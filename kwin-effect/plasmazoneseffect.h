@@ -520,6 +520,11 @@ private:
     // --- Daemon readiness / virtual screen fetch gate state ---
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
+
+    /// Pre-computed zone geometries for pending snap restores (appId → pixel rect).
+    /// Fetched once from daemon on ready; consumed in slotWindowAdded for instant
+    /// teleport (no D-Bus round-trip visible flash).
+    QHash<QString, QRect> m_snapRestoreCache;
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs

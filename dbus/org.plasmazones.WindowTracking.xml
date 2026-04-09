@@ -382,6 +382,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="JSON array of {windowId, x, y, width, height}."/>
             </arg>
         </method>
+        <method name="getPendingRestoreGeometries">
+            <annotation name="org.gtk.GDBus.DocString" value="Pre-computed zone geometries for pending restore entries. The effect caches these for instant window teleport on open (no D-Bus round-trip flash)."/>
+            <arg name="geometriesJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON object: { appId: {x, y, width, height}, ... }"/>
+            </arg>
+        </method>
         <method name="reportNavigationFeedback">
             <annotation name="org.gtk.GDBus.DocString" value="Report keyboard-navigation result from KWin effect; daemon emits navigationFeedback for OSD."/>
             <arg name="success" type="b" direction="in">

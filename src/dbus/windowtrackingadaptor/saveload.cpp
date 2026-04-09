@@ -360,43 +360,68 @@ void WindowTrackingAdaptor::loadState()
         }
     }
 
-    // Merge active-derived entries: only add entries not already covered by persisted
-    // queues. saveState() persists ALL pending entries including active-derived ones
-    // from the previous load. Without count-based merging, entries would double on
-    // every daemon restart (1→2→4→...).
+    // Merge active-derived entries with persisted pending queues.
     //
-    // For each (appId, zoneIds, screen, desktop) fingerprint, a persisted entry
-    // "covers" one active-derived entry. Uncovered active-derived entries (new windows
-    // snapped since last save) are appended. This correctly handles multi-instance
-    // apps in the same zone — two konsole windows in zone Z produce two entries.
+    // Active entries represent windows that were alive and snapped at the time of
+    // daemon shutdown — they are the MOST RECENT state. Persisted pending entries
+    // may include older entries from windows that were closed in previous sessions.
+    //
+    // FIFO ordering invariant: active entries must come FIRST so that when N windows
+    // reopen, each consumes the entry matching its last-known state. Without this,
+    // stale persisted entries from a previous session (e.g., a second Firefox window
+    // on VS2 that no longer exists) could be consumed before the current VS1 entry,
+    // causing the window to restore to the wrong virtual screen.
+    //
+    // When an active entry matches a persisted entry (same fingerprint), the persisted
+    // version is used because it contains richer data (layoutId, zoneNumbers).
+    // Unmatched persisted entries (from previously-closed windows) are appended AFTER
+    // all active entries. This correctly handles multi-instance apps and prevents
+    // entry doubling on every daemon restart.
     for (auto activeIt = activePending.constBegin(); activeIt != activePending.constEnd(); ++activeIt) {
         const QString& appId = activeIt.key();
-        // Build a consumable budget of persisted fingerprints for this appId
-        struct Fingerprint
-        {
-            QStringList zoneIds;
-            QString screenId;
-            int virtualDesktop;
-        };
-        QList<Fingerprint> persistedBudget;
-        for (const auto& e : pendingQueues.value(appId)) {
-            persistedBudget.append({e.zoneIds, e.screenId, e.virtualDesktop});
-        }
+        QList<PendingRestore> persistedList = pendingQueues.value(appId);
+        QVector<bool> persistedUsed(persistedList.size(), false);
+
+        // Phase 1: For each active entry, find a matching persisted entry to enrich it.
+        // Active entries go to the front of the queue (most recent state first).
+        QList<PendingRestore> activeEnriched;
         for (const auto& activeEntry : activeIt.value()) {
-            bool covered = false;
-            for (int i = 0; i < persistedBudget.size(); ++i) {
-                if (persistedBudget[i].zoneIds == activeEntry.zoneIds
-                    && persistedBudget[i].screenId == activeEntry.screenId
-                    && persistedBudget[i].virtualDesktop == activeEntry.virtualDesktop) {
-                    persistedBudget.removeAt(i); // consume one match
-                    covered = true;
+            bool matched = false;
+            for (int i = 0; i < persistedList.size(); ++i) {
+                if (!persistedUsed[i] && persistedList[i].zoneIds == activeEntry.zoneIds
+                    && persistedList[i].screenId == activeEntry.screenId
+                    && persistedList[i].virtualDesktop == activeEntry.virtualDesktop) {
+                    // Use persisted entry (has layoutId and zoneNumbers)
+                    activeEnriched.append(persistedList[i]);
+                    persistedUsed[i] = true;
+                    matched = true;
                     break;
                 }
             }
-            if (!covered) {
-                // New window snapped since last save — persisted queues don't have it
-                pendingQueues[appId].append(activeEntry);
+            if (!matched) {
+                // New window snapped since last save — no persisted match
+                activeEnriched.append(activeEntry);
             }
+        }
+
+        // Phase 2: Collect unmatched persisted entries (from previously-closed windows).
+        QList<PendingRestore> unmatchedPersisted;
+        for (int i = 0; i < persistedList.size(); ++i) {
+            if (!persistedUsed[i]) {
+                unmatchedPersisted.append(persistedList[i]);
+            }
+        }
+
+        // Rebuild queue: active entries first, then stale entries from older sessions.
+        QList<PendingRestore> merged;
+        merged.reserve(activeEnriched.size() + unmatchedPersisted.size());
+        merged.append(activeEnriched);
+        merged.append(unmatchedPersisted);
+
+        if (merged.isEmpty()) {
+            pendingQueues.remove(appId);
+        } else {
+            pendingQueues[appId] = merged;
         }
     }
 

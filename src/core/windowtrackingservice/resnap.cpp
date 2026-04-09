@@ -539,4 +539,56 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
     return result;
 }
 
+QHash<QString, QRect> WindowTrackingService::pendingRestoreGeometries() const
+{
+    QHash<QString, QRect> result;
+    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+
+    for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
+        if (it->isEmpty()) {
+            continue;
+        }
+
+        // Only the first entry per appId (FIFO consumption order)
+        const PendingRestore& entry = it->first();
+        if (entry.zoneIds.isEmpty()) {
+            continue;
+        }
+
+        QString screenId = resolveEffectiveScreenId(entry.screenId);
+
+        // Validate layout context — same checks as calculateRestoreFromSession.
+        // Without this, the cache could contain geometry for a zone that no longer
+        // exists in the current layout, causing a wrong-position teleport that the
+        // async resolveWindowRestore then rejects (orphaned window at zone position
+        // with no zone assignment).
+        if (!entry.layoutId.isEmpty() && m_layoutManager) {
+            Layout* currentLayout = m_layoutManager->layoutForScreen(screenId, entry.virtualDesktop, currentActivity);
+            if (!currentLayout) {
+                currentLayout = m_layoutManager->activeLayout();
+            }
+            if (!currentLayout) {
+                continue;
+            }
+            QUuid savedUuid = QUuid::fromString(entry.layoutId);
+            if (!savedUuid.isNull() && currentLayout->id() != savedUuid) {
+                continue;
+            }
+        }
+
+        // Validate desktop context
+        if (entry.virtualDesktop > 0 && currentDesktop > 0 && entry.virtualDesktop != currentDesktop) {
+            continue;
+        }
+
+        QRect geo = resolveZoneGeometry(entry.zoneIds, screenId);
+        if (geo.isValid()) {
+            result.insert(it.key(), geo);
+        }
+    }
+
+    return result;
+}
+
 } // namespace PlasmaZones

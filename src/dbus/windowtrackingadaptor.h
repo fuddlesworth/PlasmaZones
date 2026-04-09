@@ -390,6 +390,15 @@ public Q_SLOTS:
      */
     QString getUpdatedWindowGeometries();
 
+    /**
+     * @brief Pre-computed zone geometries for pending restore entries.
+     * @return JSON object: { appId: {x, y, width, height}, ... }
+     *
+     * The effect caches these so that slotWindowAdded can teleport windows
+     * to their zone position immediately, without waiting for a D-Bus round-trip.
+     */
+    QString getPendingRestoreGeometries();
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Phase 1 Keyboard Navigation Methods
     // ═══════════════════════════════════════════════════════════════════════════

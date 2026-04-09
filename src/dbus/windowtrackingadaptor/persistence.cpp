@@ -167,6 +167,27 @@ QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
     return QString::fromUtf8(QJsonDocument(windowGeometries).toJson(QJsonDocument::Compact));
 }
 
+QString WindowTrackingAdaptor::getPendingRestoreGeometries()
+{
+    QHash<QString, QRect> geometries = m_service->pendingRestoreGeometries();
+    if (geometries.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+
+    QJsonObject result;
+    for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
+        QJsonObject geoObj;
+        geoObj[QLatin1String("x")] = it.value().x();
+        geoObj[QLatin1String("y")] = it.value().y();
+        geoObj[QLatin1String("width")] = it.value().width();
+        geoObj[QLatin1String("height")] = it.value().height();
+        result[it.key()] = geoObj;
+    }
+
+    qCDebug(lcDbusWindow) << "Returning pending restore geometries for" << result.size() << "apps";
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+}
+
 void WindowTrackingAdaptor::onLayoutChanged()
 {
     // Delegate to service

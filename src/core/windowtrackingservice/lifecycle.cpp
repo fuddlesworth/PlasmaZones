@@ -230,10 +230,17 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         anyStateMigrated = true;
     }
 
-    // Also migrate pending restore queues — these have screenId per entry
+    // Also migrate pending restore queues — these have screenId per entry.
+    // Same guard as active assignments: skip entries that already have a valid
+    // virtual screen ID matching the current config. Re-migrating would run
+    // resolveVirtualScreen with zone coords relative to the virtual screen
+    // (not the physical screen), which can produce wrong results.
     for (auto queueIt = m_pendingRestoreQueues.begin(); queueIt != m_pendingRestoreQueues.end(); ++queueIt) {
         for (PendingRestore& entry : queueIt.value()) {
             if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
+                continue;
+            }
+            if (VirtualScreenId::isVirtual(entry.screenId) && virtualScreenIds.contains(entry.screenId)) {
                 continue;
             }
             entry.screenId = resolveVirtualScreen(entry.zoneIds, entry.screenId);

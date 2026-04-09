@@ -607,6 +607,19 @@ public:
      */
     QHash<QString, QRect> updatedWindowGeometries() const;
 
+    /**
+     * @brief Pre-compute zone geometries for all pending restore entries.
+     * @return Map of appId -> zone geometry (pixel coordinates)
+     *
+     * Used by the KWin effect to cache expected snap positions so that
+     * windows can be teleported to their zone immediately on windowAdded,
+     * eliminating the visible "flash" from KWin's session-restored position.
+     * Only the first entry per appId is returned (FIFO consumption order).
+     * Returns geometries without consuming entries or validating layout/desktop
+     * context — the actual resolveWindowRestore call handles that.
+     */
+    QHash<QString, QRect> pendingRestoreGeometries() const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Lifecycle
     // ═══════════════════════════════════════════════════════════════════════════

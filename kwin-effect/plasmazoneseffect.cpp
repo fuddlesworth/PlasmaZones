@@ -515,6 +515,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         m_daemonServiceRegistered = false;
         m_daemonReadyRestoresDone = false;
         m_daemonReadyWindowStateProcessed = false;
+        m_snapRestoreCache.clear();
 
         // Restore borderless and monocle-maximized windows — daemon state is gone
         m_autotileHandler->restoreAllBorderless();
@@ -638,23 +639,57 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     QString windowId = getWindowId(w);
     m_navigationHandler->syncFloatingStateForWindow(windowId);
 
-    // Notify autotile daemon about the new window
+    bool onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+
+    // Check if this window is a candidate for snap restore
+    // Use stricter filter - only normal application windows, NOT dialogs/utilities
+    bool canSnapRestore =
+        shouldHandleWindow(w) && isTileableWindow(w) && !w->isMinimized() && !hasOtherWindowOfClassWithDifferentPid(w);
+
+    // Instant snap restore: if we have a cached zone geometry for this app,
+    // teleport the window immediately — no D-Bus round-trip, no visible flash.
+    // The async callResolveWindowRestore still runs to register the zone assignment
+    // in the daemon; this just eliminates the visual lag.
+    if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
+        QString appId = extractAppId(windowId);
+        auto cacheIt = m_snapRestoreCache.find(appId);
+        if (cacheIt != m_snapRestoreCache.end()) {
+            QRect cachedGeo = cacheIt.value();
+            if (cachedGeo.isValid()) {
+                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cachedGeo;
+                applySnapGeometry(w, cachedGeo, false, /*skipAnimation=*/true);
+                m_snapRestoreCache.erase(cacheIt);
+                // Re-evaluate screen after teleport — the window may have moved
+                // off the autotile screen, so update for the autotile decision below.
+                onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+            }
+        }
+    }
+
+    if (onAutotileScreen && canSnapRestore) {
+        // Window landed on an autotile screen, but may have a pending snap restore
+        // to a non-autotile screen. KWin's session restore places windows at their
+        // saved geometry, which may be a pre-snap floating position in the autotile
+        // screen's area — even though the window was snapped in the snap screen
+        // before logout. Try snap restore FIRST: if it moves the window off the
+        // autotile screen, we avoid the autotile add→float→remove→resnap dance
+        // that causes visible flickering and repeated resizing.
+        QPointer<KWin::EffectWindow> safeW = w;
+        callResolveWindowRestore(w, [this, safeW]() {
+            if (!safeW || safeW->isDeleted()) {
+                return;
+            }
+            // Snap restore either moved the window to a snap screen (no-op for
+            // autotile) or didn't apply (window genuinely belongs on autotile).
+            m_autotileHandler->notifyWindowAdded(safeW);
+        });
+        return;
+    }
+
+    // Standard path: notify autotile first, then try snap restore
     m_autotileHandler->notifyWindowAdded(w);
 
-    // Check if we should auto-snap new windows
-    // Skip on autotile screens - the autotile engine handles window placement
-    // Use stricter filter - only normal application windows, NOT dialogs/utilities
-    if (!m_autotileHandler->isAutotileScreen(getWindowScreenId(w)) && shouldHandleWindow(w) && isTileableWindow(w)
-        && !w->isMinimized()) {
-        // Don't auto-snap if there's already another window of the same class
-        // with a different PID. This prevents unwanted snapping when another app
-        // spawns a window (e.g., Cachy Update spawning a Ghostty terminal).
-        if (hasOtherWindowOfClassWithDifferentPid(w)) {
-            qCDebug(lcEffect) << "Skipping auto-snap for" << w->windowClass()
-                              << "- another window of same class exists with different PID";
-            return;
-        }
-
+    if (!onAutotileScreen && canSnapRestore) {
         callResolveWindowRestore(w);
     }
 }
@@ -1165,7 +1200,42 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                               {QVariant::fromValue(aliveWindowIds)}, QStringLiteral("pruneStaleWindows"));
     }
 
-    // Restore snap state for non-autotile windows.
+    // Fetch pre-computed pending restore geometries so slotWindowAdded can
+    // teleport windows to their zone immediately (no D-Bus round-trip flash).
+    // Fire-and-forget: the cache is populated asynchronously. Windows that open
+    // before the reply arrives fall back to the normal async restore path.
+    {
+        QDBusMessage geoMsg =
+            QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
+                                           QStringLiteral("getPendingRestoreGeometries"));
+        auto* geoWatcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(geoMsg), this);
+        connect(geoWatcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QString> reply = *w;
+            if (!reply.isValid()) {
+                return;
+            }
+            QJsonDocument doc = QJsonDocument::fromJson(reply.value().toUtf8());
+            if (!doc.isObject()) {
+                return;
+            }
+            QJsonObject obj = doc.object();
+            m_snapRestoreCache.clear();
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                QJsonObject geo = it.value().toObject();
+                int x = geo[QLatin1String("x")].toInt();
+                int y = geo[QLatin1String("y")].toInt();
+                int w = geo[QLatin1String("width")].toInt();
+                int h = geo[QLatin1String("height")].toInt();
+                if (w > 0 && h > 0) {
+                    m_snapRestoreCache.insert(it.key(), QRect(x, y, w, h));
+                }
+            }
+            qCDebug(lcEffect) << "Cached" << m_snapRestoreCache.size() << "pending restore geometries";
+        });
+    }
+
+    // Restore snap state for all untracked windows.
     // pendingRestoresAvailable may have fired BEFORE daemonReady, causing
     // slotPendingRestoresAvailable to bail out (m_daemonServiceRegistered was false).
     // Now that the daemon is confirmed ready, retry the restore flow using raw
@@ -1206,7 +1276,13 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 savedStackingOrder.append(QPointer<KWin::EffectWindow>(w));
             }
 
-            // Collect windows that need snap restoration (untracked, non-autotile).
+            // Collect windows that need snap restoration (untracked).
+            // Don't skip windows on autotile screens: KWin session restore may
+            // place a window in the autotile screen's area even though it was
+            // snapped in the snap screen before logout. The daemon's pending
+            // restore entry knows the correct screen; if it returns a snap
+            // geometry, the window moves off the autotile screen and the
+            // autotile handler detects the departure via VS crossing detection.
             // Use QPointer for lifetime safety in case a window is destroyed
             // between collection and the dispatch loop below.
             QVector<QPointer<KWin::EffectWindow>> toRestore;
@@ -1215,9 +1291,6 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                     continue;
                 }
                 if (window->isMinimized()) {
-                    continue;
-                }
-                if (m_autotileHandler->isAutotileScreen(getWindowScreenId(window))) {
                     continue;
                 }
                 QString appId = extractAppId(getWindowId(window));
