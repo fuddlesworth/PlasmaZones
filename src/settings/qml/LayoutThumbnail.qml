@@ -30,10 +30,18 @@ Rectangle {
     readonly property real borderOpacity: 0.9 // Increased for better border visibility
     readonly property int normalBorderWidth: Math.round(Kirigami.Units.devicePixelRatio)
     readonly property int selectedBorderWidth: Math.round(Kirigami.Units.devicePixelRatio * 2.5) // Thicker when selected
+    // When set (> 0), overrides layout-based aspect ratio with the target monitor's
+    // actual aspect ratio — so the preview matches the physical screen shape (e.g. portrait).
+    property real screenAspectRatio: 0
     // Aspect ratio: use the layout's intended ratio so previews show correct proportions.
     // Falls back to primary screen ratio for user-created layouts (aspectRatioClass "any" or absent).
     readonly property real fallbackAspectRatio: (Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9)
     readonly property real layoutAspectRatio: {
+        // If a specific screen aspect ratio was provided, use it — the preview
+        // should match the physical monitor shape regardless of layout class.
+        if (root.screenAspectRatio > 0)
+            return root.screenAspectRatio;
+
         var cls = root.layout ? (root.layout.aspectRatioClass || "any") : "any";
         switch (cls) {
         case "standard":

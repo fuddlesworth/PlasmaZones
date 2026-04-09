@@ -30,6 +30,26 @@ Flickable {
     property var _screenStates: []
     property string _selectedScreen: ""
     property int _revision: 0
+    // Aspect ratio of the currently selected monitor (width / height).
+    // Used to render the layout preview in the correct shape for portrait monitors.
+    readonly property real _selectedScreenAspectRatio: {
+        var screens = settingsController.screens;
+        var target = _selectedScreen;
+        if (!target && screens.length > 0)
+            target = screens[0].name || "";
+
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].name === target) {
+                var w = screens[i].width || 0;
+                var h = screens[i].height || 0;
+                if (w > 0 && h > 0)
+                    return w / h;
+
+                break;
+            }
+        }
+        return 0; // 0 = let LayoutThumbnail use its default logic
+    }
 
     function _refresh() {
         _screenStates = settingsController.getScreenStates();
@@ -223,6 +243,7 @@ Flickable {
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
                 maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var l = stateView.currentLayout;
                     return l ? i18n("Snapping layout preview: %1", l.name) : i18n("Snapping layout preview");
@@ -247,6 +268,7 @@ Flickable {
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
                 maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var algoId = "autotile:" + stateView.localAlgorithmId;
                     var found = root._findLayout(algoId);

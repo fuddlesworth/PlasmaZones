@@ -140,6 +140,8 @@ ColumnLayout {
                     ColumnLayout {
                         id: monitorContent
 
+                        readonly property bool isPortrait: (modelData.width || 0) > 0 && (modelData.height || 0) > 0 && modelData.height > modelData.width
+
                         anchors.centerIn: parent
                         spacing: Kirigami.Units.smallSpacing / 2
 
@@ -149,6 +151,7 @@ ColumnLayout {
                             Layout.preferredHeight: Kirigami.Units.iconSizes.medium
                             Layout.alignment: Qt.AlignHCenter
                             opacity: isSelected ? 1 : 0.5
+                            rotation: monitorContent.isPortrait ? 90 : 0
                         }
 
                         Label {
