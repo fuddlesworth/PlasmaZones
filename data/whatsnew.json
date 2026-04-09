@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "2.8.2",
+            "date": "2026-04-08",
+            "highlights": [
+                "Fixed autotile windows being pushed off-screen when their minimum size exceeds the assigned zone",
+                "Reverted min-size clearing regression from 2.8.1 that triggered the off-screen centering",
+                "Added diagnostic logging for autotile retiles, min-sizes, zone geometries, and window eligibility"
+            ]
+        },
+        {
             "version": "2.8.1",
             "date": "2026-04-08",
             "highlights": [

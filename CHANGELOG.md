@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.2] - 2026-04-08
+
+### Fixed
+- **Autotile windows pushed off-screen on retile** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When a window's minimum size exceeded its assigned zone (common with browsers on ultrawide monitors), the Wayland centering code centered the oversized window within the zone — pushing it to a negative x/y position, literally off the left edge of the screen. Oversized windows are now left/top-aligned in their zone instead of centered, staying on-screen while the daemon adjusts zone sizes.
+- **Min-size clearing regression from 2.8.1**: Removed the indiscriminate `m_windowMinSizes` clearing in `onScreenGeometryChanged()` added in 2.8.1. The min-size feedback loop it guarded against was already eliminated by removing the `targetZone.width()` fallback, so the clearing just forced windows through unnecessary centering discovery cycles — triggering the off-screen push above.
+
+### Improved
+- **Autotile diagnostic logging**: Added logging to key autotile paths — window open/remove events now log IDs and min-sizes, `recalculateLayout` logs zone geometries and split ratios, screen geometry changes are logged, and window eligibility rejections now include the reason. This makes autotile ratio issues diagnosable from `journalctl` without code changes.
+
 ## [2.8.1] - 2026-04-08
 
 ### Fixed
@@ -1187,7 +1196,8 @@ Initial packaged release. Wayland-only (X11 support removed). Requires KDE Plasm
 - Session restoration and rotation after login ([#66])
 - Window tracking: snap/restore behavior, zone clearing, startup timing, rotation zone ID matching, floating window exclusion ([#67])
 
-[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...HEAD
+[Unreleased]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.2...HEAD
+[2.8.2]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.1...v2.8.2
 [2.8.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.8.0...v2.8.1
 [2.8.0]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.1...v2.8.0
 [2.7.1]: https://github.com/fuddlesworth/PlasmaZones/compare/v2.7.0...v2.7.1
