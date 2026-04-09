@@ -2406,7 +2406,10 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         return;
     }
 
-    ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow));
+    // Capture geometry BEFORE applySnapGeometry resizes the window. The async D-Bus
+    // callback in ensurePreSnapGeometryStored would read frameGeometry() after the
+    // resize, corrupting the pre-tile entry with zone dimensions.
+    ensurePreSnapGeometryStored(targetWindow, getWindowId(targetWindow), targetWindow->frameGeometry());
     applySnapGeometry(targetWindow, geometry);
 
     // Derive screen from the applied geometry center. Use resolveEffectiveScreenId
@@ -3243,7 +3246,7 @@ void PlasmaZonesEffect::tryAsyncSnapCall(const QString& interface, const QString
                               reply.argumentAt<3>());
                     qCInfo(lcEffect) << method << "snapping" << windowId << "to:" << geo;
                     if (storePreSnap)
-                        ensurePreSnapGeometryStored(window, windowId);
+                        ensurePreSnapGeometryStored(window, windowId, window ? window->frameGeometry() : QRectF());
                     applySnapGeometry(window, geo, false, skipAnimation);
                     // args[1] is screenId (e.g. for snapToEmptyZone, snapToLastZone)
                     if (onSnapSuccess && args.size() >= 2) {

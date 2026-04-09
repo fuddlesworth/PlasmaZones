@@ -176,11 +176,10 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     // windowClosed() cleans all of these per-window; prune must do the same
     // for windows that disappeared without a close event.
     //
-    // The first loop already removed stale entries from:
-    //   m_windowScreenAssignments, m_windowDesktopAssignments, m_preTileGeometries,
-    //   m_preFloatZoneAssignments, m_preFloatScreenAssignments, m_floatingWindows,
-    //   m_autotileFloatedWindows
-    // Only sweep maps/sets NOT already cleaned above to avoid double-counting.
+    // The first loop removed stale entries from maps keyed by zone-assigned windows.
+    // This second sweep catches entries in maps that can have entries WITHOUT a
+    // corresponding m_windowZoneAssignments entry (e.g. floating windows with
+    // pre-float state but no current zone assignment).
     auto removeIfNotAlive = [&](auto& hash) {
         for (auto hashIt = hash.begin(); hashIt != hash.end();) {
             if (!aliveWindowIds.contains(hashIt.key())) {
@@ -379,8 +378,13 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
             QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
                 ? mgr->screenAvailableGeometry(currentScreenName)
                 : target->availableGeometry();
-            QRect adjusted(available.x() + (available.width() - rect.width()) / 2,
-                           available.y() + (available.height() - rect.height()) / 2, rect.width(), rect.height());
+            // Clamp size to fit within the target screen (the window may have been
+            // larger than the target VS when captured on a wider screen/physical monitor).
+            int w = qMin(rect.width(), available.width());
+            int h = qMin(rect.height(), available.height());
+            int x = available.x() + (available.width() - w) / 2;
+            int y = available.y() + (available.height() - h) / 2;
+            QRect adjusted(x, y, w, h);
             qCDebug(lcCore) << "validatedPreTileGeometry: cross-screen adjustment for" << windowId << "from"
                             << storedScreen << "to" << currentScreenName << ":" << rect << "->" << adjusted;
             return adjusted;
@@ -525,6 +529,15 @@ QString WindowTrackingService::preFloatScreen(const QString& windowId) const
         screen = m_preFloatScreenAssignments.value(appId);
     }
     return screen;
+}
+
+void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_preFloatZoneAssignments.remove(windowId);
+    m_preFloatScreenAssignments.remove(windowId);
 }
 
 void WindowTrackingService::clearPreFloatZone(const QString& windowId)

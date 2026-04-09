@@ -14,6 +14,7 @@
 
 #include "shortcutmanager.h"
 #include "../core/types.h"
+#include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
 
@@ -162,6 +163,8 @@ private:
     void connectLayoutSignals();
     void connectOverlaySignals();
     void finalizeStartup();
+    /** @brief Migrate window screen assignments from physical to virtual IDs after startup */
+    void migrateStartupScreenAssignments();
 
     /**
      * @brief Pre-seed autotile engine with zone-ordered windows for one screen
@@ -192,26 +195,6 @@ private:
      */
     void presaveSnapFloats();
 
-    // Per-desktop context key for layout/autotile tracking.
-    // Uses screenId (EDID-based) or connector name depending on context.
-    struct DesktopContextKey
-    {
-        QString screenId;
-        int desktop;
-        QString activity;
-        bool operator==(const DesktopContextKey& o) const
-        {
-            return screenId == o.screenId && desktop == o.desktop && activity == o.activity;
-        }
-    };
-    friend size_t qHash(const DesktopContextKey& k, size_t seed)
-    {
-        seed = ::qHash(k.screenId, seed);
-        seed = ::qHash(k.desktop, seed);
-        seed = ::qHash(k.activity, seed);
-        return seed;
-    }
-
     /**
      * @brief Capture autotile window order for all autotile screens
      *
@@ -220,7 +203,7 @@ private:
      *
      * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
-    QHash<DesktopContextKey, QStringList> captureAutotileOrders() const;
+    QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
     /**
      * @brief Restore pre-tile geometry for autotile-only windows
@@ -331,10 +314,29 @@ private:
     bool isCurrentContextLocked(const QString& screenId) const;
     bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
 
+    /**
+     * @brief Sync daemon-side float state when autotile floats/unfloats a window
+     *
+     * Propagates floating state to WindowTrackingService and KWin effect,
+     * manages autotile-originated vs snap-mode float bookkeeping, restores
+     * pre-tile geometry on float, and shows navigation OSD.
+     */
+    void syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
+     * @brief Batch-update daemon-side float state for overflow-floated windows
+     *
+     * Updates WTS state directly without emitting per-window D-Bus signals
+     * (the effect already processed the float from the windowsTileRequested batch).
+     */
+    void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
+
     /** @brief Prune m_lastAutotileOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);
     /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
+    /** @brief Prune m_lastAutotileOrders for old virtual screen IDs that no longer exist */
+    void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;
@@ -350,9 +352,9 @@ private:
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order
     // on re-entry, producing deterministic arrangements across mode toggles.
-    // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
+    // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
-    QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
+    QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
 
     // Snap-float restore entries collected during windowsReleasedFromTiling.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.

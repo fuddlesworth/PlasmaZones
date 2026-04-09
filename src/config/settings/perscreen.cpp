@@ -122,26 +122,25 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::MasterCount)
         return QVariant(
             qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
-    if (k == QLatin1String("InnerGap"))
+    if (k == PerScreenKeys::InnerGap)
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k.startsWith(QLatin1String("OuterGap")))
+    if (k.startsWith(PerScreenKeys::OuterGap))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
     if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
-    if (k == QLatin1String("InsertPosition"))
+    if (k == PerScreenKeys::InsertPosition)
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
-    if (k == PerScreenKeys::Algorithm || k == QLatin1String("AnimationEasingCurve"))
+    if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
         return value;
-    if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
-        || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")
-        || k == QLatin1String("RespectMinimumSize") || k == QLatin1String("HideTitleBars")
-        || k == QLatin1String("AnimationsEnabled"))
+    if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
+        || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
+        || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
         return QVariant(value.toBool());
-    if (k == QLatin1String("AnimationDuration"))
+    if (k == PerScreenKeys::AnimationDuration)
         return QVariant(
             qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
     return QVariant();

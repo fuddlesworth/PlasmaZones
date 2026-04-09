@@ -282,20 +282,21 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (screenGeometries.contains(windowId)) {
         return false;
     }
-    screenGeometries[windowId] = frame;
-    qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
-    if (m_effect->m_daemonServiceRegistered) {
-        // Use overwrite=false so a pre-existing snap geometry is preserved when
-        // autotile activates on a screen with already-snapped windows. The effect-
-        // local cache (screenGeometries) already guards against redundant stores
-        // within an autotile session; overwrite=false prevents cross-mode clobbering.
-        // screenId is already an effective (possibly virtual) screen ID resolved
-        // by the caller via getWindowScreenId() — no need to re-resolve.
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                                        {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId,
-                                         false},
-                                        QStringLiteral("storePreTileGeometry"));
+    // Only save geometry for floating windows — snapped/tiled windows have zone
+    // dimensions in frameGeometry(), not the original free-floating size. Storing
+    // zone geometry here would cause handleDragToFloat to restore to zone size.
+    if (m_effect->isWindowFloating(windowId)) {
+        screenGeometries[windowId] = frame;
+        qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
+        if (m_effect->m_daemonServiceRegistered) {
+            m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                                            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                             static_cast<int>(frame.width()), static_cast<int>(frame.height()),
+                                             screenId, false},
+                                            QStringLiteral("storePreTileGeometry"));
+        }
+    } else {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
     }
     return true;
 }
@@ -618,8 +619,13 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         return;
                     }
 
-                    // If the drag already ended, apply immediately.
+                    // If the drag already ended, apply immediately — unless the
+                    // window was snapped to a zone by dragStopped during this D-Bus
+                    // round-trip. In that case, zone geometry is already correct.
                     if (!safeW->isUserMove() && !safeW->isUserResize()) {
+                        if (!m_effect->isWindowFloating(wid)) {
+                            return; // Snapped to zone — don't clobber zone geometry
+                        }
                         const QRectF frame = safeW->frameGeometry();
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
                         m_effect->applySnapGeometry(safeW, geo);
@@ -639,16 +645,21 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                                     if (m_autotileScreens.contains(dropScreen)) {
                                         return;
                                     }
+                                    // Guard: window may have been snapped to a zone by dragStopped.
+                                    if (!m_effect->isWindowFloating(wid)) {
+                                        return;
+                                    }
                                     const QRectF frame = safeW->frameGeometry();
                                     const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
                                     m_effect->applySnapGeometry(safeW, geo);
                                 });
                 });
 
-        // Unsnap the window so it becomes floating on the new screen
-        // instead of retaining a stale zone assignment from autotile.
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowUnsnapped"), {windowId},
-                                        QStringLiteral("autotile-to-snap unsnap"));
+        // NOTE: Do NOT call windowUnsnapped here. The drag-drop handler
+        // (WindowDragAdaptor::dragStopped) manages the zone assignment transition.
+        // Firing windowUnsnapped now would race with the snap-to-zone D-Bus call
+        // from the drop handler, destroying the zone assignment that was just created.
+        // The drop handler's cross-screen path already clears stale state.
 
         // Raise above existing windows so it doesn't end up buried behind
         // snapped windows on the target screen.
@@ -804,6 +815,13 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
                     PlasmaZonesEffect* effect = m_effect;
                     QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
                         if (!wp || wp->isDeleted()) {
+                            return;
+                        }
+                        // Skip if the window was re-snapped during the deferred tick
+                        // (e.g., dropped on a zone on a snap screen during cross-VS drag).
+                        if (!effect->isWindowFloating(effect->getWindowId(wp))) {
+                            qCDebug(lcEffect)
+                                << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
                             return;
                         }
                         QRectF currentFrame = wp->frameGeometry();

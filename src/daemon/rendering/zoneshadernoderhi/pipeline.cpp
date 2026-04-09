@@ -397,6 +397,13 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     }
     m_bufferRenderPassFormat = format;
 
+    // NOTE: The SRB binding builders below (createBufferSrb, createImageSrbSingle,
+    // createImageSrbMulti, and the multi-buffer loop in ensureBufferPipeline) share
+    // the same overall structure (UBO:0, labels:1, channels:2-5, audio:6, user,
+    // wallpaper, depth) but differ in how channel textures at bindings 2-5 are
+    // resolved (feedback ping-pong vs multi-pass vs dummy). Extracting a common
+    // helper would require a channel-resolution callback, adding indirection
+    // without meaningful clarity gains.
     auto createBufferSrb = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;

@@ -23,9 +23,14 @@ ModeTracker::~ModeTracker() = default;
 
 void ModeTracker::setContext(const QString& screenId, int desktop, const QString& activity)
 {
+    const TilingMode oldMode = currentMode();
     m_screenId = screenId;
     m_desktop = desktop;
     m_activity = activity;
+    const TilingMode newMode = currentMode();
+    if (newMode != oldMode) {
+        Q_EMIT currentModeChanged(newMode);
+    }
 }
 
 TilingMode ModeTracker::currentMode() const

@@ -50,6 +50,10 @@ add_executable(test_wts_virtual_migration core/test_wts_virtual_migration.cpp)
 target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 
+add_executable(test_wts_crossmode_float core/test_wts_crossmode_float.cpp)
+target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -302,7 +306,7 @@ set(_all_tests
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
     test_overflow_manager
     test_geometry_utils_minsizes test_geometry_utils_overlaps test_geometry_utils_bsp
-    test_geometry_utils_serialization test_wts_clearfloat test_wts_virtual_migration test_snap_engine
+    test_geometry_utils_serialization test_wts_clearfloat test_wts_virtual_migration test_wts_crossmode_float test_snap_engine
     test_settings_core test_settings_validation test_settings_perscreen
     test_settings_virtualscreen test_virtualscreen_staged
     test_configdefaults test_configbackend_json test_configmigration

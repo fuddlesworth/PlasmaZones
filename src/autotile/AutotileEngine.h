@@ -322,6 +322,16 @@ public:
     }
 
     /**
+     * @brief Set callback to query daemon-side window floating state
+     *
+     * Used by toggleWindowFloat to adopt untracked floating windows into autotile.
+     */
+    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
+    {
+        m_isWindowFloatingFn = std::move(fn);
+    }
+
+    /**
      * @brief Serialize per-context autotile window orders to JSON
      *
      * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
@@ -1055,6 +1065,7 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
+    std::function<bool(const QString&)> m_isWindowFloatingFn;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

@@ -319,10 +319,14 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                 saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
                 if (m_effect->isWindowFloating(windowId) && m_effect->m_daemonServiceRegistered) {
                     QRectF frame = w->frameGeometry();
+                    // Use overwrite=false: an overflow-floated window may still have its
+                    // frame at the tiled position. If a correct pre-tile entry already
+                    // exists, preserve it. If no entry exists, the floating window's
+                    // current geometry is the best available fallback.
                     m_effect->fireAndForgetDBusCall(
                         DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                         {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, true},
+                         static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, false},
                         QStringLiteral("storePreTileGeometry"));
                 }
             }

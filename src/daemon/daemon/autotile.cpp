@@ -26,8 +26,10 @@
 namespace PlasmaZones {
 
 namespace {
-// Geometry/panel timing (ms) — keep in sync with daemon.cpp constants
-// After processing geometry we re-query panels once so we pick up settled state (e.g. panel editor close).
+// Follow-up panel geometry requery delay (ms): after the debounced geometry update
+// completes, re-query panel geometry once so we pick up settled state (e.g. panel editor close).
+// Conceptually distinct from GEOMETRY_UPDATE_DEBOUNCE_MS in daemon.cpp (which coalesces
+// rapid geometry change events into a single update).
 constexpr int DELAYED_PANEL_REQUERY_MS = 400;
 // Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
 constexpr int REAPPLY_DELAY_MS = 0;
@@ -69,7 +71,7 @@ void Daemon::updateAutotileScreens()
     for (const QString& screenId : removedScreens) {
         QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
         if (!order.isEmpty()) {
-            m_lastAutotileOrders[DesktopContextKey{screenId, desktop, activity}] = order;
+            m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
 
@@ -298,9 +300,9 @@ void Daemon::handleSnappingToAutotile()
     }
 }
 
-QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() const
+QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
 {
-    QHash<DesktopContextKey, QStringList> orders;
+    QHash<TilingStateKey, QStringList> orders;
     if (!m_autotileEngine) {
         return orders;
     }
@@ -309,7 +311,7 @@ QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() co
     for (const QString& screenId : m_autotileEngine->autotileScreens()) {
         QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
         if (!order.isEmpty()) {
-            orders[DesktopContextKey{screenId, desktop, activity}] = order;
+            orders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
     return orders;
@@ -405,7 +407,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    DesktopContextKey orderKey{screenId, currentDesktop(), currentActivity()};
+    TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         WindowTrackingService* wts = m_windowTrackingAdaptor->service();

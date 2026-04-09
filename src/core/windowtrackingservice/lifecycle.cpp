@@ -271,11 +271,16 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         validateLastUsedZone(targetVs);
     }
 
-    // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual
+    // Migrate pre-tile geometry connectorName fields from physical (or old virtual) to new virtual.
+    // Only migrate entries for windows that have zone assignments — without zone info,
+    // resolveVirtualScreen falls back to the first VS which may be wrong. Leaving the
+    // physical ID lets validatedPreTileGeometry handle cross-screen adjustment correctly.
     for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
         if (it->connectorName == physicalScreenId || it->connectorName.startsWith(prefix)) {
-            // Use resolveVirtualScreen if the window has zone info, otherwise default to first
             QStringList zoneIds = m_windowZoneAssignments.value(it.key());
+            if (zoneIds.isEmpty()) {
+                continue; // No zone info — keep physical ID, don't guess VS
+            }
             it->connectorName = resolveVirtualScreen(zoneIds, it->connectorName);
             anyStateMigrated = true;
         }

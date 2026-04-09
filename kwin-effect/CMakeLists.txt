@@ -53,6 +53,7 @@ set(plasmazones_effect_SRCS
     windowanimator.h
     dragtracker.cpp
     dragtracker.h
+    ${CMAKE_SOURCE_DIR}/shared/virtualscreenid.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro

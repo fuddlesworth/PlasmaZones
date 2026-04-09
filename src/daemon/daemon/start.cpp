@@ -53,14 +53,6 @@ void Daemon::connectScreenSignals()
     const auto vsConfigs = m_settings->virtualScreenConfigs();
     for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
         m_screenManager->setVirtualScreenConfig(it.key(), it.value());
-        // Migrate any window screen assignments from physical to virtual IDs.
-        // Windows snapped before virtual screens were configured have physical screen IDs
-        // and would be invisible to zone occupancy, snap assist, float/unfloat, etc.
-        if (it.value().hasSubdivisions() && m_windowTrackingAdaptor) {
-            QStringList vsIds = m_screenManager->virtualScreenIdsFor(it.key());
-            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(it.key(), vsIds,
-                                                                                  m_screenManager.get());
-        }
     }
 
     // Persist virtual screen config changes back to Settings, and migrate screen assignments
@@ -76,6 +68,8 @@ void Daemon::connectScreenSignals()
             QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
             m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physId, vsIds, m_screenManager.get());
         }
+        // Prune stale autotile order entries for old virtual screen IDs
+        pruneAutotileOrdersForRemovedScreens(physId);
         // Trigger geometry recalculation and window resnap so snapped windows
         // reposition to the new virtual screen bounds (e.g. 50/50 → 60/40).
         // Reuse the same debounced path as physical screen geometry changes.
@@ -557,6 +551,39 @@ void Daemon::handleCycleLayout(const QString& screenId, bool forward)
         m_unifiedLayoutController->cyclePrevious();
     }
     resnapIfManualMode();
+}
+
+void Daemon::migrateStartupScreenAssignments()
+{
+    if (!m_windowTrackingAdaptor || !m_screenManager) {
+        return;
+    }
+    const auto vsConfigs = m_settings->virtualScreenConfigs();
+    for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
+        if (it.value().hasSubdivisions()) {
+            QStringList vsIds = m_screenManager->virtualScreenIdsFor(it.key());
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(it.key(), vsIds,
+                                                                                  m_screenManager.get());
+        }
+    }
+}
+
+void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId)
+{
+    const QStringList currentVsIds =
+        m_screenManager ? m_screenManager->virtualScreenIdsFor(physicalScreenId) : QStringList();
+    QSet<QString> keepIds(currentVsIds.begin(), currentVsIds.end());
+    // Also keep the physical ID itself (in case VS config was removed entirely)
+    keepIds.insert(physicalScreenId);
+
+    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+        if (VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
+            && !keepIds.contains(it.key().screenId)) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 } // namespace PlasmaZones

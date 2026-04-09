@@ -262,9 +262,16 @@ public:
     QString preFloatScreen(const QString& windowId) const;
 
     /**
-     * @brief Clear pre-float zone after restore
+     * @brief Clear pre-float zone after restore (both windowId and appId keys)
      */
     void clearPreFloatZone(const QString& windowId);
+
+    /**
+     * @brief Clear pre-float zone for a specific window only (not appId)
+     *
+     * Used by autotile float sync to avoid destroying sibling instances' data.
+     */
+    void clearPreFloatZoneForWindow(const QString& windowId);
 
     /**
      * @brief Clear floating state when snapping a floating window

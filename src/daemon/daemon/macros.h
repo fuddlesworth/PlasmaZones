@@ -16,6 +16,8 @@
         const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);                                     \
         if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))                                       \
             return;                                                                                                    \
+        if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))                        \
+            return;                                                                                                    \
         m_autotileEngine->setActiveScreenHint(screenId);                                                               \
         m_autotileEngine->engineCall;                                                                                  \
     }

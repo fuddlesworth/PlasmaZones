@@ -86,9 +86,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         QString storedScreen = m_windowTracking->service()->screenAssignments().value(windowId);
         if (!storedScreen.isEmpty() && storedScreen != releaseScreenId) {
             m_windowTracking->windowUnsnapped(windowId);
-            m_windowTracking->clearPreTileGeometry(windowId);
-            qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap/pre-tile state for" << windowId << "from"
-                                 << storedScreen << "to" << releaseScreenId;
+            // Preserve pre-tile geometry: it holds the correct free-floating dimensions
+            // from the original snap. Clearing it would cause tryStorePreSnapGeometry to
+            // store zone geometry (capturedOriginalGeometry is zone-sized for snapped windows).
+            // The existing entry's screen context may be stale, but validatedPreTileGeometry
+            // handles cross-screen adjustment (clamp + center) when restoring.
+            qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap state for" << windowId << "from" << storedScreen
+                                 << "to" << releaseScreenId;
         }
     }
 

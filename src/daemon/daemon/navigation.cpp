@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
+#include "../../config/settings.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
@@ -225,6 +226,10 @@ void Daemon::handleIncreaseMasterRatio()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+        return;
+    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+        return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
 }
@@ -234,6 +239,10 @@ void Daemon::handleDecreaseMasterRatio()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+        return;
+    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+        return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
 }

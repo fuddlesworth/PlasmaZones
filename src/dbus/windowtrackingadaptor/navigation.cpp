@@ -331,24 +331,14 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
             adaptor->windowUnsnapped(entry.windowId);
             adaptor->clearPreTileGeometry(entry.windowId);
         } else {
-            // Detect screen from zone geometry center (virtual-screen-aware)
+            // Detect screen from zone geometry center (virtual-screen-aware).
+            // effectiveScreenAt() already checks both virtual and physical screen
+            // geometries, so no separate effectiveScreenIds iteration is needed.
             QString screenId;
             QPoint center = entry.targetGeometry.center();
             auto* mgr = ScreenManager::instance();
             if (mgr) {
                 screenId = mgr->effectiveScreenAt(center);
-            }
-            if (screenId.isEmpty() && mgr) {
-                // Fallback: iterate effective screen IDs (includes virtual screens)
-                // to resolve by geometry containment.
-                const auto effectiveIds = mgr->effectiveScreenIds();
-                for (const auto& id : effectiveIds) {
-                    const QRect geom = mgr->screenGeometry(id);
-                    if (geom.isValid() && geom.contains(center)) {
-                        screenId = id;
-                        break;
-                    }
-                }
             }
             if (screenId.isEmpty()) {
                 // Last resort: no ScreenManager or point not in any effective screen.

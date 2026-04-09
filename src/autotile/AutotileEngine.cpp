@@ -1396,10 +1396,28 @@ void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& s
     }
 
     if (!state) {
-        qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
-        Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"),
-                                           QString(), QString(), screenId);
-        return;
+        // Window not tracked by autotile — if it's floating (daemon-side) on an autotile
+        // screen, adopt it into the tiling layout. This handles the flow:
+        // float on snap screen → move to autotile screen → toggle float to tile.
+        // The windowFloating flag is checked via the callback to avoid coupling to WTS.
+        if (isAutotileScreen(screenId) && m_isWindowFloatingFn && m_isWindowFloatingFn(windowId)) {
+            state = stateForScreen(screenId);
+            if (state && !state->containsWindow(windowId)) {
+                state->addWindow(windowId);
+                state->setFloating(windowId, true);
+                m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+                resolvedScreen = screenId;
+                qCInfo(lcAutotile) << "toggleWindowFloat: adopted floating window" << windowId << "into autotile on"
+                                   << screenId;
+                // Fall through to performToggleFloat which will unfloat it
+            }
+        }
+        if (!state) {
+            qCWarning(lcAutotile) << "toggleWindowFloat: window" << windowId << "not found in any autotile state";
+            Q_EMIT navigationFeedbackRequested(false, QStringLiteral("float"), QStringLiteral("window_not_tracked"),
+                                               QString(), QString(), screenId);
+            return;
+        }
     }
 
     performToggleFloat(state, windowId, resolvedScreen);

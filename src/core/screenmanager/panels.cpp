@@ -183,13 +183,13 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
 
                         ScreenPanelOffsets& offsets = m_panelOffsets[connectorName];
                         if (location == QLatin1String("top")) {
-                            offsets.top = totalOffset;
+                            offsets.top = qMax(offsets.top, totalOffset);
                         } else if (location == QLatin1String("bottom")) {
-                            offsets.bottom = totalOffset;
+                            offsets.bottom = qMax(offsets.bottom, totalOffset);
                         } else if (location == QLatin1String("left")) {
-                            offsets.left = totalOffset;
+                            offsets.left = qMax(offsets.left, totalOffset);
                         } else if (location == QLatin1String("right")) {
-                            offsets.right = totalOffset;
+                            offsets.right = qMax(offsets.right, totalOffset);
                         }
                     }
                 } else {

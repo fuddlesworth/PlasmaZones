@@ -50,8 +50,9 @@
 namespace PlasmaZones {
 
 namespace {
-// Geometry/panel timing (ms) — keep in sync with daemon_autotile.cpp constants
-// Debounce: coalesce rapid geometry changes (multi-screen, panel editor) into one update.
+// Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
+// Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
+// follow-up panel geometry requery after the debounced update completes).
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 } // anonymous namespace
 
@@ -389,6 +390,9 @@ bool Daemon::init()
             if (wta)
                 wta->loadState();
         });
+    m_autotileEngine->setIsWindowFloatingFn([wta = QPointer(m_windowTrackingAdaptor)](const QString& windowId) -> bool {
+        return wta && wta->service() && wta->service()->isWindowFloating(windowId);
+    });
 
     // Wire window order serialization delegates so WTA includes autotile window
     // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
@@ -580,6 +584,11 @@ void Daemon::start()
     syncModeFromAssignments();
 
     finalizeStartup();
+
+    // Migrate window screen assignments from physical to virtual IDs.
+    // Must run AFTER finalizeStartup() which loads WTA state — otherwise
+    // the migration finds no windows to migrate.
+    migrateStartupScreenAssignments();
 
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
