@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.3] - 2026-04-09
+
+### Added
+- **`--debug` flag for daemon** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): `plasmazonesd --debug` (or `-d`) enables debug-level logging for all `plasmazones.*` categories, replacing the need for `qtlogging.ini` or environment variables when capturing diagnostic output.
+
+### Improved
+- **Autotile diagnostic depth**: Debug logging now includes per-window min-sizes used in zone calculation, before/after zone comparison from `enforceWindowMinSizes`, per-window applied geometries in `applyTiling`, min-size cap values, stale min-size clearing on unfloat, and split tree ratio restoration detail. These additions target the intermittent master-goes-to-100% ratio bug reported in #271.
+
 ## [2.8.2] - 2026-04-08
 
 ### Fixed
