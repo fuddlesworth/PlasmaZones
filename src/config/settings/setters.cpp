@@ -817,11 +817,21 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
     // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,
     // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
     // causes inconsistency (settings says VS exists, ScreenManager disagrees).
+    // Also reject individually-invalid entries via VirtualScreenConfig::isValid
+    // — Settings is the source of truth, so it must apply the same admission
+    // rules as the singular setVirtualScreenConfig path.
     QHash<QString, VirtualScreenConfig> filtered;
     for (auto it = configs.constBegin(); it != configs.constEnd(); ++it) {
-        if (it.value().hasSubdivisions()) {
-            filtered.insert(it.key(), it.value());
+        if (!it.value().hasSubdivisions()) {
+            continue;
         }
+        QString error;
+        if (!VirtualScreenConfig::isValid(it.value(), it.key(), ConfigDefaults::maxVirtualScreensPerPhysical(),
+                                          &error)) {
+            qCWarning(lcConfig) << "setVirtualScreenConfigs: dropping invalid entry for" << it.key() << "—" << error;
+            continue;
+        }
+        filtered.insert(it.key(), it.value());
     }
 
     // Check exact equality to avoid dropping tiny geometry adjustments
@@ -844,11 +854,27 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
 
 void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
+    if (physicalScreenId.isEmpty()) {
+        qCWarning(lcConfig) << "setVirtualScreenConfig: empty physicalScreenId";
+        return;
+    }
+
     if (config.screens.isEmpty() || !config.hasSubdivisions()) {
         if (!m_virtualScreenConfigs.contains(physicalScreenId))
             return;
         m_virtualScreenConfigs.remove(physicalScreenId);
     } else {
+        // Validate before storing — Settings is the source of truth for VS
+        // configs, so it must reject inputs that would later be refused by
+        // ScreenManager. Otherwise Settings and ScreenManager diverge in
+        // memory and the disk save persists garbage that next-load drops.
+        QString error;
+        if (!VirtualScreenConfig::isValid(config, physicalScreenId, ConfigDefaults::maxVirtualScreensPerPhysical(),
+                                          &error)) {
+            qCWarning(lcConfig) << "setVirtualScreenConfig: rejected invalid config for" << physicalScreenId << "—"
+                                << error;
+            return;
+        }
         if (m_virtualScreenConfigs.value(physicalScreenId) == config)
             return;
         m_virtualScreenConfigs.insert(physicalScreenId, config);

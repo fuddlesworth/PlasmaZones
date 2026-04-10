@@ -320,6 +320,10 @@ bool Daemon::init()
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
     m_screenAdaptor = new ScreenAdaptor(this);
+    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
+    // of truth); the daemon's Settings → ScreenManager observer wiring then
+    // refreshes ScreenManager's cache and fires the downstream signal chain.
+    m_screenAdaptor->setSettings(m_settings.get());
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here

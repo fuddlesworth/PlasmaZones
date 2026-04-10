@@ -3,7 +3,7 @@
 
 #include "screenadaptor.h"
 #include "dbushelpers.h"
-#include "../config/configdefaults.h"
+#include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
@@ -106,6 +106,10 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 
     // Update cached effective IDs when virtual screen config changes,
     // so screenRemoved signals emit the current IDs, not stale ones.
+    // Also re-broadcast the D-Bus virtualScreensChanged signal so out-of-process
+    // listeners (KWin effect) refetch their virtual screen state at runtime.
+    // Without this, runtime add/remove only updates the daemon — the effect keeps
+    // stale defs until something else triggers fetchAllVirtualScreenConfigs.
     if (auto* mgr = ScreenManager::instance()) {
         connect(mgr, &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
             auto* m = ScreenManager::instance();
@@ -114,6 +118,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             } else {
                 m_cachedEffectiveIdsPerScreen.remove(physId);
             }
+            Q_EMIT virtualScreensChanged(physId);
         });
     }
 }
@@ -348,6 +353,11 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
+void ScreenAdaptor::setSettings(Settings* settings)
+{
+    m_settings = settings;
+}
+
 void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
 {
     if (physicalScreenId.isEmpty()) {
@@ -359,9 +369,8 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return;
     }
 
-    auto* mgr = ScreenManager::instance();
-    if (!mgr) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: no ScreenManager instance";
+    if (!m_settings) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: no Settings instance — adaptor was not wired";
         return;
     }
 
@@ -374,6 +383,16 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
 
     QJsonObject root = doc.object();
     QJsonArray screensArr = root[JsonKeys::Screens].toArray();
+
+    // Empty screens array is a removal request — write an empty config to
+    // Settings; the daemon's virtualScreenConfigsChanged bridge tears down
+    // ScreenManager subdivisions for this physical screen.
+    if (screensArr.isEmpty()) {
+        VirtualScreenConfig empty;
+        empty.physicalScreenId = physicalScreenId;
+        m_settings->setVirtualScreenConfig(physicalScreenId, empty);
+        return;
+    }
 
     VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
@@ -415,18 +434,18 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         config.screens.append(def);
     }
 
-    if (config.screens.size() < 2) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: need at least 2 screens for subdivision";
-        return;
-    }
-
-    if (config.screens.size() > ConfigDefaults::maxVirtualScreensPerPhysical()) {
-        qCWarning(lcDbus) << "setVirtualScreenConfig: too many virtual screens" << config.screens.size() << "(max"
-                          << ConfigDefaults::maxVirtualScreensPerPhysical() << ")";
-        return;
-    }
-
-    mgr->setVirtualScreenConfig(physicalScreenId, config);
+    // Persist to Settings (the source of truth). Settings::setVirtualScreenConfig
+    // runs the canonical VirtualScreenConfig::isValid validation — including
+    // the "at least 2 screens" floor and the maxVirtualScreensPerPhysical
+    // ceiling — and emits virtualScreenConfigsChanged on success. The
+    // daemon's bridge then calls ScreenManager::refreshVirtualConfigs which
+    // re-validates and fires virtualScreensChanged(physId) for each changed
+    // physical screen. Downstream consumers (autotile engine, overlay
+    // service, daemon migration handler) react to that. We deliberately do
+    // NOT pre-validate the screens count here to avoid two layers of
+    // bounds-checking with subtly different log messages — Settings is the
+    // single point of admission control.
+    m_settings->setVirtualScreenConfig(physicalScreenId, config);
 }
 
 QStringList ScreenAdaptor::getPhysicalScreens()

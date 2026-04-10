@@ -10,6 +10,7 @@
 #include "../logging.h"
 #include <QScreen>
 #include <QSet>
+#include <algorithm>
 #include <limits>
 
 namespace PlasmaZones {
@@ -63,90 +64,13 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return true;
     }
 
-    // Validate: physicalScreenId must match config
-    if (config.physicalScreenId != physicalScreenId) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: config physicalScreenId" << config.physicalScreenId
-                            << "does not match parameter" << physicalScreenId;
-        return false;
-    }
-
-    // Validate: need at least 2 screens for a meaningful subdivision
-    if (config.screens.size() < 2) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: need at least 2 screens for subdivision, got"
-                            << config.screens.size();
-        return false;
-    }
-
-    // Validate: all defs must pass isValid() and have consistent IDs
-    for (const auto& def : config.screens) {
-        if (!def.isValid()) {
-            qCWarning(lcScreen) << "setVirtualScreenConfig: invalid VirtualScreenDef" << def.id
-                                << "region:" << def.region;
-            return false;
-        }
-        if (def.physicalScreenId != physicalScreenId) {
-            qCWarning(lcScreen) << "setVirtualScreenConfig: def.physicalScreenId" << def.physicalScreenId
-                                << "does not match physicalScreenId" << physicalScreenId << "for def" << def.id;
-            return false;
-        }
-        QString expectedId = VirtualScreenId::make(physicalScreenId, def.index);
-        if (def.id != expectedId) {
-            qCWarning(lcScreen) << "setVirtualScreenConfig: def.id" << def.id << "does not match expected" << expectedId
-                                << "for index" << def.index;
-            return false;
-        }
-    }
-
-    // Validate: all def.id values are unique
-    {
-        QSet<QString> seenIds;
-        for (const auto& def : config.screens) {
-            if (seenIds.contains(def.id)) {
-                qCWarning(lcScreen) << "setVirtualScreenConfig: duplicate def.id" << def.id;
-                return false;
-            }
-            seenIds.insert(def.id);
-        }
-    }
-
-    // Validate: all def.index values are unique
-    {
-        QSet<int> seenIndices;
-        for (const auto& def : config.screens) {
-            if (seenIndices.contains(def.index)) {
-                qCWarning(lcScreen) << "setVirtualScreenConfig: duplicate def.index" << def.index;
-                return false;
-            }
-            seenIndices.insert(def.index);
-        }
-    }
-
-    // Validate: no two regions overlap (pairwise intersection check, tolerance-aware)
-    for (int i = 0; i < config.screens.size(); ++i) {
-        for (int j = i + 1; j < config.screens.size(); ++j) {
-            QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
-            if (intersection.width() > VirtualScreenDef::Tolerance
-                && intersection.height() > VirtualScreenDef::Tolerance) {
-                qCWarning(lcScreen) << "setVirtualScreenConfig: overlapping regions between" << config.screens[i].id
-                                    << "and" << config.screens[j].id;
-                return false;
-            }
-        }
-    }
-
-    // Validate: regions should approximately cover [0,1]x[0,1]
-    qreal totalArea = 0.0;
-    for (const auto& def : config.screens) {
-        totalArea += def.region.width() * def.region.height();
-    }
-    if (totalArea < (1.0 - VirtualScreenDef::Tolerance)) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: insufficient coverage for" << physicalScreenId << "- total area"
-                            << totalArea << "<" << (1.0 - VirtualScreenDef::Tolerance) << ", rejecting config";
-        return false;
-    }
-    if (totalArea > (1.0 + VirtualScreenDef::Tolerance)) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: excessive coverage for" << physicalScreenId << "- total area"
-                            << totalArea << ">" << (1.0 + VirtualScreenDef::Tolerance) << ", rejecting config";
+    QString error;
+    // ScreenManager doesn't enforce a max-screens cap here — that's a policy
+    // decision owned by Settings (the source of truth) and ScreenAdaptor (the
+    // D-Bus boundary). ScreenManager just enforces structural/geometric
+    // invariants so its cache can't hold internally inconsistent state.
+    if (!VirtualScreenConfig::isValid(config, physicalScreenId, /*maxScreensPerPhysical=*/0, &error)) {
+        qCWarning(lcScreen) << "setVirtualScreenConfig: rejected invalid config —" << error;
         return false;
     }
 
@@ -164,6 +88,45 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
 VirtualScreenConfig ScreenManager::virtualScreenConfig(const QString& physicalScreenId) const
 {
     return m_virtualConfigs.value(physicalScreenId);
+}
+
+void ScreenManager::refreshVirtualConfigs(const QHash<QString, VirtualScreenConfig>& configs)
+{
+    // Compute the delta in two ordered passes so the downstream signal fan-out
+    // is deterministic across runs:
+    //   1. Removals first (entries in cache but absent from `configs`),
+    //   2. Then additions/changes (entries in `configs`).
+    // Both passes iterate sorted physical IDs so observers see a stable order
+    // when multiple physical screens change in one refresh. Without sorting,
+    // QHash iteration order is unspecified and downstream cross-screen state
+    // (window migrations, autotile updates) can race subtly between runs.
+    QStringList toRemove;
+    QStringList toApply;
+    for (auto it = m_virtualConfigs.constBegin(); it != m_virtualConfigs.constEnd(); ++it) {
+        if (!configs.contains(it.key())) {
+            toRemove.append(it.key());
+        }
+    }
+    for (auto it = configs.constBegin(); it != configs.constEnd(); ++it) {
+        toApply.append(it.key());
+    }
+    std::sort(toRemove.begin(), toRemove.end());
+    std::sort(toApply.begin(), toApply.end());
+
+    // Pass 1: tear down removed entries. setVirtualScreenConfig with an empty
+    // config short-circuits if there's nothing to remove, so this is idempotent.
+    for (const QString& physId : std::as_const(toRemove)) {
+        VirtualScreenConfig empty;
+        empty.physicalScreenId = physId;
+        setVirtualScreenConfig(physId, empty);
+    }
+
+    // Pass 2: apply additions and updates. setVirtualScreenConfig early-returns
+    // when the new config is bit-identical to the current one, so unchanged
+    // entries are no-ops and don't fire the virtualScreensChanged signal.
+    for (const QString& physId : std::as_const(toApply)) {
+        setVirtualScreenConfig(physId, configs.value(physId));
+    }
 }
 
 QStringList ScreenManager::effectiveScreenIds() const

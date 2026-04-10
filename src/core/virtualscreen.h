@@ -7,6 +7,7 @@
 #include <QHash>
 #include <QRect>
 #include <QRectF>
+#include <QSet>
 #include <QString>
 #include <QVector>
 
@@ -124,6 +125,110 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
     }
 
     bool operator==(const VirtualScreenConfig&) const = default;
+
+    /// Validate geometric and structural invariants for this config.
+    /// Returns true if the config is acceptable to apply (including the
+    /// empty/removal case — empty configs are always valid).
+    /// On failure, writes a single human-readable reason to *error.
+    ///
+    /// Centralizing the checks here lets both Settings (writing the source
+    /// of truth) and ScreenManager (refreshing its cache) reject the same
+    /// invalid inputs the same way, avoiding the divergence where Settings
+    /// stores invalid data that ScreenManager later refuses to apply.
+    static bool isValid(const VirtualScreenConfig& cfg, const QString& expectedPhysicalScreenId,
+                        int maxScreensPerPhysical, QString* error = nullptr)
+    {
+        auto fail = [&](const QString& msg) {
+            if (error)
+                *error = msg;
+            return false;
+        };
+
+        // Empty config = removal request. Always valid.
+        if (cfg.isEmpty()) {
+            return true;
+        }
+
+        if (!expectedPhysicalScreenId.isEmpty() && cfg.physicalScreenId != expectedPhysicalScreenId) {
+            return fail(QStringLiteral("config physicalScreenId '%1' does not match parameter '%2'")
+                            .arg(cfg.physicalScreenId, expectedPhysicalScreenId));
+        }
+
+        if (cfg.screens.size() < 2) {
+            return fail(QStringLiteral("need at least 2 screens for subdivision, got %1").arg(cfg.screens.size()));
+        }
+
+        if (maxScreensPerPhysical > 0 && cfg.screens.size() > maxScreensPerPhysical) {
+            return fail(QStringLiteral("too many virtual screens %1 (max %2)")
+                            .arg(cfg.screens.size())
+                            .arg(maxScreensPerPhysical));
+        }
+
+        QSet<QString> seenIds;
+        QSet<int> seenIndices;
+        for (const auto& def : cfg.screens) {
+            if (!def.isValid()) {
+                return fail(QStringLiteral("invalid VirtualScreenDef id='%1' region=(%2,%3 %4x%5)")
+                                .arg(def.id)
+                                .arg(def.region.x())
+                                .arg(def.region.y())
+                                .arg(def.region.width())
+                                .arg(def.region.height()));
+            }
+            if (def.physicalScreenId != cfg.physicalScreenId) {
+                return fail(QStringLiteral("def.physicalScreenId '%1' does not match config '%2' for def '%3'")
+                                .arg(def.physicalScreenId, cfg.physicalScreenId, def.id));
+            }
+            const QString expectedId = VirtualScreenId::make(cfg.physicalScreenId, def.index);
+            if (def.id != expectedId) {
+                return fail(QStringLiteral("def.id '%1' does not match expected '%2' for index %3")
+                                .arg(def.id, expectedId)
+                                .arg(def.index));
+            }
+            if (seenIds.contains(def.id)) {
+                return fail(QStringLiteral("duplicate def.id %1").arg(def.id));
+            }
+            seenIds.insert(def.id);
+            if (seenIndices.contains(def.index)) {
+                return fail(QStringLiteral("duplicate def.index %1").arg(def.index));
+            }
+            seenIndices.insert(def.index);
+        }
+
+        // Pairwise overlap check (tolerance-aware).
+        for (int i = 0; i < cfg.screens.size(); ++i) {
+            for (int j = i + 1; j < cfg.screens.size(); ++j) {
+                const QRectF intersection = cfg.screens[i].region.intersected(cfg.screens[j].region);
+                if (intersection.width() > VirtualScreenDef::Tolerance
+                    && intersection.height() > VirtualScreenDef::Tolerance) {
+                    return fail(QStringLiteral("overlapping regions between '%1' and '%2'")
+                                    .arg(cfg.screens[i].id, cfg.screens[j].id));
+                }
+            }
+        }
+
+        // Total area must approximately cover the unit square.
+        qreal totalArea = 0.0;
+        for (const auto& def : cfg.screens) {
+            totalArea += def.region.width() * def.region.height();
+        }
+        const qreal lower = 1.0 - VirtualScreenDef::Tolerance;
+        const qreal upper = 1.0 + VirtualScreenDef::Tolerance;
+        if (totalArea < lower) {
+            return fail(QStringLiteral("insufficient coverage for '%1' — total area %2 < %3")
+                            .arg(cfg.physicalScreenId)
+                            .arg(totalArea)
+                            .arg(lower));
+        }
+        if (totalArea > upper) {
+            return fail(QStringLiteral("excessive coverage for '%1' — total area %2 > %3")
+                            .arg(cfg.physicalScreenId)
+                            .arg(totalArea)
+                            .arg(upper));
+        }
+
+        return true;
+    }
 };
 
 } // namespace PlasmaZones

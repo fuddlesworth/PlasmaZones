@@ -457,10 +457,17 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     m_trackedScreens.removeAll(screen);
     m_effectiveScreenIdsDirty = true;
 
-    // Remove stale virtual screen config for the removed physical screen.
-    // Keeping it would cause effectiveScreenIds() to enumerate virtual screen IDs
-    // that no longer have a backing QScreen, leading to invalid geometry lookups.
-    m_virtualConfigs.remove(physId);
+    // Do NOT remove the entry from m_virtualConfigs here. Settings is the
+    // authoritative source of truth for VS configuration; ScreenManager only
+    // caches it. Wiping the cache on a transient disconnect (panel change,
+    // EDID re-read, suspend/resume, KWin relayout) used to permanently lose
+    // VS state for the rest of the session because nothing re-pushed it on
+    // re-add. Stale cache entries for screens that are not currently connected
+    // are filtered out by effectiveScreenIds()'s findScreenByIdOrName() check
+    // (virtualscreens.cpp:181), so leaving them in place is harmless and
+    // avoids the loss-on-flap bug. The cache is rebuilt from Settings via
+    // refreshVirtualConfigs() whenever Settings::virtualScreenConfigsChanged
+    // fires.
 
     // Invalidate EDID cache so a different monitor on this connector gets a fresh read.
     // The daemon also does this, but ScreenManager should be self-contained.

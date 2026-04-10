@@ -142,10 +142,31 @@ public:
      * Defines how a physical screen is subdivided into virtual screens.
      * Pass an empty config to remove subdivisions.
      *
+     * **Production code should NOT call this directly.** Settings is the
+     * source of truth for virtual screen configurations: write to
+     * Settings::setVirtualScreenConfig and let the daemon's connect to
+     * Settings::virtualScreenConfigsChanged drive ScreenManager via
+     * refreshVirtualConfigs(). Direct calls remain supported for unit tests
+     * and the refresh path itself.
+     *
      * @param physicalScreenId Stable EDID-based physical screen identifier
      * @param config Virtual screen configuration (regions + names)
      */
     bool setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+
+    /**
+     * @brief Refresh ScreenManager's cache from an authoritative config map
+     *
+     * Diffs @p configs against the current cache and applies the delta via
+     * setVirtualScreenConfig (which validates each entry). For physical IDs
+     * present in the cache but absent in @p configs, applies an empty config
+     * to tear down subdivisions. This is the canonical entry point for the
+     * Settings → ScreenManager observer wiring; calling it more than once is
+     * idempotent.
+     *
+     * @param configs Authoritative configs keyed by physical screen ID
+     */
+    void refreshVirtualConfigs(const QHash<QString, VirtualScreenConfig>& configs);
 
     /**
      * @brief Get virtual screen configuration for a physical screen

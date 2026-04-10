@@ -253,6 +253,19 @@ private:
      */
     void updateAutotileScreens();
 
+    /**
+     * @brief Respond to a ScreenManager VS cache change for a physical screen
+     *
+     * Wired to ScreenManager::virtualScreensChanged. Performs the post-change
+     * fan-out: clears stale resnap buffer, migrates window assignments to the
+     * new VS IDs (when subdivisions exist), prunes stale autotile orders,
+     * refreshes the autotile screen set, recalculates affected zone
+     * geometries inline, resnaps windows on this physical screen and its
+     * virtual children, and schedules the debounced geometry update for
+     * downstream consumers.
+     */
+    void onVirtualScreensReconfigured(const QString& physicalScreenId);
+
     /** @brief Resnap windows to current layout zones (only in manual/snap mode) */
     void resnapIfManualMode();
 

@@ -339,31 +339,32 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
             adaptor->windowUnsnapped(entry.windowId);
             adaptor->clearPreTileGeometry(entry.windowId);
         } else {
-            // Detect screen from zone geometry center (virtual-screen-aware).
-            // effectiveScreenAt() already checks both virtual and physical screen
-            // geometries, so no separate effectiveScreenIds iteration is needed.
-            QString screenId;
+            // If the caller stamped an authoritative target screen, trust it.
+            // This is the safe path for resnap-from-stored callers, where
+            // re-deriving from geometry.center() risks landing in a sibling
+            // virtual screen if the layout geometry resolved against a stale
+            // or fallback rect. Empty means "no caller-known target" — legacy
+            // callers like rotate / snap-all that compute geometry without
+            // knowing the target screen — and falls through to the geometry-
+            // based resolution below.
+            QString screenId = entry.targetScreenId;
             QPoint center = entry.targetGeometry.center();
             auto* mgr = ScreenManager::instance();
-            if (mgr) {
+            if (screenId.isEmpty() && mgr) {
                 screenId = mgr->effectiveScreenAt(center);
             }
             if (screenId.isEmpty()) {
-                // Last resort: no ScreenManager or point not in any effective screen.
-                // If the physical screen has virtual screens, resolve to the correct one.
+                // Final fallback: walk QGuiApplication's screens manually.
+                // This path is hit only when both targetScreenId and
+                // effectiveScreenAt(center) returned empty — typically when
+                // ScreenManager hasn't been initialized yet (very early in
+                // daemon lifecycle) or when the geometry's center falls
+                // outside all known screens. effectiveScreenAt above already
+                // covers the VS-aware case, so we just need a physical fall-
+                // through here — no need to re-attempt VS resolution.
                 for (QScreen* screen : QGuiApplication::screens()) {
                     if (screen->geometry().contains(center)) {
-                        QString physId = Utils::screenIdentifier(screen);
-                        if (!VirtualScreenId::isVirtual(screenId)) {
-                            if (mgr && mgr->hasVirtualScreens(physId)) {
-                                QString vsId = mgr->effectiveScreenAt(center);
-                                if (!vsId.isEmpty()) {
-                                    screenId = vsId;
-                                    break;
-                                }
-                            }
-                        }
-                        screenId = physId;
+                        screenId = Utils::screenIdentifier(screen);
                         break;
                     }
                 }

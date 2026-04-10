@@ -229,8 +229,18 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
         }
 
         QString screenId = m_windowScreenAssignments.value(windowId);
-        if (!screenFilter.isEmpty() && !Utils::screensMatch(screenId, screenFilter)) {
-            continue;
+        if (!screenFilter.isEmpty()) {
+            // If the filter is a virtual screen ID, require exact equality —
+            // screensMatch already enforces that distinct VS IDs (and VS vs
+            // physical) never match. If the filter is a physical screen ID,
+            // match windows stored on that physical screen OR on any of its
+            // virtual children — belongsToPhysicalScreen handles both cases.
+            const bool match = VirtualScreenId::isVirtual(screenFilter)
+                ? Utils::screensMatch(screenId, screenFilter)
+                : Utils::belongsToPhysicalScreen(screenId, screenFilter);
+            if (!match) {
+                continue;
+            }
         }
 
         QRect geo = resolveZoneGeometry(zoneIds, screenId);
@@ -245,6 +255,12 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
         if (zoneIds.size() > 1)
             entry.targetZoneIds = zoneIds;
         entry.targetGeometry = geo;
+        // Stamp the authoritative target screen so processBatchEntries skips
+        // re-derivation from geometry.center(). If the layout's geometry ever
+        // resolved to a stale fallback (e.g. a transient cache miss), the
+        // re-derivation could land in a sibling VS and clobber the stored
+        // assignment. Trust the source screen we already read above.
+        entry.targetScreenId = screenId;
         result.append(entry);
     }
 
@@ -253,13 +269,19 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
                    << (screenFilter.isEmpty() ? QStringLiteral("(all screens)")
                                               : QStringLiteral("(screen: %1)").arg(screenFilter));
     if (result.isEmpty() && !m_windowZoneAssignments.isEmpty() && lcCore().isDebugEnabled()) {
+        auto screenMatches = [&](const QString& screen) {
+            if (screenFilter.isEmpty())
+                return true;
+            return VirtualScreenId::isVirtual(screenFilter) ? Utils::screensMatch(screen, screenFilter)
+                                                            : Utils::belongsToPhysicalScreen(screen, screenFilter);
+        };
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             QString screen = m_windowScreenAssignments.value(it.key());
             bool floating = isWindowFloating(it.key());
             QRect geo = it.value().isEmpty() ? QRect() : resolveZoneGeometry(it.value(), screen);
             qCDebug(lcCore) << "  skipped:" << it.key() << "zones=" << it.value() << "screen=" << screen
                             << "floating=" << floating << "geoValid=" << geo.isValid()
-                            << "screenMatch=" << (screenFilter.isEmpty() || Utils::screensMatch(screen, screenFilter));
+                            << "screenMatch=" << screenMatches(screen);
         }
     }
     return result;

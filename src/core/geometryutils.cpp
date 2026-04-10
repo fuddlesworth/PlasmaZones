@@ -248,6 +248,17 @@ QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& scr
         QRect availGeom = vsAvailGeom.isValid() ? vsAvailGeom : vsGeom;
         return getZoneGeometryWithGaps(zone, vsGeom, availGeom, zonePadding, outerGaps, useAvail, screenId);
     }
+    // For virtual screen IDs, do NOT fall back to the parent QScreen* — that
+    // re-projects relative zone coordinates (defined for the VS sub-region)
+    // onto the full physical screen, producing a geometry that lands in a
+    // DIFFERENT virtual screen. processBatchEntries then re-derives the
+    // window's screen from the geometry center, silently overwriting the
+    // stored VS scope and corrupting WindowScreenAssignments. Better to
+    // return an invalid rect so the caller skips the entry; the next resnap
+    // (after VS state is restored) will succeed.
+    if (VirtualScreenId::isVirtual(screenId)) {
+        return QRectF();
+    }
     if (screen) {
         return getZoneGeometryWithGaps(zone, screen, zonePadding, outerGaps, useAvail, screenId);
     }

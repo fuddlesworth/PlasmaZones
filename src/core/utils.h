@@ -344,6 +344,24 @@ PLASMAZONES_EXPORT bool isConnectorName(const QString& identifier);
 PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
 
 /**
+ * @brief Check whether @p storedScreenId belongs to a given physical screen
+ *
+ * Returns true when @p storedScreenId is either:
+ *   - the physical screen ID itself (resolves via screensMatch), OR
+ *   - a virtual screen ID whose physical parent is @p physicalScreenId.
+ *
+ * This is the "filter by physical screen including its virtual children"
+ * operation that screensMatch deliberately does NOT provide (different
+ * virtual IDs are not equivalent to each other or to their parent under
+ * screensMatch's strict semantics). Use this for "do something to all
+ * windows on this physical screen, including any subdivisions" — e.g.
+ * resnap on VS reconfiguration.
+ *
+ * Both empty / both invalid → false. Empty physicalScreenId → false.
+ */
+PLASMAZONES_EXPORT bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId);
+
+/**
  * @brief Check for duplicate screen identifiers among connected monitors
  */
 PLASMAZONES_EXPORT void warnDuplicateScreenIds();

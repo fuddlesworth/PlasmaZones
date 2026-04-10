@@ -14,6 +14,8 @@ class QScreen;
 
 namespace PlasmaZones {
 
+class Settings;
+
 /**
  * @brief D-Bus adaptor for screen management operations
  *
@@ -31,6 +33,12 @@ class PLASMAZONES_EXPORT ScreenAdaptor : public QDBusAbstractAdaptor
 public:
     explicit ScreenAdaptor(QObject* parent = nullptr);
     ~ScreenAdaptor() override = default;
+
+    /// Wire the authoritative Settings instance for VS config writes.
+    /// Must be called once after construction; D-Bus VS mutations are
+    /// persisted to Settings, which then drives ScreenManager via the
+    /// daemon's virtualScreenConfigsChanged → refreshVirtualConfigs bridge.
+    void setSettings(Settings* settings);
 
 public Q_SLOTS:
     // Screen queries
@@ -66,6 +74,7 @@ private:
     bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
 
     QString m_primaryScreenOverride;
+    Settings* m_settings = nullptr;
 
     /// Last effective screen ID list emitted by the deferred timer, used to
     /// suppress duplicate emissions during rapid hot-plug sequences.

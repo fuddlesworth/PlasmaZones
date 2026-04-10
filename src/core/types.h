@@ -152,6 +152,16 @@ struct PLASMAZONES_EXPORT ZoneAssignmentEntry
     QString targetZoneId; ///< Primary zone to move to
     QStringList targetZoneIds; ///< All zones (for multi-zone spans; empty = single zone)
     QRect targetGeometry; ///< Target geometry in pixels
+    /// Authoritative target screen ID (physical or virtual). Set by callers
+    /// that know the intended destination screen — typically resnap-from-stored
+    /// paths where the screen is read from m_windowScreenAssignments and the
+    /// geometry is derived from that screen's layout. When non-empty,
+    /// processBatchEntries trusts this value and does NOT re-derive from
+    /// targetGeometry.center(). Empty means "ask effectiveScreenAt" (the
+    /// legacy path; correct for fresh user drops where the target screen is
+    /// unknown a priori, but corrupting on resnap-from-stored where a stale
+    /// geometry could re-derive into the wrong virtual screen).
+    QString targetScreenId;
 };
 
 } // namespace PlasmaZones

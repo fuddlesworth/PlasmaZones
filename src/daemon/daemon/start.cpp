@@ -49,36 +49,33 @@ void Daemon::connectScreenSignals()
     // Warn about identical monitors producing duplicate screen IDs
     Utils::warnDuplicateScreenIds();
 
-    // Load saved virtual screen configs from Settings into ScreenManager
-    const auto vsConfigs = m_settings->virtualScreenConfigs();
-    for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
-        m_screenManager->setVirtualScreenConfig(it.key(), it.value());
-    }
-
-    // Persist virtual screen config changes back to Settings, and migrate screen assignments
-    connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
-        auto config = m_screenManager->virtualScreenConfig(physId);
-        m_settings->setVirtualScreenConfig(physId, config);
-        // Clear stale resnap buffer — screen IDs have changed
-        if (m_windowTrackingAdaptor) {
-            m_windowTrackingAdaptor->service()->clearResnapBuffer();
-        }
-        // Migrate window screen assignments when virtual screens change at runtime
-        if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
-            QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
-            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physId, vsIds, m_screenManager.get());
-        }
-        // Prune stale autotile order entries for old virtual screen IDs
-        pruneAutotileOrdersForRemovedScreens(physId);
-        // Trigger geometry recalculation and window resnap so snapped windows
-        // reposition to the new virtual screen bounds (e.g. 50/50 → 60/40).
-        // Reuse the same debounced path as physical screen geometry changes.
-        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(physId);
-        if (physScreen) {
-            m_geometryUpdatePending = true;
-            m_geometryUpdateTimer.start();
-        }
+    // ─────────────────────────────────────────────────────────────────────
+    // Settings → ScreenManager observer wiring
+    //
+    // Settings is the single source of truth for virtual screen configs.
+    // ScreenManager keeps a cache (for fast geometry lookups) that is rebuilt
+    // from Settings whenever Settings::virtualScreenConfigsChanged fires —
+    // either from disk reload (notifyReload), in-process mutation (D-Bus
+    // ScreenAdaptor::setVirtualScreenConfig writes here, not directly to
+    // ScreenManager), or programmatic settings changes.
+    //
+    // Both connections fire ScreenManager::virtualScreensChanged(physId) for
+    // each changed entry, which the downstream handler below picks up to do
+    // migration / autotile / resnap work.
+    // ─────────────────────────────────────────────────────────────────────
+    connect(m_settings.get(), &Settings::virtualScreenConfigsChanged, this, [this]() {
+        m_screenManager->refreshVirtualConfigs(m_settings->virtualScreenConfigs());
     });
+    // Initial sync: pull whatever Settings::load() already populated.
+    m_screenManager->refreshVirtualConfigs(m_settings->virtualScreenConfigs());
+
+    // React to ScreenManager VS cache changes (driven by the observer above
+    // OR by direct test calls). Delegates to onVirtualScreensReconfigured
+    // which migrates window assignments, refreshes autotile, resnaps
+    // windows, and schedules downstream geometry updates. NOTE: this
+    // handler no longer writes back to Settings — Settings is now the
+    // source, not the sink.
+    connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, &Daemon::onVirtualScreensReconfigured);
 
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
@@ -86,7 +83,12 @@ void Daemon::connectScreenSignals()
         // (handles the case where EDID wasn't available during very early startup)
         Utils::invalidateEdidCache(screen->name());
         m_overlayService->handleScreenAdded(screen);
-        // Recalculate zone geometries for all effective screen IDs on this physical screen
+        // Recalculate zone geometries for all effective screen IDs on this physical screen.
+        // Note: VS cache restoration on screen re-add is no longer needed —
+        // ScreenManager::onScreenRemoved no longer wipes m_virtualConfigs, so
+        // the entry survives a disconnect and is reused as-is when the screen
+        // comes back. Settings is the source of truth and pushes updates via
+        // refreshVirtualConfigs() in response to its own change signal.
         const QString physId = Utils::screenIdentifier(screen);
         const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
         const int desktop = m_virtualDesktopManager->currentDesktop();
@@ -583,6 +585,77 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
         } else {
             ++it;
         }
+    }
+}
+
+void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
+{
+    // m_screenManager / m_layoutManager / m_virtualDesktopManager are
+    // unique_ptrs constructed in the Daemon ctor's initializer list and
+    // never nulled — by the time this signal handler fires they are valid.
+    // m_windowTrackingAdaptor is constructed later in init() and may be null
+    // if the signal somehow fires before construction (e.g. early Settings
+    // load); guard those uses individually.
+    const VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
+
+    // Recalculate zone geometries inline for the affected screens FIRST so
+    // that any TilingState created by the upcoming updateAutotileScreens
+    // call (and the resnap below) reads fresh zone bounds. The screenAdded
+    // handler does the same inline recalc for newly-added physical screens.
+    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString activity =
+        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QStringList affectedScreenIds = config.hasSubdivisions()
+        ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
+        : QStringList{physicalScreenId};
+    for (const QString& sid : affectedScreenIds) {
+        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        if (screenLayout) {
+            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+        }
+    }
+
+    // Clear stale resnap buffer — screen IDs have changed.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->service()->clearResnapBuffer();
+    }
+
+    // Migrate window screen assignments to the new VS IDs (when subdivisions
+    // exist). Migration is a no-op for windows already on a valid VS ID in
+    // the new config — those keep their stored screen.
+    if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
+        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+        m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physicalScreenId, vsIds,
+                                                                              m_screenManager.get());
+    }
+
+    // Prune stale autotile order entries for old virtual screen IDs.
+    pruneAutotileOrdersForRemovedScreens(physicalScreenId);
+
+    // Re-derive the autotile screen set so the engine picks up new virtual
+    // screen IDs (or drops removed ones) and creates/destroys TilingStates
+    // accordingly. Without this, re-splitting a physical screen whose
+    // assignments already exist on the VS IDs leaves the engine unaware of
+    // the screens — onScreenGeometryChanged early-returns and no tiling
+    // happens until something else (e.g. an assignment change) fires
+    // layoutAssigned → updateAutotileScreens.
+    updateAutotileScreens();
+
+    // Resnap windows on this physical screen and any of its virtual children
+    // to their stored zones. Uses calculateResnapFromCurrentAssignments which
+    // is NOT gated on keepWindowsInZonesOnResolutionChange — VS reconfiguration
+    // is user-initiated, not a passive resolution change. The physId filter is
+    // VS-aware via Utils::belongsToPhysicalScreen.
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->resnapCurrentAssignments(physicalScreenId);
+    }
+
+    // Trigger debounced geometry recalculation for the rest of the system
+    // (overlays, panel requery, autotile retile). Reuse the same debounced
+    // path as physical screen geometry changes.
+    if (ScreenManager::resolvePhysicalScreen(physicalScreenId)) {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
     }
 }
 
