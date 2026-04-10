@@ -286,8 +286,36 @@ public:
     // Paint helper — applies translate, scale, and style-specific opacity.
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 
+    // Geometry-only variant — translate + scale but NO opacity.
+    // Used when a custom GLSL fragment shader handles opacity / dissolve so
+    // the C++ side provides only positioning; the shader outputs final alpha.
+    void applyGeometryOnly(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
+
     // Bounding rect covering the full animation path (for repaint regions)
     QRectF animationBounds(KWin::EffectWindow* window) const;
+
+    /// Snapshot of animation state for shader uniform binding
+    struct AnimationInfo
+    {
+        qreal progress;
+        qreal duration; ///< Effective duration in ms (computed from spring if applicable)
+        qreal styleParam;
+        QPointF startPosition;
+        QSizeF startSize;
+        QRect targetGeometry;
+        QString shaderPath;
+        QString vertexShaderPath;
+        int shaderSubdivisions = 1;
+    };
+
+    /// Get animation info for shader uniforms (returns nullopt if no animation)
+    std::optional<AnimationInfo> animationInfo(KWin::EffectWindow* window) const;
+
+Q_SIGNALS:
+    /// Emitted from advanceAnimations() when a window's animation completes
+    /// and is removed from the active set. Listeners can clean up any per-window
+    /// state (e.g. OffscreenEffect shader redirection).
+    void animationFinished(KWin::EffectWindow* window);
 
 private:
     // Shared translate + scale interpolation used by Morph, Slide, SlideFade

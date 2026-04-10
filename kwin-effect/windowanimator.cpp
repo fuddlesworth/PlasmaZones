@@ -304,6 +304,9 @@ void WindowAnimator::advanceAnimations(std::chrono::milliseconds presentTime)
                 --m_opacityAnimationCount;
             m_animations.erase(it);
         }
+        // Notify listeners (e.g. shader redirection cleanup) after the entry
+        // is removed so a slot that calls hasAnimation() sees the current state.
+        Q_EMIT animationFinished(w);
     }
     m_opacityAnimationCount = qMax(0, m_opacityAnimationCount);
 }
@@ -349,6 +352,52 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
         applyMorphTransform(window, *it, data);
         break;
     }
+}
+
+void WindowAnimator::applyGeometryOnly(KWin::EffectWindow* window, KWin::WindowPaintData& data) const
+{
+    auto it = m_animations.constFind(window);
+    if (it == m_animations.constEnd() || !it->isValid())
+        return;
+
+    // Popin style: center-scale geometry without opacity.
+    if (it->style == AnimationStyle::Popin) {
+        const qreal p = it->cachedProgress;
+        const qreal minScale = qBound(0.1, it->styleParam, 1.0);
+        const qreal scale = qMax(0.01, minScale + (1.0 - minScale) * p);
+        const QRectF frameGeo = window->frameGeometry();
+        const qreal cx = frameGeo.width() * 0.5;
+        const qreal cy = frameGeo.height() * 0.5;
+        data.setXScale(data.xScale() * scale);
+        data.setYScale(data.yScale() * scale);
+        data += QPointF(cx * (1.0 - scale), cy * (1.0 - scale));
+        return;
+    }
+
+    // SlideFade: partial translate/scale via slideFraction = styleParam.
+    if (it->style == AnimationStyle::SlideFade) {
+        const qreal slideFraction = qBound(0.0, it->styleParam, 1.0);
+        applyGeometryInterpolation(window, *it, data, slideFraction);
+        return;
+    }
+
+    // Morph / Slide / Custom / default: full geometry interpolation.
+    applyGeometryInterpolation(window, *it, data);
+}
+
+std::optional<WindowAnimator::AnimationInfo> WindowAnimator::animationInfo(KWin::EffectWindow* window) const
+{
+    auto it = m_animations.constFind(window);
+    if (it == m_animations.constEnd() || !it->isValid())
+        return std::nullopt;
+
+    qreal effectiveDuration = it->duration;
+    if (it->isSpring() && it->cachedSpringDuration > 0) {
+        effectiveDuration = it->cachedSpringDuration * 1000.0;
+    }
+    return AnimationInfo{it->cachedProgress, effectiveDuration,    it->styleParam,
+                         it->startPosition,  it->startSize,        it->targetGeometry,
+                         it->shaderPath,     it->vertexShaderPath, it->shaderSubdivisions};
 }
 
 void WindowAnimator::applyGeometryInterpolation(KWin::EffectWindow* window, const ManagedAnimation& anim,
