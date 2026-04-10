@@ -7,6 +7,23 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.4] - 2026-04-09
+
+### Fixed
+- **Ephemeral windows entering autotile tree** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The KWin effect's minimum window size filter initialized to 0x0 and was only populated after an async D-Bus settings load. During that startup race window, all windows — including Steam splash screens and Electron notification popups — bypassed the size check and entered the tiling tree. The cache now initializes to 200x150 (matching daemon defaults) so the filter is active from effect load.
+
+### Added
+- **`--log-file` flag for daemon**: `plasmazonesd --log-file /tmp/pz.log` redirects all log output to a file (append mode, thread-safe). Combines with `--debug` for easy bug report capture without piping or `journalctl`.
+- **Autotile eligibility diagnostics**: Windows accepted into the autotile tree now log their window class, skipSwitcher, keepAbove, and transient properties at debug level, making it possible to identify why specific windows pass the filter.
+
+## [2.8.3] - 2026-04-09
+
+### Added
+- **`--debug` flag for daemon** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): `plasmazonesd --debug` (or `-d`) enables debug-level logging for all `plasmazones.*` categories, replacing the need for `qtlogging.ini` or environment variables when capturing diagnostic output.
+
+### Improved
+- **Autotile diagnostic depth**: Debug logging now includes per-window min-sizes used in zone calculation, before/after zone comparison from `enforceWindowMinSizes`, per-window applied geometries in `applyTiling`, min-size cap values, stale min-size clearing on unfloat, and split tree ratio restoration detail. These additions target the intermittent master-goes-to-100% ratio bug reported in #271.
+
 ## [2.8.2] - 2026-04-08
 
 ### Fixed

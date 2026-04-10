@@ -17,12 +17,16 @@
 #include <QDBusInterface>
 #include <QIcon>
 #include <QLibrary>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QQuickWindow>
 #include <QThread>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 #include <QtQml/qqml.h>
 #include "pz_i18n.h"
+#include <cerrno>
+#include <cstring>
 #include <signal.h>
 
 // Import static QML module for shared components
@@ -131,7 +135,44 @@ int main(int argc, char* argv[])
                                      PzI18n::tr("Replace existing daemon instance"));
     parser.addOption(replaceOption);
 
+    QCommandLineOption debugOption(QStringList{QStringLiteral("d"), QStringLiteral("debug")},
+                                   PzI18n::tr("Enable debug logging for all PlasmaZones categories"));
+    parser.addOption(debugOption);
+
+    QCommandLineOption logFileOption(QStringList{QStringLiteral("l"), QStringLiteral("log-file")},
+                                     PzI18n::tr("Write log output to <file> instead of stderr"), PzI18n::tr("file"));
+    parser.addOption(logFileOption);
+
     parser.process(app);
+
+    // --log-file: redirect Qt message output to a file.
+    // Opened here (before --debug filter rules) so the file is ready
+    // before any log messages are emitted. The static FILE* and QMutex
+    // intentionally leak — they must outlive QCoreApplication for
+    // shutdown messages.
+    static FILE* logFile = nullptr;
+    static QMutex* logMutex = nullptr;
+    if (parser.isSet(logFileOption)) {
+        const QByteArray pathLocal = parser.value(logFileOption).toLocal8Bit();
+        logFile = fopen(pathLocal.constData(), "a");
+        if (logFile) {
+            logMutex = new QMutex;
+            qInstallMessageHandler([](QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
+                const QByteArray formatted = qFormatLogMessage(type, ctx, msg).toUtf8();
+                QMutexLocker lock(logMutex);
+                fprintf(logFile, "%s\n", formatted.constData());
+                fflush(logFile);
+            });
+            fprintf(stderr, "plasmazonesd: logging to %s\n", pathLocal.constData());
+        } else {
+            qCWarning(PlasmaZones::lcDaemon)
+                << "Failed to open log file:" << parser.value(logFileOption) << "-" << strerror(errno);
+        }
+    }
+
+    if (parser.isSet(debugOption)) {
+        QLoggingCategory::setFilterRules(QStringLiteral("plasmazones.*=true"));
+    }
 
     // Ensure single instance via D-Bus service name registration
     const QString serviceName = QStringLiteral("org.plasmazones.daemon");

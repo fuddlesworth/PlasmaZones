@@ -31,15 +31,22 @@ Flickable {
     property string _selectedScreen: ""
     property int _revision: 0
     // Aspect ratio of the currently selected screen (for layout preview).
+    // Falls back to the first screen if none is selected.
     readonly property real _selectedScreenAspectRatio: {
-        if (!_selectedScreen)
-            return 0;
-
         var screens = settingsController.screens;
-        for (var i = 0; i < screens.length; i++) {
-            if (screens[i].name === _selectedScreen && screens[i].width > 0 && screens[i].height > 0)
-                return screens[i].width / screens[i].height;
+        var target = _selectedScreen;
+        if (!target && screens.length > 0)
+            target = screens[0].name || "";
 
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].name === target) {
+                var w = screens[i].width || 0;
+                var h = screens[i].height || 0;
+                if (w > 0 && h > 0)
+                    return w / h;
+
+                break;
+            }
         }
         return 0;
     }

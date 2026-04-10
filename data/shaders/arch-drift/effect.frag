@@ -449,7 +449,7 @@ vec4 renderArchZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
 
             // Some cells light up on treble hits
             float cellFlash = step(0.8, cellHash)
-                            * step(0.3, hash21(cellId + floor(time * 4.0))) * trebleEnv;
+                            * step(0.8, hash21(cellId + floor(time * 0.7))) * trebleEnv;
 
             // Grid color: subtle primary with occasional accent highlights
             vec3 gridCol = palPrimary * (0.2 + contrast * 0.2);

@@ -1,6 +1,23 @@
 {
     "releases": [
         {
+            "version": "2.8.4",
+            "date": "2026-04-09",
+            "highlights": [
+                "Fixed startup race where ephemeral windows (Steam splash, Electron notifications) bypassed the autotile size filter",
+                "New --log-file flag for easy file-based log capture",
+                "Autotile eligibility diagnostics show window properties at debug level"
+            ]
+        },
+        {
+            "version": "2.8.3",
+            "date": "2026-04-09",
+            "highlights": [
+                "New --debug flag for easy diagnostic log capture (plasmazonesd --debug)",
+                "Deeper autotile debug logging for diagnosing the intermittent ratio bug (#271)"
+            ]
+        },
+        {
             "version": "2.8.2",
             "date": "2026-04-08",
             "highlights": [

@@ -711,6 +711,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     m_notifiedWindowScreens.remove(windowId);
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
+    cancelPendingMinimizeFloat(windowId);
 
     // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
     // and pre-autotile tracking
@@ -775,9 +776,13 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
     if ((m_effect->m_cachedMinWindowWidth > 0 && frame.width() < m_effect->m_cachedMinWindowWidth)
         || (m_effect->m_cachedMinWindowHeight > 0 && frame.height() < m_effect->m_cachedMinWindowHeight)) {
         qCDebug(lcEffect) << "isEligibleForAutotileNotify: rejected (too small)" << m_effect->getWindowId(w)
-                          << "size=" << frame.size();
+                          << "size=" << frame.size() << "threshold=" << m_effect->m_cachedMinWindowWidth << "x"
+                          << m_effect->m_cachedMinWindowHeight;
         return false;
     }
+    qCDebug(lcEffect) << "isEligibleForAutotileNotify: accepted" << m_effect->getWindowId(w) << "size=" << frame.size()
+                      << "class=" << w->windowClass() << "skipSwitcher=" << w->isSkipSwitcher()
+                      << "keepAbove=" << w->keepAbove() << "transient=" << (w->transientFor() != nullptr);
     return true;
 }
 

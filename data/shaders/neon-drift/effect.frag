@@ -104,10 +104,10 @@ vec3 neonTube(float dist, vec3 tubeColor, float intensity) {
 }
 
 float neonFlicker(float time, float seed, float trebleEnv) {
-    float base = 0.92 + 0.08 * sin(time * 60.0 + seed * 100.0);
-    float buzz = step(0.97, noise2D(vec2(time * 30.0, seed * 7.0))) * 0.4;
-    float trebleBuzz = trebleEnv * step(0.9, noise2D(vec2(time * 50.0, seed * 13.0))) * 0.5;
-    return clamp(base - buzz - trebleBuzz, 0.4, 1.0);
+    float base = 0.94 + 0.06 * sin(time * 8.0 + seed * 100.0);
+    float buzz = step(0.97, noise2D(vec2(time * 4.0, seed * 7.0))) * 0.2;
+    float trebleBuzz = trebleEnv * step(0.93, noise2D(vec2(time * 5.0, seed * 13.0))) * 0.25;
+    return clamp(base - buzz - trebleBuzz, 0.6, 1.0);
 }
 
 
@@ -918,9 +918,9 @@ vec4 compositeNeonLabels(vec4 color, vec2 fragCoord,
     // ── Neon sign flicker (per-region, not uniform) ──────────────────
     float flickerRegion = floor(uv.x * 6.0 + uv.y * 3.0);
     float flickerSeed = hash11(flickerRegion * 13.7);
-    float flicker = 0.88 + 0.12 * sin(time * 55.0 + flickerSeed * 100.0);
-    float buzzOff = step(0.96, noise2D(vec2(time * 25.0, flickerSeed * 7.0))) * 0.5;
-    flicker = clamp(flicker - buzzOff, 0.35, 1.0);
+    float flicker = 0.92 + 0.08 * sin(time * 8.0 + flickerSeed * 100.0);
+    float buzzOff = step(0.97, noise2D(vec2(time * 4.0, flickerSeed * 7.0))) * 0.25;
+    flicker = clamp(flicker - buzzOff, 0.6, 1.0);
 
     // ── Color sweep across text (neon powering on) ──────────────────
     float sweep = fract(time * 0.15);

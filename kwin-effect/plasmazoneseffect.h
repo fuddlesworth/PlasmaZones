@@ -133,6 +133,21 @@ private:
     QString getWindowId(KWin::EffectWindow* w) const;
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
     bool isTileableWindow(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Reject Plasma shell layer-shell surfaces by window class.
+     *
+     * On Wayland, KDE notification popups, system tray overlays, the emoji
+     * picker, the OSD, and krunner are layer-shell surfaces that don't
+     * reliably set KWin's isNotification()/isPopupWindow() metadata, so they
+     * slip past the type-based filters in shouldHandleWindow() and
+     * notifyWindowActivated(). Class-based rejection is authoritative —
+     * these are never zone-managed regardless of how KWin labels them, and
+     * every stray activation/minimize event they generate caused the autotile
+     * churn that balloons the master window to 100% on every notification
+     * (discussion #271).
+     */
+    static bool isPlasmaShellSurface(const QString& windowClass);
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
@@ -452,8 +467,15 @@ private:
     // Minimum window size for autotile eligibility. Windows smaller than this
     // are rejected by isEligibleForAutotileNotify() to prevent small utility
     // windows (emoji picker, color picker, etc.) from entering the tiling tree.
-    int m_cachedMinWindowWidth = 0;
-    int m_cachedMinWindowHeight = 0;
+    // Defaults match ConfigDefaults::minimumWindowWidth/Height() (200/150).
+    // The async loadSettingAsync() call in loadCachedSettings() overrides
+    // with the user's actual setting once daemon settings arrive via D-Bus.
+    // Until then, these defaults keep the min-size filter active from
+    // effect load — preventing small ephemeral windows (Steam splash,
+    // Electron notification popups) from entering the autotile tree during
+    // the startup race window.
+    int m_cachedMinWindowWidth = 200;
+    int m_cachedMinWindowHeight = 150;
 
     // Autotile: true when the current drag was started on an autotile screen
     // (callDragStarted was skipped). Captured at drag start so the drag end

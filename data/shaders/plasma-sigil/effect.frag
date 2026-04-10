@@ -137,7 +137,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
     float vitality = zoneVitality(isHighlighted);
     float angle    = atan(p.y, p.x);
     float t        = iTime;
-    float midsShift = hasAudio ? t * (gradSpd + mids * 2.0) : t * gradSpd;
+    float midsShift = hasAudio ? t * (gradSpd + mids * 0.3) : t * gradSpd;
 
     vec3 borderClr = colorWithFallback(borderColor.rgb, vec3(0.4, 0.3, 0.8));
 
@@ -361,7 +361,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
         // ── Treble: edge sparks ───────────────────────────────────────────
         if (hasAudio && treble > 0.05 && strokeDist > -0.02 && strokeDist < 0.08) {
             float sparkProx = 1.0 - smoothstep(0.0, 0.08, abs(strokeDist));
-            float sparkSeed = noise2D(iconP * 30.0 + t * 4.0);
+            float sparkSeed = noise2D(iconP * 30.0 + t * 1.5);
             float sparkThresh = 1.0 - treble * 0.35;
             float spark = smoothstep(sparkThresh, sparkThresh + 0.05, sparkSeed);
             spark *= sparkProx * treble * audioR * sparkRate;
@@ -407,7 +407,7 @@ vec4 renderSigilZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
         // Mids: color cycling between border color and gradient complement
         if (hasAudio && mids > 0.05) {
-            float cyclePhase = fract(t * (0.2 + mids * 0.8));
+            float cyclePhase = fract(t * (0.2 + mids * 0.12));
             vec3 complement = iconGradient(borderPhase + 0.5, cyanCol, blueCol, purpleCol, roseCol);
             borderCol = mix(borderCol, complement * flow, smoothstep(0.05, 0.4, mids) * 0.25);
         }
@@ -499,8 +499,8 @@ vec4 compositeSigilLabels(vec4 color, vec2 fragCoord,
 
         // Treble sparkles at label edges
         if (hasAudio && treble > 0.1) {
-            float sparkNoise = noise2D(uv * 50.0 + iTime * 3.0);
-            float spark = smoothstep(0.7, 0.95, sparkNoise) * treble * 2.0;
+            float sparkNoise = noise2D(uv * 50.0 + iTime * 1.5);
+            float spark = smoothstep(0.75, 0.95, sparkNoise) * treble * 0.8;
             color.rgb += cyanCol * haloEdge * spark;
         }
 

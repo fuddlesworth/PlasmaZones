@@ -87,9 +87,10 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
     // Restore ratios if leaf count matches
     if (oldLeafCount != leafCount()) {
         qCDebug(lcAutotile) << "rebuildFromOrder: leaf count changed from" << oldLeafCount << "to" << leafCount()
-                            << "-- skipping ratio restoration";
+                            << "-- skipping ratio restoration, defaultRatio=" << defaultSplitRatio;
     } else {
         applyInternalNodeParams(m_root.get(), oldRatios, oldDirections, 0);
+        qCDebug(lcAutotile) << "rebuildFromOrder: restored" << oldRatios.size() << "ratios:" << oldRatios;
     }
 }
 

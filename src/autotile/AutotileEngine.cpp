@@ -1515,7 +1515,12 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     // constraints. The centering code in the KWin effect will re-discover and
     // report the actual min-size if the window can't fill its assigned zone.
     if (!shouldFloat) {
+        const bool hadMinSize = m_windowMinSizes.contains(windowId);
+        const QSize clearedMinSize = m_windowMinSizes.value(windowId, QSize(0, 0));
         m_windowMinSizes.remove(windowId);
+        if (hadMinSize) {
+            qCDebug(lcAutotile) << "unfloat: cleared stale minSize=" << clearedMinSize << "for" << windowId;
+        }
     }
 
     const QString screenId = m_windowToStateKey.value(windowId).screenId;
@@ -1637,7 +1642,15 @@ bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, i
         m_windowMinSizes.remove(windowId);
     }
 
-    qCDebug(lcAutotile) << "Updated min size for" << windowId << "-" << oldMin << "->" << newMin;
+    if (Q_UNLIKELY(lcAutotile().isDebugEnabled()) && !screenId.isEmpty()) {
+        const QRect screen = screenGeometry(screenId);
+        if (screen.isValid()) {
+            qCDebug(lcAutotile) << "storeWindowMinSize: cap="
+                                << static_cast<int>(screen.width() * AutotileDefaults::MaxSplitRatio) << "x"
+                                << static_cast<int>(screen.height() * AutotileDefaults::MaxSplitRatio)
+                                << "screen=" << screen.size();
+        }
+    }
     return true;
 }
 
@@ -2098,7 +2111,7 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     const QString algoId = effectiveAlgorithmId(screenId);
 
     qCDebug(lcAutotile) << "recalculateLayout: screen=" << screenId << "geometry=" << screen
-                        << "windows=" << windowCount << "algo=" << algoId;
+                        << "windows=" << windowCount << "algo=" << algoId << "splitRatio=" << state->splitRatio();
 
     // Calculate zone geometries using the algorithm, with gap-aware zones.
     // Algorithms apply gaps directly using their topology knowledge, eliminating
@@ -2117,6 +2130,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         minSizes.resize(windowCount, QSize(0, 0));
         for (int i = 0; i < windowCount && i < windows.size(); ++i) {
             minSizes[i] = m_windowMinSizes.value(windows[i], QSize(0, 0));
+        }
+        if (Q_UNLIKELY(lcAutotile().isDebugEnabled())) {
+            for (int i = 0; i < windowCount && i < windows.size(); ++i) {
+                if (minSizes[i].width() > 0 || minSizes[i].height() > 0) {
+                    qCDebug(lcAutotile) << "  minSize[" << i << "]:" << windows[i] << "=" << minSizes[i];
+                }
+            }
         }
     }
 
@@ -2198,7 +2218,12 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // overlap and removeZoneOverlaps would destroy the intended layout.
     if (effectiveRespectMinimumSize(screenId) && !minSizes.isEmpty() && !algo->producesOverlappingZones()) {
         const int threshold = effectiveInnerGap(screenId) + qMax(AutotileDefaults::GapEdgeThresholdPx, 12);
+        const QVector<QRect> preEnforceZones = zones;
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, threshold, innerGap);
+        if (Q_UNLIKELY(lcAutotile().isDebugEnabled()) && zones != preEnforceZones) {
+            qCDebug(lcAutotile) << "enforceWindowMinSizes: zones adjusted"
+                                << "before=" << preEnforceZones << "after=" << zones;
+        }
     }
 
     // Clamp zones to minimum 1x1 — algorithms or the constraint solver can
@@ -2284,6 +2309,12 @@ void AutotileEngine::applyTiling(const QString& screenId)
         obj[QLatin1String("floating")] = true;
         obj[QLatin1String("screenId")] = screenId;
         arr.append(obj);
+    }
+
+    if (Q_UNLIKELY(lcAutotile().isDebugEnabled())) {
+        for (int i = 0; i < tileCount; ++i) {
+            qCDebug(lcAutotile) << "  applyTiling:" << windows[i] << "zone=" << zones[i];
+        }
     }
 
     Q_EMIT windowsTiled(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));

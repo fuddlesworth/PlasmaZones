@@ -37,6 +37,11 @@ Rectangle {
     // Falls back to primary screen ratio for user-created layouts (aspectRatioClass "any" or absent).
     readonly property real fallbackAspectRatio: screenAspectRatio > 0 ? screenAspectRatio : ((Screen.width > 0 && Screen.height > 0) ? (Screen.width / Screen.height) : (16 / 9))
     readonly property real layoutAspectRatio: {
+        // If a specific screen aspect ratio was provided, use it — the preview
+        // should match the physical monitor shape regardless of layout class.
+        if (root.screenAspectRatio > 0)
+            return root.screenAspectRatio;
+
         var cls = root.layout ? (root.layout.aspectRatioClass || "any") : "any";
         switch (cls) {
         case "standard":

@@ -136,7 +136,40 @@ void DaemonController::startDaemon()
     if (isRunning()) {
         return;
     }
-    runSystemctl({QStringLiteral("--user"), QStringLiteral("start"), QLatin1String(KCMConstants::SystemdServiceName)});
+    // Clear any stuck failed-state before issuing start. This is needed when
+    // the user has run plasmazonesd manually (e.g. from a terminal for
+    // logging), which causes systemd's own managed instance to lose the
+    // D-Bus name race and exit; Restart=on-failure then retries until the
+    // unit's StartLimitBurst is exhausted, leaving it wedged in "failed"
+    // until a session restart or manual `systemctl reset-failed`. Without
+    // this, toggling PlasmaZones back on from the settings app silently
+    // does nothing, which was reported in discussion #271.
+    //
+    // reset-failed is a no-op on units not in failed state, so it's safe
+    // to issue unconditionally. Chain the start via callback so it only
+    // runs after reset completes — otherwise the two systemctl processes
+    // race and the start can still arrive at a failed unit.
+    runSystemctl(
+        {QStringLiteral("--user"), QStringLiteral("reset-failed"), QLatin1String(KCMConstants::SystemdServiceName)},
+        [this](bool /*success*/, const QString& /*output*/) {
+            // Ignore reset-failed's exit code: the unit may not
+            // exist yet (service file freshly installed, user's
+            // systemd hasn't scanned) which is fine — start will
+            // handle that error path via its own warning.
+            //
+            // Re-check isRunning() here: the D-Bus service watcher
+            // may have brought the daemon up between the entry
+            // check and this callback (e.g. a parallel toggle from
+            // another settings window, or systemd's own restart
+            // path firing concurrently). Issuing `start` against
+            // an already-active unit is harmless but emits a
+            // "Unit is already active" warning; skipping is cleaner.
+            if (isRunning()) {
+                return;
+            }
+            runSystemctl(
+                {QStringLiteral("--user"), QStringLiteral("start"), QLatin1String(KCMConstants::SystemdServiceName)});
+        });
 }
 
 void DaemonController::stopDaemon()

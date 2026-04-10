@@ -15,6 +15,8 @@
 #include <QStringList>
 #include <QVector>
 
+class QTimer;
+
 namespace KWin {
 class EffectWindow;
 }
@@ -255,6 +257,25 @@ private:
      * @return true if the window should be notified to the autotile daemon
      */
     bool isEligibleForAutotileNotify(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Cancel a pending debounced minimize→float commit.
+     *
+     * No-op if no timer is pending for the window. Called from the
+     * unminimize path (to coalesce spurious cycles), from onWindowClosed
+     * (so pending timers never fire against destroyed windows), and from
+     * clearAllPendingMinimizeFloats (bulk teardown).
+     */
+    void cancelPendingMinimizeFloat(const QString& windowId);
+
+    /**
+     * @brief Cancel every pending debounced minimize→float commit.
+     *
+     * Called when autotile is disabled — in-flight timers should not
+     * commit floats against a now-disabled engine.
+     */
+    void clearAllPendingMinimizeFloats();
+
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame);
     bool shouldApplyBorderInset(const QString& windowId) const;
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
@@ -289,6 +310,13 @@ private:
     QHash<QString, QMetaObject::Connection>
         m_pendingCrossScreenRestore; ///< windowId → deferred size-restore connection
     QSet<QString> m_minimizeFloatedWindows;
+    /// Pending debounced minimize→float commits, keyed by windowId. An entry
+    /// is created when slotWindowMinimizedChanged sees minimized=true; if the
+    /// matching unminimize arrives before the timer fires, the timer is
+    /// cancelled and no D-Bus float is issued. This absorbs spurious
+    /// minimize/unminimize cycles that KWin emits on tiled windows when
+    /// plasmashell notification popups transiently change stacking.
+    QHash<QString, QPointer<QTimer>> m_pendingMinimizeFloat;
     uint64_t m_autotileStaggerGeneration = 0;
     uint64_t m_restoreStaggerGeneration = 0;
     QVector<QPointer<KWin::EffectWindow>> m_savedGlobalStackForResnap; ///< z-order snapshot for resnap restore
