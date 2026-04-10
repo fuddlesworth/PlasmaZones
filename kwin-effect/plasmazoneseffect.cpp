@@ -227,6 +227,25 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
                     m_dragBypassedForAutotile = true;
                     m_dragBypassScreenId = getWindowScreenId(w);
+                    // If the window is currently autotile-tiled, restore its
+                    // title bar and pre-autotile size NOW (synchronously, during
+                    // the interactive move). This mirrors snap mode, where
+                    // dragging a snapped window out of its zone visibly restores
+                    // the free-floating size before release — without this, the
+                    // user drags a borderless tile-sized window and only sees it
+                    // become a floating window after they drop.
+                    //
+                    // Guarded on isTrackedWindow so we don't touch windows that
+                    // are already floating (not in the autotile tree).
+                    if (m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
+                        m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId, /*immediate=*/true);
+                        // Mark as drag-floated so the daemon's pre-tile geometry
+                        // restore (applyGeometryForFloat, triggered by the
+                        // setWindowFloatingForScreen call at drop) is skipped in
+                        // slotApplyGeometryRequested — the window should stay
+                        // where the user drops it, not snap back to a stored rect.
+                        m_dragFloatedWindowIds.insert(windowId);
+                    }
                     return;
                 }
                 m_dragBypassedForAutotile = false;
@@ -279,9 +298,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             // VS crossing on every subsequent geometry change (including
                             // user resize), which would call handleWindowOutputChanged
                             // and fight the snap geometry.
+                            //
+                            // Deliberately DO NOT call handleDragToFloat here: it runs
+                            // mid-drag, reads the current (mid-drag) frame position, and
+                            // schedules an applySnapGeometry that defers via
+                            // windowFinishUserMovedResized. When the drop eventually
+                            // completes the deferred lambda fires with that stale
+                            // mid-drag position and races against the zone snap applied
+                            // by dragStopped — causing the window to jump and resize
+                            // itself after the user drops. Border/float cleanup at drop
+                            // time is handled by the dragStopped path or by snap-zone
+                            // restore; onWindowClosed alone is sufficient to kill the
+                            // resize-lock this crossover path was added to fix.
                             KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
                             if (dragW) {
-                                m_autotileHandler->handleDragToFloat(dragW, windowId, m_dragBypassScreenId);
                                 m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
                             }
                             m_dragBypassedForAutotile = false;

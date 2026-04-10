@@ -71,11 +71,20 @@ public:
      * clears tiling state, and defers a size-only restore to the next event loop
      * tick (after KWin finishes the interactive move).
      *
+     * When @p immediate is true (drag-start path), the size restore is applied
+     * synchronously with allowDuringDrag=true so the user sees the window return
+     * to its free-floating size as soon as they start dragging a tile — matching
+     * snap-mode behavior. When false (drag-stop path), the restore is deferred
+     * via QTimer::singleShot so it runs after KWin has finished the interactive
+     * move and the window's frame geometry reflects the actual drop position.
+     *
      * @param w The window being floated (may be null for cross-screen drops)
      * @param windowId Stable window identifier
      * @param screenId Screen the window was tiled on (pre-drag screen)
+     * @param immediate Apply size restore synchronously during the interactive move
      */
-    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
+    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId,
+                           bool immediate = false);
     void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
