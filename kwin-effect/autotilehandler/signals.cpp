@@ -22,10 +22,22 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QPointer>
+#include <QTimer>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+// Debounce window for minimize→float commits. KWin can transiently flip a
+// tiled window's isMinimized() state to true and back within a few
+// milliseconds when a plasmashell notification popup rearranges stacking.
+// Deferring the D-Bus float for this long coalesces spurious cycles: if the
+// matching unminimize arrives inside the window, no float is issued and the
+// autotile layout never sees the transient 1-window state that causes the
+// master to balloon to the full screen. Real user minimizes always last
+// longer than this, so they commit normally.
+static constexpr int kMinimizeFloatDebounceMs = 75;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // D-Bus signal slot handlers
@@ -40,8 +52,35 @@ void AutotileHandler::slotEnabledChanged(bool enabled)
         m_savedSnapStackingOrder.clear();
         m_savedAutotileStackingOrder.clear();
         m_savedNotifiedForDesktopReturn.clear();
+        // Drop any in-flight debounced minimize→float commits — they must not
+        // fire against a disabled engine.
+        clearAllPendingMinimizeFloats();
         m_effect->updateAllBorders();
     }
+}
+
+void AutotileHandler::cancelPendingMinimizeFloat(const QString& windowId)
+{
+    auto it = m_pendingMinimizeFloat.find(windowId);
+    if (it == m_pendingMinimizeFloat.end()) {
+        return;
+    }
+    if (QTimer* pending = it.value()) {
+        pending->stop();
+        pending->deleteLater();
+    }
+    m_pendingMinimizeFloat.erase(it);
+}
+
+void AutotileHandler::clearAllPendingMinimizeFloats()
+{
+    for (auto it = m_pendingMinimizeFloat.begin(); it != m_pendingMinimizeFloat.end(); ++it) {
+        if (QTimer* pending = it.value()) {
+            pending->stop();
+            pending->deleteLater();
+        }
+    }
+    m_pendingMinimizeFloat.clear();
 }
 
 void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch)
@@ -483,28 +522,111 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
             qCDebug(lcEffect) << "Autotile: minimized already-floating window, skipping floatWindow:" << windowId;
             return;
         }
-        m_minimizeFloatedWindows.insert(windowId);
-    } else {
-        if (!m_minimizeFloatedWindows.remove(windowId)) {
-            qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
-                              << windowId;
-            notifyWindowAdded(w);
+        // A commit is already pending for this window — nothing new to do.
+        if (m_pendingMinimizeFloat.contains(windowId)) {
             return;
         }
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+
+        // Debounce the float. KWin emits spurious minimizedChanged(true) events
+        // on tiled windows when plasmashell notification popups change stacking;
+        // the matching unminimize arrives ~1-2ms later. If we commit the float
+        // immediately, the autotile engine recalculates with N-1 windows, the
+        // surviving master gets tiled to the full screen, and the user sees a
+        // "100%" flash on every notification. By deferring we give the
+        // unminimize path a chance to cancel the float entirely.
+        QPointer<KWin::EffectWindow> wPtr(w);
+        auto* timer = new QTimer(this);
+        timer->setSingleShot(true);
+        timer->setInterval(kMinimizeFloatDebounceMs);
+        connect(timer, &QTimer::timeout, this, [this, windowId, screenId, wPtr]() {
+            // Consume the hash entry first. We take the timer out by value
+            // so we own its deleteLater regardless of which early-return
+            // branch we take below.
+            auto it = m_pendingMinimizeFloat.find(windowId);
+            if (it == m_pendingMinimizeFloat.end()) {
+                return; // Already cancelled by cancelPendingMinimizeFloat.
+            }
+            QPointer<QTimer> owned = it.value();
+            m_pendingMinimizeFloat.erase(it);
+            if (owned) {
+                owned->deleteLater();
+            }
+
+            // Re-validate the full entry predicate: the window may have been
+            // destroyed, unminimized, moved, or had autotile disabled on its
+            // screen during the debounce window. Mirrors the checks at entry
+            // to slotWindowMinimizedChanged so the deferred path can't commit
+            // a float the entry path would have rejected.
+            if (!wPtr) {
+                qCDebug(lcEffect) << "Autotile: debounced minimize window destroyed, skipping float:" << windowId;
+                return;
+            }
+            KWin::EffectWindow* fw = wPtr.data();
+            if (!m_effect->shouldHandleWindow(fw) || !m_effect->isTileableWindow(fw)) {
+                qCDebug(lcEffect) << "Autotile: debounced minimize no longer handleable, skipping float:" << windowId;
+                return;
+            }
+            if (!fw->isMinimized()) {
+                qCDebug(lcEffect) << "Autotile: debounced minimize reverted, skipping float:" << windowId;
+                return;
+            }
+            if (m_effect->isWindowFloating(windowId)) {
+                return;
+            }
+            // Screen membership must still hold, and the window must still
+            // be on the same screen we captured — a mid-debounce output
+            // change invalidates the deferred commit.
+            const QString currentScreenId = m_effect->getWindowScreenId(fw);
+            if (currentScreenId != screenId || !m_autotileScreens.contains(currentScreenId)) {
+                qCDebug(lcEffect) << "Autotile: debounced minimize screen changed or no longer autotiled, skipping:"
+                                  << windowId << "was=" << screenId << "now=" << currentScreenId;
+                return;
+            }
+
+            m_minimizeFloatedWindows.insert(windowId);
+
+            qCInfo(lcEffect) << "Autotile: window minimized (after debounce), floating:" << windowId << "on"
+                             << screenId;
+
+            if (m_effect->m_daemonServiceRegistered) {
+                m_effect->fireAndForgetDBusCall(
+                    DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
+                    {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
+            }
+        });
+        m_pendingMinimizeFloat.insert(windowId, timer);
+        timer->start();
+        return;
     }
 
-    qCInfo(lcEffect) << "Autotile: window" << (minimized ? "minimized, floating:" : "unminimized, unfloating:")
-                     << windowId << "on" << screenId;
+    // Unminimized path.
+    //
+    // If a debounced float is still pending, cancel it: the minimize was
+    // spurious (a transient plasmashell-induced flicker). No D-Bus traffic,
+    // no retile, no balloon-to-100% flash.
+    if (m_pendingMinimizeFloat.contains(windowId)) {
+        cancelPendingMinimizeFloat(windowId);
+        qCDebug(lcEffect) << "Autotile: coalesced spurious minimize/unminimize cycle for" << windowId;
+        notifyWindowAdded(w);
+        return;
+    }
+
+    if (!m_minimizeFloatedWindows.remove(windowId)) {
+        qCDebug(lcEffect) << "Autotile: unminimized window was not minimize-floated, skipping unfloatWindow:"
+                          << windowId;
+        notifyWindowAdded(w);
+        return;
+    }
+    saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+
+    qCInfo(lcEffect) << "Autotile: window unminimized, unfloating:" << windowId << "on" << screenId;
 
     if (m_effect->m_daemonServiceRegistered) {
         m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                                        {windowId, screenId, minimized}, QStringLiteral("setWindowFloatingForScreen"));
+                                        {windowId, screenId, false}, QStringLiteral("setWindowFloatingForScreen"));
     }
 
-    if (!minimized) {
-        notifyWindowAdded(w);
-    }
+    notifyWindowAdded(w);
 }
 
 void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, bool horizontal, bool vertical)

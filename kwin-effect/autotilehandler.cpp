@@ -667,6 +667,7 @@ void AutotileHandler::onWindowClosed(const QString& windowId, const QString& scr
     m_notifiedWindowScreens.remove(windowId);
     m_savedNotifiedForDesktopReturn.remove(windowId);
     m_minimizeFloatedWindows.remove(windowId);
+    cancelPendingMinimizeFloat(windowId);
 
     // Clean up borderless, monocle-maximize, deferred-centering, border zone, focus-follows-mouse,
     // and pre-autotile tracking

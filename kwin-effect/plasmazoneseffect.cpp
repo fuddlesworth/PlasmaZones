@@ -1114,6 +1114,19 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     return appId + QLatin1Char('|') + instanceId;
 }
 
+bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
+{
+    // Substring match on "plasmashell" already subsumes "org.kde.plasmashell".
+    // Listed classes are the layer-shell surfaces that leak into autotile
+    // tracking on Wayland: notification containers, system tray popups, the
+    // OSD, the emoji picker, and krunner. Case-insensitive because Wayland
+    // appIds and X11 class names differ in casing conventions.
+    return windowClass.contains(QLatin1String("plasmashell"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("org.kde.plasma.emojier"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("org.kde.plasma.notifications"), Qt::CaseInsensitive)
+        || windowClass.contains(QLatin1String("org.kde.krunner"), Qt::CaseInsensitive);
+}
+
 bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
 {
     if (!w) {
@@ -1129,6 +1142,11 @@ bool PlasmaZonesEffect::shouldHandleWindow(KWin::EffectWindow* w) const
 
     // Exclude XDG desktop portal windows (file dialogs, color pickers, etc.)
     if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+        return false;
+    }
+
+    // Plasma shell layer-shell surfaces — see isPlasmaShellSurface() for rationale.
+    if (isPlasmaShellSurface(windowClass)) {
         return false;
     }
 
@@ -2863,6 +2881,13 @@ void PlasmaZonesEffect::notifyWindowActivated(KWin::EffectWindow* w)
         return;
     }
     if (windowClass.contains(QLatin1String("xdg-desktop-portal"), Qt::CaseInsensitive)) {
+        return;
+    }
+    // Plasma shell surfaces — independent filter chain from shouldHandleWindow()
+    // because notifyWindowActivated() intentionally skips user-exclusion lists
+    // (the daemon still needs focus updates for excluded apps). The plasmashell
+    // rejection must apply in both chains; see isPlasmaShellSurface().
+    if (isPlasmaShellSurface(windowClass)) {
         return;
     }
     if (w->isSpecialWindow() || w->isDesktop() || w->isDock() || w->isFullScreen() || w->isSkipSwitcher()

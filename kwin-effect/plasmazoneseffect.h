@@ -130,6 +130,21 @@ private:
     QString getWindowId(KWin::EffectWindow* w) const;
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
     bool isTileableWindow(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Reject Plasma shell layer-shell surfaces by window class.
+     *
+     * On Wayland, KDE notification popups, system tray overlays, the emoji
+     * picker, the OSD, and krunner are layer-shell surfaces that don't
+     * reliably set KWin's isNotification()/isPopupWindow() metadata, so they
+     * slip past the type-based filters in shouldHandleWindow() and
+     * notifyWindowActivated(). Class-based rejection is authoritative —
+     * these are never zone-managed regardless of how KWin labels them, and
+     * every stray activation/minimize event they generate caused the autotile
+     * churn that balloons the master window to 100% on every notification
+     * (discussion #271).
+     */
+    static bool isPlasmaShellSurface(const QString& windowClass);
     bool hasOtherWindowOfClassWithDifferentPid(KWin::EffectWindow* w) const;
     bool isWindowSticky(KWin::EffectWindow* w) const;
     void updateWindowStickyState(KWin::EffectWindow* w);
