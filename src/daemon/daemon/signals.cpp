@@ -69,6 +69,14 @@ void Daemon::initializeAutotile()
         // Sync autotile float state and show OSD when a window is floated/unfloated
         connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingChanged, this, &Daemon::syncAutotileFloatState);
 
+        // Passive float state sync for engine-internal state divergence (e.g. a
+        // newly-inserted window carrying stale snap-mode float state). Routes to
+        // a handler that updates WTS bookkeeping without calling
+        // applyGeometryForFloat — the window already has a valid position and
+        // must not be teleported to a stored pre-tile rect.
+        connect(m_autotileEngine.get(), &AutotileEngine::windowFloatingStateSynced, this,
+                &Daemon::syncAutotileFloatStatePassive);
+
         // Batch overflow float handler: overflow windows are included in the
         // windowsTileRequested D-Bus signal with "floating" flag, so the effect
         // handles geometry restore directly. Here we only update daemon-side
@@ -674,6 +682,42 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
         QString reason = floating ? QStringLiteral("floated") : QStringLiteral("tiled");
         m_overlayService->showNavigationOsd(true, QStringLiteral("float"), reason, QString(), QString(), screenId);
     }
+}
+
+void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId)
+{
+    // Passive state-sync: update WTS to match the engine's internal TilingState,
+    // but DO NOT call applyGeometryForFloat. This path is entered when the
+    // engine inserts a window whose WTS floating state diverges from the
+    // TilingState (e.g. snap→autotile drag drops a window whose WTS still
+    // says floating from a prior snap-mode Meta+F). The window already has a
+    // valid position (the drop location); teleporting it via the stored
+    // pre-tile rect would resize and jump it — discussion #271.
+    if (!m_windowTrackingAdaptor) {
+        return;
+    }
+    WindowTrackingService* wts = m_windowTrackingAdaptor->service();
+    if (floating) {
+        m_windowTrackingAdaptor->setWindowFloating(windowId, true);
+        wts->markAutotileFloated(windowId);
+        // Mirror syncAutotileFloatState's cross-VS pre-float preservation so
+        // zone-restore on return to the snap VS still works.
+        const QString preFloatScreen = wts->preFloatScreen(windowId);
+        if (preFloatScreen.isEmpty() || preFloatScreen == screenId) {
+            wts->clearPreFloatZoneForWindow(windowId);
+        }
+    } else {
+        bool wasFloating = wts->isWindowFloating(windowId);
+        bool wasAutotileFloated = wts->isAutotileFloated(windowId);
+        if (wasFloating && !wasAutotileFloated) {
+            wts->saveSnapFloating(windowId);
+            qCInfo(lcDaemon) << "Saved snap-float for" << windowId << "(passive sync clearing stale snap-float)";
+        }
+        m_windowTrackingAdaptor->setWindowFloating(windowId, false);
+        wts->clearAutotileFloated(windowId);
+    }
+    // Deliberately no applyGeometryForFloat and no navigation OSD — this is
+    // a silent sync of engine↔WTS state, not a user-visible float action.
 }
 
 void Daemon::syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId)

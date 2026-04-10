@@ -750,7 +750,8 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     unmaximizeMonocleWindow(windowId);
 }
 
-void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId)
+void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId,
+                                        bool immediate)
 {
     // Restore border and clear tiling state synchronously — don't wait for
     // the daemon's async windowFloatingChanged signal, which may never arrive
@@ -758,9 +759,7 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
     // before setWindowFloatingForScreen processes).
     applyFloatCleanup(windowId);
 
-    // Restore pre-autotile SIZE (not position — window stays where dropped).
-    // Defer to next event loop tick so KWin has finished the interactive move
-    // and the window's frame geometry reflects the actual drop position.
+    // Restore pre-autotile SIZE at the window's current position.
     if (w) {
         auto screenIt = m_preAutotileGeometries.constFind(screenId);
         if (screenIt != m_preAutotileGeometries.constEnd()) {
@@ -768,30 +767,52 @@ void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& wi
             if (!geoKey.isEmpty()) {
                 const QRectF savedGeo = screenIt.value().value(geoKey);
                 if (savedGeo.isValid()) {
-                    QPointer<KWin::EffectWindow> wp = w;
                     const int savedW = qRound(savedGeo.width());
                     const int savedH = qRound(savedGeo.height());
-                    // Capture m_effect by value (raw pointer, owned by the timer's
-                    // context object) instead of `this` — avoids implicit coupling
-                    // to AutotileHandler's lifetime via the parent ownership chain.
-                    PlasmaZonesEffect* effect = m_effect;
-                    QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
-                        if (!wp || wp->isDeleted()) {
-                            return;
+
+                    if (immediate) {
+                        // Drag-start path: apply synchronously during the
+                        // interactive move (allowDuringDrag=true) so the user
+                        // sees the window return to its free-floating size the
+                        // moment they start dragging — matches snap-mode behavior.
+                        // Re-center horizontally under the cursor so the window
+                        // doesn't "jump away" from the grab point when it shrinks.
+                        QRectF currentFrame = w->frameGeometry();
+                        const QPointF cursor = KWin::effects->cursorPos();
+                        int newX = qRound(currentFrame.x());
+                        int newY = qRound(currentFrame.y());
+                        if (currentFrame.width() > 0 && savedW < currentFrame.width()) {
+                            const qreal cursorOffsetRatio = (cursor.x() - currentFrame.x()) / currentFrame.width();
+                            newX = qRound(cursor.x() - cursorOffsetRatio * savedW);
                         }
-                        // Skip if the window was re-snapped during the deferred tick
-                        // (e.g., dropped on a zone on a snap screen during cross-VS drag).
-                        if (!effect->isWindowFloating(effect->getWindowId(wp))) {
-                            qCDebug(lcEffect)
-                                << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
-                            return;
-                        }
-                        QRectF currentFrame = wp->frameGeometry();
-                        QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
-                        effect->applySnapGeometry(wp, sizeRestored);
-                        qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
-                                         << savedH;
-                    });
+                        QRect sizeRestored(newX, newY, savedW, savedH);
+                        m_effect->applySnapGeometry(w, sizeRestored, /*allowDuringDrag=*/true);
+                        qCInfo(lcEffect) << "Drag-start float: restored pre-autotile size for" << windowId << savedW
+                                         << "x" << savedH;
+                    } else {
+                        // Drag-stop path: defer to next event loop tick so
+                        // KWin has finished the interactive move and the window's
+                        // frame geometry reflects the actual drop position.
+                        QPointer<KWin::EffectWindow> wp = w;
+                        PlasmaZonesEffect* effect = m_effect;
+                        QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
+                            if (!wp || wp->isDeleted()) {
+                                return;
+                            }
+                            // Skip if the window was re-snapped during the deferred tick
+                            // (e.g., dropped on a zone on a snap screen during cross-VS drag).
+                            if (!effect->isWindowFloating(effect->getWindowId(wp))) {
+                                qCDebug(lcEffect)
+                                    << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
+                                return;
+                            }
+                            QRectF currentFrame = wp->frameGeometry();
+                            QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
+                            effect->applySnapGeometry(wp, sizeRestored);
+                            qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW
+                                             << "x" << savedH;
+                        });
+                    }
                 }
             }
         }

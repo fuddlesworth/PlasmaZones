@@ -819,12 +819,35 @@ Q_SIGNALS:
     void tilingChanged(const QString& screenId);
 
     /**
-     * @brief Emitted when a window's floating state changes
+     * @brief Emitted when a window's floating state changes due to a user action
+     *
+     * User-intent semantics: the downstream handler restores pre-tile geometry,
+     * shows the navigation OSD, etc. Emitted from performToggleFloat and
+     * setWindowFloat (explicit user/caller toggles).
+     *
      * @param windowId Window whose floating state changed
      * @param floating True if the window is now floating, false if tiled
      * @param screenId Screen where the window is (for OSD placement)
      */
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
+     * @brief Emitted to sync WTS floating state without restoring geometry
+     *
+     * Passive state-sync semantics: used when the engine's internal
+     * TilingState::isFloating diverges from WindowTrackingService's view
+     * (e.g. a newly-inserted window carries stale snap-mode float state).
+     * The downstream handler updates WTS bookkeeping but must NOT call
+     * applyGeometryForFloat — the window already has a valid position
+     * (e.g. the drop point of a snap→autotile drag) and teleporting it
+     * to the stored pre-tile rect would resize and jump it off the drop
+     * location.
+     *
+     * @param windowId Window whose floating state is being synced
+     * @param floating True if the engine's state says the window should be floating
+     * @param screenId Screen where the window is
+     */
+    void windowFloatingStateSynced(const QString& windowId, bool floating, const QString& screenId);
 
     /**
      * @brief Emitted when overflow windows are batch-floated during applyTiling

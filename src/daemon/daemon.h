@@ -339,6 +339,19 @@ private:
     void syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId);
 
     /**
+     * @brief Passively sync daemon-side float state without restoring geometry
+     *
+     * Handler for AutotileEngine::windowFloatingStateSynced. Mirrors the WTS
+     * bookkeeping of syncAutotileFloatState (setWindowFloating, autotileFloated
+     * marker, pre-float zone housekeeping) but skips applyGeometryForFloat and
+     * the navigation OSD — this path is invoked when the engine's internal
+     * state diverges from WTS (e.g. a newly-inserted window carrying stale
+     * snap-mode float state), not by a user float toggle. The window already
+     * has a valid position and must not be teleported.
+     */
+    void syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
      * @brief Batch-update daemon-side float state for overflow-floated windows
      *
      * Updates WTS state directly without emitting per-window D-Bus signals

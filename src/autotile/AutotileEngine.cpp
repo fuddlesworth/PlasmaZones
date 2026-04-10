@@ -1527,7 +1527,17 @@ void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
     retileAfterOperation(screenId, true);
 
     qCInfo(lcAutotile) << "Window" << (shouldFloat ? "floated from" : "unfloated to") << "autotile -" << windowId;
-    Q_EMIT windowFloatingChanged(windowId, shouldFloat, screenId);
+    // Use windowFloatingStateSynced (not windowFloatingChanged): the only caller
+    // of setWindowFloat is WindowTrackingAdaptor::setWindowFloatingForScreen,
+    // invoked by the KWin effect for drag drops, minimize→float, and
+    // unminimize→tile. None of those scenarios want the daemon to restore
+    // pre-tile geometry — the effect manages drop position locally, and
+    // minimize/unminimize don't show the window. Routing through
+    // windowFloatingChanged would call applyGeometryForFloat and teleport
+    // the window away from where the user dropped it (regression #271).
+    // User float toggles (Meta+F) go through performToggleFloat, which
+    // continues to emit windowFloatingChanged so geometry is restored.
+    Q_EMIT windowFloatingStateSynced(windowId, shouldFloat, screenId);
 }
 
 void AutotileEngine::floatWindow(const QString& windowId)
@@ -1745,11 +1755,19 @@ void AutotileEngine::onWindowAdded(const QString& windowId)
     // Sync floating state to daemon. Float state is per-mode:
     // - Restored as floating from autotile's saved set → notify daemon to set WTS floating
     // - Inserted as tiled but WTS says floating (stale snap-mode float) → clear WTS floating
+    //
+    // Use windowFloatingStateSynced (not windowFloatingChanged): this is a
+    // passive state-sync on window insertion, not a user float toggle. The
+    // daemon must NOT restore pre-tile geometry here — the window was just
+    // added (e.g. dropped onto an autotile VS from a snap VS) and already
+    // has a valid position. Routing through windowFloatingChanged causes
+    // syncAutotileFloatState to call applyGeometryForFloat, which teleports
+    // the window to a cross-screen-adjusted rect and resizes it.
     if (inserted && state) {
         if (state->isFloating(windowId)) {
-            Q_EMIT windowFloatingChanged(windowId, true, screenId);
+            Q_EMIT windowFloatingStateSynced(windowId, true, screenId);
         } else if (m_windowTracker && m_windowTracker->isWindowFloating(windowId)) {
-            Q_EMIT windowFloatingChanged(windowId, false, screenId);
+            Q_EMIT windowFloatingStateSynced(windowId, false, screenId);
         }
     }
 
@@ -1942,10 +1960,18 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
                     inserted = true;
                     restoredFromPendingQueue = true;
 
-                    // Restore floating state if the window was floating when removed
-                    if (entry.wasFloating) {
-                        state->setFloating(windowId, true);
-                    }
+                    // Note: entry.wasFloating is intentionally NOT restored here.
+                    // The pending queue records the float state at the moment the
+                    // window was last removed from this autotile context, but a
+                    // window arriving via snap→autotile drag (the dominant
+                    // consumer of this path) carries the user's *current* drop
+                    // intent, which is "tile me here". Restoring a stale
+                    // wasFloating=true from a prior session leaves the window
+                    // stuck floating on drop, then the user's next Meta+F float
+                    // teleports it via applyGeometryForFloat reading a corrupted
+                    // pre-tile rect (regression #271). Tile-by-default matches
+                    // the historical behavior the user expects from drop-on-
+                    // autotile and matches snapping's restore semantics.
 
                     qCDebug(lcAutotile) << "Restored window" << windowId
                                         << "from pending queue at position=" << clampedPos

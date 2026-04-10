@@ -147,11 +147,11 @@ struct PLASMAZONES_EXPORT NavigationCommand
  */
 struct PLASMAZONES_EXPORT ZoneAssignmentEntry
 {
-    QString windowId; ///< Window to move
-    QString sourceZoneId; ///< Zone window is moving from (for OSD highlighting)
-    QString targetZoneId; ///< Primary zone to move to
-    QStringList targetZoneIds; ///< All zones (for multi-zone spans; empty = single zone)
-    QRect targetGeometry; ///< Target geometry in pixels
+    QString windowId{}; ///< Window to move
+    QString sourceZoneId{}; ///< Zone window is moving from (for OSD highlighting)
+    QString targetZoneId{}; ///< Primary zone to move to
+    QStringList targetZoneIds{}; ///< All zones (for multi-zone spans; empty = single zone)
+    QRect targetGeometry{}; ///< Target geometry in pixels
     /// Authoritative target screen ID (physical or virtual). Set by callers
     /// that know the intended destination screen — typically resnap-from-stored
     /// paths where the screen is read from m_windowScreenAssignments and the
@@ -161,7 +161,7 @@ struct PLASMAZONES_EXPORT ZoneAssignmentEntry
     /// legacy path; correct for fresh user drops where the target screen is
     /// unknown a priori, but corrupting on resnap-from-stored where a stale
     /// geometry could re-derive into the wrong virtual screen).
-    QString targetScreenId;
+    QString targetScreenId{};
 };
 
 } // namespace PlasmaZones
