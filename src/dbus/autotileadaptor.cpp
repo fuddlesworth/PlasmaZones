@@ -35,7 +35,13 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
     connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &AutotileEngine::focusWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
-    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this, &AutotileAdaptor::windowsReleasedFromTiling);
+    // The in-process engine signal has a 2nd QSet<QString> argument for
+    // daemon-side bookkeeping; strip it before forwarding over D-Bus since
+    // QSet is not a D-Bus-marshallable type.
+    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this,
+            [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
+                Q_EMIT windowsReleasedFromTiling(windowIds);
+            });
     connect(m_engine, &AutotileEngine::windowFloatingChanged, this, &AutotileAdaptor::windowFloatingChanged);
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
