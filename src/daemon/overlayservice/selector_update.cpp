@@ -309,6 +309,9 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
     applyZoneSelectorGeometry(window, screenGeom, layout, pos);
 
+    // Keep stored geometry in sync so hit-testing uses the current value
+    m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
+
     if (auto* contentRoot = window->contentItem()) {
         // Ensure the root item matches the window size after geometry changes.
         // This avoids anchors evaluating against a 0x0 root during rapid updates.

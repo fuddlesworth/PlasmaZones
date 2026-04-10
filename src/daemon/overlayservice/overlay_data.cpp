@@ -64,14 +64,8 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
 QVariantList OverlayService::buildZonesList(QScreen* screen) const
 {
     // WARNING: One physical QScreen can back multiple virtual screens.
-    // This overload picks the FIRST matching virtual screen ID from m_screenStates,
-    // which is non-deterministic for QHash iteration. It should only be called in
-    // single-overlay-per-physical-screen contexts (no virtual screens configured).
-    // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
-
-    // Virtual screens make the QScreen* overload ambiguous — screen center always
-    // resolves to the same VS. Delegate to the first virtual screen's QString overload
-    // so callers in single-physical-screen paths still get correct zone data.
+    // When virtual screens are configured, this delegates to the first VS in config
+    // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
     const QString physId = Utils::screenIdentifier(screen);
     auto* mgr = ScreenManager::instance();

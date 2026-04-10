@@ -274,11 +274,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         if (m_dragBypassedForAutotile && !cursorOnAutotile) {
                             // Autotile→snap: exit bypass mode and initialize snap-drag
                             // state as if the drag started on this snap screen.
+                            // Remove the window from autotile tracking NOW so that
+                            // slotWindowFrameGeometryChanged doesn't detect a stale
+                            // VS crossing on every subsequent geometry change (including
+                            // user resize), which would call handleWindowOutputChanged
+                            // and fight the snap geometry.
+                            KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
+                            if (dragW) {
+                                m_autotileHandler->handleDragToFloat(dragW, windowId, m_dragBypassScreenId);
+                                m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
+                            }
                             m_dragBypassedForAutotile = false;
                             m_dragActivationDetected = false;
                             m_dragStartedSent = false;
                             m_pendingDragWindowId = windowId;
-                            KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
                             m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
                             m_snapDragStartScreenId = cursorScreenId;
                             qCInfo(lcEffect) << "Drag crossed from autotile" << m_dragBypassScreenId << "to snap screen"
@@ -333,27 +342,31 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
                     if (!cancelled) {
-                        // Re-resolve the window's virtual screen at drop time.
-                        // KWin's outputChanged only fires on physical monitor changes,
-                        // so moving between virtual screens on the same monitor
-                        // (e.g., A/vs:0 → A/vs:1) is invisible to the outputChanged
-                        // handler. Detect the change here and trigger a transfer.
                         const QString dropScreenId = w ? getWindowScreenId(w) : m_dragBypassScreenId;
-                        if (dropScreenId != m_dragBypassScreenId) {
+                        const bool windowWasInAutotile = m_autotileHandler->isTrackedWindow(windowId);
+
+                        if (!windowWasInAutotile) {
+                            // Snap→autotile drag: the window was on a snap screen and
+                            // the cursor crossed to an autotile VS mid-drag. The window
+                            // was never in autotile tracking — just add it now.
+                            const bool dropIsAutotile = m_autotileHandler->isAutotileScreen(dropScreenId);
+                            if (w && dropIsAutotile) {
+                                m_autotileHandler->notifyWindowAdded(w);
+                                qCInfo(lcEffect)
+                                    << "Snap→autotile drag: added" << windowId << "to autotile on" << dropScreenId;
+                            }
+                            // If dropped back on a snap screen (cursor bounced back),
+                            // nothing to do — window stays on its snap screen.
+                        } else if (dropScreenId != m_dragBypassScreenId) {
+                            // Autotile drag: virtual screen changed.
                             qCInfo(lcEffect) << "Autotile drag: virtual screen changed" << m_dragBypassScreenId << "->"
                                              << dropScreenId;
-                            // Preserve pre-autotile geometry across virtual screen transfer
-                            // (mirrors handleWindowOutputChanged in AutotileHandler).
-                            // Must happen BEFORE onWindowClosed which clears the source map.
                             const bool dropIsAutotile = m_autotileHandler->isAutotileScreen(dropScreenId);
                             if (dropIsAutotile) {
                                 m_autotileHandler->transferPreAutotileGeometry(windowId, m_dragBypassScreenId,
                                                                                dropScreenId);
                             }
 
-                            // Transfer: remove from old virtual screen, add to new one.
-                            // handleWindowOutputChanged won't fire (same physical monitor),
-                            // so manually perform the close/open cycle.
                             // Restore border and pre-autotile size BEFORE onWindowClosed
                             // clears the tiling/borderless tracking state.
                             if (!dropIsAutotile) {
@@ -363,9 +376,6 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
                             if (w && dropIsAutotile) {
                                 m_autotileHandler->notifyWindowAdded(w);
-                                // The window was floating (being dragged) — keep it floating
-                                // on the destination VS. notifyWindowAdded tiles the window,
-                                // so immediately restore its floating state and size.
                                 m_autotileHandler->handleDragToFloat(w, windowId, dropScreenId);
                                 m_dragFloatedWindowIds.insert(windowId);
                                 fireAndForgetDBusCall(DBus::Interface::WindowTracking,
@@ -375,22 +385,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                 qCInfo(lcEffect) << "Autotile cross-VS drag-to-float:" << windowId
                                                  << m_dragBypassScreenId << "->" << dropScreenId;
                             }
-                            // Non-autotile drop: handleDragToFloat already restored
-                            // border and size locally. onWindowClosed sent D-Bus
-                            // windowClosed which removes daemon tracking — a subsequent
-                            // setWindowFloatingForScreen would be a no-op (window not
-                            // found in autotile engine). Don't insert into
-                            // m_dragFloatedWindowIds either: the stale entry would
-                            // incorrectly skip geometry restore if the window is later
-                            // re-snapped on the drop screen and then float-toggled.
                         } else {
                             // Same virtual screen — normal drag-to-float behavior.
-                            // Restore border and pre-autotile size synchronously (don't
-                            // wait for the daemon's async windowFloatingChanged signal).
                             m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId);
-                            // Mark as drag-floated so slotApplyGeometryRequested skips the
-                            // daemon's pre-autotile geometry restore — the window should stay
-                            // where the user dropped it, not snap back to its original position.
                             m_dragFloatedWindowIds.insert(windowId);
                             fireAndForgetDBusCall(
                                 DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),

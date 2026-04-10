@@ -189,10 +189,6 @@ void OverlayService::updateLayout(Layout* layout)
             // Ensure shader timing + updates continue after layout switch
             ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
             m_zoneDataDirty = true;
-            // updateGeometries() already incremented m_zoneDataVersion once above.
-            // Undo that increment so updateZonesForAllWindows() provides the single
-            // authoritative bump for this logical update cycle.
-            --m_zoneDataVersion;
             updateZonesForAllWindows();
             if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
                 startShaderAnimation();
@@ -211,15 +207,8 @@ void OverlayService::updateGeometries()
             updateOverlayWindow(screenId, physScreen);
         }
     }
-    // Bump zone data version once after all per-screen updates complete,
-    // then broadcast to all windows so shaders see the new version atomically.
-    ++m_zoneDataVersion;
-    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
-        auto* w = it_.value().overlayWindow;
-        if (w) {
-            writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
-        }
-    }
+    // Geometry data is now current — do NOT bump version here.
+    // updateZonesForAllWindows() is the single authoritative version bump point.
 }
 
 void OverlayService::highlightZone(const QString& zoneId)

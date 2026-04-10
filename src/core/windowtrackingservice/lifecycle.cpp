@@ -293,8 +293,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     }
 
     if (migrated > 0 || anyStateMigrated) {
-        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments from" << physicalScreenId
-                       << "to virtual screens";
+        qCInfo(lcCore) << "Migrated" << migrated << "window screen assignments"
+                       << "(plus auxiliary state)" << "from" << physicalScreenId << "to virtual screens";
         scheduleSaveState();
     }
 }

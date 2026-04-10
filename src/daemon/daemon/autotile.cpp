@@ -154,7 +154,18 @@ void Daemon::updateAutotileScreens()
     // any already created by applyPerScreenConfig above) and retiles them.
     // Because per-screen overrides are set first, retileAfterOperation inside
     // setAutotileScreens uses effectiveAlgorithm() with the correct per-screen algo.
+    const bool setChanged = (m_autotileEngine->autotileScreens() != autotileScreens);
     m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // When the autotile set didn't change (e.g., VS inherited autotile from
+    // the physical screen's cascade before the explicit assignment was written),
+    // setAutotileScreens early-returns without retiling. Force a retile for
+    // screens that are in the set so mode-swap toggles always take effect.
+    if (!setChanged) {
+        for (const QString& screenId : autotileScreens) {
+            m_autotileEngine->scheduleRetileForScreen(screenId);
+        }
+    }
 
     // Retile for existing screens whose overrides changed is handled by the
     // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().

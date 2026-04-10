@@ -632,27 +632,34 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         return;
                     }
 
-                    // Still dragging — wait for drop.
-                    m_pendingCrossScreenRestore[wid] =
-                        connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
-                                [this, safeW, wid, restoreW, restoreH](KWin::EffectWindow*) {
-                                    m_pendingCrossScreenRestore.remove(wid);
-                                    if (!safeW || safeW->isDeleted()) {
-                                        return;
-                                    }
-                                    // Guard: window may have bounced back to autotile during drag.
-                                    const QString dropScreen = m_effect->getWindowScreenId(safeW);
-                                    if (m_autotileScreens.contains(dropScreen)) {
-                                        return;
-                                    }
-                                    // Guard: window may have been snapped to a zone by dragStopped.
-                                    if (!m_effect->isWindowFloating(wid)) {
-                                        return;
-                                    }
-                                    const QRectF frame = safeW->frameGeometry();
-                                    const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                                    m_effect->applySnapGeometry(safeW, geo);
-                                });
+                    // Still dragging — wait for drop, then restore size once.
+                    // Use a shared connection so the lambda can disconnect itself
+                    // after firing once — preventing subsequent user resizes from
+                    // snapping the window back to the pre-autotile size.
+                    auto sharedConn = std::make_shared<QMetaObject::Connection>();
+                    *sharedConn = connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
+                                          [this, safeW, wid, restoreW, restoreH, sharedConn](KWin::EffectWindow*) {
+                                              // Disconnect immediately so this only fires once (the drop),
+                                              // not on every subsequent user resize.
+                                              QObject::disconnect(*sharedConn);
+                                              m_pendingCrossScreenRestore.remove(wid);
+                                              if (!safeW || safeW->isDeleted()) {
+                                                  return;
+                                              }
+                                              // Guard: window may have bounced back to autotile during drag.
+                                              const QString dropScreen = m_effect->getWindowScreenId(safeW);
+                                              if (m_autotileScreens.contains(dropScreen)) {
+                                                  return;
+                                              }
+                                              // Guard: window may have been snapped to a zone by dragStopped.
+                                              if (!m_effect->isWindowFloating(wid)) {
+                                                  return;
+                                              }
+                                              const QRectF frame = safeW->frameGeometry();
+                                              const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
+                                              m_effect->applySnapGeometry(safeW, geo);
+                                          });
+                    m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });
 
         // NOTE: Do NOT call windowUnsnapped here. The drag-drop handler

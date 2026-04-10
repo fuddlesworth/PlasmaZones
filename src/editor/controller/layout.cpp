@@ -75,14 +75,42 @@ QVariantList EditorController::screenModel() const
         return model;
     }
 
+    // Cache VS display names per physical screen to avoid repeated D-Bus calls
+    QHash<QString, QJsonArray> vsConfigCache;
+
     // Build from daemon's effective screen IDs (includes virtual screens)
     for (const QString& screenId : m_availableScreenIds) {
         QVariantMap entry;
         entry[QStringLiteral("name")] = screenId;
         if (VirtualScreenId::isVirtual(screenId)) {
-            // Short display label: "VS1", "VS2", etc. (1-indexed for user-facing text)
-            int idx = VirtualScreenId::extractIndex(screenId);
-            entry[QStringLiteral("displayName")] = QStringLiteral("VS%1").arg(idx + 1);
+            // Use user-configured display name from VS config, fall back to generic label
+            QString vsDisplayName;
+            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            int vsIndex = VirtualScreenId::extractIndex(screenId);
+            if (vsIndex >= 0) {
+                if (!vsConfigCache.contains(physId)) {
+                    QDBusMessage msg = QDBusMessage::createMethodCall(
+                        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getVirtualScreenConfig"));
+                    msg << physId;
+                    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+                    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+                        QJsonObject root =
+                            QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
+                        vsConfigCache[physId] = root.value(QStringLiteral("screens")).toArray();
+                    } else {
+                        vsConfigCache[physId] = QJsonArray();
+                    }
+                }
+                const QJsonArray& screens = vsConfigCache[physId];
+                if (vsIndex < screens.size()) {
+                    vsDisplayName = screens[vsIndex].toObject().value(QStringLiteral("displayName")).toString();
+                }
+            }
+            if (vsDisplayName.isEmpty()) {
+                vsDisplayName = QStringLiteral("VS%1").arg(vsIndex + 1);
+            }
+            entry[QStringLiteral("displayName")] = vsDisplayName;
         } else {
             // Physical screen: use connector name for brevity
             QScreen* screen = Utils::findScreenByIdOrName(screenId);
@@ -178,6 +206,9 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     }
 
     // Physical screen: fullscreen on the matching monitor
+    // Clear frameless hint in case this window was previously shown on a virtual screen.
+    window->setFlag(Qt::FramelessWindowHint, false);
+
     const auto screens = QGuiApplication::screens();
     for (auto* screen : screens) {
         if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
