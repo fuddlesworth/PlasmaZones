@@ -281,6 +281,14 @@ add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
+# End-to-end adaptor routing test: verifies typed-struct slot dispatch works
+# over a real QDBusConnection. Regression guard for the 2026-04-10 resnap
+# crash (moc recorded unqualified type names, metatype lookup failed).
+add_executable(test_dbus_adaptor_routing dbus/test_dbus_adaptor_routing.cpp)
+target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                          plasmazones_compositor_common)
+add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -327,6 +335,7 @@ set(_all_tests
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers
     test_wta_convenience test_settings_schema test_compositor_bridge
+    test_dbus_adaptor_routing
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -80,8 +80,8 @@ public Q_SLOTS:
      *   "borders"     — bridge supports native window border rendering
      *   "modifiers"   — bridge reports keyboard modifier state
      */
-    BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
-                                            const QStringList& capabilities);
+    PlasmaZones::BridgeRegistrationResult registerBridge(const QString& compositorName, const QString& version,
+                                                         const QStringList& capabilities);
 
     /**
      * @brief Report keyboard modifier and mouse button state
@@ -107,7 +107,7 @@ Q_SIGNALS:
      * @param batchJson JSON array of [{windowId, x, y, width, height, targetZoneId, ...}]
      * @param action Operation type ("rotate", "resnap", "snap_all")
      */
-    void applyWindowGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
+    void applyWindowGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window focus and stacking commands (daemon → compositor)

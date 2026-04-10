@@ -170,7 +170,7 @@ public Q_SLOTS:
      *
      * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
-    void windowsOpenedBatch(const WindowOpenedList& entries);
+    void windowsOpenedBatch(const PlasmaZones::WindowOpenedList& entries);
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -292,7 +292,7 @@ Q_SIGNALS:
      *
      * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowsTileRequested(const TileRequestList& tileRequests);
+    void windowsTileRequested(const PlasmaZones::TileRequestList& tileRequests);
 
     /**
      * @brief Emitted when a window should be focused

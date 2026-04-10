@@ -37,8 +37,8 @@ public Q_SLOTS:
     // Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
-    ZoneGeometryRect getZoneGeometry(const QString& zoneId);
-    ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
     QStringList getZonesForScreen(const QString& screenId);
 
     // Zone navigation - get adjacent zone in a direction
@@ -65,7 +65,7 @@ public Q_SLOTS:
     QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
     // Get all zone geometries, optionally for a specific screen
-    NamedZoneGeometryList getAllZoneGeometries(const QString& screenId = QString());
+    PlasmaZones::NamedZoneGeometryList getAllZoneGeometries(const QString& screenId = QString());
 
     /**
      * @brief Get current keyboard modifier state
@@ -97,7 +97,7 @@ public Q_SLOTS:
     QString detectZoneWithModifiers(int x, int y);
 
 Q_SIGNALS:
-    void zoneDetected(const QString& zoneId, const ZoneGeometryRect& geometry);
+    void zoneDetected(const QString& zoneId, const PlasmaZones::ZoneGeometryRect& geometry);
 
 private:
     IZoneDetector* m_zoneDetector; // Interface type (DIP)

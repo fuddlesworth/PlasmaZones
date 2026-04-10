@@ -132,7 +132,7 @@ public Q_SLOTS:
      * Used by KWin effect after resnap stagger completes to avoid per-window D-Bus round-trips.
      * @param entries Array of (windowId, zoneId, screenId, isRestore) structs
      */
-    void windowsSnappedBatch(const SnapConfirmationList& entries);
+    void windowsSnappedBatch(const PlasmaZones::SnapConfirmationList& entries);
     /**
      * Handle window screen change: unsnap only if the new screen differs
      * from the stored assignment (user-initiated move). Programmatic moves
@@ -179,7 +179,7 @@ public Q_SLOTS:
      * @param screenId Screen ID for geometry calculation
      * @return UnfloatRestoreResult with found, zoneIds, screenName, x, y, width, height
      */
-    UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
+    PlasmaZones::UnfloatRestoreResult calculateUnfloatRestore(const QString& windowId, const QString& screenId);
 
     /**
      * Store window geometry before snapping (for unsnap restoration)
@@ -298,7 +298,7 @@ public Q_SLOTS:
      * @param screenId Screen ID (e.g. DP-1)
      * @return EmptyZoneList of empty zone entries with overlay-local geometry
      */
-    EmptyZoneList getEmptyZones(const QString& screenId);
+    PlasmaZones::EmptyZoneList getEmptyZones(const QString& screenId);
 
     /**
      * Get the last zone a window was snapped to
@@ -388,7 +388,7 @@ public Q_SLOTS:
      * @return JSON array of objects: [{windowId, x, y, width, height}, ...]
      * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled
      */
-    WindowGeometryList getUpdatedWindowGeometries();
+    PlasmaZones::WindowGeometryList getUpdatedWindowGeometries();
 
     /**
      * @brief Pre-computed zone geometries for pending restore entries.
@@ -505,7 +505,7 @@ public Q_SLOTS:
      * @return Typed struct array with windowId, targetZoneId, sourceZoneId, x, y, width, height
      * @note Called by KWin effect after collecting unsnapped windows
      */
-    SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
+    PlasmaZones::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
     // Daemon-driven navigation: KWin calls with windowId, daemon returns result JSON
     /**
@@ -515,7 +515,8 @@ public Q_SLOTS:
      * @param screenId Screen for geometry
      * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
      */
-    MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
+    PlasmaZones::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
+                                                         const QString& screenId);
 
     /**
      * @brief Get focus target (window to activate) in adjacent zone
@@ -524,8 +525,8 @@ public Q_SLOTS:
      * @param screenId Screen for zone resolution
      * @return FocusTargetResult with success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName
      */
-    FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
-                                              const QString& screenId);
+    PlasmaZones::FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
+                                                           const QString& screenId);
 
     /**
      * @brief Get restore geometry for a snapped window
@@ -533,7 +534,7 @@ public Q_SLOTS:
      * @param screenId Screen for validation
      * @return RestoreTargetResult with success, found, x, y, width, height
      */
-    RestoreTargetResult getRestoreForWindow(const QString& windowId, const QString& screenId);
+    PlasmaZones::RestoreTargetResult getRestoreForWindow(const QString& windowId, const QString& screenId);
 
     /**
      * @brief Get cycle target (next/prev window in same zone)
@@ -542,7 +543,8 @@ public Q_SLOTS:
      * @param screenId Screen for zone resolution
      * @return CycleTargetResult with success, reason, windowIdToActivate, zoneId, screenName
      */
-    CycleTargetResult getCycleTargetForWindow(const QString& windowId, bool forward, const QString& screenId);
+    PlasmaZones::CycleTargetResult getCycleTargetForWindow(const QString& windowId, bool forward,
+                                                           const QString& screenId);
 
     /**
      * @brief Get swap target data (both windows' geometries and zone IDs)
@@ -552,7 +554,8 @@ public Q_SLOTS:
      * @return SwapTargetResult with success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2,
      * zoneId2, screenName, sourceZoneId, targetZoneId
      */
-    SwapTargetResult getSwapTargetForWindow(const QString& windowId, const QString& direction, const QString& screenId);
+    PlasmaZones::SwapTargetResult getSwapTargetForWindow(const QString& windowId, const QString& direction,
+                                                         const QString& screenId);
 
     /**
      * @brief Get push-to-empty-zone target (zone + geometry)
@@ -560,7 +563,7 @@ public Q_SLOTS:
      * @param screenId Screen for layout/geometry
      * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
      */
-    MoveTargetResult getPushTargetForWindow(const QString& windowId, const QString& screenId);
+    PlasmaZones::MoveTargetResult getPushTargetForWindow(const QString& windowId, const QString& screenId);
 
     /**
      * @brief Get snap-to-zone-by-number target (zone + geometry)
@@ -569,7 +572,8 @@ public Q_SLOTS:
      * @param screenId Screen for layout/geometry
      * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
      */
-    MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber, const QString& screenId);
+    PlasmaZones::MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber,
+                                                              const QString& screenId);
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -605,13 +609,13 @@ public Q_SLOTS:
      * @param windowId Window to query
      * @return WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
      */
-    WindowStateEntry getWindowState(const QString& windowId);
+    PlasmaZones::WindowStateEntry getWindowState(const QString& windowId);
 
     /**
      * @brief Get state for all tracked windows (TUI dashboard)
      * @return List of WindowStateEntry structs
      */
-    WindowStateList getAllWindowStates();
+    PlasmaZones::WindowStateList getAllWindowStates();
 
     /**
      * @brief Check if a window is temporarily floating (excluded from snapping)
@@ -651,7 +655,7 @@ public Q_SLOTS:
      * @param zoneId Zone UUID string
      * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
-    ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
 
     /**
      * @brief Get geometry for a specific zone ID on a specific screen
@@ -659,7 +663,7 @@ public Q_SLOTS:
      * @param screenId Screen ID (empty = primary screen)
      * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
-    ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    PlasmaZones::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
 
     /// Internal: returns QRect directly (avoids JSON round-trip for daemon-internal callers)
     QRect zoneGeometryRect(const QString& zoneId, const QString& screenId);
@@ -774,7 +778,7 @@ Q_SIGNALS:
      * @param state WindowStateEntry with windowId, zoneId, screenId, isFloating, changeType
      *        changeType: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
      */
-    void windowStateChanged(const QString& windowId, const WindowStateEntry& state);
+    void windowStateChanged(const QString& windowId, const PlasmaZones::WindowStateEntry& state);
 
     /**
      * @brief Emitted when pending window restores become available
@@ -864,7 +868,7 @@ Q_SIGNALS:
      * @note Daemon handles windowSnapped bookkeeping internally before emitting.
      *       Effect just applies geometry with stagger — no windowsSnappedBatch callback.
      */
-    void applyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
+    void applyGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
 
     /**
      * @brief Daemon requests KWin to raise windows in order (z-order restoration)

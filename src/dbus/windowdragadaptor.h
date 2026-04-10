@@ -119,7 +119,7 @@ public Q_SLOTS:
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     EmptyZoneList& emptyZonesOut);
+                     PlasmaZones::EmptyZoneList& emptyZonesOut);
 
     /**
      * Cancel current snap operation (Escape key)

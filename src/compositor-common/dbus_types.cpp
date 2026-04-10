@@ -303,35 +303,53 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e
 
 void registerDBusTypes()
 {
-    qDBusRegisterMetaType<WindowGeometryEntry>();
-    qDBusRegisterMetaType<WindowGeometryList>();
-    qDBusRegisterMetaType<TileRequestEntry>();
-    qDBusRegisterMetaType<TileRequestList>();
-    qDBusRegisterMetaType<SnapAllResultEntry>();
-    qDBusRegisterMetaType<SnapAllResultList>();
-    qDBusRegisterMetaType<SnapConfirmationEntry>();
-    qDBusRegisterMetaType<SnapConfirmationList>();
-    qDBusRegisterMetaType<WindowOpenedEntry>();
-    qDBusRegisterMetaType<WindowOpenedList>();
-    qDBusRegisterMetaType<WindowStateEntry>();
-    qDBusRegisterMetaType<WindowStateList>();
-    qDBusRegisterMetaType<UnfloatRestoreResult>();
-    qDBusRegisterMetaType<ZoneGeometryRect>();
-    qDBusRegisterMetaType<ZoneGeometryList>();
-    qDBusRegisterMetaType<EmptyZoneEntry>();
-    qDBusRegisterMetaType<EmptyZoneList>();
-    qDBusRegisterMetaType<SnapAssistCandidate>();
-    qDBusRegisterMetaType<SnapAssistCandidateList>();
-    qDBusRegisterMetaType<NamedZoneGeometry>();
-    qDBusRegisterMetaType<NamedZoneGeometryList>();
-    qDBusRegisterMetaType<AlgorithmInfoEntry>();
-    qDBusRegisterMetaType<AlgorithmInfoList>();
-    qDBusRegisterMetaType<BridgeRegistrationResult>();
-    qDBusRegisterMetaType<MoveTargetResult>();
-    qDBusRegisterMetaType<FocusTargetResult>();
-    qDBusRegisterMetaType<CycleTargetResult>();
-    qDBusRegisterMetaType<SwapTargetResult>();
-    qDBusRegisterMetaType<RestoreTargetResult>();
+    // IMPORTANT: register each type under BOTH its qualified and unqualified
+    // names. Q_DECLARE_METATYPE must be at global scope, so it registers under
+    // the fully-qualified name "PlasmaZones::Foo". The authoritative fix is to
+    // fully-qualify the type in every adaptor slot parameter declaration (see
+    // e.g. autotileadaptor.h) so moc records "PlasmaZones::Foo" and matches
+    // the qualified registration. This unqualified-alias registration is a
+    // defensive belt-and-suspenders so that a future adaptor written with
+    // unqualified slot parameters still works rather than crashing D-Bus
+    // dispatch at runtime (see dbus_adaptor_routing integration test for the
+    // failure mode — "Could not find slot ..." / "demarshalling function for
+    // type 'QString' failed" observed in production on 2026-04-10).
+
+#define PZ_REGISTER_DBUS_TYPE(Type)                                                                                    \
+    qRegisterMetaType<Type>(#Type);                                                                                    \
+    qDBusRegisterMetaType<Type>()
+
+    PZ_REGISTER_DBUS_TYPE(WindowGeometryEntry);
+    PZ_REGISTER_DBUS_TYPE(WindowGeometryList);
+    PZ_REGISTER_DBUS_TYPE(TileRequestEntry);
+    PZ_REGISTER_DBUS_TYPE(TileRequestList);
+    PZ_REGISTER_DBUS_TYPE(SnapAllResultEntry);
+    PZ_REGISTER_DBUS_TYPE(SnapAllResultList);
+    PZ_REGISTER_DBUS_TYPE(SnapConfirmationEntry);
+    PZ_REGISTER_DBUS_TYPE(SnapConfirmationList);
+    PZ_REGISTER_DBUS_TYPE(WindowOpenedEntry);
+    PZ_REGISTER_DBUS_TYPE(WindowOpenedList);
+    PZ_REGISTER_DBUS_TYPE(WindowStateEntry);
+    PZ_REGISTER_DBUS_TYPE(WindowStateList);
+    PZ_REGISTER_DBUS_TYPE(UnfloatRestoreResult);
+    PZ_REGISTER_DBUS_TYPE(ZoneGeometryRect);
+    PZ_REGISTER_DBUS_TYPE(ZoneGeometryList);
+    PZ_REGISTER_DBUS_TYPE(EmptyZoneEntry);
+    PZ_REGISTER_DBUS_TYPE(EmptyZoneList);
+    PZ_REGISTER_DBUS_TYPE(SnapAssistCandidate);
+    PZ_REGISTER_DBUS_TYPE(SnapAssistCandidateList);
+    PZ_REGISTER_DBUS_TYPE(NamedZoneGeometry);
+    PZ_REGISTER_DBUS_TYPE(NamedZoneGeometryList);
+    PZ_REGISTER_DBUS_TYPE(AlgorithmInfoEntry);
+    PZ_REGISTER_DBUS_TYPE(AlgorithmInfoList);
+    PZ_REGISTER_DBUS_TYPE(BridgeRegistrationResult);
+    PZ_REGISTER_DBUS_TYPE(MoveTargetResult);
+    PZ_REGISTER_DBUS_TYPE(FocusTargetResult);
+    PZ_REGISTER_DBUS_TYPE(CycleTargetResult);
+    PZ_REGISTER_DBUS_TYPE(SwapTargetResult);
+    PZ_REGISTER_DBUS_TYPE(RestoreTargetResult);
+
+#undef PZ_REGISTER_DBUS_TYPE
 }
 
 } // namespace PlasmaZones
