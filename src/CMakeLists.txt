@@ -87,6 +87,10 @@ set(plasmazones_core_SRCS
     core/layoutmanager.h
     core/layoututils.cpp
     core/layoututils.h
+    core/baseshaderregistry.cpp
+    core/baseshaderregistry.h
+    core/animationshaderregistry.cpp
+    core/animationshaderregistry.h
     core/supportreport.cpp
     core/supportreport.h
     core/shaderregistry/params.cpp
@@ -110,6 +114,8 @@ set(plasmazones_core_SRCS
     core/shaderincluderesolver.h
     core/modifierutils.cpp
     core/modifierutils.h
+    core/animationprofile.cpp
+    core/animationprofile.h
     config/settings.cpp
     config/settings/loadsave.cpp
     config/settings/setters.cpp
@@ -385,6 +391,11 @@ set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshaderitem/setters.cpp
     daemon/rendering/zonelabeltexturebuilder.h
     daemon/rendering/zonelabeltexturebuilder.cpp
+    daemon/rendering/animationshadercommon.h
+    daemon/rendering/animationshadernoderhi.h
+    daemon/rendering/animationshadernoderhi.cpp
+    daemon/rendering/animationshaderitem.h
+    daemon/rendering/animationshaderitem.cpp
 )
 
 add_library(plasmazones_rendering SHARED ${plasmazones_rendering_SRCS})
@@ -658,12 +669,10 @@ qt_add_qml_module(plasmazones-editor
         editor/qml/ZoneOperations.qml
         editor/qml/HelpDialogContent.qml
         editor/qml/TemplatePreview.qml
-        editor/qml/ShaderParameterSection.qml
         editor/qml/ShaderSettingsDialog.qml
         editor/qml/VisibilitySettingsDialog.qml
         editor/qml/LayoutSettingsDialog.qml
         editor/qml/SectionHeader.qml
-        editor/qml/ParameterDelegate.qml
         # SRP-extracted components from PropertyPanel
         editor/qml/ColorUtils.js
         editor/qml/ColorPickerRow.qml

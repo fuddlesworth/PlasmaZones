@@ -75,6 +75,10 @@ public:
     // Reset state (e.g., when effect is reconfigured)
     void reset();
 
+    /// Release velocity in pixels/second at the moment the drag ended.
+    /// Returns (0,0) if insufficient samples or drag hasn't ended.
+    QPointF releaseVelocity() const;
+
 Q_SIGNALS:
     void dragStarted(KWin::EffectWindow* window, const QString& windowId, const QRectF& geometry);
     void dragMoved(const QString& windowId, const QPointF& cursorPos);
@@ -94,6 +98,17 @@ private:
     // Throttle event-driven dragMoved signals to ~30Hz (32ms intervals).
     // Without throttling, 1000Hz mouse input would flood D-Bus.
     QElapsedTimer m_dragMovedThrottle;
+
+    // Velocity tracking — circular buffer of recent cursor samples for release velocity
+    struct CursorSample
+    {
+        QPointF position;
+        qint64 timestampMs = 0;
+    };
+    static constexpr int VelocitySampleCount = 4;
+    CursorSample m_velocitySamples[VelocitySampleCount] = {};
+    int m_velocitySampleIndex = 0;
+    QPointF m_releaseVelocity;
 };
 
 } // namespace PlasmaZones

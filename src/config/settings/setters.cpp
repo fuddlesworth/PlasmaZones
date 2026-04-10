@@ -561,6 +561,33 @@ SETTINGS_SETTER_CLAMPED(AnimationSequenceMode, m_animationSequenceMode, animatio
                         ConfigDefaults::animationSequenceModeMin(), ConfigDefaults::animationSequenceModeMax())
 SETTINGS_SETTER_CLAMPED(AnimationStaggerInterval, m_animationStaggerInterval, animationStaggerIntervalChanged,
                         ConfigDefaults::animationStaggerIntervalMin(), ConfigDefaults::animationStaggerIntervalMax())
+SETTINGS_SETTER_CLAMPED(AnimationShaderSubdivisions, m_animationShaderSubdivisions, animationShaderSubdivisionsChanged,
+                        ConfigDefaults::animationShaderSubdivisionsMin(),
+                        ConfigDefaults::animationShaderSubdivisionsMax())
+
+void Settings::setAnimationProfileTree(const AnimationProfileTree& tree)
+{
+    if (m_animationProfileTree != tree) {
+        m_animationProfileTree = tree;
+        Q_EMIT animationProfileTreeChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+void Settings::setAnimationProfileTreeJson(const QJsonObject& json)
+{
+    setAnimationProfileTree(AnimationProfileTree::fromJson(json));
+}
+
+void Settings::setUserAnimationPresetsJson(const QJsonArray& presets)
+{
+    if (m_userAnimationPresets != presets) {
+        m_userAnimationPresets = presets;
+        Q_EMIT userAnimationPresetsChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)

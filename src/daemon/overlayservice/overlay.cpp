@@ -564,6 +564,8 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
         bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
         writeQmlProperty(window, QStringLiteral("showNumbers"), showNumbers);
         writeFontProperties(window, m_settings);
+        writeAnimationProperties(window, m_settings, AnimationEvents::zoneHighlightIn(),
+                                 AnimationEvents::zoneHighlightOut());
     }
 
     // Update shader-specific properties if using shader overlay

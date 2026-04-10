@@ -21,6 +21,9 @@ Rectangle {
 
     id: root
 
+    // Animation profile properties (set from parent window)
+    property int animInDuration: 150
+    property int animOutDuration: 200
     // Layout data
     property var layouts: []
     // Array of layout objects with zones
@@ -191,8 +194,8 @@ Rectangle {
         readonly property int standardBorderWidth: Kirigami.Units.smallSpacing / 2 // 2px
         readonly property int thickBorderWidth: Kirigami.Units.smallSpacing // 4px
         readonly property int thinBorderWidth: 1
-        readonly property int animationDuration: 150 // ms - consistent timing
-        readonly property int expandedAnimationDuration: 200 // ms - slightly longer for expand
+        readonly property int animationDuration: root.animInDuration
+        readonly property int expandedAnimationDuration: root.animOutDuration > root.animInDuration ? root.animOutDuration : Math.round(root.animInDuration * 1.33)
     }
 
     // Subtle glow/shadow effect

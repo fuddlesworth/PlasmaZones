@@ -221,6 +221,11 @@ target_include_directories(test_layersurface PRIVATE
 add_test(NAME test_layersurface COMMAND test_layersurface)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — AnimationProfile Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_animation_profile core/test_animation_profile.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Support Report Tests (redaction, generation)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_support_report core/test_support_report.cpp)
@@ -330,6 +335,7 @@ set(_all_tests
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
     test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
     test_layersurface
+    test_animation_profile
     test_support_report
     test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge

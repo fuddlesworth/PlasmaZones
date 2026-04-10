@@ -213,7 +213,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setWidth(screenGeom.width());
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
-    m_snapAssistWindow->show();
+    writeAnimationProperties(m_snapAssistWindow, m_settings, AnimationEvents::snapAssistIn(),
+                             AnimationEvents::snapAssistOut());
+    QMetaObject::invokeMethod(m_snapAssistWindow, "show");
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
@@ -331,17 +333,22 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
         }
     });
 
-    // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
-        if (!visible) {
-            Q_EMIT snapAssistDismissed();
-        }
-    });
-
     // Connect windowSelected from QML: convert overlay-local geometry to screen
     // coordinates before emitting (KWin effect needs global coordinates for moveResize)
     connect(window, SIGNAL(windowSelected(QString, QString, QString)), this,
             SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
+
+    // Connect dismissed signal (emitted after hide animation completes).
+    // Replaces the old visibleChanged connection — the animation needs to
+    // finish before we destroy the window and notify listeners.
+    // Uses QWindow::visibleChanged as a proxy since dismissed() is a QML signal
+    // not visible to moc. When hide() animation completes, it sets visible=false.
+    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+        if (!visible && m_snapAssistWindow) {
+            destroySnapAssistWindow();
+            Q_EMIT snapAssistDismissed();
+        }
+    });
 
     // Install event filter for reliable Escape key handling on Wayland.
     // The QML Shortcut may not fire if the layer shell keyboard focus
@@ -353,9 +360,8 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
 void OverlayService::destroySnapAssistWindow()
 {
     if (m_snapAssistWindow) {
-        // Disconnect visibleChanged before closing to prevent spurious snapAssistDismissed
-        // when the window is being destroyed and recreated (e.g. showSnapAssist recreate cycle)
-        disconnect(m_snapAssistWindow, &QWindow::visibleChanged, this, nullptr);
+        // Disconnect all signals to prevent callbacks during teardown
+        disconnect(m_snapAssistWindow, nullptr, this, nullptr);
         // Disconnect screen signals so no geometryChanged etc. are delivered during teardown
         if (m_snapAssistScreen) {
             disconnect(m_snapAssistScreen, nullptr, m_snapAssistWindow, nullptr);
@@ -490,6 +496,8 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // setX/setY are no-ops on layer surfaces.
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
+    writeAnimationProperties(m_layoutPickerWindow, m_settings, AnimationEvents::layoutPickerIn(),
+                             AnimationEvents::layoutPickerOut());
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 

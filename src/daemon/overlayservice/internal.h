@@ -13,9 +13,11 @@
 #include <QScreen>
 
 #include "overlay_helpers.h"
+#include "../../common/animationstyle.h"
+#include "../../core/animationprofile.h"
+#include "../../core/interfaces.h"
 #include "../../core/screenmanager.h"
 #include "../../core/settings_interfaces.h"
-#include "../../core/interfaces.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include "../config/configdefaults.h"
@@ -96,6 +98,43 @@ inline void writeAutotileMetadata(QObject* window, bool showMasterDot, bool prod
     writeQmlProperty(window, QStringLiteral("producesOverlappingZones"), producesOverlappingZones);
     writeQmlProperty(window, QStringLiteral("zoneNumberDisplay"), zoneNumberDisplay);
     writeQmlProperty(window, QStringLiteral("masterCount"), masterCount);
+}
+
+/// Push resolved animation profile properties to a QML overlay window.
+/// Call this BEFORE QMetaObject::invokeMethod(window, "show") so the QML
+/// show()/hide() functions pick up profile-driven durations and styles.
+inline void writeAnimationProperties(QObject* window, ISettings* settings, const QString& inEvent,
+                                     const QString& outEvent)
+{
+    if (!window || !settings) {
+        return;
+    }
+    const auto& tree = settings->animationProfileTree();
+    const auto inProfile = tree.resolvedProfile(inEvent);
+    const auto outProfile = tree.resolvedProfile(outEvent);
+
+    // "In" animation properties
+    writeQmlProperty(window, QStringLiteral("animInDuration"), inProfile.duration.value_or(150));
+    writeQmlProperty(window, QStringLiteral("animInStyle"),
+                     animationStyleToString(inProfile.style.value_or(AnimationStyle::ScaleIn)));
+    writeQmlProperty(window, QStringLiteral("animInStyleParam"), inProfile.styleParam.value_or(0.8));
+    // Shader source URL (file://) — AnimationShaderItem loads from this
+    const QString inShaderPath = inProfile.shaderPath.value_or(QString());
+    writeQmlProperty(window, QStringLiteral("animInShaderSource"),
+                     inShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(inShaderPath));
+    writeQmlProperty(window, QStringLiteral("animInShaderParams"),
+                     QVariant::fromValue(inProfile.shaderParams.value_or(QVariantMap())));
+
+    // "Out" animation properties
+    writeQmlProperty(window, QStringLiteral("animOutDuration"), outProfile.duration.value_or(200));
+    writeQmlProperty(window, QStringLiteral("animOutStyle"),
+                     animationStyleToString(outProfile.style.value_or(AnimationStyle::ScaleIn)));
+    writeQmlProperty(window, QStringLiteral("animOutStyleParam"), outProfile.styleParam.value_or(0.9));
+    const QString outShaderPath = outProfile.shaderPath.value_or(QString());
+    writeQmlProperty(window, QStringLiteral("animOutShaderSource"),
+                     outShaderPath.isEmpty() ? QUrl() : QUrl::fromLocalFile(outShaderPath));
+    writeQmlProperty(window, QStringLiteral("animOutShaderParams"),
+                     QVariant::fromValue(outProfile.shaderParams.value_or(QVariantMap())));
 }
 
 // Fallback config when ISettings* is null (e.g. during teardown).

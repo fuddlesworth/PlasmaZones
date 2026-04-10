@@ -53,6 +53,12 @@ ApplicationWindow {
         "hasChildren": true,
         "hasDividerAfter": true
     }, {
+        "name": "animations",
+        "label": i18n("Animations"),
+        "iconName": "media-playback-start",
+        "hasChildren": true,
+        "hasDividerAfter": true
+    }, {
         "name": "exclusions",
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
@@ -114,6 +120,58 @@ ApplicationWindow {
             "label": i18n("Quick Shortcuts"),
             "iconName": "bookmark"
         }],
+        "animations": [{
+            "name": "animations-general",
+            "label": i18n("General"),
+            "iconName": "configure"
+        }, {
+            "name": "animations-presets",
+            "label": i18n("Presets"),
+            "iconName": "bookmark",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-snap",
+            "label": i18n("Snap"),
+            "iconName": "view-split-left-right"
+        }, {
+            "name": "animations-layout",
+            "label": i18n("Layout Switch"),
+            "iconName": "view-grid"
+        }, {
+            "name": "animations-border",
+            "label": i18n("Autotile Border"),
+            "iconName": "draw-rectangle",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-zonehighlight",
+            "label": i18n("Zone Highlight"),
+            "iconName": "gradient"
+        }, {
+            "name": "animations-osd",
+            "label": i18n("OSD"),
+            "iconName": "dialog-information"
+        }, {
+            "name": "animations-popup",
+            "label": i18n("Popups"),
+            "iconName": "window-new"
+        }, {
+            "name": "animations-zoneselector",
+            "label": i18n("Zone Selector"),
+            "iconName": "view-list-icons"
+        }, {
+            "name": "animations-preview",
+            "label": i18n("Preview"),
+            "iconName": "view-preview"
+        }, {
+            "name": "animations-dim",
+            "label": i18n("Dim"),
+            "iconName": "contrast",
+            "hasDividerAfter": true
+        }, {
+            "name": "animations-shaders",
+            "label": i18n("Shaders"),
+            "iconName": "preferences-desktop-effects"
+        }],
         "tiling": [{
             "name": "tiling-appearance",
             "label": i18n("Appearance"),
@@ -161,6 +219,18 @@ ApplicationWindow {
         "tiling-assignments": "TilingAssignmentsPage.qml",
         "tiling-shortcuts": "TilingQuickShortcutsPage.qml",
         "tiling-ordering": "TilingOrderingPage.qml",
+        "animations-general": "AnimationsGeneralPage.qml",
+        "animations-snap": "AnimationsSnapPage.qml",
+        "animations-layout": "AnimationsLayoutPage.qml",
+        "animations-border": "AnimationsBorderPage.qml",
+        "animations-zonehighlight": "AnimationsZoneHighlightPage.qml",
+        "animations-osd": "AnimationsOsdPage.qml",
+        "animations-popup": "AnimationsPopupPage.qml",
+        "animations-zoneselector": "AnimationsZoneSelectorPage.qml",
+        "animations-preview": "AnimationsPreviewPage.qml",
+        "animations-dim": "AnimationsDimPage.qml",
+        "animations-presets": "AnimationsPresetsPage.qml",
+        "animations-shaders": "AnimationsShadersPage.qml",
         "exclusions": "ExclusionsPage.qml",
         "editor": "EditorPage.qml",
         "general": "GeneralPage.qml",

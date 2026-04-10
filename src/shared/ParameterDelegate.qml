@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 
@@ -21,21 +21,7 @@ Item {
     // Dialog reference - passed explicitly from ShaderSettingsDialog
     // This is more reliable than parent chain walking through Loaders/FormLayouts
     required property var dialogRoot
-    // Fallback: Walk parent chain if dialogRoot not passed explicitly
-    readonly property var resolvedDialogRoot: {
-        if (dialogRoot)
-            return dialogRoot;
-
-        // Fallback parent chain walk
-        var p = parent;
-        while (p) {
-            if (typeof p.pendingParams !== "undefined" && typeof p.parameterValue === "function" && typeof p.setPendingParam === "function")
-                return p;
-
-            p = p.parent;
-        }
-        return null;
-    }
+    readonly property var resolvedDialogRoot: dialogRoot
     // Track pendingParams changes to force value re-evaluation
     readonly property var _pendingRef: resolvedDialogRoot ? resolvedDialogRoot.pendingParams : null
     // Computed type for visibility switching
@@ -55,7 +41,7 @@ Item {
         // ═══════════════════════════════════════════════════════════════
         // FLOAT PARAMETER
         // ═══════════════════════════════════════════════════════════════
-        Slider {
+        QQC.Slider {
             id: floatSlider
 
             visible: paramDelegate.paramType === "float"
@@ -64,9 +50,9 @@ Item {
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 1
             stepSize: paramDelegate.paramData && paramDelegate.paramData.step !== undefined ? paramDelegate.paramData.step : 0.01
-            ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
-            ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
-            ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC.ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
+            QQC.ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
+            QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
             onMoved: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
@@ -89,7 +75,7 @@ Item {
 
         }
 
-        Label {
+        QQC.Label {
             visible: paramDelegate.paramType === "float"
             text: floatSlider.value.toFixed(2)
             Layout.preferredWidth: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.sliderValueLabelWidth : 50
@@ -100,16 +86,16 @@ Item {
         // ═══════════════════════════════════════════════════════════════
         // INT PARAMETER
         // ═══════════════════════════════════════════════════════════════
-        SpinBox {
+        QQC.SpinBox {
             id: intSpinBox
 
             visible: paramDelegate.paramType === "int"
             Accessible.name: paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : ""
             from: paramDelegate.paramData && paramDelegate.paramData.min !== undefined ? paramDelegate.paramData.min : 0
             to: paramDelegate.paramData && paramDelegate.paramData.max !== undefined ? paramDelegate.paramData.max : 100
-            ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
-            ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
-            ToolTip.delay: Kirigami.Units.toolTipDelay
+            QQC.ToolTip.text: paramDelegate.paramData ? (paramDelegate.paramData.description || "") : ""
+            QQC.ToolTip.visible: hovered && paramDelegate.paramData && paramDelegate.paramData.description !== undefined && paramDelegate.paramData.description !== ""
+            QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
             onValueModified: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, value);
@@ -140,7 +126,7 @@ Item {
         // ═══════════════════════════════════════════════════════════════
         // BOOL PARAMETER
         // ═══════════════════════════════════════════════════════════════
-        CheckBox {
+        QQC.CheckBox {
             id: boolCheckBox
 
             visible: paramDelegate.paramType === "bool"
@@ -220,7 +206,7 @@ Item {
 
         }
 
-        Label {
+        QQC.Label {
             visible: paramDelegate.paramType === "color"
             text: colorSwatch.currentColor.toString().toUpperCase()
             Layout.preferredWidth: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.colorLabelWidth : 80
@@ -236,7 +222,7 @@ Item {
         // ═══════════════════════════════════════════════════════════════
         // IMAGE PARAMETER
         // ═══════════════════════════════════════════════════════════════
-        Button {
+        QQC.Button {
             id: imagePickerButton
 
             property string currentPath: {
@@ -247,6 +233,7 @@ Item {
                 return String(paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id, paramDelegate.paramData.default !== undefined ? paramDelegate.paramData.default : "") || "");
             }
 
+            Accessible.name: i18nc("@action:button", "Choose image for %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
             visible: paramDelegate.paramType === "image"
             Layout.fillWidth: true
             text: {
@@ -263,10 +250,11 @@ Item {
             }
         }
 
-        ToolButton {
+        QQC.ToolButton {
             visible: paramDelegate.paramType === "image" && imagePickerButton.currentPath.length > 0
             icon.name: "edit-clear"
-            ToolTip.text: i18nc("@info:tooltip", "Clear image")
+            Accessible.name: i18nc("@action:button", "Clear image for %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
+            QQC.ToolTip.text: i18nc("@info:tooltip", "Clear image")
             onClicked: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id, "");
@@ -275,13 +263,13 @@ Item {
         }
 
         // SVG render resolution (only visible when an SVG is selected)
-        Label {
+        QQC.Label {
             visible: paramDelegate.isSvgImage
             text: i18nc("@label:spinbox", "Size:")
             opacity: 0.7
         }
 
-        SpinBox {
+        QQC.SpinBox {
             id: svgSizeSpinBox
 
             visible: paramDelegate.isSvgImage
@@ -289,24 +277,31 @@ Item {
             from: 64
             to: 4096
             stepSize: 128
-            value: {
-                void (paramDelegate._pendingRef);
-                if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
-                    return 1024;
-
-                var v = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id + "_svgSize", 1024);
-                return Number(v) || 1024;
-            }
             editable: true
-            Layout.preferredWidth: 120
-            ToolTip.text: i18nc("@info:tooltip", "SVG render resolution (longest side in pixels)")
-            ToolTip.visible: hovered
-            ToolTip.delay: Kirigami.Units.toolTipDelay
+            Layout.preferredWidth: Kirigami.Units.gridUnit * 8
+            QQC.ToolTip.text: i18nc("@info:tooltip", "SVG render resolution (longest side in pixels)")
+            QQC.ToolTip.visible: hovered
+            QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
             onValueModified: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setPendingParam(paramDelegate.paramData.id + "_svgSize", value);
 
             }
+
+            Binding on value {
+                value: {
+                    void (paramDelegate._pendingRef);
+                    if (!paramDelegate.paramData || !paramDelegate.resolvedDialogRoot)
+                        return 1024;
+
+                    var v = paramDelegate.resolvedDialogRoot.parameterValue(paramDelegate.paramData.id + "_svgSize", 1024);
+                    var num = Number(v);
+                    return isNaN(num) ? 1024 : num;
+                }
+                when: !svgSizeSpinBox.activeFocus
+                restoreMode: Binding.RestoreNone
+            }
+
         }
 
         Item {
@@ -317,7 +312,7 @@ Item {
         // ═══════════════════════════════════════════════════════════════
         // LOCK TOGGLE (all parameter types)
         // ═══════════════════════════════════════════════════════════════
-        ToolButton {
+        QQC.ToolButton {
             // Force re-evaluation when lockedParams changes (same pattern as _pendingRef)
             readonly property var _lockedRef: paramDelegate.resolvedDialogRoot ? paramDelegate.resolvedDialogRoot.lockedParams : null
             readonly property bool isLocked: {
@@ -329,10 +324,11 @@ Item {
             icon.width: Kirigami.Units.iconSizes.small
             icon.height: Kirigami.Units.iconSizes.small
             opacity: isLocked ? 1 : 0.4
-            display: ToolButton.IconOnly
-            ToolTip.text: isLocked ? i18nc("@info:tooltip", "Locked — preserved during randomize") : i18nc("@info:tooltip", "Unlocked — will be randomized")
-            ToolTip.visible: hovered
-            ToolTip.delay: Kirigami.Units.toolTipDelay
+            display: QQC.ToolButton.IconOnly
+            Accessible.name: isLocked ? i18nc("@action:button", "Unlock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "") : i18nc("@action:button", "Lock %1", paramDelegate.paramData ? (paramDelegate.paramData.name || paramDelegate.paramData.id || "") : "")
+            QQC.ToolTip.text: isLocked ? i18nc("@info:tooltip", "Locked — preserved during randomize") : i18nc("@info:tooltip", "Unlocked — will be randomized")
+            QQC.ToolTip.visible: hovered
+            QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
             onClicked: {
                 if (paramDelegate.paramData && paramDelegate.resolvedDialogRoot)
                     paramDelegate.resolvedDialogRoot.setParamLocked(paramDelegate.paramData.id, !isLocked);

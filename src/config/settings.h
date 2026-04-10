@@ -12,6 +12,8 @@
 #include <optional>
 #include <QFont>
 #include <QHash>
+#include <QJsonArray>
+#include <QJsonObject>
 #include <QVariantMap>
 
 namespace PlasmaZones {
@@ -221,6 +223,12 @@ public:
                    animationSequenceModeChanged)
     Q_PROPERTY(int animationStaggerInterval READ animationStaggerInterval WRITE setAnimationStaggerInterval NOTIFY
                    animationStaggerIntervalChanged)
+    Q_PROPERTY(int animationShaderSubdivisions READ animationShaderSubdivisions WRITE setAnimationShaderSubdivisions
+                   NOTIFY animationShaderSubdivisionsChanged)
+    Q_PROPERTY(QJsonObject animationProfileTreeJson READ animationProfileTreeJson WRITE setAnimationProfileTreeJson
+                   NOTIFY animationProfileTreeChanged)
+    Q_PROPERTY(QJsonArray userAnimationPresetsJson READ userAnimationPresetsJson WRITE setUserAnimationPresetsJson
+                   NOTIFY userAnimationPresetsChanged)
 
     // Autotile Behavior and Visual Settings
     Q_PROPERTY(bool autotileFocusFollowsMouse READ autotileFocusFollowsMouse WRITE setAutotileFocusFollowsMouse NOTIFY
@@ -1061,6 +1069,32 @@ public:
     }
     void setAnimationStaggerInterval(int ms) override;
 
+    int animationShaderSubdivisions() const override
+    {
+        return m_animationShaderSubdivisions;
+    }
+    void setAnimationShaderSubdivisions(int subdivisions) override;
+
+    AnimationProfileTree animationProfileTree() const override
+    {
+        return m_animationProfileTree;
+    }
+    void setAnimationProfileTree(const AnimationProfileTree& tree) override;
+
+    // QML-friendly JSON accessor for the profile tree
+    QJsonObject animationProfileTreeJson() const
+    {
+        return m_animationProfileTree.toJson();
+    }
+    void setAnimationProfileTreeJson(const QJsonObject& json);
+
+    // User animation presets
+    QJsonArray userAnimationPresetsJson() const
+    {
+        return m_userAnimationPresets;
+    }
+    void setUserAnimationPresetsJson(const QJsonArray& presets);
+
     // Additional Autotiling Settings
     bool autotileFocusFollowsMouse() const override
     {
@@ -1497,6 +1531,9 @@ public:
     void applyAutotileBorderSystemColor();
 
 Q_SIGNALS:
+    // User animation presets (Settings-only, not part of ISettings interface)
+    void userAnimationPresetsChanged();
+
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
@@ -1739,6 +1776,9 @@ private:
     int m_animationMinDistance = ConfigDefaults::animationMinDistance();
     int m_animationSequenceMode = ConfigDefaults::animationSequenceMode();
     int m_animationStaggerInterval = ConfigDefaults::animationStaggerInterval();
+    int m_animationShaderSubdivisions = ConfigDefaults::animationShaderSubdivisions();
+    AnimationProfileTree m_animationProfileTree = AnimationProfileTree::defaultTree();
+    QJsonArray m_userAnimationPresets;
 
     // Additional Autotiling Settings
     bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();

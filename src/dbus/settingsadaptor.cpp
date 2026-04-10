@@ -385,6 +385,58 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("animationMinDistance", animationMinDistance, setAnimationMinDistance)
     REGISTER_INT_SETTING("animationSequenceMode", animationSequenceMode, setAnimationSequenceMode)
     REGISTER_INT_SETTING("animationStaggerInterval", animationStaggerInterval, setAnimationStaggerInterval)
+    REGISTER_INT_SETTING("animationShaderSubdivisions", animationShaderSubdivisions, setAnimationShaderSubdivisions)
+
+    // Animation profile tree: QJsonObject → serialized as compact JSON string over D-Bus
+    // animationProfileTreeJson() is on concrete Settings only (not ISettings)
+    if (concrete) {
+        m_getters[QStringLiteral("animationProfileTreeJson")] = [concrete]() -> QVariant {
+            return QString::fromUtf8(
+                QJsonDocument(concrete->animationProfileTreeJson()).toJson(QJsonDocument::Compact));
+        };
+        m_setters[QStringLiteral("animationProfileTreeJson")] = [concrete](const QVariant& v) {
+            QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (!doc.isObject())
+                return false;
+
+            const QJsonObject obj = doc.object();
+
+            // Defense in depth: reject unreasonably large payloads
+            if (obj.size() > 50)
+                return false;
+
+            // Validate that all top-level keys are known event names
+            const QStringList validNames = AnimationProfileTree::allEventNames();
+            const QSet<QString> validSet(validNames.constBegin(), validNames.constEnd());
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (!validSet.contains(it.key()))
+                    return false;
+            }
+
+            concrete->setAnimationProfileTreeJson(obj);
+            return true;
+        };
+        m_schemas[QStringLiteral("animationProfileTreeJson")] = QStringLiteral("string");
+
+        // User animation presets: QJsonArray → serialized as compact JSON string over D-Bus
+        m_getters[QStringLiteral("userAnimationPresetsJson")] = [concrete]() -> QVariant {
+            return QString::fromUtf8(
+                QJsonDocument(concrete->userAnimationPresetsJson()).toJson(QJsonDocument::Compact));
+        };
+        m_setters[QStringLiteral("userAnimationPresetsJson")] = [concrete](const QVariant& v) {
+            QJsonDocument doc = QJsonDocument::fromJson(v.toString().toUtf8());
+            if (!doc.isArray())
+                return false;
+
+            // Defense in depth: reject unreasonably large payloads
+            if (doc.array().size() > 200)
+                return false;
+
+            concrete->setUserAnimationPresetsJson(doc.array());
+            return true;
+        };
+        m_schemas[QStringLiteral("userAnimationPresetsJson")] = QStringLiteral("string");
+    }
 
     // Autotile core settings (concrete Settings only)
     if (concrete) {

@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "animationprofile.h"
 #include "enums.h"
 #include "settings_interfaces.h"
 #include <dbus_types.h>
@@ -76,6 +77,12 @@ public:
     virtual void setAnimationSequenceMode(int mode) = 0;
     virtual int animationStaggerInterval() const = 0;
     virtual void setAnimationStaggerInterval(int ms) = 0;
+    virtual int animationShaderSubdivisions() const = 0;
+    virtual void setAnimationShaderSubdivisions(int subdivisions) = 0;
+
+    // Animation profile tree (hierarchical per-event configuration)
+    virtual AnimationProfileTree animationProfileTree() const = 0;
+    virtual void setAnimationProfileTree(const AnimationProfileTree& tree) = 0;
 
     // Autotile decoration settings (fetched by KWin effect via D-Bus)
     virtual bool autotileFocusFollowsMouse() const = 0;
@@ -291,6 +298,8 @@ Q_SIGNALS:
     void animationMinDistanceChanged();
     void animationSequenceModeChanged();
     void animationStaggerIntervalChanged();
+    void animationShaderSubdivisionsChanged();
+    void animationProfileTreeChanged();
 
     // Autotile shortcuts
     void autotileToggleShortcutChanged();

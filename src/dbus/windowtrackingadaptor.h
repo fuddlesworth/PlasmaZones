@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "../core/animationprofile.h"
 #include "../core/windowtrackingservice.h"
 #include <dbus_types.h>
 #include <QObject>

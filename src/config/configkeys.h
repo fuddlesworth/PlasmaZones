@@ -372,6 +372,38 @@ public:
     PZ_CONFIG_KEY(staggerIntervalKey, "StaggerInterval")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Animation Profiles (hierarchical per-event tree)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_GROUP(animationProfilesGroup, "AnimationProfiles")
+
+    // Per-profile field keys (stored as JSON object fields within each event node)
+    PZ_CONFIG_KEY(animProfileEnabledKey, "enabled")
+    PZ_CONFIG_KEY(animProfileTimingModeKey, "timingMode")
+    PZ_CONFIG_KEY(animProfileDurationKey, "duration")
+    PZ_CONFIG_KEY(animProfileEasingCurveKey, "easingCurve")
+    PZ_CONFIG_KEY(animProfileStyleKey, "style")
+    PZ_CONFIG_KEY(animProfileStyleParamKey, "styleParam")
+    PZ_CONFIG_KEY(animProfileShaderPathKey, "shaderPath")
+    PZ_CONFIG_KEY(animProfileShaderParamsKey, "shaderParams")
+    PZ_CONFIG_KEY(animProfileGeometryKey, "geometry")
+
+    // Spring sub-object keys
+    PZ_CONFIG_KEY(animProfileSpringKey, "spring")
+    PZ_CONFIG_KEY(animProfileSpringDampingKey, "dampingRatio")
+    PZ_CONFIG_KEY(animProfileSpringStiffnessKey, "stiffness")
+    PZ_CONFIG_KEY(animProfileSpringEpsilonKey, "epsilon")
+
+    // Animation profile tree data
+    PZ_CONFIG_KEY(animProfileDataKey, "data")
+
+    // User animation presets (stored as JSON array string)
+    PZ_CONFIG_KEY(userAnimationPresetsKey, "UserPresets")
+
+    // Animation shader subdivision (polygon grid density for vertex shader deformation)
+    PZ_CONFIG_KEY(animationShaderSubdivisionsKey, "AnimationShaderSubdivisions")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Global
     // ═══════════════════════════════════════════════════════════════════════════
 

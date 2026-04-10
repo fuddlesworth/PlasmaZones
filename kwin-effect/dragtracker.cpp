@@ -36,6 +36,7 @@ void DragTracker::handleWindowStartMoveResize(KWin::EffectWindow* w)
 
     m_draggedWindow = w;
     m_draggedWindowId = m_effect->getWindowId(w);
+    m_velocitySampleIndex = 0;
     m_lastCursorPos = KWin::effects->cursorPos();
     m_dragMovedThrottle.start();
 
@@ -68,6 +69,11 @@ void DragTracker::forceEnd(const QPointF& cursorPos)
     finishDrag(/*cancelled=*/false);
 }
 
+QPointF DragTracker::releaseVelocity() const
+{
+    return m_releaseVelocity;
+}
+
 void DragTracker::updateCursorPosition(const QPointF& cursorPos)
 {
     if (!m_draggedWindow) {
@@ -75,6 +81,17 @@ void DragTracker::updateCursorPosition(const QPointF& cursorPos)
     }
     // Always track latest position for forceEnd()/callDragStopped() to use
     m_lastCursorPos = cursorPos;
+
+    // Record every cursor update for velocity estimation (unthrottled)
+    const qint64 now = m_dragMovedThrottle.elapsed();
+    m_velocitySamples[m_velocitySampleIndex % VelocitySampleCount] = {cursorPos, now};
+    m_velocitySampleIndex++;
+    // Prevent integer overflow: at ~1000 Hz cursor updates, an int overflows INT_MAX
+    // after ~34 minutes of dragging, causing negative modulo and OOB array writes.
+    // Reset to VelocitySampleCount to preserve the "we have enough samples" semantic
+    // for the qMin check in finishDrag().
+    if (m_velocitySampleIndex >= VelocitySampleCount * 2)
+        m_velocitySampleIndex = VelocitySampleCount;
     // Throttle dragMoved signals to ~30Hz. slotMouseChanged fires at input
     // device rate (often 1000Hz on gaming mice); sending a D-Bus call for
     // every pixel of movement would add ~10-50μs of message serialization
@@ -88,6 +105,23 @@ void DragTracker::updateCursorPosition(const QPointF& cursorPos)
 
 void DragTracker::finishDrag(bool cancelled)
 {
+    // Compute release velocity from the last two sufficiently-spaced samples
+    m_releaseVelocity = QPointF(0, 0);
+    if (m_velocitySampleIndex >= 2) {
+        const int lastIdx = (m_velocitySampleIndex - 1) % VelocitySampleCount;
+        // Search backwards for a sample at least 5ms older to avoid noise
+        for (int offset = 1; offset < qMin(m_velocitySampleIndex, VelocitySampleCount); ++offset) {
+            const int prevIdx = ((m_velocitySampleIndex - 1 - offset) % VelocitySampleCount + VelocitySampleCount)
+                % VelocitySampleCount;
+            const qint64 dtMs = m_velocitySamples[lastIdx].timestampMs - m_velocitySamples[prevIdx].timestampMs;
+            if (dtMs >= 5) {
+                const QPointF dp = m_velocitySamples[lastIdx].position - m_velocitySamples[prevIdx].position;
+                m_releaseVelocity = dp / (dtMs / 1000.0); // pixels per second
+                break;
+            }
+        }
+    }
+
     // Copy raw pointer before clearing — QPointer auto-nulls when the window is destroyed
     auto* windowToSnap = m_draggedWindow.data();
     QString windowIdToSnap = m_draggedWindowId;
@@ -95,6 +129,7 @@ void DragTracker::finishDrag(bool cancelled)
     // Clear state first to prevent re-entry issues
     m_draggedWindow = nullptr;
     m_draggedWindowId.clear();
+    m_velocitySampleIndex = 0;
 
     Q_EMIT dragStopped(windowToSnap, windowIdToSnap, cancelled);
 }

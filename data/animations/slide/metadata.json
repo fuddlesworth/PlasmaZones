@@ -1,0 +1,11 @@
+{
+  "id": "slide",
+  "name": "Slide",
+  "description": "Translate with opacity fade-in (uses morph geometry interpolation)",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "vertexShader": "effect.vert",
+  "geometry": "morph"
+}

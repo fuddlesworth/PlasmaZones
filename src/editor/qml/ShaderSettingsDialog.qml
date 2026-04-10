@@ -7,6 +7,7 @@ import QtQuick.Controls
 import QtQuick.Dialogs
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.plasmazones.common as QFZCommon
 
 /**
  * @brief Shader settings dialog
@@ -1070,7 +1071,7 @@ Kirigami.Dialog {
 
                     model: root.parameterGroups
 
-                    delegate: ShaderParameterSection {
+                    delegate: QFZCommon.ShaderParameterSection {
                         id: paramSection
 
                         required property var modelData
@@ -1108,7 +1109,7 @@ Kirigami.Dialog {
                                             elide: Text.ElideRight
                                         }
 
-                                        ParameterDelegate {
+                                        QFZCommon.ParameterDelegate {
                                             Layout.fillWidth: true
                                             Kirigami.Theme.inherit: true
                                             dialogRoot: root
@@ -1157,7 +1158,7 @@ Kirigami.Dialog {
                             elide: Text.ElideRight
                         }
 
-                        ParameterDelegate {
+                        QFZCommon.ParameterDelegate {
                             Layout.fillWidth: true
                             Kirigami.Theme.inherit: true
                             dialogRoot: root

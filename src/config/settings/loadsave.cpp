@@ -533,6 +533,32 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
             readValidatedInt(*animations, ConfigDefaults::staggerIntervalKey(),
                              ConfigDefaults::animationStaggerInterval(), ConfigDefaults::animationStaggerIntervalMin(),
                              ConfigDefaults::animationStaggerIntervalMax(), "animation stagger interval");
+        m_animationShaderSubdivisions = readValidatedInt(
+            *animations, ConfigDefaults::animationShaderSubdivisionsKey(),
+            ConfigDefaults::animationShaderSubdivisions(), ConfigDefaults::animationShaderSubdivisionsMin(),
+            ConfigDefaults::animationShaderSubdivisionsMax(), "animation shader subdivisions");
+    }
+
+    // Animation Profile Tree (hierarchical per-event configuration)
+    {
+        auto profiles = backend->group(ConfigDefaults::animationProfilesGroup());
+        const QString profilesStr = profiles->readString(ConfigDefaults::animProfileDataKey(), QString());
+        if (!profilesStr.isEmpty()) {
+            const QJsonObject obj = QJsonDocument::fromJson(profilesStr.toUtf8()).object();
+            m_animationProfileTree = AnimationProfileTree::fromJson(obj);
+        } else {
+            m_animationProfileTree = AnimationProfileTree::defaultTree();
+        }
+    }
+
+    // User animation presets
+    {
+        auto animations2 = backend->group(ConfigDefaults::animationsGroup());
+        const QString presetsStr = animations2->readString(ConfigDefaults::userAnimationPresetsKey(), QString());
+        if (!presetsStr.isEmpty())
+            m_userAnimationPresets = QJsonDocument::fromJson(presetsStr.toUtf8()).array();
+        else
+            m_userAnimationPresets = QJsonArray();
     }
 
     // Tiling Shortcuts
@@ -911,6 +937,25 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
         animations->writeInt(ConfigDefaults::minDistanceKey(), m_animationMinDistance);
         animations->writeInt(ConfigDefaults::sequenceModeKey(), m_animationSequenceMode);
         animations->writeInt(ConfigDefaults::staggerIntervalKey(), m_animationStaggerInterval);
+        animations->writeInt(ConfigDefaults::animationShaderSubdivisionsKey(), m_animationShaderSubdivisions);
+    }
+
+    // Animation Profile Tree
+    {
+        auto profiles = backend->group(ConfigDefaults::animationProfilesGroup());
+        const QJsonObject obj = m_animationProfileTree.toJson();
+        profiles->writeString(ConfigDefaults::animProfileDataKey(),
+                              QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact)));
+    }
+
+    // User animation presets
+    {
+        auto animations2 = backend->group(ConfigDefaults::animationsGroup());
+        animations2->writeString(
+            ConfigDefaults::userAnimationPresetsKey(),
+            m_userAnimationPresets.isEmpty()
+                ? QString()
+                : QString::fromUtf8(QJsonDocument(m_userAnimationPresets).toJson(QJsonDocument::Compact)));
     }
 
     {

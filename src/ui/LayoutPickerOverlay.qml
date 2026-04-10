@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import PlasmaZones 1.0
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
@@ -42,6 +43,20 @@ Window {
     property bool fontUnderline: false
     property bool fontStrikeout: false
     property bool locked: false
+    // Animation profile properties (set from C++ before show)
+    property int animInDuration: 150
+    property string animInStyle: "scalein"
+    property real animInStyleParam: 0.9
+    property int animOutDuration: 120
+    property string animOutStyle: "scalein"
+    property real animOutStyleParam: 0.95
+    // Shader source URLs (set from C++ via AnimationShaderRegistry)
+    property url animInShaderSource: ""
+    property var animInShaderParams: ({
+    })
+    property url animOutShaderSource: ""
+    property var animOutShaderParams: ({
+    })
     // Current keyboard selection index — binding is intentionally broken on first
     // keyboard/mouse interaction; the picker is recreated each time so this is safe.
     property int selectedIndex: {
@@ -67,23 +82,98 @@ Window {
     signal layoutSelected(string layoutId)
     signal dismissed()
 
-    // Show with animation
+    // Show with animation (style-adaptive, supports shader transitions)
     function show() {
         showAnimation.stop();
         hideAnimation.stop();
-        contentWrapper.opacity = 0;
-        container.scale = metrics.showScaleFrom;
-        root.visible = true;
-        showAnimation.start();
+        shaderShowAnim.stop();
+        shaderHideAnim.stop();
+        if (animInShaderSource.toString() !== "") {
+            // ── Shader transition path ──
+            contentWrapper.opacity = 1;
+            container.scale = 1;
+            contentWrapper.layer.enabled = true;
+            shaderTransition.shaderSource = animInShaderSource;
+            shaderTransition.direction = 0;
+            shaderTransition.duration = animInDuration;
+            shaderTransition.styleParam = animInStyleParam;
+            shaderTransition.shaderParams = animInShaderParams || {
+            };
+            shaderTransition.progress = 0;
+            shaderTransition.visible = true;
+            root.visible = true;
+            shaderShowAnim.duration = animInDuration;
+            shaderShowAnim.start();
+        } else {
+            // ── Built-in QML animation path ──
+            contentWrapper.opacity = 0;
+            container.scale = (animInStyle === "scalein") ? animInStyleParam : 1;
+            container.y = 0;
+            showOpacityAnim.duration = animInDuration;
+            showTransformAnim.duration = (animInStyle === "fadein" || animInStyle === "none") ? 0 : animInDuration;
+            if (animInStyle === "scalein") {
+                showTransformAnim.target = container;
+                showTransformAnim.property = "scale";
+                showTransformAnim.from = animInStyleParam;
+                showTransformAnim.to = 1;
+                showTransformAnim.easing.type = Easing.OutBack;
+                showTransformAnim.easing.overshoot = 1.1;
+            } else if (animInStyle === "slideup") {
+                showTransformAnim.target = container;
+                showTransformAnim.property = "y";
+                showTransformAnim.from = animInStyleParam;
+                showTransformAnim.to = 0;
+                showTransformAnim.easing.type = Easing.OutCubic;
+                showTransformAnim.easing.overshoot = 0;
+            } else {
+                showTransformAnim.duration = 0;
+            }
+            root.visible = true;
+            showAnimation.start();
+        }
         root.requestActivate();
     }
 
-    // Hide with animation
+    // Hide with animation (style-adaptive, supports shader transitions)
     function hide() {
         showAnimation.stop();
-        if (root.visible)
-            hideAnimation.start();
+        shaderShowAnim.stop();
+        if (!root.visible)
+            return ;
 
+        if (animOutShaderSource.toString() !== "") {
+            // ── Shader transition path ──
+            contentWrapper.opacity = 1;
+            contentWrapper.layer.enabled = true;
+            shaderTransition.shaderSource = animOutShaderSource;
+            shaderTransition.direction = 1;
+            shaderTransition.duration = animOutDuration;
+            shaderTransition.styleParam = animOutStyleParam;
+            shaderTransition.shaderParams = animOutShaderParams || {
+            };
+            shaderTransition.progress = 1;
+            shaderTransition.visible = true;
+            shaderHideAnim.duration = animOutDuration;
+            shaderHideAnim.start();
+        } else {
+            // ── Built-in QML animation path ──
+            hideOpacityAnim.duration = animOutDuration;
+            hideTransformAnim.duration = (animOutStyle === "fadein" || animOutStyle === "none") ? 0 : animOutDuration;
+            if (animOutStyle === "scalein") {
+                hideTransformAnim.target = container;
+                hideTransformAnim.property = "scale";
+                hideTransformAnim.to = animOutStyleParam;
+                hideTransformAnim.easing.type = Easing.InCubic;
+            } else if (animOutStyle === "slideup") {
+                hideTransformAnim.target = container;
+                hideTransformAnim.property = "y";
+                hideTransformAnim.to = animOutStyleParam;
+                hideTransformAnim.easing.type = Easing.InCubic;
+            } else {
+                hideTransformAnim.duration = 0;
+            }
+            hideAnimation.start();
+        }
     }
 
     function moveSelection(dx, dy) {
@@ -129,57 +219,59 @@ Window {
         readonly property int indicatorSpacing: Kirigami.Units.gridUnit
         // Card preview
         readonly property int previewWidth: 160
-        // Show/hide animation
-        readonly property int showDuration: Kirigami.Units.shortDuration
-        readonly property int hideDuration: Math.round(Kirigami.Units.shortDuration * 0.8)
-        readonly property real showScaleFrom: 0.9
-        readonly property real hideScaleTo: 0.95
-        readonly property real showOvershoot: 1.1
     }
 
-    // Show animation
+    // Show animation (configured dynamically in show())
     ParallelAnimation {
         id: showAnimation
 
         NumberAnimation {
+            id: showOpacityAnim
+
             target: contentWrapper
             property: "opacity"
             from: 0
             to: 1
-            duration: metrics.showDuration
+            duration: root.animInDuration
             easing.type: Easing.OutCubic
         }
 
         NumberAnimation {
+            id: showTransformAnim
+
             target: container
             property: "scale"
-            from: metrics.showScaleFrom
+            from: root.animInStyleParam
             to: 1
-            duration: metrics.showDuration
+            duration: root.animInDuration
             easing.type: Easing.OutBack
-            easing.overshoot: metrics.showOvershoot
+            easing.overshoot: 1.1
         }
 
     }
 
-    // Hide animation
+    // Hide animation (configured dynamically in hide())
     SequentialAnimation {
         id: hideAnimation
 
         ParallelAnimation {
             NumberAnimation {
+                id: hideOpacityAnim
+
                 target: contentWrapper
                 property: "opacity"
                 to: 0
-                duration: metrics.hideDuration
+                duration: root.animOutDuration
                 easing.type: Easing.InCubic
             }
 
             NumberAnimation {
+                id: hideTransformAnim
+
                 target: container
                 property: "scale"
-                to: metrics.hideScaleTo
-                duration: metrics.hideDuration
+                to: root.animOutStyleParam
+                duration: root.animOutDuration
                 easing.type: Easing.InCubic
             }
 
@@ -223,6 +315,54 @@ Window {
     Shortcut {
         sequence: "Down"
         onActivated: moveSelection(0, 1)
+    }
+
+    // ── Shader transition animations ──
+    NumberAnimation {
+        id: shaderShowAnim
+
+        target: shaderTransition
+        property: "progress"
+        from: 0
+        to: 1
+        duration: root.animInDuration
+        easing.type: Easing.OutCubic
+        onFinished: {
+            contentWrapper.layer.enabled = false;
+            shaderTransition.visible = false;
+        }
+    }
+
+    SequentialAnimation {
+        id: shaderHideAnim
+
+        NumberAnimation {
+            target: shaderTransition
+            property: "progress"
+            from: 1
+            to: 0
+            duration: root.animOutDuration
+            easing.type: Easing.InCubic
+        }
+
+        ScriptAction {
+            script: {
+                contentWrapper.layer.enabled = false;
+                shaderTransition.visible = false;
+                root.visible = false;
+                root.dismissed();
+            }
+        }
+
+    }
+
+    AnimationShaderItem {
+        id: shaderTransition
+
+        anchors.fill: contentWrapper
+        source: contentWrapper
+        visible: false
+        progress: 0
     }
 
     // Content wrapper for opacity animation (avoid Wayland setOpacity warning)

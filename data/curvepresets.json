@@ -1,0 +1,18 @@
+{
+  "quickPresets": [
+    {"label": "Standard (Cubic)", "curve": "0.33,1.00,0.68,1.00"},
+    {"label": "Gentle (Sine)",    "curve": "0.61,1.00,0.88,1.00"},
+    {"label": "Smooth (Quad)",    "curve": "0.50,1.00,0.89,1.00"},
+    {"label": "Snappy (Quart)",   "curve": "0.25,1.00,0.50,1.00"},
+    {"label": "Sharp (Quint)",    "curve": "0.23,1.00,0.32,1.00"},
+    {"label": "Aggressive (Expo)","curve": "0.16,1.00,0.30,1.00"},
+    {"label": "Overshoot (Back)", "curve": "0.18,0.89,0.32,1.28"},
+    {"label": "Elastic",          "curve": "elastic-out:1.00,0.30"},
+    {"label": "Bounce",           "curve": "bounce-out:1.00,3"}
+  ],
+  "springPresets": [
+    {"label": "Snappy",  "dampingRatio": 0.8, "stiffness": 800, "epsilon": 0.001},
+    {"label": "Smooth",  "dampingRatio": 1.0, "stiffness": 400, "epsilon": 0.0001},
+    {"label": "Bouncy",  "dampingRatio": 0.5, "stiffness": 600, "epsilon": 0.001}
+  ]
+}

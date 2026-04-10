@@ -121,6 +121,12 @@ class SettingsController : public QObject
     Q_PROPERTY(int animationMinDistanceMax READ animationMinDistanceMax CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMin READ animationStaggerIntervalMin CONSTANT)
     Q_PROPERTY(int animationStaggerIntervalMax READ animationStaggerIntervalMax CONSTANT)
+    Q_PROPERTY(double springDampingRatioMin READ springDampingRatioMin CONSTANT)
+    Q_PROPERTY(double springDampingRatioMax READ springDampingRatioMax CONSTANT)
+    Q_PROPERTY(double springStiffnessMin READ springStiffnessMin CONSTANT)
+    Q_PROPERTY(double springStiffnessMax READ springStiffnessMax CONSTANT)
+    Q_PROPERTY(double springEpsilonMin READ springEpsilonMin CONSTANT)
+    Q_PROPERTY(double springEpsilonMax READ springEpsilonMax CONSTANT)
     Q_PROPERTY(int borderWidthMin READ borderWidthMin CONSTANT)
     Q_PROPERTY(int borderRadiusMin READ borderRadiusMin CONSTANT)
     Q_PROPERTY(int gapMin READ gapMin CONSTANT)
@@ -257,6 +263,41 @@ public:
     Q_INVOKABLE void setLayoutHidden(const QString& layoutId, bool hidden);
     Q_INVOKABLE void setLayoutAutoAssign(const QString& layoutId, bool enabled);
     Q_INVOKABLE void setLayoutAspectRatio(const QString& layoutId, int aspectRatioClass);
+
+    // Animation profile tree helpers (per-event read/write for QML)
+    Q_INVOKABLE QVariantMap resolvedProfileForEvent(const QString& eventName) const;
+    Q_INVOKABLE QVariantMap rawProfileForEvent(const QString& eventName) const;
+    Q_INVOKABLE void setEventProfile(const QString& eventName, const QVariantMap& profile);
+    Q_INVOKABLE void clearEventProfile(const QString& eventName);
+    Q_INVOKABLE QString parentChainForEvent(const QString& eventName) const;
+    Q_INVOKABLE QString inheritSummaryForEvent(const QString& eventName) const;
+    Q_INVOKABLE QStringList animationStyleNames() const;
+    Q_INVOKABLE QStringList animationStyleKeys() const;
+    /// Returns "window", "overlay", or "both" for a given style key.
+    Q_INVOKABLE QString animationStyleDomain(const QString& styleKey) const;
+    /// Returns the style key to display in the dropdown for a given profile.
+    /// For custom shaders, the profile stores style="custom"+shaderPath, but the
+    /// dropdown key is the shader's registry ID. This maps back from profile→dropdown key.
+    Q_INVOKABLE QString styleKeyForProfile(const QVariantMap& profile) const;
+    /// Sets the animation style on an event profile from a dropdown key.
+    /// For built-in keys (morph, slide, etc.), sets style directly.
+    /// For registry shader IDs, sets style="custom" and shaderPath from registry.
+    Q_INVOKABLE void setEventAnimationStyle(const QString& eventName, const QString& styleKey);
+
+    // Animation shader registry (delegates to AnimationShaderRegistry singleton)
+    Q_INVOKABLE QVariantList availableAnimationShaders() const;
+    Q_INVOKABLE QVariantMap animationShaderInfo(const QString& id) const;
+    Q_INVOKABLE void openAnimationShaderDirectory() const;
+
+    // Animation shader parameter helpers
+    Q_INVOKABLE QVariantList animationShaderParameters(const QString& shaderId) const;
+    Q_INVOKABLE QVariantMap animationShaderDefaults(const QString& shaderId) const;
+    Q_INVOKABLE QVariantList animationShaderPresets(const QString& shaderId) const;
+
+    // User animation presets (save/delete custom curves and spring configs)
+    Q_INVOKABLE QVariantList userPresets() const;
+    Q_INVOKABLE void addUserPreset(const QString& name, const QVariantMap& preset);
+    Q_INVOKABLE void removeUserPreset(int index);
 
     // Screen helpers
     Q_INVOKABLE bool isMonitorDisabled(const QString& screenName) const;
@@ -487,6 +528,30 @@ public:
     int animationStaggerIntervalMax() const
     {
         return ConfigDefaults::animationStaggerIntervalMax();
+    }
+    double springDampingRatioMin() const
+    {
+        return ConfigDefaults::springDampingRatioMin();
+    }
+    double springDampingRatioMax() const
+    {
+        return ConfigDefaults::springDampingRatioMax();
+    }
+    double springStiffnessMin() const
+    {
+        return ConfigDefaults::springStiffnessMin();
+    }
+    double springStiffnessMax() const
+    {
+        return ConfigDefaults::springStiffnessMax();
+    }
+    double springEpsilonMin() const
+    {
+        return ConfigDefaults::springEpsilonMin();
+    }
+    double springEpsilonMax() const
+    {
+        return ConfigDefaults::springEpsilonMax();
     }
     int borderWidthMin() const
     {
