@@ -86,6 +86,13 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
 
+    // Clear stale autotile-floated flag when a window is zone-assigned in snap mode.
+    // A window that crossed from an autotile VS to a snap VS via drag keeps its
+    // autotileFloated marker (only windowsReleasedFromTiling clears it). Without
+    // this, a subsequent mode change on the autotile VS incorrectly processes the
+    // window (already snapped on the snap VS) as if it were still autotile-managed.
+    m_autotileFloatedWindows.remove(windowId);
+
     // NOTE: Do NOT store to m_pendingRestoreQueues here!
     // Pending assignments are for session persistence and should only be populated
     // when a window closes (in windowClosed()). Storing here causes ALL previously-snapped
@@ -584,8 +591,8 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
             restoreScreen.clear();
         }
     }
-    if (restoreScreen.isEmpty()) {
-        restoreScreen = fallbackScreen;
+    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
+        restoreScreen = resolveEffectiveScreenId(fallbackScreen);
     }
 
     // Compute geometry (combined for multi-zone)

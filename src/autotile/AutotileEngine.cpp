@@ -144,6 +144,7 @@ void AutotileEngine::connectSignals()
 
             // Find and release orphaned virtual screen states for this physical screen
             QStringList releasedWindows;
+            QSet<QString> orphanedVsIds;
             QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
             while (it.hasNext()) {
                 it.next();
@@ -157,9 +158,20 @@ void AutotileEngine::connectSignals()
                 if (newVsSet.contains(sid)) {
                     continue;
                 }
-                // This virtual screen no longer exists — release its windows
+                // This virtual screen no longer exists — release its windows.
+                // Save user-floated windows (excluding overflow) so they stay
+                // floating if autotile is re-enabled on a new VS config — mirrors
+                // the preservation logic in setAutotileScreens.
+                orphanedVsIds.insert(sid);
+                QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
+                const QStringList floated = it.value()->floatingWindows();
+                for (const QString& fid : floated) {
+                    if (!screenOverflow.contains(fid)) {
+                        m_savedFloatingWindows[it.key()].insert(fid);
+                    }
+                }
                 releasedWindows.append(it.value()->tiledWindows());
-                releasedWindows.append(it.value()->floatingWindows());
+                releasedWindows.append(floated);
                 m_pendingInitialOrders.remove(sid);
                 m_pendingOrderGeneration.remove(sid);
                 it.value()->deleteLater();
@@ -169,7 +181,18 @@ void AutotileEngine::connectSignals()
                 m_windowToStateKey.remove(windowId);
             }
             if (!releasedWindows.isEmpty()) {
-                Q_EMIT windowsReleasedFromTiling(releasedWindows);
+                Q_EMIT windowsReleasedFromTiling(releasedWindows, orphanedVsIds);
+            }
+
+            // Clean up per-screen autotile settings for removed virtual screens.
+            // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
+            // as virtual screen IDs are never reused after reconfiguration.
+            if (!orphanedVsIds.isEmpty()) {
+                if (Settings* settings = m_settingsBridge->settings()) {
+                    for (const QString& orphanId : std::as_const(orphanedVsIds)) {
+                        settings->clearPerScreenAutotileSettings(orphanId);
+                    }
+                }
             }
 
             // Clean up desktop overrides for removed virtual screens on this physical screen.
@@ -493,7 +516,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     }
 
     if (!releasedWindows.isEmpty()) {
-        Q_EMIT windowsReleasedFromTiling(releasedWindows);
+        Q_EMIT windowsReleasedFromTiling(releasedWindows, removed);
     }
 
     // Clean up any remaining overflow entries for removed screens.
@@ -1654,7 +1677,14 @@ void AutotileEngine::windowFocused(const QString& windowId, const QString& scree
     const TilingStateKey oldKey = m_windowToStateKey.value(windowId);
     const QString oldScreen = oldKey.screenId;
     if (!screenId.isEmpty() && m_windowToStateKey.contains(windowId)) {
-        m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+        if (isAutotileScreen(screenId)) {
+            m_windowToStateKey[windowId] = currentKeyForScreen(screenId);
+        } else {
+            // Window moved to a non-autotile screen — remove tracking entirely.
+            // Leaving a stale entry pointing at a snap screen causes phantom
+            // lookups and prevents clean re-entry if the window returns.
+            m_windowToStateKey.remove(windowId);
+        }
     }
 
     if (!oldScreen.isEmpty() && !screenId.isEmpty() && oldScreen != screenId) {

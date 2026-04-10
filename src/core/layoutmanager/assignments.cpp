@@ -66,8 +66,17 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
     }
 
     // 5. Virtual screen fallback: try physical screen ID if this is a virtual screen.
-    // This lets virtual screens inherit the physical screen's assignment when no
-    // per-virtual-screen assignment exists.
+    // This lets virtual screens inherit the physical screen's snapping layout assignment
+    // when no per-virtual-screen assignment exists.
+    //
+    // Design note: the fallback is intentionally layout-resolution-only from the caller's
+    // perspective. layoutForScreen()'s visitor already guards against Autotile mode by
+    // returning std::nullopt for Autotile entries — so a VS inheriting a physical screen's
+    // Autotile assignment from this cascade correctly falls through to the global default
+    // layout rather than activating autotile on the VS. assignmentEntryForScreen() does
+    // not apply this guard, so callers that need mode isolation (e.g. AutotileEngine
+    // checking whether a VS is in autotile mode) must treat an inherited Autotile entry
+    // as "no explicit VS assignment" and use hasExplicitAssignment() to distinguish.
     if (VirtualScreenId::isVirtual(screenId)) {
         const QString physId = VirtualScreenId::extractPhysicalId(screenId);
         auto result = walkCascade(assignments, physId, virtualDesktop, activity, std::forward<Visitor>(visitor));

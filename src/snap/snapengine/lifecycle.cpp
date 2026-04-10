@@ -72,9 +72,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // Mark this window as reported by the effect (confirmed live).
-    m_windowTracker->markWindowReported(windowId);
-
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
     // Consume the appId-based pending entry to prevent other instances of the same

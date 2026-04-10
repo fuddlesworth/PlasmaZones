@@ -189,6 +189,10 @@ void OverlayService::updateLayout(Layout* layout)
             // Ensure shader timing + updates continue after layout switch
             ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
             m_zoneDataDirty = true;
+            // updateGeometries() already incremented m_zoneDataVersion once above.
+            // Undo that increment so updateZonesForAllWindows() provides the single
+            // authoritative bump for this logical update cycle.
+            --m_zoneDataVersion;
             updateZonesForAllWindows();
             if (!m_shaderUpdateTimer || !m_shaderUpdateTimer->isActive()) {
                 startShaderAnimation();

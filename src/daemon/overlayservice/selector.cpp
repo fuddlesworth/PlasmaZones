@@ -176,7 +176,11 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         // before the first frame (geometry not yet applied). Fall back to
         // manual translation using the window's reported geometry.
         int localX, localY;
-        const QRect winGeom = window->geometry();
+        // On Wayland LayerShell, QWindow::geometry() is unreliable until the compositor
+        // acknowledges the surface position. Prefer the stored zoneSelectorGeometry which
+        // reflects the geometry we requested at creation time.
+        const QRect& storedGeom = m_screenStates.value(cursorScreenId).zoneSelectorGeometry;
+        const QRect winGeom = storedGeom.isValid() ? storedGeom : window->geometry();
         if (winGeom.isValid() && winGeom.width() > 0) {
             localX = cursorX - winGeom.x();
             localY = cursorY - winGeom.y();
@@ -331,20 +335,11 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         return;
     }
 
-    // For virtual screens, add margins to confine the zone selector within
-    // the virtual screen region of the physical monitor
-    const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
-    if (isVirtualScreen) {
-        auto* layerSurface = LayerSurface::find(window);
-        if (layerSurface) {
-            const QRect physGeom = physScreen->geometry();
-            const int leftOff = screenGeom.x() - physGeom.x();
-            const int topOff = screenGeom.y() - physGeom.y();
-            const int rightOff = (physGeom.right() - screenGeom.right());
-            const int bottomOff = (physGeom.bottom() - screenGeom.bottom());
-            layerSurface->setMargins(QMargins(leftOff, topOff, rightOff, bottomOff));
-        }
-    }
+    // Store the intended geometry so hit-testing in updateSelectorPosition() can use it
+    // before the compositor acknowledges the LayerShell surface position.
+    // The margins for virtual screen confinement are applied by updateZoneSelectorWindow()
+    // which is called immediately after createZoneSelectorWindow() in showZoneSelector().
+    m_screenStates[screenId].zoneSelectorGeometry = screenGeom;
 
     // Set screen properties for layout preview scaling
     qreal aspectRatio =

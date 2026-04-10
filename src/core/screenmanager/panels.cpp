@@ -57,7 +57,7 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
     // Query KDE Plasma via D-Bus for panel information (ASYNC to avoid blocking)
     QDBusInterface* plasmaShell =
         new QDBusInterface(s_plasmaShellService, QStringLiteral("/PlasmaShell"), QStringLiteral("org.kde.PlasmaShell"),
-                           QDBusConnection::sessionBus(), this);
+                           QDBusConnection::sessionBus(), nullptr);
 
     if (!plasmaShell->isValid()) {
         delete plasmaShell;
@@ -122,10 +122,11 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
             [this, plasmaShell, fromDelayedRequery](QDBusPendingCallWatcher* w) {
                 QDBusPendingReply<QString> reply = *w;
 
-                // Clear existing panel offsets before parsing new data
-                m_panelOffsets.clear();
-
                 if (reply.isValid()) {
+                    // Clear existing panel offsets before parsing new data.
+                    // Only clear on success so a D-Bus failure doesn't zero out
+                    // all screens' panel offsets with stale/empty data.
+                    m_panelOffsets.clear();
                     QString output = reply.value();
                     qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply=" << output;
 

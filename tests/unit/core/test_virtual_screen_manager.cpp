@@ -221,6 +221,30 @@ private Q_SLOTS:
         QVERIFY(!mgr.hasVirtualScreens(physA));
         QVERIFY(mgr.hasVirtualScreens(physB));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Overlapping region rejection
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSetVirtualScreenConfig_overlapping_rejected()
+    {
+        ScreenManager mgr;
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+
+        // Build a config with two overlapping regions: both start at x=0 and
+        // share a 0.1-wide overlap band, well above VirtualScreenDef::Tolerance.
+        VirtualScreenConfig config;
+        config.physicalScreenId = physId;
+        // Left: [0.0, 0.6) — Right: [0.5, 1.0) — overlap = [0.5, 0.6), width=0.1
+        config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 0.6, 1.0)));
+        config.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0)));
+
+        bool result = mgr.setVirtualScreenConfig(physId, config);
+
+        QVERIFY2(!result, "setVirtualScreenConfig must reject overlapping regions");
+        QVERIFY2(!mgr.hasVirtualScreens(physId),
+                 "hasVirtualScreens must return false after overlapping config is rejected");
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualScreenManager)

@@ -383,7 +383,7 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
     return entries;
 }
 
-void Daemon::presaveSnapFloats()
+void Daemon::presaveSnapFloats(const QString& screenId)
 {
     if (!m_windowTrackingAdaptor) {
         return;
@@ -391,10 +391,20 @@ void Daemon::presaveSnapFloats()
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (!wts->isAutotileFloated(fid)) {
-            wts->saveSnapFloating(fid);
-            qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "before autotile entry";
+        if (wts->isAutotileFloated(fid)) {
+            continue;
         }
+        // When scoped to a screen, only save windows on that screen.
+        // Windows floating on other screens are not entering autotile
+        // and must not have their snap-float state recorded.
+        if (!screenId.isEmpty()) {
+            const QString windowScreen = wts->screenAssignments().value(fid);
+            if (!windowScreen.isEmpty() && windowScreen != screenId) {
+                continue;
+            }
+        }
+        wts->saveSnapFloating(fid);
+        qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
     }
 }
 

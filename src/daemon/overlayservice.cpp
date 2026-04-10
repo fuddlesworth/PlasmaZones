@@ -192,7 +192,13 @@ OverlayService::OverlayService(QObject* parent)
                 m_zoneSelectorRecreationPending = true;
                 QTimer::singleShot(0, this, [this]() {
                     m_zoneSelectorRecreationPending = false;
-                    // Skip if zone selector was already shown by an interim call
+                    // m_zoneSelectorVisible was set to false above (to allow recreation).
+                    // If an external showZoneSelector() ran during the event loop pass between
+                    // posting this timer and its execution, it will have set m_zoneSelectorVisible
+                    // back to true — in that case we must NOT call showZoneSelector() again
+                    // (double-show). The !m_zoneSelectorVisible guard handles exactly this:
+                    // false means "no interim show happened, we still need to recreate";
+                    // true means "already re-shown, skip".
                     if (!m_zoneSelectorVisible) {
                         showZoneSelector();
                     }
@@ -334,14 +340,20 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     // Must be called before the window is shown (before scene graph initialization).
     // All windows share the same cache file — the RHI pipeline cache format is window-agnostic
     // and Qt serializes writes, so a single shared file is both correct and efficient.
-    if (!m_pipelineCacheConfigured) {
+    // The pipeline cache configuration is applied to EVERY window (not just the first) because
+    // each QQuickWindow independently manages its own scene graph and needs the cache path.
+    {
         const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
         if (!cacheDir.isEmpty()) {
-            QDir().mkpath(cacheDir);
+            // Only create the directory once across all windows.
+            static bool s_cacheDirCreated = false;
+            if (!s_cacheDirCreated) {
+                QDir().mkpath(cacheDir);
+                s_cacheDirCreated = true;
+            }
             QQuickGraphicsConfiguration config = window->graphicsConfiguration();
             config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
             window->setGraphicsConfiguration(config);
-            m_pipelineCacheConfigured = true;
         }
     }
 

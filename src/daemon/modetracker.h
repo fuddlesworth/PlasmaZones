@@ -60,9 +60,16 @@ public:
     }
 
     /**
-     * @brief Check if any screen on the current desktop is in autotile mode
+     * @brief Check if any screen on the given desktop/activity is in autotile mode.
+     *
+     * @param desktop  Virtual desktop number (1-based). Pass -1 to use the stored m_desktop.
+     * @param activity Activity ID. Pass an empty string to use the stored m_activity.
+     *
+     * Callers that have a fresh desktop/activity should pass them explicitly. Callers that
+     * rely on the stored context should ensure setContext() was called recently with current
+     * values to avoid stale results.
      */
-    bool isAnyScreenAutotile() const;
+    bool isAnyScreenAutotile(int desktop = -1, const QString& activity = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Layout tracking (reads from AssignmentEntry for current context)

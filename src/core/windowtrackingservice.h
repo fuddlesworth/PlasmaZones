@@ -512,8 +512,11 @@ public:
      * layout assignments changed simultaneously.
      *
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
+     * @param includeScreens When non-empty, only process windows on these screens.
+     *        Restricts resnap to screens whose layout actually changed.
      */
-    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {});
+    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
+                                           const QSet<QString>& includeScreens = {});
 
     /**
      * @brief Clear the resnap buffer

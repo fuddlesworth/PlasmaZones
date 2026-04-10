@@ -114,6 +114,11 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         if (snappedWindowIds.contains(windowId)) {
             continue;
         }
+        // Exclude windows currently managed by the autotile engine — they are
+        // already placed by autotile and should not appear as snap assist candidates.
+        if (m_effect->autotileHandler()->isTrackedWindow(windowId)) {
+            continue;
+        }
         QString appId = PlasmaZonesEffect::extractAppId(windowId);
         bool snappedByAppId = snappedAppIds.contains(appId);
         if (snappedByAppId) {

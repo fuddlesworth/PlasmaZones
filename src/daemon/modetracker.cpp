@@ -42,14 +42,18 @@ TilingMode ModeTracker::currentMode() const
     return (mode == AssignmentEntry::Autotile) ? TilingMode::Autotile : TilingMode::Manual;
 }
 
-bool ModeTracker::isAnyScreenAutotile() const
+bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) const
 {
     if (!m_layoutManager) {
         return false;
     }
+    // Use caller-supplied values when provided; fall back to stored context.
+    const int effectiveDesktop = (desktop >= 0) ? desktop : m_desktop;
+    const QString& effectiveActivity = activity.isEmpty() ? m_activity : activity;
     const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
     for (const QString& screenId : effectiveIds) {
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
+        const QString assignmentId =
+            m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);
         if (LayoutId::isAutotile(assignmentId)) {
             return true;
         }

@@ -95,6 +95,14 @@ inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
 inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
 inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
 inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
+// Geometry override keys
+inline constexpr const char ZonePadding[] = "ZonePadding";
+inline constexpr const char OuterGap[] = "OuterGap";
+inline constexpr const char UsePerSideOuterGap[] = "UsePerSideOuterGap";
+inline constexpr const char OuterGapTop[] = "OuterGapTop";
+inline constexpr const char OuterGapBottom[] = "OuterGapBottom";
+inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
+inline constexpr const char OuterGapRight[] = "OuterGapRight";
 } // namespace PerScreenSnappingKey
 
 // ═══════════════════════════════════════════════════════════════════════════════

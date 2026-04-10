@@ -166,11 +166,11 @@ private Q_SLOTS:
     // virtualScreensChanged — retile triggers
     // =========================================================================
 
-    void virtualScreensChanged_triggersRetileForVirtualScreens()
+    // Crash guard: verifies that virtualScreensChanged does not crash the engine
+    // when there is no backing QScreen. A full retile cannot be verified in
+    // headless tests because stateForScreen requires real QScreen geometry.
+    void virtualScreensChanged_doesNotCrash()
     {
-        // Create ScreenManager with virtual screen config, connect it to
-        // AutotileEngine, then emit virtualScreensChanged and verify the
-        // signal handler executes without crashing.
         ScreenManager screenMgr;
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
@@ -186,17 +186,16 @@ private Q_SLOTS:
         engine.setAutotileScreens({vs0, vs1});
 
         QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
+        QVERIFY2(tilingSpy.isValid(), "Signal spy should be valid");
 
-        // Emit virtualScreensChanged — the signal handler should retile each VS
+        // Emit virtualScreensChanged — the signal handler should not crash
         Q_EMIT screenMgr.virtualScreensChanged(physId);
         QCoreApplication::processEvents();
 
-        // Without a real QScreen backing the physical monitor, stateForScreen
-        // returns nullptr (geometry cache empty), so the retile path returns
-        // early and tilingChanged is not emitted. Verify the signal spy is
-        // in a consistent state (count >= 0) and that no crash occurred.
-        QVERIFY2(tilingSpy.count() >= 0,
-                 "Signal handler executed without crash — full retile requires compositor integration");
+        // Crash guard: reaching here means the handler executed without crashing.
+        // tilingChanged is not emitted in headless mode because stateForScreen
+        // returns nullptr when the geometry cache is empty (no real QScreen).
+        QVERIFY2(true, "Crash guard: virtualScreensChanged handler executed without crashing");
 
         // Additionally verify the ScreenManager still resolves both VS IDs,
         // confirming the signal did not corrupt the config.
@@ -204,6 +203,46 @@ private Q_SLOTS:
         QCOMPARE(vsIds.size(), 2);
         QVERIFY(vsIds.contains(vs0));
         QVERIFY(vsIds.contains(vs1));
+    }
+
+    // =========================================================================
+    // Single virtual screen — passthrough behavior
+    // =========================================================================
+
+    void singleVirtualScreen_treatedAsPassthrough()
+    {
+        // A single virtual screen covering the full physical screen should behave
+        // identically to no-VS configuration: the engine uses the VS ID as a
+        // normal screen ID and produces independent per-VS tiling state.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        const QString vsId = VirtualScreenId::make(physId, 0);
+
+        // Configure a single VS covering the full physical screen (no subdivision)
+        engine.setAutotileScreens({vsId});
+        QVERIFY(engine.isAutotileScreen(vsId));
+        QVERIFY(engine.isEnabled());
+
+        // Open a window — state should be keyed by the VS ID, not the physical ID
+        engine.windowOpened(QStringLiteral("win-single"), vsId);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(vsId);
+        QVERIFY(state != nullptr);
+        QCOMPARE(state->screenId(), vsId);
+        QVERIFY(state->containsWindow(QStringLiteral("win-single")));
+        QCOMPARE(state->windowCount(), 1);
+
+        // Physical ID must NOT be an autotile screen — the VS ID is authoritative
+        QVERIFY(!engine.isAutotileScreen(physId));
+
+        // Removing the VS from autotile screens releases the window
+        QSignalSpy releaseSpy(&engine, &AutotileEngine::windowsReleasedFromTiling);
+        engine.setAutotileScreens({});
+        QVERIFY(releaseSpy.count() >= 1);
+        QStringList released = releaseSpy.first().first().toStringList();
+        QVERIFY(released.contains(QStringLiteral("win-single")));
     }
 
     // =========================================================================

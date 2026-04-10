@@ -431,56 +431,61 @@ bool Daemon::init()
     // save completes (all setAssignmentEntry + notifyReload finished), so all
     // assignments and settings are fully committed. Separated from settingsChanged
     // handler to avoid feedback loops with autotile/snapping transitions.
-    connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this]() {
-        if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
-            return;
+    connect(
+        m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this](const QSet<QString>& changedScreenIds) {
+            if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+                return;
 
-        const int desktop = currentDesktop();
-        const QString activity = currentActivity();
+            const int desktop = currentDesktop();
+            const QString activity = currentActivity();
 
-        // Collect autotile screens and per-screen OSD data in one pass
-        QSet<QString> autotileScreens;
-        struct ScreenOsd
-        {
-            QString screenId;
-            bool isAutotile;
-            QString algoId;
-        };
-        QVector<ScreenOsd> osdEntries;
-        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : effectiveIds) {
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                autotileScreens.insert(screenId);
-                osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
-            } else {
-                osdEntries.append({screenId, false, {}});
+            // Collect autotile screens and per-screen OSD data in one pass
+            QSet<QString> autotileScreens;
+            struct ScreenOsd
+            {
+                QString screenId;
+                bool isAutotile;
+                QString algoId;
+            };
+            QVector<ScreenOsd> osdEntries;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                if (LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
+                }
+                // Only show OSD for screens that actually changed
+                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
+                    if (autotileScreens.contains(screenId)) {
+                        osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
+                    } else {
+                        osdEntries.append({screenId, false, {}});
+                    }
+                }
             }
-        }
 
-        // Resnap snapping-mode screens (autotile screens excluded)
-        // Suppress all resnap/retile navigation OSD feedback from this batch.
-        // The counter is decremented per feedback event (one per screen that has
-        // resnapped windows). Set it to the screen count to cover all of them.
-        m_suppressResnapOsd = effectiveIds.size();
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
-        m_snapEngine->resnapToNewLayout();
+            // Resnap only the snapping-mode screens whose assignments actually changed.
+            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // screens whose layout didn't change (prevents flicker on unrelated VS).
+            m_suppressResnapOsd = osdEntries.size();
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_snapEngine->resnapToNewLayout();
 
-        // Show OSD for all screens — use locked OSD variant when context is locked
-        for (const auto& osd : std::as_const(osdEntries)) {
-            int mode = osd.isAutotile ? 1 : 0;
-            if (isCurrentContextLockedForMode(osd.screenId, mode)) {
-                showLockedPreviewOsd(osd.screenId);
-            } else if (osd.isAutotile) {
-                if (!osd.algoId.isEmpty())
-                    showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
-            } else {
-                Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
-                if (layout)
-                    showLayoutOsd(layout, osd.screenId);
+            // Show OSD for changed screens — use locked OSD variant when context is locked
+            for (const auto& osd : std::as_const(osdEntries)) {
+                int mode = osd.isAutotile ? 1 : 0;
+                if (isCurrentContextLockedForMode(osd.screenId, mode)) {
+                    showLockedPreviewOsd(osd.screenId);
+                } else if (osd.isAutotile) {
+                    if (!osd.algoId.isEmpty())
+                        showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                } else {
+                    Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    if (layout)
+                        showLayoutOsd(layout, osd.screenId);
+                }
             }
-        }
-    });
+        });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();

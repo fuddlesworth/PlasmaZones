@@ -60,7 +60,9 @@ QScreen* resolvePhysicalQScreen(const QString& screenId)
             return screen;
         }
     }
-    return Utils::findScreenByIdOrName(screenId);
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    return Utils::findScreenByIdOrName(physId);
 }
 
 } // namespace DbusHelpers

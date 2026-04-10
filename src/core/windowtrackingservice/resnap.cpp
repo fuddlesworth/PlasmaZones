@@ -131,7 +131,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
     return result;
 }
 
-void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens)
+void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens,
+                                                              const QSet<QString>& includeScreens)
 {
     QVector<ResnapEntry> newBuffer;
     QSet<QString> addedIds;
@@ -169,6 +170,10 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
         // Skip windows on excluded screens (e.g. autotile screens)
         if (excludeScreens.contains(screenId))
+            continue;
+
+        // When include-filter is set, only process windows on the specified screens
+        if (!includeScreens.isEmpty() && !includeScreens.contains(screenId))
             continue;
 
         if (addedIds.contains(windowId))

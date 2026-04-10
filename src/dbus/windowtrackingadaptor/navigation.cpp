@@ -252,7 +252,9 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     Q_EMIT applyGeometryRequested(windowId1, GeometryUtils::rectToJson(QRect(x1, y1, w1, h1)), zoneId1,
                                   effectiveScreen);
 
-    // If there's a second window (swap, not move-to-empty), move it to the source zone
+    // If there's a second window (swap, not move-to-empty), move it to the source zone.
+    // Use window2's own stored screen assignment, not window1's, so cross-VS swaps
+    // assign each window to the correct virtual screen.
     QString windowId2 = obj.value(QLatin1String("windowId2")).toString();
     if (!windowId2.isEmpty()) {
         QString zoneId2 = obj.value(QLatin1String("zoneId2")).toString();
@@ -261,10 +263,16 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
         int w2 = obj.value(QLatin1String("w2")).toInt();
         int h2 = obj.value(QLatin1String("h2")).toInt();
 
-        windowSnapped(windowId2, zoneId2, effectiveScreen);
+        // Prefer window2's stored screen assignment; fall back to window1's screen
+        // only if window2 has no recorded assignment.
+        QString screen2 = m_service->screenAssignments().value(windowId2);
+        if (screen2.isEmpty()) {
+            screen2 = effectiveScreen;
+        }
+
+        windowSnapped(windowId2, zoneId2, screen2);
         recordSnapIntent(windowId2, true);
-        Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(QRect(x2, y2, w2, h2)), zoneId2,
-                                      effectiveScreen);
+        Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(QRect(x2, y2, w2, h2)), zoneId2, screen2);
     }
 }
 
@@ -346,12 +354,13 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
                 for (QScreen* screen : QGuiApplication::screens()) {
                     if (screen->geometry().contains(center)) {
                         QString physId = Utils::screenIdentifier(screen);
-                        // Check if this physical screen has virtual screens
-                        if (mgr) {
-                            QString vsId = mgr->effectiveScreenAt(center);
-                            if (!vsId.isEmpty()) {
-                                screenId = vsId;
-                                break;
+                        if (!VirtualScreenId::isVirtual(screenId)) {
+                            if (mgr && mgr->hasVirtualScreens(physId)) {
+                                QString vsId = mgr->effectiveScreenAt(center);
+                                if (!vsId.isEmpty()) {
+                                    screenId = vsId;
+                                    break;
+                                }
                             }
                         }
                         screenId = physId;

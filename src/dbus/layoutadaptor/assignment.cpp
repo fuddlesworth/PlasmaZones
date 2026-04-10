@@ -569,7 +569,9 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
-    m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), virtualDesktop, activityId);
+    QString resolvedId = Utils::screenIdForName(screenId);
+    m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
+    m_changedScreenIds.insert(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }
@@ -606,6 +608,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
+    m_changedScreenIds.insert(resolvedId);
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
@@ -619,7 +622,9 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
 
 void LayoutAdaptor::applyAssignmentChanges()
 {
-    Q_EMIT assignmentChangesApplied();
+    QSet<QString> changed = std::move(m_changedScreenIds);
+    m_changedScreenIds.clear();
+    Q_EMIT assignmentChangesApplied(changed);
 }
 
 } // namespace PlasmaZones

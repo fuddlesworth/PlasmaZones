@@ -368,8 +368,8 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         return;
     }
 
-    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to" << newScreenId
-                         << "- unsnapping";
+    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
+                         << resolvedNewScreen << "- unsnapping";
     m_service->clearStalePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 

@@ -164,6 +164,32 @@ private Q_SLOTS:
         QVERIFY(spy.count() >= 1);
     }
 
+    void testWindowClosed_persistsZoneToPending_virtualScreen()
+    {
+        // Same as testWindowClosed_persistsZoneToPending but using a virtual screen ID.
+        // Verifies that the pending restore queue entry records the virtual screen ID
+        // rather than falling back to the physical screen ID.
+        const QString windowId = QStringLiteral("konsole|abcdef12-0000-0000-0000-000000000001");
+        const QString vsId = QStringLiteral("DP-1/vs:0");
+        const QString appId = Utils::extractAppId(windowId);
+
+        m_service->assignWindowToZone(windowId, m_zoneIds[1], vsId, 1);
+        QVERIFY(m_service->isWindowSnapped(windowId));
+        QCOMPARE(m_service->zoneForWindow(windowId), m_zoneIds[1]);
+
+        m_service->windowClosed(windowId);
+
+        QVERIFY(!m_service->isWindowSnapped(windowId));
+        QVERIFY(m_service->pendingRestoreQueues().contains(appId));
+
+        const auto& queue = m_service->pendingRestoreQueues().value(appId);
+        QVERIFY(!queue.isEmpty());
+
+        const auto& entry = queue.first();
+        QCOMPARE(entry.zoneIds.first(), m_zoneIds[1]);
+        QCOMPARE(entry.screenId, vsId);
+    }
+
     // =====================================================================
     // P0: Layout Change
     // =====================================================================

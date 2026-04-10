@@ -57,6 +57,10 @@ public:
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
         QQuickWindow* zoneSelectorWindow = nullptr;
         QScreen* zoneSelectorPhysScreen = nullptr;
+        /// Intended geometry of the zone selector window. On Wayland LayerShell, QWindow::geometry()
+        /// is unreliable until the compositor acknowledges the surface position. This field stores
+        /// the geometry we requested so hit-testing in updateSelectorPosition() can use it immediately.
+        QRect zoneSelectorGeometry;
         QQuickWindow* layoutOsdWindow = nullptr;
         QScreen* layoutOsdPhysScreen = nullptr;
         QQuickWindow* navigationOsdWindow = nullptr;
@@ -427,9 +431,6 @@ private:
 
     // Screens excluded from overlay display (autotile-managed screens)
     QSet<QString> m_excludedScreens;
-
-    // Pipeline cache: only configure on the first window (all windows share the cache file)
-    bool m_pipelineCacheConfigured = false;
 
     // Fallback QVulkanInstance for when 'auto' backend resolves to Vulkan
 #if QT_CONFIG(vulkan)

@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QUuid>
 #include <QRectF>
+#include <QGuiApplication>
 #include <memory>
 
 #include "core/windowtrackingservice.h"
@@ -34,89 +35,14 @@
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
+#include "../helpers/StubSettings.h"
+#include "../helpers/StubZoneDetector.h"
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-// =========================================================================
-// Stub Settings
-// =========================================================================
-
-#include "../helpers/StubSettings.h"
-
 using StubSettingsCrossModeFloat = StubSettings;
-
-// =========================================================================
-// Stub Zone Detector
-// =========================================================================
-
-class StubZoneDetectorCrossModeFloat : public IZoneDetector
-{
-    Q_OBJECT
-public:
-    explicit StubZoneDetectorCrossModeFloat(QObject* parent = nullptr)
-        : IZoneDetector(parent)
-    {
-    }
-    Layout* layout() const override
-    {
-        return m_layout;
-    }
-    void setLayout(Layout* layout) override
-    {
-        m_layout = layout;
-    }
-    ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    Zone* zoneAtPoint(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    Zone* nearestZone(const QPointF&) const override
-    {
-        return nullptr;
-    }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
-    {
-        return {};
-    }
-    void highlightZone(Zone*) override
-    {
-    }
-    void highlightZones(const QVector<Zone*>&) override
-    {
-    }
-    void clearHighlights() override
-    {
-    }
-
-private:
-    Layout* m_layout = nullptr;
-};
-
-// =========================================================================
-// Helper
-// =========================================================================
-
-static Layout* createTestLayout(int zoneCount, QObject* parent)
-{
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
-    for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
-        qreal x = static_cast<qreal>(i) / zoneCount;
-        qreal w = 1.0 / zoneCount;
-        zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
-        zone->setZoneNumber(i + 1);
-        layout->addZone(zone);
-    }
-    return layout;
-}
+using StubZoneDetectorCrossModeFloat = StubZoneDetector;
 
 // =========================================================================
 // Test Class
@@ -260,17 +186,20 @@ private Q_SLOTS:
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[2]);
         QCOMPARE(m_service->preFloatScreen(windowId), screenId);
 
-        // Step 4: resolveUnfloatGeometry should find the saved zone
-        // (In headless mode geometry may be invalid, but zoneIds should be correct
-        //  if the method finds them. The key invariant is found=true when pre-float exists
-        //  and geometry can be resolved — headless may return found=false due to no QScreen.)
+        // Step 4: resolveUnfloatGeometry should find the saved zone when a real
+        // QScreen is available. In headless tests, resolveZoneGeometry returns an
+        // invalid QRect because there is no physical screen, so found stays false.
+        // Gate the full assertion on screen availability; in both cases the
+        // pre-float state in the service must remain intact (resolve is read-only).
         UnfloatResult result = m_service->resolveUnfloatGeometry(windowId, screenId);
-        if (result.found) {
+        if (QGuiApplication::screens().size() > 0) {
+            QVERIFY2(result.found,
+                     "resolveUnfloatGeometry should find pre-float state after snap->float->unfloat cycle");
             QCOMPARE(result.zoneIds, QStringList{m_zoneIds[2]});
             QCOMPARE(result.screenId, screenId);
             QVERIFY(result.geometry.isValid());
         }
-        // Either way, the pre-float state should still be intact (resolve is read-only)
+        // The pre-float state should still be intact (resolve is read-only)
         QCOMPARE(m_service->preFloatZone(windowId), m_zoneIds[2]);
 
         // Step 5: Simulate unfloat consuming the state

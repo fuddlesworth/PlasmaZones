@@ -266,7 +266,7 @@ int getEffectiveZonePadding(Layout* layout, ISettings* settings, const QString& 
     // Per-screen snapping override (highest priority), with virtual screen fallback
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
-        auto it = perScreen.constFind(QLatin1String("ZonePadding"));
+        auto it = perScreen.constFind(QLatin1String(PerScreenSnappingKey::ZonePadding));
         if (it != perScreen.constEnd()) {
             return it->toInt();
         }
@@ -304,18 +304,18 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
     if (!screenId.isEmpty() && settings) {
         QVariantMap perScreen = getPerScreenSnappingWithFallback(settings, screenId);
         if (!perScreen.isEmpty()) {
-            auto usePerSideIt = perScreen.constFind(QLatin1String("UsePerSideOuterGap"));
+            auto usePerSideIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::UsePerSideOuterGap));
             bool usePerSide = (usePerSideIt != perScreen.constEnd()) ? usePerSideIt->toBool() : false;
             if (usePerSide) {
-                auto topIt = perScreen.constFind(QLatin1String("OuterGapTop"));
-                auto bottomIt = perScreen.constFind(QLatin1String("OuterGapBottom"));
-                auto leftIt = perScreen.constFind(QLatin1String("OuterGapLeft"));
-                auto rightIt = perScreen.constFind(QLatin1String("OuterGapRight"));
+                auto topIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapTop));
+                auto bottomIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapBottom));
+                auto leftIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapLeft));
+                auto rightIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGapRight));
                 // If any per-side key is present, use per-screen per-side gaps
                 if (topIt != perScreen.constEnd() || bottomIt != perScreen.constEnd() || leftIt != perScreen.constEnd()
                     || rightIt != perScreen.constEnd()) {
                     // Fall back to per-screen uniform OuterGap, then global for missing sides
-                    auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+                    auto uniformIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGap));
                     int fallback = (uniformIt != perScreen.constEnd()) ? uniformIt->toInt() : settings->outerGap();
                     return {(topIt != perScreen.constEnd()) ? topIt->toInt() : fallback,
                             (bottomIt != perScreen.constEnd()) ? bottomIt->toInt() : fallback,
@@ -325,7 +325,7 @@ EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QStrin
             }
             // UsePerSideOuterGap not set or false — per-side keys ignored if present
             // Per-screen uniform outer gap
-            auto uniformIt = perScreen.constFind(QLatin1String("OuterGap"));
+            auto uniformIt = perScreen.constFind(QLatin1String(PerScreenSnappingKey::OuterGap));
             if (uniformIt != perScreen.constEnd()) {
                 return EdgeGaps::uniform(uniformIt->toInt());
             }

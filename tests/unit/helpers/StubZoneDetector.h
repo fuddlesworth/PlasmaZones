@@ -23,8 +23,13 @@ namespace PlasmaZones {
  */
 class StubZoneDetector : public IZoneDetector
 {
-    // No Q_OBJECT needed — this stub adds no signals/slots beyond IZoneDetector.
-    // Omitting Q_OBJECT avoids MOC/vtable issues when included from multiple TUs.
+    // Q_OBJECT is intentionally omitted here. IZoneDetector already has Q_OBJECT
+    // and provides the meta-object infrastructure (vtable, signal dispatch, MOC
+    // data). A concrete subclass only needs Q_OBJECT if it declares new signals
+    // or slots of its own. StubZoneDetector adds neither, so omitting Q_OBJECT
+    // is correct and avoids vtable/ODR violations when this header is included
+    // from multiple translation units (e.g. Unity builds). The existing signals
+    // declared in IZoneDetector remain fully functional via the base meta-object.
 public:
     explicit StubZoneDetector(QObject* parent = nullptr)
         : IZoneDetector(parent)

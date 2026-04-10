@@ -229,8 +229,9 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when the KCM requests resnap/retile after assignment changes
+     * @param changedScreenIds Screen IDs whose assignments were modified in this batch
      */
-    void assignmentChangesApplied();
+    void assignmentChangesApplied(const QSet<QString>& changedScreenIds);
 
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals
@@ -316,6 +317,10 @@ private:
     // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
     // the KCM initiated the change and doesn't need the echo back.
     bool m_suppressScreenLayoutSignal = false;
+
+    // Track which screens had assignments modified during the current batch.
+    // Populated by setAssignmentEntry/clearAssignment, consumed by applyAssignmentChanges.
+    QSet<QString> m_changedScreenIds;
 
     // JSON caching for performance
     QString m_cachedActiveLayoutJson;

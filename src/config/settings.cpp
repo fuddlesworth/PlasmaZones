@@ -307,6 +307,11 @@ void Settings::purgeStaleKeys()
         if (isPerScreenPrefix(groupName)) {
             continue;
         }
+        // VirtualScreen: groups are saved separately by saveVirtualScreenConfigs()
+        // and must not be deleted here as a stale root-level group.
+        if (groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+            continue;
+        }
         const int dotIdx = groupName.indexOf(QLatin1Char('.'));
         const QString topLevel = (dotIdx >= 0) ? groupName.left(dotIdx) : groupName;
         if (deleted.contains(topLevel) || preservedGroups.contains(topLevel)) {

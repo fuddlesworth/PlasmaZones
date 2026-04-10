@@ -70,13 +70,16 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // Callers with virtual screen context should use buildZonesList(screenId, physScreen) directly.
 
     // Virtual screens make the QScreen* overload ambiguous — screen center always
-    // resolves to the same VS. Return empty to force callers to use the QString
-    // overload which receives the correct virtual screen ID.
+    // resolves to the same VS. Delegate to the first virtual screen's QString overload
+    // so callers in single-physical-screen paths still get correct zone data.
+    // Callers with an explicit virtual screen ID should use the QString overload directly.
     const QString physId = Utils::screenIdentifier(screen);
     auto* mgr = ScreenManager::instance();
     if (mgr && mgr->hasVirtualScreens(physId)) {
-        qCWarning(lcOverlay) << "buildZonesList(QScreen*): physical screen" << physId
-                             << "has virtual screens configured — caller must use QString overload";
+        const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+        if (!vsIds.isEmpty()) {
+            return buildZonesList(vsIds.first(), screen);
+        }
         return {};
     }
 

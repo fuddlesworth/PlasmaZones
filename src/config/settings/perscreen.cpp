@@ -150,6 +150,8 @@ QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
 {
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
+        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
     if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
         || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
@@ -181,32 +183,35 @@ constexpr const char* kPerScreenSnappingKeys[] = {
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
+    namespace K = PerScreenSnappingKey;
+    if (key == QLatin1String(K::SnapAssistEnabled) || key == QLatin1String(K::ZoneSelectorEnabled))
         return QVariant(value.toBool());
-    if (key == QLatin1String("ZoneSelectorTriggerDistance"))
-        return QVariant(qBound(10, value.toInt(), 200));
-    if (key == QLatin1String("ZoneSelectorPosition")) {
+    if (key == QLatin1String(K::ZoneSelectorTriggerDistance))
+        return QVariant(
+            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
+    if (key == QLatin1String(K::ZoneSelectorPosition)) {
         int v = value.toInt();
         return (v >= 0 && v <= 8) ? QVariant(v) : QVariant();
     }
-    if (key == QLatin1String("ZoneSelectorLayoutMode"))
+    if (key == QLatin1String(K::ZoneSelectorLayoutMode))
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    if (key == QLatin1String("ZoneSelectorSizeMode"))
+    if (key == QLatin1String(K::ZoneSelectorSizeMode))
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorSizeMode::Manual)));
-    if (key == QLatin1String("ZoneSelectorMaxRows"))
-        return QVariant(qBound(1, value.toInt(), 10));
-    if (key == QLatin1String("ZoneSelectorPreviewWidth"))
-        return QVariant(qBound(80, value.toInt(), 400));
-    if (key == QLatin1String("ZoneSelectorPreviewHeight"))
-        return QVariant(qBound(60, value.toInt(), 300));
+    if (key == QLatin1String(K::ZoneSelectorMaxRows))
+        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
+    if (key == QLatin1String(K::ZoneSelectorPreviewWidth))
+        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
+    if (key == QLatin1String(K::ZoneSelectorPreviewHeight))
+        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
     return QVariant();
 }
 
 QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
 {
-    if (key == QLatin1String("SnapAssistEnabled"))
+    namespace K = PerScreenSnappingKey;
+    if (key == QLatin1String(K::SnapAssistEnabled))
         return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
-    if (key == QLatin1String("ZoneSelectorEnabled"))
+    if (key == QLatin1String(K::ZoneSelectorEnabled))
         return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     return QVariant(group.readInt(key, 0));
 }
@@ -366,9 +371,9 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 {
     // Short keys that should NOT get the "Autotile" prefix
     static const QStringList animationKeys = {
-        QStringLiteral("AnimationsEnabled"),
-        QStringLiteral("AnimationDuration"),
-        QStringLiteral("AnimationEasingCurve"),
+        QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+        QLatin1String(PerScreenAutotileKey::AnimationDuration),
+        QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
     };
 
     QHash<QString, QVariantMap> expanded;

@@ -880,8 +880,10 @@ Q_SIGNALS:
      * Fired when screens are removed from autotile.
      *
      * @param windowIds Window IDs no longer under autotile control
+     * @param releasedScreenIds Screen IDs that triggered the release — handlers
+     *        must only process windows whose current WTS screen is in this set
      */
-    void windowsReleasedFromTiling(const QStringList& windowIds);
+    void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
 private Q_SLOTS:
     void onWindowAdded(const QString& windowId);

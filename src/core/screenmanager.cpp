@@ -457,6 +457,11 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     m_trackedScreens.removeAll(screen);
     m_effectiveScreenIdsDirty = true;
 
+    // Remove stale virtual screen config for the removed physical screen.
+    // Keeping it would cause effectiveScreenIds() to enumerate virtual screen IDs
+    // that no longer have a backing QScreen, leading to invalid geometry lookups.
+    m_virtualConfigs.remove(physId);
+
     // Invalidate EDID cache so a different monitor on this connector gets a fresh read.
     // The daemon also does this, but ScreenManager should be self-contained.
     Utils::invalidateEdidCache(screen->name());

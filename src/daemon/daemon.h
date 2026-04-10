@@ -190,10 +190,12 @@ private:
     /**
      * @brief Pre-save snap-mode floating state before entering autotile
      *
-     * Iterates all floating windows and saves non-autotile-floated ones
-     * to WTS's savedSnapFloating set. Idempotent (QSet::insert).
+     * Saves non-autotile-floated floating windows to WTS's savedSnapFloating set.
+     * When screenId is provided, only saves windows on that screen. When empty,
+     * saves all floating windows (used for global autotile enable).
+     * Idempotent (QSet::insert).
      */
-    void presaveSnapFloats();
+    void presaveSnapFloats(const QString& screenId = QString());
 
     /**
      * @brief Capture autotile window order for all autotile screens

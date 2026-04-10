@@ -260,23 +260,28 @@ inline QRect updateWindowScreenPosition(QWindow* window, const QString& screenId
 // Lock-mode check helper shared across overlayservice TUs
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Check whether either snapping mode (0 = manual, 1 = autotile) is locked for
-/// the given screen/desktop/activity context. Used by zone selector, layout
-/// picker, and overlay update paths that must respect per-context lock state.
+/// Check whether a snapping mode is locked for the given screen/desktop/activity context.
+/// Used by zone selector, layout picker, and overlay update paths that must respect per-context lock state.
 ///
-/// NOTE (behavioral change, PR #247): This intentionally checks BOTH modes
-/// (0 = manual, 1 = autotile) regardless of which mode is currently active.
+/// @param currentMode  The mode to check: 0 = manual, 1 = autotile, -1 = check both modes (default).
+///
+/// When currentMode is -1 (default), BOTH modes are checked. This is intentional (PR #247): a lock on
+/// either mode blocks the zone selector for consistency with the OverlayService lock checks.
+/// Previously, ZoneSelectorController only checked the current mode, causing inconsistencies when the
+/// overlay reported a lock but the selector did not.
+///
+/// Pass the current mode explicitly when only the active mode's lock is relevant.
 // contextLockKey is defined in Utils:: (src/core/utils.h)
-
-/// A lock on either mode blocks the zone selector for consistency with the
-/// OverlayService lock checks. Previously, ZoneSelectorController only
-/// checked the current mode, which caused inconsistencies when the overlay
-/// reported a lock but the selector did not.
-inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity)
+inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int desktop, const QString& activity,
+                            int currentMode = -1)
 {
     if (!settings) {
         return false;
     }
+    if (currentMode == 0 || currentMode == 1) {
+        return settings->isContextLocked(Utils::contextLockKey(currentMode, screenId), desktop, activity);
+    }
+    // Default: check both modes (maintains PR #247 behavior)
     return settings->isContextLocked(Utils::contextLockKey(0, screenId), desktop, activity)
         || settings->isContextLocked(Utils::contextLockKey(1, screenId), desktop, activity);
 }

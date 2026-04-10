@@ -27,10 +27,12 @@ constexpr int MinUsableScreenDimension = 100;
 /// pixels between adjacent virtual screens.
 qint64 edgeDistance(const QRect& rect, const QPoint& point)
 {
-    const qint64 dx =
-        qMax(qint64(0), qMax(qint64(rect.left() - point.x()), qint64(point.x() - (rect.x() + rect.width()))));
-    const qint64 dy =
-        qMax(qint64(0), qMax(qint64(rect.top() - point.y()), qint64(point.y() - (rect.y() + rect.height()))));
+    const qint64 dx = qMax(
+        qint64(0),
+        qMax(qint64(rect.left()) - qint64(point.x()), qint64(point.x()) - (qint64(rect.x()) + qint64(rect.width()))));
+    const qint64 dy = qMax(
+        qint64(0),
+        qMax(qint64(rect.top()) - qint64(point.y()), qint64(point.y()) - (qint64(rect.y()) + qint64(rect.height()))));
     return dx * dx + dy * dy;
 }
 
@@ -174,6 +176,11 @@ QStringList ScreenManager::effectiveScreenIds() const
 
     for (auto* screen : m_trackedScreens) {
         QString physId = Utils::screenIdentifier(screen);
+        // Skip configs whose physical screen can no longer be resolved — they are
+        // stale entries left over from a screen removal that has not yet been pruned.
+        if (!Utils::findScreenByIdOrName(physId)) {
+            continue;
+        }
         auto it = m_virtualConfigs.constFind(physId);
         if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
             for (const auto& vs : it->screens) {

@@ -92,21 +92,11 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     m_snapAssistScreen = screen;
     m_snapAssistScreenId = screenId;
 
-    // Hide zone selectors for ALL virtual screens on the same physical monitor,
-    // since the snap assist window covers the entire physical screen area.
-    const QString physId =
-        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
-    auto* mgr = ScreenManager::instance();
-    if (mgr && mgr->hasVirtualScreens(physId)) {
-        for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-            if (auto* selectorWindow = m_screenStates.value(vsId).zoneSelectorWindow) {
-                selectorWindow->hide();
-            }
-        }
-    } else {
-        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-            selectorWindow->hide();
-        }
+    // Hide the zone selector only for the specific virtual screen where snap assist is showing.
+    // Snap assist now uses virtual-screen geometry (not full physical monitor coverage), so
+    // selectors on adjacent virtual screens of the same physical monitor should remain visible.
+    if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+        selectorWindow->hide();
     }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
@@ -261,22 +251,11 @@ void OverlayService::hideSnapAssist()
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
     }
-    // Re-show zone selectors for ALL virtual screens on the same physical monitor
-    // (symmetric with the hide in showSnapAssist).
+    // Re-show the zone selector for the specific virtual screen that was hidden in showSnapAssist
+    // (symmetric: showSnapAssist only hides the selector for the target VS, not all VS).
     if (m_zoneSelectorVisible && !screenId.isEmpty()) {
-        const QString physId =
-            VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
-        auto* mgr = ScreenManager::instance();
-        if (mgr && mgr->hasVirtualScreens(physId)) {
-            for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
-                if (auto* selectorWindow = m_screenStates.value(vsId).zoneSelectorWindow) {
-                    selectorWindow->show();
-                }
-            }
-        } else {
-            if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
-                selectorWindow->show();
-            }
+        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+            selectorWindow->show();
         }
     }
 }

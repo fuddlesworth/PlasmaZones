@@ -224,6 +224,12 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             continue;
         }
 
+        // If the stored screen is already a valid virtual screen ID in the current config, skip it.
+        // Re-migrating would recompute via resolveVirtualScreen with stale zone coords.
+        if (VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+            continue;
+        }
+
         // Pre-float entries may have zone info too; try to resolve
         QStringList zoneIds = m_preFloatZoneAssignments.value(it.key());
         it.value() = resolveVirtualScreen(zoneIds, it.value());
@@ -376,6 +382,10 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
             m_windowDesktopAssignments.remove(wId);
             m_preFloatZoneAssignments.remove(wId);
             m_preFloatScreenAssignments.remove(wId);
+            m_windowStickyStates.remove(wId);
+            m_autoSnappedWindows.remove(wId);
+            m_effectReportedWindows.remove(wId);
+            m_autotileFloatedWindows.remove(wId);
             anyStateMigrated = true;
         }
     }
@@ -411,10 +421,9 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             QString screenId = m_windowScreenAssignments.value(windowId);
             entry.screenId = screenId;
 
+            // Use 0 (all desktops) as the fallback when the actual desktop is unknown.
+            // 0 is the conservative default — it avoids restoring to the wrong desktop.
             int desktop = m_windowDesktopAssignments.value(windowId, 0);
-            if (desktop <= 0 && m_virtualDesktopManager) {
-                desktop = m_virtualDesktopManager->currentDesktop();
-            }
             entry.virtualDesktop = desktop;
 
             // Save the layout ID to ensure we only restore if the same layout is active
@@ -845,6 +854,9 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
         }
     }
     m_lastUsedZoneId.clear();
+    m_lastUsedScreenId.clear();
+    m_lastUsedZoneClass.clear();
+    m_lastUsedDesktop = 0;
 }
 
 QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId) const

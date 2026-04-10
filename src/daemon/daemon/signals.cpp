@@ -81,11 +81,25 @@ void Daemon::initializeAutotile()
         //    snap floats persist across autotile sessions.
         // Must check isAutotileFloated BEFORE clearing the marker.
         connect(m_autotileEngine.get(), &AutotileEngine::windowsReleasedFromTiling, this,
-                [this](const QStringList& windowIds) {
+                [this](const QStringList& windowIds, const QSet<QString>& releasedScreenIds) {
                     if (m_windowTrackingAdaptor) {
                         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
                         m_pendingSnapFloatRestores.clear();
                         for (const QString& windowId : windowIds) {
+                            // Only process windows whose current WTS screen is one of the
+                            // screens being released. A window that moved to a different
+                            // screen (e.g., dragged from autotile VS to snap VS and resnapped)
+                            // is no longer on the releasing screen — its state on the current
+                            // screen must not be disturbed.
+                            const QString windowScreen = wts->screenAssignments().value(windowId);
+                            if (!windowScreen.isEmpty() && !releasedScreenIds.contains(windowScreen)) {
+                                // Window is on a different screen — do NOT touch its state.
+                                // It may be on another autotile screen (flag still valid) or
+                                // a snap screen (flag already cleared by assignWindowToZones).
+                                qCDebug(lcDaemon) << "windowsReleasedFromTiling: skipping" << windowId << "on screen"
+                                                  << windowScreen << "(not in released set)";
+                                continue;
+                            }
                             // Clear autotile-originated floats (they don't persist into snap mode)
                             bool wasAutotileFloated = wts->isAutotileFloated(windowId);
                             if (wasAutotileFloated) {
@@ -206,8 +220,9 @@ void Daemon::initializeAutotile()
                 }
             } else {
                 // Pre-save snap-float state before autotile entry so rapid
-                // toggles don't lose snap-mode floats (see presaveSnapFloats doc).
-                presaveSnapFloats();
+                // toggles don't lose snap-mode floats. Scoped to the toggled
+                // screen — windows floating on other screens are unaffected.
+                presaveSnapFloats(screenId);
 
                 // Pre-seed autotile engine with saved autotile order (if available)
                 // or zone-ordered windows. Only seed the focused screen — the toggle
@@ -524,6 +539,9 @@ void Daemon::connectOverlaySignals()
                 if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId
                     && m_autotileEngine->isAutotileScreen(sourceScreen)) {
                     m_autotileEngine->windowClosed(windowId);
+                    // Clear autotile-floated marker immediately — windowClosed removes
+                    // the window from the engine but doesn't clear the WTS flag.
+                    m_windowTrackingAdaptor->service()->clearAutotileFloated(windowId);
                 }
             }
             if (!effectiveScreenId.isEmpty() && m_windowTrackingAdaptor) {
