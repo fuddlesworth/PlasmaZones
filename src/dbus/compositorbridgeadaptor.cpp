@@ -4,8 +4,7 @@
 #include "compositorbridgeadaptor.h"
 #include "../core/logging.h"
 
-#include <QJsonDocument>
-#include <QJsonObject>
+#include <dbus_types.h>
 #include <QUuid>
 
 namespace PlasmaZones {
@@ -15,8 +14,8 @@ CompositorBridgeAdaptor::CompositorBridgeAdaptor(QObject* parent)
 {
 }
 
-QString CompositorBridgeAdaptor::registerBridge(const QString& compositorName, const QString& version,
-                                                const QStringList& capabilities)
+BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& compositorName, const QString& version,
+                                                                 const QStringList& capabilities)
 {
     if (!m_bridgeName.isEmpty()) {
         qCWarning(lcDbusWindow) << "Compositor bridge re-registration: replacing" << m_bridgeName << m_bridgeVersion
@@ -32,11 +31,11 @@ QString CompositorBridgeAdaptor::registerBridge(const QString& compositorName, c
 
     Q_EMIT bridgeRegistered(compositorName, version, capabilities);
 
-    QJsonObject result;
-    result[QLatin1String("apiVersion")] = 1;
-    result[QLatin1String("bridgeName")] = compositorName;
-    result[QLatin1String("sessionId")] = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    BridgeRegistrationResult result;
+    result.apiVersion = QStringLiteral("1");
+    result.bridgeName = compositorName;
+    result.sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    return result;
 }
 
 void CompositorBridgeAdaptor::reportModifierState(int modifiers, int mouseButtons)

@@ -110,7 +110,16 @@ QString ControlAdaptor::getFullState()
 
     // Window states (via WTA)
     if (m_wta) {
-        state[QLatin1String("windows")] = QJsonDocument::fromJson(m_wta->getAllWindowStates().toUtf8()).array();
+        QJsonArray windowsArray;
+        for (const auto& ws : m_wta->getAllWindowStates()) {
+            QJsonObject wsObj;
+            wsObj[QLatin1String("windowId")] = ws.windowId;
+            wsObj[QLatin1String("zoneId")] = ws.zoneId;
+            wsObj[QLatin1String("screenId")] = ws.screenId;
+            wsObj[QLatin1String("isFloating")] = ws.isFloating;
+            windowsArray.append(wsObj);
+        }
+        state[QLatin1String("windows")] = windowsArray;
     }
 
     // Autotile state

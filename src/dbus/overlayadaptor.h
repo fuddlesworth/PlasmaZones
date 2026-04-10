@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <dbus_types.h>
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -60,15 +61,17 @@ public Q_SLOTS:
     void hideShaderPreview();
 
     // Snap Assist overlay (window picker after snapping)
-    bool showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
+    bool showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                        const SnapAssistCandidateList& candidates);
     void hideSnapAssist();
     bool isSnapAssistVisible();
-    void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl);
+    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl);
 
 Q_SIGNALS:
     void overlayVisibilityChanged(bool visible);
     void zoneHighlightChanged(const QString& zoneId);
-    void snapAssistShown(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
+    void snapAssistShown(const QString& screenId, const EmptyZoneList& emptyZones,
+                         const SnapAssistCandidateList& candidates);
 
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)

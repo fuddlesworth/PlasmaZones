@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <QJsonArray>
+#include <dbus_types.h>
+
 #include <QObject>
 #include <QSet>
 #include <QString>
@@ -33,7 +34,7 @@ public:
     void showContinuationIfNeeded(const QString& screenId);
 
     /// Full async snap assist: get snapped windows, build candidates, show overlay
-    void asyncShow(const QString& excludeWindowId, const QString& screenId, const QString& emptyZonesJson);
+    void asyncShow(const QString& excludeWindowId, const QString& screenId, const EmptyZoneList& emptyZones);
 
     /// Update the enabled flag (from loadCachedSettings)
     void setEnabled(bool enabled)
@@ -46,8 +47,8 @@ public:
     }
 
 private:
-    QJsonArray buildCandidates(const QString& excludeWindowId, const QString& screenId,
-                               const QSet<QString>& snappedWindowIds) const;
+    SnapAssistCandidateList buildCandidates(const QString& excludeWindowId, const QString& screenId,
+                                            const QSet<QString>& snappedWindowIds) const;
 
     PlasmaZonesEffect* m_effect;
     bool m_snapAssistEnabled = false;

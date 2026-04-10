@@ -3,7 +3,9 @@
 
 #include "navigationhandler.h"
 #include "plasmazoneseffect.h"
-#include "dbus_constants.h"
+
+#include <dbus_constants.h>
+#include <dbus_helpers.h>
 
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
@@ -21,30 +23,8 @@ NavigationHandler::NavigationHandler(PlasmaZonesEffect* effect, QObject* parent)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Floating window tracking
+// Floating window tracking — sync methods use D-Bus helpers
 // ═══════════════════════════════════════════════════════════════════════════════
-
-bool NavigationHandler::isWindowFloating(const QString& windowId) const
-{
-    if (m_floatingWindows.contains(windowId)) {
-        return true;
-    }
-    QString appId = m_effect->extractAppId(windowId);
-    return (appId != windowId && m_floatingWindows.contains(appId));
-}
-
-void NavigationHandler::setWindowFloating(const QString& windowId, bool floating)
-{
-    if (floating) {
-        m_floatingWindows.insert(windowId);
-    } else {
-        m_floatingWindows.remove(windowId);
-        QString appId = m_effect->extractAppId(windowId);
-        if (appId != windowId) {
-            m_floatingWindows.remove(appId);
-        }
-    }
-}
 
 void NavigationHandler::syncFloatingWindowsFromDaemon()
 {
@@ -52,8 +32,8 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
         return;
     }
 
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
+    QDBusPendingCall pendingCall =
+        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
@@ -66,13 +46,13 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
         }
 
         QStringList floatingIds = reply.value();
-        m_floatingWindows.clear();
+        m_floatingCache.clear();
 
         for (const QString& id : floatingIds) {
-            m_floatingWindows.insert(id);
+            m_floatingCache.insert(id);
         }
 
-        qCDebug(lcEffect) << "Synced" << m_floatingWindows.size() << "floating windows from daemon";
+        qCDebug(lcEffect) << "Synced" << m_floatingCache.size() << "floating windows from daemon";
     });
 }
 
@@ -86,8 +66,8 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         return;
     }
 
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("queryWindowFloating"), {windowId});
+    QDBusPendingCall pendingCall =
+        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("queryWindowFloating"), {windowId});
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {
@@ -95,10 +75,10 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         if (reply.isValid()) {
             bool floating = reply.value();
             if (floating) {
-                m_floatingWindows.insert(windowId);
+                m_floatingCache.insert(windowId);
                 qCDebug(lcEffect) << "Synced floating state for window" << windowId << "- is floating";
             } else {
-                m_floatingWindows.remove(windowId);
+                m_floatingCache.remove(windowId);
             }
         }
         w->deleteLater();

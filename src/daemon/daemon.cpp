@@ -555,7 +555,7 @@ bool Daemon::init()
 
     // Connect zone detection to overlay updates
     connect(m_zoneDetectionAdaptor, &ZoneDetectionAdaptor::zoneDetected, this,
-            [this](const QString& zoneId, const QString& geometry) {
+            [this](const QString& zoneId, const ZoneGeometryRect& geometry) {
                 Q_UNUSED(zoneId)
                 Q_UNUSED(geometry)
                 // Update overlay when zone is detected

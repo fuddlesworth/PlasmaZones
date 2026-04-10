@@ -8,25 +8,25 @@
 #include "../dragtracker.h"
 #include "../plasmazoneseffect.h"
 #include "../windowanimator.h"
-#include "../dbus_constants.h"
+#include <dbus_constants.h>
+#include <dbus_helpers.h>
+#include <dbus_types.h>
+#include <window_id.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 #include <workspace.h>
 
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
 
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
-void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
+void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileRequests)
 {
-    if (tileRequestsJson.isEmpty()) {
+    if (tileRequests.isEmpty()) {
         return;
     }
 
@@ -43,13 +43,6 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         savedGlobalStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(tileRequestsJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcEffect) << "Autotile windowsTileRequested: invalid JSON:" << parseError.errorString();
-        return;
-    }
-
     struct Entry
     {
         QString windowId;
@@ -60,17 +53,15 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     };
     QVector<Entry> entries;
 
-    const QJsonArray arr = doc.array();
-    for (const QJsonValue& val : arr) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
+    for (const auto& req : tileRequests) {
+        const QString& windowId = req.windowId;
 
         // Float entries: overflow windows that should be restored to pre-autotile geometry.
         // Process inline — same cleanup as slotWindowFloatingChanged(windowId, true, ...).
         // Geometry is restored from the effect's local pre-autotile cache, avoiding
         // the per-window D-Bus roundtrip through the daemon's applyGeometryForFloat.
-        if (obj.value(QLatin1String("floating")).toBool(false)) {
-            const QString screenId = obj.value(QLatin1String("screenId")).toString();
+        if (req.floating) {
+            const QString& screenId = req.screenId;
             qCInfo(lcEffect) << "Autotile batch float:" << windowId << "screen:" << screenId;
             applyFloatCleanup(windowId);
 
@@ -79,7 +70,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             if (floatWin && !screenId.isEmpty()) {
                 auto screenIt = m_preAutotileGeometries.constFind(screenId);
                 if (screenIt != m_preAutotileGeometries.constEnd()) {
-                    const QString geoKey = findSavedGeometryKey(screenIt.value(), windowId);
+                    const QString geoKey = AutotileStateHelpers::findSavedGeometryKey(screenIt.value(), windowId);
                     if (!geoKey.isEmpty()) {
                         const QRectF& savedGeo = screenIt.value().value(geoKey);
                         m_effect->applySnapGeometry(floatWin, savedGeo.toRect());
@@ -91,8 +82,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
             continue;
         }
 
-        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
+        QRect geo = req.toRect();
         QRect normalizedGeometry = geo.normalized();
 
         if (normalizedGeometry.width() <= 0 || normalizedGeometry.height() <= 0) {
@@ -113,7 +103,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
         entry.windowId = windowId;
         entry.geometry = normalizedGeometry;
         entry.window = w;
-        entry.isMonocle = obj.value(QLatin1String("monocle")).toBool(false);
+        entry.isMonocle = req.monocle;
         if (candidates.size() > 1) {
             entry.candidates = candidates;
         }
@@ -124,7 +114,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
-            appIdToEntryIndices[PlasmaZonesEffect::extractAppId(entries[i].windowId)].append(i);
+            appIdToEntryIndices[WindowIdUtils::extractAppId(entries[i].windowId)].append(i);
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {
@@ -488,16 +478,6 @@ void AutotileHandler::slotFocusWindowRequested(const QString& windowId)
     KWin::effects->activateWindow(w);
 }
 
-QRect AutotileHandler::applyBorderInset(const QRect& geo) const
-{
-    return geo.adjusted(m_border.width, m_border.width, -m_border.width, -m_border.width);
-}
-
-bool AutotileHandler::shouldInsetForBorder(const QString& windowId, const QRect& geo) const
-{
-    return shouldApplyBorderInset(windowId) && geo.width() > 2 * m_border.width && geo.height() > 2 * m_border.width;
-}
-
 void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight)
 {
     if (minWidth <= 0 && minHeight <= 0) {
@@ -507,8 +487,8 @@ void AutotileHandler::reportDiscoveredMinSize(const QString& windowId, int minWi
     qCInfo(lcEffect) << "Discovered min size for" << windowId << ":" << minWidth << "x" << minHeight
                      << "- reporting to daemon for future retiles";
 
-    m_effect->fireAndForgetDBusCall(DBus::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
-                                    {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
+    DBusHelpers::fireAndForget(m_effect, DBus::Interface::Autotile, QStringLiteral("windowMinSizeUpdated"),
+                               {windowId, minWidth, minHeight}, QStringLiteral("windowMinSizeUpdated"));
 }
 
 } // namespace PlasmaZones

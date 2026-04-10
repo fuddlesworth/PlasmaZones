@@ -2,12 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowtrackingadaptor.h"
-#include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 
 namespace PlasmaZones {
 
@@ -37,8 +33,7 @@ void WindowTrackingAdaptor::moveWindowToZone(const QString& windowId, const QStr
     m_service->recordSnapIntent(windowId, true);
 
     // Request compositor to apply geometry
-    QString geometryJson = GeometryUtils::rectToJson(geo);
-    Q_EMIT applyGeometryRequested(windowId, geometryJson, zoneId, screenId);
+    Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), zoneId, screenId, false);
 
     qCInfo(lcDbusWindow) << "moveWindowToZone:" << windowId << "-> zone" << zoneId << "on screen" << screenId;
 }
@@ -84,39 +79,34 @@ void WindowTrackingAdaptor::swapWindowsById(const QString& windowId1, const QStr
     windowSnapped(windowId2, zoneId1, screen1);
 
     // Emit geometry requests for both
-    Q_EMIT applyGeometryRequested(windowId1, GeometryUtils::rectToJson(geo1), zoneId2, screen2);
-    Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(geo2), zoneId1, screen1);
+    Q_EMIT applyGeometryRequested(windowId1, geo1.x(), geo1.y(), geo1.width(), geo1.height(), zoneId2, screen2, false);
+    Q_EMIT applyGeometryRequested(windowId2, geo2.x(), geo2.y(), geo2.width(), geo2.height(), zoneId1, screen1, false);
 
     qCInfo(lcDbusWindow) << "swapWindowsById:" << windowId1 << "<->" << windowId2 << "zones:" << zoneId1 << "<->"
                          << zoneId2;
 }
 
-QString WindowTrackingAdaptor::getWindowState(const QString& windowId)
+WindowStateEntry WindowTrackingAdaptor::getWindowState(const QString& windowId)
 {
-    QJsonObject result;
-
     if (windowId.isEmpty()) {
         qCWarning(lcDbusWindow) << "getWindowState: empty window ID";
-        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+        return WindowStateEntry{};
     }
 
-    result[QLatin1String("windowId")] = windowId;
-    result[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
-    QStringList zones = m_service->zonesForWindow(windowId);
-    QJsonArray zonesArr;
-    for (const QString& z : zones)
-        zonesArr.append(z);
-    result[QLatin1String("zoneIds")] = zonesArr;
-    result[QLatin1String("screenId")] = m_service->screenAssignments().value(windowId);
-    result[QLatin1String("isFloating")] = m_service->isWindowFloating(windowId);
-    result[QLatin1String("isSticky")] = m_service->isWindowSticky(windowId);
-
-    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    return WindowStateEntry{
+        windowId,
+        m_service->zoneForWindow(windowId),
+        m_service->screenAssignments().value(windowId),
+        m_service->isWindowFloating(windowId),
+        QString(), // changeType: empty for query (not a state change event)
+        m_service->zonesForWindow(windowId),
+        m_service->isWindowSticky(windowId),
+    };
 }
 
-QString WindowTrackingAdaptor::getAllWindowStates()
+WindowStateList WindowTrackingAdaptor::getAllWindowStates()
 {
-    QJsonArray result;
+    WindowStateList result;
 
     // Collect all tracked windows: snapped + floating
     QSet<QString> allWindowIds;
@@ -135,23 +125,18 @@ QString WindowTrackingAdaptor::getAllWindowStates()
 
     // Build state for each window
     for (const QString& windowId : std::as_const(allWindowIds)) {
-        QJsonObject state;
-        state[QLatin1String("windowId")] = windowId;
-        // Primary zone (backwards compat)
-        state[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
-        // All zones the window spans
-        QStringList zones = m_service->zonesForWindow(windowId);
-        QJsonArray zonesArr;
-        for (const QString& z : zones)
-            zonesArr.append(z);
-        state[QLatin1String("zoneIds")] = zonesArr;
-        state[QLatin1String("screenId")] = m_service->screenAssignments().value(windowId);
-        state[QLatin1String("isFloating")] = m_service->isWindowFloating(windowId);
-        state[QLatin1String("isSticky")] = m_service->isWindowSticky(windowId);
-        result.append(state);
+        result.append(WindowStateEntry{
+            windowId,
+            m_service->zoneForWindow(windowId),
+            m_service->screenAssignments().value(windowId),
+            m_service->isWindowFloating(windowId),
+            QString(), // changeType: empty for query
+            m_service->zonesForWindow(windowId),
+            m_service->isWindowSticky(windowId),
+        });
     }
 
-    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    return result;
 }
 
 } // namespace PlasmaZones

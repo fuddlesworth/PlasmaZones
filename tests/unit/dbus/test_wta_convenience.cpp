@@ -12,9 +12,6 @@
 #include <QString>
 #include <QStringList>
 #include <QSignalSpy>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QRectF>
 #include <memory>
 
@@ -176,9 +173,10 @@ private Q_SLOTS:
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), windowId);
-        // geometryJson should be non-empty
-        QVERIFY(!spy.at(0).at(1).toString().isEmpty());
-        QCOMPARE(spy.at(0).at(2).toString(), m_zoneIds[0]);
+        // Geometry args (x, y, width, height) should have valid dimensions
+        QVERIFY(spy.at(0).at(3).toInt() > 0); // width
+        QVERIFY(spy.at(0).at(4).toInt() > 0); // height
+        QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[0]);
     }
 
     void testMoveWindowToZone_invalidZone_noSignal()
@@ -223,9 +221,9 @@ private Q_SLOTS:
 
         // Window1 should move to zone2, window2 to zone1
         QCOMPARE(spy.at(0).at(0).toString(), window1);
-        QCOMPARE(spy.at(0).at(2).toString(), m_zoneIds[1]);
+        QCOMPARE(spy.at(0).at(5).toString(), m_zoneIds[1]);
         QCOMPARE(spy.at(1).at(0).toString(), window2);
-        QCOMPARE(spy.at(1).at(2).toString(), m_zoneIds[0]);
+        QCOMPARE(spy.at(1).at(5).toString(), m_zoneIds[0]);
     }
 
     void testSwapWindowsById_oneNotSnapped_noSignal()
@@ -249,21 +247,17 @@ private Q_SLOTS:
     // getWindowState
     // =====================================================================
 
-    void testGetWindowState_snappedWindow_returnsJson()
+    void testGetWindowState_snappedWindow_returnsStruct()
     {
         QString windowId = QStringLiteral("firefox|12345");
 
         m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
 
-        QString stateJson = m_wta->getWindowState(windowId);
-        QJsonDocument doc = QJsonDocument::fromJson(stateJson.toUtf8());
-        QVERIFY(!doc.isNull());
-
-        QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("windowId")].toString(), windowId);
-        QCOMPARE(obj[QLatin1String("zoneId")].toString(), m_zoneIds[0]);
-        QCOMPARE(obj[QLatin1String("screenId")].toString(), m_screenId);
-        QCOMPARE(obj[QLatin1String("isFloating")].toBool(), false);
+        WindowStateEntry state = m_wta->getWindowState(windowId);
+        QCOMPARE(state.windowId, windowId);
+        QCOMPARE(state.zoneId, m_zoneIds[0]);
+        QCOMPARE(state.screenId, m_screenId);
+        QCOMPARE(state.isFloating, false);
     }
 
     void testGetWindowState_floatingWindow_returnsFloatingTrue()
@@ -274,31 +268,23 @@ private Q_SLOTS:
         m_wta->windowSnapped(windowId, m_zoneIds[0], m_screenId);
         m_wta->setWindowFloating(windowId, true);
 
-        QString stateJson = m_wta->getWindowState(windowId);
-        QJsonDocument doc = QJsonDocument::fromJson(stateJson.toUtf8());
-        QVERIFY(!doc.isNull());
-
-        QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("isFloating")].toBool(), true);
+        WindowStateEntry state = m_wta->getWindowState(windowId);
+        QCOMPARE(state.isFloating, true);
     }
 
     void testGetWindowState_unknownWindow_returnsEmptyZone()
     {
         QString windowId = QStringLiteral("unknown|99999");
 
-        QString stateJson = m_wta->getWindowState(windowId);
-        QJsonDocument doc = QJsonDocument::fromJson(stateJson.toUtf8());
-        QVERIFY(!doc.isNull());
-
-        QJsonObject obj = doc.object();
-        QVERIFY(obj[QLatin1String("zoneId")].toString().isEmpty());
+        WindowStateEntry state = m_wta->getWindowState(windowId);
+        QVERIFY(state.zoneId.isEmpty());
     }
 
     // =====================================================================
     // getAllWindowStates
     // =====================================================================
 
-    void testGetAllWindowStates_multipleWindows_returnsArray()
+    void testGetAllWindowStates_multipleWindows_returnsList()
     {
         QString window1 = QStringLiteral("app1|11111");
         QString window2 = QStringLiteral("app2|22222");
@@ -306,18 +292,13 @@ private Q_SLOTS:
         m_wta->windowSnapped(window1, m_zoneIds[0], m_screenId);
         m_wta->windowSnapped(window2, m_zoneIds[1], m_screenId);
 
-        QString allStatesJson = m_wta->getAllWindowStates();
-        QJsonDocument doc = QJsonDocument::fromJson(allStatesJson.toUtf8());
-        QVERIFY(!doc.isNull());
-        QVERIFY(doc.isArray());
+        WindowStateList allStates = m_wta->getAllWindowStates();
+        QCOMPARE(allStates.size(), 2);
 
-        QJsonArray arr = doc.array();
-        QCOMPARE(arr.size(), 2);
-
-        // Collect all window IDs from the array
+        // Collect all window IDs from the list
         QStringList windowIds;
-        for (const QJsonValue& val : arr) {
-            windowIds.append(val.toObject()[QLatin1String("windowId")].toString());
+        for (const auto& ws : allStates) {
+            windowIds.append(ws.windowId);
         }
         QVERIFY(windowIds.contains(window1));
         QVERIFY(windowIds.contains(window2));
@@ -340,9 +321,8 @@ private Q_SLOTS:
         // Find the "snapped" emission
         bool foundSnapped = false;
         for (int i = 0; i < spy.count(); ++i) {
-            QJsonDocument doc = QJsonDocument::fromJson(spy.at(i).at(1).toString().toUtf8());
-            QJsonObject obj = doc.object();
-            if (obj[QLatin1String("changeType")].toString() == QLatin1String("snapped")) {
+            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            if (state.changeType == QLatin1String("snapped")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundSnapped = true;
                 break;
@@ -365,9 +345,8 @@ private Q_SLOTS:
 
         bool foundUnsnapped = false;
         for (int i = 0; i < spy.count(); ++i) {
-            QJsonDocument doc = QJsonDocument::fromJson(spy.at(i).at(1).toString().toUtf8());
-            QJsonObject obj = doc.object();
-            if (obj[QLatin1String("changeType")].toString() == QLatin1String("unsnapped")) {
+            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            if (state.changeType == QLatin1String("unsnapped")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundUnsnapped = true;
                 break;
@@ -390,9 +369,8 @@ private Q_SLOTS:
 
         bool foundFloated = false;
         for (int i = 0; i < spy.count(); ++i) {
-            QJsonDocument doc = QJsonDocument::fromJson(spy.at(i).at(1).toString().toUtf8());
-            QJsonObject obj = doc.object();
-            if (obj[QLatin1String("changeType")].toString() == QLatin1String("floated")) {
+            auto state = spy.at(i).at(1).value<WindowStateEntry>();
+            if (state.changeType == QLatin1String("floated")) {
                 QCOMPARE(spy.at(i).at(0).toString(), windowId);
                 foundFloated = true;
                 break;

@@ -282,6 +282,14 @@ target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DB
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
+#                      TriggerParser, WindowIdUtils)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_compositor_common compositor-common/test_compositor_common.cpp)
+target_link_libraries(test_compositor_common PRIVATE Qt6::Test plasmazones_compositor_common)
+add_test(NAME test_compositor_common COMMAND test_compositor_common)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support
 # Set QT_QPA_PLATFORM=offscreen so tests run in CI containers without a display
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -319,5 +327,6 @@ set(_all_tests
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers
     test_wta_convenience test_settings_schema test_compositor_bridge
+    test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

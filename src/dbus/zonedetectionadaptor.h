@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "../compositor-common/dbus_types.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QString>
@@ -36,8 +37,8 @@ public Q_SLOTS:
     // Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
-    QString getZoneGeometry(const QString& zoneId);
-    QString getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
+    ZoneGeometryRect getZoneGeometry(const QString& zoneId);
+    ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
     QStringList getZonesForScreen(const QString& screenId);
 
     // Zone navigation - get adjacent zone in a direction
@@ -64,7 +65,7 @@ public Q_SLOTS:
     QString getZoneByNumber(int zoneNumber, const QString& screenId = QString());
 
     // Get all zone geometries, optionally for a specific screen
-    QStringList getAllZoneGeometries(const QString& screenId = QString());
+    NamedZoneGeometryList getAllZoneGeometries(const QString& screenId = QString());
 
     /**
      * @brief Get current keyboard modifier state
@@ -96,7 +97,7 @@ public Q_SLOTS:
     QString detectZoneWithModifiers(int x, int y);
 
 Q_SIGNALS:
-    void zoneDetected(const QString& zoneId, const QString& geometry);
+    void zoneDetected(const QString& zoneId, const ZoneGeometryRect& geometry);
 
 private:
     IZoneDetector* m_zoneDetector; // Interface type (DIP)

@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 
+#include <dbus_types.h>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QRect>
@@ -165,12 +166,11 @@ public Q_SLOTS:
      *
      * Processes multiple windowOpened in one D-Bus call. Used on daemon
      * startup/restart and autotile toggle-on to avoid per-window D-Bus
-     * round-trips. Entries may include preTileGeometry to eliminate
-     * separate storePreTileGeometry calls.
+     * round-trips.
      *
-     * @param batchJson JSON array of {windowId, screenId, minWidth, minHeight, preTileGeometry?}
+     * @param entries Array of (windowId, screenId, minWidth, minHeight) structs
      */
-    void windowsOpenedBatch(const QString& batchJson);
+    void windowsOpenedBatch(const WindowOpenedList& entries);
 
     /**
      * @brief Update a window's minimum size at runtime
@@ -249,9 +249,9 @@ public Q_SLOTS:
     /**
      * @brief Get information about a specific algorithm
      * @param algorithmId Algorithm ID to query
-     * @return JSON object with id, name, description, icon
+     * @return AlgorithmInfoEntry struct with algorithm metadata
      */
-    QString algorithmInfo(const QString& algorithmId);
+    AlgorithmInfoEntry algorithmInfo(const QString& algorithmId);
 
 Q_SIGNALS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -292,7 +292,7 @@ Q_SIGNALS:
      *
      * @param tileRequestsJson JSON array of {windowId,x,y,width,height}
      */
-    void windowsTileRequested(const QString& tileRequestsJson);
+    void windowsTileRequested(const TileRequestList& tileRequests);
 
     /**
      * @brief Emitted when a window should be focused

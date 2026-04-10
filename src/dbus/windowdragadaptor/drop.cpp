@@ -20,7 +20,7 @@ namespace PlasmaZones {
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                                     int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                                     QString& releaseScreenIdOut, bool& restoreSizeOnlyOut, bool& snapAssistRequestedOut,
-                                    QString& emptyZonesJsonOut)
+                                    EmptyZoneList& emptyZonesOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
@@ -34,7 +34,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     releaseScreenIdOut.clear();
     restoreSizeOnlyOut = false;
     snapAssistRequestedOut = false;
-    emptyZonesJsonOut.clear();
+    emptyZonesOut.clear();
 
     if (windowId != m_draggedWindowId) {
         return;
@@ -286,13 +286,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // Use screen-filtered occupancy — without this, zones occupied on
             // other screens appear occupied here when layouts share zone IDs.
             QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreenId, releaseScreen, m_settings,
-                                                                   [&occupied](const Zone* z) {
-                                                                       return !occupied.contains(z->id());
-                                                                   });
-            if (!emptyJson.isEmpty() && emptyJson != QLatin1String("[]")) {
+            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
+                layout, releaseScreenId, releaseScreen, m_settings,
+                [&occupied](const Zone* z) { return !occupied.contains(z->id()); });
+            if (!emptyZones.isEmpty()) {
                 snapAssistRequestedOut = true;
-                emptyZonesJsonOut = emptyJson;
+                emptyZonesOut = emptyZones;
             }
         }
     }

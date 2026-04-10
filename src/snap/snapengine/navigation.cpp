@@ -152,12 +152,26 @@ void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
-QString SnapEngine::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
+SnapAllResultList SnapEngine::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
 {
     QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateSnapAllWindows(windowIds, screenId);
 
-    qCDebug(lcCore) << "Calculated snap-all for" << entries.size() << "windows";
-    return GeometryUtils::serializeZoneAssignments(entries);
+    SnapAllResultList result;
+    result.reserve(entries.size());
+    for (const auto& entry : entries) {
+        SnapAllResultEntry r;
+        r.windowId = entry.windowId;
+        r.targetZoneId = entry.targetZoneId;
+        r.sourceZoneId = entry.sourceZoneId;
+        r.x = entry.targetGeometry.x();
+        r.y = entry.targetGeometry.y();
+        r.width = entry.targetGeometry.width();
+        r.height = entry.targetGeometry.height();
+        result.append(r);
+    }
+
+    qCDebug(lcCore) << "Calculated snap-all for" << result.size() << "windows";
+    return result;
 }
 
 void SnapEngine::snapAllWindows(const QString& screenId)

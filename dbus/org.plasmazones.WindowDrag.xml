@@ -93,8 +93,9 @@
             <arg name="snapAssistRequested" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="If true: effect should call showSnapAssist with candidate windows to fill empty zones."/>
             </arg>
-            <arg name="emptyZonesJson" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of {zoneId, x, y, width, height} for empty zones. Only set when snapAssistRequested is true."/>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity). Only set when snapAssistRequested is true."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out8" value="PlasmaZones::EmptyZoneList"/>
             </arg>
         </method>
 

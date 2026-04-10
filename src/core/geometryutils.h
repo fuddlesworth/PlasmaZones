@@ -6,6 +6,7 @@
 #include "constants.h"
 #include "plasmazones_export.h"
 #include "types.h"
+#include <dbus_types.h>
 #include <QRectF>
 #include <QScreen>
 #include <QVariantMap>
@@ -194,28 +195,28 @@ PLASMAZONES_EXPORT QRectF extractZoneGeometry(const QVariantMap& zone);
 PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
 
 /**
- * @brief Build JSON array of empty zones for Snap Assist
+ * @brief Build typed list of empty zones for Snap Assist
  * @param layout Layout containing zones
  * @param screen Screen to calculate geometry for
  * @param settings Settings for zone padding/outer gap
  * @param isZoneEmpty Predicate: returns true if zone has no windows
- * @return JSON array string (compact format)
+ * @return EmptyZoneList of empty zone entries with overlay-local geometry
  *
- * Used by WindowTrackingService::getEmptyZonesJson and WindowDragAdaptor::dragStopped
- * to avoid duplicating the empty-zones JSON building logic.
+ * Used by WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
+ * to avoid duplicating the empty-zones building logic.
  */
-PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
-                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Layout* layout, QScreen* screen, ISettings* settings,
+                                                    const std::function<bool(const Zone*)>& isZoneEmpty);
 
 /**
- * @brief Build JSON array of empty zones using explicit screen ID (virtual-screen-aware)
+ * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
  *
- * Uses ScreenManager to resolve virtual screen geometry when available,
- * falling back to the physical QScreen* geometry.
+ * Uses ScreenManager to resolve virtual screen geometry when available, falling back
+ * to the physical QScreen* geometry.
  */
-PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* physScreen,
-                                               ISettings* settings,
-                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Layout* layout, const QString& screenId, QScreen* physScreen,
+                                                    ISettings* settings,
+                                                    const std::function<bool(const Zone*)>& isZoneEmpty);
 
 /**
  * @brief Enforce minimum size constraints on zones by borrowing space from neighbors

@@ -19,6 +19,9 @@
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../dbus/zonedetectionadaptor.h"
+
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "../../dbus/windowdragadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
@@ -518,7 +521,6 @@ void Daemon::connectOverlaySignals()
         m_overlayService.get(), &IOverlayService::snapAssistWindowSelected, this,
         [this](const QString& windowId, const QString& zoneId, const QString& geometryJson, const QString& screenId) {
             // Resolve screen ID; fall back to primary screen
-            QString geometryToUse = geometryJson;
             QString effectiveScreenId = screenId;
             if (effectiveScreenId.isEmpty()) {
                 // Prefer effective screen IDs (virtual-screen-aware) over physical screen
@@ -544,14 +546,17 @@ void Daemon::connectOverlaySignals()
                     m_windowTrackingAdaptor->service()->clearAutotileFloated(windowId);
                 }
             }
+            QRect geometry;
             if (!effectiveScreenId.isEmpty() && m_windowTrackingAdaptor) {
-                QString authGeometry = m_windowTrackingAdaptor->getZoneGeometryForScreen(zoneId, effectiveScreenId);
-                if (!authGeometry.isEmpty()) {
-                    geometryToUse = authGeometry;
-                }
+                geometry = m_windowTrackingAdaptor->zoneGeometryRect(zoneId, effectiveScreenId);
+            }
+            if (!geometry.isValid() && !geometryJson.isEmpty()) {
+                QJsonObject obj = QJsonDocument::fromJson(geometryJson.toUtf8()).object();
+                geometry = QRect(obj[QLatin1String("x")].toInt(), obj[QLatin1String("y")].toInt(),
+                                 obj[QLatin1String("width")].toInt(), obj[QLatin1String("height")].toInt());
             }
             if (m_windowTrackingAdaptor) {
-                m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometryToUse);
+                m_windowTrackingAdaptor->requestMoveSpecificWindowToZone(windowId, zoneId, geometry);
             }
         });
 

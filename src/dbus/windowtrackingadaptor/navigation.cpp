@@ -5,7 +5,6 @@
 #include "internal.h"
 #include "../../snap/SnapEngine.h"
 #include "../../core/logging.h"
-#include "../../core/geometryutils.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layout.h"
 #include "../../core/screenmanager.h"
@@ -86,27 +85,27 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    QString resultJson = getMoveTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    MoveTargetResult result = getMoveTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
     // getMoveTargetForWindow already emits navigationFeedback on failure
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return;
     }
 
-    QString zoneId = obj.value(QLatin1String("zoneId")).toString();
-    QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
-    QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
-    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
+    QRect geo = result.toRect();
+    if (!geo.isValid()) {
+        qCWarning(lcDbusWindow) << "moveWindowToAdjacentZone: invalid geometry from nav result";
+        return;
+    }
 
     // Handle snap bookkeeping internally (pre-snap geometry is stored by the
     // effect in slotApplyGeometryRequested via ensurePreSnapGeometryStored)
-    windowSnapped(m_lastActiveWindowId, zoneId, effectiveScreen);
+    windowSnapped(m_lastActiveWindowId, result.zoneId, result.screenName);
     recordSnapIntent(m_lastActiveWindowId, true);
 
     // Tell effect to apply the geometry
-    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geometryJson, zoneId, effectiveScreen);
+    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
+                                  result.screenName, false);
 }
 
 void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
@@ -124,17 +123,14 @@ void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    QString resultJson = getFocusTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    FocusTargetResult result = getFocusTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getFocusTargetForWindow already emitted feedback
     }
 
-    QString targetWindowId = obj.value(QLatin1String("windowIdToActivate")).toString();
-    if (!targetWindowId.isEmpty()) {
-        Q_EMIT activateWindowRequested(targetWindowId);
+    if (!result.windowIdToActivate.isEmpty()) {
+        Q_EMIT activateWindowRequested(result.windowIdToActivate);
     }
 }
 
@@ -153,21 +149,23 @@ void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenId)
     }
 
     QString effectiveScreen = screenId.isEmpty() ? resolveNavScreen(this, m_lastActiveWindowId, m_service) : screenId;
-    QString resultJson = getPushTargetForWindow(m_lastActiveWindowId, effectiveScreen);
+    MoveTargetResult result = getPushTargetForWindow(m_lastActiveWindowId, effectiveScreen);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getPushTargetForWindow already emitted feedback
     }
 
-    QString zoneId = obj.value(QLatin1String("zoneId")).toString();
-    QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
+    QRect geo = result.toRect();
+    if (!geo.isValid()) {
+        qCWarning(lcDbusWindow) << "pushToEmptyZone: invalid geometry from nav result";
+        return;
+    }
 
-    windowSnapped(m_lastActiveWindowId, zoneId, effectiveScreen);
+    windowSnapped(m_lastActiveWindowId, result.zoneId, effectiveScreen);
     recordSnapIntent(m_lastActiveWindowId, true);
 
-    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geometryJson, zoneId, effectiveScreen);
+    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
+                                  effectiveScreen, false);
 }
 
 void WindowTrackingAdaptor::restoreWindowSize()
@@ -181,26 +179,19 @@ void WindowTrackingAdaptor::restoreWindowSize()
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    QString resultJson = getRestoreForWindow(m_lastActiveWindowId, screenId);
+    RestoreTargetResult result = getRestoreForWindow(m_lastActiveWindowId, screenId);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getRestoreForWindow already emitted feedback
     }
-
-    int x = obj.value(QLatin1String("x")).toInt();
-    int y = obj.value(QLatin1String("y")).toInt();
-    int w = obj.value(QLatin1String("width")).toInt();
-    int h = obj.value(QLatin1String("height")).toInt();
 
     // Unsnap the window and clear pre-tile geometry
     windowUnsnapped(m_lastActiveWindowId);
     clearPreTileGeometry(m_lastActiveWindowId);
 
     // Emit with empty zoneId = restore (no snap)
-    QString geometryJson = GeometryUtils::rectToJson(QRect(x, y, w, h));
-    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geometryJson, QString(), screenId);
+    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, result.x, result.y, result.width, result.height, QString(),
+                                  screenId, false);
 }
 
 void WindowTrackingAdaptor::toggleWindowFloat()
@@ -230,49 +221,31 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    QString resultJson = getSwapTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    SwapTargetResult result = getSwapTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getSwapTargetForWindow already emitted feedback
     }
 
-    QString windowId1 = obj.value(QLatin1String("windowId1")).toString();
-    QString zoneId1 = obj.value(QLatin1String("zoneId1")).toString();
-    int x1 = obj.value(QLatin1String("x1")).toInt();
-    int y1 = obj.value(QLatin1String("y1")).toInt();
-    int w1 = obj.value(QLatin1String("w1")).toInt();
-    int h1 = obj.value(QLatin1String("h1")).toInt();
-    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
-
     // Move window 1 to target zone
-    windowSnapped(windowId1, zoneId1, effectiveScreen);
-    recordSnapIntent(windowId1, true);
-    Q_EMIT applyGeometryRequested(windowId1, GeometryUtils::rectToJson(QRect(x1, y1, w1, h1)), zoneId1,
-                                  effectiveScreen);
+    windowSnapped(result.windowId1, result.zoneId1, result.screenName);
+    recordSnapIntent(result.windowId1, true);
+    Q_EMIT applyGeometryRequested(result.windowId1, result.x1, result.y1, result.w1, result.h1, result.zoneId1,
+                                  result.screenName, false);
 
     // If there's a second window (swap, not move-to-empty), move it to the source zone.
-    // Use window2's own stored screen assignment, not window1's, so cross-VS swaps
+    // Prefer window2's stored screen assignment, not window1's screen, so cross-VS swaps
     // assign each window to the correct virtual screen.
-    QString windowId2 = obj.value(QLatin1String("windowId2")).toString();
-    if (!windowId2.isEmpty()) {
-        QString zoneId2 = obj.value(QLatin1String("zoneId2")).toString();
-        int x2 = obj.value(QLatin1String("x2")).toInt();
-        int y2 = obj.value(QLatin1String("y2")).toInt();
-        int w2 = obj.value(QLatin1String("w2")).toInt();
-        int h2 = obj.value(QLatin1String("h2")).toInt();
-
-        // Prefer window2's stored screen assignment; fall back to window1's screen
-        // only if window2 has no recorded assignment.
-        QString screen2 = m_service->screenAssignments().value(windowId2);
+    if (!result.windowId2.isEmpty()) {
+        QString screen2 = m_service->screenAssignments().value(result.windowId2);
         if (screen2.isEmpty()) {
-            screen2 = effectiveScreen;
+            screen2 = result.screenName;
         }
 
-        windowSnapped(windowId2, zoneId2, screen2);
-        recordSnapIntent(windowId2, true);
-        Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(QRect(x2, y2, w2, h2)), zoneId2, screen2);
+        windowSnapped(result.windowId2, result.zoneId2, screen2);
+        recordSnapIntent(result.windowId2, true);
+        Q_EMIT applyGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2, result.zoneId2,
+                                      screen2, false);
     }
 }
 
@@ -298,21 +271,23 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
     }
 
     QString effectiveScreen = screenId.isEmpty() ? resolveNavScreen(this, m_lastActiveWindowId, m_service) : screenId;
-    QString resultJson = getSnapToZoneByNumberTarget(m_lastActiveWindowId, zoneNumber, effectiveScreen);
+    MoveTargetResult result = getSnapToZoneByNumberTarget(m_lastActiveWindowId, zoneNumber, effectiveScreen);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getSnapToZoneByNumberTarget already emitted feedback
     }
 
-    QString zoneId = obj.value(QLatin1String("zoneId")).toString();
-    QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
+    QRect geo = result.toRect();
+    if (!geo.isValid()) {
+        qCWarning(lcDbusWindow) << "snapToZoneByNumber: invalid geometry from nav result";
+        return;
+    }
 
-    windowSnapped(m_lastActiveWindowId, zoneId, effectiveScreen);
+    windowSnapped(m_lastActiveWindowId, result.zoneId, effectiveScreen);
     recordSnapIntent(m_lastActiveWindowId, true);
 
-    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geometryJson, zoneId, effectiveScreen);
+    Q_EMIT applyGeometryRequested(m_lastActiveWindowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
+                                  effectiveScreen, false);
 }
 
 /**
@@ -385,9 +360,13 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Zo
         }
     }
 
-    // Serialize and emit batch for effect to apply geometries
-    QString batchJson = GeometryUtils::serializeZoneAssignments(entries);
-    Q_EMIT adaptor->applyGeometriesBatch(batchJson, action);
+    // Build struct list and emit batch for effect to apply geometries
+    WindowGeometryList geometries;
+    geometries.reserve(entries.size());
+    for (const ZoneAssignmentEntry& entry : entries) {
+        geometries.append(WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry));
+    }
+    Q_EMIT adaptor->applyGeometriesBatch(geometries, action);
     return true;
 }
 
@@ -432,17 +411,14 @@ void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    QString resultJson = getCycleTargetForWindow(m_lastActiveWindowId, forward, screenId);
+    CycleTargetResult result = getCycleTargetForWindow(m_lastActiveWindowId, forward, screenId);
 
-    QJsonDocument doc = QJsonDocument::fromJson(resultJson.toUtf8());
-    QJsonObject obj = doc.object();
-    if (!obj.value(QLatin1String("success")).toBool()) {
+    if (!result.success) {
         return; // getCycleTargetForWindow already emitted feedback
     }
 
-    QString targetWindowId = obj.value(QLatin1String("windowIdToActivate")).toString();
-    if (!targetWindowId.isEmpty()) {
-        Q_EMIT activateWindowRequested(targetWindowId);
+    if (!result.windowIdToActivate.isEmpty()) {
+        Q_EMIT activateWindowRequested(result.windowIdToActivate);
     }
 }
 
@@ -510,19 +486,20 @@ void WindowTrackingAdaptor::snapAllWindows(const QString& screenId)
 }
 
 void WindowTrackingAdaptor::requestMoveSpecificWindowToZone(const QString& windowId, const QString& zoneId,
-                                                            const QString& geometryJson)
+                                                            const QRect& geometry)
 {
     qCDebug(lcDbusWindow) << "requestMoveSpecificWindowToZone: window=" << windowId << "zone=" << zoneId;
-    Q_EMIT moveSpecificWindowToZoneRequested(windowId, zoneId, geometryJson);
+    Q_EMIT moveSpecificWindowToZoneRequested(windowId, zoneId, geometry.x(), geometry.y(), geometry.width(),
+                                             geometry.height());
 }
 
-QString WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
+SnapAllResultList WindowTrackingAdaptor::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "calculateSnapAllWindows: count=" << windowIds.size() << "screen=" << screenId;
     if (m_snapEngine) {
         return m_snapEngine->calculateSnapAllWindows(windowIds, screenId);
     }
-    return QStringLiteral("[]");
+    return {};
 }
 
 void WindowTrackingAdaptor::handleBatchedResnap(const QString& resnapData)

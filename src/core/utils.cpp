@@ -5,32 +5,20 @@
 #include "logging.h"
 #include "screenmanager.h"
 #include "virtualscreen.h"
+
+#include <screen_id.h>
+
 #include <QGuiApplication>
 #include <QScreen>
-#include <QDir>
-#include <QFile>
 #include <QHash>
 #include <QPointer>
 
 namespace PlasmaZones {
 namespace Utils {
 
-// Shared cache for EDID header serial lookups (avoids sysfs I/O per call).
-// Must only be called from the main (GUI) thread — no synchronization.
-static QHash<QString, QString>& edidSerialCache()
-{
-    static QHash<QString, QString> s_cache;
-    return s_cache;
-}
-
-// Retry counter for connectors where EDID read returned empty.
-// After maxRetries attempts, the empty result is cached permanently
-// to avoid unbounded sysfs I/O for virtual displays / embedded panels.
-static QHash<QString, int>& edidMissCounter()
-{
-    static QHash<QString, int> s_counter;
-    return s_counter;
-}
+// Sysfs EDID lookups are delegated to ScreenIdUtils (compositor-common).
+// The QScreen*-keyed caches below are daemon-side only — they wrap the shared
+// ScreenIdUtils::buildScreenBaseId call and keep findScreenByIdOrName fast.
 
 // Cache: QScreen* → EDID-based identifier (never changes while screen is connected)
 static QHash<const QScreen*, QString>& screenIdentifierCache()
@@ -48,79 +36,16 @@ static QHash<QString, QPointer<QScreen>>& screenByIdCache()
 
 QString readEdidHeaderSerial(const QString& connectorName)
 {
-    auto& cache = edidSerialCache();
-    auto cacheIt = cache.constFind(connectorName);
-    if (cacheIt != cache.constEnd()) {
-        return *cacheIt;
-    }
-
-    QString result;
-
-    // Find the sysfs EDID file: /sys/class/drm/card*-<connector>/edid
-    QDir drmDir(QStringLiteral("/sys/class/drm"));
-    if (drmDir.exists()) {
-        const QStringList entries = drmDir.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-        for (const QString& entry : entries) {
-            // Match entries like "card0-DP-2", "card1-HDMI-A-1"
-            int dashPos = entry.indexOf(QLatin1Char('-'));
-            if (dashPos < 0) {
-                continue;
-            }
-            if (entry.mid(dashPos + 1) != connectorName) {
-                continue;
-            }
-            QFile edidFile(drmDir.filePath(entry) + QStringLiteral("/edid"));
-            if (!edidFile.open(QIODevice::ReadOnly)) {
-                continue;
-            }
-            QByteArray header = edidFile.read(16);
-            if (header.size() < 16) {
-                continue;
-            }
-            // Validate EDID magic header: bytes 0-7 must be 00 FF FF FF FF FF FF 00
-            const auto* data = reinterpret_cast<const uint8_t*>(header.constData());
-            if (data[0] != 0x00 || data[1] != 0xFF || data[2] != 0xFF || data[3] != 0xFF || data[4] != 0xFF
-                || data[5] != 0xFF || data[6] != 0xFF || data[7] != 0x00) {
-                continue; // Not a valid EDID blob
-            }
-            // Bytes 12-15: serial number (little-endian uint32)
-            uint32_t serial = data[12] | (static_cast<uint32_t>(data[13]) << 8)
-                | (static_cast<uint32_t>(data[14]) << 16) | (static_cast<uint32_t>(data[15]) << 24);
-            if (serial != 0) {
-                result = QString::number(serial);
-                break; // Found valid EDID with non-zero serial
-            }
-        }
-    }
-
-    if (!result.isEmpty()) {
-        cache.insert(connectorName, result);
-        edidMissCounter().remove(connectorName);
-    } else {
-        // Track failed reads. After 3 misses, cache the empty result permanently
-        // to avoid unbounded sysfs I/O for virtual displays and embedded panels.
-        // Boot-time races resolve within 1-2 retries; anything beyond 3 is genuinely
-        // absent EDID data. invalidateEdidCache() resets both caches on hotplug.
-        constexpr int maxRetries = 3;
-        int& misses = edidMissCounter()[connectorName];
-        ++misses;
-        if (misses >= maxRetries) {
-            cache.insert(connectorName, result); // Cache empty permanently
-        }
-    }
-    return result;
+    return ScreenIdUtils::readEdidHeaderSerial(connectorName);
 }
 
 void invalidateEdidCache(const QString& connectorName)
 {
+    ScreenIdUtils::invalidateEdidCache(connectorName);
     if (connectorName.isEmpty()) {
-        edidSerialCache().clear();
-        edidMissCounter().clear();
         screenIdentifierCache().clear();
         screenByIdCache().clear();
     } else {
-        edidSerialCache().remove(connectorName);
-        edidMissCounter().remove(connectorName);
         // Remove the cached identifier for this connector's QScreen
         auto& idCache = screenIdentifierCache();
         for (auto it = idCache.begin(); it != idCache.end(); ++it) {
@@ -142,56 +67,21 @@ void invalidateEdidCache(const QString& connectorName)
 }
 
 // EDID-based identifier without duplicate disambiguation.
-// Returns "manufacturer:model:serial" or fallback to connector name.
+// Delegates hex normalization and sysfs fallback to ScreenIdUtils.
 static QString screenBaseIdentifier(const QScreen* screen)
 {
     if (!screen) {
         return QString();
     }
 
-    // Cache: QScreen* → EDID identifier (never changes while screen is connected)
     auto& cache = screenIdentifierCache();
     auto cacheIt = cache.constFind(screen);
     if (cacheIt != cache.constEnd()) {
         return cacheIt.value();
     }
 
-    const QString manufacturer = screen->manufacturer();
-    const QString model = screen->model();
-
-    // Prefer Qt's text serial descriptor (from EDID descriptor blocks)
-    QString serial = screen->serialNumber();
-
-    // KWin on Wayland exposes the EDID header serial (bytes 12-15) as hex via
-    // QScreen::serialNumber() (e.g. "0x0001C1A3").  The effect side normalizes
-    // this to decimal (e.g. "115107") so both sides produce identical IDs.
-    // Apply the same normalization here.
-    if (!serial.isEmpty() && serial.startsWith(QLatin1String("0x"), Qt::CaseInsensitive)) {
-        bool ok = false;
-        uint32_t numericSerial = serial.toUInt(&ok, 16);
-        if (ok && numericSerial != 0) {
-            serial = QString::number(numericSerial);
-        }
-    }
-
-    // Fallback: read the EDID header serial from sysfs (always present, what KDE shows)
-    if (serial.isEmpty()) {
-        serial = readEdidHeaderSerial(screen->name());
-    }
-
-    // Note: leading colons (":model:serial") are possible for screens with empty
-    // manufacturer fields (some cheap/generic monitors). This is intentional —
-    // the identifier is still unique and stable, and isConnectorName() correctly
-    // classifies it as a screen ID (contains ':').
-    QString result;
-    if (!serial.isEmpty()) {
-        result = manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
-    } else if (!manufacturer.isEmpty() || !model.isEmpty()) {
-        result = manufacturer + QLatin1Char(':') + model;
-    } else {
-        // Fallback: connector name (virtual displays, some embedded panels)
-        result = screen->name();
-    }
+    QString result = ScreenIdUtils::buildScreenBaseId(screen->manufacturer(), screen->model(), screen->serialNumber(),
+                                                      screen->name());
     cache.insert(screen, result);
     return result;
 }

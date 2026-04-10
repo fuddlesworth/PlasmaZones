@@ -3,10 +3,11 @@
 
 #pragma once
 
-#include <QColor>
+#include <autotile_state.h>
+#include <dbus_types.h>
+
 #include <QHash>
 #include <QObject>
-#include <optional>
 #include <QPointer>
 #include <QRect>
 #include <QRectF>
@@ -127,22 +128,18 @@ public:
         }
     }
 
-    // Border rendering accessors
+    // Border rendering accessors — delegate to shared AutotileStateHelpers
     bool isBorderlessWindow(const QString& windowId) const
     {
-        return m_border.borderlessWindows.contains(windowId);
+        return AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
     }
     bool isTiledWindow(const QString& windowId) const
     {
-        return m_border.tiledWindows.contains(windowId);
+        return AutotileStateHelpers::isTiledWindow(m_border, windowId);
     }
     bool shouldShowBorderForWindow(const QString& windowId) const
     {
-        // showBorder and hideTitleBars are independent toggles.
-        // showBorder=false means no borders, regardless of title bar state.
-        if (!m_border.showBorder)
-            return false;
-        return isBorderlessWindow(windowId) || isTiledWindow(windowId);
+        return AutotileStateHelpers::shouldShowBorderForWindow(m_border, windowId);
     }
     int borderWidth() const
     {
@@ -176,10 +173,22 @@ public:
     {
         m_border.radius = r;
     }
-    QRect applyBorderInset(const QRect& geo) const;
-    bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const;
-    std::optional<QRect> borderZoneGeometry(const QString& windowId) const;
-    QVector<QRect> allBorderZoneGeometries() const;
+    QRect applyBorderInset(const QRect& geo) const
+    {
+        return AutotileStateHelpers::applyBorderInset(geo, m_border.width);
+    }
+    bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const
+    {
+        return AutotileStateHelpers::shouldInsetForBorder(m_border, windowId, geo);
+    }
+    std::optional<QRect> borderZoneGeometry(const QString& windowId) const
+    {
+        return AutotileStateHelpers::borderZoneGeometry(m_border, windowId);
+    }
+    QVector<QRect> allBorderZoneGeometries() const
+    {
+        return AutotileStateHelpers::allBorderZoneGeometries(m_border);
+    }
 
     /**
      * @brief Extract pre-autotile geometry from one screen and inject into another.
@@ -219,7 +228,7 @@ public:
 
 public Q_SLOTS:
     // Autotile D-Bus signal handlers
-    void slotWindowsTileRequested(const QString& tileRequestsJson);
+    void slotWindowsTileRequested(const TileRequestList& tileRequests);
     void slotFocusWindowRequested(const QString& windowId);
     void slotEnabledChanged(bool enabled);
     void slotScreensChanged(const QStringList& screenIds, bool isDesktopSwitch);
@@ -277,18 +286,7 @@ private:
     void clearAllPendingMinimizeFloats();
 
     bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame);
-    bool shouldApplyBorderInset(const QString& windowId) const;
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
-
-    /**
-     * @brief Find key in saved geometries map for a window (exact or stable ID match)
-     */
-    static QString findSavedGeometryKey(const QHash<QString, QRectF>& savedGeometries, const QString& windowId);
-
-    /**
-     * @brief Check if we already have saved geometry for this window (exact or stable ID)
-     */
-    static bool hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════
     // Member variables
@@ -329,19 +327,8 @@ private:
     // ── Focus follows mouse ──
     bool m_focusFollowsMouse = false;
     QString m_lastFocusFollowsMouseWindowId;
-    // ── Border state (logically grouped for SRP clarity) ──
-    struct BorderState
-    {
-        QSet<QString> borderlessWindows;
-        QSet<QString> tiledWindows; ///< all currently tiled windows (for showBorder without hideTitleBars)
-        QHash<QString, QRect> zoneGeometries;
-        bool hideTitleBars = false;
-        bool showBorder = false;
-        int width = 2;
-        int radius = 0;
-        QColor color;
-        QColor inactiveColor;
-    } m_border;
+    // ── Border state — uses shared BorderState from compositor-common ──
+    BorderState m_border;
 };
 
 } // namespace PlasmaZones

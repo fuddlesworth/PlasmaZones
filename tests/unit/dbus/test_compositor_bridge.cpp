@@ -151,13 +151,10 @@ private Q_SLOTS:
 
     void testRegisterBridge_returnsApiVersion()
     {
-        QString result = m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"),
-                                                         {QStringLiteral("borderless"), QStringLiteral("animation")});
+        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
+            QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QJsonDocument doc = QJsonDocument::fromJson(result.toUtf8());
-        QVERIFY(!doc.isNull());
-        QJsonObject obj = doc.object();
-        QCOMPARE(obj[QLatin1String("apiVersion")].toInt(), 1);
+        QCOMPARE(result.apiVersion, QStringLiteral("1"));
     }
 
     void testRegisterBridge_storesBridgeName()
