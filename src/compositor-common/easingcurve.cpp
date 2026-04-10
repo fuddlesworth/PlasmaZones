@@ -232,4 +232,91 @@ qreal EasingCurve::evaluate(qreal x) const
     return 3.0 * mt * mt * t * y1 + 3.0 * mt * t * t * y2 + t * t * t;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SpringAnimation — damped harmonic oscillator physics
+// ═══════════════════════════════════════════════════════════════════════════════
+
+qreal SpringAnimation::evaluate(qreal t) const
+{
+    if (t <= 0.0)
+        return 0.0;
+
+    const qreal safeStiffness = qMax(1.0, stiffness);
+    const qreal omega = qSqrt(safeStiffness); // natural frequency (mass = 1)
+    const qreal zeta = qMax(0.0, dampingRatio);
+
+    if (zeta < 1.0) {
+        // Underdamped: oscillates
+        const qreal omegaD = omega * qSqrt(1.0 - zeta * zeta);
+        // Guard near-critical damping where omegaD approaches zero — fall through
+        // to the critically-damped formula to avoid division by near-zero.
+        if (omegaD < 1e-6) {
+            const qreal decay = qExp(-omega * t);
+            return 1.0 - decay * (1.0 + (omega - initialVelocity) * t);
+        }
+        const qreal decay = qExp(-zeta * omega * t);
+        const qreal v0 = initialVelocity;
+        const qreal sinTerm = (zeta * omega - v0) / omegaD;
+        return 1.0 - decay * (qCos(omegaD * t) + sinTerm * qSin(omegaD * t));
+    } else if (qFuzzyCompare(zeta, 1.0)) {
+        // Critically damped: fastest without oscillation
+        const qreal decay = qExp(-omega * t);
+        return 1.0 - decay * (1.0 + (omega - initialVelocity) * t);
+    } else {
+        // Overdamped: no oscillation, slower
+        const qreal disc = qSqrt(zeta * zeta - 1.0);
+        const qreal s1 = -omega * (zeta + disc);
+        const qreal s2 = -omega * (zeta - disc);
+        // Guard near-degenerate eigenvalues: fall back to critically damped.
+        if (qAbs(s2 - s1) < 1e-6) {
+            const qreal decay = qExp(-omega * t);
+            return 1.0 - decay * (1.0 + (omega - initialVelocity) * t);
+        }
+        const qreal c2 = (initialVelocity - s1) / (s2 - s1);
+        const qreal c1 = 1.0 - c2;
+        const qreal result = 1.0 - (c1 * qExp(s1 * t) + c2 * qExp(s2 * t));
+        if (!std::isfinite(result))
+            return 1.0;
+        return result;
+    }
+}
+
+bool SpringAnimation::isSettled(qreal t) const
+{
+    if (t <= 0.0)
+        return false;
+    const qreal pos = evaluate(t);
+    const qreal dt = 0.001;
+    const qreal vel = (evaluate(t + dt) - pos) / dt;
+    const qreal safeEps = qMax(0.00001, epsilon);
+    return qAbs(pos - 1.0) < safeEps && qAbs(vel) < safeEps * 10.0;
+}
+
+qreal SpringAnimation::estimatedDuration() const
+{
+    // Forward scan: require 3 consecutive settled samples to avoid
+    // false positives from underdamped springs briefly crossing epsilon.
+    constexpr qreal dt = 0.005;
+    constexpr qreal maxT = 5.0;
+    constexpr int requiredConsecutive = 3;
+    int consecutive = 0;
+    for (qreal t = dt; t <= maxT; t += dt) {
+        if (isSettled(t)) {
+            if (++consecutive >= requiredConsecutive)
+                return t - (requiredConsecutive - 1) * dt;
+        } else {
+            consecutive = 0;
+        }
+    }
+    return maxT;
+}
+
+QString SpringAnimation::toString() const
+{
+    return QStringLiteral("spring(damping=%1,stiffness=%2,epsilon=%3)")
+        .arg(dampingRatio, 0, 'f', 2)
+        .arg(stiffness, 0, 'f', 0)
+        .arg(epsilon, 0, 'g', 4);
+}
+
 } // namespace PlasmaZones
