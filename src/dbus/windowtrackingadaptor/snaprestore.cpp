@@ -4,17 +4,61 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../snap/SnapEngine.h"
 
 namespace PlasmaZones {
 
+namespace {
+// Non-blocking startup gate shared by all synchronous snap D-Bus methods.
+//
+// Rationale: these slots return zone geometry synchronously to the KWin effect.
+// Before the first panel D-Bus query completes, ScreenManager's availability cache
+// is empty and zones would be computed against the unreserved full-screen rect —
+// handing the effect coordinates that place the window partially behind the panel.
+//
+// The effect already waits for WindowTrackingAdaptor::pendingRestoresAvailable before
+// issuing initial restore calls, and that signal is gated on panelGeometryReady (see
+// tryEmitPendingRestoresAvailable in persistence.cpp). This helper is belt-and-suspenders:
+// if a snap slot is nevertheless invoked before panel geometry is known — a bug in the
+// effect-side ordering, a programmatic D-Bus client, or a future refactor — we log once
+// per session and return shouldSnap=false rather than handing back wrong coordinates.
+// The effect treats shouldSnap=false as "no snap" and leaves the window where KWin placed
+// it, which is the same fallback as if the slot had never been called.
+//
+// Unlike a blocking wait, this short-circuit introduces no nested event loop, no
+// reentrancy hazard, and no bounded-timeout guesswork. The tradeoff is that snap
+// restore becomes best-effort if the effect-side gate is broken; we prefer a visible
+// warning over a silent jump to wrong coordinates.
+bool isSnapReadyOrWarn(const char* method)
+{
+    if (!ScreenManager::instance() || ScreenManager::isPanelGeometryReady()) {
+        return true;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        qCWarning(lcDbusWindow) << method << "called before panel geometry ready — returning no-snap."
+                                << "The KWin effect should gate restore calls on pendingRestoresAvailable;"
+                                << "if you see this, the effect-side gate was bypassed or is racing startup.";
+    } else {
+        qCDebug(lcDbusWindow) << method << "called before panel geometry ready — returning no-snap";
+    }
+    return false;
+}
+} // namespace
+
 void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QString& windowScreenId, bool sticky,
                                            int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldSnap)
 {
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
+
+    if (!isSnapReadyOrWarn("snapToLastZone")) {
+        return;
+    }
 
     SnapResult result = m_service->calculateSnapToLastZone(windowId, windowScreenId, sticky);
     if (!result.shouldSnap) {
@@ -35,6 +79,10 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
         return;
     }
 
+    if (!isSnapReadyOrWarn("snapToAppRule")) {
+        return;
+    }
+
     SnapResult result = m_service->calculateSnapToAppRule(windowId, windowScreenName, sticky);
     if (!result.shouldSnap) {
         return;
@@ -51,6 +99,10 @@ void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QStri
     shouldSnap = false;
 
     if (windowId.isEmpty()) {
+        return;
+    }
+
+    if (!isSnapReadyOrWarn("snapToEmptyZone")) {
         return;
     }
 
@@ -81,6 +133,10 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
         return;
     }
 
+    if (!isSnapReadyOrWarn("restoreToPersistedZone")) {
+        return;
+    }
+
     SnapResult result = m_service->calculateRestoreFromSession(windowId, screenId, sticky);
     if (!result.shouldSnap) {
         return;
@@ -108,6 +164,10 @@ void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const 
     // a SnapResult without side effects, so we apply it here for D-Bus compat.
     if (!m_snapEngine) {
         qCWarning(lcDbusWindow) << "resolveWindowRestore: no SnapEngine available";
+        return;
+    }
+
+    if (!isSnapReadyOrWarn("resolveWindowRestore")) {
         return;
     }
 

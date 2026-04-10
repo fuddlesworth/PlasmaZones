@@ -289,6 +289,14 @@ target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6:
                                                           plasmazones_compositor_common)
 add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
 
+# Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
+# for the stale-VS-geometry race: entries arriving before the first panel
+# D-Bus query must be deferred until ScreenManager::panelGeometryReady fires.
+add_executable(test_autotile_adaptor_panel_gate dbus/test_autotile_adaptor_panel_gate.cpp)
+target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_autotile_adaptor_panel_gate COMMAND test_autotile_adaptor_panel_gate)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -336,6 +344,7 @@ set(_all_tests
     test_zone_shader_item test_overlay_helpers
     test_wta_convenience test_settings_schema test_compositor_bridge
     test_dbus_adaptor_routing
+    test_autotile_adaptor_panel_gate
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
