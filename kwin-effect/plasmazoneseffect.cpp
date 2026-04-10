@@ -2827,7 +2827,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
             [this, safeWindow, windowId, snapDragStartScreenId](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
 
-                QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, QDBusArgument> reply = *w;
+                QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, PlasmaZones::EmptyZoneList> reply = *w;
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
                     return;
@@ -2841,7 +2841,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 QString releaseScreenId = reply.argumentAt<5>();
                 bool restoreSizeOnly = reply.argumentAt<6>();
                 bool snapAssistRequested = reply.argumentAt<7>();
-                EmptyZoneList emptyZones = qdbus_cast<EmptyZoneList>(reply.reply().arguments().at(8));
+                EmptyZoneList emptyZones = reply.argumentAt<8>();
 
                 qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
                                  << "releaseScreenId=" << releaseScreenId << "restoreSizeOnly=" << restoreSizeOnly
