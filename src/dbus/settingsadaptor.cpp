@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingsadaptor.h"
+#include "../core/animationprofile.h"
 #include "../core/interfaces.h"
 #include "../config/settings.h" // For concrete Settings type
 #include "../core/dbusvariantutils.h"
@@ -854,6 +855,15 @@ bool SettingsAdaptor::userShadersEnabled()
 {
     auto* registry = ShaderRegistry::instance();
     return registry ? registry->userShadersEnabled() : false;
+}
+
+QString SettingsAdaptor::resolveAnimationProfile(const QString& eventName)
+{
+    // Resolve the per-event profile on the daemon side (walks parent chain +
+    // fills defaults) and return the compact JSON form. Callers parse with
+    // AnimationParams::fromJson() on the effect side.
+    auto profile = PlasmaZones::resolvedProfileOrDefault(m_settings, eventName);
+    return QString::fromUtf8(QJsonDocument(profile.toJson()).toJson(QJsonDocument::Compact));
 }
 
 QString SettingsAdaptor::userShaderDirectory()

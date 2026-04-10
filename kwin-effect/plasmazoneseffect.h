@@ -27,6 +27,7 @@
 #include <functional>
 
 #include "shared/virtualscreenid.h"
+#include "windowanimator.h"
 
 namespace KWin {
 class OutlinedBorderItem;
@@ -251,8 +252,10 @@ private:
     // Apply snap geometry to window.
     // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
+    // animationEvent optionally selects a per-event animation profile ("snapIn", "snapOut", "snapResize",
+    // "layoutSwitchIn"). Empty string defaults to "snapIn".
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           bool skipAnimation = false);
+                           bool skipAnimation = false, const QString& animationEvent = {});
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -459,6 +462,13 @@ private:
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
     int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon
     int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
+
+    // Cache of per-event resolved animation profiles fetched from the daemon via
+    // SettingsAdaptor::resolveAnimationProfile(). Populated at startup and on
+    // settingsChanged. Look up via resolvedAnimationParams(eventName).
+    QHash<QString, AnimationParams> m_animationProfileCache;
+    void refreshAnimationProfiles();
+    AnimationParams resolvedAnimationParams(const QString& eventName) const;
 
     // Per-drag activation tracking: set once any activation trigger is detected
     // during the current drag. Stays true for the remainder of the drag so

@@ -1154,6 +1154,7 @@ void PlasmaZonesEffect::slotDaemonReady()
 
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
     loadCachedSettings();
+    refreshAnimationProfiles();
     // Note: connectNavigationSignals() is NOT called here — it's already called
     // once in the constructor. D-Bus signal subscriptions persist across daemon
     // restarts. Calling it again would create duplicate connections, causing
@@ -1368,6 +1369,7 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
+    refreshAnimationProfiles();
     // Note: loadAutotileSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated autotileScreensChanged
     // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
@@ -1375,6 +1377,59 @@ void PlasmaZonesEffect::slotSettingsChanged()
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
+}
+
+// Window-side animation events we route per-profile. The daemon's AnimationEvents
+// namespace has many more (overlay, OSD, popup, ...), but only these apply to
+// compositor window animations.
+static const QStringList kCachedWindowAnimationEvents = {
+    QStringLiteral("snapIn"),         QStringLiteral("snapOut"),         QStringLiteral("snapResize"),
+    QStringLiteral("layoutSwitchIn"), QStringLiteral("layoutSwitchOut"),
+};
+
+void PlasmaZonesEffect::refreshAnimationProfiles()
+{
+    // Fetch each event's resolved profile via the new Settings.resolveAnimationProfile
+    // D-Bus method and cache parsed AnimationParams.
+    for (const QString& event : kCachedWindowAnimationEvents) {
+        auto call = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                                   QStringLiteral("resolveAnimationProfile"));
+        call.setArguments({event});
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(call);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, event](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                qCDebug(lcEffect) << "resolveAnimationProfile failed for" << event << ":" << reply.error().message();
+                return;
+            }
+            const QString json = reply.value();
+            QJsonParseError parseError{};
+            const auto doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                qCDebug(lcEffect) << "resolveAnimationProfile: invalid JSON for" << event << ":"
+                                  << parseError.errorString();
+                return;
+            }
+            m_animationProfileCache[event] = AnimationParams::fromJson(doc.object());
+            qCDebug(lcEffect) << "Cached animation profile for event:" << event;
+        });
+    }
+}
+
+AnimationParams PlasmaZonesEffect::resolvedAnimationParams(const QString& eventName) const
+{
+    auto it = m_animationProfileCache.constFind(eventName.isEmpty() ? QStringLiteral("snapIn") : eventName);
+    if (it != m_animationProfileCache.constEnd()) {
+        return *it;
+    }
+    // Default: use global animator config (duration/easing) via empty AnimationParams.
+    AnimationParams fallback;
+    fallback.timingMode = TimingMode::Easing;
+    fallback.duration = -1; // -> m_duration on animator
+    fallback.style = AnimationStyle::Morph;
+    return fallback;
 }
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
@@ -2241,7 +2296,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), width, height);
             qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << width << "x"
                              << height;
-            applySnapGeometry(w, sizeOnlyGeo);
+            applySnapGeometry(w, sizeOnlyGeo, false, false, QStringLiteral("snapResize"));
         }
         return;
     }
@@ -2281,7 +2336,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
     }
 
-    applySnapGeometry(w, geometry);
+    // Event mapping: empty zoneId typically means a float-out / pre-tile restore
+    // (snapOut); otherwise it's a zone placement (snapIn).
+    const QString event = zoneId.isEmpty() ? QStringLiteral("snapOut") : QStringLiteral("snapIn");
+    applySnapGeometry(w, geometry, false, false, event);
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -2356,12 +2414,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const WindowGeometryList& geome
         savedStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
+    // Map batch action to animation event: resnap / rotate / layout switch all use
+    // layoutSwitchIn; snap_all uses snapIn as a direct placement.
+    const QString batchEvent =
+        (action == QLatin1String("snap_all")) ? QStringLiteral("snapIn") : QStringLiteral("layoutSwitchIn");
+
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending](int i) {
+        [this, pending, batchEvent](int i) {
             const auto& p = pending[i];
             if (p.window) {
-                applySnapGeometry(p.window, p.geometry);
+                applySnapGeometry(p.window, p.geometry, false, false, batchEvent);
             }
         },
         [this, savedStack, action]() {
@@ -3031,7 +3094,7 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation)
+                                          bool skipAnimation, const QString& animationEvent)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -3099,10 +3162,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         QPointer<KWin::EffectWindow> safeWindow = window;
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
+                        [this, safeWindow, geo, skipAnimation, animationEvent, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation);
+                                applySnapGeometry(safeWindow, geo, false, skipAnimation, animationEvent);
                             }
                         });
         return;
@@ -3134,8 +3197,9 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(QRectF(geo));
         }
 
-        // Start animation from old visual state to new geometry
-        m_windowAnimator->startAnimation(window, animStartPos, animStartSize, geo);
+        // Resolve per-event animation profile (falls back to global if unknown/unset).
+        const AnimationParams params = resolvedAnimationParams(animationEvent);
+        m_windowAnimator->startAnimation(window, animStartPos, animStartSize, geo, params);
 
         repaintSnapRegions(window, oldFrame, geo);
         return;
