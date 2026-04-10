@@ -30,7 +30,7 @@ std::optional<WindowAnimation> createSnapAnimation(const QPointF& oldPosition, c
     anim.startSize = oldSize;
     anim.targetGeometry = targetGeometry;
     anim.duration = config.duration;
-    anim.easing = config.easing;
+    anim.timing = config.easing;
     return anim;
 }
 

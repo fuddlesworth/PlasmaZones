@@ -882,6 +882,77 @@ public:
     {
         return 200;
     }
+
+    // ── Animation profile duration & styleParam bounds ───────────────────
+    static constexpr int animProfileDurationMin()
+    {
+        return 0;
+    }
+    static constexpr int animProfileDurationMax()
+    {
+        return 10000;
+    }
+    static constexpr qreal animProfileStyleParamMin()
+    {
+        return 0.0;
+    }
+    static constexpr qreal animProfileStyleParamMax()
+    {
+        return 10.0;
+    }
+
+    // ── Animation shader subdivision ────────────────────────────────────────
+    static constexpr int animationShaderSubdivisions()
+    {
+        return 1;
+    }
+    static constexpr int animationShaderSubdivisionsMin()
+    {
+        return 1;
+    }
+    static constexpr int animationShaderSubdivisionsMax()
+    {
+        return 64;
+    }
+
+    // ── Spring physics defaults & bounds ────────────────────────────────────
+    static constexpr qreal springDampingRatio()
+    {
+        return 1.0;
+    }
+    static constexpr qreal springDampingRatioMin()
+    {
+        return 0.1;
+    }
+    static constexpr qreal springDampingRatioMax()
+    {
+        return 10.0;
+    }
+    static constexpr qreal springStiffness()
+    {
+        return 800.0;
+    }
+    static constexpr qreal springStiffnessMin()
+    {
+        return 1.0;
+    }
+    static constexpr qreal springStiffnessMax()
+    {
+        return 2000.0;
+    }
+    static constexpr qreal springEpsilon()
+    {
+        return 0.0001;
+    }
+    static constexpr qreal springEpsilonMin()
+    {
+        return 0.00001;
+    }
+    static constexpr qreal springEpsilonMax()
+    {
+        return 0.1;
+    }
+
     static bool autotileFocusFollowsMouse()
     {
         return false;

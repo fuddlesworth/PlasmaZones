@@ -104,6 +104,9 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     // Shared fade color for scroll edge indicators
     readonly property color fadeColor: Qt.rgba(backgroundColor.r, backgroundColor.g, backgroundColor.b, autoScrollConstants.fadeOpacity)
+    // Animation profile properties (set from C++ before show)
+    property int animInDuration: 150
+    property int animOutDuration: 200
 
     // Signals (zoneSelected is used by C++ for hover-based zone selection)
     signal zoneSelected(string layoutId, int zoneIndex, var relativeGeometry)
@@ -124,12 +127,12 @@ Window {
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
 
-    // Animation constants
+    // Animation constants (derived from profile or defaults)
     QtObject {
         id: animationConstants
 
-        readonly property int shortDuration: 150
-        readonly property int normalDuration: 200
+        readonly property int shortDuration: root.animInDuration
+        readonly property int normalDuration: root.animOutDuration > root.animInDuration ? root.animOutDuration : Math.round(root.animInDuration * 1.33)
     }
 
     // Auto-scroll constants for drag-based scrolling.

@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="820" viewBox="0 0 680 820">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; rx: 10; }
+      .card-header { fill: #2a2e32; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-primary { fill: #eff0f1; font-size: 13px; }
+      .text-desc { fill: #7f8c8d; font-size: 11px; }
+      .text-value { fill: #eff0f1; font-size: 12px; font-weight: 500; }
+      .accent { fill: #3daee9; }
+      .toggle-on { fill: #27ae60; }
+      .toggle-track-on { fill: #27ae60; opacity: 0.3; }
+      .toggle-knob { fill: #eff0f1; }
+      .divider { stroke: #31363b; stroke-width: 1; }
+      .combo-bg { fill: #31363b; rx: 6; }
+      .slider-track { fill: #3d4349; }
+      .slider-fill { fill: #3daee9; }
+      .slider-knob { fill: #eff0f1; }
+      .curve-bg { fill: #1b1e20; rx: 8; }
+      .curve-line { fill: none; stroke: #3daee9; stroke-width: 2; }
+      .curve-grid { stroke: #2a2e32; stroke-width: 0.5; }
+      .curve-handle { fill: #3daee9; }
+      .curve-handle-line { stroke: #3daee9; stroke-width: 1; opacity: 0.5; }
+      .box-track { fill: #2a2e32; rx: 4; }
+      .box { fill: #3daee9; rx: 3; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="820" rx="12"/>
+
+  <!-- ============================================================ -->
+  <!-- ANIMATIONS CARD -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="16" width="640" height="788" rx="10"/>
+
+  <!-- Card header -->
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="44" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="46">Animations</text>
+
+  <!-- Toggle switch (ON) -->
+  <rect x="596" y="32" width="40" height="22" rx="11" fill="#27ae60" opacity="0.35"/>
+  <circle cx="624" cy="43" r="9" fill="#27ae60"/>
+  <circle cx="624" cy="43" r="6" fill="#eff0f1"/>
+
+  <!-- ============================================================ -->
+  <!-- EASING PREVIEW WIDGET -->
+  <!-- ============================================================ -->
+  <rect x="120" y="80" width="440" height="200" rx="8" fill="#1b1e20"/>
+
+  <!-- Grid lines -->
+  <line x1="152" y1="92" x2="152" y2="240" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="230" y1="92" x2="230" y2="240" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="308" y1="92" x2="308" y2="240" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="386" y1="92" x2="386" y2="240" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="464" y1="92" x2="464" y2="240" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="152" y1="126" x2="528" y2="126" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="152" y1="166" x2="528" y2="166" stroke="#2a2e32" stroke-width="0.5"/>
+  <line x1="152" y1="206" x2="528" y2="206" stroke="#2a2e32" stroke-width="0.5"/>
+
+  <!-- Axis labels -->
+  <text x="136" y="96" fill="#4d5357" font-size="9" font-family="Inter, sans-serif" text-anchor="end">1.0</text>
+  <text x="136" y="170" fill="#4d5357" font-size="9" font-family="Inter, sans-serif" text-anchor="end">0.5</text>
+  <text x="136" y="244" fill="#4d5357" font-size="9" font-family="Inter, sans-serif" text-anchor="end">0.0</text>
+
+  <!-- Bezier curve (ease-out cubic) -->
+  <path d="M152,240 C276,240 383,92 528,92" fill="none" stroke="#3daee9" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- Control point handles -->
+  <line x1="152" y1="240" x2="276" y2="240" stroke="#3daee9" stroke-width="1" opacity="0.4"/>
+  <line x1="528" y1="92" x2="383" y2="92" stroke="#3daee9" stroke-width="1" opacity="0.4"/>
+  <circle cx="276" cy="240" r="6" fill="#3daee9"/>
+  <circle cx="276" cy="240" r="3" fill="#1b1e20"/>
+  <circle cx="383" cy="92" r="6" fill="#3daee9"/>
+  <circle cx="383" cy="92" r="3" fill="#1b1e20"/>
+
+  <!-- Animated box track -->
+  <rect x="152" y="256" width="376" height="12" rx="4" fill="#2a2e32"/>
+  <rect x="332" y="254" width="20" height="16" rx="4" fill="#3daee9"/>
+
+  <!-- ============================================================ -->
+  <!-- SETTINGS ROWS -->
+  <!-- ============================================================ -->
+
+  <!-- Divider -->
+  <line x1="40" y1="294" x2="640" y2="294" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Default timing mode -->
+  <text class="text-primary" x="40" y="322">Default timing mode</text>
+  <text class="text-desc" x="40" y="338">Timing used when events don't override</text>
+  <rect x="486" y="308" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="330">Easing</text>
+  <text x="614" y="330" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="358" x2="640" y2="358" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Style -->
+  <text class="text-primary" x="40" y="386">Style</text>
+  <text class="text-desc" x="40" y="402">Animation curve style — controls how acceleration feels</text>
+  <rect x="486" y="372" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="394">Standard (Cubic)</text>
+  <text x="614" y="394" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="422" x2="640" y2="422" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Direction -->
+  <text class="text-primary" x="40" y="450">Direction</text>
+  <text class="text-desc" x="40" y="466">Ease In accelerates, Ease Out decelerates, In-Out does both</text>
+  <rect x="486" y="436" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="458">Ease Out</text>
+  <text x="614" y="458" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="486" x2="640" y2="486" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Duration slider -->
+  <text class="text-primary" x="40" y="514">Duration</text>
+  <text class="text-desc" x="40" y="530">Total animation time in milliseconds</text>
+  <!-- Slider track -->
+  <rect x="420" y="514" width="168" height="6" rx="3" fill="#3d4349"/>
+  <rect x="420" y="514" width="84" height="6" rx="3" fill="#3daee9"/>
+  <circle cx="504" cy="517" r="8" fill="#eff0f1"/>
+  <!-- Value label -->
+  <text class="text-value" x="608" y="522">300 ms</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="550" x2="640" y2="550" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Multiple windows -->
+  <text class="text-primary" x="40" y="578">Multiple windows</text>
+  <text class="text-desc" x="40" y="594">How to animate when moving several windows at once</text>
+  <rect x="486" y="564" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="586">All at once</text>
+  <text x="614" y="586" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <!-- Divider -->
+  <line x1="40" y1="614" x2="640" y2="614" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Stagger delay (dimmed - only visible in "one by one" mode) -->
+  <g opacity="0.35">
+    <text class="text-primary" x="40" y="642">Stagger delay</text>
+    <text class="text-desc" x="40" y="658">Pause between each window's animation start</text>
+    <rect x="420" y="642" width="168" height="6" rx="3" fill="#3d4349"/>
+    <rect x="420" y="642" width="34" height="6" rx="3" fill="#3daee9"/>
+    <circle cx="454" cy="645" r="8" fill="#eff0f1"/>
+    <text class="text-value" x="608" y="650">50 ms</text>
+  </g>
+
+  <!-- Divider -->
+  <line x1="40" y1="678" x2="640" y2="678" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Minimum distance -->
+  <text class="text-primary" x="40" y="706">Minimum distance</text>
+  <text class="text-desc" x="40" y="722">Currently: always animate, no threshold</text>
+  <!-- SpinBox -->
+  <rect x="556" y="694" width="80" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="582" y="716">0 px</text>
+
+  <!-- Page label -->
+  <text x="340" y="800" text-anchor="middle" fill="#4d5357" font-size="10" font-family="Inter, sans-serif">Animations &gt; General (Easing Mode)</text>
+</svg>

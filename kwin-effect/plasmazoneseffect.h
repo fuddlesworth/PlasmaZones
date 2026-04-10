@@ -13,6 +13,7 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <effect/globals.h> // For ElectricBorder enum
+#include <effect/offscreeneffect.h>
 #include <scene/borderradius.h>
 #include <QJsonArray>
 #include <QObject>
@@ -25,12 +26,17 @@
 #include <QRect>
 
 #include <functional>
+#include <map>
+#include <memory>
 
 #include "shared/virtualscreenid.h"
+#include "windowanimator.h"
 
 namespace KWin {
+class GLShader;
 class OutlinedBorderItem;
 class SurfaceItem;
+class WindowQuadList;
 }
 
 namespace PlasmaZones {
@@ -55,7 +61,7 @@ class DragTracker;
  * - Keyboard modifier state via QGuiApplication
  * - Window move/resize state via isUserMove()
  */
-class PlasmaZonesEffect : public KWin::Effect
+class PlasmaZonesEffect : public KWin::OffscreenEffect
 {
     Q_OBJECT
 
@@ -80,6 +86,9 @@ public:
     void paintWindow(const KWin::RenderTarget& renderTarget, const KWin::RenderViewport& viewport,
                      KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                      KWin::WindowPaintData& data) override;
+    /// OffscreenEffect override: sets custom shader uniforms for redirected windows
+    /// (windows driven by AnimationStyle::Custom or built-in shader-backed styles).
+    void apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data, KWin::WindowQuadList& quads) override;
     void grabbedKeyboardEvent(QKeyEvent* e) override;
 
 private Q_SLOTS:
@@ -251,8 +260,10 @@ private:
     // Apply snap geometry to window.
     // When allowDuringDrag is true, applies immediately even if window is in user move state (snap-on-hover).
     // When false and the window is being dragged, defers via windowFinishUserMovedResized signal.
+    // animationEvent optionally selects a per-event animation profile ("snapIn", "snapOut", "snapResize",
+    // "layoutSwitchIn"). Empty string defaults to "snapIn".
     void applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag = false,
-                           bool skipAnimation = false);
+                           bool skipAnimation = false, const QString& animationEvent = {});
     void repaintSnapRegions(KWin::EffectWindow* window, const QRectF& oldFrame, const QRect& newGeo);
 
     // Async D-Bus helper for 5-arg snap replies (x, y, w, h, shouldSnap).
@@ -459,6 +470,46 @@ private:
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
     int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon
     int m_cachedAnimationStaggerInterval = 30; // ms between each window start when animating one by one (cascading)
+
+    // Cache of per-event resolved animation profiles fetched from the daemon via
+    // SettingsAdaptor::resolveAnimationProfile(). Populated at startup and on
+    // settingsChanged. Look up via resolvedAnimationParams(eventName).
+    QHash<QString, AnimationParams> m_animationProfileCache;
+    void refreshAnimationProfiles();
+    AnimationParams resolvedAnimationParams(const QString& eventName) const;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Custom GLSL shader animations (OffscreenEffect redirection)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Cache of loaded animation shaders keyed by "fragPath|vertPath".
+    /// std::map because QHash value types must be copyable (unique_ptr isn't).
+    std::map<QString, std::unique_ptr<KWin::GLShader>> m_animationShaders;
+
+    /// Windows currently redirected for shader-based rendering.
+    QSet<KWin::EffectWindow*> m_redirectedWindows;
+
+    /// Grid subdivision count for vertex shader deformation (>=1).
+    int m_animationShaderSubdivisions = 1;
+
+    /// Load (or look up in cache) an animation shader. Returns nullptr on failure.
+    KWin::GLShader* loadAnimationShader(const QString& fragmentPath, const QString& vertexPath = QString());
+
+    /// Redirect a window for custom shader rendering.
+    void redirectAnimatedWindow(KWin::EffectWindow* window, const QString& fragmentPath,
+                                const QString& vertexPath = QString());
+
+    /// Unredirect a window (called on animation end / window close / teardown).
+    void unredirectAnimatedWindow(KWin::EffectWindow* window);
+
+    /// Unredirect all redirected windows and clear the shader cache.
+    /// MUST be called before destroying m_animationShaders to avoid dangling pointers.
+    void clearAnimationShaders();
+
+    /// Populate params.shaderPath / params.vertexShaderPath from data/animations/<style>/
+    /// for the built-in styles (Morph, Slide, Popin, SlideFade). No-op if shaderPath
+    /// is already set, or if the shader files are not installed on the system.
+    void resolveBuiltinShaderPaths(AnimationParams& params);
 
     // Per-drag activation tracking: set once any activation trigger is detected
     // during the current drag. Stays true for the remainder of the drag so

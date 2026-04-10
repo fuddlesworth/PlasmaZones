@@ -347,6 +347,17 @@ install(DIRECTORY data/shaders/
     PATTERN "*.svg"
 )
 
+# Install bundled animation shaders (built-in + user-installable)
+install(DIRECTORY data/animations/
+    DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/animations
+    FILES_MATCHING
+    PATTERN "metadata.json"
+    PATTERN "*.frag"
+    PATTERN "*.vert"
+    PATTERN "*.glsl"
+    PATTERN "*.png"
+)
+
 # Install bundled scripted tiling algorithms
 install(DIRECTORY data/algorithms/
     DESTINATION ${KDE_INSTALL_DATADIR}/plasmazones/algorithms

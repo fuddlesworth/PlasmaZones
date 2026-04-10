@@ -1,0 +1,41 @@
+{
+  "id": "glitch",
+  "name": "Glitch",
+  "description": "Digital glitch with horizontal band shifts and RGB channel separation",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "parameters": [
+    {
+      "id": "bandCount",
+      "name": "Band Count",
+      "group": "Effect",
+      "type": "float",
+      "slot": 0,
+      "default": 20.0,
+      "min": 5.0,
+      "max": 50.0
+    },
+    {
+      "id": "shiftIntensity",
+      "name": "Shift Intensity",
+      "group": "Effect",
+      "type": "float",
+      "slot": 1,
+      "default": 0.1,
+      "min": 0.01,
+      "max": 0.3
+    },
+    {
+      "id": "rgbSeparation",
+      "name": "RGB Separation",
+      "group": "Effect",
+      "type": "float",
+      "slot": 2,
+      "default": 0.02,
+      "min": 0.005,
+      "max": 0.1
+    }
+  ]
+}

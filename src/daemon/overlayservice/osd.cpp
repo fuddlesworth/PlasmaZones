@@ -162,6 +162,7 @@ void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, 
 
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
+    writeAnimationProperties(window, m_settings, AnimationEvents::layoutOsdIn(), AnimationEvents::layoutOsdOut());
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
@@ -210,6 +211,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeFontProperties(window, m_settings);
 
     sizeAndCenterOsd(window, physScreen, screenGeom, layoutAR);
+    writeAnimationProperties(window, m_settings, AnimationEvents::layoutOsdIn(), AnimationEvents::layoutOsdOut());
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
@@ -496,7 +498,9 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     const QRect physGeom = physScreen ? physScreen->geometry() : screenGeom;
     centerLayerWindowOnScreen(window, physGeom, screenGeom, osdWidth, osdHeight);
 
-    // Show with animation
+    // Push animation profile and show with animation
+    writeAnimationProperties(window, m_settings, AnimationEvents::navigationOsdIn(),
+                             AnimationEvents::navigationOsdOut());
     QMetaObject::invokeMethod(window, "show");
 
     qCInfo(lcOverlay) << "Showing navigation OSD: success=" << success << "action=" << action << "reason=" << reason

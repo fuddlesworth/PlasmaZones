@@ -18,6 +18,8 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusServiceWatcher>
+#include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QJsonArray>
@@ -27,8 +29,13 @@
 #include <QKeyEvent>
 #include <QLoggingCategory>
 #include <QScreen>
+#include <QStandardPaths>
 #include <QtMath>
 #include <QPointer>
+#include <QVector2D>
+#include <QVector4D>
+#include <opengl/glshader.h>
+#include <opengl/glshadermanager.h>
 #include <window.h>
 #include <workspace.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
@@ -145,7 +152,7 @@ bool PlasmaZonesEffect::isWindowFloating(const QString& windowId) const
 }
 
 PlasmaZonesEffect::PlasmaZonesEffect()
-    : Effect()
+    : OffscreenEffect()
     , m_autotileHandler(std::make_unique<AutotileHandler>(this))
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
@@ -439,12 +446,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // QHash::take/remove on missing keys is a no-op, so this is safe.
     connect(KWin::effects, &KWin::EffectsHandler::windowDeleted, this, [this](KWin::EffectWindow* w) {
         m_windowAnimator->removeAnimation(w);
+        unredirectAnimatedWindow(w);
         if (m_windowIdCache.contains(w)) {
             const QString cachedId = m_windowIdCache.take(w);
             m_windowIdReverse.remove(cachedId);
         }
         m_trackedScreenPerWindow.remove(w);
     });
+
+    // Unredirect windows from shader rendering when their animation finishes naturally
+    // (advanceAnimations drops completed entries and emits animationFinished).
+    connect(m_windowAnimator.get(), &WindowAnimator::animationFinished, this,
+            &PlasmaZonesEffect::unredirectAnimatedWindow);
 
     connect(KWin::effects, &KWin::EffectsHandler::windowActivated, this, &PlasmaZonesEffect::slotWindowActivated);
 
@@ -618,15 +631,18 @@ PlasmaZonesEffect::~PlasmaZonesEffect()
         KWin::effects->ungrabKeyboard();
         m_keyboardGrabbed = false;
     }
+    // Tear down any active shader redirections before the shader cache (and
+    // the OffscreenEffect base) go away.
+    clearAnimationShaders();
     m_screenChangeHandler->stop();
     // We no longer reserve/unreserve edges; the daemon disables KWin snap via config.
 }
 
 bool PlasmaZonesEffect::supported()
 {
-    // This effect is a compositor plugin that works in KWin on Wayland
-    // Note: PlasmaZones daemon requires Wayland with layer-shell support
-    return true;
+    // OffscreenEffect redirection requires OpenGL compositing. Fall back to
+    // Effect::supported() on platforms where OpenGL isn't available.
+    return KWin::OffscreenEffect::supported();
 }
 
 bool PlasmaZonesEffect::enabledByDefault()
@@ -742,6 +758,7 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     m_navigationHandler->setWindowFloating(getWindowId(w), false);
 
     m_windowAnimator->removeAnimation(w);
+    unredirectAnimatedWindow(w);
 
     const QString closedWindowId = getWindowId(w);
     const QString closedScreenId = getWindowScreenId(w);
@@ -1154,6 +1171,7 @@ void PlasmaZonesEffect::slotDaemonReady()
 
     // These already use QDBusMessage::createMethodCall (no QDBusInterface)
     loadCachedSettings();
+    refreshAnimationProfiles();
     // Note: connectNavigationSignals() is NOT called here — it's already called
     // once in the constructor. D-Bus signal subscriptions persist across daemon
     // restarts. Calling it again would create duplicate connections, causing
@@ -1368,6 +1386,7 @@ void PlasmaZonesEffect::slotSettingsChanged()
 {
     qCInfo(lcEffect) << "settingsChanged: reloading settings";
     loadCachedSettings();
+    refreshAnimationProfiles();
     // Note: loadAutotileSettings() is intentionally NOT called here.
     // Autotile screen changes are tracked via the dedicated autotileScreensChanged
     // D-Bus signal (→ slotAutotileScreensChanged), which is authoritative.
@@ -1375,6 +1394,234 @@ void PlasmaZonesEffect::slotSettingsChanged()
     // full window re-notification (N D-Bus windowOpened calls + retile round)
     // on every algorithm/gap/setting change — the daemon already retiles and
     // emits windowsTiled directly for those changes.
+}
+
+// Window-side animation events we route per-profile. The daemon's AnimationEvents
+// namespace has many more (overlay, OSD, popup, ...), but only these apply to
+// compositor window animations.
+static const QStringList kCachedWindowAnimationEvents = {
+    QStringLiteral("snapIn"),         QStringLiteral("snapOut"),         QStringLiteral("snapResize"),
+    QStringLiteral("layoutSwitchIn"), QStringLiteral("layoutSwitchOut"),
+};
+
+void PlasmaZonesEffect::refreshAnimationProfiles()
+{
+    // Fetch each event's resolved profile via the new Settings.resolveAnimationProfile
+    // D-Bus method and cache parsed AnimationParams.
+    for (const QString& event : kCachedWindowAnimationEvents) {
+        auto call = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Settings,
+                                                   QStringLiteral("resolveAnimationProfile"));
+        call.setArguments({event});
+        QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(call);
+        auto* watcher = new QDBusPendingCallWatcher(pending, this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, event](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QString> reply = *w;
+            if (reply.isError()) {
+                qCDebug(lcEffect) << "resolveAnimationProfile failed for" << event << ":" << reply.error().message();
+                return;
+            }
+            const QString json = reply.value();
+            QJsonParseError parseError{};
+            const auto doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+            if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+                qCDebug(lcEffect) << "resolveAnimationProfile: invalid JSON for" << event << ":"
+                                  << parseError.errorString();
+                return;
+            }
+            m_animationProfileCache[event] = AnimationParams::fromJson(doc.object());
+            qCDebug(lcEffect) << "Cached animation profile for event:" << event;
+        });
+    }
+}
+
+AnimationParams PlasmaZonesEffect::resolvedAnimationParams(const QString& eventName) const
+{
+    auto it = m_animationProfileCache.constFind(eventName.isEmpty() ? QStringLiteral("snapIn") : eventName);
+    if (it != m_animationProfileCache.constEnd()) {
+        return *it;
+    }
+    // Default: use global animator config (duration/easing) via empty AnimationParams.
+    AnimationParams fallback;
+    fallback.timingMode = TimingMode::Easing;
+    fallback.duration = -1; // -> m_duration on animator
+    fallback.style = AnimationStyle::Morph;
+    return fallback;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Custom GLSL shader animations (OffscreenEffect pipeline)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+KWin::GLShader* PlasmaZonesEffect::loadAnimationShader(const QString& fragmentPath, const QString& vertexPath)
+{
+    if (fragmentPath.isEmpty()) {
+        return nullptr;
+    }
+
+    // Path traversal guard: only allow files under trusted data directories
+    // (system-wide /usr/share/plasmazones/, user ~/.local/share/plasmazones/, etc.)
+    auto isPathAllowed = [](const QString& path) -> bool {
+        const QString canonical = QFileInfo(path).canonicalFilePath();
+        if (canonical.isEmpty())
+            return false;
+        const QStringList dataDirs = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        for (const QString& dir : dataDirs) {
+            if (canonical.startsWith(dir + QLatin1Char('/')))
+                return true;
+        }
+        return false;
+    };
+
+    if (!isPathAllowed(fragmentPath)) {
+        qCWarning(lcEffect) << "Animation shader path outside allowed directories:" << fragmentPath;
+        return nullptr;
+    }
+    if (!vertexPath.isEmpty() && !isPathAllowed(vertexPath)) {
+        qCWarning(lcEffect) << "Animation vertex shader path outside allowed directories:" << vertexPath;
+        return nullptr;
+    }
+
+    // Prefer a `*_kwin.frag` variant next to effect.frag — the plain effect.frag is
+    // authored for the QML pipeline (GLSL 450 UBOs) while the _kwin variant uses
+    // individual uniforms compatible with ShaderManager::generateCustomShader().
+    QString resolvedFragPath = fragmentPath;
+    {
+        QFileInfo fragInfo(fragmentPath);
+        const QString kwinVariant = fragInfo.absolutePath() + QLatin1Char('/') + fragInfo.completeBaseName()
+            + QStringLiteral("_kwin.") + fragInfo.suffix();
+        if (QFile::exists(kwinVariant)) {
+            resolvedFragPath = kwinVariant;
+        }
+    }
+
+    const QString cacheKey =
+        vertexPath.isEmpty() ? resolvedFragPath : resolvedFragPath + QLatin1String("|") + vertexPath;
+    auto it = m_animationShaders.find(cacheKey);
+    if (it != m_animationShaders.end()) {
+        return it->second.get();
+    }
+
+    // Read fragment source
+    QFile fragFile(resolvedFragPath);
+    if (!fragFile.open(QIODevice::ReadOnly)) {
+        qCWarning(lcEffect) << "Failed to open animation fragment shader:" << resolvedFragPath;
+        return nullptr;
+    }
+    const QByteArray fragmentSource = fragFile.readAll();
+    fragFile.close();
+    if (fragmentSource.isEmpty()) {
+        qCWarning(lcEffect) << "Animation fragment shader is empty:" << resolvedFragPath;
+        return nullptr;
+    }
+
+    // Vertex source is optional — empty means KWin generates its default MapTexture vertex shader.
+    QByteArray vertexSource;
+    if (!vertexPath.isEmpty()) {
+        QFile vertFile(vertexPath);
+        if (vertFile.open(QIODevice::ReadOnly)) {
+            vertexSource = vertFile.readAll();
+            vertFile.close();
+        } else {
+            qCWarning(lcEffect) << "Failed to open animation vertex shader:" << vertexPath
+                                << "- falling back to default vertex shader";
+        }
+    }
+
+    auto shader = KWin::ShaderManager::instance()->generateCustomShader(KWin::ShaderTrait::MapTexture, vertexSource,
+                                                                        fragmentSource);
+    if (!shader || !shader->isValid()) {
+        qCWarning(lcEffect) << "Failed to compile animation shader:" << fragmentPath
+                            << (vertexPath.isEmpty() ? QString() : QStringLiteral(" + ") + vertexPath);
+        return nullptr;
+    }
+
+    qCInfo(lcEffect) << "Loaded animation shader:" << resolvedFragPath
+                     << "vertex:" << (vertexPath.isEmpty() ? QStringLiteral("(default)") : vertexPath);
+
+    KWin::GLShader* raw = shader.get();
+    m_animationShaders[cacheKey] = std::move(shader);
+    return raw;
+}
+
+void PlasmaZonesEffect::redirectAnimatedWindow(KWin::EffectWindow* window, const QString& fragmentPath,
+                                               const QString& vertexPath)
+{
+    if (!window) {
+        return;
+    }
+    KWin::GLShader* shader = loadAnimationShader(fragmentPath, vertexPath);
+    if (!shader) {
+        return; // loadAnimationShader already logged the reason
+    }
+    redirect(window);
+    setShader(window, shader);
+    m_redirectedWindows.insert(window);
+    qCDebug(lcEffect) << "Redirected window for shader animation:" << fragmentPath;
+}
+
+void PlasmaZonesEffect::unredirectAnimatedWindow(KWin::EffectWindow* window)
+{
+    if (!window) {
+        return;
+    }
+    if (m_redirectedWindows.remove(window)) {
+        unredirect(window);
+        qCDebug(lcEffect) << "Unredirected window from shader animation";
+    }
+}
+
+void PlasmaZonesEffect::clearAnimationShaders()
+{
+    // Unredirect every active window first so setShader pointers don't
+    // dangle against freed shader objects.
+    const auto windows = m_redirectedWindows;
+    for (KWin::EffectWindow* w : windows) {
+        if (w && !w->isDeleted()) {
+            unredirect(w);
+        }
+    }
+    m_redirectedWindows.clear();
+    m_animationShaders.clear();
+}
+
+void PlasmaZonesEffect::resolveBuiltinShaderPaths(AnimationParams& params)
+{
+    // Caller already set a custom shader path — never override.
+    if (!params.shaderPath.isEmpty())
+        return;
+
+    const char* dirName = nullptr;
+    switch (params.style) {
+    case AnimationStyle::Morph:
+        dirName = "morph";
+        break;
+    case AnimationStyle::Slide:
+        dirName = "slide";
+        break;
+    case AnimationStyle::Popin:
+        dirName = "popin";
+        break;
+    case AnimationStyle::SlideFade:
+        dirName = "slidefade";
+        break;
+    default:
+        return; // None, Custom, overlay styles — no built-in shader bundle.
+    }
+
+    const QString subDir = QStringLiteral("plasmazones/animations/%1").arg(QLatin1String(dirName));
+    const QString fragPath =
+        QStandardPaths::locate(QStandardPaths::GenericDataLocation, subDir + QStringLiteral("/effect.frag"));
+    if (fragPath.isEmpty()) {
+        return; // Shader bundle not installed — fall back to C++ transforms.
+    }
+    params.shaderPath = fragPath;
+
+    const QString vertPath =
+        QStandardPaths::locate(QStandardPaths::GenericDataLocation, subDir + QStringLiteral("/effect.vert"));
+    if (!vertPath.isEmpty()) {
+        params.vertexShaderPath = vertPath;
+    }
 }
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
@@ -2241,7 +2488,7 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
             QRect sizeOnlyGeo(qRound(currentFrame.x()), qRound(currentFrame.y()), width, height);
             qCInfo(lcEffect) << "slotApplyGeometryRequested: size-only restore for" << windowId << width << "x"
                              << height;
-            applySnapGeometry(w, sizeOnlyGeo);
+            applySnapGeometry(w, sizeOnlyGeo, false, false, QStringLiteral("snapResize"));
         }
         return;
     }
@@ -2281,7 +2528,10 @@ void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int 
         ensurePreSnapGeometryStored(w, getWindowId(w), w->frameGeometry());
     }
 
-    applySnapGeometry(w, geometry);
+    // Event mapping: empty zoneId typically means a float-out / pre-tile restore
+    // (snapOut); otherwise it's a zone placement (snapIn).
+    const QString event = zoneId.isEmpty() ? QStringLiteral("snapOut") : QStringLiteral("snapIn");
+    applySnapGeometry(w, geometry, false, false, event);
     // Note: windowSnapped/recordSnapIntent are NOT called here. For daemon-driven
     // navigation, the daemon handles zone bookkeeping internally before emitting
     // applyGeometryRequested. For legacy callers (autotile float restore via
@@ -2356,12 +2606,17 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const WindowGeometryList& geome
         savedStack.append(QPointer<KWin::EffectWindow>(w));
     }
 
+    // Map batch action to animation event: resnap / rotate / layout switch all use
+    // layoutSwitchIn; snap_all uses snapIn as a direct placement.
+    const QString batchEvent =
+        (action == QLatin1String("snap_all")) ? QStringLiteral("snapIn") : QStringLiteral("layoutSwitchIn");
+
     applyStaggeredOrImmediate(
         pending.size(),
-        [this, pending](int i) {
+        [this, pending, batchEvent](int i) {
             const auto& p = pending[i];
             if (p.window) {
-                applySnapGeometry(p.window, p.geometry);
+                applySnapGeometry(p.window, p.geometry, false, false, batchEvent);
             }
         },
         [this, savedStack, action]() {
@@ -3031,7 +3286,7 @@ void PlasmaZonesEffect::repaintSnapRegions(KWin::EffectWindow* window, const QRe
 }
 
 void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRect& geometry, bool allowDuringDrag,
-                                          bool skipAnimation)
+                                          bool skipAnimation, const QString& animationEvent)
 {
     if (!window) {
         qCWarning(lcEffect) << "applyGeometry: window is null";
@@ -3099,10 +3354,10 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
         QPointer<KWin::EffectWindow> safeWindow = window;
         auto conn = std::make_shared<QMetaObject::Connection>();
         *conn = connect(window, &KWin::EffectWindow::windowFinishUserMovedResized, this,
-                        [this, safeWindow, geo, skipAnimation, conn](KWin::EffectWindow*) {
+                        [this, safeWindow, geo, skipAnimation, animationEvent, conn](KWin::EffectWindow*) {
                             disconnect(*conn);
                             if (safeWindow && !safeWindow->isDeleted() && !safeWindow->isFullScreen()) {
-                                applySnapGeometry(safeWindow, geo, false, skipAnimation);
+                                applySnapGeometry(safeWindow, geo, false, skipAnimation, animationEvent);
                             }
                         });
         return;
@@ -3123,6 +3378,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             animStartPos = m_windowAnimator->currentVisualPosition(window);
             animStartSize = m_windowAnimator->currentVisualSize(window);
             m_windowAnimator->removeAnimation(window);
+            unredirectAnimatedWindow(window);
         } else {
             animStartPos = oldFrame.topLeft();
             animStartSize = oldFrame.size();
@@ -3134,8 +3390,18 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             kw->moveResize(QRectF(geo));
         }
 
-        // Start animation from old visual state to new geometry
-        m_windowAnimator->startAnimation(window, animStartPos, animStartSize, geo);
+        // Resolve per-event animation profile (falls back to global if unknown/unset)
+        // and populate built-in shader paths for standard styles so Morph / Slide /
+        // Popin / SlideFade render through GPU shaders when the bundle is installed.
+        AnimationParams params = resolvedAnimationParams(animationEvent);
+        resolveBuiltinShaderPaths(params);
+        m_windowAnimator->startAnimation(window, animStartPos, animStartSize, geo, params);
+
+        // If the resolved profile has a shader path, redirect the window for
+        // OffscreenEffect rendering. `apply()` will bind the uniforms per-frame.
+        if (!params.shaderPath.isEmpty()) {
+            redirectAnimatedWindow(window, params.shaderPath, params.vertexShaderPath);
+        }
 
         repaintSnapRegions(window, oldFrame, geo);
         return;
@@ -3144,6 +3410,7 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // No animation path (disabled, during drag, etc.): apply moveResize directly.
     if (m_windowAnimator->hasAnimation(window)) {
         m_windowAnimator->removeAnimation(window);
+        unredirectAnimatedWindow(window);
     }
 
     KWin::Window* kwinWindow = window->window();
@@ -3457,8 +3724,82 @@ void PlasmaZonesEffect::paintWindow(const KWin::RenderTarget& renderTarget, cons
                                     KWin::EffectWindow* w, int mask, const KWin::Region& deviceRegion,
                                     KWin::WindowPaintData& data)
 {
-    m_windowAnimator->applyTransform(w, data);
+    // For shader-redirected windows the fragment shader handles opacity/fade
+    // output — apply only geometry here so the C++ side doesn't double-fade.
+    if (m_redirectedWindows.contains(w)) {
+        m_windowAnimator->applyGeometryOnly(w, data);
+    } else {
+        m_windowAnimator->applyTransform(w, data);
+    }
     KWin::effects->paintWindow(renderTarget, viewport, w, mask, deviceRegion, data);
+}
+
+void PlasmaZonesEffect::apply(KWin::EffectWindow* window, int mask, KWin::WindowPaintData& data,
+                              KWin::WindowQuadList& quads)
+{
+    Q_UNUSED(mask)
+
+    // Only process windows we redirected with a custom shader.
+    if (!m_redirectedWindows.contains(window))
+        return;
+
+    auto animInfo = m_windowAnimator->animationInfo(window);
+    if (!animInfo)
+        return;
+
+    // When a vertex shader is installed it handles geometry interpolation on
+    // the GPU side, so skip the CPU transform in paintWindow. (The redirect path
+    // already uses applyGeometryOnly — this just means we don't double-transform.)
+    // Subdivide the quad list so vertex shaders have enough vertices to deform.
+    const int subdivisions = qMax(m_animationShaderSubdivisions, animInfo->shaderSubdivisions);
+    if (subdivisions > 1) {
+        quads = quads.makeRegularGrid(subdivisions, subdivisions);
+    }
+
+    KWin::GLShader* shader = KWin::ShaderManager::instance()->getBoundShader();
+    if (!shader)
+        return;
+
+    // Standard animation uniforms — available to both vertex and fragment shaders.
+    shader->setUniform("pz_progress", static_cast<float>(animInfo->progress));
+    shader->setUniform("pz_duration", static_cast<float>(animInfo->duration));
+    shader->setUniform("pz_style_param", static_cast<float>(animInfo->styleParam));
+    shader->setUniform("pz_subdivisions", subdivisions);
+
+    // Window size in pixels
+    const QRectF frameGeo = window->frameGeometry();
+    shader->setUniform("pz_window_size",
+                       QVector2D(static_cast<float>(frameGeo.width()), static_cast<float>(frameGeo.height())));
+
+    // Pixel-space start and target geometry (for vertex shader interpolation)
+    shader->setUniform(
+        "pz_start_pos",
+        QVector2D(static_cast<float>(animInfo->startPosition.x()), static_cast<float>(animInfo->startPosition.y())));
+    shader->setUniform(
+        "pz_start_size",
+        QVector2D(static_cast<float>(animInfo->startSize.width()), static_cast<float>(animInfo->startSize.height())));
+    shader->setUniform(
+        "pz_target_pos",
+        QVector2D(static_cast<float>(animInfo->targetGeometry.x()), static_cast<float>(animInfo->targetGeometry.y())));
+    shader->setUniform("pz_target_size",
+                       QVector2D(static_cast<float>(animInfo->targetGeometry.width()),
+                                 static_cast<float>(animInfo->targetGeometry.height())));
+
+    // Normalized source/target rects (0-1 on the virtual screen) for fragment
+    // shaders that want screen-space UV math instead of pixel math.
+    const QRectF screenGeo = KWin::effects->virtualScreenGeometry();
+    if (screenGeo.width() > 0.0 && screenGeo.height() > 0.0) {
+        const QVector4D srcRect(static_cast<float>((animInfo->startPosition.x() - screenGeo.x()) / screenGeo.width()),
+                                static_cast<float>((animInfo->startPosition.y() - screenGeo.y()) / screenGeo.height()),
+                                static_cast<float>(animInfo->startSize.width() / screenGeo.width()),
+                                static_cast<float>(animInfo->startSize.height() / screenGeo.height()));
+        const QVector4D tgtRect(static_cast<float>((animInfo->targetGeometry.x() - screenGeo.x()) / screenGeo.width()),
+                                static_cast<float>((animInfo->targetGeometry.y() - screenGeo.y()) / screenGeo.height()),
+                                static_cast<float>(animInfo->targetGeometry.width() / screenGeo.width()),
+                                static_cast<float>(animInfo->targetGeometry.height() / screenGeo.height()));
+        shader->setUniform("pz_source_rect", srcRect);
+        shader->setUniform("pz_target_rect", tgtRect);
+    }
 }
 
 } // namespace PlasmaZones

@@ -28,6 +28,8 @@ target_include_directories(plasmazones-settings PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+set_source_files_properties(qml/CurvePresets.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_add_qml_module(plasmazones-settings
     URI org.plasmazones.settings
     VERSION 1.0
@@ -87,8 +89,31 @@ qt_add_qml_module(plasmazones-settings
         qml/LayoutFilterBar.qml
         qml/LayoutFilterLogic.js
         qml/ZoneSelectorSection.qml
+        qml/AnimationsGeneralPage.qml
+        qml/AnimationsSnapPage.qml
+        qml/AnimationsLayoutPage.qml
+        qml/AnimationsBorderPage.qml
+        qml/AnimationsZoneHighlightPage.qml
+        qml/AnimationsOsdPage.qml
+        qml/AnimationsPopupPage.qml
+        qml/AnimationsZoneSelectorPage.qml
+        qml/AnimationsPreviewPage.qml
+        qml/AnimationsDimPage.qml
+        qml/AnimationsPresetsPage.qml
+        qml/AnimationsShadersPage.qml
+        qml/AnimationEventCard.qml
+        qml/AnimationShaderParamEditor.qml
+        qml/AnimationSubPage.qml
+        qml/AnimationSubPageHeader.qml
+        qml/CurveEditorDialog.qml
+        qml/CurvePresets.qml
+        qml/CurveThumbnail.qml
+        qml/SpringPreview.qml
+        qml/SpringPhysics.js
+        qml/EasingCurve.js
         qml/EasingPreview.qml
-        qml/EasingSettings.qml
+        qml/AnimatedBoxTrack.qml
+
         qml/SettingsCard.qml
         qml/GapsSettingsCard.qml
         qml/OsdCard.qml
@@ -113,12 +138,21 @@ qt_add_qml_module(plasmazones-settings
     NO_PLUGIN
 )
 
+
 # Embed What's New data
 qt_add_resources(plasmazones-settings "whatsnew_data"
     PREFIX "/"
     BASE "${CMAKE_SOURCE_DIR}/data"
     FILES
         ${CMAKE_SOURCE_DIR}/data/whatsnew.json
+)
+
+# Embed shared curve/spring preset data (single source of truth for QML + C++)
+qt_add_resources(plasmazones-settings "curvepreset_data"
+    PREFIX "/"
+    BASE "${CMAKE_SOURCE_DIR}/data"
+    FILES
+        ${CMAKE_SOURCE_DIR}/data/curvepresets.json
 )
 
 # Embed org.plasmazones.common QML module (ZonePreview, CategoryBadge)
@@ -129,6 +163,8 @@ qt_add_resources(plasmazones-settings "shared_common_qml"
         ${CMAKE_SOURCE_DIR}/src/shared/AspectRatioBadge.qml
         ${CMAKE_SOURCE_DIR}/src/shared/ZonePreview.qml
         ${CMAKE_SOURCE_DIR}/src/shared/CategoryBadge.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ParameterDelegate.qml
+        ${CMAKE_SOURCE_DIR}/src/shared/ShaderParameterSection.qml
 )
 qt_add_resources(plasmazones-settings "shared_common_qmldir"
     PREFIX "/qt/qml/org/plasmazones/common"

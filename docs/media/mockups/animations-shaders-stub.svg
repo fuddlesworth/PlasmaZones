@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="400" viewBox="0 0 680 400">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-primary { fill: #eff0f1; font-size: 13px; }
+      .text-desc { fill: #7f8c8d; font-size: 12px; line-height: 1.5; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="400" rx="12"/>
+
+  <!-- ANIMATION SHADERS CARD -->
+  <rect class="card" x="20" y="16" width="640" height="368" rx="10"/>
+
+  <!-- Header -->
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="44" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="46">Animation Shaders</text>
+  <!-- Phase 2 badge -->
+  <rect x="168" y="33" width="62" height="20" rx="4" fill="#f39c12" opacity="0.15"/>
+  <text x="181" y="47" fill="#f39c12" font-size="10" font-weight="600" font-family="Inter, sans-serif">Phase 2</text>
+
+  <!-- Content area -->
+  <!-- Large icon -->
+  <g transform="translate(290, 90)">
+    <rect x="0" y="0" width="100" height="80" rx="8" fill="none" stroke="#3d4349" stroke-width="2" stroke-dasharray="6,4"/>
+    <!-- Shader-like wave inside -->
+    <path d="M15,50 C25,30 35,60 50,40 C65,20 75,55 85,35" fill="none" stroke="#3daee9" stroke-width="2" opacity="0.4" stroke-linecap="round"/>
+    <path d="M15,55 C25,35 35,65 50,45 C65,25 75,60 85,40" fill="none" stroke="#3daee9" stroke-width="1.5" opacity="0.25" stroke-linecap="round"/>
+    <!-- Sparkle -->
+    <circle cx="70" cy="25" r="3" fill="#f39c12" opacity="0.5"/>
+    <line x1="70" y1="20" x2="70" y2="30" stroke="#f39c12" stroke-width="1" opacity="0.4"/>
+    <line x1="65" y1="25" x2="75" y2="25" stroke="#f39c12" stroke-width="1" opacity="0.4"/>
+  </g>
+
+  <!-- Description text -->
+  <text x="340" y="200" text-anchor="middle" fill="#bdc3c7" font-size="13" font-family="Inter, sans-serif">Custom GLSL animation shaders</text>
+  <text x="340" y="220" text-anchor="middle" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Coming in a future update</text>
+
+  <!-- Feature list -->
+  <g transform="translate(120, 248)">
+    <!-- Bullet: Slide -->
+    <circle cx="8" cy="8" r="3" fill="#3daee9" opacity="0.5"/>
+    <text x="20" y="12" fill="#7f8c8d" font-size="12" font-family="Inter, sans-serif">
+      <tspan font-weight="500" fill="#bdc3c7">Slide</tspan> &#x2014; translate window texture by direction vector
+    </text>
+
+    <!-- Bullet: Pop In -->
+    <circle cx="8" cy="32" r="3" fill="#3daee9" opacity="0.5"/>
+    <text x="20" y="36" fill="#7f8c8d" font-size="12" font-family="Inter, sans-serif">
+      <tspan font-weight="500" fill="#bdc3c7">Pop In</tspan> &#x2014; scale up from center with opacity fade
+    </text>
+
+    <!-- Bullet: Slide Fade -->
+    <circle cx="8" cy="56" r="3" fill="#3daee9" opacity="0.5"/>
+    <text x="20" y="60" fill="#7f8c8d" font-size="12" font-family="Inter, sans-serif">
+      <tspan font-weight="500" fill="#bdc3c7">Slide Fade</tspan> &#x2014; partial translate with alpha blend
+    </text>
+
+    <!-- Bullet: Custom -->
+    <circle cx="8" cy="80" r="3" fill="#3daee9" opacity="0.5"/>
+    <text x="20" y="84" fill="#7f8c8d" font-size="12" font-family="Inter, sans-serif">
+      <tspan font-weight="500" fill="#bdc3c7">Custom</tspan> &#x2014; user-provided GLSL fragment shader
+    </text>
+  </g>
+
+  <!-- Footer note -->
+  <rect x="40" y="350" width="600" height="24" rx="4" fill="#3daee9" opacity="0.06"/>
+  <text x="340" y="366" text-anchor="middle" fill="#3daee9" font-size="10" font-family="Inter, sans-serif" opacity="0.7">Reuses the existing ZoneShaderNodeRHI pipeline with animation-specific uniforms (pz_progress, pz_window_tex, ...)</text>
+</svg>

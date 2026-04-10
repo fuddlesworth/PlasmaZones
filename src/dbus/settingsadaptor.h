@@ -108,6 +108,20 @@ public Q_SLOTS:
     bool userShadersEnabled();
 
     /**
+     * @brief Resolve a per-event animation profile, applying parent inheritance
+     *        and default fallbacks, and return it as a JSON string.
+     *
+     * Used by compositor plugins (e.g. kwin-effect) to look up animation
+     * parameters for a specific event ("snapIn", "snapOut", etc.) without
+     * re-implementing the profile tree walk on their side.
+     *
+     * @param eventName Event name (must be a known animation event)
+     * @return Compact JSON string of the resolved AnimationProfile, or "{}"
+     *         if the event is unknown or settings is unavailable.
+     */
+    QString resolveAnimationProfile(const QString& eventName);
+
+    /**
      * @brief Get the user shader installation directory path
      * @return Path to ~/.local/share/plasmazones/shaders
      */

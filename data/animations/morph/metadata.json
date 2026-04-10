@@ -1,0 +1,11 @@
+{
+  "id": "morph",
+  "name": "Morph",
+  "description": "Smooth geometry interpolation between positions",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "vertexShader": "effect.vert",
+  "geometry": "morph"
+}

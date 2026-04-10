@@ -10,10 +10,6 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
-    // Layout constants (previously from monolith's QtObject)
-    readonly property int sliderPreferredWidth: Kirigami.Units.gridUnit * 16
-    readonly property int sliderValueLabelWidth: Kirigami.Units.gridUnit * 3
-    // Capture the context property so child components can access it
     readonly property var settingsBridge: appSettings
 
     contentHeight: content.implicitHeight
@@ -24,62 +20,6 @@ Flickable {
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
-
-        // =====================================================================
-        // ANIMATIONS CARD
-        // =====================================================================
-        Item {
-            Layout.fillWidth: true
-            implicitHeight: animationsCard.implicitHeight
-
-            SettingsCard {
-                id: animationsCard
-
-                anchors.fill: parent
-                headerText: i18n("Animations")
-                showToggle: true
-                toggleChecked: appSettings.animationsEnabled
-                onToggleClicked: (checked) => {
-                    return appSettings.animationsEnabled = checked;
-                }
-                collapsible: true
-
-                contentItem: ColumnLayout {
-                    spacing: Kirigami.Units.largeSpacing
-
-                    // Easing curve editor with animated preview
-                    EasingPreview {
-                        id: easingPreview
-
-                        Layout.fillWidth: true
-                        Layout.maximumWidth: Kirigami.Units.gridUnit * 28
-                        Layout.alignment: Qt.AlignHCenter
-                        curve: appSettings.animationEasingCurve
-                        animationDuration: appSettings.animationDuration
-                        previewEnabled: animationsCard.toggleChecked
-                        opacity: animationsCard.toggleChecked ? 1 : 0.4
-                        onCurveEdited: function(newCurve) {
-                            appSettings.animationEasingCurve = newCurve;
-                        }
-                    }
-
-                    SettingsSeparator {
-                    }
-
-                    // Easing controls (extracted component)
-                    EasingSettings {
-                        Layout.fillWidth: true
-                        appSettings: root.settingsBridge
-                        constants: root
-                        animationsEnabled: animationsCard.toggleChecked
-                        easingPreview: easingPreview
-                    }
-
-                }
-
-            }
-
-        }
 
         // =====================================================================
         // ON-SCREEN DISPLAY CARD

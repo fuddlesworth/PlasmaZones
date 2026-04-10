@@ -63,13 +63,6 @@ Kirigami.Dialog {
     title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")
     preferredWidth: Kirigami.Units.gridUnit * 25
     preferredHeight: Kirigami.Units.gridUnit * 20
-    customFooterActions: [
-        Kirigami.Action {
-            text: i18n("Refresh")
-            icon.name: "view-refresh"
-            onTriggered: dialog.refresh()
-        }
-    ]
 
     ColumnLayout {
         spacing: Kirigami.Units.smallSpacing
@@ -161,6 +154,15 @@ Kirigami.Dialog {
 
             }
 
+        }
+
+    }
+
+    footerLeadingComponent: Component {
+        ToolButton {
+            text: i18n("Refresh")
+            icon.name: "view-refresh"
+            onClicked: dialog.refresh()
         }
 
     }

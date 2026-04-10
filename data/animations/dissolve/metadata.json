@@ -1,0 +1,31 @@
+{
+  "id": "dissolve",
+  "name": "Dissolve",
+  "description": "Noise-based dissolve that randomly erases pixels as the animation progresses",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "parameters": [
+    {
+      "id": "noiseScale",
+      "name": "Noise Scale",
+      "group": "Effect",
+      "type": "float",
+      "slot": 0,
+      "default": 200.0,
+      "min": 10.0,
+      "max": 500.0
+    },
+    {
+      "id": "edgeSoftness",
+      "name": "Edge Softness",
+      "group": "Effect",
+      "type": "float",
+      "slot": 1,
+      "default": 0.05,
+      "min": 0.01,
+      "max": 0.3
+    }
+  ]
+}

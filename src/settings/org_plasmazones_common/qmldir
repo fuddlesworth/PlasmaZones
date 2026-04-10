@@ -2,3 +2,5 @@ module org.plasmazones.common
 AspectRatioBadge 1.0 AspectRatioBadge.qml
 ZonePreview 1.0 ZonePreview.qml
 CategoryBadge 1.0 CategoryBadge.qml
+ParameterDelegate 1.0 ParameterDelegate.qml
+ShaderParameterSection 1.0 ShaderParameterSection.qml

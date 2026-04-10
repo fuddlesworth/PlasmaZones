@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import PlasmaZones 1.0
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Effects
@@ -54,9 +55,20 @@ Window {
     }
     // Timing
     property int displayDuration: 1500
-    // ms before auto-hide
-    property int fadeInDuration: 150
-    property int fadeOutDuration: 200
+    // Animation profile properties (set from C++ before show)
+    property int animInDuration: 150
+    property string animInStyle: "scalein"
+    property real animInStyleParam: 0.8
+    property int animOutDuration: 200
+    property string animOutStyle: "scalein"
+    property real animOutStyleParam: 0.9
+    // Shader source URLs (set from C++ via AnimationShaderRegistry)
+    property url animInShaderSource: ""
+    property var animInShaderParams: ({
+    })
+    property url animOutShaderSource: ""
+    property var animOutShaderParams: ({
+    })
     // Theme colors
     property color backgroundColor: Kirigami.Theme.backgroundColor
     property color textColor: Kirigami.Theme.textColor
@@ -75,29 +87,100 @@ Window {
     // Signals
     signal dismissed()
 
-    // Show the OSD with animation
+    // Show the OSD with animation (style-adaptive, supports shader transitions)
     function show() {
-        // Stop any running animations to prevent conflicts
         showAnimation.stop();
         hideAnimation.stop();
+        shaderShowAnim.stop();
+        shaderHideAnim.stop();
         dismissTimer.stop();
-        // Reset state for fresh animation (animate wrapper, not window)
-        contentWrapper.opacity = 0;
-        container.scale = 0.8;
-        root.visible = true;
-        showAnimation.start();
+        if (animInShaderSource.toString() !== "") {
+            // ── Shader transition path (loaded from AnimationShaderRegistry) ──
+            contentWrapper.opacity = 1;
+            container.scale = 1;
+            contentWrapper.layer.enabled = true;
+            shaderTransition.shaderSource = animInShaderSource;
+            shaderTransition.direction = 0;
+            shaderTransition.duration = animInDuration;
+            shaderTransition.styleParam = animInStyleParam;
+            shaderTransition.shaderParams = animInShaderParams || {
+            };
+            shaderTransition.progress = 0;
+            shaderTransition.visible = true;
+            root.visible = true;
+            shaderShowAnim.duration = animInDuration;
+            shaderShowAnim.start();
+        } else {
+            // ── Built-in QML animation path ──
+            contentWrapper.opacity = 0;
+            container.scale = (animInStyle === "scalein") ? animInStyleParam : 1;
+            container.y = 0;
+            showOpacityAnim.duration = animInDuration;
+            showTransformAnim.duration = (animInStyle === "fadein" || animInStyle === "none") ? 0 : animInDuration;
+            if (animInStyle === "scalein") {
+                showTransformAnim.target = container;
+                showTransformAnim.property = "scale";
+                showTransformAnim.from = animInStyleParam;
+                showTransformAnim.to = 1;
+                showTransformAnim.easing.type = Easing.OutBack;
+                showTransformAnim.easing.overshoot = 1.2;
+            } else if (animInStyle === "slideup") {
+                showTransformAnim.target = container;
+                showTransformAnim.property = "y";
+                showTransformAnim.from = animInStyleParam;
+                showTransformAnim.to = 0;
+                showTransformAnim.easing.type = Easing.OutCubic;
+                showTransformAnim.easing.overshoot = 0;
+            } else {
+                showTransformAnim.duration = 0;
+            }
+            root.visible = true;
+            showAnimation.start();
+        }
         dismissTimer.restart();
     }
 
-    // Hide the OSD with animation
+    // Hide the OSD with animation (style-adaptive, supports shader transitions)
     function hide() {
-        // Stop show animation if running
         showAnimation.stop();
+        shaderShowAnim.stop();
         dismissTimer.stop();
-        // Only hide if visible
-        if (root.visible)
-            hideAnimation.start();
+        if (!root.visible)
+            return ;
 
+        if (animOutShaderSource.toString() !== "") {
+            // ── Shader transition path (loaded from AnimationShaderRegistry) ──
+            contentWrapper.opacity = 1;
+            contentWrapper.layer.enabled = true;
+            shaderTransition.shaderSource = animOutShaderSource;
+            shaderTransition.direction = 1;
+            shaderTransition.duration = animOutDuration;
+            shaderTransition.styleParam = animOutStyleParam;
+            shaderTransition.shaderParams = animOutShaderParams || {
+            };
+            shaderTransition.progress = 1;
+            shaderTransition.visible = true;
+            shaderHideAnim.duration = animOutDuration;
+            shaderHideAnim.start();
+        } else {
+            // ── Built-in QML animation path ──
+            hideOpacityAnim.duration = animOutDuration;
+            hideTransformAnim.duration = (animOutStyle === "fadein" || animOutStyle === "none") ? 0 : animOutDuration;
+            if (animOutStyle === "scalein") {
+                hideTransformAnim.target = container;
+                hideTransformAnim.property = "scale";
+                hideTransformAnim.to = animOutStyleParam;
+                hideTransformAnim.easing.type = Easing.InCubic;
+            } else if (animOutStyle === "slideup") {
+                hideTransformAnim.target = container;
+                hideTransformAnim.property = "y";
+                hideTransformAnim.to = animOutStyleParam;
+                hideTransformAnim.easing.type = Easing.InCubic;
+            } else {
+                hideTransformAnim.duration = 0;
+            }
+            hideAnimation.start();
+        }
     }
 
     // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
@@ -119,49 +202,57 @@ Window {
         onTriggered: root.hide()
     }
 
-    // Show animation
+    // Show animation (configured dynamically in show())
     ParallelAnimation {
         id: showAnimation
 
         NumberAnimation {
+            id: showOpacityAnim
+
             target: contentWrapper
             property: "opacity"
             from: 0
             to: 1
-            duration: root.fadeInDuration
+            duration: root.animInDuration
             easing.type: Easing.OutCubic
         }
 
         NumberAnimation {
+            id: showTransformAnim
+
             target: container
             property: "scale"
-            from: 0.8
+            from: root.animInStyleParam
             to: 1
-            duration: root.fadeInDuration
+            duration: root.animInDuration
             easing.type: Easing.OutBack
             easing.overshoot: 1.2
         }
 
     }
 
-    // Hide animation
+    // Hide animation (configured dynamically in hide())
     SequentialAnimation {
         id: hideAnimation
 
         ParallelAnimation {
             NumberAnimation {
+                id: hideOpacityAnim
+
                 target: contentWrapper
                 property: "opacity"
                 to: 0
-                duration: root.fadeOutDuration
+                duration: root.animOutDuration
                 easing.type: Easing.InCubic
             }
 
             NumberAnimation {
+                id: hideTransformAnim
+
                 target: container
                 property: "scale"
-                to: 0.9
-                duration: root.fadeOutDuration
+                to: root.animOutStyleParam
+                duration: root.animOutDuration
                 easing.type: Easing.InCubic
             }
 
@@ -174,6 +265,56 @@ Window {
             }
         }
 
+    }
+
+    // ── Shader transition animations ──
+    NumberAnimation {
+        id: shaderShowAnim
+
+        target: shaderTransition
+        property: "progress"
+        from: 0
+        to: 1
+        duration: root.animInDuration
+        easing.type: Easing.OutCubic
+        onFinished: {
+            // Disable layer after animation for performance
+            contentWrapper.layer.enabled = false;
+            shaderTransition.visible = false;
+        }
+    }
+
+    SequentialAnimation {
+        id: shaderHideAnim
+
+        NumberAnimation {
+            target: shaderTransition
+            property: "progress"
+            from: 1
+            to: 0
+            duration: root.animOutDuration
+            easing.type: Easing.InCubic
+        }
+
+        ScriptAction {
+            script: {
+                contentWrapper.layer.enabled = false;
+                shaderTransition.visible = false;
+                root.visible = false;
+                root.dismissed();
+            }
+        }
+
+    }
+
+    // Shader transition renderer — renders contentWrapper through a shader effect
+    AnimationShaderItem {
+        id: shaderTransition
+
+        anchors.fill: contentWrapper
+        source: contentWrapper
+        visible: false
+        progress: 0
     }
 
     // Content wrapper - animates opacity instead of Window

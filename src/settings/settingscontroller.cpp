@@ -17,6 +17,7 @@
 
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
+#include "../core/animationshaderregistry.h"
 #include "../pz_i18n.h"
 
 #include <QDBusMessage>
@@ -117,6 +118,13 @@ SettingsController::SettingsController(QObject* parent)
     // the shared AlgorithmRegistry singleton within their respective processes.
     auto* scriptLoader = new ScriptedAlgorithmLoader(this);
     scriptLoader->scanAndRegister();
+
+    // Create the animation shader registry for the settings process.
+    // The daemon has its own instance — each process needs one to populate
+    // the animation style dropdown (built-in + user-installed shaders).
+    if (!AnimationShaderRegistry::instance()) {
+        new AnimationShaderRegistry(this);
+    }
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Emit both signals: availableAlgorithmsChanged for algorithm-specific
@@ -320,6 +328,7 @@ const QHash<QString, QString>& SettingsController::parentPageRedirects()
     static const QHash<QString, QString> redirects{
         {QStringLiteral("snapping"), QStringLiteral("snapping-appearance")},
         {QStringLiteral("tiling"), QStringLiteral("tiling-appearance")},
+        {QStringLiteral("animations"), QStringLiteral("animations-general")},
     };
     return redirects;
 }
@@ -345,6 +354,18 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("snapping-ordering"),
         QStringLiteral("tiling-ordering"),
         QStringLiteral("snapping-apprules"),
+        QStringLiteral("animations-general"),
+        QStringLiteral("animations-snap"),
+        QStringLiteral("animations-layout"),
+        QStringLiteral("animations-border"),
+        QStringLiteral("animations-zonehighlight"),
+        QStringLiteral("animations-osd"),
+        QStringLiteral("animations-popup"),
+        QStringLiteral("animations-zoneselector"),
+        QStringLiteral("animations-preview"),
+        QStringLiteral("animations-dim"),
+        QStringLiteral("animations-presets"),
+        QStringLiteral("animations-shaders"),
         QStringLiteral("exclusions"),
         QStringLiteral("editor"),
         QStringLiteral("general"),
@@ -1434,6 +1455,422 @@ void SettingsController::toggleContextLock(const QString& screenName, int virtua
     m_settings.setContextLocked(key, virtualDesktop, activity, !locked);
     Q_EMIT lockedScreensChanged();
     setNeedsSave(true);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Animation profile tree helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+static QVariantMap profileToVariantMap(const AnimationProfile& p)
+{
+    return p.toJson().toVariantMap();
+}
+
+static AnimationProfile variantMapToProfile(const QVariantMap& m)
+{
+    return AnimationProfile::fromJson(QJsonObject::fromVariantMap(m));
+}
+
+QVariantMap SettingsController::resolvedProfileForEvent(const QString& eventName) const
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return {};
+    return profileToVariantMap(m_settings.animationProfileTree().resolvedProfile(eventName));
+}
+
+QVariantMap SettingsController::rawProfileForEvent(const QString& eventName) const
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return {};
+    return profileToVariantMap(m_settings.animationProfileTree().rawProfile(eventName));
+}
+
+void SettingsController::setEventProfile(const QString& eventName, const QVariantMap& profile)
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return;
+    auto tree = m_settings.animationProfileTree();
+    tree.setProfile(eventName, variantMapToProfile(profile));
+    m_settings.setAnimationProfileTree(tree);
+    setNeedsSave(true);
+}
+
+void SettingsController::clearEventProfile(const QString& eventName)
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return;
+    auto tree = m_settings.animationProfileTree();
+    tree.clearProfile(eventName);
+    m_settings.setAnimationProfileTree(tree);
+    setNeedsSave(true);
+}
+
+QString SettingsController::parentChainForEvent(const QString& eventName) const
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return {};
+
+    static const QHash<QString, QString> displayNames = {
+        {QStringLiteral("global"), PzI18n::tr("Global")},
+        // Window geometry domain
+        {QStringLiteral("windowGeometry"), PzI18n::tr("Window Geometry")},
+        {QStringLiteral("snap"), PzI18n::tr("Snap")},
+        {QStringLiteral("snapIn"), PzI18n::tr("Snap In")},
+        {QStringLiteral("snapOut"), PzI18n::tr("Snap Out")},
+        {QStringLiteral("snapResize"), PzI18n::tr("Snap Resize")},
+        {QStringLiteral("layoutSwitch"), PzI18n::tr("Layout Switch")},
+        {QStringLiteral("layoutSwitchIn"), PzI18n::tr("Layout Switch In")},
+        {QStringLiteral("layoutSwitchOut"), PzI18n::tr("Layout Switch Out")},
+        {QStringLiteral("autotileBorder"), PzI18n::tr("Autotile Border")},
+        {QStringLiteral("borderIn"), PzI18n::tr("Border In")},
+        {QStringLiteral("borderOut"), PzI18n::tr("Border Out")},
+        // Overlay domain
+        {QStringLiteral("overlay"), PzI18n::tr("Overlay")},
+        {QStringLiteral("zoneHighlight"), PzI18n::tr("Zone Highlight")},
+        {QStringLiteral("zoneHighlightIn"), PzI18n::tr("Zone Highlight In")},
+        {QStringLiteral("zoneHighlightOut"), PzI18n::tr("Zone Highlight Out")},
+        {QStringLiteral("osd"), PzI18n::tr("OSD")},
+        {QStringLiteral("layoutOsdIn"), PzI18n::tr("Layout OSD In")},
+        {QStringLiteral("layoutOsdOut"), PzI18n::tr("Layout OSD Out")},
+        {QStringLiteral("navigationOsdIn"), PzI18n::tr("Navigation OSD In")},
+        {QStringLiteral("navigationOsdOut"), PzI18n::tr("Navigation OSD Out")},
+        {QStringLiteral("popup"), PzI18n::tr("Popup")},
+        {QStringLiteral("layoutPickerIn"), PzI18n::tr("Layout Picker In")},
+        {QStringLiteral("layoutPickerOut"), PzI18n::tr("Layout Picker Out")},
+        {QStringLiteral("snapAssistIn"), PzI18n::tr("Snap Assist In")},
+        {QStringLiteral("snapAssistOut"), PzI18n::tr("Snap Assist Out")},
+        {QStringLiteral("zoneSelector"), PzI18n::tr("Zone Selector")},
+        {QStringLiteral("zoneSelectorIn"), PzI18n::tr("Zone Selector In")},
+        {QStringLiteral("zoneSelectorOut"), PzI18n::tr("Zone Selector Out")},
+        {QStringLiteral("preview"), PzI18n::tr("Preview")},
+        {QStringLiteral("previewIn"), PzI18n::tr("Preview In")},
+        {QStringLiteral("previewOut"), PzI18n::tr("Preview Out")},
+        // Standalone
+        {QStringLiteral("dim"), PzI18n::tr("Dim")},
+    };
+
+    QStringList chain;
+    QString current = AnimationProfileTree::parentOf(eventName);
+    while (!current.isEmpty()) {
+        chain.append(displayNames.value(current, current));
+        current = AnimationProfileTree::parentOf(current);
+    }
+    return chain.join(QStringLiteral(" \u2192 "));
+}
+
+QString SettingsController::inheritSummaryForEvent(const QString& eventName) const
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return {};
+    const auto p = m_settings.animationProfileTree().resolvedProfile(eventName);
+
+    QStringList parts;
+
+    // Timing mode
+    const auto mode = p.timingMode.value_or(TimingMode::Easing);
+    if (mode == TimingMode::Spring)
+        parts << PzI18n::tr("Spring");
+    else
+        parts << PzI18n::tr("Easing");
+
+    // Duration (only for easing)
+    if (mode == TimingMode::Easing && p.duration.has_value())
+        parts << QStringLiteral("%1ms").arg(*p.duration);
+
+    // Curve (only for easing) — preset labels loaded from shared data/curvepresets.json
+    if (mode == TimingMode::Easing && p.easingCurve.has_value()) {
+        const QString& curve = *p.easingCurve;
+        // Lazy-load preset lookup map from embedded resource (single source of truth)
+        static const QHash<QString, QString> curveLabels = [] {
+            QHash<QString, QString> map;
+            QFile f(QStringLiteral(":/curvepresets.json"));
+            if (f.open(QIODevice::ReadOnly)) {
+                const QJsonArray presets =
+                    QJsonDocument::fromJson(f.readAll()).object().value(QLatin1String("quickPresets")).toArray();
+                for (const QJsonValue& v : presets) {
+                    const QJsonObject obj = v.toObject();
+                    map[obj.value(QLatin1String("curve")).toString()] = obj.value(QLatin1String("label")).toString();
+                }
+            }
+            return map;
+        }();
+        const QString label = curveLabels.value(curve);
+        if (!label.isEmpty()) {
+            parts << PzI18n::tr(label.toUtf8().constData());
+        } else if (curve.contains(QLatin1String("elastic"))) {
+            parts << PzI18n::tr("Elastic");
+        } else if (curve.contains(QLatin1String("bounce"))) {
+            parts << PzI18n::tr("Bounce");
+        } else {
+            parts << curve;
+        }
+    }
+
+    // Spring params
+    if (mode == TimingMode::Spring && p.spring.has_value()) {
+        const auto& sp = *p.spring;
+        if (sp.dampingRatio < 0.7)
+            parts << PzI18n::tr("Bouncy");
+        else if (sp.dampingRatio < 0.95)
+            parts << PzI18n::tr("Snappy");
+        else
+            parts << PzI18n::tr("Smooth");
+    }
+
+    // Style
+    if (p.style.has_value()) {
+        switch (*p.style) {
+        case AnimationStyle::Morph:
+            parts << PzI18n::tr("Morph");
+            break;
+        case AnimationStyle::Slide:
+            parts << PzI18n::tr("Slide");
+            break;
+        case AnimationStyle::Popin:
+            parts << PzI18n::tr("Pop In");
+            break;
+        case AnimationStyle::SlideFade:
+            parts << PzI18n::tr("Slide Fade");
+            break;
+        case AnimationStyle::None:
+            parts << PzI18n::tr("None");
+            break;
+        case AnimationStyle::Custom:
+            parts << PzI18n::tr("Custom");
+            break;
+        case AnimationStyle::FadeIn:
+            parts << PzI18n::tr("Fade In");
+            break;
+        case AnimationStyle::SlideUp:
+            parts << PzI18n::tr("Slide Up");
+            break;
+        case AnimationStyle::ScaleIn:
+            parts << PzI18n::tr("Scale In");
+            break;
+        }
+    }
+
+    return parts.join(QStringLiteral(", "));
+}
+
+// animationStyleKeys() and animationStyleNames() MUST stay in sync —
+// index N of keys corresponds to index N of names.
+//
+// Order: built-in window styles → built-in overlay styles → shader registry → "None"
+//
+// Built-in styles use their animationStyleToString() key directly (e.g. "morph", "fadein").
+// Shader entries use their registry ID (resolved to shaderPath in setEventAnimationStyle).
+QStringList SettingsController::animationStyleNames() const
+{
+    QStringList names;
+    // Built-in window geometry styles
+    names.append(PzI18n::tr("Morph"));
+    names.append(PzI18n::tr("Slide"));
+    names.append(PzI18n::tr("Pop In"));
+    names.append(PzI18n::tr("Slide Fade"));
+    // Built-in overlay styles
+    names.append(PzI18n::tr("Fade In"));
+    names.append(PzI18n::tr("Slide Up"));
+    names.append(PzI18n::tr("Scale In"));
+    // Shader registry (user-installed custom shaders)
+    if (auto* registry = AnimationShaderRegistry::instance()) {
+        const auto shaders = registry->availableAnimationShadersVariant();
+        for (const auto& v : shaders) {
+            const auto map = v.toMap();
+            names.append(map.value(QLatin1String("name")).toString());
+        }
+    }
+    names.append(PzI18n::tr("None"));
+    return names;
+}
+
+// animationStyleKeys() and animationStyleNames() MUST stay in sync —
+// index N of keys corresponds to index N of names.
+QStringList SettingsController::animationStyleKeys() const
+{
+    QStringList keys;
+    // Built-in window geometry styles (use animationStyleToString() values)
+    keys.append(QStringLiteral("morph"));
+    keys.append(QStringLiteral("slide"));
+    keys.append(QStringLiteral("popin"));
+    keys.append(QStringLiteral("slidefade"));
+    // Built-in overlay styles
+    keys.append(QStringLiteral("fadein"));
+    keys.append(QStringLiteral("slideup"));
+    keys.append(QStringLiteral("scalein"));
+    // Shader registry
+    if (auto* registry = AnimationShaderRegistry::instance()) {
+        const auto shaders = registry->availableAnimationShadersVariant();
+        for (const auto& v : shaders) {
+            const auto map = v.toMap();
+            keys.append(map.value(QLatin1String("id")).toString());
+        }
+    }
+    keys.append(QStringLiteral("none"));
+    return keys;
+}
+
+/// Returns the style domain ("window", "overlay", or "both") for a given style key.
+/// Used by QML to filter the dropdown based on the event's domain.
+QString SettingsController::animationStyleDomain(const QString& styleKey) const
+{
+    // Built-in styles map directly
+    const AnimationStyle style = animationStyleFromString(styleKey);
+    if (styleKey == animationStyleToString(style)) {
+        return PlasmaZones::animationStyleDomain(style);
+    }
+    // Shader registry entries are available in all domains
+    return QStringLiteral("both");
+}
+
+QString SettingsController::styleKeyForProfile(const QVariantMap& profile) const
+{
+    const QString style = profile.value(QLatin1String("style")).toString();
+    if (style == QLatin1String("none"))
+        return style;
+
+    // All animations store shaderPath — map it back to the registry ID for the dropdown
+    const QString shaderPath = profile.value(QLatin1String("shaderPath")).toString();
+    if (!shaderPath.isEmpty()) {
+        auto* registry = AnimationShaderRegistry::instance();
+        if (registry) {
+            const auto shaders = registry->availableAnimationShadersVariant();
+            for (const auto& v : shaders) {
+                const auto map = v.toMap();
+                if (map.value(QLatin1String("sourcePath")).toString() == shaderPath) {
+                    return map.value(QLatin1String("id")).toString();
+                }
+            }
+        }
+    }
+
+    // Fallback: return style string directly (handles legacy profiles)
+    return style.isEmpty() ? QStringLiteral("none") : style;
+}
+
+void SettingsController::setEventAnimationStyle(const QString& eventName, const QString& styleKey)
+{
+    if (!AnimationProfileTree::isValidEventName(eventName))
+        return;
+    auto raw = m_settings.animationProfileTree().rawProfile(eventName);
+    QJsonObject obj = raw.toJson();
+
+    // Check if this is a built-in style (morph, slide, popin, slidefade, fadein, slideup, scalein, none)
+    static const QSet<QString> builtinStyleKeys = {
+        QStringLiteral("morph"),  QStringLiteral("slide"),   QStringLiteral("popin"),   QStringLiteral("slidefade"),
+        QStringLiteral("fadein"), QStringLiteral("slideup"), QStringLiteral("scalein"), QStringLiteral("none"),
+    };
+
+    if (builtinStyleKeys.contains(styleKey)) {
+        // Built-in style — store directly, clear shader path
+        obj[QLatin1String("style")] = styleKey;
+        obj.remove(QLatin1String("shaderPath"));
+        obj.remove(QLatin1String("geometry"));
+    } else {
+        // Shader registry entry — resolve source path
+        obj[QLatin1String("style")] = QStringLiteral("custom");
+        auto* registry = AnimationShaderRegistry::instance();
+        if (registry) {
+            const auto info = registry->animationShaderInfo(styleKey);
+            const QString sourcePath = info.value(QLatin1String("sourcePath")).toString();
+            if (!sourcePath.isEmpty()) {
+                obj[QLatin1String("shaderPath")] = sourcePath;
+            }
+            const QString geometry = info.value(QLatin1String("geometry")).toString();
+            if (!geometry.isEmpty()) {
+                obj[QLatin1String("geometry")] = geometry;
+            }
+        }
+    }
+
+    auto tree = m_settings.animationProfileTree();
+    tree.setProfile(eventName, AnimationProfile::fromJson(obj));
+    m_settings.setAnimationProfileTree(tree);
+    setNeedsSave(true);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// User animation presets
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QVariantList SettingsController::availableAnimationShaders() const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (!registry) {
+        return {};
+    }
+    return registry->availableAnimationShadersVariant();
+}
+
+QVariantMap SettingsController::animationShaderInfo(const QString& id) const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (!registry) {
+        return {};
+    }
+    return registry->animationShaderInfo(id);
+}
+
+void SettingsController::openAnimationShaderDirectory() const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (registry) {
+        registry->openUserShaderDirectory();
+    }
+}
+
+QVariantList SettingsController::animationShaderParameters(const QString& shaderId) const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (!registry)
+        return {};
+    const auto info = registry->animationShaderInfo(shaderId);
+    return info.value(QLatin1String("parameters")).toList();
+}
+
+QVariantMap SettingsController::animationShaderDefaults(const QString& shaderId) const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (!registry)
+        return {};
+    return registry->defaultParams(shaderId);
+}
+
+QVariantList SettingsController::animationShaderPresets(const QString& shaderId) const
+{
+    auto* registry = AnimationShaderRegistry::instance();
+    if (!registry)
+        return {};
+    return registry->shaderPresetsVariant(shaderId);
+}
+
+QVariantList SettingsController::userPresets() const
+{
+    QVariantList result;
+    const QJsonArray arr = m_settings.userAnimationPresetsJson();
+    for (const auto& val : arr)
+        result.append(val.toObject().toVariantMap());
+    return result;
+}
+
+void SettingsController::addUserPreset(const QString& name, const QVariantMap& preset)
+{
+    QJsonArray arr = m_settings.userAnimationPresetsJson();
+    QJsonObject obj = QJsonObject::fromVariantMap(preset);
+    obj[QLatin1String("name")] = name;
+    arr.append(obj);
+    m_settings.setUserAnimationPresetsJson(arr);
+    setNeedsSave(true);
+}
+
+void SettingsController::removeUserPreset(int index)
+{
+    QJsonArray arr = m_settings.userAnimationPresetsJson();
+    if (index >= 0 && index < arr.size()) {
+        arr.removeAt(index);
+        m_settings.setUserAnimationPresetsJson(arr);
+        setNeedsSave(true);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

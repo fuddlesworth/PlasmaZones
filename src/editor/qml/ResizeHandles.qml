@@ -196,6 +196,7 @@ Item {
                 // newX stays at startZoneX
                 // newY stays at startZoneY
                 // Idle
+                // South handles move bottom edge
 
                 id: handleMouse
 
@@ -310,7 +311,7 @@ Item {
                     }
                 }
                 onPositionChanged: function(mouse) {
-                    // South handles move bottom edge
+                    // threshold
 
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
@@ -474,8 +475,6 @@ Item {
                         var snapped = resizeHandles.root.controller.snapGeometrySelective(relX, relY, relW, relH, resizeHandles.root.zoneId, snapLeft, snapRight, snapTop, snapBottom);
                         // Convert back to canvas coordinates
                         if (snapped && isFinite(snapped.x) && !isNaN(snapped.x) && isFinite(snapped.y) && !isNaN(snapped.y) && isFinite(snapped.width) && !isNaN(snapped.width) && snapped.width > 0 && isFinite(snapped.height) && !isNaN(snapped.height) && snapped.height > 0) {
-                            // threshold
-
                             var snappedX = snapped.x * actualW;
                             var snappedY = snapped.y * actualH;
                             var snappedW = snapped.width * actualW;

@@ -27,6 +27,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/shaderregistry.h"
+#include "../core/animationshaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
 #include "../config/iconfigbackend.h"
@@ -142,6 +143,9 @@ bool Daemon::init()
     for (const ShaderRegistry::ShaderInfo& info : shaderRegistry->availableShaders()) {
         scheduleWarmForShader(info);
     }
+
+    // Initialize animation shader registry singleton (scans plasmazones/animations/)
+    new AnimationShaderRegistry(this);
 
     m_layoutManager->setSettings(m_settings.get());
     // Load layouts (defaultLayout() reads settings internally)

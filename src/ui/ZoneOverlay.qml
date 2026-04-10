@@ -37,6 +37,9 @@ Window {
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
     property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
+    // Animation profile properties (set from C++ on create/update)
+    property int animInDuration: 150
+    property int animOutDuration: 200
 
     function flash() {
         flashAnimation.start();
@@ -177,6 +180,7 @@ Window {
                 inactiveOpacity: (useCustom && modelData.inactiveOpacity !== undefined) ? modelData.inactiveOpacity : root.inactiveOpacity
                 borderWidth: (useCustom && modelData.borderWidth !== undefined) ? modelData.borderWidth : root.borderWidth
                 borderRadius: (useCustom && modelData.borderRadius !== undefined) ? modelData.borderRadius : root.borderRadius
+                animDuration: root.animInDuration
             }
 
         }
@@ -264,7 +268,7 @@ Window {
                     property: "opacity"
                     from: 0.3
                     to: 0
-                    duration: 300
+                    duration: root.animInDuration > 0 ? Math.round(root.animInDuration * 2) : 300
                     easing.type: Easing.OutQuad
                 }
 

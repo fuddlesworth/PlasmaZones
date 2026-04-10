@@ -30,6 +30,7 @@ Item {
     property real inactiveOpacity: 0.3 // Match Settings default
     property int borderWidth: Kirigami.Units.smallSpacing // 4px - increased for better visibility
     property int borderRadius: Kirigami.Units.gridUnit // 8px - use theme spacing
+    property int animDuration: 150 // Highlight transition duration (from profile tree)
 
     signal clicked()
     signal hovered()
@@ -57,14 +58,14 @@ Item {
 
         Behavior on color {
             ColorAnimation {
-                duration: 150
+                duration: zoneItem.animDuration
             }
 
         }
 
         Behavior on opacity {
             NumberAnimation {
-                duration: 150
+                duration: zoneItem.animDuration
             }
 
         }
@@ -100,7 +101,7 @@ Item {
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 150
+                    duration: zoneItem.animDuration
                 }
 
             }
@@ -123,7 +124,7 @@ Item {
 
             Behavior on opacity {
                 NumberAnimation {
-                    duration: 150
+                    duration: zoneItem.animDuration
                 }
 
             }

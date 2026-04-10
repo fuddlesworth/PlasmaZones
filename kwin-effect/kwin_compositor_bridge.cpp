@@ -249,7 +249,7 @@ bool KWinCompositorBridge::isDaemonReady() const
 
 void KWinCompositorBridge::invalidateScreenIdCache()
 {
-    m_effect->clearScreenIdCache();
+    m_effect->m_screenIdCache.clear();
 }
 
 } // namespace PlasmaZones

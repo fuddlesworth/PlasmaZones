@@ -1,0 +1,11 @@
+{
+  "id": "slidefade",
+  "name": "Slide Fade",
+  "description": "Partial translate with alpha blend",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "vertexShader": "effect.vert",
+  "geometry": "slidefade"
+}

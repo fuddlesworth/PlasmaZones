@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="520" viewBox="0 0 680 520">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-info { fill: #3daee9; font-size: 11px; }
+      .text-inherit { fill: #7f8c8d; font-size: 11px; font-style: italic; }
+      .text-parent { fill: #bdc3c7; font-size: 13px; font-weight: 500; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="520" rx="12"/>
+
+  <!-- ============================================================ -->
+  <!-- FADE (parent defaults) -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="16" width="640" height="76" rx="10"/>
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#262a2e"/>
+  <rect x="20" y="44" width="640" height="20" fill="#262a2e"/>
+  <text class="text-parent" x="40" y="46">Fade (parent defaults)</text>
+  <text x="512" y="46" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="32" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="43" r="9" fill="#7f8c8d"/>
+  <text class="text-inherit" x="58" y="79">Inherits all values from Global (Easing, 300ms)</text>
+
+  <!-- ============================================================ -->
+  <!-- Zone Highlight Fade -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="108" width="640" height="88" rx="10"/>
+  <rect x="20" y="108" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="136" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="138">Zone Highlight Fade</text>
+  <text x="512" y="138" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="124" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="135" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 168)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="175">Inheriting from: Fade &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="191">Current: Easing, 300ms, Standard (Ease Out)</text>
+
+  <!-- ============================================================ -->
+  <!-- OSD Fade -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="212" width="640" height="88" rx="10"/>
+  <rect x="20" y="212" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="240" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="242">OSD Fade</text>
+  <text x="512" y="242" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="228" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="239" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 272)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="279">Inheriting from: Fade &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="295">Current: Easing, 300ms, Standard (Ease Out)</text>
+
+  <!-- ============================================================ -->
+  <!-- Dim Fade -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="316" width="640" height="88" rx="10"/>
+  <rect x="20" y="316" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="344" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="346">Dim Fade</text>
+  <text x="512" y="346" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="332" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="343" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 376)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="383">Inheriting from: Fade &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="399">Current: Easing, 300ms, Standard (Ease Out)</text>
+
+  <!-- ============================================================ -->
+  <!-- Layout Switch Fade -->
+  <!-- ============================================================ -->
+  <rect class="card" x="20" y="420" width="640" height="88" rx="10"/>
+  <rect x="20" y="420" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="448" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="450">Layout Switch Fade</text>
+  <text x="512" y="450" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">Override</text>
+  <rect x="568" y="436" width="40" height="22" rx="11" fill="#3d4349"/>
+  <circle cx="579" cy="447" r="9" fill="#7f8c8d"/>
+  <g transform="translate(40, 480)">
+    <circle cx="7" cy="7" r="7" fill="none" stroke="#3daee9" stroke-width="1.2"/>
+    <text x="5" y="11" fill="#3daee9" font-size="10" font-weight="700" font-family="Inter, sans-serif">i</text>
+  </g>
+  <text class="text-info" x="58" y="487">Inheriting from: Fade &#x2192; Global</text>
+  <text class="text-inherit" x="58" y="503">Current: Easing, 300ms, Standard (Ease Out)</text>
+</svg>

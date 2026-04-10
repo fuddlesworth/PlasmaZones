@@ -1,0 +1,11 @@
+{
+  "id": "popin",
+  "name": "Pop In",
+  "description": "Scale up from center with opacity fade",
+  "author": "PlasmaZones",
+  "version": "1.0",
+  "category": "Transition",
+  "fragmentShader": "effect.frag",
+  "vertexShader": "effect.vert",
+  "geometry": "popin"
+}

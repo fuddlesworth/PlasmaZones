@@ -362,6 +362,9 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     writeQmlProperty(window, QStringLiteral("previewHeight"), config.previewHeight);
     writeQmlProperty(window, QStringLiteral("previewLockAspect"), config.previewLockAspect);
 
+    // Push animation profile properties
+    writeAnimationProperties(window, m_settings, AnimationEvents::zoneSelectorIn(), AnimationEvents::zoneSelectorOut());
+
     // Initial layout is applied by updateZoneSelectorWindow() which is always
     // called immediately after createZoneSelectorWindow() in showZoneSelector().
 

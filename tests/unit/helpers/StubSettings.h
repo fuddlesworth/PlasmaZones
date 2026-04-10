@@ -622,6 +622,20 @@ public:
     void setAnimationStaggerInterval(int) override
     {
     }
+    int animationShaderSubdivisions() const override
+    {
+        return 1;
+    }
+    void setAnimationShaderSubdivisions(int) override
+    {
+    }
+    AnimationProfileTree animationProfileTree() const override
+    {
+        return AnimationProfileTree::defaultTree();
+    }
+    void setAnimationProfileTree(const AnimationProfileTree&) override
+    {
+    }
 
     // Autotile decoration settings (ISettings)
     bool autotileFocusFollowsMouse() const override

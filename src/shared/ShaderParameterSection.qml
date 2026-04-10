@@ -97,6 +97,7 @@ ColumnLayout {
                 icon.height: Kirigami.Units.iconSizes.small
                 opacity: allLocked ? 1 : 0.4
                 display: QQC.ToolButton.IconOnly
+                Accessible.name: allLocked ? i18nc("@action:button", "Unlock all in %1", root.title) : i18nc("@action:button", "Lock all in %1", root.title)
                 QQC.ToolTip.text: allLocked ? i18nc("@info:tooltip", "Unlock all in %1", root.title) : i18nc("@info:tooltip", "Lock all in %1", root.title)
                 QQC.ToolTip.visible: hovered
                 QQC.ToolTip.delay: Kirigami.Units.toolTipDelay
@@ -153,7 +154,7 @@ ColumnLayout {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1
-                color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
+                color: root.dialogRoot && root.dialogRoot.themeSeparatorColor !== undefined ? root.dialogRoot.themeSeparatorColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.2)
                 visible: root.expanded
                 opacity: 0.5
             }

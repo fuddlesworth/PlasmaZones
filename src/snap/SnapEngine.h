@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/animationprofile.h"
 #include "core/iwindowengine.h"
 #include "core/types.h"
 #include <dbus_types.h>

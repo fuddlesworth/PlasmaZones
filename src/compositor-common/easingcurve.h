@@ -3,12 +3,16 @@
 
 #pragma once
 
+#include "../common/animationstyle.h"
+#include "../common/springparams.h"
+
 #include <QString>
 #include <QtMath>
 #include <chrono>
 #include <QPointF>
 #include <QSizeF>
 #include <QRect>
+#include <variant>
 
 namespace PlasmaZones {
 
@@ -80,12 +84,43 @@ private:
 };
 
 /**
- * @brief Animation data for window snap transitions (translate + scale)
+ * @brief Damped harmonic oscillator animation (niri-inspired spring physics)
+ *
+ * Inherits the persistent config fields (dampingRatio, stiffness, epsilon)
+ * from SpringParams and adds runtime-only fields (initialVelocity) plus
+ * physics evaluation methods. Unlike EasingCurve, spring animations have no
+ * fixed duration — they converge based on physics parameters.
+ */
+struct SpringAnimation : SpringParams
+{
+    qreal initialVelocity = 0.0; ///< Initial velocity (e.g. from gesture release)
+
+    /// Evaluate normalized spring position at time t seconds. Returns 0→1 (may overshoot).
+    qreal evaluate(qreal t) const;
+
+    /// Check if the spring has settled within epsilon at time t seconds.
+    bool isSettled(qreal t) const;
+
+    /// Estimated duration in seconds until the spring settles within epsilon.
+    qreal estimatedDuration() const;
+
+    QString toString() const;
+};
+
+/**
+ * @brief Animation data for window snap transitions (translate + scale + style)
  *
  * Stores the start position/size and target geometry for smooth animations.
- * Timing uses std::chrono::milliseconds for frame-perfect animation.
+ * Timing uses std::chrono::milliseconds for frame-perfect animation and a
+ * variant<EasingCurve, SpringAnimation> so callers can pick duration-based
+ * easing or physics-based spring convergence per animation.
+ *
  * Progress is cached once per frame to avoid inconsistencies between
  * position and size interpolation within a single paint cycle.
+ *
+ * Style / shader fields drive per-event visual variants on compositor
+ * plugins that support them (e.g. kwin-effect's Morph / Slide / Popin /
+ * SlideFade transforms and the OffscreenEffect GLSL pipeline).
  */
 struct WindowAnimation
 {
@@ -93,9 +128,31 @@ struct WindowAnimation
     QSizeF startSize; ///< Visual size before snap (for scale interpolation)
     QRect targetGeometry; ///< Target geometry (for duplicate detection)
     std::chrono::milliseconds startTime{-1}; ///< presentTime when animation started (-1 = pending)
-    qreal duration = 150.0; ///< Animation duration in milliseconds
-    EasingCurve easing; ///< Easing curve for this animation
-    qreal cachedProgress = 0.0; ///< Eased progress, updated once per frame
+    qreal duration = 150.0; ///< Animation duration in milliseconds (ignored for spring timing)
+    std::variant<EasingCurve, SpringAnimation> timing{EasingCurve{}}; ///< Easing curve or spring physics
+    qreal cachedProgress = 0.0; ///< Eased / spring progress, updated once per frame
+    qreal cachedSpringDuration = -1.0; ///< Pre-computed estimatedDuration() for springs (-1 = not computed)
+
+    // Style / shader metadata (no-op on compositor plugins that don't honor it).
+    AnimationStyle style = AnimationStyle::Morph;
+    qreal styleParam = 0.87; ///< Style-specific (e.g. minScale for Popin, slide fraction for SlideFade)
+    QString shaderPath; ///< Path to custom GLSL fragment shader (reserved for Custom / built-in bundles)
+    QString vertexShaderPath; ///< Optional vertex shader (empty = compositor default)
+    int shaderSubdivisions = 1; ///< Grid subdivision for vertex deformation (1 = single quad)
+
+    /// Whether timing is spring-based rather than duration-based.
+    bool isSpring() const
+    {
+        return std::holds_alternative<SpringAnimation>(timing);
+    }
+
+    /// Whether this animation's style uses opacity — lets callers enable
+    /// translucent rendering only when needed.
+    bool usesOpacity() const
+    {
+        return style == AnimationStyle::Slide || style == AnimationStyle::Popin || style == AnimationStyle::SlideFade
+            || style == AnimationStyle::FadeIn || style == AnimationStyle::SlideUp || style == AnimationStyle::ScaleIn;
+    }
 
     /// Check if the animation has been initialized
     bool isValid() const
@@ -112,29 +169,43 @@ struct WindowAnimation
             cachedProgress = 0.0;
             return;
         }
-        if (duration <= 0.0) {
-            cachedProgress = 1.0;
-            return;
+        const qreal elapsedMs = qreal((presentTime - startTime).count());
+
+        if (isSpring()) {
+            const auto& spring = std::get<SpringAnimation>(timing);
+            cachedProgress = spring.evaluate(elapsedMs / 1000.0);
+        } else {
+            if (duration <= 0.0) {
+                cachedProgress = 1.0;
+                return;
+            }
+            const qreal t = qMin(1.0, elapsedMs / duration);
+            cachedProgress = std::get<EasingCurve>(timing).evaluate(t);
         }
-        const qreal elapsed = qreal((presentTime - startTime).count());
-        const qreal t = qMin(1.0, elapsed / duration);
-        cachedProgress = easing.evaluate(t);
     }
 
-    /// Eased progress. Usually in [0.0, 1.0], but elastic and bounce curves
-    /// may overshoot (e.g. 1.05 or -0.02) by design.
+    /// Eased / spring progress. Usually in [0.0, 1.0], but elastic, bounce,
+    /// and underdamped spring timings may overshoot (e.g. 1.05 or -0.02).
     qreal progress() const
     {
         return cachedProgress;
     }
 
-    /// Check if animation is complete based on presentTime
+    /// Check if animation is complete based on presentTime.
     bool isComplete(std::chrono::milliseconds presentTime) const
     {
-        if (startTime.count() < 0 || duration <= 0.0) {
+        if (startTime.count() < 0) {
+            return false; // not started yet
+        }
+        const qreal elapsedMs = qreal((presentTime - startTime).count());
+
+        if (isSpring()) {
+            return std::get<SpringAnimation>(timing).isSettled(elapsedMs / 1000.0);
+        }
+        if (duration <= 0.0) {
             return true;
         }
-        return qreal((presentTime - startTime).count()) >= duration;
+        return elapsedMs >= duration;
     }
 
     /// Absolute visual top-left position at the cached progress.

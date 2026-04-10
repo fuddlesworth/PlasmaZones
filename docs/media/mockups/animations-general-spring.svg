@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="760" viewBox="0 0 680 760">
+  <defs>
+    <style>
+      text { font-family: 'Inter', 'Noto Sans', sans-serif; }
+      .bg { fill: #1b1e20; }
+      .card { fill: #232629; }
+      .text-title { fill: #eff0f1; font-size: 14px; font-weight: 600; }
+      .text-primary { fill: #eff0f1; font-size: 13px; }
+      .text-desc { fill: #7f8c8d; font-size: 11px; }
+      .text-value { fill: #eff0f1; font-size: 12px; font-weight: 500; }
+      .divider { stroke: #31363b; stroke-width: 1; }
+      .combo-bg { fill: #31363b; }
+      .slider-track { fill: #3d4349; }
+      .slider-fill { fill: #3daee9; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="680" height="760" rx="12"/>
+
+  <!-- ANIMATIONS CARD -->
+  <rect class="card" x="20" y="16" width="640" height="728" rx="10"/>
+
+  <!-- Card header -->
+  <rect x="20" y="16" width="640" height="48" rx="10" fill="#2a2e32"/>
+  <rect x="20" y="44" width="640" height="20" fill="#2a2e32"/>
+  <text class="text-title" x="40" y="46">Animations</text>
+
+  <!-- Toggle ON -->
+  <rect x="596" y="32" width="40" height="22" rx="11" fill="#27ae60" opacity="0.35"/>
+  <circle cx="624" cy="43" r="9" fill="#27ae60"/>
+  <circle cx="624" cy="43" r="6" fill="#eff0f1"/>
+
+  <!-- ============================================================ -->
+  <!-- SPRING PREVIEW WIDGET -->
+  <!-- ============================================================ -->
+  <rect x="120" y="80" width="440" height="190" rx="8" fill="#1b1e20"/>
+
+  <!-- Spring visualization area -->
+  <!-- Ball-on-spring horizontal diagram -->
+  <rect x="140" y="94" width="400" height="50" rx="4" fill="#1b1e20"/>
+
+  <!-- Wall -->
+  <rect x="148" y="98" width="4" height="42" rx="1" fill="#4d5357"/>
+  <line x1="148" y1="98" x2="148" y2="140" stroke="#5d6367" stroke-width="2"/>
+
+  <!-- Spring coils -->
+  <path d="M152,119 L162,108 L172,130 L182,108 L192,130 L202,108 L212,130 L222,108 L232,119" fill="none" stroke="#7f8c8d" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Ball (at current position - slightly past target showing overshoot) -->
+  <circle cx="248" cy="119" r="12" fill="#3daee9"/>
+  <circle cx="248" cy="119" r="8" fill="#3daee9" opacity="0.7"/>
+
+  <!-- Target line -->
+  <line x1="320" y1="100" x2="320" y2="138" stroke="#27ae60" stroke-width="1" stroke-dasharray="3,3"/>
+  <text x="324" y="110" fill="#27ae60" font-size="9" font-family="Inter, sans-serif">target</text>
+
+  <!-- Ghost positions (showing oscillation) -->
+  <circle cx="380" cy="119" r="10" fill="#3daee9" opacity="0.1"/>
+  <circle cx="290" cy="119" r="10" fill="#3daee9" opacity="0.15"/>
+  <circle cx="340" cy="119" r="10" fill="#3daee9" opacity="0.2"/>
+
+  <!-- Damped oscillation graph below -->
+  <rect x="140" y="154" width="400" height="100" rx="4" fill="#1b1e20"/>
+
+  <!-- Graph axes -->
+  <line x1="160" y1="204" x2="520" y2="204" stroke="#3d4349" stroke-width="1"/>
+  <line x1="160" y1="164" x2="160" y2="244" stroke="#3d4349" stroke-width="1"/>
+
+  <!-- Target line (y = 1.0) -->
+  <line x1="160" y1="180" x2="520" y2="180" stroke="#27ae60" stroke-width="0.5" stroke-dasharray="4,3"/>
+
+  <!-- Damped sine wave (underdamped, damping=0.8) -->
+  <path d="M160,240 C180,160 200,158 220,175 C240,192 250,190 270,183 C290,176 295,177 310,180 C325,183 328,182 340,181 C355,180 360,180 380,180 L520,180" fill="none" stroke="#3daee9" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Envelope (decay) -->
+  <path d="M160,160 C200,165 260,172 320,178 L520,180" fill="none" stroke="#3daee9" stroke-width="0.5" opacity="0.3" stroke-dasharray="3,3"/>
+  <path d="M160,240 C200,235 260,228 320,222 L520,220" fill="none" stroke="#3daee9" stroke-width="0.5" opacity="0" stroke-dasharray="3,3"/>
+
+  <!-- Labels -->
+  <text x="146" y="184" fill="#4d5357" font-size="8" font-family="Inter, sans-serif" text-anchor="end">1.0</text>
+  <text x="146" y="208" fill="#4d5357" font-size="8" font-family="Inter, sans-serif" text-anchor="end">0.0</text>
+  <text x="520" y="218" fill="#4d5357" font-size="8" font-family="Inter, sans-serif" text-anchor="end">time</text>
+
+  <!-- ============================================================ -->
+  <!-- SETTINGS ROWS -->
+  <!-- ============================================================ -->
+
+  <line x1="40" y1="288" x2="640" y2="288" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Default timing mode = Spring -->
+  <text class="text-primary" x="40" y="316">Default timing mode</text>
+  <text class="text-desc" x="40" y="332">Timing used when events don't override</text>
+  <rect x="486" y="302" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="324">Spring</text>
+  <text x="614" y="324" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="40" y1="352" x2="640" y2="352" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Preset -->
+  <text class="text-primary" x="40" y="380">Preset</text>
+  <text class="text-desc" x="40" y="396">Quick-select spring behavior</text>
+  <rect x="486" y="366" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="388">Snappy</text>
+  <text x="614" y="388" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="40" y1="416" x2="640" y2="416" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Damping ratio -->
+  <text class="text-primary" x="40" y="444">Damping ratio</text>
+  <text class="text-desc" x="40" y="460">&lt; 1 bouncy, = 1 critical, &gt; 1 overdamped</text>
+  <rect x="420" y="444" width="168" height="6" rx="3" fill="#3d4349"/>
+  <rect x="420" y="444" width="110" height="6" rx="3" fill="#3daee9"/>
+  <circle cx="530" cy="447" r="8" fill="#eff0f1"/>
+  <text class="text-value" x="612" y="452">0.80</text>
+
+  <line x1="40" y1="480" x2="640" y2="480" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Stiffness -->
+  <text class="text-primary" x="40" y="508">Stiffness</text>
+  <text class="text-desc" x="40" y="524">Higher = faster spring response</text>
+  <rect x="420" y="508" width="168" height="6" rx="3" fill="#3d4349"/>
+  <rect x="420" y="508" width="101" height="6" rx="3" fill="#3daee9"/>
+  <circle cx="521" cy="511" r="8" fill="#eff0f1"/>
+  <text class="text-value" x="618" y="516">800</text>
+
+  <line x1="40" y1="544" x2="640" y2="544" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Epsilon -->
+  <text class="text-primary" x="40" y="572">Epsilon</text>
+  <text class="text-desc" x="40" y="588">Convergence threshold — lower means longer animation</text>
+  <rect x="420" y="572" width="168" height="6" rx="3" fill="#3d4349"/>
+  <rect x="420" y="572" width="30" height="6" rx="3" fill="#3daee9"/>
+  <circle cx="450" cy="575" r="8" fill="#eff0f1"/>
+  <text class="text-value" x="606" y="580">0.001</text>
+
+  <line x1="40" y1="608" x2="640" y2="608" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Multiple windows -->
+  <text class="text-primary" x="40" y="636">Multiple windows</text>
+  <text class="text-desc" x="40" y="652">How to animate when moving several windows at once</text>
+  <rect x="486" y="622" width="150" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="502" y="644">All at once</text>
+  <text x="614" y="644" fill="#7f8c8d" font-size="11" font-family="Inter, sans-serif">&#x25BE;</text>
+
+  <line x1="40" y1="672" x2="640" y2="672" stroke="#31363b" stroke-width="1"/>
+
+  <!-- Minimum distance -->
+  <text class="text-primary" x="40" y="700">Minimum distance</text>
+  <text class="text-desc" x="40" y="716">Currently: always animate, no threshold</text>
+  <rect x="556" y="688" width="80" height="34" rx="6" fill="#31363b"/>
+  <text class="text-value" x="582" y="710">0 px</text>
+
+  <!-- Page label -->
+  <text x="340" y="750" text-anchor="middle" fill="#4d5357" font-size="10" font-family="Inter, sans-serif">Animations &gt; General (Spring Mode)</text>
+</svg>
