@@ -150,6 +150,15 @@ private:
 
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
+    // Bypass-safe variant: sends dragMoved over D-Bus without the
+    // m_dragBypassedForAutotile early return in callDragMoved(). Used by the
+    // autotile drag-insert forwarding path so the daemon sees modifier state
+    // transitions while the cursor is on an autotile screen.
+    void sendDragMovedBypassSafe(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods,
+                                 int mouseButtons);
+    // True when the current modifiers/buttons match any configured autotile
+    // drag-insert trigger. Empty list (not yet loaded) returns false.
+    bool autotileDragInsertHeld() const;
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
                          const QString& snapDragStartScreenId = {});
     void callCancelSnap();
@@ -452,6 +461,16 @@ private:
     // Once real settings arrive, they override these conservative defaults.
     QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
                                              // QVariant unboxing in hot path)
+    // Autotile drag-insert triggers: forwarded to daemon even in autotile-bypass
+    // drags so the daemon can reorder the tiling stack live while the cursor is
+    // on an autotile screen. Populated async from Settings::autotileDragInsertTriggers.
+    QVector<ParsedTrigger> m_parsedAutotileDragInsertTriggers;
+    // True when the effect has started forwarding drag events to the daemon for
+    // an in-progress autotile drag-insert preview. Set when the trigger first
+    // engages during a bypassed drag, cleared on drag end. Used by the drag-end
+    // handler to ensure a matching callDragStopped is sent so the daemon commits
+    // or cancels the preview.
+    bool m_autotileDragInsertForwarded = false;
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;

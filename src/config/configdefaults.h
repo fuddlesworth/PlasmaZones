@@ -66,6 +66,16 @@ public:
         trigger[ConfigKeys::triggerMouseButtonField()] = 0;
         return {trigger};
     }
+    static QVariantList autotileDragInsertTriggers()
+    {
+        // Default: single trigger with Alt modifier, no mouse button.
+        // Held while dragging a window to dynamically insert it into the
+        // autotile stack at the cursor position.
+        QVariantMap trigger;
+        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Alt);
+        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
+        return {trigger};
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Display Settings

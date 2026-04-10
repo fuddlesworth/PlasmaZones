@@ -191,8 +191,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         // where the user drops it, not snap back to a stored rect.
                         m_dragFloatedWindowIds.insert(windowId);
                     }
+                    // Stash pending dragStarted info so sendDeferredDragStarted()
+                    // can forward it to the daemon later if the autotile drag-insert
+                    // trigger gets engaged mid-drag (autotileDragInsertHeld path).
+                    m_dragStartedSent = false;
+                    m_pendingDragWindowId = windowId;
+                    m_pendingDragGeometry = geometry;
+                    m_autotileDragInsertForwarded = false;
                     return;
                 }
+                m_autotileDragInsertForwarded = false;
                 m_dragBypassedForAutotile = false;
                 m_dragActivationDetected = false;
                 m_dragStartedSent = false;
@@ -280,17 +288,52 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             m_dragBypassedForAutotile = true;
                             m_dragBypassScreenId = cursorScreenId; // Track the autotile VS we entered
                             m_dragStartedSent = false;
-                            m_pendingDragWindowId.clear();
-                            m_pendingDragGeometry = QRectF();
+                            // Preserve pending drag info so the autotile drag-insert path
+                            // can re-send dragStarted later if the trigger engages here.
+                            // (callCancelSnap cleared the daemon-side drag state, so we
+                            // have to send a fresh dragStarted before any dragMoved.)
+                            if (KWin::EffectWindow* draggedW = m_dragTracker->draggedWindow()) {
+                                m_pendingDragWindowId = windowId;
+                                m_pendingDragGeometry = draggedW->frameGeometry();
+                            } else {
+                                m_pendingDragWindowId.clear();
+                                m_pendingDragGeometry = QRectF();
+                            }
                             m_snapDragStartScreenId.clear();
+                            m_autotileDragInsertForwarded = false;
                             qCInfo(lcEffect)
                                 << "Drag crossed from snap to autotile" << cursorScreenId << "- deactivating zones";
                         }
                     }
                 }
 
-                // In autotile bypass — skip snap zone processing
+                // In autotile bypass — skip snap zone processing, but still
+                // forward dragStarted/dragMoved to the daemon when an autotile
+                // drag-insert trigger is held so the daemon can reorder the
+                // tiling stack live under the cursor.
                 if (m_dragBypassedForAutotile) {
+                    const bool insertHeld = autotileDragInsertHeld();
+                    if (insertHeld) {
+                        // Send dragStarted the first time we forward anything during
+                        // a bypassed drag (callDragStarted has no bypass guard). The
+                        // daemon needs this to populate m_draggedWindowId before
+                        // dragMoved early-returns on the mismatch.
+                        if (!m_dragStartedSent && !m_pendingDragWindowId.isEmpty()) {
+                            callDragStarted(m_pendingDragWindowId, m_pendingDragGeometry);
+                            m_dragStartedSent = true;
+                        }
+                        m_autotileDragInsertForwarded = true;
+                        sendDragMovedBypassSafe(windowId, cursorPos, m_currentModifiers,
+                                                static_cast<int>(m_currentMouseButtons));
+                    } else if (m_autotileDragInsertForwarded) {
+                        // Trigger released mid-drag: keep forwarding dragMoved so the
+                        // daemon sees the trigger state transition and cancels the
+                        // in-progress preview. After this one more tick the daemon
+                        // clears its state and subsequent dragMoveds are no-ops on
+                        // the autotile side.
+                        sendDragMovedBypassSafe(windowId, cursorPos, m_currentModifiers,
+                                                static_cast<int>(m_currentMouseButtons));
+                    }
                     return;
                 }
 
@@ -316,6 +359,22 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 // Use the captured autotile state from drag start (not live m_autotileScreens)
                 // to ensure consistent behavior even if autotile screens changed mid-drag.
                 if (m_dragBypassedForAutotile) {
+                    // Autotile drag-insert: the daemon owns this drag. Forward
+                    // dragStopped so the daemon's drop.cpp commits the preview
+                    // (final retile places the window at its picked stack slot)
+                    // and skip the effect-side adoption fallbacks below — those
+                    // would fight the daemon's geometry application.
+                    if (m_autotileDragInsertForwarded) {
+                        callDragStopped(w, windowId, /*snapDragStartScreenId=*/{});
+                        m_autotileDragInsertForwarded = false;
+                        m_snapDragStartScreenId.clear();
+                        m_dragBypassedForAutotile = false;
+                        m_dragBypassScreenId.clear();
+                        m_dragStartedSent = false;
+                        m_pendingDragWindowId.clear();
+                        m_pendingDragGeometry = QRectF();
+                        return;
+                    }
                     if (!cancelled) {
                         const QString dropScreenId = w ? getWindowScreenId(w) : m_dragBypassScreenId;
                         const bool windowWasInAutotile = m_autotileHandler->isTrackedWindow(windowId);
@@ -1673,6 +1732,18 @@ void PlasmaZonesEffect::loadCachedSettings()
         });
     }
 
+    // autotileDragInsertTriggers — forwarded to daemon during autotile-bypassed
+    // drags so the stack can be reordered live. Same parsing pipeline as the
+    // snapping triggers above.
+    {
+        DBusHelpers::loadSettingAsync(this, QStringLiteral("autotileDragInsertTriggers"), [this](const QVariant& v) {
+            m_parsedAutotileDragInsertTriggers =
+                TriggerParser::parseTriggers(v, TriggerModifierField, TriggerMouseButtonField);
+            qCDebug(lcEffect) << "Loaded autotileDragInsertTriggers:" << m_parsedAutotileDragInsertTriggers.size()
+                              << "triggers";
+        });
+    }
+
     qCDebug(lcEffect) << "Loading cached settings asynchronously, using defaults until loaded";
 }
 
@@ -2819,14 +2890,28 @@ void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cu
     if (m_dragBypassedForAutotile) {
         return;
     }
+    sendDragMovedBypassSafe(windowId, cursorPos, mods, mouseButtons);
+}
 
-    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
-    // See callDragStarted() comment for rationale.
+void PlasmaZonesEffect::sendDragMovedBypassSafe(const QString& windowId, const QPointF& cursorPos,
+                                                Qt::KeyboardModifiers mods, int mouseButtons)
+{
+    // Unguarded D-Bus dragMoved — the caller is responsible for deciding whether
+    // the daemon should see this event (e.g. autotile drag-insert path during a
+    // bypassed drag).
     QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
                                                       QStringLiteral("dragMoved"));
     msg << windowId << static_cast<int>(cursorPos.x()) << static_cast<int>(cursorPos.y()) << static_cast<int>(mods)
         << mouseButtons;
     QDBusConnection::sessionBus().asyncCall(msg);
+}
+
+bool PlasmaZonesEffect::autotileDragInsertHeld() const
+{
+    if (m_parsedAutotileDragInsertTriggers.isEmpty()) {
+        return false;
+    }
+    return TriggerParser::anyTriggerHeld(m_parsedAutotileDragInsertTriggers, m_currentModifiers, m_currentMouseButtons);
 }
 
 void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId,

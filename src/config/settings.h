@@ -209,6 +209,8 @@ public:
         int autotileMaxWindows READ autotileMaxWindows WRITE setAutotileMaxWindows NOTIFY autotileMaxWindowsChanged)
     Q_PROPERTY(int autotileInsertPosition READ autotileInsertPositionInt WRITE setAutotileInsertPositionInt NOTIFY
                    autotileInsertPositionChanged)
+    Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
+                   setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     Q_PROPERTY(bool animationsEnabled READ animationsEnabled WRITE setAnimationsEnabled NOTIFY animationsEnabledChanged)
@@ -975,6 +977,12 @@ public:
     }
     void setAutotileInsertPositionInt(int position);
 
+    QVariantList autotileDragInsertTriggers() const override
+    {
+        return m_autotileDragInsertTriggers;
+    }
+    void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
+
     // Autotile Shortcuts
     QString autotileToggleShortcut() const
     {
@@ -1731,6 +1739,7 @@ private:
     bool m_autotileSmartGaps = ConfigDefaults::autotileSmartGaps();
     int m_autotileMaxWindows = ConfigDefaults::autotileMaxWindows();
     AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
+    QVariantList m_autotileDragInsertTriggers; // [{modifier: int, mouseButton: int}, ...]
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     bool m_animationsEnabled = ConfigDefaults::animationsEnabled();

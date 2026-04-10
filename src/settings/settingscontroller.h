@@ -88,6 +88,9 @@ class SettingsController : public QObject
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
                    snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
+    Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
+                   setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
+    Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
 
     // Rendering backend info
     Q_PROPERTY(QStringList renderingBackendOptions READ renderingBackendOptions CONSTANT)
@@ -368,11 +371,14 @@ public:
     QVariantList defaultZoneSpanTriggers() const;
     QVariantList snapAssistTriggers() const;
     QVariantList defaultSnapAssistTriggers() const;
+    QVariantList autotileDragInsertTriggers() const;
+    QVariantList defaultAutotileDragInsertTriggers() const;
 
     void setAlwaysActivateOnDrag(bool enabled);
     void setDragActivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
+    void setAutotileDragInsertTriggers(const QVariantList& triggers);
 
     // ── Rendering backend ─────────────────────────────────────────────────────
     QStringList renderingBackendOptions() const
@@ -683,6 +689,7 @@ Q_SIGNALS:
     void dragActivationTriggersChanged();
     void zoneSpanTriggersChanged();
     void snapAssistTriggersChanged();
+    void autotileDragInsertTriggersChanged();
 
     // Color import signals
     void colorImportError(const QString& error);

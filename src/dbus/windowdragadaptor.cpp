@@ -205,6 +205,13 @@ QStringList WindowDragAdaptor::zoneIdsToStringList(const QVector<QUuid>& ids)
 
 void WindowDragAdaptor::cancelSnap()
 {
+    // Cancel any active autotile drag-insert preview so neighbours snap back
+    // to their original order instead of sticking at the previewed position.
+    if (m_autotileDragInsertActive && m_autotileEngine) {
+        m_autotileEngine->cancelDragInsertPreview();
+        m_autotileDragInsertActive = false;
+        m_autotileDragInsertScreenId.clear();
+    }
     m_snapCancelled = true;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
@@ -237,6 +244,11 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
     // If this window was being dragged, clean up drag state
     if (windowId == m_draggedWindowId) {
+        if (m_autotileDragInsertActive && m_autotileEngine) {
+            m_autotileEngine->cancelDragInsertPreview();
+            m_autotileDragInsertActive = false;
+            m_autotileDragInsertScreenId.clear();
+        }
         unregisterCancelOverlayShortcut();
         hideOverlayAndClearZoneState();
 

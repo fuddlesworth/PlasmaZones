@@ -1773,6 +1773,16 @@ QVariantList SettingsController::defaultSnapAssistTriggers() const
     return convertTriggersForQml(ConfigDefaults::snapAssistTriggers());
 }
 
+QVariantList SettingsController::autotileDragInsertTriggers() const
+{
+    return convertTriggersForQml(m_settings.autotileDragInsertTriggers());
+}
+
+QVariantList SettingsController::defaultAutotileDragInsertTriggers() const
+{
+    return convertTriggersForQml(ConfigDefaults::autotileDragInsertTriggers());
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Trigger setters
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1827,6 +1837,16 @@ void SettingsController::setSnapAssistTriggers(const QVariantList& triggers)
     if (m_settings.snapAssistTriggers() != converted) {
         m_settings.setSnapAssistTriggers(converted);
         Q_EMIT snapAssistTriggersChanged();
+        setNeedsSave(true);
+    }
+}
+
+void SettingsController::setAutotileDragInsertTriggers(const QVariantList& triggers)
+{
+    const QVariantList converted = convertTriggersForStorage(triggers);
+    if (m_settings.autotileDragInsertTriggers() != converted) {
+        m_settings.setAutotileDragInsertTriggers(converted);
+        Q_EMIT autotileDragInsertTriggersChanged();
         setNeedsSave(true);
     }
 }

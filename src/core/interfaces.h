@@ -97,6 +97,11 @@ public:
     virtual StickyWindowHandling autotileStickyWindowHandling() const = 0;
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
 
+    // Autotile drag-insert triggers: hold-to-activate list for live
+    // re-inserting a dragged window into the autotile stack.
+    virtual QVariantList autotileDragInsertTriggers() const = 0;
+    virtual void setAutotileDragInsertTriggers(const QVariantList& triggers) = 0;
+
     // Rendering backend (pipeline-level, not specific to any sub-interface)
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
@@ -109,6 +114,7 @@ public:
 Q_SIGNALS:
     void settingsChanged();
     void dragActivationTriggersChanged();
+    void autotileDragInsertTriggersChanged();
     void zoneSpanEnabledChanged();
     void zoneSpanModifierChanged();
     void zoneSpanTriggersChanged();

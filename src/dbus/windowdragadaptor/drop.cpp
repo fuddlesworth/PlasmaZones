@@ -40,6 +40,19 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         return;
     }
 
+    // ── Autotile drag-insert commit ─────────────────────────────────────────
+    // If a drag-insert preview is live, finalize it: commit the reorder so the
+    // dragged window's final geometry is applied on the next retile. Snapping
+    // logic is skipped entirely — the window's place in the stack IS the drop.
+    if (m_autotileDragInsertActive && m_autotileEngine) {
+        m_autotileEngine->commitDragInsertPreview();
+        m_autotileDragInsertActive = false;
+        m_autotileDragInsertScreenId.clear();
+        hideOverlayAndSelector();
+        resetDragState();
+        return;
+    }
+
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
     // Resolve the effective (virtual-aware) screen ID so zones are calculated against
     // virtual screen bounds, not physical screen bounds.
@@ -286,9 +299,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // Use screen-filtered occupancy — without this, zones occupied on
             // other screens appear occupied here when layouts share zone IDs.
             QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
-                layout, releaseScreenId, releaseScreen, m_settings,
-                [&occupied](const Zone* z) { return !occupied.contains(z->id()); });
+            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, releaseScreenId, releaseScreen,
+                                                                         m_settings, [&occupied](const Zone* z) {
+                                                                             return !occupied.contains(z->id());
+                                                                         });
             if (!emptyZones.isEmpty()) {
                 snapAssistRequestedOut = true;
                 emptyZonesOut = emptyZones;

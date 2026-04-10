@@ -484,6 +484,12 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
         }
     }
     {
+        auto tilingBehaviorTriggers = backend->group(ConfigDefaults::tilingBehaviorTriggersGroup());
+        m_autotileDragInsertTriggers =
+            parseTriggerListJson(tilingBehaviorTriggers->readString(ConfigDefaults::triggersKey()))
+                .value_or(ConfigDefaults::autotileDragInsertTriggers());
+    }
+    {
         auto tilingDecorations = backend->group(ConfigDefaults::tilingAppearanceDecorationsGroup());
         m_autotileHideTitleBars =
             tilingDecorations->readBool(ConfigDefaults::hideTitleBarsKey(), ConfigDefaults::autotileHideTitleBars());
@@ -885,6 +891,10 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
         tilingBehavior->writeInt(ConfigDefaults::stickyWindowHandlingKey(),
                                  static_cast<int>(m_autotileStickyWindowHandling));
         tilingBehavior->writeString(ConfigDefaults::lockedScreensKey(), m_lockedScreens.join(QLatin1Char(',')));
+    }
+    {
+        auto tilingBehaviorTriggers = backend->group(ConfigDefaults::tilingBehaviorTriggersGroup());
+        saveTriggerList(*tilingBehaviorTriggers, ConfigDefaults::triggersKey(), m_autotileDragInsertTriggers);
     }
     {
         auto tilingDecorations = backend->group(ConfigDefaults::tilingAppearanceDecorationsGroup());

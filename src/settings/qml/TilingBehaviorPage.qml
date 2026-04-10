@@ -9,6 +9,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -17,6 +19,39 @@ Flickable {
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
+
+        // =================================================================
+        // Triggers Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Triggers")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Hold to re-insert into stack")
+                    description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
+
+                    ModifierAndMouseCheckBoxes {
+                        width: Math.min(root.triggerPreferredWidth, Kirigami.Units.gridUnit * 16)
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: settingsController.autotileDragInsertTriggers
+                        defaultTriggers: settingsController.defaultAutotileDragInsertTriggers
+                        tooltipEnabled: false
+                        onTriggersModified: (triggers) => {
+                            settingsController.autotileDragInsertTriggers = triggers;
+                        }
+                    }
+
+                }
+
+            }
+
+        }
 
         // =================================================================
         // Behavior Card
