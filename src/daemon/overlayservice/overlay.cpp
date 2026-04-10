@@ -9,6 +9,7 @@
 #include "../../core/zone.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/screenmanager.h"
 #include "../../core/shaderregistry.h"
 #include <QQuickWindow>
@@ -22,68 +23,139 @@
 
 namespace PlasmaZones {
 
-void OverlayService::initializeOverlay(QScreen* cursorScreen)
+void OverlayService::destroyIfTypeMismatch(const QString& screenId)
+{
+    auto it = m_screenStates.find(screenId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    auto* existing = it->overlayWindow;
+    if (!existing) {
+        return;
+    }
+    const bool windowIsShader = existing->property("isShaderOverlay").toBool();
+    const bool shouldUseShader = useShaderForScreen(screenId);
+    if (windowIsShader != shouldUseShader) {
+        destroyOverlayWindow(screenId);
+    }
+}
+
+void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos)
 {
     // Determine if we should show on all monitors (cursorScreen == nullptr means all)
     const bool showOnAllMonitors = (cursorScreen == nullptr);
 
     m_visible = true;
-    m_currentOverlayScreen = showOnAllMonitors ? nullptr : cursorScreen;
 
     // Initialize shader timing (shared across all monitors for synchronized effects)
     // Only start timer if invalid - preserves iTime across show/hide for less predictable animations
     ensureShaderTimerStarted(m_shaderTimer, m_shaderTimerMutex, m_lastFrameTime, m_frameCount);
     m_zoneDataDirty = true; // Rebuild zone data on next frame
 
-    // When single-monitor mode, dismiss overlay on screens we're switching away from (#136).
+    // Determine the cursor's effective screen ID for single-monitor filtering.
+    // For virtual screens we must resolve to the specific virtual screen under
+    // the cursor, not just the physical monitor (all virtual screens on one
+    // physical monitor share the same QScreen*).
+    // Resolve to effective (virtual) screen ID under the cursor
+    QString cursorEffectiveId;
+    if (!showOnAllMonitors && cursorScreen) {
+        QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
+        cursorEffectiveId = Utils::effectiveScreenIdAt(pos, cursorScreen);
+    } else if (cursorScreen) {
+        cursorEffectiveId = Utils::screenIdentifier(cursorScreen);
+    }
+
+    // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
+    m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
+
+    // When single-monitor mode, destroy overlay on screens we're switching away from (#136).
+    // Must destroy (not just hide) because on Vulkan, window->hide() destroys the
+    // VkSwapchainKHR but Qt doesn't properly reinitialize it on re-show. Destroying
+    // the window ensures a fresh window is created via createOverlayWindow() below.
     if (!showOnAllMonitors) {
-        const QList<QScreen*> screens = m_overlayWindows.keys();
-        for (auto* screen : screens) {
-            if (screen != cursorScreen) {
-                dismissOverlayWindow(screen);
+        const QStringList screenIds = m_screenStates.keys();
+        for (const QString& screenId : screenIds) {
+            if (screenId != cursorEffectiveId && m_screenStates[screenId].overlayWindow) {
+                destroyOverlayWindow(screenId);
             }
         }
     }
 
-    for (auto* screen : Utils::allScreens()) {
-        // Skip screens that aren't the cursor's screen when single-monitor mode is enabled
-        if (!showOnAllMonitors && screen != cursorScreen) {
-            continue;
-        }
-        // Skip monitors/desktops/activities where PlasmaZones is disabled
-        if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                              m_currentActivity)) {
-            continue;
-        }
-        // Skip autotile-managed screens (overlay is for manual zone selection)
-        if (m_excludedScreens.contains(Utils::screenIdentifier(screen))) {
-            continue;
-        }
+    // Iterate effective screen IDs (includes virtual screens when configured)
+    auto* mgr = ScreenManager::instance();
+    const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
 
-        if (m_overlayWindows.contains(screen)) {
-            // Type-mismatch check: non-shader windows survive hide() and may be
-            // stale if shader settings changed while the overlay was hidden.
-            // Destroy and recreate if the window type no longer matches.
-            auto* existing = m_overlayWindows.value(screen);
-            if (existing) {
-                const bool windowIsShader = existing->property("isShaderOverlay").toBool();
-                const bool shouldUseShader = useShaderForScreen(screen);
-                if (windowIsShader != shouldUseShader) {
-                    destroyOverlayWindow(screen);
-                }
+    // Use effective screen IDs if ScreenManager is available, otherwise fall back to physical screens
+    if (mgr && !effectiveIds.isEmpty()) {
+        for (const QString& screenId : effectiveIds) {
+            QScreen* physScreen = mgr->physicalQScreenFor(screenId);
+            if (!physScreen) {
+                continue;
+            }
+            // Skip screens that aren't the cursor's effective screen when single-monitor mode is enabled
+            if (!showOnAllMonitors && screenId != cursorEffectiveId) {
+                continue;
+            }
+            // Skip monitors/desktops/activities where PlasmaZones is disabled
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                continue;
+            }
+            // Skip autotile-managed screens (overlay is for manual zone selection)
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
+            }
+
+            const QRect geom = mgr->screenGeometry(screenId);
+
+            // Destroy and recreate if the window type no longer matches shader settings.
+            destroyIfTypeMismatch(screenId);
+            if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
+                createOverlayWindow(screenId, physScreen, geom);
+            }
+            if (auto* window = m_screenStates.value(screenId).overlayWindow) {
+                const QRect storedGeom =
+                    (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
+                         ? m_screenStates[screenId].overlayGeometry
+                         : geom);
+                assertWindowOnScreen(window, physScreen, storedGeom);
+                qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
+                                   << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
+                updateOverlayWindow(screenId, physScreen);
+                window->show();
+                window->update();
             }
         }
-        if (!m_overlayWindows.contains(screen)) {
-            createOverlayWindow(screen);
-        }
-        if (auto* window = m_overlayWindows.value(screen)) {
-            assertWindowOnScreen(window, screen);
-            qCDebug(lcOverlay) << "initializeOverlay: screen=" << screen->name() << "screenGeom=" << screen->geometry()
-                               << "availGeom=" << ScreenManager::actualAvailableGeometry(screen) << "windowScreen="
-                               << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
-            updateOverlayWindow(screen);
-            window->show();
-            window->update();
+    } else {
+        // Fallback: no ScreenManager, use physical screens directly
+        for (auto* screen : Utils::allScreens()) {
+            if (!showOnAllMonitors && screen != cursorScreen) {
+                continue;
+            }
+            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
+                                  m_currentActivity)) {
+                continue;
+            }
+            if (m_excludedScreens.contains(Utils::screenIdentifier(screen))) {
+                continue;
+            }
+
+            const QString screenId = Utils::screenIdentifier(screen);
+
+            // Destroy and recreate if the window type no longer matches shader settings.
+            destroyIfTypeMismatch(screenId);
+            if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
+                createOverlayWindow(screen);
+            }
+            if (auto* window = m_screenStates.value(screenId).overlayWindow) {
+                assertWindowOnScreen(window, screen);
+                qCDebug(lcOverlay) << "initializeOverlay (physical fallback): screenId=" << screenId
+                                   << "physGeom=" << screen->geometry()
+                                   << "availGeom=" << ScreenManager::actualAvailableGeometry(screen) << "windowScreen="
+                                   << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
+                updateOverlayWindow(screen);
+                window->show();
+                window->update();
+            }
         }
     }
 
@@ -103,7 +175,8 @@ void OverlayService::updateLayout(Layout* layout)
 
         // Flash zones to indicate layout change if enabled
         if (m_settings && m_settings->flashZonesOnSwitch()) {
-            for (auto* window : std::as_const(m_overlayWindows)) {
+            for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+                auto* window = it_.value().overlayWindow;
                 if (window) {
                     QMetaObject::invokeMethod(window, "flash");
                 }
@@ -128,17 +201,14 @@ void OverlayService::updateLayout(Layout* layout)
 
 void OverlayService::updateGeometries()
 {
-    for (auto* screen : m_overlayWindows.keys()) {
-        updateOverlayWindow(screen);
-    }
-    // Bump zone data version once after all per-screen updates complete,
-    // then broadcast to all windows so shaders see the new version atomically.
-    ++m_zoneDataVersion;
-    for (auto* w : std::as_const(m_overlayWindows)) {
-        if (w) {
-            writeQmlProperty(w, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
+    for (const QString& screenId : m_screenStates.keys()) {
+        QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+        if (physScreen) {
+            updateOverlayWindow(screenId, physScreen);
         }
     }
+    // Geometry data is now current — do NOT bump version here.
+    // updateZonesForAllWindows() is the single authoritative version bump point.
 }
 
 void OverlayService::highlightZone(const QString& zoneId)
@@ -147,7 +217,8 @@ void OverlayService::highlightZone(const QString& zoneId)
     m_zoneDataDirty = true;
 
     // Update the highlightedZoneId property on all overlay windows
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("highlightedZoneId"), zoneId);
             // Clear multi-zone highlighting when using single zone
@@ -167,7 +238,8 @@ void OverlayService::highlightZones(const QStringList& zoneIds)
         zoneIdList.append(zoneId);
     }
 
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), zoneIdList);
             // Clear single zone highlighting when using multi-zone
@@ -182,7 +254,8 @@ void OverlayService::clearHighlight()
     m_zoneDataDirty = true;
 
     // Clear the highlight on all overlay windows
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
             writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
@@ -196,24 +269,44 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
         return;
     }
 
-    // Update mouse position on all overlay windows for shader effects
-    for (auto* window : std::as_const(m_overlayWindows)) {
-        if (window) {
-            // Convert global cursor position to window-local coordinates
-            const QPoint localPos = window->mapFromGlobal(QPoint(cursorX, cursorY));
-            window->setProperty("mousePosition", QPointF(localPos.x(), localPos.y()));
+    // Update mouse position on all overlay windows for shader effects.
+    // Use per-screen overlayGeometry for coordinate translation instead of
+    // window->mapFromGlobal(), which may return wrong coordinates before the
+    // first frame because QWindow::geometry() doesn't reflect LayerShell
+    // positioning yet.
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (it.value().overlayWindow) {
+            const QRect targetGeom = it.value().overlayGeometry;
+            if (!targetGeom.isValid()) {
+                // No overlay geometry recorded for this screen ID yet. Skip rather than
+                // falling back to QWindow::mapFromGlobal(), which is unreliable on Wayland
+                // with LayerShell until after the first frame (geometry not yet applied).
+                qCWarning(lcOverlay) << "updateMousePosition: no overlay geometry for screen" << it.key()
+                                     << "— skipping mouse position update";
+                continue;
+            }
+            const QPointF local(cursorX - targetGeom.x(), cursorY - targetGeom.y());
+            it.value().overlayWindow->setProperty("mousePosition", local);
         }
     }
 }
 
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
-    if (m_overlayWindows.contains(screen)) {
+    const QString screenId = Utils::screenIdentifier(screen);
+    auto* mgr = ScreenManager::instance();
+    QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
+    createOverlayWindow(screenId, screen, geom);
+}
+
+void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry)
+{
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayWindow) {
         return;
     }
 
     // Choose overlay type based on shader settings for THIS screen's layout
-    bool usingShader = useShaderForScreen(screen);
+    bool usingShader = useShaderForScreen(screenId);
 
     // Expose overlayService to QML context for error reporting
     m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
@@ -226,28 +319,27 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         placeholder.fill(Qt::transparent);
         QVariantMap initProps;
         initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
-        window =
-            createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, "shader overlay", initProps);
+        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), physScreen, "shader overlay",
+                                 initProps);
         if (window) {
-            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen"
-                              << screen->name();
+            qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screenId;
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
         }
     }
     if (!window) {
-        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), screen, "overlay");
+        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), physScreen, "overlay");
         if (!window) {
             return;
         }
     }
 
-    // Set window size to cover full screen. Position is controlled by layer-surface
-    // anchors (AnchorAll), not by setX/setY which are no-ops on layer surfaces.
-    const QRect geom = screen->geometry();
-    window->setWidth(geom.width());
-    window->setHeight(geom.height());
+    // Set window size to cover the target screen area (physical or virtual).
+    // Position is controlled by layer-surface anchors + margins for virtual screens,
+    // so setX/setY are only used as hints for mapFromGlobal.
+    window->setWidth(geometry.width());
+    window->setHeight(geometry.height());
 
     // Mark window type for reliable type detection
     window->setProperty("isShaderOverlay", usingShader);
@@ -255,7 +347,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
     // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
     // Use per-screen layout (same resolution as updateOverlayWindow) so each monitor
     // gets the correct shader when per-screen assignments differ
-    Layout* screenLayout = resolveScreenLayout(screen);
+    Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (usingShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
@@ -269,45 +361,80 @@ void OverlayService::createOverlayWindow(QScreen* screen)
         }
     }
 
-    // Configure layer surface for full-screen overlay
-    if (!configureLayerSurface(
-            window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-            QStringLiteral("plasmazones-overlay-%1-%2").arg(Utils::screenIdentifier(screen)).arg(++m_scopeGeneration),
-            LayerSurface::AnchorAll)) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screen->name();
+    // Configure layer surface for overlay.
+    // For virtual screens, the window is parented to the physical QScreen but sized
+    // to the virtual screen geometry. Anchors are NOT set to all-edges for virtual
+    // screens since the window doesn't cover the full physical screen.
+    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+                               QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screenId;
         window->deleteLater();
         return;
     }
+    // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
+    updateWindowScreenPosition(window, screenId);
 
     window->setVisible(false);
 
-    // Connect to screen geometry changes
-    QPointer<QScreen> screenPtr = screen;
-    connect(screen, &QScreen::geometryChanged, window, [this, screenPtr](const QRect& newGeom) {
-        if (!screenPtr) {
-            return;
-        }
-        if (auto* w = m_overlayWindows.value(screenPtr)) {
-            // Only set size — position is controlled by layer-surface anchors (AnchorAll),
-            // setX/setY are no-ops on layer surfaces.
-            w->setWidth(newGeom.width());
-            w->setHeight(newGeom.height());
-            updateOverlayWindow(screenPtr);
-        }
-    });
+    // Connect to physical screen geometry changes.
+    // For physical screens: update overlay size directly from the new geometry.
+    // For virtual screens: recalculate geometry from ScreenManager since the
+    // virtual screen bounds are derived from the physical screen geometry.
+    const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
+    QMetaObject::Connection geomConn;
+    {
+        QPointer<QScreen> screenPtr = physScreen;
+        const QString sid = screenId; // Capture by value for lambda
+        const bool isVS = isVirtualScreen;
+        geomConn =
+            connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
+                if (!screenPtr) {
+                    return;
+                }
+                auto stateIt = m_screenStates.find(sid);
+                if (stateIt == m_screenStates.end())
+                    return; // State was cleaned up, ignore stale geometry signal
+                auto& st = stateIt.value();
+                if (auto* w = st.overlayWindow) {
+                    if (isVS) {
+                        // Virtual screen: recalculate geometry from ScreenManager since
+                        // virtual screen proportions are relative to the physical screen.
+                        const QRect vsGeom = updateWindowScreenPosition(w, sid);
+                        if (vsGeom.isValid()) {
+                            w->setWidth(vsGeom.width());
+                            w->setHeight(vsGeom.height());
+                            st.overlayGeometry = vsGeom;
+                            updateOverlayWindow(sid, screenPtr);
+                            return;
+                        }
+                    } else {
+                        // Physical screen: size directly from the new geometry.
+                        // Position is controlled by layer-surface anchors (AnchorAll),
+                        // setX/setY are no-ops on layer surfaces.
+                        w->setWidth(newGeom.width());
+                        w->setHeight(newGeom.height());
+                        st.overlayGeometry = newGeom;
+                        updateOverlayWindow(sid, screenPtr);
+                    }
+                }
+            });
+    }
 
     if (usingShader) {
         writeQmlProperty(window, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
     }
 
-    m_overlayWindows.insert(screen, window);
+    m_screenStates[screenId].overlayWindow = window;
+    m_screenStates[screenId].overlayPhysScreen = physScreen;
+    m_screenStates[screenId].overlayGeometry = geometry;
+    m_screenStates[screenId].overlayGeomConnection = geomConn;
 }
 
 void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 {
-    QList<QScreen*> screensToRecreate;
-    for (auto it = m_overlayWindows.constBegin(); it != m_overlayWindows.constEnd(); ++it) {
-        auto* window = it.value();
+    QStringList screensToRecreate;
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (!window)
             continue;
         const bool windowIsShader = window->property("isShaderOverlay").toBool();
@@ -322,14 +449,26 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
     if (wasVisible)
         stopShaderAnimation();
 
-    for (QScreen* screen : screensToRecreate)
-        destroyOverlayWindow(screen);
-    for (QScreen* screen : screensToRecreate) {
-        if (!isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                               m_currentActivity)) {
-            createOverlayWindow(screen);
-            if (auto* w = m_overlayWindows.value(screen)) {
-                updateOverlayWindow(screen);
+    // Snapshot phys screens before destroying
+    // Snapshot per-screen state before destroying
+    QHash<QString, QScreen*> savedPhysScreens;
+    QHash<QString, QRect> savedGeometries;
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        savedPhysScreens.insert(it_.key(), it_.value().overlayPhysScreen);
+        savedGeometries.insert(it_.key(), it_.value().overlayGeometry);
+    }
+
+    for (const QString& screenId : screensToRecreate)
+        destroyOverlayWindow(screenId);
+    for (const QString& screenId : screensToRecreate) {
+        if (!isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+            QScreen* physScreen = savedPhysScreens.value(screenId);
+            if (!physScreen)
+                continue;
+            const QRect geom = savedGeometries.value(screenId, physScreen->geometry());
+            createOverlayWindow(screenId, physScreen, geom);
+            if (auto* w = m_screenStates.value(screenId).overlayWindow) {
+                updateOverlayWindow(screenId, physScreen);
                 if (wasVisible)
                     w->show();
             }
@@ -343,70 +482,94 @@ void OverlayService::recreateOverlayWindowsOnTypeMismatch()
 
 void OverlayService::dismissOverlayWindow(QScreen* screen)
 {
-    auto* window = m_overlayWindows.value(screen);
-    if (!window) {
-        return;
+    const QString physId = Utils::screenIdentifier(screen);
+
+    // Collect matching overlay keys — may be virtual screen IDs for this physical screen
+    QStringList matchingKeys;
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (VirtualScreenId::extractPhysicalId(it.key()) == physId) {
+            matchingKeys.append(it.key());
+        }
     }
-    // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
-    // to the per-window QRhi which gets invalidated when hide() tears down the
-    // wl_surface and show() creates a new one.
-    // Non-shader overlays: hide() is safe — standard QML items recover from
-    // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
-    if (window->property("isShaderOverlay").toBool()) {
-        destroyOverlayWindow(screen);
-    } else {
-        window->hide();
+
+    for (const QString& screenId : matchingKeys) {
+        auto* window = m_screenStates.value(screenId).overlayWindow;
+        if (!window) {
+            continue;
+        }
+        // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
+        // to the per-window QRhi which gets invalidated when hide() tears down the
+        // wl_surface and show() creates a new one.
+        // Non-shader overlays: hide() is safe — standard QML items recover from
+        // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
+        if (window->property("isShaderOverlay").toBool()) {
+            destroyOverlayWindow(screenId);
+        } else {
+            window->hide();
+        }
     }
 }
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)
 {
-    if (auto* window = m_overlayWindows.take(screen)) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        disconnect(screen, nullptr, window, nullptr);
-        window->close();
-        // destroy() synchronously tears down the platform window (wl_surface) and
-        // its Vulkan resources (VkSurfaceKHR, VkSwapchainKHR, scene graph render loop).
-        // Without this, deleteLater() defers cleanup to the next event loop iteration,
-        // leaving stale Vulkan resources alive when createOverlayWindow() creates a new
-        // surface on the same screen — causing swapchain/render loop corruption after
-        // 2-3 show/hide cycles.
-        window->destroy();
-        window->deleteLater();
+    const QString screenId = Utils::screenIdentifier(screen);
+    destroyOverlayWindow(screenId);
+}
+
+void OverlayService::destroyOverlayWindow(const QString& screenId)
+{
+    auto it = m_screenStates.find(screenId);
+    if (it != m_screenStates.end()) {
+        if (auto* window = it->overlayWindow) {
+            // Disconnect the stored geometryChanged connection specifically,
+            // rather than disconnecting all signals from the screen to a receiver.
+            // The connection targets `this` (not `window`), so the old blanket
+            // disconnect(screen, nullptr, window, nullptr) missed it entirely.
+            QObject::disconnect(it->overlayGeomConnection);
+            window->close();
+            window->destroy();
+            window->deleteLater();
+            it->overlayWindow = nullptr;
+        }
+        it->overlayPhysScreen = nullptr;
+        it->overlayGeometry = QRect();
+        it->overlayGeomConnection = {};
     }
 }
 
 void OverlayService::updateOverlayWindow(QScreen* screen)
 {
-    auto* window = m_overlayWindows.value(screen);
+    const QString screenId = Utils::screenIdentifier(screen);
+    updateOverlayWindow(screenId, screen);
+}
+
+void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physScreen)
+{
+    auto* window = m_screenStates.value(screenId).overlayWindow;
     if (!window) {
         return;
     }
 
     // Get the layout for this screen to use layout-specific settings
     // Prefer per-screen assignment, fall back to global active layout
-    Layout* screenLayout = resolveScreenLayout(screen);
+    Layout* screenLayout = resolveScreenLayout(screenId);
 
     // Update settings-based properties on the window itself (QML root)
     if (m_settings) {
-        window->setProperty("highlightColor", m_settings->highlightColor());
-        window->setProperty("inactiveColor", m_settings->inactiveColor());
-        window->setProperty("borderColor", m_settings->borderColor());
-        window->setProperty("activeOpacity", m_settings->activeOpacity());
-        window->setProperty("inactiveOpacity", m_settings->inactiveOpacity());
-        window->setProperty("borderWidth", m_settings->borderWidth());
-        window->setProperty("borderRadius", m_settings->borderRadius());
-        window->setProperty("enableBlur", m_settings->enableBlur());
+        writeColorSettings(window, m_settings);
+        writeQmlProperty(window, QStringLiteral("borderWidth"), m_settings->borderWidth());
+        writeQmlProperty(window, QStringLiteral("borderRadius"), m_settings->borderRadius());
+        writeQmlProperty(window, QStringLiteral("enableBlur"), m_settings->enableBlur());
         // Global setting is a master switch; per-layout setting can only further restrict
         bool showNumbers = m_settings->showZoneNumbers() && (!screenLayout || screenLayout->showZoneNumbers());
-        window->setProperty("showNumbers", showNumbers);
+        writeQmlProperty(window, QStringLiteral("showNumbers"), showNumbers);
         writeFontProperties(window, m_settings);
     }
 
     // Update shader-specific properties if using shader overlay
     // Only update if this window is actually a shader overlay window (check isShaderOverlay property)
     const bool windowIsShader = window->property("isShaderOverlay").toBool();
-    const bool screenUsesShader = useShaderForScreen(screen);
+    const bool screenUsesShader = useShaderForScreen(screenId);
     if (windowIsShader && screenUsesShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
         if (registry) {
@@ -433,7 +596,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
     // Update zones on the window (QML root has the zones property).
     // Patch isHighlighted from overlay's highlightedZoneId/highlightedZoneIds so
     // ZoneDataProvider and zone components see the correct state.
-    QVariantList zones = buildZonesList(screen);
+    QVariantList zones = buildZonesList(screenId, physScreen);
     QVariantList patched = patchZonesWithHighlight(zones, window);
 
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
@@ -457,7 +620,7 @@ void OverlayService::updateOverlayWindow(QScreen* screen)
         }
         writeQmlProperty(window, QStringLiteral("zoneCount"), patched.size());
         writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
-        updateLabelsTextureForWindow(window, patched, screen, screenLayout);
+        updateLabelsTextureForWindow(window, patched, physScreen, screenLayout);
         // Note: zoneDataVersion is bumped and broadcast to all windows in
         // updateGeometries() after all per-screen updates complete. Do not
         // write it here — updateOverlayWindow() is called per-screen, and

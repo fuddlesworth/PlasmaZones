@@ -9,7 +9,9 @@
 #include <QRect>
 #include <QHash>
 #include <QString>
+#include "../../core/constants.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/windowtrackingservice.h"
 
 namespace PlasmaZones {
@@ -27,10 +29,10 @@ inline QJsonArray toJsonArray(const QStringList& list)
 inline QJsonObject rectToJsonObject(const QRect& rect)
 {
     QJsonObject obj;
-    obj[QLatin1String("x")] = rect.x();
-    obj[QLatin1String("y")] = rect.y();
-    obj[QLatin1String("width")] = rect.width();
-    obj[QLatin1String("height")] = rect.height();
+    obj[JsonKeys::X] = rect.x();
+    obj[JsonKeys::Y] = rect.y();
+    obj[JsonKeys::Width] = rect.width();
+    obj[JsonKeys::Height] = rect.height();
     return obj;
 }
 
@@ -40,7 +42,9 @@ inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
         QJsonObject obj = rectToJsonObject(it.value().geometry);
         if (!it.value().connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
+            obj[QLatin1String("screen")] = VirtualScreenId::isVirtual(it.value().connectorName)
+                ? it.value().connectorName
+                : Utils::screenIdForName(it.value().connectorName);
         }
         result[Utils::extractAppId(it.key())] = obj;
     }
@@ -63,12 +67,14 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         }
         QJsonObject obj;
         obj[QLatin1String("windowId")] = it.key();
-        obj[QLatin1String("x")] = it.value().geometry.x();
-        obj[QLatin1String("y")] = it.value().geometry.y();
-        obj[QLatin1String("width")] = it.value().geometry.width();
-        obj[QLatin1String("height")] = it.value().geometry.height();
+        obj[JsonKeys::X] = it.value().geometry.x();
+        obj[JsonKeys::Y] = it.value().geometry.y();
+        obj[JsonKeys::Width] = it.value().geometry.width();
+        obj[JsonKeys::Height] = it.value().geometry.height();
         if (!it.value().connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
+            obj[QLatin1String("screen")] = VirtualScreenId::isVirtual(it.value().connectorName)
+                ? it.value().connectorName
+                : Utils::screenIdForName(it.value().connectorName);
         }
         result.append(obj);
     }

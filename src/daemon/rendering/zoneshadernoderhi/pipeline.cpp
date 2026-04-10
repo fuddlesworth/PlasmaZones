@@ -71,8 +71,8 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         return false;
     }
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
-    const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
+    const int bufferW = qMax(1, qRound(m_width * m_bufferScale));
+    const int bufferH = qMax(1, qRound(m_height * m_bufferScale));
     const QSize bufferSize(bufferW, bufferH);
     // Create or resize depth texture before render targets that reference it
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
@@ -397,6 +397,13 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     }
     m_bufferRenderPassFormat = format;
 
+    // NOTE: The SRB binding builders below (createBufferSrb, createImageSrbSingle,
+    // createImageSrbMulti, and the multi-buffer loop in ensureBufferPipeline) share
+    // the same overall structure (UBO:0, labels:1, channels:2-5, audio:6, user,
+    // wallpaper, depth) but differ in how channel textures at bindings 2-5 are
+    // resolved (feedback ping-pong vs multi-pass vs dummy). Extracting a common
+    // helper would require a channel-resolution callback, adding indirection
+    // without meaningful clarity gains.
     auto createBufferSrb = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;

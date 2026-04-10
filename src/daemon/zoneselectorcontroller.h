@@ -136,6 +136,14 @@ public:
 
     // Screen management
     void setScreen(QScreen* screen);
+    void setScreenId(const QString& screenId)
+    {
+        m_screenId = screenId;
+    }
+    QString screenId() const
+    {
+        return m_screenId;
+    }
     QScreen* screen() const
     {
         return m_screen;
@@ -225,6 +233,7 @@ private:
 
     // Cursor tracking
     QPointF m_cursorPosition;
+    bool m_hasCursorPosition = false; // True after first updateCursorPosition() call
     qreal m_cursorProximity = 1.0; // 0.0 = at edge, 1.0 = far away
 
     // Configuration (in pixels)
@@ -243,6 +252,7 @@ private:
     QPointer<LayoutManager> m_layoutManager;
     QPointer<ISettings> m_settings;
     QPointer<QScreen> m_screen;
+    QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)
     QPointer<QQuickItem> m_qmlItem;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)

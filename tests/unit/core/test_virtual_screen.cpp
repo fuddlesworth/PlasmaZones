@@ -1,0 +1,629 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * @file test_virtual_screen.cpp
+ * @brief Unit tests for virtual screen data model and ID utilities
+ *
+ * Tests VirtualScreenId namespace (ID parsing/construction),
+ * VirtualScreenDef::absoluteGeometry(), and VirtualScreenConfig
+ * equality and subdivision detection.
+ */
+
+#include <QTest>
+#include <QString>
+#include <QRect>
+#include <QRectF>
+
+#include "core/virtualscreen.h"
+
+using namespace PlasmaZones;
+
+class TestVirtualScreen : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // --- VirtualScreenId::isVirtual ---
+
+    void testIsVirtual_physicalId_returnsFalse()
+    {
+        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107")));
+    }
+    void testIsVirtual_virtualId_returnsTrue()
+    {
+        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:0")));
+    }
+    void testIsVirtual_virtualIdHighIndex_returnsTrue()
+    {
+        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:5")));
+    }
+    void testIsVirtual_emptyString_returnsFalse()
+    {
+        QVERIFY(!VirtualScreenId::isVirtual(QString()));
+    }
+    void testIsVirtual_bareVsSeparator_returnsTrue()
+    {
+        // Malformed ID — isVirtual() requires pos > 0 to reject
+        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("/vs:0")));
+    }
+
+    // --- VirtualScreenId::extractPhysicalId ---
+    void testExtractPhysicalId_virtualId()
+    {
+        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:0")),
+                 QStringLiteral("Dell:U2722D:115107"));
+    }
+    void testExtractPhysicalId_physicalId_returnsUnchanged()
+    {
+        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107")),
+                 QStringLiteral("Dell:U2722D:115107"));
+    }
+    void testExtractPhysicalId_higherIndex()
+    {
+        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:2")),
+                 QStringLiteral("Dell:U2722D:115107"));
+    }
+    void testExtractPhysicalId_emptyString()
+    {
+        QCOMPARE(VirtualScreenId::extractPhysicalId(QString()), QString());
+    }
+    void testExtractPhysicalId_bareVsSeparator_returnsOriginal()
+    {
+        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("/vs:0")), QStringLiteral("/vs:0"));
+    }
+
+    // --- VirtualScreenId::extractIndex ---
+    void testExtractIndex_index0()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:0")), 0);
+    }
+    void testExtractIndex_index3()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:3")), 3);
+    }
+    void testExtractIndex_physicalId_returnsNegOne()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107")), -1);
+    }
+    void testExtractIndex_invalidIndex_returnsNegOne()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:abc")), -1);
+    }
+    void testExtractIndex_emptyString_returnsNegOne()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QString()), -1);
+    }
+    void testExtractIndex_emptyAfterSeparator_returnsNegOne()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:")), -1);
+    }
+
+    // --- VirtualScreenId::make ---
+    void testMake_index0()
+    {
+        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 0),
+                 QStringLiteral("Dell:U2722D:115107/vs:0"));
+    }
+    void testMake_index1()
+    {
+        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 1),
+                 QStringLiteral("Dell:U2722D:115107/vs:1"));
+    }
+    void testMake_roundTrip()
+    {
+        const QString physId = QStringLiteral("LG:27GP850:ABC123");
+        const int idx = 2;
+        const QString vsId = VirtualScreenId::make(physId, idx);
+        QCOMPARE(VirtualScreenId::extractPhysicalId(vsId), physId);
+        QCOMPARE(VirtualScreenId::extractIndex(vsId), idx);
+        QVERIFY(VirtualScreenId::isVirtual(vsId));
+    }
+
+    // --- VirtualScreenDef::absoluteGeometry ---
+
+    void testAbsoluteGeometry_leftHalf()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0, 0, 0.5, 1.0);
+        QRect phys(0, 0, 3440, 1440);
+
+        QRect result = def.absoluteGeometry(phys);
+        QCOMPARE(result, QRect(0, 0, 1720, 1440));
+    }
+
+    void testAbsoluteGeometry_rightHalf()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.5, 0, 0.5, 1.0);
+        QRect phys(0, 0, 3440, 1440);
+
+        QRect result = def.absoluteGeometry(phys);
+        QCOMPARE(result, QRect(1720, 0, 1720, 1440));
+    }
+
+    void testAbsoluteGeometry_leftThirdWithOffset()
+    {
+        // Physical screen at an offset (multi-monitor setup)
+        VirtualScreenDef def;
+        def.region = QRectF(0, 0, 0.333, 1.0);
+        QRect phys(1920, 0, 3840, 1600);
+
+        QRect result = def.absoluteGeometry(phys);
+        // x = 1920 + round(0 * 3840) = 1920
+        // y = 0 + round(0 * 1600) = 0
+        // w = round(0.333 * 3840) = round(1278.72) = 1279
+        // h = round(1.0 * 1600) = 1600
+        QCOMPARE(result, QRect(1920, 0, 1279, 1600));
+    }
+
+    void testAbsoluteGeometry_middleThird()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.333, 0, 0.334, 1.0);
+        QRect phys(1920, 0, 3840, 1600);
+
+        QRect result = def.absoluteGeometry(phys);
+        // Edge-consistent rounding:
+        // left  = 1920 + round(0.333 * 3840) = 1920 + 1279 = 3199
+        // right = 1920 + round(0.667 * 3840) = 1920 + 2561 = 4481
+        // width = 4481 - 3199 = 1282
+        QCOMPARE(result.x(), 3199);
+        QCOMPARE(result.width(), 1282);
+        QCOMPARE(result.height(), 1600);
+    }
+
+    void testAbsoluteGeometry_rightThird()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.667, 0, 0.333, 1.0);
+        QRect phys(1920, 0, 3840, 1600);
+
+        QRect result = def.absoluteGeometry(phys);
+        // x = 1920 + round(0.667 * 3840) = 1920 + round(2561.28) = 1920 + 2561 = 4481
+        // w = round(0.333 * 3840) = round(1278.72) = 1279
+        QCOMPARE(result.x(), 4481);
+        QCOMPARE(result.width(), 1279);
+        QCOMPARE(result.height(), 1600);
+    }
+
+    void testAbsoluteGeometry_fullScreen()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0, 0, 1.0, 1.0);
+        QRect phys(0, 0, 1920, 1080);
+
+        QRect result = def.absoluteGeometry(phys);
+        QCOMPARE(result, QRect(0, 0, 1920, 1080));
+    }
+
+    // --- VirtualScreenConfig::hasSubdivisions ---
+
+    void testHasSubdivisions_empty_returnsFalse()
+    {
+        VirtualScreenConfig config;
+        QVERIFY(!config.hasSubdivisions());
+    }
+
+    void testHasSubdivisions_singleScreen_returnsFalse()
+    {
+        VirtualScreenConfig config;
+        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                               QStringLiteral("Full"), QRectF(0, 0, 1, 1), 0});
+        QVERIFY(!config.hasSubdivisions());
+    }
+
+    void testHasSubdivisions_twoScreens_returnsTrue()
+    {
+        VirtualScreenConfig config;
+        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                               QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
+        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                               QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1});
+        QVERIFY(config.hasSubdivisions());
+    }
+
+    void testIsEmpty_noScreens()
+    {
+        VirtualScreenConfig config;
+        QVERIFY(config.isEmpty());
+    }
+
+    void testIsEmpty_withScreens()
+    {
+        VirtualScreenConfig config;
+        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                               QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
+        QVERIFY(!config.isEmpty());
+    }
+
+    // --- VirtualScreenConfig equality ---
+
+    void testConfigEquality_sameConfigs()
+    {
+        auto makeDef = [](const QString& id, const QString& name, const QRectF& region, int idx) {
+            return VirtualScreenDef{id, QStringLiteral("phys"), name, region, idx};
+        };
+
+        VirtualScreenConfig a;
+        a.physicalScreenId = QStringLiteral("phys");
+        a.screens.append(makeDef(QStringLiteral("phys/vs:0"), QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0));
+        a.screens.append(makeDef(QStringLiteral("phys/vs:1"), QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1));
+
+        VirtualScreenConfig b;
+        b.physicalScreenId = QStringLiteral("phys");
+        b.screens.append(makeDef(QStringLiteral("phys/vs:0"), QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0));
+        b.screens.append(makeDef(QStringLiteral("phys/vs:1"), QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1));
+
+        QVERIFY(a == b);
+        QVERIFY(!(a != b));
+    }
+
+    void testConfigEquality_differentRegions()
+    {
+        VirtualScreenConfig a;
+        a.physicalScreenId = QStringLiteral("phys");
+        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        VirtualScreenConfig b;
+        b.physicalScreenId = QStringLiteral("phys");
+        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.6, 1), 0});
+
+        QVERIFY(a != b);
+    }
+
+    void testConfigEquality_differentNames()
+    {
+        VirtualScreenConfig a;
+        a.physicalScreenId = QStringLiteral("phys");
+        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        VirtualScreenConfig b;
+        b.physicalScreenId = QStringLiteral("phys");
+        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Right"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        QVERIFY(a != b);
+    }
+
+    void testConfigEquality_differentPhysicalScreenId()
+    {
+        VirtualScreenConfig a;
+        a.physicalScreenId = QStringLiteral("phys1");
+        a.screens.append(VirtualScreenDef{QStringLiteral("phys1/vs:0"), QStringLiteral("phys1"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        VirtualScreenConfig b;
+        b.physicalScreenId = QStringLiteral("phys2");
+        b.screens.append(VirtualScreenDef{QStringLiteral("phys2/vs:0"), QStringLiteral("phys2"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        QVERIFY(a != b);
+    }
+
+    void testConfigEquality_differentScreenCount()
+    {
+        VirtualScreenConfig a;
+        a.physicalScreenId = QStringLiteral("phys");
+        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+
+        VirtualScreenConfig b;
+        b.physicalScreenId = QStringLiteral("phys");
+        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                          QRectF(0, 0, 0.5, 1), 0});
+        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("Right"),
+                                          QRectF(0.5, 0, 0.5, 1), 1});
+
+        QVERIFY(a != b);
+    }
+
+    // --- VirtualScreenDef equality ---
+
+    void testDefEquality_sameId()
+    {
+        VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                           QRectF(0, 0, 0.5, 1), 0};
+        VirtualScreenDef b{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                           QRectF(0, 0, 0.5, 1), 0};
+
+        // VirtualScreenDef::operator== compares all fields
+        QVERIFY(a == b);
+    }
+
+    void testDefEquality_differentId()
+    {
+        VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                           QRectF(0, 0, 0.5, 1), 0};
+        VirtualScreenDef b{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("Right"),
+                           QRectF(0.5, 0, 0.5, 1), 1};
+
+        QVERIFY(!(a == b));
+    }
+
+    // --- Tiny region: absoluteGeometry guarantees minimum 1px dimensions ---
+
+    void testAbsoluteGeometry_tinyRegion()
+    {
+        // A very tiny region (width=0.001) on a 1920px screen:
+        // raw width = round(0.001 * 1920) - round(0 * 1920) could be ~2px,
+        // but absoluteGeometry enforces qMax(1, ...) so even a sub-pixel
+        // region must produce at least 1px in each dimension.
+        VirtualScreenDef def;
+        def.region = QRectF(0, 0, 0.001, 0.001);
+        QRect phys(0, 0, 1920, 1080);
+
+        QRect result = def.absoluteGeometry(phys);
+        QVERIFY2(result.width() >= 1, "Tiny region must produce at least 1px width");
+        QVERIFY2(result.height() >= 1, "Tiny region must produce at least 1px height");
+        QCOMPARE(result.x(), 0);
+        QCOMPARE(result.y(), 0);
+    }
+
+    // --- Rounding edge case: no gaps or overlaps for common resolutions ---
+
+    void testAbsoluteGeometry_noGapsOrOverlaps()
+    {
+        // Test that adjacent virtual screens have no gaps or overlaps
+        // for common ultrawide resolutions with the 33-33-33 preset
+        QVector<int> widths = {3440, 3840, 5120, 2560};
+
+        for (int physWidth : widths) {
+            QRect physGeom(0, 0, physWidth, 1440);
+
+            VirtualScreenDef left;
+            left.region = QRectF(0, 0, 0.333, 1.0);
+            VirtualScreenDef center;
+            center.region = QRectF(0.333, 0, 0.334, 1.0);
+            VirtualScreenDef right;
+            right.region = QRectF(0.667, 0, 0.333, 1.0);
+
+            QRect leftGeom = left.absoluteGeometry(physGeom);
+            QRect centerGeom = center.absoluteGeometry(physGeom);
+            QRect rightGeom = right.absoluteGeometry(physGeom);
+
+            // No gap between left and center
+            QCOMPARE(leftGeom.x() + leftGeom.width(), centerGeom.x());
+            // No gap between center and right
+            QCOMPARE(centerGeom.x() + centerGeom.width(), rightGeom.x());
+            // Right edge matches physical screen
+            QCOMPARE(rightGeom.x() + rightGeom.width(), physWidth);
+            // Left edge is at origin
+            QCOMPARE(leftGeom.x(), 0);
+        }
+    }
+
+    // --- Rounding edge case: vertical split — no gaps or overlaps ---
+
+    void testAbsoluteGeometry_verticalSplit_noGapsOrOverlaps()
+    {
+        // Test that adjacent top/bottom virtual screens have no gaps or overlaps
+        QVector<int> heights = {1080, 1440, 1600, 2160};
+
+        for (int physHeight : heights) {
+            QRect physGeom(0, 0, 1920, physHeight);
+
+            VirtualScreenDef top;
+            top.region = QRectF(0, 0, 1.0, 0.5);
+            VirtualScreenDef bottom;
+            bottom.region = QRectF(0, 0.5, 1.0, 0.5);
+
+            QRect topGeom = top.absoluteGeometry(physGeom);
+            QRect bottomGeom = bottom.absoluteGeometry(physGeom);
+
+            // No gap between top and bottom
+            QCOMPARE(topGeom.y() + topGeom.height(), bottomGeom.y());
+            // Bottom edge matches physical screen
+            QCOMPARE(bottomGeom.y() + bottomGeom.height(), physHeight);
+            // Top edge is at origin
+            QCOMPARE(topGeom.y(), 0);
+            // Both span full width
+            QCOMPARE(topGeom.x(), 0);
+            QCOMPARE(topGeom.width(), 1920);
+            QCOMPARE(bottomGeom.x(), 0);
+            QCOMPARE(bottomGeom.width(), 1920);
+        }
+    }
+
+    // --- Rounding edge case: 2x2 grid split — no gaps or overlaps ---
+
+    void testAbsoluteGeometry_2x2Grid_noGapsOrOverlaps()
+    {
+        // Test that a 2x2 grid of virtual screens has no gaps or overlaps
+        // Common ultrawide + standard resolutions
+        struct Resolution
+        {
+            int w;
+            int h;
+        };
+        QVector<Resolution> resolutions = {{3840, 2160}, {3440, 1440}, {2560, 1440}, {1920, 1080}};
+
+        for (const auto& res : resolutions) {
+            QRect physGeom(0, 0, res.w, res.h);
+
+            VirtualScreenDef topLeft;
+            topLeft.region = QRectF(0, 0, 0.5, 0.5);
+            VirtualScreenDef topRight;
+            topRight.region = QRectF(0.5, 0, 0.5, 0.5);
+            VirtualScreenDef bottomLeft;
+            bottomLeft.region = QRectF(0, 0.5, 0.5, 0.5);
+            VirtualScreenDef bottomRight;
+            bottomRight.region = QRectF(0.5, 0.5, 0.5, 0.5);
+
+            QRect tlGeom = topLeft.absoluteGeometry(physGeom);
+            QRect trGeom = topRight.absoluteGeometry(physGeom);
+            QRect blGeom = bottomLeft.absoluteGeometry(physGeom);
+            QRect brGeom = bottomRight.absoluteGeometry(physGeom);
+
+            // Horizontal adjacency: no gap between left and right columns
+            QCOMPARE(tlGeom.x() + tlGeom.width(), trGeom.x());
+            QCOMPARE(blGeom.x() + blGeom.width(), brGeom.x());
+
+            // Vertical adjacency: no gap between top and bottom rows
+            QCOMPARE(tlGeom.y() + tlGeom.height(), blGeom.y());
+            QCOMPARE(trGeom.y() + trGeom.height(), brGeom.y());
+
+            // Outer edges match physical screen bounds
+            QCOMPARE(tlGeom.x(), 0);
+            QCOMPARE(tlGeom.y(), 0);
+            QCOMPARE(trGeom.x() + trGeom.width(), res.w);
+            QCOMPARE(trGeom.y(), 0);
+            QCOMPARE(blGeom.x(), 0);
+            QCOMPARE(blGeom.y() + blGeom.height(), res.h);
+            QCOMPARE(brGeom.x() + brGeom.width(), res.w);
+            QCOMPARE(brGeom.y() + brGeom.height(), res.h);
+        }
+    }
+
+    // --- VirtualScreenDef::physicalEdges ---
+
+    void testPhysicalEdges_leftEdgeAtOrigin()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 0.5, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(!edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_rightEdgeAtOne()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.5, 0.0, 0.5, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(!edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_topEdgeAtOrigin()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 1.0, 0.5);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(!edges.bottom);
+    }
+
+    void testPhysicalEdges_bottomEdgeAtOne()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.5, 1.0, 0.5);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(!edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_interiorRegion_allFalse()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.3, 0.3, 0.4, 0.4);
+        auto edges = def.physicalEdges();
+        QVERIFY(!edges.left);
+        QVERIFY(!edges.top);
+        QVERIFY(!edges.right);
+        QVERIFY(!edges.bottom);
+    }
+
+    void testPhysicalEdges_withinTolerance_stillTrue()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0005, 0.0005, 0.999, 0.999);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    void testPhysicalEdges_fullScreen_allTrue()
+    {
+        VirtualScreenDef def;
+        def.region = QRectF(0.0, 0.0, 1.0, 1.0);
+        auto edges = def.physicalEdges();
+        QVERIFY(edges.left);
+        QVERIFY(edges.top);
+        QVERIFY(edges.right);
+        QVERIFY(edges.bottom);
+    }
+
+    // --- VirtualScreenId edge cases: negative, double-nested, multi-digit ---
+
+    void testMake_negativeIndex_returnsEmpty()
+    {
+        QVERIFY(VirtualScreenId::make(QStringLiteral("physId"), -1).isEmpty());
+    }
+
+    void testMake_doubleNestedVirtualId()
+    {
+        // Calling make() with an already-virtual ID produces a double-suffixed ID.
+        // extractPhysicalId uses indexOf (first match), so it returns the true physical ID.
+        // extractIndex fails because "0/vs:1" is not a valid integer.
+        QString result = VirtualScreenId::make(QStringLiteral("physId/vs:0"), 1);
+        QCOMPARE(result, QStringLiteral("physId/vs:0/vs:1"));
+        QCOMPARE(VirtualScreenId::extractPhysicalId(result), QStringLiteral("physId"));
+        QCOMPARE(VirtualScreenId::extractIndex(result), -1);
+    }
+
+    void testExtractIndex_multiDigit()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:10")), 10);
+    }
+
+    void testExtractIndex_largeIndex()
+    {
+        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:999")), 999);
+    }
+
+    // --- Cross-validation: daemon vs effect extractPhysicalId ---
+    // Validates daemon VirtualScreenId::extractPhysicalId() matches effect-side logic.
+    // If the effect's implementation changes, the local copy below must be updated.
+    void testExtractPhysicalId_crossValidation()
+    {
+        // Local copy of effect's extractPhysicalScreenId (kwin-effect/plasmazoneseffect.h ~540)
+        auto effectExtractPhysicalScreenId = [](const QString& screenId) -> QString {
+            static const QLatin1String vsSep("/vs:");
+            int pos = screenId.indexOf(vsSep);
+            return (pos > 0) ? screenId.left(pos) : screenId;
+        };
+
+        struct TestCase
+        {
+            QString input;
+            QString expected;
+        };
+        const QVector<TestCase> cases = {
+            {QStringLiteral("DP-1/vs:0"), QStringLiteral("DP-1")}, // virtual
+            {QStringLiteral("DP-1/vs:2"), QStringLiteral("DP-1")}, // higher index
+            {QStringLiteral("DP-1:BenQ:12345/vs:2"), QStringLiteral("DP-1:BenQ:12345")}, // EDID
+            {QStringLiteral("DP-1"), QStringLiteral("DP-1")}, // plain connector
+            {QStringLiteral("Dell:U2722D:115107"), QStringLiteral("Dell:U2722D:115107")}, // EDID
+            {QString(), QString()}, // empty
+            {QStringLiteral("/vs:0"), QStringLiteral("/vs:0")}, // malformed
+            {QStringLiteral("DP-1/vs:"), QStringLiteral("DP-1")}, // no index
+        };
+
+        for (const auto& tc : cases) {
+            QString daemonResult = VirtualScreenId::extractPhysicalId(tc.input);
+            QString effectResult = effectExtractPhysicalScreenId(tc.input);
+
+            QCOMPARE(daemonResult, tc.expected);
+            QCOMPARE(effectResult, tc.expected);
+            QCOMPARE(daemonResult, effectResult);
+        }
+    }
+};
+
+QTEST_GUILESS_MAIN(TestVirtualScreen)
+#include "test_virtual_screen.moc"

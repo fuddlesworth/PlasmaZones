@@ -11,11 +11,12 @@
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../../shared/virtualscreenid.h"
 
 #include "pz_i18n.h"
-#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusInterface>
+#include <QDBusMessage>
 #include <QDBusReply>
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -33,6 +34,94 @@ namespace PlasmaZones {
 // Group 1 - Screen targeting
 // ---------------------------------------------------------------------------
 
+void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
+{
+    m_virtualScreenSize = QSize();
+    m_virtualScreenRect = QRect();
+    if (!VirtualScreenId::isVirtual(screenName)) {
+        return;
+    }
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));
+    msg << screenName;
+    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+        QRect geo = qdbus_cast<QRect>(reply.arguments().at(0));
+        if (geo.isValid()) {
+            m_virtualScreenSize = geo.size();
+            QString physId = VirtualScreenId::extractPhysicalId(screenName);
+            QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+            QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
+            m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
+            qCDebug(lcEditor) << "Virtual screen" << screenName << "geometry:" << geo
+                              << "relative rect:" << m_virtualScreenRect;
+        }
+    }
+}
+
+QVariantList EditorController::screenModel() const
+{
+    QVariantList model;
+
+    if (m_availableScreenIds.isEmpty()) {
+        // Fallback: use Qt's physical screens (editor opened before daemon responded)
+        for (QScreen* screen : QGuiApplication::screens()) {
+            QVariantMap entry;
+            entry[QStringLiteral("name")] = Utils::screenIdentifier(screen);
+            entry[QStringLiteral("displayName")] = screen->name();
+            model.append(entry);
+        }
+        return model;
+    }
+
+    // Cache VS display names per physical screen to avoid repeated D-Bus calls
+    QHash<QString, QJsonArray> vsConfigCache;
+
+    // Build from daemon's effective screen IDs (includes virtual screens)
+    for (const QString& screenId : m_availableScreenIds) {
+        QVariantMap entry;
+        entry[QStringLiteral("name")] = screenId;
+        if (VirtualScreenId::isVirtual(screenId)) {
+            // Use user-configured display name from VS config, fall back to generic label
+            QString vsDisplayName;
+            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            int vsIndex = VirtualScreenId::extractIndex(screenId);
+            if (vsIndex >= 0) {
+                if (!vsConfigCache.contains(physId)) {
+                    QDBusMessage msg = QDBusMessage::createMethodCall(
+                        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getVirtualScreenConfig"));
+                    msg << physId;
+                    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+                    if (reply.type() == QDBusMessage::ReplyMessage && reply.arguments().size() >= 1) {
+                        QJsonObject root =
+                            QJsonDocument::fromJson(reply.arguments().at(0).toString().toUtf8()).object();
+                        vsConfigCache[physId] = root.value(QStringLiteral("screens")).toArray();
+                    } else {
+                        vsConfigCache[physId] = QJsonArray();
+                    }
+                }
+                const QJsonArray& screens = vsConfigCache[physId];
+                if (vsIndex < screens.size()) {
+                    vsDisplayName = screens[vsIndex].toObject().value(QStringLiteral("displayName")).toString();
+                }
+            }
+            if (vsDisplayName.isEmpty()) {
+                vsDisplayName = QStringLiteral("VS%1").arg(vsIndex + 1);
+            }
+            entry[QStringLiteral("displayName")] = vsDisplayName;
+        } else {
+            // Physical screen: use connector name for brevity
+            QScreen* screen = Utils::findScreenByIdOrName(screenId);
+            entry[QStringLiteral("displayName")] = screen ? screen->name() : screenId;
+        }
+        model.append(entry);
+    }
+
+    return model;
+}
+
 void EditorController::setTargetScreen(const QString& screenName)
 {
     if (m_targetScreen != screenName) {
@@ -44,6 +133,9 @@ void EditorController::setTargetScreen(const QString& screenName)
 
         QString previousLayout = m_layoutId;
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
@@ -72,45 +164,84 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         return;
     }
 
-    if (!m_targetScreen.isEmpty()) {
-        const auto screens = QGuiApplication::screens();
-        for (auto* screen : screens) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
-                // Already on the correct screen — nothing to do
-                if (window->screen() == screen && window->isVisible()) {
-                    return;
-                }
+    if (m_targetScreen.isEmpty()) {
+        window->showFullScreen();
+        return;
+    }
 
-                qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
-                                  << "geometry:" << screen->geometry();
+    // For virtual screens: size the editor to the VS region, not fullscreen.
+    // The VS rect is in absolute screen coordinates (set in setTargetScreen).
+    if (m_virtualScreenRect.isValid()) {
+        QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
+        QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+        if (physScreen) {
+            auto applyVsGeometry = [](QQuickWindow* win, QScreen* screen, const QRect& vsRect) {
+                win->setScreen(screen);
+                // Absolute VS coordinates (physical screen origin + VS offset)
+                QRect absRect(screen->geometry().topLeft() + vsRect.topLeft(), vsRect.size());
+                win->setGeometry(absRect);
+                // Show as frameless normal window covering just the VS region.
+                // showFullScreen() would expand to the entire physical monitor.
+                win->setFlag(Qt::FramelessWindowHint, true);
+                win->show();
+            };
 
-                // On Wayland, the wl_output for an xdg-shell surface is bound at
-                // surface creation time. setScreen()/setGeometry() cannot move an
-                // already-mapped surface to a different output. To switch screens we
-                // must destroy the native window (wl_surface) and let Qt recreate it
-                // so the new surface gets mapped to the correct output.
-                // When the window is already visible (mid-session screen switch), defer
-                // the destroy+recreate to avoid tearing down the surface inside the
-                // current render frame or signal handler (QTBUG-88997).
-                if (window->isVisible()) {
-                    QPointer<QQuickWindow> safeWindow(window);
-                    QScreen* targetScreen = screen;
-                    QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
-                        if (!safeWindow || !targetScreen) {
-                            return;
-                        }
-                        safeWindow->destroy();
-                        safeWindow->setScreen(targetScreen);
-                        safeWindow->setGeometry(targetScreen->geometry());
-                        safeWindow->showFullScreen();
-                    });
-                    return;
-                }
-
-                window->setScreen(screen);
-                window->setGeometry(screen->geometry());
-                break;
+            if (window->isVisible()) {
+                QPointer<QQuickWindow> safeWindow(window);
+                QScreen* targetScreen = physScreen;
+                QRect vsRect = m_virtualScreenRect;
+                QTimer::singleShot(0, window, [safeWindow, targetScreen, vsRect, applyVsGeometry]() {
+                    if (!safeWindow || !targetScreen) {
+                        return;
+                    }
+                    safeWindow->destroy();
+                    applyVsGeometry(safeWindow, targetScreen, vsRect);
+                });
+                return;
             }
+
+            applyVsGeometry(window, physScreen, m_virtualScreenRect);
+            return;
+        }
+    }
+
+    // Physical screen: fullscreen on the matching monitor
+    // Clear frameless hint in case this window was previously shown on a virtual screen.
+    window->setFlag(Qt::FramelessWindowHint, false);
+
+    const auto screens = QGuiApplication::screens();
+    for (auto* screen : screens) {
+        if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+            if (window->screen() == screen && window->isVisible()) {
+                return;
+            }
+
+            qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
+                              << "geometry:" << screen->geometry();
+
+            // On Wayland, the wl_output for an xdg-shell surface is bound at
+            // surface creation time. setScreen()/setGeometry() cannot move an
+            // already-mapped surface to a different output. To switch screens we
+            // must destroy the native window (wl_surface) and let Qt recreate it
+            // so the new surface gets mapped to the correct output.
+            if (window->isVisible()) {
+                QPointer<QQuickWindow> safeWindow(window);
+                QScreen* targetScreen = screen;
+                QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
+                    if (!safeWindow || !targetScreen) {
+                        return;
+                    }
+                    safeWindow->destroy();
+                    safeWindow->setScreen(targetScreen);
+                    safeWindow->setGeometry(targetScreen->geometry());
+                    safeWindow->showFullScreen();
+                });
+                return;
+            }
+
+            window->setScreen(screen);
+            window->setGeometry(screen->geometry());
+            break;
         }
     }
 
@@ -123,6 +254,9 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
     // when a layout is explicitly specified via command line
     if (m_targetScreen != screenName) {
         m_targetScreen = screenName;
+
+        cacheVirtualScreenGeometry(screenName);
+
         Q_EMIT targetScreenChanged();
         Q_EMIT targetScreenSizeChanged();
         refreshUsableAreaInsets();
@@ -648,7 +782,7 @@ void EditorController::discardChanges()
 void EditorController::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutLoadFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
@@ -656,7 +790,7 @@ void EditorController::importLayout(const QString& filePath)
                                  QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -664,8 +798,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QDBusReply<QString> reply = layoutManager.call(QStringLiteral("importLayout"), filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to import layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to import layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -673,7 +806,7 @@ void EditorController::importLayout(const QString& filePath)
 
     QString newLayoutId = reply.value();
     if (newLayoutId.isEmpty()) {
-        QString error = QCoreApplication::translate("EditorController", "Imported layout but received empty ID");
+        QString error = PzI18n::tr("Imported layout but received empty ID");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutLoadFailed(error);
         return;
@@ -693,12 +826,12 @@ void EditorController::importLayout(const QString& filePath)
 void EditorController::exportLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "File path cannot be empty"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("File path cannot be empty"));
         return;
     }
 
     if (m_layoutId.isEmpty()) {
-        Q_EMIT layoutSaveFailed(QCoreApplication::translate("EditorController", "No layout loaded to export"));
+        Q_EMIT layoutSaveFailed(PzI18n::tr("No layout loaded to export"));
         return;
     }
 
@@ -706,7 +839,7 @@ void EditorController::exportLayout(const QString& filePath)
                                  QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
-        QString error = QCoreApplication::translate("EditorController", "Cannot connect to PlasmaZones daemon");
+        QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;
@@ -714,8 +847,7 @@ void EditorController::exportLayout(const QString& filePath)
 
     QDBusReply<void> reply = layoutManager.call(QStringLiteral("exportLayout"), m_layoutId, filePath);
     if (!reply.isValid()) {
-        QString error =
-            QCoreApplication::translate("EditorController", "Failed to export layout: %1").arg(reply.error().message());
+        QString error = PzI18n::tr("Failed to export layout: %1").arg(reply.error().message());
         qCWarning(lcEditor) << error;
         Q_EMIT layoutSaveFailed(error);
         return;

@@ -8,8 +8,10 @@
 #include "../../core/layout.h"
 #include "../../core/zone.h"
 #include "../../core/logging.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
 #include "../../core/geometryutils.h"
+#include "../../core/virtualscreen.h"
 #include <QJsonDocument>
 #include <QJsonObject>
 
@@ -28,7 +30,7 @@ static QJsonObject moveResult(bool success, const QString& reason, const QString
     obj[QLatin1String("zoneId")] = zoneId;
     obj[QLatin1String("geometryJson")] = geometryJson;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -41,7 +43,7 @@ static QJsonObject focusResult(bool success, const QString& reason, const QStrin
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -53,7 +55,7 @@ static QJsonObject cycleResult(bool success, const QString& reason, const QStrin
     obj[QLatin1String("reason")] = reason;
     obj[QLatin1String("windowIdToActivate")] = windowIdToActivate;
     obj[QLatin1String("zoneId")] = zoneId;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     return obj;
 }
 
@@ -77,10 +79,40 @@ static QJsonObject swapResult(bool success, const QString& reason, const QString
     obj[QLatin1String("w2")] = w2;
     obj[QLatin1String("h2")] = h2;
     obj[QLatin1String("zoneId2")] = zoneId2;
-    obj[QLatin1String("screenName")] = screenId;
+    obj[QLatin1String("screenId")] = screenId;
     obj[QLatin1String("sourceZoneId")] = sourceZoneId;
     obj[QLatin1String("targetZoneId")] = targetZoneId;
     return obj;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stored Screen Validation
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Validate a stored screen ID, including virtual screen existence check.
+ *
+ * For virtual screen IDs, verifies both that the backing physical screen
+ * is still connected AND that the virtual screen ID is still in the
+ * effective screen list (guards against stale IDs after config removal).
+ * For physical screen IDs, verifies the screen is connected.
+ *
+ * @return true if the stored screen ID is still valid
+ */
+static bool isStoredScreenValid(const QString& storedScreen)
+{
+    if (storedScreen.isEmpty()) {
+        return false;
+    }
+    if (VirtualScreenId::isVirtual(storedScreen)) {
+        QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+        if (!Utils::findScreenByIdOrName(physId)) {
+            return false;
+        }
+        auto* mgr = ScreenManager::instance();
+        return mgr && mgr->effectiveScreenIds().contains(storedScreen);
+    }
+    return Utils::findScreenByIdOrName(storedScreen) != nullptr;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -124,7 +156,7 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
     QString effectiveScreenId = screenId;
     if (!currentZoneId.isEmpty()) {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
+        if (isStoredScreenValid(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
@@ -140,7 +172,7 @@ QString WindowTrackingAdaptor::getMoveTargetForWindow(const QString& windowId, c
                                          .toJson(QJsonDocument::Compact));
         }
     } else {
-        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+        targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
             Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                       QString(), effectiveScreenId);
@@ -188,33 +220,42 @@ QString WindowTrackingAdaptor::getFocusTargetForWindow(const QString& windowId, 
     if (currentZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("not_snapped"), QString(), QString(),
                                   screenId);
-        return QString::fromUtf8(QJsonDocument(focusResult(false, QStringLiteral("not_snapped"), QString(), QString(),
-                                                           QString(), screenId))
-                                     .toJson(QJsonDocument::Compact));
+        return QString::fromUtf8(
+            QJsonDocument(focusResult(false, QStringLiteral("not_snapped"), QString(), QString(), QString(), screenId))
+                .toJson(QJsonDocument::Compact));
     }
 
-    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+    // Trust stored screen for snapped windows — see getMoveTargetForWindow comment
+    QString effectiveScreenId = screenId;
+    {
+        QString storedScreen = m_service->screenAssignments().value(windowId);
+        if (isStoredScreenValid(storedScreen)) {
+            effectiveScreenId = storedScreen;
+        }
+    }
+
+    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId,
-                                  QString(), screenId);
+                                  QString(), effectiveScreenId);
         return QString::fromUtf8(QJsonDocument(focusResult(false, QStringLiteral("no_adjacent_zone"), QString(),
-                                                           currentZoneId, QString(), screenId))
+                                                           currentZoneId, QString(), effectiveScreenId))
                                      .toJson(QJsonDocument::Compact));
     }
 
     QStringList windowsInZone = m_service->windowsInZone(targetZoneId);
     if (windowsInZone.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"), currentZoneId,
-                                  targetZoneId, screenId);
+                                  targetZoneId, effectiveScreenId);
         return QString::fromUtf8(QJsonDocument(focusResult(false, QStringLiteral("no_window_in_zone"), QString(),
-                                                           currentZoneId, targetZoneId, screenId))
+                                                           currentZoneId, targetZoneId, effectiveScreenId))
                                      .toJson(QJsonDocument::Compact));
     }
 
-    Q_EMIT navigationFeedback(true, QStringLiteral("focus"), direction, currentZoneId, targetZoneId, screenId);
-    return QString::fromUtf8(
-        QJsonDocument(focusResult(true, QString(), windowsInZone.first(), currentZoneId, targetZoneId, screenId))
-            .toJson(QJsonDocument::Compact));
+    Q_EMIT navigationFeedback(true, QStringLiteral("focus"), direction, currentZoneId, targetZoneId, effectiveScreenId);
+    return QString::fromUtf8(QJsonDocument(focusResult(true, QString(), windowsInZone.first(), currentZoneId,
+                                                       targetZoneId, effectiveScreenId))
+                                 .toJson(QJsonDocument::Compact));
 }
 
 QString WindowTrackingAdaptor::getRestoreForWindow(const QString& windowId, const QString& screenId)
@@ -334,12 +375,12 @@ QString WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, c
     QString effectiveScreenId = screenId;
     {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
+        if (isStoredScreenValid(storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
 
-    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction);
+    QString targetZoneId = m_zoneDetectionAdaptor->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                   QString(), effectiveScreenId);

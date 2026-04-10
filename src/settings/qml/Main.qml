@@ -29,11 +29,17 @@ ApplicationWindow {
         "hasChildren": false,
         "hasDividerAfter": true
     }, {
+        "name": "virtualscreens",
+        "label": i18n("Virtual Screens"),
+        "iconName": "virtual-desktops",
+        "hasChildren": false,
+        "hasDividerAfter": false
+    }, {
         "name": "layouts",
         "label": i18n("Layouts"),
         "iconName": "view-grid",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "snapping",
         "label": i18n("Snapping"),
@@ -51,7 +57,7 @@ ApplicationWindow {
         "label": i18n("Exclusions"),
         "iconName": "dialog-cancel",
         "hasChildren": false,
-        "hasDividerAfter": false
+        "hasDividerAfter": true
     }, {
         "name": "editor",
         "label": i18n("Editor"),
@@ -139,6 +145,7 @@ ApplicationWindow {
     // Page component map -- loaded on demand by Loader
     readonly property var _pageComponents: ({
         "overview": "MonitorStatePage.qml",
+        "virtualscreens": "VirtualScreensPage.qml",
         "layouts": "LayoutsPage.qml",
         "snapping-appearance": "SnappingAppearancePage.qml",
         "snapping-behavior": "SnappingBehaviorPage.qml",
@@ -1289,15 +1296,8 @@ ApplicationWindow {
                     if (screens.length > 1) {
                         for (let i = 0; i < screens.length; i++) {
                             let s = screens[i];
-                            let parts = [s.manufacturer || "", s.model || ""].filter((p) => {
-                                return p !== "";
-                            });
-                            let label = parts.length > 0 ? parts.join(" ") : (s.name || "");
-                            if (s.resolution)
-                                label += " (" + s.resolution + ")";
-
                             let item = screenMenuItemComponent.createObject(layoutContextMenu, {
-                                "text": i18n("Edit on %1", label),
+                                "text": i18n("Edit on %1", s.displayLabel || s.name || ""),
                                 "icon.name": s.isPrimary ? "starred-symbolic" : "monitor"
                             });
                             item._screenName = s.name;

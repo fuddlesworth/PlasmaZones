@@ -803,4 +803,63 @@ SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut
 SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 SETTINGS_SETTER(const QString&, ToggleLayoutLockShortcut, m_toggleLayoutLockShortcut, toggleLayoutLockShortcutChanged)
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Virtual screen config setters
+// ═══════════════════════════════════════════════════════════════════════════════
+
+QHash<QString, VirtualScreenConfig> Settings::virtualScreenConfigs() const
+{
+    return m_virtualScreenConfigs;
+}
+
+void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs)
+{
+    // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,
+    // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
+    // causes inconsistency (settings says VS exists, ScreenManager disagrees).
+    QHash<QString, VirtualScreenConfig> filtered;
+    for (auto it = configs.constBegin(); it != configs.constEnd(); ++it) {
+        if (it.value().hasSubdivisions()) {
+            filtered.insert(it.key(), it.value());
+        }
+    }
+
+    // Check exact equality to avoid dropping tiny geometry adjustments
+    if (m_virtualScreenConfigs.size() != filtered.size()) {
+        m_virtualScreenConfigs = filtered;
+        Q_EMIT virtualScreenConfigsChanged();
+        Q_EMIT settingsChanged();
+        return;
+    }
+    for (auto it = filtered.constBegin(); it != filtered.constEnd(); ++it) {
+        auto existing = m_virtualScreenConfigs.constFind(it.key());
+        if (existing == m_virtualScreenConfigs.constEnd() || !(existing.value() == it.value())) {
+            m_virtualScreenConfigs = filtered;
+            Q_EMIT virtualScreenConfigsChanged();
+            Q_EMIT settingsChanged();
+            return;
+        }
+    }
+}
+
+void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
+{
+    if (config.screens.isEmpty() || !config.hasSubdivisions()) {
+        if (!m_virtualScreenConfigs.contains(physicalScreenId))
+            return;
+        m_virtualScreenConfigs.remove(physicalScreenId);
+    } else {
+        if (m_virtualScreenConfigs.value(physicalScreenId) == config)
+            return;
+        m_virtualScreenConfigs.insert(physicalScreenId, config);
+    }
+    Q_EMIT virtualScreenConfigsChanged();
+    Q_EMIT settingsChanged();
+}
+
+VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_virtualScreenConfigs.value(physicalScreenId);
+}
+
 } // namespace PlasmaZones

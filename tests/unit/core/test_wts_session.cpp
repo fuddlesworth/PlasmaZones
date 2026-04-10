@@ -251,8 +251,8 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
 
-        QVector<RotationEntry> resnap = m_service->calculateResnapFromPreviousLayout();
-        QVector<RotationEntry> secondCall = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> resnap = m_service->calculateResnapFromPreviousLayout();
+        QVector<ZoneAssignmentEntry> secondCall = m_service->calculateResnapFromPreviousLayout();
         QVERIFY(secondCall.isEmpty()); // Buffer consumed on first call
     }
 
@@ -268,8 +268,8 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
 
-        QVector<RotationEntry> cw = m_service->calculateRotation(true);
-        QVector<RotationEntry> ccw = m_service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> cw = m_service->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> ccw = m_service->calculateRotation(false);
 
         Q_UNUSED(cw);
         Q_UNUSED(ccw);

@@ -22,6 +22,8 @@
 #include <QQuickWindow>
 #include <QScreen>
 #include <QCursor>
+#include <QDBusConnection>
+#include <QDBusMessage>
 #include <QObject>
 
 #include "pz_i18n.h"
@@ -132,13 +134,27 @@ int main(int argc, char* argv[])
         targetScreen = parser.value(screenOption);
     } else {
         // Default to the screen under the cursor — more intuitive than primaryScreen()
-        // which can be unreliable on Wayland (Qt may not match KDE's configured primary)
-        QScreen* cursorScreen = QGuiApplication::screenAt(QCursor::pos());
-        if (!cursorScreen) {
-            cursorScreen = QGuiApplication::primaryScreen();
+        // which can be unreliable on Wayland (Qt may not match KDE's configured primary).
+        // Query the daemon for the effective screen ID (resolves to virtual screen when
+        // configured) so the editor opens with the correct VS context.
+        QPoint cursorPos = QCursor::pos();
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QString::fromLatin1(PlasmaZones::DBus::ServiceName), QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
+            QString::fromLatin1(PlasmaZones::DBus::Interface::Screen), QStringLiteral("getEffectiveScreenAt"));
+        msg << cursorPos.x() << cursorPos.y();
+        QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            targetScreen = reply.arguments().at(0).toString();
         }
-        if (cursorScreen) {
-            targetScreen = cursorScreen->name();
+        // Fallback to Qt's physical screen if daemon unavailable
+        if (targetScreen.isEmpty()) {
+            QScreen* cursorScreen = QGuiApplication::screenAt(cursorPos);
+            if (!cursorScreen) {
+                cursorScreen = QGuiApplication::primaryScreen();
+            }
+            if (cursorScreen) {
+                targetScreen = cursorScreen->name();
+            }
         }
     }
 
@@ -183,8 +199,8 @@ int main(int argc, char* argv[])
     // Expose controller to QML
     engine.rootContext()->setContextProperty(QStringLiteral("editorController"), &controller);
 
-    // Expose screen list to QML
-    engine.rootContext()->setContextProperty(QStringLiteral("availableScreens"), QVariant::fromValue(app.screens()));
+    // Screen list: editorController.screenModel provides VS-aware entries.
+    // Legacy "availableScreens" context property removed — QML uses screenModel directly.
 
     // Load main QML (Window starts with visible:false — QML calls
     // editorController.showFullScreenOnTargetScreen() which sets screen from C++)

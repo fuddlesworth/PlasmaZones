@@ -20,6 +20,7 @@
 #include "../core/zoneselectorlayout.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "../core/constants.h"
 #include "../config/settings.h"
 #include "../autotile/AutotileEngine.h"
@@ -73,6 +74,34 @@ QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
     return Utils::findScreenAtPosition(x, y);
 }
 
+QString WindowDragAdaptor::effectiveScreenIdAt(int x, int y) const
+{
+    return Utils::effectiveScreenIdAt(QPoint(x, y));
+}
+
+WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPointF& globalPos) const
+{
+    ScreenResolution result;
+    result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
+    result.physicalId = VirtualScreenId::extractPhysicalId(result.screenId);
+    result.qscreen = ScreenManager::resolvePhysicalScreen(result.physicalId);
+    if (!result.qscreen) {
+        result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
+        if (result.qscreen) {
+            result.physicalId = Utils::screenIdentifier(result.qscreen);
+            // Try virtual screen resolution before falling back to physical ID
+            auto* mgr = ScreenManager::instance();
+            if (mgr && mgr->hasVirtualScreens(result.physicalId)) {
+                QString vsId = mgr->effectiveScreenAt(QPoint(qRound(globalPos.x()), qRound(globalPos.y())));
+                result.screenId = vsId.isEmpty() ? result.physicalId : vsId;
+            } else {
+                result.screenId = result.physicalId;
+            }
+        }
+    }
+    return result;
+}
+
 bool WindowDragAdaptor::checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const
 {
     bool shiftHeld = mods.testFlag(Qt::ShiftModifier);
@@ -124,20 +153,42 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVariantList& triggers, Qt::Keyboar
     return false;
 }
 
-QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen,
-                                                      Layout* layout) const
+QVector<WindowDragAdaptor::ParsedTrigger> WindowDragAdaptor::parseTriggers(const QVariantList& triggers)
+{
+    QVector<ParsedTrigger> result;
+    result.reserve(triggers.size());
+    for (const auto& t : triggers) {
+        const auto map = t.toMap();
+        ParsedTrigger pt;
+        pt.modifier = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        pt.mouseButton = map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
+        result.append(pt);
+    }
+    return result;
+}
+
+bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods,
+                                       int mouseButtons) const
+{
+    for (const auto& pt : triggers) {
+        const bool modMatch = (pt.modifier == 0) || checkModifier(pt.modifier, mods);
+        const bool btnMatch = (pt.mouseButton == 0) || (mouseButtons & pt.mouseButton) != 0;
+        if (modMatch && btnMatch && (pt.modifier != 0 || pt.mouseButton != 0))
+            return true;
+    }
+    return false;
+}
+
+QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
+                                                      const QString& screenId) const
 {
     if (zones.isEmpty()) {
         return QRectF();
     }
-    QString screenId = Utils::screenIdentifier(screen);
-    int zonePadding = GeometryUtils::getEffectiveZonePadding(layout, m_settings, screenId);
-    EdgeGaps outerGaps = GeometryUtils::getEffectiveOuterGaps(layout, m_settings, screenId);
-    bool useAvail = !(layout && layout->useFullScreenGeometry());
-    QRectF combined = GeometryUtils::getZoneGeometryWithGaps(zones.first(), screen, zonePadding, outerGaps, useAvail);
+    QRectF combined = GeometryUtils::getZoneGeometryForScreenF(zones.first(), screen, screenId, layout, m_settings);
     for (int i = 1; i < zones.size(); ++i) {
         combined =
-            combined.united(GeometryUtils::getZoneGeometryWithGaps(zones[i], screen, zonePadding, outerGaps, useAvail));
+            combined.united(GeometryUtils::getZoneGeometryForScreenF(zones[i], screen, screenId, layout, m_settings));
     }
     return combined;
 }
@@ -234,9 +285,12 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         return;
     }
 
-    QScreen* screen = screenAtPoint(cursorX, cursorY);
+    // Resolve effective (virtual-aware) screen ID for disabled-monitor check
+    auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
+    QString selectorScreenId = resolved.screenId;
+    QScreen* screen = resolved.qscreen;
     if (screen
-        && isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_layoutManager->currentVirtualDesktop(),
+        && isContextDisabled(m_settings, selectorScreenId, m_layoutManager->currentVirtualDesktop(),
                              m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
@@ -245,13 +299,14 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
         return;
     }
 
-    bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY);
+    bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);
 
     if (nearEdge && !m_zoneSelectorShown) {
         // Show zone selector on the cursor's screen only
         m_zoneSelectorShown = true;
         // Call directly - QDBusAbstractAdaptor signals don't work for internal Qt connections
-        m_overlayService->showZoneSelector(screen);
+        // Pass screen ID string (supports virtual screen IDs like "physicalId/vs:N")
+        m_overlayService->showZoneSelector(selectorScreenId);
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge
         m_zoneSelectorShown = false;
@@ -264,25 +319,32 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
     }
 }
 
-bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY) const
+bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY, const QString& screenId) const
 {
     if (!m_settings || !screen) {
         return false;
     }
 
+    // Use virtual-aware screen ID for config lookups (falls back to physical ID)
+    const QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+
     // Use per-screen resolved config (per-screen override > global default)
-    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(Utils::screenIdentifier(screen));
+    const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(effectiveId);
     const int triggerDistance = config.triggerDistance;
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
-    const QRect screenGeom = screen->geometry();
+    // Use virtual screen geometry when available
+    auto* smgr = ScreenManager::instance();
+    QRect vsGeom = smgr ? smgr->screenGeometry(effectiveId) : QRect();
+    const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
+
     // Use filtered layout count (matches what the zone selector popup actually displays)
     // so the keep-visible zone matches the real popup dimensions
-    const int layoutCount = m_overlayService ? m_overlayService->visibleLayoutCount(Utils::screenIdentifier(screen))
+    const int layoutCount = m_overlayService ? m_overlayService->visibleLayoutCount(effectiveId)
                                              : (m_layoutManager ? m_layoutManager->layouts().size() : 0);
 
     // Use shared layout computation (same code as OverlayService)
-    const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screen, layoutCount);
+    const ZoneSelectorLayout selectorLayout = computeZoneSelectorLayout(config, screenGeom, layoutCount);
     const int barHeight = selectorLayout.barHeight;
     const int barWidth = selectorLayout.barWidth;
 
@@ -337,6 +399,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         m_overlayService->hide();
         m_overlayShown = false;
         m_overlayScreen = nullptr;
+        m_overlayScreenId.clear();
     }
 
     // Hide zone selector and clear selection
@@ -388,10 +451,12 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wa
     // Store pre-tile geometry for restore on unsnap/float (first-only: overwrite=false).
     // The service handles the "already stored" case internally.
     if (m_windowTracking && originalGeometry.isValid()) {
-        QString screenId;
-        QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
-        if (screen) {
-            screenId = Utils::screenIdentifier(screen);
+        QString screenId = effectiveScreenIdAt(originalGeometry.center().x(), originalGeometry.center().y());
+        if (screenId.isEmpty()) {
+            QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
+            if (screen) {
+                screenId = Utils::screenIdentifier(screen);
+            }
         }
         m_windowTracking->storePreTileGeometry(windowId, originalGeometry.x(), originalGeometry.y(),
                                                originalGeometry.width(), originalGeometry.height(), screenId, false);

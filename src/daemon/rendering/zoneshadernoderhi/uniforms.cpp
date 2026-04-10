@@ -142,11 +142,10 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
                 m_uniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
                 m_uniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
-            } else if (!multiBufferMode && i == 0 && m_bufferTexture && m_width > 0 && m_height > 0) {
-                const int bufferW = qMax(1, static_cast<int>(m_width * m_bufferScale));
-                const int bufferH = qMax(1, static_cast<int>(m_height * m_bufferScale));
-                m_uniforms.iChannelResolution[0][0] = static_cast<float>(bufferW);
-                m_uniforms.iChannelResolution[0][1] = static_cast<float>(bufferH);
+            } else if (!multiBufferMode && i == 0 && m_bufferTexture) {
+                QSize ps = m_bufferTexture->pixelSize();
+                m_uniforms.iChannelResolution[0][0] = static_cast<float>(ps.width());
+                m_uniforms.iChannelResolution[0][1] = static_cast<float>(ps.height());
             } else {
                 m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1
                 m_uniforms.iChannelResolution[i][1] = 1.0f;
@@ -239,12 +238,18 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                    + K_TIME_BLOCK_OFFSET);
                 }
                 if (m_zoneDataDirty) {
+                    // Full scene data (includes zone arrays) — only when zone data actually changed
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_DATA_OFFSET, K_SCENE_DATA_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_uniforms))
                                                    + K_SCENE_DATA_OFFSET);
+                } else if (m_sceneDataDirty) {
+                    // Scene header only (resolution, mouse, date, params, colors) — skip zone arrays
+                    batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms))
+                                                   + K_SCENE_HEADER_OFFSET);
                 }
                 // Defensive: if a future setter sets m_uniformsDirty without granular flags, do full upload
-                if (!m_timeDirty && !m_zoneDataDirty) {
+                if (!m_timeDirty && !m_zoneDataDirty && !m_sceneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
                 }
             }
@@ -255,6 +260,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             cb->resourceUpdate(batch);
             m_timeDirty = false;
             m_zoneDataDirty = false;
+            m_sceneDataDirty = false;
             m_uniformsDirty = false;
         }
     } else {
@@ -269,9 +275,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
     if (m_dummyChannelTextureNeedsUpload && m_dummyChannelTexture) {
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
-            QImage onePixel(1, 1, QImage::Format_RGBA8888);
-            onePixel.fill(Qt::transparent);
-            batch->uploadTexture(m_dummyChannelTexture.get(), onePixel);
+            batch->uploadTexture(m_dummyChannelTexture.get(), m_transparentFallbackImage);
             cb->resourceUpdate(batch);
             m_dummyChannelTextureNeedsUpload = false;
         }
@@ -307,9 +311,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             batch->uploadTexture(m_audioSpectrumTexture.get(), img);
             cb->resourceUpdate(batch);
         } else if (batch && bars == 0) {
-            QImage onePixel(1, 1, QImage::Format_RGBA8888);
-            onePixel.fill(0);
-            batch->uploadTexture(m_audioSpectrumTexture.get(), onePixel);
+            batch->uploadTexture(m_audioSpectrumTexture.get(), m_transparentFallbackImage);
             cb->resourceUpdate(batch);
         }
     }
@@ -348,9 +350,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_userTextures[i].get(), img);
             } else {
-                QImage onePixel(1, 1, QImage::Format_RGBA8888);
-                onePixel.fill(Qt::transparent);
-                ubatch->uploadTexture(m_userTextures[i].get(), onePixel);
+                ubatch->uploadTexture(m_userTextures[i].get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
         }
@@ -377,9 +377,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             if (!img.isNull() && img.width() > 0 && img.height() > 0) {
                 ubatch->uploadTexture(m_wallpaperTexture.get(), img);
             } else {
-                QImage onePixel(1, 1, QImage::Format_RGBA8888);
-                onePixel.fill(Qt::transparent);
-                ubatch->uploadTexture(m_wallpaperTexture.get(), onePixel);
+                ubatch->uploadTexture(m_wallpaperTexture.get(), m_transparentFallbackImage);
             }
             cb->resourceUpdate(ubatch);
         }
@@ -456,6 +454,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_uniformsDirty = true;
     m_timeDirty = true;
     m_zoneDataDirty = true;
+    m_sceneDataDirty = true;
     m_labelsTextureDirty = true;
     m_audioSpectrumDirty = true;
     // Next prepare() will re-create all RHI resources and do a full UBO upload
@@ -496,8 +495,7 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             QShaderBaker fragmentBaker;
             fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
-            fragmentBaker.setSourceString(src.toUtf8(), QShader::FragmentStage);
-            m_multiBufferFragmentShaders[i] = fragmentBaker.bake();
+            m_multiBufferFragmentShaders[i] = detail::cachedBake(fragmentBaker, src.toUtf8(), QShader::FragmentStage);
             if (!m_multiBufferFragmentShaders[i].isValid()) {
                 qCWarning(lcOverlay) << "Multi-buffer shader" << i << "compile failed, path=" << path
                                      << "error=" << fragmentBaker.errorMessage();
@@ -540,8 +538,8 @@ void ZoneShaderNodeRhi::bakeBufferShaders()
             QShaderBaker fragmentBaker;
             fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
-            fragmentBaker.setSourceString(m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
-            m_bufferFragmentShader = fragmentBaker.bake();
+            m_bufferFragmentShader =
+                detail::cachedBake(fragmentBaker, m_bufferFragmentShaderSource.toUtf8(), QShader::FragmentStage);
             if (m_bufferFragmentShader.isValid()) {
                 m_bufferShaderReady = true;
                 m_bufferPipeline.reset();

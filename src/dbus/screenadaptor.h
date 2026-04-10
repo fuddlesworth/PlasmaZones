@@ -8,6 +8,9 @@
 #include <QDBusAbstractAdaptor>
 #include <QRect>
 #include <QStringList>
+#include <functional>
+
+class QScreen;
 
 namespace PlasmaZones {
 
@@ -37,14 +40,40 @@ public Q_SLOTS:
     QString getScreenId(const QString& connectorName);
     void setPrimaryScreenFromKWin(const QString& connectorName);
     QRect getAvailableGeometry(const QString& screenId);
+    QRect getScreenGeometry(const QString& screenId);
+
+    // Virtual screen management
+    QString getVirtualScreenConfig(const QString& physicalScreenId);
+    void setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
+    QStringList getPhysicalScreens();
+    QString getEffectiveScreenAt(int x, int y);
 
 Q_SIGNALS:
     void screenAdded(const QString& screenId);
     void screenRemoved(const QString& screenId);
     void screenGeometryChanged(const QString& screenId);
+    void virtualScreensChanged(const QString& physicalScreenId);
 
 private:
+    void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
+
+    /// Handle physical screen removal: emit screenRemoved for each cached
+    /// effective (virtual) screen ID, or fall back to the physical screen ID.
+    void handleScreenRemoved(QScreen* removedScreen, QScreen* targetScreen, const QString& cachedId);
+
+    /// Emit per-virtual-screen or fall back to physical screen ID.
+    /// Returns true if virtual screen IDs were emitted, false if physical.
+    bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
+
     QString m_primaryScreenOverride;
+
+    /// Last effective screen ID list emitted by the deferred timer, used to
+    /// suppress duplicate emissions during rapid hot-plug sequences.
+    QStringList m_lastEmittedEffectiveIds;
+
+    /// Per-physical-screen cached effective IDs for screenRemoved emission.
+    /// Updated when virtualScreensChanged fires so removal signals stay current.
+    QHash<QString, QStringList> m_cachedEffectiveIdsPerScreen;
 };
 
 } // namespace PlasmaZones

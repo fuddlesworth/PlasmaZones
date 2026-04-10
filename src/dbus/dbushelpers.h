@@ -9,6 +9,7 @@
 #include "../core/zone.h"
 #include "../core/utils.h"
 #include "../core/logging.h"
+#include <QRectF>
 #include <QScreen>
 #include <QUuid>
 #include <QString>
@@ -284,6 +285,45 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
 {
     return validateNonEmpty(value, paramName, operation, lcDbus);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen ID Resolution (implemented in dbushelpers.cpp to reduce header weight)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Resolve a screen ID to an effective (virtual-aware) screen ID
+ *
+ * When screenId is empty, resolves via cursor position then primary screen fallback.
+ * When non-empty, passes virtual screen IDs through and resolves physical names
+ * via Utils::screenIdForName.
+ */
+QString resolveScreenId(const QString& screenId);
+
+/**
+ * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
+ *
+ * Uses ScreenManager::physicalQScreenFor() when available, then falls back to
+ * Utils::findScreenByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * nullptr so the caller can decide the appropriate fallback behavior.
+ *
+ * This replaces the duplicated pattern:
+ *   if (VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
+ *   if (!screen) { Utils::findScreenByIdOrName(id); }
+ */
+QScreen* resolvePhysicalQScreen(const QString& screenId);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief Resolve effective screen geometry for a layout, handling virtual screens
+ *
+ * Prefers ScreenManager geometry (virtual-screen-aware) when available,
+ * falls back to resolving the physical QScreen and using the QScreen overload.
+ * Returns an invalid QRectF if no geometry can be resolved.
+ */
+QRectF resolveScreenGeometry(Layout* layout, const QString& screenId);
 
 } // namespace DbusHelpers
 } // namespace PlasmaZones

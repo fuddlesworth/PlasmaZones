@@ -14,6 +14,7 @@
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "../core/types.h"
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -53,22 +54,23 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     // Connect to layout changes for pending restores notification
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
 
-    // Connect to ScreenManager for panel geometry readiness
-    // This is needed to delay window restoration until panel positions are known
-    // Use QTimer::singleShot to defer connection until ScreenManager is likely initialized
+    // Deferred: ScreenManager may not be initialized yet during adaptor construction.
+    // If ScreenManager is still unavailable after the first event loop iteration,
+    // virtual screen signals won't be connected until the next daemon restart or
+    // screen change. Window restoration will still work via onLayoutChanged() ->
+    // tryEmitPendingRestoresAvailable(), which emits immediately when
+    // isPanelGeometryReady() returns false (no ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
-        if (auto* screenMgr = ScreenManager::instance()) {
-            connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
-            // If panel geometry is already ready, trigger the check now
-            if (ScreenManager::isPanelGeometryReady()) {
-                onPanelGeometryReady();
-            }
-        } else {
-            // ScreenManager not available - this is unexpected but we handle it gracefully.
-            // Window restoration will still work via onLayoutChanged() -> tryEmitPendingRestoresAvailable()
-            // which will emit immediately since isPanelGeometryReady() returns false when instance is null.
+        auto* screenMgr = ScreenManager::instance();
+        if (!screenMgr) {
             qCWarning(lcDbusWindow)
                 << "ScreenManager instance not available - window restoration may use incorrect geometry";
+            return;
+        }
+        connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
+        // If panel geometry is already ready, trigger the check now
+        if (ScreenManager::isPanelGeometryReady()) {
+            onPanelGeometryReady();
         }
     });
 
@@ -196,12 +198,8 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = zoneId;
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    QJsonObject stateObj =
+        buildStateObject(windowId, zoneId, QJsonArray{zoneId}, resolvedScreen, false, QStringLiteral("snapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -244,12 +242,11 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
                          << resolvedScreen;
 
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = primaryZoneId;
-    stateObj[QLatin1String("screenId")] = resolvedScreen;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("snapped");
+    QJsonArray zoneIdsArr;
+    for (const QString& zid : zoneIds)
+        zoneIdsArr.append(zid);
+    QJsonObject stateObj =
+        buildStateObject(windowId, primaryZoneId, zoneIdsArr, resolvedScreen, false, QStringLiteral("snapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -274,12 +271,8 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = QString();
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("unsnapped");
+    QJsonObject stateObj =
+        buildStateObject(windowId, QString(), QJsonArray(), QString(), false, QStringLiteral("unsnapped"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -298,6 +291,9 @@ void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
     for (const QJsonValue& val : entries) {
         QJsonObject obj = val.toObject();
         QString windowId = obj.value(QLatin1String("windowId")).toString();
+        // isRestore == true means the window should be unsnapped (its zone no longer
+        // exists in the new layout), NOT restored to a zone. The name is misleading
+        // but preserved for wire compatibility.
         bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
 
         if (windowId.isEmpty()) {
@@ -333,23 +329,53 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // to its assigned zone's screen (restore, resnap, snap assist) — keep snapped.
     // If they differ, the user moved the window away — unsnap it.
     QString storedScreen = m_service->screenAssignments().value(windowId);
-    if (Utils::screensMatch(storedScreen, newScreenId)) {
+
+    // KWin reports physical screen names in outputChanged. When the stored screen
+    // is a virtual screen (e.g. "HDMI-1/vs:0"), comparing against the physical name
+    // ("HDMI-1") via screensMatch returns false → spurious unsnap.
+    //
+    // If the stored screen is virtual and its physical parent matches the reported
+    // physical screen, keep the stored virtual screen ID — it's already correct.
+    // Only re-resolve via geometry when the physical screens actually differ,
+    // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
+    QString resolvedNewScreen = newScreenId;
+    if (!VirtualScreenId::isVirtual(newScreenId) && VirtualScreenId::isVirtual(storedScreen)) {
+        QString storedPhysical = VirtualScreenId::extractPhysicalId(storedScreen);
+        if (Utils::screensMatch(storedPhysical, newScreenId)) {
+            // Physical parent matches — the window is still on the same monitor,
+            // so the stored virtual screen ID is still valid.
+            resolvedNewScreen = storedScreen;
+        } else {
+            // Different physical screen — resolve via zone geometry as fallback.
+            // NOTE: Ideally we'd use the window's actual position, but window
+            // geometry is not available in this context (KWin only reports the
+            // physical screen name). Using the zone center is imprecise when the
+            // zone straddles a virtual screen boundary; however, the resolved ID
+            // will still differ from storedScreen (different physical parent), so
+            // the window correctly unsnaps regardless.
+            QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
+            if (zoneGeo.isValid()) {
+                QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
+                if (!vsId.isEmpty()) {
+                    resolvedNewScreen = vsId;
+                }
+            }
+        }
+    }
+
+    if (Utils::screensMatch(storedScreen, resolvedNewScreen)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }
 
-    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to" << newScreenId
-                         << "- unsnapping";
+    qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
+                         << resolvedNewScreen << "- unsnapping";
     m_service->clearStalePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = QString();
-    stateObj[QLatin1String("screenId")] = newScreenId;
-    stateObj[QLatin1String("isFloating")] = false;
-    stateObj[QLatin1String("changeType")] = QStringLiteral("screen_changed");
+    QJsonObject stateObj =
+        buildStateObject(windowId, QString(), QJsonArray(), newScreenId, false, QStringLiteral("screen_changed"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -388,8 +414,34 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     if (screenId.isEmpty()) {
         return;
     }
-    m_lastCursorScreenId = screenId;
-    qCDebug(lcDbusWindow) << "Cursor screen changed to" << screenId;
+
+    // The KWin effect may send a physical screen ID when virtual screen configs
+    // haven't loaded yet.  Resolve to the correct virtual screen using the
+    // focused window's daemon-tracked screen assignment as the best hint.
+    QString resolvedId = screenId;
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr && mgr->hasVirtualScreens(screenId)) {
+            // Use focused window's tracked screen as hint
+            if (m_service && !m_lastActiveWindowId.isEmpty()) {
+                const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
+                if (VirtualScreenId::isVirtual(trackedScreen)
+                    && VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
+                    resolvedId = trackedScreen;
+                }
+            }
+            // If no window hint, fall back to first virtual screen
+            if (!VirtualScreenId::isVirtual(resolvedId)) {
+                QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
+                if (!vsIds.isEmpty()) {
+                    resolvedId = vsIds.first();
+                }
+            }
+        }
+    }
+
+    m_lastCursorScreenId = resolvedId;
+    qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
@@ -403,8 +455,18 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
 
     // Track the active window's screen as fallback for shortcut screen detection.
     // The primary source is now cursorScreenChanged (from KWin effect's mouseChanged).
+    // Prefer the daemon-tracked screen assignment (set at snap time) over what the
+    // effect reports, since the effect may send a physical ID before VS configs load.
+    QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
-        m_lastActiveScreenId = screenId;
+        if (!VirtualScreenId::isVirtual(screenId) && m_service) {
+            const QString trackedScreen = m_service->screenAssignments().value(windowId);
+            if (VirtualScreenId::isVirtual(trackedScreen)
+                && VirtualScreenId::extractPhysicalId(trackedScreen) == VirtualScreenId::extractPhysicalId(screenId)) {
+                resolvedScreen = trackedScreen;
+            }
+        }
+        m_lastActiveScreenId = resolvedScreen;
     }
 
     qCDebug(lcDbusWindow) << "Window activated:" << windowId << "on screen" << screenId;
@@ -416,7 +478,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
         && !m_service->isAutoSnapped(windowId)) {
         QString windowClass = Utils::extractWindowClass(windowId);
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-        m_service->updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
+        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 }
 
@@ -447,6 +509,16 @@ QStringList WindowTrackingAdaptor::getSnappedWindows()
 {
     // Delegate to service
     return m_service->snappedWindows();
+}
+
+void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
+{
+    const QSet<QString> alive(aliveWindowIds.begin(), aliveWindowIds.end());
+    int pruned = m_service->pruneStaleAssignments(alive);
+    if (pruned > 0) {
+        qCInfo(lcDbusWindow) << "Pruned" << pruned << "stale window assignments (not in KWin)";
+        scheduleSaveState();
+    }
 }
 
 QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
@@ -500,6 +572,21 @@ QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, c
     }
 
     return GeometryUtils::rectToJson(geo);
+}
+
+QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,
+                                                    const QJsonArray& zoneIds, const QString& screenId, bool isFloating,
+                                                    const QString& changeType) const
+{
+    QJsonObject obj;
+    obj[QLatin1String("windowId")] = windowId;
+    obj[QLatin1String("zoneId")] = zoneId;
+    obj[QLatin1String("zoneIds")] = zoneIds;
+    obj[QLatin1String("screenId")] = screenId;
+    obj[QLatin1String("isFloating")] = isFloating;
+    obj[QLatin1String("isSticky")] = m_service ? m_service->isWindowSticky(windowId) : false;
+    obj[QLatin1String("changeType")] = changeType;
+    return obj;
 }
 
 } // namespace PlasmaZones

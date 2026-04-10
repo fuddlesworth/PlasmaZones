@@ -79,13 +79,28 @@ void ScreenChangeHandler::applyScreenGeometryChange()
     // Position-only changes (e.g. exiting KDE panel edit mode) should not move windows.
     const QSize previousSize = m_lastVirtualScreenGeometry.size();
     const QSize currentSize = currentGeometry.size();
-    if (previousSize == currentSize) {
-        qCDebug(lcScreenChange) << "Virtual screen size unchanged, skipping window repositioning";
-        m_lastVirtualScreenGeometry = currentGeometry;
-        return;
-    }
+    const bool sizeChanged = (previousSize != currentSize);
 
     m_lastVirtualScreenGeometry = currentGeometry;
+
+    // Always refresh virtual screen definitions — physical screen geometry
+    // (including position) changed, so virtual screen absolute coordinates
+    // need recalculation from the daemon.
+    if (m_effect->m_daemonServiceRegistered) {
+        m_effect->fetchAllVirtualScreenConfigs();
+    }
+
+    if (!sizeChanged) {
+        // Even when physical size is unchanged, virtual screen split ratio changes
+        // require window repositioning. Only proceed if VS configs exist; otherwise
+        // there's nothing to reposition.
+        if (!m_effect->m_daemonServiceRegistered || m_effect->m_virtualScreenDefs.isEmpty()) {
+            qCDebug(lcScreenChange) << "Screen size unchanged, no VS configs — skipping window repositioning";
+            return;
+        }
+        qCDebug(lcScreenChange) << "Screen size unchanged but VS configs present — repositioning windows";
+    }
+
     if (m_reapplyInProgress) {
         m_reapplyPending = true;
         return;
@@ -109,8 +124,8 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         return;
     }
     m_reapplyInProgress = true;
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                             QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {

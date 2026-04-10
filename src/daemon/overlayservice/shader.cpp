@@ -59,20 +59,10 @@ QVariantMap parseShaderParamsJson(const QString& json, const char* context)
 QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& size,
                                        const IZoneVisualizationSettings* settings)
 {
-    const QColor labelFontColor = settings ? settings->labelFontColor() : QColor(Qt::white);
-    QColor backgroundColor = Qt::black;
-    if (settings) {
-        backgroundColor = QGuiApplication::palette().color(QPalette::Active, QPalette::Base);
-    }
-    const QString fontFamily = settings ? settings->labelFontFamily() : QString();
-    const qreal fontSizeScale = settings ? settings->labelFontSizeScale() : 1.0;
-    const int fontWeight = settings ? settings->labelFontWeight() : QFont::Bold;
-    const bool fontItalic = settings ? settings->labelFontItalic() : false;
-    const bool fontUnderline = settings ? settings->labelFontUnderline() : false;
-    const bool fontStrikeout = settings ? settings->labelFontStrikeout() : false;
-    QImage labelsImage =
-        ZoneLabelTextureBuilder::build(zones, size, labelFontColor, true, backgroundColor, fontFamily, fontSizeScale,
-                                       fontWeight, fontItalic, fontUnderline, fontStrikeout);
+    const LabelFontSettings lfs = extractLabelFontSettings(settings);
+    QImage labelsImage = ZoneLabelTextureBuilder::build(zones, size, lfs.fontColor, true, lfs.backgroundColor,
+                                                        lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
+                                                        lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
     if (labelsImage.isNull()) {
         labelsImage = QImage(1, 1, QImage::Format_ARGB32);
         labelsImage.fill(Qt::transparent);
@@ -98,14 +88,56 @@ bool OverlayService::canUseShaders() const
 
 bool OverlayService::useShaderForScreen(QScreen* screen) const
 {
+    if (!screen) {
+        return false;
+    }
+    // Resolve to virtual screen ID when the physical screen has subdivisions,
+    // so shader-type checks use the correct per-virtual-screen layout.
+    const QString physId = Utils::screenIdentifier(screen);
+    auto* mgr = ScreenManager::instance();
+    if (mgr && mgr->hasVirtualScreens(physId)) {
+        // Check all virtual screens — if any uses a shader, return true.
+        // This is used by initializeOverlay which creates per-virtual-screen windows.
+        const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
+        for (const QString& vsId : vsIds) {
+            if (useShaderForScreen(vsId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    return useShaderForScreen(physId);
+}
+
+bool OverlayService::anyScreenUsesShader() const
+{
     if (!canUseShaders()) {
         return false;
     }
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    Layout* screenLayout = resolveScreenLayout(screen);
-    if (!screenLayout || ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
+    for (const QString& screenId : m_screenStates.keys()) {
+        if (useShaderForScreen(screenId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool OverlayService::useShaderForScreen(const QString& screenId) const
+{
+    if (!canUseShaders()) {
+        return false;
+    }
+    if (m_settings && !m_settings->enableShaderEffects()) {
+        return false;
+    }
+    Layout* screenLayout = resolveScreenLayout(screenId);
+    if (!screenLayout) {
+        return false;
+    }
+    if (ShaderRegistry::isNoneShader(screenLayout->shaderId())) {
         return false;
     }
 
@@ -123,22 +155,6 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
 
     auto* registry = ShaderRegistry::instance();
     return registry && registry->shader(screenLayout->shaderId()).isValid();
-}
-
-bool OverlayService::anyScreenUsesShader() const
-{
-    if (!canUseShaders()) {
-        return false;
-    }
-    if (m_settings && !m_settings->enableShaderEffects()) {
-        return false;
-    }
-    for (auto* screen : m_overlayWindows.keys()) {
-        if (useShaderForScreen(screen)) {
-            return true;
-        }
-    }
-    return false;
 }
 
 void OverlayService::startShaderAnimation()
@@ -168,7 +184,8 @@ void OverlayService::stopShaderAnimation()
 {
     // Don't stop CAVA here — it stays warm for instant audio data on next show().
     // Just clear the spectrum from overlay windows so they don't render stale data.
-    for (auto* window : std::as_const(m_overlayWindows)) {
+    for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
+        auto* window = it_.value().overlayWindow;
         if (window) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), QVariantList());
         }
@@ -187,8 +204,8 @@ void OverlayService::onAudioSpectrumUpdated(const QVector<float>& spectrum)
     // Pass QVector<float> wrapped in QVariant to avoid per-element QVariant boxing.
     // ZoneShaderItem::setAudioSpectrum() detects and unwraps QVector<float> directly.
     const QVariant wrapped = QVariant::fromValue(spectrum);
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && useShaderForScreen(it.key())) {
             writeQmlProperty(window, QStringLiteral("audioSpectrum"), wrapped);
         }
@@ -233,8 +250,8 @@ void OverlayService::updateShaderUniforms()
     // Skip hidden non-shader windows kept alive across hide/show cycles —
     // they don't have iTime/iFrame properties and writing to hidden windows
     // is wasted work (60Hz property writes silently dropped by QML).
-    for (auto it = m_overlayWindows.cbegin(); it != m_overlayWindows.cend(); ++it) {
-        auto* window = it.value();
+    for (auto it = m_screenStates.cbegin(); it != m_screenStates.cend(); ++it) {
+        auto* window = it.value().overlayWindow;
         if (window && window->isVisible()) {
             writeQmlProperty(window, QStringLiteral("iTime"), static_cast<qreal>(iTime));
             writeQmlProperty(window, QStringLiteral("iTimeDelta"), static_cast<qreal>(iTimeDelta));
@@ -264,7 +281,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
-        screen = Utils::findScreenByIdOrName(screenId);
+        screen = resolveTargetScreen(screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
@@ -297,7 +314,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     if (!m_shaderPreviewWindow || m_shaderPreviewScreen != screen) {
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
+        createShaderPreviewWindow(screen, screenId);
     }
 
     if (!m_shaderPreviewWindow) {
@@ -306,6 +323,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     m_shaderPreviewScreen = screen;
     m_shaderPreviewShaderId = shaderId;
+    m_shaderPreviewScreenId = screenId;
 
     auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
     if (!layerSurface) {
@@ -313,7 +331,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
                              << "— layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
-        createShaderPreviewWindow(screen);
+        createShaderPreviewWindow(screen, screenId);
         if (!m_shaderPreviewWindow) {
             return;
         }
@@ -325,13 +343,15 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     }
 
     {
-        const QRect screenGeom = screen->geometry();
-        const int localX = x - screenGeom.x();
-        const int localY = y - screenGeom.y();
+        // For virtual screens, margins are relative to the physical screen origin,
+        // not the virtual screen origin (LayerShell positions within the physical output).
+        const QRect physGeom = screen->geometry();
+        const int marginLeft = x - physGeom.x();
+        const int marginTop = y - physGeom.y();
         // Batch anchors + margins into a single propertiesChanged() emission
         LayerSurface::BatchGuard batch(layerSurface);
         layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+        layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -381,10 +401,11 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
             if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
-                const QRect screenGeom = screen->geometry();
-                const int localX = x - screenGeom.x();
-                const int localY = y - screenGeom.y();
-                layerSurface->setMargins(QMargins(localX, localY, 0, 0));
+                // Margins are relative to the physical screen origin (LayerShell)
+                const QRect physGeom = screen->geometry();
+                const int marginLeft = x - physGeom.x();
+                const int marginTop = y - physGeom.y();
+                layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
             }
         }
     }
@@ -412,7 +433,7 @@ void OverlayService::hideShaderPreview()
     destroyShaderPreviewWindow();
 }
 
-void OverlayService::createShaderPreviewWindow(QScreen* screen)
+void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)
 {
     if (m_shaderPreviewWindow) {
         return;
@@ -434,12 +455,12 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen)
 
     window->setProperty("isShaderOverlay", true);
 
-    if (!configureLayerSurface(window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-shader-preview-%1-%2")
-                                   .arg(Utils::screenIdentifier(screen))
-                                   .arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << screen->name();
-        delete window;
+    const QString scopeId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    if (!configureLayerSurface(
+            window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
+            QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration))) {
+        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << scopeId;
+        window->deleteLater();
         return;
     }
 
@@ -462,6 +483,7 @@ void OverlayService::destroyShaderPreviewWindow()
     }
     m_shaderPreviewScreen = nullptr;
     m_shaderPreviewShaderId.clear();
+    m_shaderPreviewScreenId.clear();
     // Stop shader timer only if main overlay is also not visible
     if (!m_visible && m_shaderUpdateTimer && m_shaderUpdateTimer->isActive()) {
         stopShaderAnimation();

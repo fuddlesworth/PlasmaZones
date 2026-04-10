@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QColor>
+#include <QRectF>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -940,6 +941,32 @@ public:
     static QStringList lockedScreens()
     {
         return {};
+    }
+
+    // ── Virtual Screen Limits ──────────────────────────────────────────
+    static constexpr int maxVirtualScreensPerPhysical()
+    {
+        return 10;
+    }
+    static constexpr int minVirtualScreensPerPhysical()
+    {
+        return 2;
+    }
+
+    // ── Virtual Screen Defaults ───────────────────────────────────────
+    static QString defaultVirtualScreenName(int index)
+    {
+        return QStringLiteral("Screen %1").arg(index + 1);
+    }
+    static QRectF defaultVirtualScreenRegion()
+    {
+        return QRectF(0.0, 0.0, 1.0, 1.0);
+    }
+
+    /// Tolerance for validating that virtual screen regions cover the full physical screen.
+    static constexpr qreal areaCoverageTolerance()
+    {
+        return 0.05;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

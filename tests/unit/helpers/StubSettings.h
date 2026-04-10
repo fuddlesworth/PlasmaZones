@@ -532,17 +532,19 @@ public:
     }
     bool snapAssistFeatureEnabled() const override
     {
-        return false;
+        return m_snapAssistFeatureEnabled;
     }
-    void setSnapAssistFeatureEnabled(bool) override
+    void setSnapAssistFeatureEnabled(bool enabled) override
     {
+        m_snapAssistFeatureEnabled = enabled;
     }
     bool snapAssistEnabled() const override
     {
-        return false;
+        return m_snapAssistEnabled;
     }
-    void setSnapAssistEnabled(bool) override
+    void setSnapAssistEnabled(bool enabled) override
     {
+        m_snapAssistEnabled = enabled;
     }
     QVariantList snapAssistTriggers() const override
     {
@@ -736,6 +738,8 @@ public:
 private:
     QString m_defaultLayoutId;
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
+    bool m_snapAssistFeatureEnabled = false;
+    bool m_snapAssistEnabled = false;
     QStringList m_snappingLayoutOrder;
     QStringList m_tilingAlgorithmOrder;
 };

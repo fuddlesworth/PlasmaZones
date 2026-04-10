@@ -18,6 +18,7 @@ namespace PlasmaZones {
 class LayoutManager;
 class IZoneDetector;
 class ISettings;
+class ScreenManager;
 class VirtualDesktopManager;
 class Layout;
 class Zone;
@@ -110,6 +111,10 @@ public:
      * @return List of window IDs that are currently snapped
      */
     QStringList snappedWindows() const;
+
+    /// Remove zone/screen/desktop assignments for windows not in the alive set.
+    /// Returns the number of pruned entries.
+    int pruneStaleAssignments(const QSet<QString>& aliveWindowIds);
 
     /**
      * @brief Check if a window is assigned to any zone
@@ -257,9 +262,16 @@ public:
     QString preFloatScreen(const QString& windowId) const;
 
     /**
-     * @brief Clear pre-float zone after restore
+     * @brief Clear pre-float zone after restore (both windowId and appId keys)
      */
     void clearPreFloatZone(const QString& windowId);
+
+    /**
+     * @brief Clear pre-float zone for a specific window only (not appId)
+     *
+     * Used by autotile float sync to avoid destroying sibling instances' data.
+     */
+    void clearPreFloatZoneForWindow(const QString& windowId);
 
     /**
      * @brief Clear floating state when snapping a floating window
@@ -337,6 +349,10 @@ public:
      * @param screenId Screen for geometry calculation
      * @param isSticky Whether window is on all desktops
      * @return SnapResult with geometry and zone info
+     *
+     * @note This method peeks at the pending queue but does NOT consume the entry.
+     * Callers MUST call consumePendingAssignment() after acting on a successful result
+     * to prevent duplicate restoration for the next window of the same app class.
      */
     SnapResult calculateRestoreFromSession(const QString& windowId, const QString& screenId, bool isSticky) const;
 
@@ -457,20 +473,20 @@ public:
      * @brief Calculate rotation data for windows on a specific screen
      * @param clockwise true for clockwise rotation
      * @param screenFilter When non-empty, only rotate windows on this screen
-     * @return List of rotation entries
+     * @return List of zone assignment entries
      */
-    QVector<RotationEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
+    QVector<ZoneAssignmentEntry> calculateRotation(bool clockwise, const QString& screenFilter = QString()) const;
 
     /**
      * @brief Calculate snap assignments for all unsnapped windows
      * @param windowIds List of unsnapped window IDs (from KWin effect)
      * @param screenId Screen for layout/geometry resolution
-     * @return List of RotationEntry with target zone assignments
+     * @return List of ZoneAssignmentEntry with target zone assignments
      *
      * Assigns windows to zones in zone-number order, skipping already-occupied
      * zones. If more windows than zones, extra windows are left unassigned.
      */
-    QVector<RotationEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId) const;
 
     /**
      * @brief Calculate resnap data for windows from previous layout to current layout
@@ -480,9 +496,9 @@ public:
      * with cycling when the new layout has fewer zones (e.g. zone 4->1, 5->2 when
      * going from 5 zones to 3).
      *
-     * @return List of rotation entries (same format as rotate) for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> calculateResnapFromPreviousLayout();
 
     /**
      * @brief Populate the resnap buffer for all screens independently.
@@ -496,8 +512,22 @@ public:
      * layout assignments changed simultaneously.
      *
      * @param excludeScreens Screens to skip (e.g. autotile screens handled separately)
+     * @param includeScreens When non-empty, only process windows on these screens.
+     *        Restricts resnap to screens whose layout actually changed.
      */
-    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {});
+    void populateResnapBufferForAllScreens(const QSet<QString>& excludeScreens = {},
+                                           const QSet<QString>& includeScreens = {});
+
+    /**
+     * @brief Clear the resnap buffer
+     *
+     * Called when virtual screen configuration changes to prevent stale
+     * resnap data from referencing old screen IDs.
+     */
+    void clearResnapBuffer()
+    {
+        m_resnapBuffer.clear();
+    }
 
     /**
      * @brief Calculate resnap data from current zone assignments
@@ -508,9 +538,9 @@ public:
      * so windows can be moved back to their zone positions.
      *
      * @param screenFilter When non-empty, only include windows on this screen
-     * @return List of rotation entries for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
+    QVector<ZoneAssignmentEntry> calculateResnapFromCurrentAssignments(const QString& screenFilter = QString()) const;
 
     /**
      * @brief Calculate resnap data from an explicit autotile window order
@@ -522,10 +552,10 @@ public:
      *
      * @param autotileWindowOrder Ordered list of window IDs from autotile (master first)
      * @param screenId Screen for layout/geometry resolution
-     * @return List of rotation entries for KWin to apply
+     * @return List of zone assignment entries for KWin to apply
      */
-    QVector<RotationEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                            const QString& screenId) const;
+    QVector<ZoneAssignmentEntry> calculateResnapFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                  const QString& screenId) const;
 
     /**
      * @brief Build a zone-ordered window list for a screen from current zone assignments
@@ -540,6 +570,42 @@ public:
     QStringList buildZoneOrderedWindowList(const QString& screenId) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Migration
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Migrate window screen assignments from physical to virtual screen IDs
+     *
+     * Windows snapped before virtual screens were configured have physical screen IDs
+     * in m_windowScreenAssignments. When virtual screens are active, all per-screen
+     * lookups use virtual IDs, so these windows become invisible to zone occupancy
+     * checks, snap assist, float/unfloat, etc.
+     *
+     * This method iterates all screen assignments and, for any window whose screen
+     * matches the given physical screen, determines which virtual screen the window's
+     * zone falls within and updates the assignment accordingly.
+     *
+     * Also migrates m_preFloatScreenAssignments.
+     *
+     * @param physicalScreenId The physical screen being subdivided
+     * @param virtualScreenIds Virtual screen IDs for the physical screen
+     * @param mgr ScreenManager for geometry lookups
+     */
+    void migrateScreenAssignmentsToVirtual(const QString& physicalScreenId, const QStringList& virtualScreenIds,
+                                           ScreenManager* mgr);
+
+    /**
+     * @brief Reverse migration: virtual screen IDs → physical screen ID
+     *
+     * Called when virtual screen configuration is removed for a physical screen.
+     * Strips the "/vs:N" suffix from all tracked window screen assignments that
+     * belong to the given physical screen, reverting them to the physical ID.
+     *
+     * @param physicalScreenId The physical screen ID to migrate back to
+     */
+    void migrateScreenAssignmentsFromVirtual(const QString& physicalScreenId);
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Resolution Change Handling
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -550,6 +616,19 @@ public:
      * Used when screen resolution changes to recalculate zone positions.
      */
     QHash<QString, QRect> updatedWindowGeometries() const;
+
+    /**
+     * @brief Pre-compute zone geometries for all pending restore entries.
+     * @return Map of appId -> zone geometry (pixel coordinates)
+     *
+     * Used by the KWin effect to cache expected snap positions so that
+     * windows can be teleported to their zone immediately on windowAdded,
+     * eliminating the visible "flash" from KWin's session-restored position.
+     * Only the first entry per appId is returned (FIFO consumption order).
+     * Returns geometries without consuming entries or validating layout/desktop
+     * context — the actual resolveWindowRestore call handles that.
+     */
+    QHash<QString, QRect> pendingRestoreGeometries() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Window Lifecycle
@@ -731,12 +810,45 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
-    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId) const;
+    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter = 0) const;
+
+    /// Resolve a screen ID to an effective screen ID, falling back to the physical
+    /// screen ID if a virtual screen no longer exists in the current configuration.
+    QString resolveEffectiveScreenId(const QString& screenId) const;
+
+    /// Clear m_lastUsedZoneId if it doesn't exist in the layout for targetScreen.
+    void validateLastUsedZone(const QString& targetScreen);
+
+    /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
+    /// when multiple zones share the same number.
+    static void sortZonesByNumber(QVector<Zone*>& zones);
+
+    /// Find the nearest virtual screen by index proximity.
+    /// Used when a stored virtual screen ID no longer exists in the current configuration.
+    static QString findNearestVirtualScreen(const QStringList& vsIds, int oldIndex);
+
+    /// Find a zone by UUID across all loaded layouts.
+    /// Returns the zone and its parent layout, or {nullptr, nullptr} if not found.
+    struct ZoneLookupResult
+    {
+        Zone* zone = nullptr;
+        Layout* layout = nullptr;
+    };
+    ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
+
+    /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
+    static QHash<QString, int> buildZonePositionMap(Layout* layout);
+
+    /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
+    /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
+    QRect resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const;
 
 public:
-    /// Build set of occupied zone UUIDs, optionally filtered by screen.
+    /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.
-    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
+    /// When @p desktopFilter is positive, only windows on that desktop (or desktop 0 = all)
+    /// are included. Pass 0 or omit to disable desktop filtering.
+    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
 private:
     // Dependencies

@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QLatin1String>
+#include <QString>
 
 namespace PlasmaZones {
 
@@ -29,6 +30,10 @@ enum class ZoneGeometryMode {
  * structural constants for built-in layouts.
  */
 namespace Defaults {
+// Fallback screen dimensions when no QScreen is available
+inline constexpr int FallbackScreenWidth = 1920;
+inline constexpr int FallbackScreenHeight = 1080;
+
 // Alpha values for semi-transparent colors
 constexpr int HighlightAlpha = 128;
 constexpr int InactiveAlpha = 64;
@@ -85,7 +90,6 @@ enum class AspectRatioClass {
 namespace ScreenClassification {
 // Aspect ratio boundary thresholds (width / height)
 constexpr qreal PortraitMax = 1.0; // AR < 1.0 → portrait
-constexpr qreal StandardMin = 1.0; // AR >= 1.0 and < UltrawideMin → standard
 constexpr qreal UltrawideMin = 1.9; // AR >= 1.9 and < SuperUltrawideMin → ultrawide
 constexpr qreal SuperUltrawideMin = 2.8; // AR >= 2.8 → super-ultrawide
 
@@ -242,9 +246,9 @@ constexpr qreal ExpansionStep = 0.01; // 1% increment for fill expansion
 constexpr qreal GeometryBoundsTolerance = 0.001; // Tolerance for coordinate bounds checking
 
 // Default zone colors (hex strings for QML compatibility)
-inline constexpr const char* DefaultHighlightColor = "#800078D4";
-inline constexpr const char* DefaultInactiveColor = "#40808080";
-inline constexpr const char* DefaultBorderColor = "#C8FFFFFF";
+inline constexpr QLatin1String DefaultHighlightColor{"#800078D4"};
+inline constexpr QLatin1String DefaultInactiveColor{"#40808080"};
+inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
 }
 
 /**
@@ -354,6 +358,22 @@ inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
+
+// Zone assignment serialization keys
+inline constexpr QLatin1String WindowId{"windowId"};
+inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
+inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
+inline constexpr QLatin1String TargetZoneIds{"targetZoneIds"};
+
+// Virtual screen keys
+inline constexpr QLatin1String IsVirtualScreen{"isVirtualScreen"};
+inline constexpr QLatin1String VirtualDisplayName{"virtualDisplayName"};
+inline constexpr QLatin1String PhysicalScreenId{"physicalScreenId"};
+inline constexpr QLatin1String SerialNumber{"serialNumber"};
+inline constexpr QLatin1String Index{"index"};
+inline constexpr QLatin1String DisplayName{"displayName"};
+inline constexpr QLatin1String Region{"region"};
+inline constexpr QLatin1String Screens{"screens"};
 }
 
 /**
@@ -410,6 +430,18 @@ inline constexpr QLatin1String SplitRatioStep{"SplitRatioStep"};
 inline constexpr QLatin1String MasterCount{"MasterCount"};
 inline constexpr QLatin1String Algorithm{"Algorithm"};
 inline constexpr QLatin1String MaxWindows{"MaxWindows"};
+inline constexpr QLatin1String InnerGap{"InnerGap"};
+inline constexpr QLatin1String OuterGap{"OuterGap"};
+inline constexpr QLatin1String UsePerSideOuterGap{"UsePerSideOuterGap"};
+inline constexpr QLatin1String FocusNewWindows{"FocusNewWindows"};
+inline constexpr QLatin1String SmartGaps{"SmartGaps"};
+inline constexpr QLatin1String InsertPosition{"InsertPosition"};
+inline constexpr QLatin1String FocusFollowsMouse{"FocusFollowsMouse"};
+inline constexpr QLatin1String RespectMinimumSize{"RespectMinimumSize"};
+inline constexpr QLatin1String HideTitleBars{"HideTitleBars"};
+inline constexpr QLatin1String AnimationsEnabled{"AnimationsEnabled"};
+inline constexpr QLatin1String AnimationDuration{"AnimationDuration"};
+inline constexpr QLatin1String AnimationEasingCurve{"AnimationEasingCurve"};
 }
 
 /**
@@ -419,6 +451,24 @@ namespace Audio {
 constexpr int MinBars = 16;
 constexpr int MaxBars = 256;
 }
+
+/**
+ * @brief Synthetic zone ID prefix used by the zone selector overlay
+ *
+ * Zone IDs starting with this prefix are transient selector entries,
+ * not real zone UUIDs. They must be excluded from persistence and
+ * occupancy checks.
+ */
+inline constexpr QLatin1String ZoneSelectorIdPrefix{"zoneselector-"};
+
+/**
+ * @brief Sentinel value used as targetZoneId when restoring pre-tiling geometry
+ *
+ * When a window is released from autotile, its zone assignment entry uses this
+ * sentinel instead of a real zone UUID to signal that the window should be
+ * restored to its original (pre-tiling) geometry rather than snapped to a zone.
+ */
+inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 /**
  * @brief D-Bus service constants

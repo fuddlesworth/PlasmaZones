@@ -51,8 +51,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
 
     // Emit geometry for KWin effect to apply
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId,
-                                  result.screenId);
+    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId, result.screenId);
 
     qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
                    << result.screenId;
@@ -72,9 +71,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return SnapResult::noSnap();
     }
-
-    // Mark this window as reported by the effect (confirmed live).
-    m_windowTracker->markWindowReported(windowId);
 
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.

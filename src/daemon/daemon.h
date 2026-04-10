@@ -8,13 +8,13 @@
 #include <QElapsedTimer>
 #include <QTimer>
 #include <QHash>
-#include <QRect>
 #include <QSet>
 #include <QThreadPool>
 #include <memory>
 
 #include "shortcutmanager.h"
 #include "../core/types.h"
+#include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
 
@@ -147,9 +147,14 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
-    void connectToKWinScript(); // Shortcuts now handled by ShortcutManager
 
-    // Start-up sub-methods (defined in daemon_start.cpp)
+    /** @brief Check if screen is locked for layout change in its current mode */
+    bool isScreenLockedForLayoutChange(const QString& screenId);
+
+    /** @brief Handle cycle-layout shortcut (previous or next) */
+    void handleCycleLayout(const QString& screenId, bool forward);
+
+    // Start-up sub-methods (defined in start.cpp)
     void connectScreenSignals();
     void connectDesktopActivity();
     void connectShortcutSignals();
@@ -158,6 +163,8 @@ private:
     void connectLayoutSignals();
     void connectOverlaySignals();
     void finalizeStartup();
+    /** @brief Migrate window screen assignments from physical to virtual IDs after startup */
+    void migrateStartupScreenAssignments();
 
     /**
      * @brief Pre-seed autotile engine with zone-ordered windows for one screen
@@ -183,30 +190,12 @@ private:
     /**
      * @brief Pre-save snap-mode floating state before entering autotile
      *
-     * Iterates all floating windows and saves non-autotile-floated ones
-     * to WTS's savedSnapFloating set. Idempotent (QSet::insert).
+     * Saves non-autotile-floated floating windows to WTS's savedSnapFloating set.
+     * When screenId is provided, only saves windows on that screen. When empty,
+     * saves all floating windows (used for global autotile enable).
+     * Idempotent (QSet::insert).
      */
-    void presaveSnapFloats();
-
-    // Per-desktop context key for layout/autotile tracking.
-    // Uses screenId (EDID-based) or connector name depending on context.
-    struct DesktopContextKey
-    {
-        QString screenId;
-        int desktop;
-        QString activity;
-        bool operator==(const DesktopContextKey& o) const
-        {
-            return screenId == o.screenId && desktop == o.desktop && activity == o.activity;
-        }
-    };
-    friend size_t qHash(const DesktopContextKey& k, size_t seed)
-    {
-        seed = ::qHash(k.screenId, seed);
-        seed = ::qHash(k.desktop, seed);
-        seed = ::qHash(k.activity, seed);
-        return seed;
-    }
+    void presaveSnapFloats(const QString& screenId = QString());
 
     /**
      * @brief Capture autotile window order for all autotile screens
@@ -216,7 +205,7 @@ private:
      *
      * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
      */
-    QHash<DesktopContextKey, QStringList> captureAutotileOrders() const;
+    QHash<TilingStateKey, QStringList> captureAutotileOrders() const;
 
     /**
      * @brief Restore pre-tile geometry for autotile-only windows
@@ -227,8 +216,8 @@ private:
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
                                        const QString& activity = QString());
-    QVector<RotationEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                       const QString& activity);
+    QVector<ZoneAssignmentEntry> buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                             const QString& activity);
 
     /** @brief Show layout OSD deferred (avoids blocking on first-time QML compilation) */
     void showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenId);
@@ -246,6 +235,15 @@ private:
      * @param activity Current activity ID
      */
     void showDesktopSwitchOsd(int desktop, const QString& activity);
+
+    /**
+     * @brief Show per-screen OSD for all effective screens
+     *
+     * Iterates effectiveScreenIds, resolves assignment (autotile vs snapping),
+     * and calls showAlgorithmOsdDeferred or showLayoutOsdDeferred per screen.
+     * DRY helper shared by showDesktopSwitchOsd and settingsChanged handler.
+     */
+    void showOsdForAllScreens(int desktop, const QString& activity);
 
     /**
      * @brief Recompute which screens use autotile from layout assignments
@@ -318,10 +316,29 @@ private:
     bool isCurrentContextLocked(const QString& screenId) const;
     bool isCurrentContextLockedForMode(const QString& screenId, int mode) const;
 
+    /**
+     * @brief Sync daemon-side float state when autotile floats/unfloats a window
+     *
+     * Propagates floating state to WindowTrackingService and KWin effect,
+     * manages autotile-originated vs snap-mode float bookkeeping, restores
+     * pre-tile geometry on float, and shows navigation OSD.
+     */
+    void syncAutotileFloatState(const QString& windowId, bool floating, const QString& screenId);
+
+    /**
+     * @brief Batch-update daemon-side float state for overflow-floated windows
+     *
+     * Updates WTS state directly without emitting per-window D-Bus signals
+     * (the effect already processed the float from the windowsTileRequested batch).
+     */
+    void syncAutotileBatchFloatState(const QStringList& windowIds, const QString& screenId);
+
     /** @brief Prune m_lastAutotileOrders for stale desktops */
     void pruneContextMapsForDesktop(int maxDesktop);
     /** @brief Prune context maps for removed activities */
     void pruneContextMapsForActivities(const QSet<QString>& validActivities);
+    /** @brief Prune m_lastAutotileOrders for old virtual screen IDs that no longer exist */
+    void pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId);
 
     bool m_running = false;
     int m_suppressResnapOsd = 0;
@@ -337,13 +354,13 @@ private:
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order
     // on re-entry, producing deterministic arrangements across mode toggles.
-    // Keyed by DesktopContextKey (not plain screen name) so cross-desktop toggles
+    // Keyed by TilingStateKey (not plain screen name) so cross-desktop toggles
     // don't overwrite each other's ordering.
-    QHash<DesktopContextKey, QStringList> m_lastAutotileOrders;
+    QHash<TilingStateKey, QStringList> m_lastAutotileOrders;
 
     // Snap-float restore entries collected during windowsReleasedFromTiling.
     // Consumed by the toggle handler to batch geometry restores into the resnap signal.
-    QVector<RotationEntry> m_pendingSnapFloatRestores;
+    QVector<ZoneAssignmentEntry> m_pendingSnapFloatRestores;
 
     // State tracking for settingsChanged delta detection (replaces individual signal handlers)
     // Initialized from m_settings in init() before settingsChanged is connected.
@@ -358,7 +375,7 @@ private:
 
     // Geometry update debouncing to prevent cascade of redundant recalculations
     QTimer m_geometryUpdateTimer;
-    QHash<QString, QRect> m_pendingGeometryUpdates;
+    bool m_geometryUpdatePending = false;
     void processPendingGeometryUpdates();
 
     // After geometry updates settle, request KWin effect to re-apply window positions (panel editor fix)

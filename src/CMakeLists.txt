@@ -93,6 +93,7 @@ set(plasmazones_core_SRCS
     core/layersurface.h
     core/screenmanager.cpp
     core/screenmanager/panels.cpp
+    core/screenmanager/virtualscreens.cpp
     core/screenmanager.h
     core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
@@ -125,6 +126,7 @@ set(plasmazones_core_SRCS
     config/colorimporter.h
     config/updatechecker.cpp
     config/updatechecker.h
+    dbus/dbushelpers.cpp
     dbus/layoutadaptor.cpp
     dbus/layoutadaptor/assignment.cpp
     dbus/layoutadaptor/editor.cpp
@@ -232,6 +234,11 @@ set_source_files_properties(
     core/qpa/layershellintegration.cpp
     core/qpa/layershellwindow.cpp
     config/configdefaults.cpp
+    # Exclude from unity build to avoid forward-declaration conflicts
+    # between AutotileEngine.h (forward-declares Settings) and
+    # SettingsBridge.h (uses QPointer<Settings>, needs full definition)
+    dbus/windowdragadaptor/drag.cpp
+    dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
 target_include_directories(plasmazones_core PRIVATE ${_pz_gen_dir})
@@ -292,6 +299,7 @@ target_include_directories(plasmazones_core
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>  # For shared/ headers (virtualscreenid.h)
         $<INSTALL_INTERFACE:include/plasmazones>
 )
 

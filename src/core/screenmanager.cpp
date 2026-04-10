@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "screenmanager.h"
+#include "virtualscreen.h"
 #include "platform.h"
 #include "logging.h"
 #include "utils.h"
@@ -10,6 +11,7 @@
 #include <QWindow>
 #include <QHash>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -25,15 +27,23 @@ namespace PlasmaZones {
 
 // Global cache for available geometry (screen name -> geometry)
 // Updated by sensor windows, read by actualAvailableGeometry()
+// Main-thread-only — no synchronization needed (Qt GUI thread constraint)
 static QHash<QString, QRect> s_availableGeometryCache;
 
 // Global pointer to the active ScreenManager instance (for static method access)
+// Main-thread-only — no synchronization needed (Qt GUI thread constraint)
 static QPointer<ScreenManager> s_instance;
 
 ScreenManager::ScreenManager(QObject* parent)
     : QObject(parent)
 {
+    Q_ASSERT_X(!s_instance, "ScreenManager", "Multiple ScreenManager instances created");
+    if (s_instance) {
+        qCWarning(lcScreen) << "ScreenManager: singleton already exists, ignoring duplicate construction";
+        return;
+    }
     s_instance = this;
+    m_valid = true;
     m_delayedPanelRequeryTimer.setSingleShot(true);
     connect(&m_delayedPanelRequeryTimer, &QTimer::timeout, this, [this]() {
         queryKdePlasmaPanels(true); // true = emit delayedPanelRequeryCompleted when done
@@ -50,12 +60,13 @@ ScreenManager::~ScreenManager()
 
 bool ScreenManager::init()
 {
+    // Placeholder — initialization logic moved to start(). Kept for API compatibility.
     return true;
 }
 
 void ScreenManager::start()
 {
-    if (m_running) {
+    if (m_running || !m_valid) {
         return;
     }
 
@@ -95,9 +106,9 @@ void ScreenManager::stop()
     m_running = false;
     m_delayedPanelRequeryTimer.stop();
 
-    // Destroy all geometry sensors
-    for (auto* screen : m_geometrySensors.keys()) {
-        destroyGeometrySensor(screen);
+    // Destroy all geometry sensors (use while-loop to avoid modifying hash during iteration)
+    while (!m_geometrySensors.isEmpty()) {
+        destroyGeometrySensor(m_geometrySensors.begin().key());
     }
 
     // Disconnect from all screens
@@ -405,6 +416,19 @@ ScreenManager* ScreenManager::instance()
     return s_instance;
 }
 
+QScreen* ScreenManager::resolvePhysicalScreen(const QString& screenId)
+{
+    auto* mgr = instance();
+    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
+    if (!screen) {
+        screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);
+    }
+    if (!screen) {
+        screen = Utils::primaryScreen();
+    }
+    return screen;
+}
+
 void ScreenManager::onScreenAdded(QScreen* screen)
 {
     if (!screen || m_trackedScreens.contains(screen)) {
@@ -413,6 +437,7 @@ void ScreenManager::onScreenAdded(QScreen* screen)
 
     connectScreenSignals(screen);
     m_trackedScreens.append(screen);
+    m_effectiveScreenIdsDirty = true;
     createGeometrySensor(screen);
     Q_EMIT screenAdded(screen);
 }
@@ -423,13 +448,28 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
         return;
     }
 
+    // Invalidate virtual geometry cache before the screen pointer becomes invalid
+    QString physId = Utils::screenIdentifier(screen);
+    invalidateVirtualGeometryCache(physId);
+
     destroyGeometrySensor(screen);
     disconnectScreenSignals(screen);
     m_trackedScreens.removeAll(screen);
+    m_effectiveScreenIdsDirty = true;
+
+    // Remove stale virtual screen config for the removed physical screen.
+    // Keeping it would cause effectiveScreenIds() to enumerate virtual screen IDs
+    // that no longer have a backing QScreen, leading to invalid geometry lookups.
+    m_virtualConfigs.remove(physId);
 
     // Invalidate EDID cache so a different monitor on this connector gets a fresh read.
     // The daemon also does this, but ScreenManager should be self-contained.
     Utils::invalidateEdidCache(screen->name());
+
+    // EDID invalidation may change screenIdentifier() results for subsequently
+    // connected monitors on the same connector, so mark effective IDs dirty again
+    // (the assignment above covers the current removal; this covers the EDID side-effect).
+    m_effectiveScreenIdsDirty = true;
 
     Q_EMIT screenRemoved(screen);
 }
@@ -438,6 +478,15 @@ void ScreenManager::onScreenGeometryChanged(const QRect& geometry)
 {
     auto* screen = qobject_cast<QScreen*>(sender());
     if (screen) {
+        // Invalidate virtual geometry caches only for the screen that changed
+        const QString physId = Utils::screenIdentifier(screen);
+        if (!physId.isEmpty()) {
+            invalidateVirtualGeometryCache(physId);
+        } else {
+            invalidateVirtualGeometryCache();
+        }
+        m_effectiveScreenIdsDirty = true;
+
         // Screen geometry changed - the sensor window will be reconfigured by compositor
         // which will trigger onSensorGeometryChanged automatically
         Q_EMIT screenGeometryChanged(screen, geometry);
@@ -461,5 +510,7 @@ void ScreenManager::disconnectScreenSignals(QScreen* screen)
 
     disconnect(screen, &QScreen::geometryChanged, this, nullptr);
 }
+
+// Virtual screen management methods are in screenmanager/virtualscreens.cpp
 
 } // namespace PlasmaZones

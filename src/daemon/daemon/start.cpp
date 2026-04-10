@@ -15,11 +15,25 @@
 #include "../../core/utils.h"
 #include "../../dbus/layoutadaptor.h"
 #include "../../dbus/settingsadaptor.h"
+#include "../../dbus/shaderadaptor.h"
+#include "../../dbus/compositorbridgeadaptor.h"
+#include "../../dbus/controladaptor.h"
+#include "../../dbus/overlayadaptor.h"
+#include "../../dbus/zonedetectionadaptor.h"
 #include "../../dbus/windowtrackingadaptor.h"
+#include "../../dbus/screenadaptor.h"
+#include "../../dbus/windowdragadaptor.h"
+#include "../../dbus/autotileadaptor.h"
+#include "../../dbus/snapadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
+#include "../../autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include "../../snap/SnapEngine.h"
+#include "../../core/shaderregistry.h"
+#include "../../core/zonedetector.h"
 #include <QProcess>
+#include <QPointer>
 #include "../config/settings.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -35,18 +49,54 @@ void Daemon::connectScreenSignals()
     // Warn about identical monitors producing duplicate screen IDs
     Utils::warnDuplicateScreenIds();
 
+    // Load saved virtual screen configs from Settings into ScreenManager
+    const auto vsConfigs = m_settings->virtualScreenConfigs();
+    for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
+        m_screenManager->setVirtualScreenConfig(it.key(), it.value());
+    }
+
+    // Persist virtual screen config changes back to Settings, and migrate screen assignments
+    connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
+        auto config = m_screenManager->virtualScreenConfig(physId);
+        m_settings->setVirtualScreenConfig(physId, config);
+        // Clear stale resnap buffer — screen IDs have changed
+        if (m_windowTrackingAdaptor) {
+            m_windowTrackingAdaptor->service()->clearResnapBuffer();
+        }
+        // Migrate window screen assignments when virtual screens change at runtime
+        if (config.hasSubdivisions() && m_windowTrackingAdaptor) {
+            QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(physId, vsIds, m_screenManager.get());
+        }
+        // Prune stale autotile order entries for old virtual screen IDs
+        pruneAutotileOrdersForRemovedScreens(physId);
+        // Trigger geometry recalculation and window resnap so snapped windows
+        // reposition to the new virtual screen bounds (e.g. 50/50 → 60/40).
+        // Reuse the same debounced path as physical screen geometry changes.
+        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(physId);
+        if (physScreen) {
+            m_geometryUpdatePending = true;
+            m_geometryUpdateTimer.start();
+        }
+    });
+
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
         // Invalidate cached EDID serial so a fresh sysfs read happens for this connector
         // (handles the case where EDID wasn't available during very early startup)
         Utils::invalidateEdidCache(screen->name());
         m_overlayService->handleScreenAdded(screen);
-        // Use per-screen layout (falls back to activeLayout if no assignment)
-        Layout* screenLayout = m_layoutManager->layoutForScreen(
-            Utils::screenIdentifier(screen), m_virtualDesktopManager->currentDesktop(),
-            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString());
-        if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, screen));
+        // Recalculate zone geometries for all effective screen IDs on this physical screen
+        const QString physId = Utils::screenIdentifier(screen);
+        const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+        const int desktop = m_virtualDesktopManager->currentDesktop();
+        const QString activity =
+            m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+        for (const QString& sid : vsIds) {
+            Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+            if (screenLayout) {
+                screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+            }
         }
     });
 
@@ -75,25 +125,18 @@ void Daemon::connectScreenSignals()
         }
     });
 
-    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this,
-            [this](QScreen* screen, const QRect& geometry) {
-                Q_UNUSED(geometry)
-                // Queue geometry update with debouncing to avoid cascade
-                QRect availableGeom = ScreenManager::actualAvailableGeometry(screen);
-                m_pendingGeometryUpdates[screen->name()] = availableGeom;
-                m_geometryUpdateTimer.start();
-            });
+    connect(m_screenManager.get(), &ScreenManager::screenGeometryChanged, this, [this] {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
+    });
 
     // Connect to available geometry changes (panels added/removed/resized)
     // This is reactive - the sensor windows automatically track panel changes
     // Uses debouncing to coalesce rapid changes into a single update
-    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this,
-            [this](QScreen* screen, const QRect& availableGeometry) {
-                // Queue geometry update with debouncing
-                // Multiple rapid changes will be coalesced into a single update
-                m_pendingGeometryUpdates[screen->name()] = availableGeometry;
-                m_geometryUpdateTimer.start();
-            });
+    connect(m_screenManager.get(), &ScreenManager::availableGeometryChanged, this, [this] {
+        m_geometryUpdatePending = true;
+        m_geometryUpdateTimer.start();
+    });
 
     // Don't pre-create overlay windows at startup. On Wayland with the layer-shell
     // QPA plugin this can cause visibility issues. Create on-demand in show() instead,
@@ -269,7 +312,7 @@ void Daemon::connectShortcutSignals()
 
     // Connect shortcut signals
     // Screen detection: On X11, QCursor::pos() works; on Wayland, background daemons
-    // get stale cursor data. resolveShortcutScreen() handles both by falling back to
+    // get stale cursor data. resolveShortcutScreenId() handles both by falling back to
     // the screen reported by the KWin effect's windowActivated D-Bus call.
     connect(m_shortcutManager.get(), &ShortcutManager::openSettingsRequested, this, []() {
         // Launch in its own systemd scope so stopping the daemon service
@@ -278,16 +321,20 @@ void Daemon::connectShortcutSignals()
                 QStringLiteral("systemd-run"),
                 {QStringLiteral("--user"), QStringLiteral("--scope"), QStringLiteral("plasmazones-settings")})) {
             // Fallback if systemd-run is unavailable
-            QProcess::startDetached(QStringLiteral("plasmazones-settings"), {});
+            if (!QProcess::startDetached(QStringLiteral("plasmazones-settings"), {})) {
+                qCWarning(lcDaemon) << "Failed to launch plasmazones-settings";
+            }
         }
     });
     connect(m_shortcutManager.get(), &ShortcutManager::openEditorRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen && m_unifiedLayoutController && !m_unifiedLayoutController->currentScreenName().isEmpty()) {
-            screen = Utils::findScreenByIdOrName(m_unifiedLayoutController->currentScreenName());
+        QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty() && m_unifiedLayoutController) {
+            screenId = m_unifiedLayoutController->currentScreenName();
         }
-        if (screen) {
-            m_layoutAdaptor->openEditorForScreen(screen->name());
+        if (!screenId.isEmpty()) {
+            // Pass the effective screen ID directly — the editor handles both
+            // physical and virtual screen IDs (VS-aware since v2.9).
+            m_layoutAdaptor->openEditorForScreen(screenId);
         } else {
             m_layoutAdaptor->openEditor();
         }
@@ -297,21 +344,14 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "QuickLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked for its current mode
-        if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
-                return;
-            }
+        m_unifiedLayoutController->setCurrentScreenName(screenId);
+        if (isScreenLockedForLayoutChange(screenId)) {
+            return;
         }
         if (!m_unifiedLayoutController->applyLayoutByNumber(number)) {
             return;
@@ -325,56 +365,24 @@ void Daemon::connectShortcutSignals()
             return;
         }
         m_cycleLayoutDebounce.restart();
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "PreviousLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked for its current mode
-        if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
-                return;
-            }
-        }
-        updateLayoutFilterForScreen(Utils::screenIdentifier(screen));
-        m_unifiedLayoutController->cyclePrevious();
-        resnapIfManualMode();
+        handleCycleLayout(screenId, false);
     });
     connect(m_shortcutManager.get(), &ShortcutManager::nextLayoutRequested, this, [this]() {
         if (m_cycleLayoutDebounce.isValid() && m_cycleLayoutDebounce.elapsed() < kShortcutDebounceMs) {
             return;
         }
         m_cycleLayoutDebounce.restart();
-        if (!m_unifiedLayoutController) {
-            return;
-        }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (screen) {
-            m_unifiedLayoutController->setCurrentScreenName(Utils::screenIdentifier(screen));
-        } else {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "NextLayout shortcut: no screen info";
             return;
         }
-        // Check if screen is locked for its current mode
-        if (m_layoutManager) {
-            int mode = static_cast<int>(
-                m_layoutManager->modeForScreen(Utils::screenIdentifier(screen), currentDesktop(), currentActivity()));
-            if (isCurrentContextLockedForMode(Utils::screenIdentifier(screen), mode)) {
-                showLockedPreviewOsd(Utils::screenIdentifier(screen));
-                return;
-            }
-        }
-        updateLayoutFilterForScreen(Utils::screenIdentifier(screen));
-        m_unifiedLayoutController->cycleNext();
-        resnapIfManualMode();
+        handleCycleLayout(screenId, true);
     });
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -422,12 +430,11 @@ void Daemon::connectShortcutSignals()
         if (!m_unifiedLayoutController) {
             return;
         }
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen) {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty()) {
             qCDebug(lcDaemon) << "LayoutPicker shortcut: no screen info";
             return;
         }
-        const QString screenId = Utils::screenIdentifier(screen);
         m_unifiedLayoutController->setCurrentScreenName(screenId);
         updateLayoutFilterForScreen(screenId);
         m_overlayService->showLayoutPicker(screenId);
@@ -454,16 +461,14 @@ void Daemon::connectShortcutSignals()
 
     // Toggle layout lock shortcut — locks/unlocks current screen at screen-level for current mode
     connect(m_shortcutManager.get(), &ShortcutManager::toggleLayoutLockRequested, this, [this]() {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        if (!screen || !m_settings || !m_layoutManager) {
+        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        if (screenId.isEmpty() || !m_settings || !m_layoutManager) {
             return;
         }
-        QString screenId = Utils::screenIdentifier(screen);
         int desktop = currentDesktop();
         QString activity = currentActivity();
         int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, desktop, activity));
-        QString prefix = QString::number(mode) + QStringLiteral(":");
-        QString key = prefix + screenId;
+        QString key = QString::number(mode) + QStringLiteral(":") + screenId;
         // Lock at screen-level (desktop=0, activity="") so it applies to all desktops/activities
         // and matches the KCM's screen-level lock button
         bool wasLocked = m_settings->isScreenLocked(key);
@@ -486,7 +491,7 @@ void Daemon::connectShortcutSignals()
                 showLayoutOsd(layout, screenId);
             }
         } else {
-            showLockedPreviewOsd(Utils::screenIdentifier(screen));
+            showLockedPreviewOsd(screenId);
         }
         qCInfo(lcDaemon) << "Toggle layout lock:" << (wasLocked ? "unlocked" : "locked") << "screen=" << screenId
                          << "mode=" << mode;
@@ -510,6 +515,70 @@ void Daemon::pruneContextMapsForActivities(const QSet<QString>& validActivities)
     auto it = m_lastAutotileOrders.begin();
     while (it != m_lastAutotileOrders.end()) {
         if (!it.key().activity.isEmpty() && !validActivities.contains(it.key().activity)) {
+            it = m_lastAutotileOrders.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool Daemon::isScreenLockedForLayoutChange(const QString& screenId)
+{
+    if (!m_layoutManager) {
+        return false;
+    }
+    int mode = static_cast<int>(m_layoutManager->modeForScreen(screenId, currentDesktop(), currentActivity()));
+    if (isCurrentContextLockedForMode(screenId, mode)) {
+        showLockedPreviewOsd(screenId);
+        return true;
+    }
+    return false;
+}
+
+void Daemon::handleCycleLayout(const QString& screenId, bool forward)
+{
+    if (!m_unifiedLayoutController) {
+        return;
+    }
+    m_unifiedLayoutController->setCurrentScreenName(screenId);
+    if (isScreenLockedForLayoutChange(screenId)) {
+        return;
+    }
+    updateLayoutFilterForScreen(screenId);
+    if (forward) {
+        m_unifiedLayoutController->cycleNext();
+    } else {
+        m_unifiedLayoutController->cyclePrevious();
+    }
+    resnapIfManualMode();
+}
+
+void Daemon::migrateStartupScreenAssignments()
+{
+    if (!m_windowTrackingAdaptor || !m_screenManager) {
+        return;
+    }
+    const auto vsConfigs = m_settings->virtualScreenConfigs();
+    for (auto it = vsConfigs.constBegin(); it != vsConfigs.constEnd(); ++it) {
+        if (it.value().hasSubdivisions()) {
+            QStringList vsIds = m_screenManager->virtualScreenIdsFor(it.key());
+            m_windowTrackingAdaptor->service()->migrateScreenAssignmentsToVirtual(it.key(), vsIds,
+                                                                                  m_screenManager.get());
+        }
+    }
+}
+
+void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenId)
+{
+    const QStringList currentVsIds =
+        m_screenManager ? m_screenManager->virtualScreenIdsFor(physicalScreenId) : QStringList();
+    QSet<QString> keepIds(currentVsIds.begin(), currentVsIds.end());
+    // Also keep the physical ID itself (in case VS config was removed entirely)
+    keepIds.insert(physicalScreenId);
+
+    for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
+        if (VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
+            && !keepIds.contains(it.key().screenId)) {
             it = m_lastAutotileOrders.erase(it);
         } else {
             ++it;

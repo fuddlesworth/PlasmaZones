@@ -279,6 +279,7 @@ Q_SIGNALS:
     void autotileUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void lockedScreensChanged();
+    void virtualScreenConfigsChanged();
     // Ordering
     void snappingLayoutOrderChanged();
     void tilingAlgorithmOrderChanged();
@@ -486,7 +487,7 @@ public:
 
     // Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
-    virtual void showZoneSelector(QScreen* screen = nullptr) = 0;
+    virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;
     virtual void hideZoneSelector() = 0;
     virtual void updateSelectorPosition(int cursorX, int cursorY) = 0;
     virtual void scrollZoneSelector(int angleDeltaY) = 0;
@@ -502,6 +503,7 @@ public:
     virtual QString selectedLayoutId() const = 0;
     virtual int selectedZoneIndex() const = 0;
     virtual QRect getSelectedZoneGeometry(QScreen* screen) const = 0;
+    virtual QRect getSelectedZoneGeometry(const QString& screenId) const = 0;
     virtual void clearSelectedZone() = 0;
 
     // Shader preview overlay (editor dialog - dedicated window avoids multi-pass clear)

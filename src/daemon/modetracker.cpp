@@ -8,9 +8,7 @@
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
-#include "../core/utils.h"
-#include <QGuiApplication>
-#include <QScreen>
+#include "../core/screenmanager.h"
 
 namespace PlasmaZones {
 
@@ -25,9 +23,14 @@ ModeTracker::~ModeTracker() = default;
 
 void ModeTracker::setContext(const QString& screenId, int desktop, const QString& activity)
 {
+    const TilingMode oldMode = currentMode();
     m_screenId = screenId;
     m_desktop = desktop;
     m_activity = activity;
+    const TilingMode newMode = currentMode();
+    if (newMode != oldMode) {
+        Q_EMIT currentModeChanged(newMode);
+    }
 }
 
 TilingMode ModeTracker::currentMode() const
@@ -39,14 +42,18 @@ TilingMode ModeTracker::currentMode() const
     return (mode == AssignmentEntry::Autotile) ? TilingMode::Autotile : TilingMode::Manual;
 }
 
-bool ModeTracker::isAnyScreenAutotile() const
+bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) const
 {
     if (!m_layoutManager) {
         return false;
     }
-    for (QScreen* screen : Utils::allScreens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
-        const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, m_desktop, m_activity);
+    // Use caller-supplied values when provided; fall back to stored context.
+    const int effectiveDesktop = (desktop >= 0) ? desktop : m_desktop;
+    const QString& effectiveActivity = activity.isEmpty() ? m_activity : activity;
+    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    for (const QString& screenId : effectiveIds) {
+        const QString assignmentId =
+            m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);
         if (LayoutId::isAutotile(assignmentId)) {
             return true;
         }

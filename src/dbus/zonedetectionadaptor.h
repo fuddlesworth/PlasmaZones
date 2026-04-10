@@ -42,7 +42,8 @@ public Q_SLOTS:
 
     // Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
-    QString getAdjacentZone(const QString& currentZoneId, const QString& direction);
+    QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
+                            const QString& screenId = QString());
 
     /**
      * @brief Get the first (edge) zone in a given direction

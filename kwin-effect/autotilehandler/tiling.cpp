@@ -5,6 +5,7 @@
 // Part of AutotileHandler — split from autotilehandler.cpp for SRP.
 
 #include "../autotilehandler.h"
+#include "../dragtracker.h"
 #include "../plasmazoneseffect.h"
 #include "../windowanimator.h"
 #include "../dbus_constants.h"
@@ -336,11 +337,50 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
 void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, const QRectF& oldGeometry)
 {
     Q_UNUSED(oldGeometry)
-    if (!w || m_autotileTargetZones.isEmpty()) {
+    if (!w) {
+        return;
+    }
+
+    // Fast bail: skip getWindowId entirely when neither VS detection nor centering needs it
+    if (m_effect->m_virtualScreenDefs.isEmpty() && m_autotileTargetZones.isEmpty()) {
         return;
     }
 
     const QString windowId = m_effect->getWindowId(w);
+
+    // Virtual screen change detection: KWin's outputChanged only fires on
+    // physical monitor changes. When a window moves between virtual screens
+    // on the same physical monitor (e.g., A/vs:0 → A/vs:1), no outputChanged
+    // fires. Detect the change here so the autotile engine can transfer the
+    // window. Only check windows we're already tracking (m_notifiedWindowScreens)
+    // and only when the physical screen has virtual subdivisions.
+    if (m_notifiedWindows.contains(windowId) && !m_effect->m_virtualScreenDefs.isEmpty()
+        && m_effect->m_virtualScreensReady) {
+        // Don't detect VS crossings for the dragged window — the drop handler
+        // (callDragStopped / autotile drag end) owns state transitions.
+        // Detecting mid-drag would transfer the window before the user drops it.
+        // Other windows (e.g., a terminal reflowing) should still get VS crossing checks.
+        const bool isDraggedWindow =
+            m_effect->m_dragTracker->isDragging() && windowId == m_effect->m_dragTracker->draggedWindowId();
+        if (!isDraggedWindow) {
+            const QString newScreenId = m_effect->getWindowScreenId(w);
+            const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
+            if (VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+                // Virtual screen changed on the same physical monitor — delegate to
+                // the same handler used by outputChanged. The re-entrancy guard
+                // inside handleWindowOutputChanged prevents infinite loops from
+                // geometry changes caused by tiling.
+                handleWindowOutputChanged(w);
+                return;
+            }
+        }
+        // Fall through to centering logic below for all windows (including dragged)
+    }
+
+    if (m_autotileTargetZones.isEmpty()) {
+        return;
+    }
+
     auto it = m_autotileTargetZones.find(windowId);
     if (it == m_autotileTargetZones.end()) {
         return;

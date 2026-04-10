@@ -102,6 +102,11 @@ constexpr size_t K_MATRIX_OPACITY_SIZE = offsetof(ZoneShaderUniforms, iTime); //
 constexpr size_t K_TIME_BLOCK_OFFSET = offsetof(ZoneShaderUniforms, iTime);
 constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int); // 12 bytes
 
+// Scene header: iResolution, zone counts, iMouse, iDate, customParams, customColors
+// (everything between time block and zone arrays — avoids re-uploading zone arrays on mouse/resolution change)
+constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, iResolution);
+constexpr size_t K_SCENE_HEADER_SIZE = offsetof(ZoneShaderUniforms, zoneRects) - K_SCENE_HEADER_OFFSET;
+
 // Scene data: iResolution through end (zone counts, iMouse, params, colors, zone arrays)
 constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, iResolution);
 constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;

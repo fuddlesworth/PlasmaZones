@@ -5,6 +5,8 @@
 #include "constants.h"
 #include "interfaces.h"
 #include "layout.h"
+#include "screenmanager.h"
+#include "virtualscreen.h"
 #include "zone.h"
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
@@ -13,6 +15,7 @@
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
+#include <algorithm>
 
 namespace PlasmaZones {
 
@@ -50,8 +53,8 @@ WindowTrackingService::~WindowTrackingService()
 // Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId,
-                                               const QString& screenId, int virtualDesktop)
+void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
+                                               int virtualDesktop)
 {
     assignWindowToZones(windowId, QStringList{zoneId}, screenId, virtualDesktop);
 }
@@ -59,17 +62,36 @@ void WindowTrackingService::assignWindowToZone(const QString& windowId, const QS
 void WindowTrackingService::assignWindowToZones(const QString& windowId, const QStringList& zoneIds,
                                                 const QString& screenId, int virtualDesktop)
 {
-    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
+    if (windowId.isEmpty() || zoneIds.isEmpty()) {
+        return;
+    }
+
+    // Filter out empty/null zone IDs — callers may pass partially-valid lists
+    QStringList validZoneIds;
+    validZoneIds.reserve(zoneIds.size());
+    for (const auto& id : zoneIds) {
+        if (!id.isEmpty()) {
+            validZoneIds.append(id);
+        }
+    }
+    if (validZoneIds.isEmpty()) {
         return;
     }
 
     // Only emit signal if value actually changed
     QStringList previousZones = m_windowZoneAssignments.value(windowId);
-    bool zoneChanged = (previousZones != zoneIds);
+    bool zoneChanged = (previousZones != validZoneIds);
 
-    m_windowZoneAssignments[windowId] = zoneIds;
+    m_windowZoneAssignments[windowId] = validZoneIds;
     m_windowScreenAssignments[windowId] = screenId;
     m_windowDesktopAssignments[windowId] = virtualDesktop;
+
+    // Clear stale autotile-floated flag when a window is zone-assigned in snap mode.
+    // A window that crossed from an autotile VS to a snap VS via drag keeps its
+    // autotileFloated marker (only windowsReleasedFromTiling clears it). Without
+    // this, a subsequent mode change on the autotile VS incorrectly processes the
+    // window (already snapped on the snap VS) as if it were still autotile-managed.
+    m_autotileFloatedWindows.remove(windowId);
 
     // NOTE: Do NOT store to m_pendingRestoreQueues here!
     // Pending assignments are for session persistence and should only be populated
@@ -77,7 +99,7 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     // windows to auto-restore on open, even when they shouldn't.
 
     if (zoneChanged) {
-        Q_EMIT windowZoneChanged(windowId, zoneIds.first());
+        Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
     scheduleSaveState();
 }
@@ -136,6 +158,69 @@ QStringList WindowTrackingService::snappedWindows() const
     return m_windowZoneAssignments.keys();
 }
 
+int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindowIds)
+{
+    int pruned = 0;
+    auto it = m_windowZoneAssignments.begin();
+    while (it != m_windowZoneAssignments.end()) {
+        if (!aliveWindowIds.contains(it.key())) {
+            const QString& wid = it.key();
+            m_windowScreenAssignments.remove(wid);
+            m_windowDesktopAssignments.remove(wid);
+            m_preTileGeometries.remove(wid);
+            m_preFloatZoneAssignments.remove(wid);
+            m_preFloatScreenAssignments.remove(wid);
+            m_floatingWindows.remove(wid);
+            m_autotileFloatedWindows.remove(wid);
+            it = m_windowZoneAssignments.erase(it);
+            ++pruned;
+        } else {
+            ++it;
+        }
+    }
+
+    // Sweep tracking hashes/sets that can have entries without a zone assignment.
+    // windowClosed() cleans all of these per-window; prune must do the same
+    // for windows that disappeared without a close event.
+    //
+    // The first loop removed stale entries from maps keyed by zone-assigned windows.
+    // This second sweep catches entries in maps that can have entries WITHOUT a
+    // corresponding m_windowZoneAssignments entry (e.g. floating windows with
+    // pre-float state but no current zone assignment).
+    auto removeIfNotAlive = [&](auto& hash) {
+        for (auto hashIt = hash.begin(); hashIt != hash.end();) {
+            if (!aliveWindowIds.contains(hashIt.key())) {
+                hashIt = hash.erase(hashIt);
+                ++pruned;
+            } else {
+                ++hashIt;
+            }
+        }
+    };
+
+    removeIfNotAlive(m_windowStickyStates);
+    removeIfNotAlive(m_preFloatZoneAssignments);
+    removeIfNotAlive(m_preFloatScreenAssignments);
+
+    // Sweep QSet members (different iterator API)
+    auto removeSetIfNotAlive = [&](auto& set) {
+        for (auto setIt = set.begin(); setIt != set.end();) {
+            if (!aliveWindowIds.contains(*setIt)) {
+                setIt = set.erase(setIt);
+                ++pruned;
+            } else {
+                ++setIt;
+            }
+        }
+    };
+
+    removeSetIfNotAlive(m_savedSnapFloatingWindows);
+    removeSetIfNotAlive(m_autoSnappedWindows);
+    removeSetIfNotAlive(m_effectReportedWindows);
+
+    return pruned;
+}
+
 bool WindowTrackingService::isWindowSnapped(const QString& windowId) const
 {
     auto it = m_windowZoneAssignments.constFind(windowId);
@@ -184,6 +269,8 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
     // Memory cleanup: limit cache to prevent unbounded growth.
     // Each window stores up to 2 keys (windowId + appId), so evict until we're
     // back at the cap. Skip just-inserted keys.
+    // Note: The inner loop is O(N) per eviction, but N is bounded by
+    // MaxPreTileGeometries (100), so the total cost is acceptable.
     static constexpr int MaxPreTileGeometries = 100;
     while (m_preTileGeometries.size() > MaxPreTileGeometries) {
         bool evicted = false;
@@ -282,15 +369,29 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
         return std::nullopt;
     }
 
-    // Cross-screen check: if the geometry was captured on a different screen than
-    // where the window currently is, the absolute coordinates are wrong. Preserve
-    // the size but center on the current screen.
-    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty() && storedScreen != currentScreenName) {
-        QScreen* target = Utils::findScreenByIdOrName(currentScreenName);
+    // Cross-screen check: if the geometry was captured on a different screen than where
+    // the window currently is, the absolute coordinates are wrong. Preserve the size
+    // but center on the current screen. This triggers for:
+    // 1. Different physical monitors (e.g. DP-1 vs HDMI-1)
+    // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
+    //    — the virtual screens have different geometry bounds, so coordinates are wrong.
+    if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
+        && !Utils::screensMatch(storedScreen, currentScreenName)) {
+        auto* mgr = ScreenManager::instance();
+        QScreen* target =
+            mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);
         if (target) {
-            QRect available = target->availableGeometry();
-            QRect adjusted(available.x() + (available.width() - rect.width()) / 2,
-                           available.y() + (available.height() - rect.height()) / 2, rect.width(), rect.height());
+            // For virtual screens, prefer virtual screen bounds over full physical screen
+            QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
+                ? mgr->screenAvailableGeometry(currentScreenName)
+                : target->availableGeometry();
+            // Clamp size to fit within the target screen (the window may have been
+            // larger than the target VS when captured on a wider screen/physical monitor).
+            int w = qMin(rect.width(), available.width());
+            int h = qMin(rect.height(), available.height());
+            int x = available.x() + (available.width() - w) / 2;
+            int y = available.y() + (available.height() - h) / 2;
+            QRect adjusted(x, y, w, h);
             qCDebug(lcCore) << "validatedPreTileGeometry: cross-screen adjustment for" << windowId << "from"
                             << storedScreen << "to" << currentScreenName << ":" << rect << "->" << adjusted;
             return adjusted;
@@ -437,6 +538,15 @@ QString WindowTrackingService::preFloatScreen(const QString& windowId) const
     return screen;
 }
 
+void WindowTrackingService::clearPreFloatZoneForWindow(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+    m_preFloatZoneAssignments.remove(windowId);
+    m_preFloatScreenAssignments.remove(windowId);
+}
+
 void WindowTrackingService::clearPreFloatZone(const QString& windowId)
 {
     // Remove by full window ID (runtime entries)
@@ -472,20 +582,21 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
 
     // Validate saved screen — fall back to caller's screen if monitor is gone
     QString restoreScreen = preFloatScreen(windowId);
-    if (!restoreScreen.isEmpty() && !Utils::findScreenByIdOrName(restoreScreen)) {
-        restoreScreen.clear();
+    if (!restoreScreen.isEmpty()) {
+        // Validate virtual screen still exists — configuration may have changed since float
+        restoreScreen = resolveEffectiveScreenId(restoreScreen);
+        // Check if the physical screen still exists
+        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(restoreScreen);
+        if (!physScreen) {
+            restoreScreen.clear();
+        }
     }
-    if (restoreScreen.isEmpty()) {
-        restoreScreen = fallbackScreen;
+    if (restoreScreen.isEmpty() && !fallbackScreen.isEmpty()) {
+        restoreScreen = resolveEffectiveScreenId(fallbackScreen);
     }
 
     // Compute geometry (combined for multi-zone)
-    QRect geo;
-    if (zoneIds.size() > 1) {
-        geo = multiZoneGeometry(zoneIds, restoreScreen);
-    } else {
-        geo = zoneGeometry(zoneIds.first(), restoreScreen);
-    }
+    QRect geo = resolveZoneGeometry(zoneIds, restoreScreen);
 
     if (!geo.isValid()) {
         return result;
@@ -510,6 +621,41 @@ void WindowTrackingService::setWindowSticky(const QString& windowId, bool sticky
 bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 {
     return m_windowStickyStates.value(windowId, false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Shared Helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingService::sortZonesByNumber(QVector<Zone*>& zones)
+{
+    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+        if (a->zoneNumber() != b->zoneNumber())
+            return a->zoneNumber() < b->zoneNumber();
+        return a->id() < b->id();
+    });
+}
+
+QHash<QString, int> WindowTrackingService::buildZonePositionMap(Layout* layout)
+{
+    QHash<QString, int> map;
+    if (!layout) {
+        return map;
+    }
+    QVector<Zone*> zones = layout->zones();
+    sortZonesByNumber(zones);
+    for (int i = 0; i < zones.size(); ++i) {
+        map[zones[i]->id().toString()] = i + 1;
+    }
+    return map;
+}
+
+QRect WindowTrackingService::resolveZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
+{
+    if (zoneIds.isEmpty()) {
+        return QRect();
+    }
+    return (zoneIds.size() > 1) ? multiZoneGeometry(zoneIds, screenId) : zoneGeometry(zoneIds.first(), screenId);
 }
 
 } // namespace PlasmaZones

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -19,6 +20,8 @@
 #include <QRect>
 
 #include <functional>
+
+#include "shared/virtualscreenid.h"
 
 namespace KWin {
 class OutlinedBorderItem;
@@ -152,7 +155,8 @@ private:
 
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
-    void callDragStopped(KWin::EffectWindow* window, const QString& windowId);
+    void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
+                         const QString& snapDragStartScreenId = {});
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void connectNavigationSignals();
@@ -251,6 +255,10 @@ private:
      */
     QString outputScreenId(const KWin::LogicalOutput* output) const;
     QString getWindowScreenId(KWin::EffectWindow* w) const;
+    AutotileHandler* autotileHandler() const
+    {
+        return m_autotileHandler.get();
+    }
 
     /**
      * @brief Emit navigationFeedback D-Bus signal
@@ -484,6 +492,7 @@ private:
     bool m_dragStartedSent = false;
     QString m_pendingDragWindowId;
     QRectF m_pendingDragGeometry;
+    QString m_snapDragStartScreenId; // Virtual screen at snap-mode drag start (for VS crossing on drop)
 
     // Windows floated by drag on autotile screens. The daemon emits
     // applyGeometryRequested to restore pre-autotile geometry on float,
@@ -508,18 +517,92 @@ private:
     // Cached daemon D-Bus service registration state.
     // Updated via QDBusServiceWatcher signals (registration/unregistration) to avoid
     // synchronous isServiceRegistered() calls that block the compositor thread.
+    // --- Daemon readiness / virtual screen fetch gate state ---
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
+
+    /// Pre-computed zone geometries for pending snap restores (appId → pixel rect).
+    /// Fetched once from daemon on ready; consumed in slotWindowAdded for instant
+    /// teleport (no D-Bus round-trip visible flash).
+    QHash<QString, QRect> m_snapRestoreCache;
+    bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
+    int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
+    uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs
+    bool m_daemonReadyWindowStateProcessed = false; ///< re-entrancy guard for processDaemonReadyWindowState
 
     // Screen ID cache: connector name → EDID screen ID (manufacturer:model:serial).
     // Avoids repeated QScreen iteration and sysfs reads during drag (~30Hz).
     // Cleared on screen geometry changes (add/remove/reconfigure).
     mutable QHash<QString, QString> m_screenIdCache;
 
+    // Window ID cache: EffectWindow* → "appId|uuid" (populated on first getWindowId call,
+    // cleared in slotWindowClosed/windowDeleted). Eliminates 3-5 QString allocations per
+    // getWindowId call across all hot paths (~1000-3000 allocs/sec during drag).
+    mutable QHash<KWin::EffectWindow*, QString> m_windowIdCache;
+    // Reverse lookup: windowId → EffectWindow* (for O(1) findWindowById)
+    mutable QHash<QString, KWin::EffectWindow*> m_windowIdReverse;
+
+    // Per-window tracked screen ID for cross-screen move detection.
+    // Replaces the per-window `new QString` heap allocation that was leaked.
+    QHash<KWin::EffectWindow*, QString> m_trackedScreenPerWindow;
+
     // Cursor output tracking (for daemon shortcut screen detection on Wayland)
     // Stores the connector name of the last output the cursor was on.
     // Used for deduplication only — the actual D-Bus call sends the EDID screen ID.
     QString m_lastCursorOutput;
+
+    // Last effective screen ID reported to daemon (physical or virtual).
+    // Used for deduplication of cursorScreenChanged D-Bus calls when virtual
+    // screens subdivide a physical monitor — detects sub-screen crossings.
+    QString m_lastEffectiveScreenId;
+
+private:
+    /**
+     * @brief A single virtual screen subdivision within a physical monitor.
+     *
+     * Virtual screens divide a physical monitor into independent sub-screens,
+     * each with its own zones, autotile state, etc. The daemon manages
+     * definitions; the effect fetches them via D-Bus and resolves positions.
+     *
+     * Named EffectVirtualScreenDef to avoid collision with the daemon's
+     * VirtualScreenDef (which has many more fields).
+     */
+    struct EffectVirtualScreenDef
+    {
+        QString id; ///< e.g., "Dell:U2722D:115107/vs:0"
+        QRect geometry; ///< Absolute geometry in global compositor coords
+    };
+
+    /// Physical screen ID -> list of virtual screens (empty = no subdivisions)
+    QHash<QString, QVector<EffectVirtualScreenDef>> m_virtualScreenDefs;
+
+    /**
+     * @brief Resolve a global point to the effective screen ID (virtual-aware).
+     *
+     * If the physical screen (from output) has virtual subdivisions, returns
+     * the virtual screen ID whose geometry contains pos. Otherwise returns
+     * the physical screen ID unchanged.
+     *
+     * @param pos Global compositor-space point
+     * @param output The KWin output the point is on
+     * @return Effective screen ID (virtual or physical)
+     */
+    QString resolveEffectiveScreenId(const QPoint& pos, const KWin::LogicalOutput* output) const;
+
+    /// Fetch virtual screen config from daemon for a single physical screen
+    void fetchVirtualScreenConfig(const QString& physicalScreenId, uint64_t generation = 0);
+
+    /// Fetch virtual screen configs for all connected physical screens
+    void fetchAllVirtualScreenConfigs();
+
+    /// Process window state that depends on virtual screen definitions being loaded.
+    /// Called from fetchAllVirtualScreenConfigs completion callback after all
+    /// async D-Bus replies have arrived.
+    void processDaemonReadyWindowState();
+
+private Q_SLOTS:
+    /// Handle daemon signal when virtual screen definitions change
+    void onVirtualScreensChanged(const QString& physicalScreenId);
 };
 
 } // namespace PlasmaZones

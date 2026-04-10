@@ -76,7 +76,7 @@ void SnapEngine::moveToPosition(const QString& windowId, int position, const QSt
 void SnapEngine::resnapToNewLayout()
 {
     qCDebug(lcCore) << "resnapToNewLayout: calculating entries from previous layout buffer";
-    QVector<RotationEntry> resnapEntries = m_windowTracker->calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> resnapEntries = m_windowTracker->calculateResnapFromPreviousLayout();
 
     if (resnapEntries.isEmpty()) {
         Layout* layout = m_layoutManager->activeLayout();
@@ -93,14 +93,14 @@ void SnapEngine::resnapToNewLayout()
         return;
     }
 
-    QString resnapData = GeometryUtils::serializeRotationEntries(resnapEntries);
+    QString resnapData = GeometryUtils::serializeZoneAssignments(resnapEntries);
     qCInfo(lcCore) << "Resnapping" << resnapEntries.size() << "windows to new layout";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
 void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
 {
-    QVector<RotationEntry> entries = m_windowTracker->calculateResnapFromCurrentAssignments(screenFilter);
+    QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateResnapFromCurrentAssignments(screenFilter);
 
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "No windows to resnap from current assignments";
@@ -109,28 +109,29 @@ void SnapEngine::resnapCurrentAssignments(const QString& screenFilter)
         return;
     }
 
-    QString resnapData = GeometryUtils::serializeRotationEntries(entries);
+    QString resnapData = GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(lcCore) << "Resnapping" << entries.size() << "windows to current zone assignments";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
 void SnapEngine::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
 {
-    QVector<RotationEntry> entries = calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
+    QVector<ZoneAssignmentEntry> entries = calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
 
     if (entries.isEmpty()) {
         return; // calculateResnapEntriesFromAutotileOrder already tried fallback
     }
 
-    QString resnapData = GeometryUtils::serializeRotationEntries(entries);
+    QString resnapData = GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(lcCore) << "Resnapping" << entries.size() << "windows from autotile order";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
-QVector<RotationEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
-                                                                           const QString& screenId)
+QVector<ZoneAssignmentEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const QStringList& autotileWindowOrder,
+                                                                                 const QString& screenId)
 {
-    QVector<RotationEntry> entries = m_windowTracker->calculateResnapFromAutotileOrder(autotileWindowOrder, screenId);
+    QVector<ZoneAssignmentEntry> entries =
+        m_windowTracker->calculateResnapFromAutotileOrder(autotileWindowOrder, screenId);
 
     if (entries.isEmpty()) {
         qCDebug(lcCore) << "calculateResnapEntriesFromAutotileOrder: no entries from autotile order,"
@@ -141,22 +142,22 @@ QVector<RotationEntry> SnapEngine::calculateResnapEntriesFromAutotileOrder(const
     return entries;
 }
 
-void SnapEngine::emitBatchedResnap(const QVector<RotationEntry>& entries)
+void SnapEngine::emitBatchedResnap(const QVector<ZoneAssignmentEntry>& entries)
 {
     if (entries.isEmpty()) {
         return;
     }
-    QString resnapData = GeometryUtils::serializeRotationEntries(entries);
+    QString resnapData = GeometryUtils::serializeZoneAssignments(entries);
     qCInfo(lcCore) << "Emitting batched resnap for" << entries.size() << "windows";
     Q_EMIT resnapToNewLayoutRequested(resnapData);
 }
 
 QString SnapEngine::calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId)
 {
-    QVector<RotationEntry> entries = m_windowTracker->calculateSnapAllWindows(windowIds, screenId);
+    QVector<ZoneAssignmentEntry> entries = m_windowTracker->calculateSnapAllWindows(windowIds, screenId);
 
     qCDebug(lcCore) << "Calculated snap-all for" << entries.size() << "windows";
-    return GeometryUtils::serializeRotationEntries(entries);
+    return GeometryUtils::serializeZoneAssignments(entries);
 }
 
 void SnapEngine::snapAllWindows(const QString& screenId)

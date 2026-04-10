@@ -8,6 +8,7 @@
 #include "../../core/layoututils.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreen.h"
 #include "../windowthumbnailservice.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -32,6 +33,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
+    // Resolve physical screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
@@ -48,7 +50,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     // request arrives, the layout may have been switched and the zone IDs are no
     // longer valid. Verify that at least one requested zone exists in the current
     // layout for the target screen.
-    Layout* currentLayout = resolveScreenLayout(screen);
+    Layout* currentLayout = resolveScreenLayout(screenId);
     if (currentLayout) {
         bool anyValid = false;
         for (const QVariant& z : zonesList) {
@@ -66,15 +68,21 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         }
     }
 
+    // Use virtual screen geometry when available, otherwise physical
+    QRect screenGeom = resolveScreenGeometry(screenId);
+    if (!screenGeom.isValid()) {
+        screenGeom = screen->geometry();
+    }
+
     // Reuse existing visible window when on the same screen (avoids QML compilation +
     // Wayland surface create/destroy churn during snap assist continuation).
     // Recreate when the target screen changes, window was closed, or doesn't exist.
     // Visibility check avoids re-showing a window whose Vulkan swapchain was torn
     // down by close() — only reuse windows that are still on-screen.
-    const bool reuseWindow = m_snapAssistWindow && m_snapAssistWindow->isVisible() && m_snapAssistScreen == screen;
+    const bool reuseWindow = m_snapAssistWindow && m_snapAssistWindow->isVisible() && m_snapAssistScreenId == screenId;
     if (!reuseWindow) {
         destroySnapAssistWindow();
-        createSnapAssistWindow();
+        createSnapAssistWindow(screen);
         if (!m_snapAssistWindow) {
             Q_EMIT snapAssistDismissed();
             return;
@@ -82,6 +90,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     }
 
     m_snapAssistScreen = screen;
+    m_snapAssistScreenId = screenId;
+
+    // Hide the zone selector only for the specific virtual screen where snap assist is showing.
+    // Snap assist now uses virtual-screen geometry (not full physical monitor coverage), so
+    // selectors on adjacent virtual screens of the same physical monitor should remain visible.
+    if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+        selectorWindow->hide();
+    }
 
     // Start async thumbnail capture via KWin ScreenShot2. Overlay shows icons immediately.
     // Requires KWIN_SCREENSHOT_NO_PERMISSION_CHECKS=1 when desktop matching fails (local install).
@@ -122,16 +138,12 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
 
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("emptyZones"), zonesList);
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
-    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screen->geometry().width());
-    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screen->geometry().height());
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screenGeom.width());
+    writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screenGeom.height());
 
     // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
+    writeColorSettings(m_snapAssistWindow, m_settings);
     if (m_settings) {
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(m_snapAssistWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderWidth"), m_settings->borderWidth());
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
@@ -147,25 +159,22 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
             ls->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
         }
     } else {
-        // Match main overlay: full-screen anchors so zone coordinates (overlay-local) line up
-        if (!configureLayerSurface(m_snapAssistWindow, screen, LayerSurface::LayerTop,
-                                   LayerSurface::KeyboardInteractivityExclusive,
-                                   QStringLiteral("plasmazones-snap-assist-%1-%2")
-                                       .arg(Utils::screenIdentifier(screen))
-                                       .arg(++m_scopeGeneration),
-                                   LayerSurface::AnchorAll)) {
+        if (!configureLayerSurface(
+                m_snapAssistWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
+                QStringLiteral("plasmazones-snap-assist-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
             qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
             destroySnapAssistWindow();
             Q_EMIT snapAssistDismissed();
             return;
         }
+        // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
+        updateWindowScreenPosition(m_snapAssistWindow, screenId);
+    }
 
-        assertWindowOnScreen(m_snapAssistWindow, screen);
-        // Size only — position is controlled by layer-surface anchors (AnchorAll),
-        // setX/setY are no-ops on layer surfaces.
-        const QRect snapGeom = screen->geometry();
-        m_snapAssistWindow->setWidth(snapGeom.width());
-        m_snapAssistWindow->setHeight(snapGeom.height());
+    if (!reuseWindow) {
+        assertWindowOnScreen(m_snapAssistWindow, screen, screenGeom);
+        m_snapAssistWindow->setWidth(screenGeom.width());
+        m_snapAssistWindow->setHeight(screenGeom.height());
     }
     m_snapAssistWindow->show();
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
@@ -236,10 +245,18 @@ bool OverlayService::eventFilter(QObject* obj, QEvent* event)
 void OverlayService::hideSnapAssist()
 {
     bool wasVisible = isSnapAssistVisible();
+    const QString screenId = m_snapAssistScreenId;
     m_thumbnailCache.clear();
     destroySnapAssistWindow();
     if (wasVisible) {
         Q_EMIT snapAssistDismissed();
+    }
+    // Re-show the zone selector for the specific virtual screen that was hidden in showSnapAssist
+    // (symmetric: showSnapAssist only hides the selector for the target VS, not all VS).
+    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
+        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+            selectorWindow->show();
+        }
     }
 }
 
@@ -248,13 +265,13 @@ bool OverlayService::isSnapAssistVisible() const
     return m_snapAssistWindow && m_snapAssistWindow->isVisible();
 }
 
-void OverlayService::createSnapAssistWindow()
+void OverlayService::createSnapAssistWindow(QScreen* physScreen)
 {
     if (m_snapAssistWindow) {
         return;
     }
 
-    QScreen* screen = Utils::primaryScreen();
+    QScreen* screen = physScreen ? physScreen : Utils::primaryScreen();
     if (!screen) {
         qCWarning(lcOverlay) << "createSnapAssistWindow: no screen";
         return;
@@ -266,9 +283,15 @@ void OverlayService::createSnapAssistWindow()
         return;
     }
 
-    connect(window, &QObject::destroyed, this, [this]() {
-        m_snapAssistWindow = nullptr;
-        m_snapAssistScreen = nullptr;
+    m_snapAssistWindow = window;
+    m_snapAssistScreen = screen;
+
+    connect(window, &QObject::destroyed, this, [this, win = window]() {
+        if (m_snapAssistWindow == win) {
+            m_snapAssistWindow = nullptr;
+            m_snapAssistScreen = nullptr;
+            m_snapAssistScreenId.clear();
+        }
     });
 
     // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
@@ -287,9 +310,6 @@ void OverlayService::createSnapAssistWindow()
     // The QML Shortcut may not fire if the layer shell keyboard focus
     // isn't fully reflected in Qt's internal focus model.
     window->installEventFilter(this);
-
-    m_snapAssistWindow = window;
-    m_snapAssistScreen = screen;
     window->setVisible(false);
 }
 
@@ -309,6 +329,7 @@ void OverlayService::destroySnapAssistWindow()
         m_snapAssistWindow = nullptr;
     }
     m_snapAssistScreen = nullptr;
+    m_snapAssistScreenId.clear();
 }
 
 void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const QString& zoneId,
@@ -323,9 +344,11 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
         }
     }
 
-    // Use stable EDID-based screen ID so the daemon's layout/tracking system
-    // resolves the correct screen without relying on connector-name fallbacks.
-    QString screenId = m_snapAssistScreen ? Utils::screenIdentifier(m_snapAssistScreen) : QString();
+    // Use the virtual-aware screen ID stored when snap assist was shown
+    QString screenId = m_snapAssistScreenId;
+    if (screenId.isEmpty() && m_snapAssistScreen) {
+        screenId = Utils::screenIdentifier(m_snapAssistScreen);
+    }
     // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
     Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, screenId);
 }
@@ -343,11 +366,24 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    // Resolve target screen
+    // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
     QScreen* screen = resolveTargetScreen(screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
         return;
+    }
+
+    // Use virtual screen geometry when available
+    const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    QRect screenGeom = resolveScreenGeometry(resolvedId);
+    if (!screenGeom.isValid()) {
+        screenGeom = screen->geometry();
+    }
+
+    // Hide the zone selector for this specific virtual screen to avoid overlap.
+    // Only hide the selector keyed by resolvedId, not all selectors on the physical monitor.
+    if (auto* selectorWindow = m_screenStates.value(resolvedId).zoneSelectorWindow) {
+        selectorWindow->hide();
     }
 
     // Always destroy and recreate for fresh state
@@ -357,9 +393,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         return;
     }
 
-    // Build layouts list
-    const QString resolvedScreenId = Utils::screenIdentifier(screen);
-    QVariantList layoutsList = buildLayoutsList(resolvedScreenId);
+    m_layoutPickerScreen = screen;
+    m_layoutPickerScreenId = resolvedId;
+
+    // Build layouts list (use virtual-aware screen ID for correct layout resolution)
+    QVariantList layoutsList = buildLayoutsList(resolvedId);
     if (layoutsList.isEmpty()) {
         qCDebug(lcOverlay) << "showLayoutPicker: no layouts available";
         destroyLayoutPickerWindow();
@@ -369,14 +407,13 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Determine active layout ID
     QString activeId;
     if (m_layoutManager) {
-        Layout* activeLayout = resolveScreenLayout(screen);
+        Layout* activeLayout = resolveScreenLayout(resolvedId);
         if (activeLayout) {
             activeId = activeLayout->id().toString();
         }
     }
 
-    // Calculate screen aspect ratio
-    const QRect screenGeom = screen->geometry();
+    // Calculate screen aspect ratio (use virtual screen geometry)
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
@@ -393,49 +430,46 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     if (m_settings && m_layoutManager) {
         int curDesktop = m_layoutManager->currentVirtualDesktop();
         QString curActivity = m_layoutManager->currentActivity();
-        locked =
-            m_settings->isContextLocked(QStringLiteral("0:") + Utils::screenIdentifier(screen), curDesktop, curActivity)
-            || m_settings->isContextLocked(QStringLiteral("1:") + Utils::screenIdentifier(screen), curDesktop,
-                                           curActivity);
+        locked = isAnyModeLocked(m_settings, resolvedId, curDesktop, curActivity);
     }
     writeQmlProperty(m_layoutPickerWindow, QStringLiteral("locked"), locked);
 
     // Theme colors and zone appearance (consistent with zone selector)
-    if (m_settings) {
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("highlightColor"), m_settings->highlightColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveColor"), m_settings->inactiveColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("borderColor"), m_settings->borderColor());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("activeOpacity"), m_settings->activeOpacity());
-        writeQmlProperty(m_layoutPickerWindow, QStringLiteral("inactiveOpacity"), m_settings->inactiveOpacity());
-    }
+    writeColorSettings(m_layoutPickerWindow, m_settings);
 
-    // Full-screen layer shell with keyboard interactivity
-    if (!configureLayerSurface(m_layoutPickerWindow, screen, LayerSurface::LayerTop,
-                               LayerSurface::KeyboardInteractivityExclusive,
-                               QStringLiteral("plasmazones-layout-picker-%1-%2")
-                                   .arg(Utils::screenIdentifier(screen))
-                                   .arg(++m_scopeGeneration),
-                               LayerSurface::AnchorAll)) {
+    // Layer shell with keyboard interactivity — position to virtual or physical screen
+    if (!configureLayerSurface(
+            m_layoutPickerWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
+            QStringLiteral("plasmazones-layout-picker-%1-%2").arg(resolvedId).arg(++m_scopeGeneration))) {
         qCWarning(lcOverlay) << "showLayoutPicker: failed to configure layer surface";
         destroyLayoutPickerWindow();
         return;
     }
+    // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
+    updateWindowScreenPosition(m_layoutPickerWindow, resolvedId);
 
-    assertWindowOnScreen(m_layoutPickerWindow, screen);
-    // Size only — position is controlled by layer-surface anchors (AnchorAll),
+    assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
+    // Size only — position is controlled by layer-surface anchors + margins,
     // setX/setY are no-ops on layer surfaces.
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
     QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
     m_layoutPickerWindow->requestActivate();
 
-    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << screen->name() << "layouts=" << layoutsList.size()
+    qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
                       << "active=" << activeId;
 }
 
 void OverlayService::hideLayoutPicker()
 {
+    const QString screenId = m_layoutPickerScreenId;
     destroyLayoutPickerWindow();
+    // Re-show the zone selector that was hidden when layout picker was shown (line 322-324)
+    if (m_zoneSelectorVisible && !screenId.isEmpty()) {
+        if (auto* selectorWindow = m_screenStates.value(screenId).zoneSelectorWindow) {
+            selectorWindow->show();
+        }
+    }
 }
 
 bool OverlayService::isLayoutPickerVisible() const
@@ -443,20 +477,25 @@ bool OverlayService::isLayoutPickerVisible() const
     return m_layoutPickerWindow && m_layoutPickerWindow->isVisible();
 }
 
-void OverlayService::createLayoutPickerWindow(QScreen* screen)
+void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
 {
     if (m_layoutPickerWindow) {
         return;
     }
 
+    QScreen* screen = physScreen ? physScreen : Utils::primaryScreen();
     auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, "layout picker");
     if (!window) {
         qCWarning(lcOverlay) << "Failed to create layout picker overlay";
         return;
     }
 
-    connect(window, &QObject::destroyed, this, [this]() {
-        m_layoutPickerWindow = nullptr;
+    connect(window, &QObject::destroyed, this, [this, win = window]() {
+        if (m_layoutPickerWindow == win) {
+            m_layoutPickerWindow = nullptr;
+            m_layoutPickerScreen = nullptr;
+            m_layoutPickerScreenId.clear();
+        }
     });
 
     // Connect layoutSelected and dismissed signals from QML
@@ -483,6 +522,8 @@ void OverlayService::destroyLayoutPickerWindow()
         m_layoutPickerWindow->deleteLater();
         m_layoutPickerWindow = nullptr;
     }
+    m_layoutPickerScreen = nullptr;
+    m_layoutPickerScreenId.clear();
 }
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)

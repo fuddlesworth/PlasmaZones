@@ -141,15 +141,16 @@ struct PLASMAZONES_EXPORT NavigationCommand
 };
 
 /**
- * @brief Window rotation entry for rotate-windows-in-layout feature
+ * @brief Zone assignment entry for window movement operations
  *
- * Describes a single window movement in a rotation operation.
+ * Describes a single window movement in a rotation, resnap, or snap-all operation.
  */
-struct PLASMAZONES_EXPORT RotationEntry
+struct PLASMAZONES_EXPORT ZoneAssignmentEntry
 {
     QString windowId; ///< Window to move
     QString sourceZoneId; ///< Zone window is moving from (for OSD highlighting)
-    QString targetZoneId; ///< Zone to move to
+    QString targetZoneId; ///< Primary zone to move to
+    QStringList targetZoneIds; ///< All zones (for multi-zone spans; empty = single zone)
     QRect targetGeometry; ///< Target geometry in pixels
 };
 

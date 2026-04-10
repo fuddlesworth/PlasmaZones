@@ -52,6 +52,59 @@ inline constexpr const char GridColumns[] = "GridColumns";
 inline constexpr const char TriggerDistance[] = "TriggerDistance";
 } // namespace ZoneSelectorConfigKey
 
+/**
+ * Per-screen autotile override key constants.
+ * These intentionally differ from the global ConfigKeys accessors (e.g.
+ * "AutotileAlgorithm" here vs ConfigKeys::defaultAutotileAlgorithmKey() =
+ * "DefaultAutotileAlgorithm") because per-screen overrides replace the default.
+ */
+namespace PerScreenAutotileKey {
+inline constexpr const char Algorithm[] = "AutotileAlgorithm";
+inline constexpr const char SplitRatio[] = "AutotileSplitRatio";
+inline constexpr const char MasterCount[] = "AutotileMasterCount";
+inline constexpr const char InnerGap[] = "AutotileInnerGap";
+inline constexpr const char OuterGap[] = "AutotileOuterGap";
+inline constexpr const char UsePerSideOuterGap[] = "AutotileUsePerSideOuterGap";
+inline constexpr const char OuterGapTop[] = "AutotileOuterGapTop";
+inline constexpr const char OuterGapBottom[] = "AutotileOuterGapBottom";
+inline constexpr const char OuterGapLeft[] = "AutotileOuterGapLeft";
+inline constexpr const char OuterGapRight[] = "AutotileOuterGapRight";
+inline constexpr const char FocusNewWindows[] = "AutotileFocusNewWindows";
+inline constexpr const char SmartGaps[] = "AutotileSmartGaps";
+inline constexpr const char MaxWindows[] = "AutotileMaxWindows";
+inline constexpr const char InsertPosition[] = "AutotileInsertPosition";
+inline constexpr const char FocusFollowsMouse[] = "AutotileFocusFollowsMouse";
+inline constexpr const char RespectMinimumSize[] = "AutotileRespectMinimumSize";
+inline constexpr const char HideTitleBars[] = "AutotileHideTitleBars";
+inline constexpr const char SplitRatioStep[] = "AutotileSplitRatioStep";
+inline constexpr const char AnimationsEnabled[] = "AnimationsEnabled";
+inline constexpr const char AnimationDuration[] = "AnimationDuration";
+inline constexpr const char AnimationEasingCurve[] = "AnimationEasingCurve";
+} // namespace PerScreenAutotileKey
+
+/**
+ * Per-screen snapping override key constants.
+ */
+namespace PerScreenSnappingKey {
+inline constexpr const char SnapAssistEnabled[] = "SnapAssistEnabled";
+inline constexpr const char ZoneSelectorEnabled[] = "ZoneSelectorEnabled";
+inline constexpr const char ZoneSelectorTriggerDistance[] = "ZoneSelectorTriggerDistance";
+inline constexpr const char ZoneSelectorPosition[] = "ZoneSelectorPosition";
+inline constexpr const char ZoneSelectorLayoutMode[] = "ZoneSelectorLayoutMode";
+inline constexpr const char ZoneSelectorSizeMode[] = "ZoneSelectorSizeMode";
+inline constexpr const char ZoneSelectorMaxRows[] = "ZoneSelectorMaxRows";
+inline constexpr const char ZoneSelectorPreviewWidth[] = "ZoneSelectorPreviewWidth";
+inline constexpr const char ZoneSelectorPreviewHeight[] = "ZoneSelectorPreviewHeight";
+// Geometry override keys
+inline constexpr const char ZonePadding[] = "ZonePadding";
+inline constexpr const char OuterGap[] = "OuterGap";
+inline constexpr const char UsePerSideOuterGap[] = "UsePerSideOuterGap";
+inline constexpr const char OuterGapTop[] = "OuterGapTop";
+inline constexpr const char OuterGapBottom[] = "OuterGapBottom";
+inline constexpr const char OuterGapLeft[] = "OuterGapLeft";
+inline constexpr const char OuterGapRight[] = "OuterGapRight";
+} // namespace PerScreenSnappingKey
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Settings Interfaces
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -397,6 +450,9 @@ inline bool pruneDisabledDesktopEntries(QStringList& entries, int maxDesktop)
 {
     const int before = entries.size();
     entries.removeIf([maxDesktop](const QString& entry) {
+        // Composite key format: "screenId/desktopNumber". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the desktop suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry
@@ -417,6 +473,9 @@ inline bool pruneDisabledActivityEntries(QStringList& entries, const QSet<QStrin
 {
     const int before = entries.size();
     entries.removeIf([&validActivityIds](const QString& entry) {
+        // Composite key format: "screenId/activityUuid". Virtual screen IDs
+        // (e.g. "physId/vs:N") contain '/', but the activity suffix is always the
+        // last segment, so lastIndexOf('/') correctly splits at the boundary.
         int slashIdx = entry.lastIndexOf(QLatin1Char('/'));
         if (slashIdx < 0)
             return true; // malformed entry

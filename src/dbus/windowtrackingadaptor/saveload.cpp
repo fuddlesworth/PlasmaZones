@@ -4,6 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
 #include "../../core/interfaces.h"
+#include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layout.h"
 #include "../../core/logging.h"
@@ -41,9 +42,6 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
             if (!zones.isEmpty()) {
                 result[it.key()] = zones;
             }
-        } else if (it.value().isString() && !it.value().toString().isEmpty()) {
-            // Backward compat: old format stored single zone ID string
-            result[it.key()] = QStringList{it.value().toString()};
         }
     }
     return result;
@@ -66,7 +64,9 @@ void WindowTrackingAdaptor::saveState()
         QJsonObject entry;
         entry[QLatin1String("windowId")] = it.key();
         entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-        entry[QLatin1String("screen")] = Utils::screenIdForName(m_service->screenAssignments().value(it.key()));
+        const QString assignedScreen = m_service->screenAssignments().value(it.key());
+        entry[QLatin1String("screen")] =
+            VirtualScreenId::isVirtual(assignedScreen) ? assignedScreen : Utils::screenIdForName(assignedScreen);
         entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
         fullAssignments.append(entry);
     }
@@ -83,7 +83,9 @@ void WindowTrackingAdaptor::saveState()
             QJsonObject entryObj;
             entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
             if (!entry.screenId.isEmpty()) {
-                entryObj[QLatin1String("screen")] = Utils::screenIdForName(entry.screenId);
+                entryObj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.screenId)
+                    ? entry.screenId
+                    : Utils::screenIdForName(entry.screenId);
             }
             if (entry.virtualDesktop > 0) {
                 entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
@@ -150,7 +152,8 @@ void WindowTrackingAdaptor::saveState()
     for (auto it = m_service->preFloatScreenAssignments().constBegin();
          it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
         QString key = Utils::extractAppId(it.key());
-        preFloatScreensObj[key] = Utils::screenIdForName(it.value());
+        preFloatScreensObj[key] =
+            VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
     }
     tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
                           QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -258,13 +261,6 @@ void WindowTrackingAdaptor::loadState()
     using PendingRestore = WindowTrackingService::PendingRestore;
     QHash<QString, QList<PendingRestore>> pendingQueues;
 
-    // Helper: resolve stored screen value. Returns as-is — mixed formats
-    // (connector names and screen IDs) are handled at comparison points via
-    // Utils::screensMatch() which resolves both to QScreen* pointers.
-    auto resolveScreen = [](const QString& storedScreen) -> QString {
-        return storedScreen;
-    };
-
     // Pending entries derived from active assignments (fallback for KWin restarts where
     // UUIDs change). Collected separately from persisted pending queues so we can do
     // count-based merging — prevents exponential growth while preserving multi-instance entries.
@@ -297,7 +293,7 @@ void WindowTrackingAdaptor::loadState()
                 if (zoneIds.isEmpty()) {
                     continue;
                 }
-                QString screen = resolveScreen(entry[QLatin1String("screen")].toString());
+                QString screen = entry[QLatin1String("screen")].toString();
                 int desktop = entry[QLatin1String("desktop")].toInt(0);
 
                 fullZones[windowId] = zoneIds;
@@ -350,7 +346,7 @@ void WindowTrackingAdaptor::loadState()
                     if (entry.zoneIds.isEmpty()) {
                         continue;
                     }
-                    entry.screenId = resolveScreen(entryObj[QLatin1String("screen")].toString());
+                    entry.screenId = entryObj[QLatin1String("screen")].toString();
                     entry.virtualDesktop = entryObj[QLatin1String("desktop")].toInt(0);
                     entry.layoutId = entryObj[QLatin1String("layout")].toString();
                     for (const QJsonValue& v : entryObj[QLatin1String("zoneNumbers")].toArray()) {
@@ -364,43 +360,68 @@ void WindowTrackingAdaptor::loadState()
         }
     }
 
-    // Merge active-derived entries: only add entries not already covered by persisted
-    // queues. saveState() persists ALL pending entries including active-derived ones
-    // from the previous load. Without count-based merging, entries would double on
-    // every daemon restart (1→2→4→...).
+    // Merge active-derived entries with persisted pending queues.
     //
-    // For each (appId, zoneIds, screen, desktop) fingerprint, a persisted entry
-    // "covers" one active-derived entry. Uncovered active-derived entries (new windows
-    // snapped since last save) are appended. This correctly handles multi-instance
-    // apps in the same zone — two konsole windows in zone Z produce two entries.
+    // Active entries represent windows that were alive and snapped at the time of
+    // daemon shutdown — they are the MOST RECENT state. Persisted pending entries
+    // may include older entries from windows that were closed in previous sessions.
+    //
+    // FIFO ordering invariant: active entries must come FIRST so that when N windows
+    // reopen, each consumes the entry matching its last-known state. Without this,
+    // stale persisted entries from a previous session (e.g., a second Firefox window
+    // on VS2 that no longer exists) could be consumed before the current VS1 entry,
+    // causing the window to restore to the wrong virtual screen.
+    //
+    // When an active entry matches a persisted entry (same fingerprint), the persisted
+    // version is used because it contains richer data (layoutId, zoneNumbers).
+    // Unmatched persisted entries (from previously-closed windows) are appended AFTER
+    // all active entries. This correctly handles multi-instance apps and prevents
+    // entry doubling on every daemon restart.
     for (auto activeIt = activePending.constBegin(); activeIt != activePending.constEnd(); ++activeIt) {
         const QString& appId = activeIt.key();
-        // Build a consumable budget of persisted fingerprints for this appId
-        struct Fingerprint
-        {
-            QStringList zoneIds;
-            QString screenId;
-            int virtualDesktop;
-        };
-        QList<Fingerprint> persistedBudget;
-        for (const auto& e : pendingQueues.value(appId)) {
-            persistedBudget.append({e.zoneIds, e.screenId, e.virtualDesktop});
-        }
+        QList<PendingRestore> persistedList = pendingQueues.value(appId);
+        QVector<bool> persistedUsed(persistedList.size(), false);
+
+        // Phase 1: For each active entry, find a matching persisted entry to enrich it.
+        // Active entries go to the front of the queue (most recent state first).
+        QList<PendingRestore> activeEnriched;
         for (const auto& activeEntry : activeIt.value()) {
-            bool covered = false;
-            for (int i = 0; i < persistedBudget.size(); ++i) {
-                if (persistedBudget[i].zoneIds == activeEntry.zoneIds
-                    && persistedBudget[i].screenId == activeEntry.screenId
-                    && persistedBudget[i].virtualDesktop == activeEntry.virtualDesktop) {
-                    persistedBudget.removeAt(i); // consume one match
-                    covered = true;
+            bool matched = false;
+            for (int i = 0; i < persistedList.size(); ++i) {
+                if (!persistedUsed[i] && persistedList[i].zoneIds == activeEntry.zoneIds
+                    && persistedList[i].screenId == activeEntry.screenId
+                    && persistedList[i].virtualDesktop == activeEntry.virtualDesktop) {
+                    // Use persisted entry (has layoutId and zoneNumbers)
+                    activeEnriched.append(persistedList[i]);
+                    persistedUsed[i] = true;
+                    matched = true;
                     break;
                 }
             }
-            if (!covered) {
-                // New window snapped since last save — persisted queues don't have it
-                pendingQueues[appId].append(activeEntry);
+            if (!matched) {
+                // New window snapped since last save — no persisted match
+                activeEnriched.append(activeEntry);
             }
+        }
+
+        // Phase 2: Collect unmatched persisted entries (from previously-closed windows).
+        QList<PendingRestore> unmatchedPersisted;
+        for (int i = 0; i < persistedList.size(); ++i) {
+            if (!persistedUsed[i]) {
+                unmatchedPersisted.append(persistedList[i]);
+            }
+        }
+
+        // Rebuild queue: active entries first, then stale entries from older sessions.
+        QList<PendingRestore> merged;
+        merged.reserve(activeEnriched.size() + unmatchedPersisted.size());
+        merged.append(activeEnriched);
+        merged.append(unmatchedPersisted);
+
+        if (merged.isEmpty()) {
+            pendingQueues.remove(appId);
+        } else {
+            pendingQueues[appId] = merged;
         }
     }
 
@@ -409,7 +430,7 @@ void WindowTrackingAdaptor::loadState()
     // Load pre-tile geometries (with migration from old split keys)
     using PreTileGeometry = WindowTrackingService::PreTileGeometry;
     QHash<QString, PreTileGeometry> preTileGeometries;
-    auto loadGeometries = [&resolveScreen](const QString& json, QHash<QString, PreTileGeometry>& out) {
+    auto loadGeometries = [](const QString& json, QHash<QString, PreTileGeometry>& out) {
         if (json.isEmpty()) {
             return;
         }
@@ -424,7 +445,7 @@ void WindowTrackingAdaptor::loadState()
                 QRect geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
                            geomObj[QLatin1String("width")].toInt(), geomObj[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = resolveScreen(geomObj[QLatin1String("screen")].toString());
+                    QString screen = geomObj[QLatin1String("screen")].toString();
                     out[it.key()] = PreTileGeometry{geom, screen};
                 }
             }
@@ -450,7 +471,7 @@ void WindowTrackingAdaptor::loadState()
                 QRect geom(entry[QLatin1String("x")].toInt(), entry[QLatin1String("y")].toInt(),
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
-                    QString screen = resolveScreen(entry[QLatin1String("screen")].toString());
+                    QString screen = entry[QLatin1String("screen")].toString();
                     PreTileGeometry ptg{geom, screen};
                     preTileGeometries[windowId] = ptg;
                     // Also store under appId for fallback (mirrors storePreTileGeometry)
@@ -504,10 +525,13 @@ void WindowTrackingAdaptor::loadState()
             for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
                 if (it.value().isString()) {
                     QString storedScreen = it.value().toString();
-                    if (!Utils::isConnectorName(storedScreen)) {
-                        QString connectorName = Utils::screenNameForId(storedScreen);
-                        if (!connectorName.isEmpty()) {
-                            storedScreen = connectorName;
+                    // Virtual screen IDs are stored as-is — no connector/ID translation
+                    if (!VirtualScreenId::isVirtual(storedScreen)) {
+                        if (!Utils::isConnectorName(storedScreen)) {
+                            QString connectorName = Utils::screenNameForId(storedScreen);
+                            if (!connectorName.isEmpty()) {
+                                storedScreen = connectorName;
+                            }
                         }
                     }
                     preFloatScreens[it.key()] = storedScreen;

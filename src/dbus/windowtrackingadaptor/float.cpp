@@ -124,7 +124,7 @@ QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, 
     result[QLatin1String("y")] = unfloat.geometry.y();
     result[QLatin1String("width")] = unfloat.geometry.width();
     result[QLatin1String("height")] = unfloat.geometry.height();
-    result[QLatin1String("screenName")] = unfloat.screenId;
+    result[QLatin1String("screenId")] = unfloat.screenId;
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
                           << "geo:" << unfloat.geometry;
@@ -159,12 +159,9 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
-    QJsonObject stateObj;
-    stateObj[QLatin1String("windowId")] = windowId;
-    stateObj[QLatin1String("zoneId")] = m_service->zoneForWindow(windowId);
-    stateObj[QLatin1String("screenId")] = screen;
-    stateObj[QLatin1String("isFloating")] = floating;
-    stateObj[QLatin1String("changeType")] = floating ? QStringLiteral("floated") : QStringLiteral("unfloated");
+    QJsonObject stateObj =
+        buildStateObject(windowId, m_service->zoneForWindow(windowId), QJsonArray(), screen, floating,
+                         floating ? QStringLiteral("floated") : QStringLiteral("unfloated"));
     Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
 }
 
@@ -225,6 +222,12 @@ void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, 
 
     // Route to the correct engine based on screen mode
     if (m_autotileEngine && m_autotileEngine->isActiveOnScreen(screenId)) {
+        // If the window isn't tracked by autotile yet (e.g., dragged from a snap screen),
+        // adopt it as floating before setting state. adoptWindowAsFloating handles the
+        // addWindow + setFloating + key tracking internally.
+        if (floating) {
+            m_autotileEngine->adoptWindowAsFloating(windowId, screenId);
+        }
         m_autotileEngine->setWindowFloat(windowId, floating);
     } else if (m_snapEngine) {
         m_snapEngine->setWindowFloat(windowId, floating);

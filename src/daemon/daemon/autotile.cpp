@@ -11,6 +11,7 @@
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
+#include "../../core/constants.h"
 #include "../../core/utils.h"
 #include "../../core/windowtrackingservice.h"
 #include "../config/settings.h"
@@ -19,14 +20,16 @@
 #include "../../autotile/AutotileConfig.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
-#include "../../core/constants.h"
+#include <QGuiApplication>
 #include <QScreen>
 
 namespace PlasmaZones {
 
 namespace {
-// Geometry/panel timing (ms) — keep in sync with daemon.cpp constants
-// After processing geometry we re-query panels once so we pick up settled state (e.g. panel editor close).
+// Follow-up panel geometry requery delay (ms): after the debounced geometry update
+// completes, re-query panel geometry once so we pick up settled state (e.g. panel editor close).
+// Conceptually distinct from GEOMETRY_UPDATE_DEBOUNCE_MS in daemon.cpp (which coalesces
+// rapid geometry change events into a single update).
 constexpr int DELAYED_PANEL_REQUERY_MS = 400;
 // Reapply requested on next event loop (0); daemon state is already updated when we start the timer.
 constexpr int REAPPLY_DELAY_MS = 0;
@@ -43,8 +46,8 @@ void Daemon::updateAutotileScreens()
 
     QSet<QString> autotileScreens;
     QHash<QString, QString> screenAlgorithms;
-    for (QScreen* screen : m_screenManager->screens()) {
-        QString screenId = Utils::screenIdentifier(screen);
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
         // Skip screens/desktops/activities where PlasmaZones is disabled
         if (isContextDisabled(m_settings.get(), screenId, desktop, activity)) {
             continue;
@@ -68,7 +71,7 @@ void Daemon::updateAutotileScreens()
     for (const QString& screenId : removedScreens) {
         QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
         if (!order.isEmpty()) {
-            m_lastAutotileOrders[DesktopContextKey{screenId, desktop, activity}] = order;
+            m_lastAutotileOrders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
 
@@ -84,8 +87,7 @@ void Daemon::updateAutotileScreens()
     // fallback).  applyPerScreenConfig lazily creates TilingStates via
     // stateForScreen(), which setAutotileScreens reuses for added screens.
     if (m_settings) {
-        for (QScreen* screen : m_screenManager->screens()) {
-            QString screenId = Utils::screenIdentifier(screen);
+        for (const QString& screenId : effectiveIds) {
             if (!autotileScreens.contains(screenId))
                 continue;
             QVariantMap overrides = m_settings->getPerScreenAutotileSettings(screenId);
@@ -132,7 +134,7 @@ void Daemon::updateAutotileScreens()
                         }
                     } else {
                         qCWarning(lcDaemon) << "updateAutotileScreens: unknown per-screen algorithm" << screenAlgo
-                                            << "for screen" << screen->name();
+                                            << "for screen" << screenId;
                     }
                 }
             }
@@ -152,7 +154,18 @@ void Daemon::updateAutotileScreens()
     // any already created by applyPerScreenConfig above) and retiles them.
     // Because per-screen overrides are set first, retileAfterOperation inside
     // setAutotileScreens uses effectiveAlgorithm() with the correct per-screen algo.
+    const bool setChanged = (m_autotileEngine->autotileScreens() != autotileScreens);
     m_autotileEngine->setAutotileScreens(autotileScreens);
+
+    // When the autotile set didn't change (e.g., VS inherited autotile from
+    // the physical screen's cascade before the explicit assignment was written),
+    // setAutotileScreens early-returns without retiling. Force a retile for
+    // screens that are in the set so mode-swap toggles always take effect.
+    if (!setChanged) {
+        for (const QString& screenId : autotileScreens) {
+            m_autotileEngine->scheduleRetileForScreen(screenId);
+        }
+    }
 
     // Retile for existing screens whose overrides changed is handled by the
     // deferred retile scheduled inside applyPerScreenConfig()/clearPerScreenConfig().
@@ -191,10 +204,14 @@ void Daemon::handleAutotileDisabled()
     // Assign per-screen (not just globally) so layoutForScreen() finds explicit
     // assignments instead of falling through to the default layout.
     if (m_layoutManager && m_screenManager) {
+        const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
         // Resolve a manual layout to restore. Use the first screen's snappingLayout
         // from AssignmentEntry (preserved when mode flips to Snapping).
         QString lastLayoutId;
-        if (!m_screenManager->screens().isEmpty()) {
+        if (!effectiveIds.isEmpty()) {
+            lastLayoutId =
+                m_layoutManager->snappingLayoutForScreen(effectiveIds.first(), currentDesktop(), currentActivity());
+        } else if (!m_screenManager->screens().isEmpty()) {
             QString screenId = Utils::screenIdentifier(m_screenManager->screens().first());
             lastLayoutId = m_layoutManager->snappingLayoutForScreen(screenId, currentDesktop(), currentActivity());
         }
@@ -215,8 +232,7 @@ void Daemon::handleAutotileDisabled()
             // Write with empty activity so entries are visible to D-Bus/KCM queries.
             {
                 QSignalBlocker blocker(m_layoutManager.get());
-                for (QScreen* screen : m_screenManager->screens()) {
-                    QString screenId = Utils::screenIdentifier(screen);
+                for (const QString& screenId : effectiveIds) {
                     if (!activity.isEmpty()) {
                         m_layoutManager->clearAssignment(screenId, desktop, activity);
                     }
@@ -271,8 +287,9 @@ void Daemon::handleSnappingToAutotile()
 
     // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch.
     // This ensures deterministic window ordering: zone 1 → master, zone 2 → second, etc.
-    for (QScreen* screen : m_screenManager->screens()) {
-        seedAutotileOrderForScreen(Utils::screenIdentifier(screen));
+    const QStringList seedIds = m_screenManager->effectiveScreenIds();
+    for (const QString& sid : seedIds) {
+        seedAutotileOrderForScreen(sid);
     }
 
     // Assign autotile layout to ALL screens (global toggle).
@@ -284,8 +301,8 @@ void Daemon::handleSnappingToAutotile()
     const QString activity = currentActivity();
     {
         QSignalBlocker blocker(m_layoutManager.get());
-        for (QScreen* screen : m_screenManager->screens()) {
-            QString screenId = Utils::screenIdentifier(screen);
+        const QStringList assignIds = m_screenManager->effectiveScreenIds();
+        for (const QString& screenId : assignIds) {
             if (!activity.isEmpty()) {
                 m_layoutManager->clearAssignment(screenId, desktop, activity);
             }
@@ -294,9 +311,9 @@ void Daemon::handleSnappingToAutotile()
     }
 }
 
-QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() const
+QHash<TilingStateKey, QStringList> Daemon::captureAutotileOrders() const
 {
-    QHash<DesktopContextKey, QStringList> orders;
+    QHash<TilingStateKey, QStringList> orders;
     if (!m_autotileEngine) {
         return orders;
     }
@@ -305,7 +322,7 @@ QHash<Daemon::DesktopContextKey, QStringList> Daemon::captureAutotileOrders() co
     for (const QString& screenId : m_autotileEngine->autotileScreens()) {
         QStringList order = m_autotileEngine->tiledWindowOrder(screenId);
         if (!order.isEmpty()) {
-            orders[DesktopContextKey{screenId, desktop, activity}] = order;
+            orders[TilingStateKey{screenId, desktop, activity}] = order;
         }
     }
     return orders;
@@ -339,10 +356,10 @@ void Daemon::restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows, 
     }
 }
 
-QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
-                                                           const QString& activity)
+QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& excludeWindows, int desktop,
+                                                                 const QString& activity)
 {
-    QVector<RotationEntry> entries;
+    QVector<ZoneAssignmentEntry> entries;
     if (!m_windowTrackingAdaptor || m_lastAutotileOrders.isEmpty()) {
         return entries;
     }
@@ -350,7 +367,6 @@ QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& 
     if (!wts) {
         return entries;
     }
-    static const QString restoreSentinel = QStringLiteral("__restore__");
     for (auto it = m_lastAutotileOrders.constBegin(); it != m_lastAutotileOrders.constEnd(); ++it) {
         if (desktop >= 0 && (it.key().desktop != desktop || it.key().activity != activity)) {
             continue;
@@ -365,9 +381,9 @@ QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& 
                 continue;
             auto geo = wts->validatedPreTileGeometry(windowId, screenId);
             if (geo) {
-                RotationEntry entry;
+                ZoneAssignmentEntry entry;
                 entry.windowId = windowId;
-                entry.targetZoneId = restoreSentinel;
+                entry.targetZoneId = RestoreSentinel;
                 entry.targetGeometry = *geo;
                 entries.append(entry);
                 qCInfo(lcDaemon) << "Batched float-restore: windowId=" << windowId << "geo=" << *geo
@@ -378,7 +394,7 @@ QVector<RotationEntry> Daemon::buildAutotileRestoreEntries(const QSet<QString>& 
     return entries;
 }
 
-void Daemon::presaveSnapFloats()
+void Daemon::presaveSnapFloats(const QString& screenId)
 {
     if (!m_windowTrackingAdaptor) {
         return;
@@ -386,10 +402,20 @@ void Daemon::presaveSnapFloats()
     WindowTrackingService* wts = m_windowTrackingAdaptor->service();
     const QStringList floatingIds = wts->floatingWindows();
     for (const QString& fid : floatingIds) {
-        if (!wts->isAutotileFloated(fid)) {
-            wts->saveSnapFloating(fid);
-            qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "before autotile entry";
+        if (wts->isAutotileFloated(fid)) {
+            continue;
         }
+        // When scoped to a screen, only save windows on that screen.
+        // Windows floating on other screens are not entering autotile
+        // and must not have their snap-float state recorded.
+        if (!screenId.isEmpty()) {
+            const QString windowScreen = wts->screenAssignments().value(fid);
+            if (!windowScreen.isEmpty() && windowScreen != screenId) {
+                continue;
+            }
+        }
+        wts->saveSnapFloating(fid);
+        qCDebug(lcDaemon) << "Pre-saved snap-float for" << fid << "screen=" << screenId;
     }
 }
 
@@ -402,7 +428,7 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
     // Prefer saved autotile order from last mode toggle (deterministic re-entry).
     // Falls back to zone-ordered window list when no saved order exists (first
     // activation, or windows changed between toggles).
-    DesktopContextKey orderKey{screenId, currentDesktop(), currentActivity()};
+    TilingStateKey orderKey{screenId, currentDesktop(), currentActivity()};
     QStringList order = m_lastAutotileOrders.value(orderKey);
     if (order.isEmpty()) {
         WindowTrackingService* wts = m_windowTrackingAdaptor->service();
@@ -424,21 +450,40 @@ void Daemon::seedAutotileOrderForScreen(const QString& screenId)
 
 void Daemon::processPendingGeometryUpdates()
 {
-    if (m_pendingGeometryUpdates.isEmpty()) {
+    if (!m_geometryUpdatePending) {
         return;
     }
 
-    // Recalculate zone geometries for ALL layouts so fixed-mode zones stay
-    // normalized correctly.  Uses primary screen as the reference geometry
-    // (per-layout useFullScreenGeometry is respected by effectiveScreenGeometry).
-    QScreen* primaryScreen = Utils::primaryScreen();
-    if (primaryScreen) {
-        for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primaryScreen));
+    // Recalculate zone geometries for each effective screen (virtual or physical)
+    // so fixed-mode zones stay normalized correctly against the correct screen geometry.
+    const int desktop = m_virtualDesktopManager->currentDesktop();
+    const QString activity =
+        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QStringList screenIds = m_screenManager->effectiveScreenIds();
+    QSet<QUuid> processedLayouts;
+    for (const QString& screenId : screenIds) {
+        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        if (layout) {
+            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            processedLayouts.insert(layout->id());
         }
     }
 
-    m_pendingGeometryUpdates.clear();
+    // Also recalculate layouts not currently assigned to any screen
+    // to prevent stale geometries when the user switches layouts.
+    // Use primary screen geometry as fallback reference.
+    const QVector<Layout*> allLayouts = m_layoutManager->layouts();
+    for (auto* layout : allLayouts) {
+        if (!processedLayouts.contains(layout->id())) {
+            const QScreen* primaryScreen = Utils::primaryScreen();
+            if (primaryScreen) {
+                layout->recalculateZoneGeometries(
+                    GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
+            }
+        }
+    }
+
+    m_geometryUpdatePending = false;
 
     // Single overlay update after all geometry recalculations
     m_overlayService->updateGeometries();

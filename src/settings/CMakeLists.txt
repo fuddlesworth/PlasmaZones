@@ -59,6 +59,8 @@ qt_add_qml_module(plasmazones-settings
         qml/AboutPage.qml
         qml/WhatsNewPage.qml
         qml/MonitorStatePage.qml
+        qml/VirtualScreensPage.qml
+        qml/VirtualScreenPreview.qml
         # Sub-components (copied from KCM)
         qml/MonitorAssignmentsCard.qml
         qml/ActivityAssignmentsCard.qml

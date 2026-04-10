@@ -70,6 +70,14 @@ public:
     }
 
     /**
+     * @brief Get the last activated window's ID
+     */
+    QString lastActiveWindowId() const
+    {
+        return m_lastActiveWindowId;
+    }
+
+    /**
      * @brief Set ZoneDetectionAdaptor for daemon-driven navigation (getAdjacentZone, getFirstZoneInDirection)
      * @param adaptor ZoneDetectionAdaptor instance (must outlive this adaptor)
      */
@@ -280,6 +288,11 @@ public Q_SLOTS:
     QStringList getWindowsInZone(const QString& zoneId);
     QStringList getSnappedWindows();
 
+    /// Remove zone/screen/desktop assignments for windows not in the alive set.
+    /// Called by the KWin effect after daemon ready to clean up stale KConfig entries
+    /// from windows that no longer exist (closed between save and daemon restart).
+    void pruneStaleWindows(const QStringList& aliveWindowIds);
+
     /**
      * Get JSON array of empty zones for Snap Assist continuation
      * @param screenId Screen ID (e.g. DP-1)
@@ -376,6 +389,15 @@ public Q_SLOTS:
      * @note Returns empty if keepWindowsInZonesOnResolutionChange is disabled
      */
     QString getUpdatedWindowGeometries();
+
+    /**
+     * @brief Pre-computed zone geometries for pending restore entries.
+     * @return JSON object: { appId: {x, y, width, height}, ... }
+     *
+     * The effect caches these so that slotWindowAdded can teleport windows
+     * to their zone position immediately, without waiting for a D-Bus round-trip.
+     */
+    QString getPendingRestoreGeometries();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Phase 1 Keyboard Navigation Methods
@@ -721,7 +743,7 @@ public Q_SLOTS:
      * autotile→snapping transition. The Daemon layer calls emitBatchedResnap
      * directly on the SnapEngine, bypassing the WTA's navigation methods.
      *
-     * @param resnapData Serialized RotationEntry JSON array
+     * @param resnapData Serialized ZoneAssignmentEntry JSON array
      */
     void handleBatchedResnap(const QString& resnapData);
 
@@ -954,6 +976,19 @@ private:
      */
     void applySnapResult(const SnapResult& result, const QString& windowId, int& snapX, int& snapY, int& snapWidth,
                          int& snapHeight, bool& shouldSnap);
+
+    /**
+     * @brief Build a unified window state JSON object for windowStateChanged emission
+     * @param windowId Window identifier
+     * @param zoneId Primary zone ID (may be empty for unsnap)
+     * @param zoneIds All zone IDs (QJsonArray)
+     * @param screenId Screen identifier
+     * @param isFloating Current float state
+     * @param changeType One of: "snapped", "unsnapped", "floated", "unfloated", "screen_changed"
+     * @return QJsonObject ready for serialization
+     */
+    QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
+                                 const QString& screenId, bool isFloating, const QString& changeType) const;
 
     /**
      * @brief Clear floating state when a window is being snapped

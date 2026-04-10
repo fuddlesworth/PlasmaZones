@@ -82,6 +82,9 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
 
     m_windowTracker->setWindowFloating(windowId, false);
     m_windowTracker->clearPreFloatZone(windowId);
+    // Consume any saved snap-float entry — the window is being explicitly zone-snapped,
+    // so it should not be restored as floating during a future mode transition.
+    m_windowTracker->restoreSnapFloating(windowId); // consumes and discards
     assignToZones(windowId, unfloat.zoneIds, unfloat.screenId);
 
     Q_EMIT windowFloatingChanged(windowId, false, unfloat.screenId);

@@ -13,6 +13,7 @@
 #include <QJsonParseError>
 #include <QDir>
 #include <QFile>
+#include <QLatin1StringView>
 #include <optional>
 
 namespace PlasmaZones {
@@ -55,14 +56,14 @@ inline qreal screenAspectRatio(QScreen* screen)
 }
 
 /**
- * @brief Get the aspect ratio of a screen by name/ID
- * @param screenNameOrId Screen connector name or EDID-based ID
+ * @brief Get the aspect ratio of a screen by name/ID (virtual-screen-aware)
+ * @param screenNameOrId Screen connector name, EDID-based ID, or virtual screen ID
  * @return width/height ratio, or 0.0 if screen not found
+ *
+ * For virtual screen IDs, uses ScreenManager::screenGeometry() to get the
+ * virtual screen dimensions. Falls back to physical QScreen* for non-virtual IDs.
  */
-inline qreal screenAspectRatio(const QString& screenNameOrId)
-{
-    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
-}
+PLASMAZONES_EXPORT qreal screenAspectRatio(const QString& screenNameOrId);
 
 /**
  * @brief Get the primary screen
@@ -172,11 +173,11 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
  * @brief Direction constants for use in comparisons
  */
 namespace Direction {
-inline const QString Left = QStringLiteral("left");
-inline const QString Right = QStringLiteral("right");
-inline const QString Up = QStringLiteral("up");
-inline const QString Down = QStringLiteral("down");
-}
+inline constexpr QLatin1StringView Left{"left"};
+inline constexpr QLatin1StringView Right{"right"};
+inline constexpr QLatin1StringView Up{"up"};
+inline constexpr QLatin1StringView Down{"down"};
+} // namespace Direction
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window ID Utilities
@@ -243,14 +244,12 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
         return true;
     }
     // Trailing dot-segment: "org.mozilla.firefox" ends with ".firefox"
-    if (appId.length() > pattern.length() + 1
-        && appId[appId.length() - pattern.length() - 1] == QLatin1Char('.')
+    if (appId.length() > pattern.length() + 1 && appId[appId.length() - pattern.length() - 1] == QLatin1Char('.')
         && appId.endsWith(pattern, Qt::CaseInsensitive)) {
         return true;
     }
     // Reverse: appId is a trailing dot-segment of pattern
-    if (pattern.length() > appId.length() + 1
-        && pattern[pattern.length() - appId.length() - 1] == QLatin1Char('.')
+    if (pattern.length() > appId.length() + 1 && pattern[pattern.length() - appId.length() - 1] == QLatin1Char('.')
         && pattern.endsWith(appId, Qt::CaseInsensitive)) {
         return true;
     }
@@ -275,6 +274,25 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
     }
     return false;
 }
+
+/**
+ * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)
+ *
+ * Queries ScreenManager::effectiveScreenAt() for virtual screen resolution,
+ * falling back to the physical QScreen's stable identifier. Eliminates the
+ * repeated pattern of:
+ *   auto* mgr = ScreenManager::instance();
+ *   QString id = mgr ? mgr->effectiveScreenAt(pos) : QString();
+ *   if (id.isEmpty()) id = Utils::screenIdentifier(screen);
+ *
+ * @param pos Global compositor position
+ * @param fallbackScreen Physical QScreen* to derive screen ID from if ScreenManager
+ *        is unavailable or pos is outside all virtual screens. If nullptr, the
+ *        QScreen at pos (via QGuiApplication::screenAt) is used.
+ * @return Effective screen ID (virtual if subdivided, physical otherwise), or
+ *         empty string if no screen could be resolved
+ */
+PLASMAZONES_EXPORT QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen = nullptr);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Identity Utilities (EDID-based stable identification)
@@ -312,12 +330,16 @@ PLASMAZONES_EXPORT QString screenNameForId(const QString& screenId);
 PLASMAZONES_EXPORT bool isConnectorName(const QString& identifier);
 
 /**
- * @brief Format-agnostic screen comparison.
+ * @brief Format-agnostic screen comparison (virtual-screen aware).
  *
- * Returns true if both identifiers refer to the same physical screen,
- * regardless of whether they are connector names ("DP-2") or EDID-based
- * screen IDs ("LG Electronics:LG Ultra HD:115107"). Resolves both to
- * QScreen* via findScreenByIdOrName and compares pointers.
+ * Returns true if both identifiers refer to the same effective screen.
+ * Handles connector names ("DP-2"), EDID-based screen IDs
+ * ("LG Electronics:LG Ultra HD:115107"), and virtual screen IDs
+ * ("Dell:U2722D:115107/vs:0"). Virtual screen IDs are never equal to
+ * each other (unless identical strings) and never equal to their parent
+ * physical screen ID — the physical screen has been subdivided, so the
+ * physical ID no longer represents a usable screen. Resolves non-virtual
+ * identifiers to QScreen* via findScreenByIdOrName and compares pointers.
  */
 PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
 
@@ -325,6 +347,13 @@ PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
  * @brief Check for duplicate screen identifiers among connected monitors
  */
 PLASMAZONES_EXPORT void warnDuplicateScreenIds();
+
+/// Build the context lock key for a given mode and screen.
+/// Format: "mode:screenId" (e.g. "0:Dell:U2722D:115107/vs:0").
+inline QString contextLockKey(int mode, const QString& screenId)
+{
+    return QString::number(mode) + QStringLiteral(":") + screenId;
+}
 
 } // namespace Utils
 } // namespace PlasmaZones

@@ -11,6 +11,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 #include "../../autotile/AutotileEngine.h"
 #include <QScreen>
 
@@ -40,11 +41,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     }
 
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
-    // Return the stable EDID-based screen ID so the effect passes a consistent identifier
-    // to daemon D-Bus methods (layout resolution, windowSnapped tracking, snap assist).
-    QScreen* releaseScreen = screenAtPoint(cursorX, cursorY);
+    // Resolve the effective (virtual-aware) screen ID so zones are calculated against
+    // virtual screen bounds, not physical screen bounds.
+    auto releaseResolved = resolveScreenAt(QPointF(cursorX, cursorY));
+    QString releaseScreenId = releaseResolved.screenId;
+    QScreen* releaseScreen = releaseResolved.qscreen;
     QString releaseScreenName = releaseScreen ? releaseScreen->name() : QString();
-    QString releaseScreenId = releaseScreen ? Utils::screenIdentifier(releaseScreen) : QString();
     releaseScreenIdOut = releaseScreenId;
     qCDebug(lcDbusWindow) << "dragStopped: cursor=" << cursorX << "," << cursorY
                           << "releaseScreen=" << releaseScreenName << "releaseScreenId=" << releaseScreenId;
@@ -61,9 +63,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const QRect capturedOriginalGeometry = m_originalGeometry;
     const bool capturedSnapCancelled = m_snapCancelled;
     const bool capturedZoneSelectorShown = m_zoneSelectorShown;
-    const int capturedLastCursorX = m_lastCursorX;
-    const int capturedLastCursorY = m_lastCursorY;
-
     // Release on a disabled context: do not snap to overlay zone
     bool useOverlayZone = true;
     int curDesktopDrop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
@@ -85,11 +84,15 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // This is the single point where cross-screen state cleanup happens.
     if (capturedWasSnapped && m_windowTracking && releaseScreen) {
         QString storedScreen = m_windowTracking->service()->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && !Utils::screensMatch(storedScreen, releaseScreenId)) {
+        if (!storedScreen.isEmpty() && storedScreen != releaseScreenId) {
             m_windowTracking->windowUnsnapped(windowId);
-            m_windowTracking->clearPreTileGeometry(windowId);
-            qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap/pre-tile state for" << windowId << "from"
-                                 << storedScreen << "to" << releaseScreenId;
+            // Preserve pre-tile geometry: it holds the correct free-floating dimensions
+            // from the original snap. Clearing it would cause tryStorePreSnapGeometry to
+            // store zone geometry (capturedOriginalGeometry is zone-sized for snapped windows).
+            // The existing entry's screen context may be stale, but validatedPreTileGeometry
+            // handles cross-screen adjustment (clamp + center) when restoring.
+            qCInfo(lcDbusWindow) << "Cross-screen drag: cleared snap state for" << windowId << "from" << storedScreen
+                                 << "to" << releaseScreenId;
         }
     }
 
@@ -98,22 +101,23 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (!capturedSnapCancelled && capturedZoneSelectorShown && m_overlayService
         && m_overlayService->hasSelectedZone()) {
         QString selectedLayoutId = m_overlayService->selectedLayoutId();
-        QScreen* screen = screenAtPoint(capturedLastCursorX, capturedLastCursorY);
+        // Resolve virtual-aware screen ID for the zone selector position
+        auto selectorResolved = resolveScreenAt(QPointF(cursorX, cursorY));
+        QString selectorScreenId = selectorResolved.screenId;
+        QScreen* screen = selectorResolved.qscreen;
 
         // Block entire zone selector snap path when screen is locked for its current mode
         bool selectorScreenLocked = false;
         if (screen && m_settings && m_layoutManager) {
             int curDesktop = m_layoutManager->currentVirtualDesktop();
             QString curActivity = m_layoutManager->currentActivity();
-            QString prefix = QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                 Utils::screenIdentifier(screen), curDesktop, curActivity)))
-                + QStringLiteral(":");
-            selectorScreenLocked =
-                m_settings->isContextLocked(prefix + Utils::screenIdentifier(screen), curDesktop, curActivity);
+            int curMode = static_cast<int>(m_layoutManager->modeForScreen(selectorScreenId, curDesktop, curActivity));
+            selectorScreenLocked = m_settings->isContextLocked(
+                QString::number(curMode) + QStringLiteral(":") + selectorScreenId, curDesktop, curActivity);
         }
         if (screen && !selectorScreenLocked
-            && !isContextDisabled(m_settings, Utils::screenIdentifier(screen), curDesktopDrop, curActivityDrop)) {
-            QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(screen);
+            && !isContextDisabled(m_settings, selectorScreenId, curDesktopDrop, curActivityDrop)) {
+            QRect zoneGeom = m_overlayService->getSelectedZoneGeometry(selectorScreenId);
             if (zoneGeom.isValid()) {
                 snapX = zoneGeom.x();
                 snapY = zoneGeom.y();
@@ -163,23 +167,20 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         // Check lock before applying layout change from drag-drop
                         int layoutChangeDesktop = m_layoutManager->currentVirtualDesktop();
                         QString layoutChangeActivity = m_layoutManager->currentActivity();
-                        QString layoutChangePrefix =
-                            QString::number(static_cast<int>(m_layoutManager->modeForScreen(
-                                Utils::screenIdentifier(screen), layoutChangeDesktop, layoutChangeActivity)))
-                            + QStringLiteral(":");
+                        int lcMode = static_cast<int>(m_layoutManager->modeForScreen(
+                            selectorScreenId, layoutChangeDesktop, layoutChangeActivity));
                         bool screenLocked = m_settings
-                            && m_settings->isContextLocked(layoutChangePrefix + Utils::screenIdentifier(screen),
+                            && m_settings->isContextLocked(QString::number(lcMode) + QStringLiteral(":")
+                                                               + selectorScreenId,
                                                            layoutChangeDesktop, layoutChangeActivity);
-                        Layout* currentLayout =
-                            m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(screen));
+                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {
                             // Hide overlay/selector BEFORE the layout change so signal
                             // handlers (updateZoneSelectorWindow, updateOverlayWindow) find
                             // hidden windows and skip heavy QML property updates / LayerShell
                             // recalculations. All overlay queries are already done above.
                             hideOverlayAndSelector();
-                            m_layoutManager->assignLayout(Utils::screenIdentifier(screen),
-                                                          m_layoutManager->currentVirtualDesktop(),
+                            m_layoutManager->assignLayout(selectorScreenId, m_layoutManager->currentVirtualDesktop(),
                                                           m_layoutManager->currentActivity(), selectedLayout);
                             m_layoutManager->setActiveLayout(selectedLayout);
                         }
@@ -285,10 +286,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             // Use screen-filtered occupancy — without this, zones occupied on
             // other screens appear occupied here when layouts share zone IDs.
             QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            QString emptyJson =
-                GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings, [&occupied](const Zone* z) {
-                    return !occupied.contains(z->id());
-                });
+            QString emptyJson = GeometryUtils::buildEmptyZonesJson(layout, releaseScreenId, releaseScreen, m_settings,
+                                                                   [&occupied](const Zone* z) {
+                                                                       return !occupied.contains(z->id());
+                                                                   });
             if (!emptyJson.isEmpty() && emptyJson != QLatin1String("[]")) {
                 snapAssistRequestedOut = true;
                 emptyZonesJsonOut = emptyJson;

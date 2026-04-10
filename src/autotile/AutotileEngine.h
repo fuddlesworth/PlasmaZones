@@ -145,6 +145,15 @@ public:
     }
 
     /**
+     * @brief Get the last-focused screen (updated by onWindowFocused)
+     * @return Screen ID of the most recently focused screen, or empty string
+     */
+    QString activeScreen() const
+    {
+        return m_activeScreen;
+    }
+
+    /**
      * @brief Set which screens use autotile (derived from layout assignments)
      *
      * Computes added/removed screens, retiles newly-added ones, and emits
@@ -313,6 +322,26 @@ public:
     }
 
     /**
+     * @brief Set callback to query daemon-side window floating state
+     *
+     * Used by toggleWindowFloat to adopt untracked floating windows into autotile.
+     */
+    void setIsWindowFloatingFn(std::function<bool(const QString&)> fn)
+    {
+        m_isWindowFloatingFn = std::move(fn);
+    }
+
+    /**
+     * @brief Adopt an untracked window as floating on an autotile screen
+     *
+     * Used when a window is dragged from a snap screen to an autotile screen.
+     * Adds the window to the TilingState as floating so subsequent
+     * toggleWindowFloat/setWindowFloat calls can find and manage it.
+     * No-op if the window is already tracked or the screen isn't autotile.
+     */
+    void adoptWindowAsFloating(const QString& windowId, const QString& screenId);
+
+    /**
      * @brief Serialize per-context autotile window orders to JSON
      *
      * Forwarded to SettingsBridge. Called by WTA's save cycle via persistence delegate.
@@ -474,6 +503,17 @@ public:
      * @param windowId Window ID that gained focus
      */
     void setFocusedWindow(const QString& windowId);
+
+    /**
+     * @brief Set the active screen hint for keyboard shortcut handlers.
+     *
+     * Called before parameterless engine methods (focusMaster, increaseMasterCount, etc.)
+     * to ensure the engine operates on the correct virtual screen when no focused window
+     * has been tracked yet on that screen.
+     *
+     * @param screenId Resolved screen ID (virtual or physical)
+     */
+    void setActiveScreenHint(const QString& screenId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Split ratio adjustment
@@ -840,8 +880,10 @@ Q_SIGNALS:
      * Fired when screens are removed from autotile.
      *
      * @param windowIds Window IDs no longer under autotile control
+     * @param releasedScreenIds Screen IDs that triggered the release — handlers
+     *        must only process windows whose current WTS screen is in this set
      */
-    void windowsReleasedFromTiling(const QStringList& windowIds);
+    void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
 private Q_SLOTS:
     void onWindowAdded(const QString& windowId);
@@ -854,6 +896,7 @@ private:
     void connectSignals();
     bool insertWindow(const QString& windowId, const QString& screenId);
     void removeWindow(const QString& windowId);
+    void removeSavedFloatingEntry(const QString& windowId);
     void pruneStaleRestores(const QString& appId);
     bool storeWindowMinSize(const QString& windowId, int minWidth, int minHeight);
     bool recalculateLayout(const QString& screenId);
@@ -861,6 +904,11 @@ private:
     bool shouldTileWindow(const QString& windowId) const;
     QString screenForWindow(const QString& windowId) const;
     QRect screenGeometry(const QString& screenId) const;
+
+    /// Check if a screen ID refers to a known (connected) screen.
+    /// Virtual screen IDs are validated via ScreenManager geometry;
+    /// physical IDs via QScreen lookup.
+    bool isKnownScreen(const QString& screenId) const;
 
     /**
      * @brief Construct a TilingStateKey for the current desktop/activity
@@ -1029,6 +1077,7 @@ private:
     // Persistence delegates (KConfig stays in WTA layer)
     std::function<void()> m_persistSaveFn;
     std::function<void()> m_persistLoadFn;
+    std::function<bool(const QString&)> m_isWindowFloatingFn;
 
     QSet<QString> m_autotileScreens;
     QString m_algorithmId;

@@ -10,6 +10,7 @@
 #include "../../src/config/settings.h"
 #include "../../src/core/constants.h"
 #include "../../src/core/utils.h"
+#include "../../src/core/virtualscreen.h"
 
 namespace PlasmaZones {
 
@@ -34,7 +35,15 @@ QList<ScreenInfo> fetchScreens()
         for (const QString& screenName : screenNames) {
             ScreenInfo info;
             info.name = screenName;
-            info.isPrimary = (screenName == primaryScreenName);
+            // Compare physical parent for virtual screens (primary is always a physical ID)
+            QString physName = VirtualScreenId::extractPhysicalId(screenName);
+            // For virtual screens, only the first child (vs:0) is considered primary
+            // to avoid showing multiple "Primary" badges in the monitor selector.
+            if (VirtualScreenId::isVirtual(screenName)) {
+                info.isPrimary = (physName == primaryScreenName && VirtualScreenId::extractIndex(screenName) == 0);
+            } else {
+                info.isPrimary = (physName == primaryScreenName);
+            }
 
             QDBusMessage infoReply =
                 DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getScreenInfo"), {screenName});
@@ -58,6 +67,13 @@ QList<ScreenInfo> fetchScreens()
                         info.width = geom[JsonKeys::Width].toInt();
                         info.height = geom[JsonKeys::Height].toInt();
                     }
+                    if (jsonObj.contains(JsonKeys::Name))
+                        info.connectorName = jsonObj[JsonKeys::Name].toString();
+                    if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
+                        info.isVirtualScreen = true;
+                        info.virtualIndex = VirtualScreenId::extractIndex(screenName);
+                        info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
+                    }
                 } else {
                     info.screenId = screenName;
                 }
@@ -80,6 +96,7 @@ QList<ScreenInfo> fetchScreens()
             info.model = screen->model();
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
+            info.connectorName = screen->name();
             info.screenId = Utils::screenIdentifier(screen);
             result.append(info);
         }
@@ -101,10 +118,50 @@ QVariantList screenInfoListToVariantList(const QList<ScreenInfo>& screens)
             map[QStringLiteral("manufacturer")] = s.manufacturer;
         if (!s.model.isEmpty())
             map[QStringLiteral("model")] = s.model;
-        if (s.width > 0 && s.height > 0)
+        if (s.width > 0 && s.height > 0) {
             map[QStringLiteral("resolution")] = QStringLiteral("%1\u00d7%2").arg(s.width).arg(s.height);
+            map[QStringLiteral("width")] = s.width;
+            map[QStringLiteral("height")] = s.height;
+        }
         if (!s.screenId.isEmpty())
             map[QStringLiteral("screenId")] = s.screenId;
+        if (s.isVirtualScreen) {
+            map[QStringLiteral("isVirtualScreen")] = true;
+            map[QStringLiteral("virtualIndex")] = s.virtualIndex;
+            if (!s.virtualDisplayName.isEmpty())
+                map[QStringLiteral("virtualDisplayName")] = s.virtualDisplayName;
+        }
+        if (!s.connectorName.isEmpty())
+            map[QStringLiteral("connectorName")] = s.connectorName;
+
+        // Pre-computed display label for QML consumers (context menus, selectors, etc.).
+        // Single source of truth — avoids duplicating label-building logic in QML.
+        {
+            QString label;
+            if (s.isVirtualScreen) {
+                QString vsName = s.virtualDisplayName.isEmpty() ? QStringLiteral("VS%1").arg(s.virtualIndex + 1)
+                                                                : s.virtualDisplayName;
+                QStringList parts;
+                if (!s.manufacturer.isEmpty())
+                    parts.append(s.manufacturer);
+                if (!s.model.isEmpty())
+                    parts.append(s.model);
+                QString monitorName = parts.isEmpty() ? s.connectorName : parts.join(QLatin1Char(' '));
+                label = monitorName.isEmpty() ? vsName : vsName + QStringLiteral(" \u2014 ") + monitorName;
+            } else {
+                QStringList parts;
+                if (!s.manufacturer.isEmpty())
+                    parts.append(s.manufacturer);
+                if (!s.model.isEmpty())
+                    parts.append(s.model);
+                label = parts.isEmpty() ? s.name : parts.join(QLatin1Char(' '));
+            }
+            if (s.width > 0 && s.height > 0) {
+                label += QStringLiteral(" (%1\u00d7%2)").arg(s.width).arg(s.height);
+            }
+            map[QStringLiteral("displayLabel")] = label;
+        }
+
         list.append(map);
     }
 

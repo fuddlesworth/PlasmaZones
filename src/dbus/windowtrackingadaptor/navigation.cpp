@@ -8,7 +8,9 @@
 #include "../../core/geometryutils.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layout.h"
+#include "../../core/screenmanager.h"
 #include "../../core/utils.h"
+#include "../../core/virtualscreen.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -37,8 +39,24 @@ static QString resolveNavScreen(const WindowTrackingAdaptor* adaptor, const QStr
     QString zoneId = service->zoneForWindow(windowId);
     if (!zoneId.isEmpty()) {
         QString storedScreen = service->screenAssignments().value(windowId);
-        if (!storedScreen.isEmpty() && Utils::findScreenByIdOrName(storedScreen)) {
-            return storedScreen;
+        if (!storedScreen.isEmpty()) {
+            // For virtual screen IDs, verify the backing physical screen exists
+            if (VirtualScreenId::isVirtual(storedScreen)) {
+                QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+                QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+                if (physScreen) {
+                    // Physical screen exists — verify the virtual screen itself still
+                    // exists (VS config may have changed, e.g. 3 VS → 2 VS)
+                    auto* mgr = ScreenManager::instance();
+                    if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
+                        return storedScreen; // Virtual screen is valid, return as-is
+                    }
+                    // Virtual screen gone (config changed), fall through
+                }
+                // Physical screen gone, fall through to cursor-based resolution
+            } else if (Utils::findScreenByIdOrName(storedScreen)) {
+                return storedScreen;
+            }
         }
     }
     // Cursor screen (primary), active-window screen (fallback)
@@ -80,7 +98,7 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
     QString zoneId = obj.value(QLatin1String("zoneId")).toString();
     QString geometryJson = obj.value(QLatin1String("geometryJson")).toString();
     QString sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
-    QString effectiveScreen = obj.value(QLatin1String("screenName")).toString();
+    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
 
     // Handle snap bookkeeping internally (pre-snap geometry is stored by the
     // effect in slotApplyGeometryRequested via ensurePreSnapGeometryStored)
@@ -226,7 +244,7 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     int y1 = obj.value(QLatin1String("y1")).toInt();
     int w1 = obj.value(QLatin1String("w1")).toInt();
     int h1 = obj.value(QLatin1String("h1")).toInt();
-    QString effectiveScreen = obj.value(QLatin1String("screenName")).toString();
+    QString effectiveScreen = obj.value(QLatin1String("screenId")).toString();
 
     // Move window 1 to target zone
     windowSnapped(windowId1, zoneId1, effectiveScreen);
@@ -234,7 +252,9 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     Q_EMIT applyGeometryRequested(windowId1, GeometryUtils::rectToJson(QRect(x1, y1, w1, h1)), zoneId1,
                                   effectiveScreen);
 
-    // If there's a second window (swap, not move-to-empty), move it to the source zone
+    // If there's a second window (swap, not move-to-empty), move it to the source zone.
+    // Use window2's own stored screen assignment, not window1's, so cross-VS swaps
+    // assign each window to the correct virtual screen.
     QString windowId2 = obj.value(QLatin1String("windowId2")).toString();
     if (!windowId2.isEmpty()) {
         QString zoneId2 = obj.value(QLatin1String("zoneId2")).toString();
@@ -243,10 +263,16 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
         int w2 = obj.value(QLatin1String("w2")).toInt();
         int h2 = obj.value(QLatin1String("h2")).toInt();
 
-        windowSnapped(windowId2, zoneId2, effectiveScreen);
+        // Prefer window2's stored screen assignment; fall back to window1's screen
+        // only if window2 has no recorded assignment.
+        QString screen2 = m_service->screenAssignments().value(windowId2);
+        if (screen2.isEmpty()) {
+            screen2 = effectiveScreen;
+        }
+
+        windowSnapped(windowId2, zoneId2, screen2);
         recordSnapIntent(windowId2, true);
-        Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(QRect(x2, y2, w2, h2)), zoneId2,
-                                      effectiveScreen);
+        Q_EMIT applyGeometryRequested(windowId2, GeometryUtils::rectToJson(QRect(x2, y2, w2, h2)), zoneId2, screen2);
     }
 }
 
@@ -290,17 +316,17 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
 }
 
 /**
- * @brief Process a vector of RotationEntry: call windowSnapped for each, emit applyGeometriesBatch.
+ * @brief Process a vector of ZoneAssignmentEntry: call windowSnapped for each, emit applyGeometriesBatch.
  *
  * Shared by rotate, resnap, and snap-all. Handles bookkeeping (zone assignment,
  * floating state clear, snap intent recording) on the daemon side so the effect
  * only needs to apply geometries.
  *
- * @param entries Rotation/resnap entries to process
+ * @param entries Zone assignment entries to process
  * @param action Action name for the applyGeometriesBatch signal ("rotate", "resnap", "snap_all")
  * @return true if entries were processed and signal emitted
  */
-static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<RotationEntry>& entries,
+static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<ZoneAssignmentEntry>& entries,
                                 const QString& action)
 {
     if (entries.isEmpty()) {
@@ -313,13 +339,33 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Ro
             adaptor->windowUnsnapped(entry.windowId);
             adaptor->clearPreTileGeometry(entry.windowId);
         } else {
-            // Detect screen from zone geometry center
+            // Detect screen from zone geometry center (virtual-screen-aware).
+            // effectiveScreenAt() already checks both virtual and physical screen
+            // geometries, so no separate effectiveScreenIds iteration is needed.
             QString screenId;
             QPoint center = entry.targetGeometry.center();
-            for (QScreen* screen : QGuiApplication::screens()) {
-                if (screen->geometry().contains(center)) {
-                    screenId = Utils::screenIdentifier(screen);
-                    break;
+            auto* mgr = ScreenManager::instance();
+            if (mgr) {
+                screenId = mgr->effectiveScreenAt(center);
+            }
+            if (screenId.isEmpty()) {
+                // Last resort: no ScreenManager or point not in any effective screen.
+                // If the physical screen has virtual screens, resolve to the correct one.
+                for (QScreen* screen : QGuiApplication::screens()) {
+                    if (screen->geometry().contains(center)) {
+                        QString physId = Utils::screenIdentifier(screen);
+                        if (!VirtualScreenId::isVirtual(screenId)) {
+                            if (mgr && mgr->hasVirtualScreens(physId)) {
+                                QString vsId = mgr->effectiveScreenAt(center);
+                                if (!vsId.isEmpty()) {
+                                    screenId = vsId;
+                                    break;
+                                }
+                            }
+                        }
+                        screenId = physId;
+                        break;
+                    }
                 }
             }
             // Fallback: use cursor/active screen if geometry doesn't resolve to a screen
@@ -330,12 +376,16 @@ static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<Ro
                     screenId = adaptor->lastActiveScreenName();
                 }
             }
-            adaptor->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
+            if (entry.targetZoneIds.size() > 1) {
+                adaptor->windowSnappedMultiZone(entry.windowId, entry.targetZoneIds, screenId);
+            } else {
+                adaptor->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
+            }
         }
     }
 
     // Serialize and emit batch for effect to apply geometries
-    QString batchJson = GeometryUtils::serializeRotationEntries(entries);
+    QString batchJson = GeometryUtils::serializeZoneAssignments(entries);
     Q_EMIT adaptor->applyGeometriesBatch(batchJson, action);
     return true;
 }
@@ -344,11 +394,11 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
 {
     qCDebug(lcDbusWindow) << "rotateWindowsInLayout: clockwise=" << clockwise << "screen=" << screenId;
 
-    QVector<RotationEntry> entries = m_service->calculateRotation(clockwise, screenId);
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateRotation(clockwise, screenId);
 
     if (entries.isEmpty()) {
         // Emit feedback for empty rotation (mirrors SnapEngine::rotateWindows logic)
-        auto* layout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdForName(screenId));
+        auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout) {
             Q_EMIT navigationFeedback(false, QStringLiteral("rotate"), QStringLiteral("no_active_layout"), QString(),
                                       QString(), screenId);
@@ -399,7 +449,7 @@ void WindowTrackingAdaptor::resnapToNewLayout()
 {
     qCDebug(lcDbusWindow) << "resnapToNewLayout";
 
-    QVector<RotationEntry> entries = m_service->calculateResnapFromPreviousLayout();
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromPreviousLayout();
 
     if (entries.isEmpty()) {
         auto* layout = m_layoutManager->activeLayout();
@@ -425,7 +475,7 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     qCDebug(lcDbusWindow) << "resnapCurrentAssignments: screen="
                           << (screenFilter.isEmpty() ? QStringLiteral("all") : screenFilter);
 
-    QVector<RotationEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
 
     if (entries.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
@@ -442,7 +492,7 @@ void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileW
 
     if (m_snapEngine) {
         // Use SnapEngine's fallback logic (autotile order → current assignments)
-        QVector<RotationEntry> entries =
+        QVector<ZoneAssignmentEntry> entries =
             m_snapEngine->calculateResnapEntriesFromAutotileOrder(autotileWindowOrder, screenId);
         if (!entries.isEmpty()) {
             processBatchEntries(this, entries, QStringLiteral("resnap"));
@@ -485,15 +535,21 @@ void WindowTrackingAdaptor::handleBatchedResnap(const QString& resnapData)
         return;
     }
 
-    // Deserialize RotationEntry array
-    QVector<RotationEntry> entries;
+    // Deserialize ZoneAssignmentEntry array
+    QVector<ZoneAssignmentEntry> entries;
     const QJsonArray arr = doc.array();
     for (const QJsonValue& val : arr) {
         QJsonObject obj = val.toObject();
-        RotationEntry entry;
+        ZoneAssignmentEntry entry;
         entry.windowId = obj.value(QLatin1String("windowId")).toString();
         entry.targetZoneId = obj.value(QLatin1String("targetZoneId")).toString();
         entry.sourceZoneId = obj.value(QLatin1String("sourceZoneId")).toString();
+        // Deserialize multi-zone IDs (for zone-spanning windows)
+        const QJsonArray zoneIdsArr = obj.value(QLatin1String("targetZoneIds")).toArray();
+        if (!zoneIdsArr.isEmpty()) {
+            for (const QJsonValue& v : zoneIdsArr)
+                entry.targetZoneIds.append(v.toString());
+        }
         entry.targetGeometry =
             QRect(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
                   obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());

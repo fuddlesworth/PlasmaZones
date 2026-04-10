@@ -5,6 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include "../core/virtualscreen.h"
 #include "configdefaults.h"
 #include "iconfigbackend.h"
 #include <memory>
@@ -1137,6 +1138,12 @@ public:
     void setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity,
                           bool locked) override;
 
+    // Virtual screen configuration
+    QHash<QString, VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs);
+    void setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+    VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+
     // Rendering (ISettings)
     QString renderingBackend() const override
     {
@@ -1503,6 +1510,7 @@ Q_SIGNALS:
     void fillOnDropEnabledChanged();
     void fillOnDropModifierChanged();
     void filterLayoutsByAspectRatioChanged();
+    void virtualScreenConfigsChanged();
 
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1574,6 +1582,7 @@ private:
     void loadShortcutConfig(IConfigBackend* backend);
     void loadAutotilingConfig(IConfigBackend* backend);
     void loadEditorConfig(IConfigBackend* backend);
+    void loadVirtualScreenConfigs(IConfigBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
     void saveActivationConfig(IConfigBackend* backend);
@@ -1586,6 +1595,7 @@ private:
     void saveShortcutConfig(IConfigBackend* backend);
     void saveAutotilingConfig(IConfigBackend* backend);
     void saveEditorConfig(IConfigBackend* backend);
+    void saveVirtualScreenConfigs(IConfigBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
@@ -1690,6 +1700,9 @@ private:
     int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
     bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
     int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+
+    // Virtual screen configurations (physicalScreenId -> config)
+    QHash<QString, VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

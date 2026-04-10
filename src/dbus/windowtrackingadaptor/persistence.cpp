@@ -95,7 +95,11 @@ bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId,
         return false;
     }
 
-    auto geo = m_service->validatedPreTileGeometry(windowId);
+    QString screenId;
+    if (m_service) {
+        screenId = m_service->screenAssignments().value(windowId);
+    }
+    auto geo = m_service->validatedPreTileGeometry(windowId, screenId);
     if (!geo) {
         return false;
     }
@@ -114,10 +118,26 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     }
 
     QRect geometry(x, y, width, height);
-    for (QScreen* screen : Utils::allScreens()) {
-        QRect intersection = screen->geometry().intersected(geometry);
-        if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
-            return true;
+    // Use effective screen IDs (virtual if subdivided) for correct geometry checks
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QRect screenGeom = mgr->screenGeometry(sid);
+            if (!screenGeom.isValid()) {
+                continue;
+            }
+            QRect intersection = screenGeom.intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
+        }
+    } else {
+        // Fallback: no ScreenManager, use physical screens
+        for (QScreen* screen : Utils::allScreens()) {
+            QRect intersection = screen->geometry().intersected(geometry);
+            if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
+                return true;
+            }
         }
     }
     return false;
@@ -145,6 +165,27 @@ QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
 
     qCDebug(lcDbusWindow) << "Returning updated geometries for" << windowGeometries.size() << "windows";
     return QString::fromUtf8(QJsonDocument(windowGeometries).toJson(QJsonDocument::Compact));
+}
+
+QString WindowTrackingAdaptor::getPendingRestoreGeometries()
+{
+    QHash<QString, QRect> geometries = m_service->pendingRestoreGeometries();
+    if (geometries.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+
+    QJsonObject result;
+    for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
+        QJsonObject geoObj;
+        geoObj[QLatin1String("x")] = it.value().x();
+        geoObj[QLatin1String("y")] = it.value().y();
+        geoObj[QLatin1String("width")] = it.value().width();
+        geoObj[QLatin1String("height")] = it.value().height();
+        result[it.key()] = geoObj;
+    }
+
+    qCDebug(lcDbusWindow) << "Returning pending restore geometries for" << result.size() << "apps";
+    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }
 
 void WindowTrackingAdaptor::onLayoutChanged()
@@ -212,11 +253,12 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
 
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
-    for (QScreen* screen : Utils::allScreens()) {
-        Layout* layout = m_layoutManager->layoutForScreen(Utils::screenIdentifier(screen), currentDesktop,
-                                                          m_layoutManager->currentActivity());
+    // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
+    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    for (const QString& sid : effectiveIds) {
+        Layout* layout = m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
-            return Utils::screenIdentifier(screen);
+            return sid;
         }
     }
 
@@ -230,13 +272,39 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!zone) {
         return QString();
     }
-    for (QScreen* screen : Utils::allScreens()) {
-        QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
-        QRectF normGeom = zone->normalizedGeometry(refGeom);
-        QPoint zoneCenter(refGeom.x() + static_cast<int>(normGeom.center().x() * refGeom.width()),
-                          refGeom.y() + static_cast<int>(normGeom.center().y() * refGeom.height()));
-        if (screen->geometry().contains(zoneCenter)) {
-            return Utils::screenIdentifier(screen);
+    // Use effective screen IDs for virtual screen support
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        for (const QString& sid : mgr->effectiveScreenIds()) {
+            QScreen* screen = mgr->physicalQScreenFor(sid);
+            if (!screen) {
+                continue;
+            }
+            QRect effGeom = mgr->screenGeometry(sid);
+            if (!effGeom.isValid()) {
+                continue;
+            }
+            // Use effGeom consistently for both normalization and containment
+            // so the zone center projection matches the containment bounds.
+            // Using different geometries causes mismatches when available
+            // geometry differs from full geometry.
+            QRectF effGeomF(effGeom);
+            QRectF normGeom = zone->normalizedGeometry(effGeomF);
+            QPoint zoneCenter(effGeom.x() + qRound(normGeom.center().x() * effGeom.width()),
+                              effGeom.y() + qRound(normGeom.center().y() * effGeom.height()));
+            if (effGeom.contains(zoneCenter)) {
+                return sid;
+            }
+        }
+    } else {
+        for (QScreen* screen : Utils::allScreens()) {
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            QRectF normGeom = zone->normalizedGeometry(refGeom);
+            QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
+                              refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
+            if (screen->geometry().contains(zoneCenter)) {
+                return Utils::screenIdentifier(screen);
+            }
         }
     }
     return QString();

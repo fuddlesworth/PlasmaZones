@@ -32,16 +32,16 @@
 #include "../config/iconfigbackend.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
-#include "../dbus/shaderadaptor.h"
-#include "../dbus/compositorbridgeadaptor.h"
-#include "../dbus/controladaptor.h"
 #include "../dbus/overlayadaptor.h"
 #include "../dbus/zonedetectionadaptor.h"
 #include "../dbus/windowtrackingadaptor.h"
-#include "../dbus/screenadaptor.h"
 #include "../dbus/windowdragadaptor.h"
 #include "../dbus/autotileadaptor.h"
 #include "../dbus/snapadaptor.h"
+#include "../dbus/shaderadaptor.h"
+#include "../dbus/compositorbridgeadaptor.h"
+#include "../dbus/screenadaptor.h"
+#include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
@@ -50,8 +50,9 @@
 namespace PlasmaZones {
 
 namespace {
-// Geometry/panel timing (ms) — keep in sync with daemon_autotile.cpp constants
-// Debounce: coalesce rapid geometry changes (multi-screen, panel editor) into one update.
+// Debounce interval (ms): coalesce rapid geometry changes (multi-screen, panel editor) into one update.
+// Conceptually distinct from DELAYED_PANEL_REQUERY_MS in autotile.cpp (which schedules a
+// follow-up panel geometry requery after the debounced update completes).
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 } // anonymous namespace
 
@@ -389,6 +390,9 @@ bool Daemon::init()
             if (wta)
                 wta->loadState();
         });
+    m_autotileEngine->setIsWindowFloatingFn([wta = QPointer(m_windowTrackingAdaptor)](const QString& windowId) -> bool {
+        return wta && wta->service() && wta->service()->isWindowFloating(windowId);
+    });
 
     // Wire window order serialization delegates so WTA includes autotile window
     // orders in its save/load cycle (analogous to WindowZoneAssignmentsFull for snap mode)
@@ -427,56 +431,61 @@ bool Daemon::init()
     // save completes (all setAssignmentEntry + notifyReload finished), so all
     // assignments and settings are fully committed. Separated from settingsChanged
     // handler to avoid feedback loops with autotile/snapping transitions.
-    connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this]() {
-        if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
-            return;
+    connect(
+        m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this, [this](const QSet<QString>& changedScreenIds) {
+            if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+                return;
 
-        const int desktop = currentDesktop();
-        const QString activity = currentActivity();
+            const int desktop = currentDesktop();
+            const QString activity = currentActivity();
 
-        // Collect autotile screens and per-screen OSD data in one pass
-        QSet<QString> autotileScreens;
-        struct ScreenOsd
-        {
-            QString screenId;
-            bool isAutotile;
-            QString algoId;
-        };
-        QVector<ScreenOsd> osdEntries;
-        for (QScreen* screen : m_screenManager->screens()) {
-            const QString screenId = Utils::screenIdentifier(screen);
-            const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-            if (LayoutId::isAutotile(assignmentId)) {
-                autotileScreens.insert(screenId);
-                osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
-            } else {
-                osdEntries.append({screenId, false, {}});
+            // Collect autotile screens and per-screen OSD data in one pass
+            QSet<QString> autotileScreens;
+            struct ScreenOsd
+            {
+                QString screenId;
+                bool isAutotile;
+                QString algoId;
+            };
+            QVector<ScreenOsd> osdEntries;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                if (LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
+                }
+                // Only show OSD for screens that actually changed
+                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
+                    if (autotileScreens.contains(screenId)) {
+                        osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
+                    } else {
+                        osdEntries.append({screenId, false, {}});
+                    }
+                }
             }
-        }
 
-        // Resnap snapping-mode screens (autotile screens excluded)
-        // Suppress all resnap/retile navigation OSD feedback from this batch.
-        // The counter is decremented per feedback event (one per screen that has
-        // resnapped windows). Set it to the screen count to cover all of them.
-        m_suppressResnapOsd = m_screenManager->screens().size();
-        m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens);
-        m_snapEngine->resnapToNewLayout();
+            // Resnap only the snapping-mode screens whose assignments actually changed.
+            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // screens whose layout didn't change (prevents flicker on unrelated VS).
+            m_suppressResnapOsd = osdEntries.size();
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_snapEngine->resnapToNewLayout();
 
-        // Show OSD for all screens — use locked OSD variant when context is locked
-        for (const auto& osd : std::as_const(osdEntries)) {
-            int mode = osd.isAutotile ? 1 : 0;
-            if (isCurrentContextLockedForMode(osd.screenId, mode)) {
-                showLockedPreviewOsd(osd.screenId);
-            } else if (osd.isAutotile) {
-                if (!osd.algoId.isEmpty())
-                    showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
-            } else {
-                Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
-                if (layout)
-                    showLayoutOsd(layout, osd.screenId);
+            // Show OSD for changed screens — use locked OSD variant when context is locked
+            for (const auto& osd : std::as_const(osdEntries)) {
+                int mode = osd.isAutotile ? 1 : 0;
+                if (isCurrentContextLockedForMode(osd.screenId, mode)) {
+                    showLockedPreviewOsd(osd.screenId);
+                } else if (osd.isAutotile) {
+                    if (!osd.algoId.isEmpty())
+                        showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                } else {
+                    Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    if (layout)
+                        showLayoutOsd(layout, osd.screenId);
+                }
             }
-        }
-    });
+        });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();
@@ -581,6 +590,11 @@ void Daemon::start()
 
     finalizeStartup();
 
+    // Migrate window screen assignments from physical to virtual IDs.
+    // Must run AFTER finalizeStartup() which loads WTA state — otherwise
+    // the migration finds no windows to migrate.
+    migrateStartupScreenAssignments();
+
     m_running = true;
     // NOTE: daemonReady() is emitted by finalizeStartup() — do NOT emit again here.
 }
@@ -593,7 +607,7 @@ void Daemon::stop()
 
     // Stop pending timers to prevent callbacks during shutdown
     m_geometryUpdateTimer.stop();
-    m_pendingGeometryUpdates.clear();
+    m_geometryUpdatePending = false;
 
     // Disconnect scripted algorithm loader to prevent file watcher events during teardown
     if (m_scriptedAlgorithmLoader) {

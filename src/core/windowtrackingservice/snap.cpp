@@ -10,7 +10,9 @@
 #include "../zone.h"
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
+#include "../virtualscreen.h"
 #include "../utils.h"
+#include "../screenmanager.h"
 #include "../logging.h"
 #include <QScreen>
 #include <QSet>
@@ -52,8 +54,9 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Validate that the target screen exists (may be connector name or screen ID)
-        QScreen* screen = Utils::findScreenByIdOrName(effectiveScreen);
+        // Validate that the target screen exists. Use ScreenManager::resolvePhysicalScreen
+        // which properly handles virtual screen IDs (resolving to backing QScreen*).
+        QScreen* screen = ScreenManager::resolvePhysicalScreen(effectiveScreen);
         if (!screen) {
             qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                            << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
@@ -99,8 +102,8 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
                 return result;
             }
         } else {
-            qCDebug(lcCore) << "calculateSnapToAppRule:" << windowClass << "no match in layout"
-                            << currentLayout->name() << "(" << currentLayout->appRules().size() << "rules)";
+            qCDebug(lcCore) << "calculateSnapToAppRule:" << windowClass << "no match in layout" << currentLayout->name()
+                            << "(" << currentLayout->appRules().size() << "rules)";
         }
     } else {
         qCDebug(lcCore) << "calculateSnapToAppRule: no layout for screen" << windowScreenName;
@@ -114,8 +117,20 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         checkedLayouts.insert(currentLayout->id());
     }
 
-    for (QScreen* screen : Utils::allScreens()) {
-        QString screenId = Utils::screenIdentifier(screen);
+    // Build a unified list of screen IDs from either effective screens (includes
+    // virtual screens) or physical screens as fallback, then use a single loop.
+    QStringList screenIds;
+    auto* smgr = ScreenManager::instance();
+    if (smgr) {
+        screenIds = smgr->effectiveScreenIds();
+    } else {
+        const auto screens = Utils::allScreens();
+        for (auto* s : screens) {
+            screenIds.append(Utils::screenIdentifier(s));
+        }
+    }
+
+    for (const QString& screenId : std::as_const(screenIds)) {
         if (Utils::screensMatch(screenId, windowScreenName)) {
             continue;
         }
@@ -172,9 +187,13 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
         return SnapResult::noSnap();
     }
 
+    // Validate virtual screen still exists — configuration may have changed since last snap.
+    // Fall back to physical screen ID if the virtual screen was removed.
+    QString effectiveScreenId = resolveEffectiveScreenId(m_lastUsedScreenId);
+
     // Don't cross-screen snap
-    if (!windowScreenId.isEmpty() && !m_lastUsedScreenId.isEmpty()
-        && !Utils::screensMatch(windowScreenId, m_lastUsedScreenId)) {
+    if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
+        && !Utils::screensMatch(windowScreenId, effectiveScreenId)) {
         return SnapResult::noSnap();
     }
 
@@ -187,7 +206,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Calculate geometry
-    QRect geo = zoneGeometry(m_lastUsedZoneId, m_lastUsedScreenId);
+    QRect geo = zoneGeometry(m_lastUsedZoneId, effectiveScreenId);
     if (!geo.isValid()) {
         return SnapResult::noSnap();
     }
@@ -197,7 +216,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     result.geometry = geo;
     result.zoneId = m_lastUsedZoneId;
     result.zoneIds = QStringList{m_lastUsedZoneId};
-    result.screenId = m_lastUsedScreenId;
+    result.screenId = effectiveScreenId;
     return result;
 }
 
@@ -230,8 +249,10 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
         return SnapResult::noSnap();
     }
 
-    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution
-    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId);
+    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution.
+    // Pass current desktop filter so zones occupied on other desktops aren't counted.
+    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId, desktopFilter);
     if (emptyZoneId.isEmpty()) {
         qCDebug(lcCore) << "snapToEmptyZone: no empty zone on" << windowScreenId;
         return SnapResult::noSnap();
@@ -298,7 +319,15 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         return SnapResult::noSnap();
     }
     QString zoneId = zoneIds.first(); // Primary zone for validation
+    // Use stored screen from the pending restore entry, falling back to the caller's
+    // screenId. If both are empty, resolveEffectiveScreenId returns it unchanged and
+    // downstream resolveZoneGeometry falls back to the primary screen via
+    // ScreenManager::resolvePhysicalScreen.
     QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
+
+    // E7: Validate virtual screen still exists — configuration may have changed since save.
+    // Fall back to physical screen ID if the virtual screen was removed.
+    savedScreen = resolveEffectiveScreenId(savedScreen);
 
     // BUG FIX: Verify layout context matches before restoring
     // Without this check, windows would restore even if the current layout is different
@@ -348,12 +377,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     }
 
     // Calculate geometry (use combined geometry for multi-zone)
-    QRect geo;
-    if (zoneIds.size() > 1) {
-        geo = multiZoneGeometry(zoneIds, savedScreen);
-    } else {
-        geo = zoneGeometry(zoneId, savedScreen);
-    }
+    QRect geo = resolveZoneGeometry(zoneIds, savedScreen);
 
     // Zone-number fallback: zone UUIDs may have changed after layout edit.
     // Re-resolve layout for this screen and look up by zone number instead.
@@ -369,8 +393,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                         fallbackIds.append(z->id().toString());
                 }
                 if (!fallbackIds.isEmpty()) {
-                    geo = (fallbackIds.size() > 1) ? multiZoneGeometry(fallbackIds, savedScreen)
-                                                   : zoneGeometry(fallbackIds.first(), savedScreen);
+                    geo = resolveZoneGeometry(fallbackIds, savedScreen);
                     if (geo.isValid()) {
                         zoneId = fallbackIds.first();
                         zoneIds = fallbackIds;
@@ -422,16 +445,22 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
 
 bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
 {
-    // When a user explicitly snaps a window, clear any stale pending assignment
-    // from a previous session. This prevents the window from restoring to the
-    // wrong zone if it's closed and reopened.
+    // When a user explicitly snaps a window, clear ONE stale pending assignment
+    // from a previous session (FIFO, mirroring consumePendingAssignment). Only the
+    // first entry is removed so multi-instance apps retain entries for other windows.
     QString appId = Utils::extractAppId(windowId);
-    bool hadPending = m_pendingRestoreQueues.remove(appId) > 0;
-    if (hadPending) {
-        qCDebug(lcCore) << "Cleared stale pending assignments for" << appId;
-        scheduleSaveState();
+    auto it = m_pendingRestoreQueues.find(appId);
+    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
+        return false;
     }
-    return hadPending;
+    it->removeFirst();
+    if (it->isEmpty()) {
+        m_pendingRestoreQueues.erase(it);
+    }
+    qCDebug(lcCore) << "Cleared one stale pending assignment for" << appId
+                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    scheduleSaveState();
+    return true;
 }
 
 void WindowTrackingService::markWindowReported(const QString& windowId)

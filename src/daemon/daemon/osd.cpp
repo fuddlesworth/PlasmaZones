@@ -48,8 +48,9 @@ void Daemon::showOverlay()
         const auto& autotileScreens = m_autotileEngine->autotileScreens();
         if (!autotileScreens.isEmpty()) {
             bool allAutotile = true;
-            for (QScreen* screen : m_screenManager->screens()) {
-                if (!autotileScreens.contains(Utils::screenIdentifier(screen))) {
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                if (!autotileScreens.contains(screenId)) {
                     allAutotile = false;
                     break;
                 }
@@ -138,7 +139,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
         const QString resolvedId = Utils::screenIdForName(screenId);
         Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
-            m_overlayService->showLockedLayoutOsd(layout, screenId);
+            m_overlayService->showLockedLayoutOsd(layout, resolvedId.isEmpty() ? screenId : resolvedId);
             return;
         }
     }
@@ -271,15 +272,6 @@ void Daemon::showAlgorithmOsdDeferred(const QString& algorithmId, const QString&
     });
 }
 
-void Daemon::connectToKWinScript()
-{
-    // The KWin script will call us via D-Bus
-    // We just need to be ready to receive calls
-
-    // Monitor for KWin script connection
-    // The script will call getActiveLayout() on startup
-}
-
 void Daemon::updateLayoutFilter()
 {
     updateLayoutFilterForScreen(QString());
@@ -307,9 +299,9 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
                 manualActive = true;
             }
         } else {
-            // Global filter: union of all screens
-            for (QScreen* screen : m_screenManager->screens()) {
-                const QString screenId = Utils::screenIdentifier(screen);
+            // Global filter: union of all effective screens (includes virtual screens)
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
                 if (LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
@@ -347,12 +339,17 @@ void Daemon::syncModeFromAssignments()
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
     // Without this, layout cycling uses the old desktop's current index.
     if (m_unifiedLayoutController) {
-        QScreen* focusedScreen = m_windowTrackingAdaptor ? resolveShortcutScreen(m_windowTrackingAdaptor) : nullptr;
-        if (!focusedScreen && !m_screenManager->screens().isEmpty()) {
-            focusedScreen = m_screenManager->screens().first();
+        QString focusedScreenId =
+            m_windowTrackingAdaptor ? resolveShortcutScreenId(m_windowTrackingAdaptor) : QString();
+        if (focusedScreenId.isEmpty()) {
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            if (!effectiveIds.isEmpty()) {
+                focusedScreenId = effectiveIds.first();
+            } else if (!m_screenManager->screens().isEmpty()) {
+                focusedScreenId = Utils::screenIdentifier(m_screenManager->screens().first());
+            }
         }
-        if (focusedScreen) {
-            const QString focusedScreenId = Utils::screenIdentifier(focusedScreen);
+        if (!focusedScreenId.isEmpty()) {
             const QString focusedAssignmentId =
                 m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
             m_unifiedLayoutController->setCurrentScreenName(focusedScreenId);
@@ -380,8 +377,8 @@ void Daemon::syncModeFromAssignments()
         }
 
         // Update ModeTracker context to reflect this desktop
-        if (m_modeTracker && focusedScreen) {
-            m_modeTracker->setContext(Utils::screenIdentifier(focusedScreen), desktop, activity);
+        if (m_modeTracker && !focusedScreenId.isEmpty()) {
+            m_modeTracker->setContext(focusedScreenId, desktop, activity);
         }
     }
 
@@ -399,11 +396,21 @@ void Daemon::showDesktopSwitchOsd(int desktop, const QString& activity)
         || !m_screenManager) {
         return;
     }
-    // Show OSD on ALL screens — each screen may have a different per-desktop
-    // assignment (autotile vs snapping, different layouts/algorithms).
+    showOsdForAllScreens(desktop, activity);
+}
+
+void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
+{
+    if (!m_layoutManager || !m_screenManager) {
+        return;
+    }
+    // Show OSD on ALL effective screens — each screen may have a different
+    // per-desktop assignment (autotile vs snapping, different layouts/algorithms).
+    // Uses effectiveScreenIds() so virtual screens each get their own OSD
+    // showing the correct per-VS layout/algorithm assignment.
     // Screens where PlasmaZones is disabled show a "disabled" OSD instead.
-    for (QScreen* screen : m_screenManager->screens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
         const DisabledReason why = contextDisabledReason(m_settings.get(), screenId, desktop, activity);
         if (why != DisabledReason::NotDisabled) {
             showContextDisabledOsd(screenId, desktop, activity, why);
@@ -437,17 +444,17 @@ QString Daemon::currentActivity() const
 bool Daemon::isCurrentContextLocked(const QString& screenId) const
 {
     // Check both snapping and tiling locks (mode-agnostic check)
-    return m_settings
-        && (m_settings->isContextLocked(QStringLiteral("0:") + screenId, currentDesktop(), currentActivity())
-            || m_settings->isContextLocked(QStringLiteral("1:") + screenId, currentDesktop(), currentActivity()));
+    if (!m_settings)
+        return false;
+    return m_settings->isContextLocked(Utils::contextLockKey(0, screenId), currentDesktop(), currentActivity())
+        || m_settings->isContextLocked(Utils::contextLockKey(1, screenId), currentDesktop(), currentActivity());
 }
 
 bool Daemon::isCurrentContextLockedForMode(const QString& screenId, int mode) const
 {
     if (!m_settings)
         return false;
-    QString prefix = QString::number(mode) + QStringLiteral(":");
-    return m_settings->isContextLocked(prefix + screenId, currentDesktop(), currentActivity());
+    return m_settings->isContextLocked(Utils::contextLockKey(mode, screenId), currentDesktop(), currentActivity());
 }
 
 } // namespace PlasmaZones

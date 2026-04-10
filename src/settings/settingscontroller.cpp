@@ -6,6 +6,7 @@
 #include "version.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include "../core/virtualscreen.h"
 #include "dbusutils.h"
 
 #include "../autotile/AlgorithmRegistry.h"
@@ -64,6 +65,19 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
             return path;
     }
     return QString();
+}
+/// Convert a QVariantMap (from QML virtual screen editor) to a VirtualScreenDef.
+/// Used by both the save path (staging → KConfig) and the D-Bus apply path.
+VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId, int index)
+{
+    VirtualScreenDef def;
+    def.physicalScreenId = physicalScreenId;
+    def.index = index;
+    def.displayName = map.value(QStringLiteral("displayName")).toString();
+    def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
+                        map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
+    def.id = VirtualScreenId::make(physicalScreenId, index);
+    return def;
 }
 } // anonymous namespace
 
@@ -335,6 +349,7 @@ const QSet<QString>& SettingsController::validPageNames()
         QStringLiteral("editor"),
         QStringLiteral("general"),
         QStringLiteral("about"),
+        QStringLiteral("virtualscreens"),
     };
     return pages;
 }
@@ -398,6 +413,7 @@ void SettingsController::load()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedVirtualScreenConfigs.clear();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
     Q_EMIT stagedSnappingOrderChanged();
@@ -420,17 +436,50 @@ void SettingsController::save()
         m_stagedTilingOrder.reset();
     }
 
-    // Save main settings (includes editor settings)
-    m_settings.save();
-
-    // Flush staged tiling quick layout slots to config BEFORE notifyReload
+    // Flush staged tiling quick layout slots to config BEFORE save
     // so the daemon sees them when it reparses
     if (!m_stagedTilingQuickSlots.isEmpty()) {
         for (auto it = m_stagedTilingQuickSlots.constBegin(); it != m_stagedTilingQuickSlots.constEnd(); ++it) {
             m_settings.writeTilingQuickLayoutSlot(it.key(), it.value());
         }
-        m_settings.syncConfig();
         m_stagedTilingQuickSlots.clear();
+    }
+
+    // Persist staged virtual screen configurations to m_settings BEFORE save
+    // so they are written to KConfig on disk, then flush to daemon via D-Bus.
+    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
+        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
+            VirtualScreenConfig vsConfig;
+            vsConfig.physicalScreenId = it.key();
+            if (!it.value().isEmpty()) {
+                for (int i = 0; i < it.value().size(); ++i) {
+                    VirtualScreenDef def = variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
+                    if (!def.isValid()) {
+                        qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
+                                            << "region:" << def.region;
+                        continue;
+                    }
+                    vsConfig.screens.append(def);
+                }
+            }
+            m_settings.setVirtualScreenConfig(it.key(), vsConfig);
+        }
+    }
+
+    // Save main settings (includes editor settings + VS configs persisted above)
+    m_settings.save();
+
+    // Flush staged virtual screen configurations to daemon via D-Bus BEFORE notifyReload
+    // so that virtual screen IDs exist when assignments referencing them are processed.
+    if (!m_stagedVirtualScreenConfigs.isEmpty()) {
+        for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
+            if (it.value().isEmpty()) {
+                removeVirtualScreenConfig(it.key());
+            } else {
+                applyVirtualScreenConfig(it.key(), it.value());
+            }
+        }
+        m_stagedVirtualScreenConfigs.clear();
     }
 
     // Notify daemon to reload KConfig settings (before D-Bus assignment mutations)
@@ -471,6 +520,7 @@ void SettingsController::defaults()
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
     m_stagedTilingQuickSlots.clear();
+    m_stagedVirtualScreenConfigs.clear();
     m_stagedSnappingOrder.reset();
     m_stagedTilingOrder.reset();
     Q_EMIT stagedSnappingOrderChanged();
@@ -644,6 +694,17 @@ void SettingsController::duplicateLayout(const QString& layoutId)
         Q_EMIT layoutOperationFailed(PzI18n::tr("Could not duplicate layout: %1").arg(reply.errorMessage()));
     }
     scheduleLayoutLoad();
+}
+
+QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
+{
+    QVariantMap result;
+    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    if (screen) {
+        result[QStringLiteral("width")] = screen->geometry().width();
+        result[QStringLiteral("height")] = screen->geometry().height();
+    }
+    return result;
 }
 
 void SettingsController::editLayout(const QString& layoutId)
@@ -3072,6 +3133,102 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
     }
 
     return imported;
+}
+
+// ── Virtual screen configuration ──────────────────────────────────────────
+
+QStringList SettingsController::getPhysicalScreens() const
+{
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("getPhysicalScreens"));
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        return reply.arguments().first().toStringList();
+    }
+    return {};
+}
+
+QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    QDBusMessage reply = DaemonDBus::callDaemon(QString(DBus::Interface::Screen),
+                                                QStringLiteral("getVirtualScreenConfig"), {physicalScreenId});
+    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+        QString json = reply.arguments().first().toString();
+        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+        if (doc.isObject()) {
+            QJsonObject root = doc.object();
+            QJsonArray screensArr = root.value(QLatin1String("screens")).toArray();
+            QVariantList result;
+            for (const auto& entry : screensArr) {
+                QJsonObject screenObj = entry.toObject();
+                QJsonObject regionObj = screenObj.value(QLatin1String("region")).toObject();
+                QVariantMap screen;
+                screen[QStringLiteral("displayName")] = screenObj.value(QLatin1String("displayName")).toString();
+                screen[QStringLiteral("x")] = regionObj.value(JsonKeys::X).toDouble();
+                screen[QStringLiteral("y")] = regionObj.value(JsonKeys::Y).toDouble();
+                screen[QStringLiteral("width")] = regionObj.value(JsonKeys::Width).toDouble();
+                screen[QStringLiteral("height")] = regionObj.value(JsonKeys::Height).toDouble();
+                screen[QStringLiteral("index")] = screenObj.value(QLatin1String("index")).toInt();
+                result.append(screen);
+            }
+            return result;
+        }
+    }
+    return {};
+}
+
+void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
+{
+    QJsonObject root;
+    root[QLatin1String("physicalScreenId")] = physicalScreenId;
+
+    QJsonArray screensArr;
+    for (int i = 0; i < screens.size(); ++i) {
+        VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        if (!def.isValid()) {
+            qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
+                                << "region:" << def.region;
+            continue;
+        }
+        QJsonObject screenObj;
+        screenObj[QLatin1String("index")] = def.index;
+        screenObj[QLatin1String("displayName")] = def.displayName;
+        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, def.region.x()},
+                                                         {JsonKeys::Y, def.region.y()},
+                                                         {JsonKeys::Width, def.region.width()},
+                                                         {JsonKeys::Height, def.region.height()}};
+        screensArr.append(screenObj);
+    }
+    root[QLatin1String("screens")] = screensArr;
+
+    QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    DaemonDBus::callDaemon(QString(DBus::Interface::Screen), QStringLiteral("setVirtualScreenConfig"),
+                           {physicalScreenId, json});
+}
+
+void SettingsController::removeVirtualScreenConfig(const QString& physicalScreenId)
+{
+    applyVirtualScreenConfig(physicalScreenId, {});
+}
+
+void SettingsController::stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens)
+{
+    m_stagedVirtualScreenConfigs.insert(physicalScreenId, screens);
+    setNeedsSave(true);
+}
+
+void SettingsController::stageVirtualScreenRemoval(const QString& physicalScreenId)
+{
+    m_stagedVirtualScreenConfigs.insert(physicalScreenId, QVariantList()); // empty = remove
+    setNeedsSave(true);
+}
+
+bool SettingsController::hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_stagedVirtualScreenConfigs.contains(physicalScreenId);
+}
+
+QVariantList SettingsController::getStagedVirtualScreenConfig(const QString& physicalScreenId) const
+{
+    return m_stagedVirtualScreenConfigs.value(physicalScreenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

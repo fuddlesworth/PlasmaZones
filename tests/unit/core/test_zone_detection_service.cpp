@@ -159,14 +159,14 @@ private Q_SLOTS:
         service->assignWindowToZone(QStringLiteral("app:win:123"), zoneIdWithBraces, QString(), 0);
 
         // calculateRotation should handle both formats without error
-        QVector<RotationEntry> result = service->calculateRotation(true);
+        QVector<ZoneAssignmentEntry> result = service->calculateRotation(true);
         Q_UNUSED(result);
 
         // Now try with without-braces format
         service->unassignWindow(QStringLiteral("app:win:123"));
         service->assignWindowToZone(QStringLiteral("app:win:456"), zoneIdWithoutBraces, QString(), 0);
 
-        QVector<RotationEntry> result2 = service->calculateRotation(false);
+        QVector<ZoneAssignmentEntry> result2 = service->calculateRotation(false);
         Q_UNUSED(result2);
     }
 };

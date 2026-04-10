@@ -460,11 +460,35 @@ public:
     PZ_CONFIG_KEY(modifierKey, "Modifier")
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Config Keys — Virtual Screens
+    // The "VirtualScreen:" prefix is intentional — parsing must use
+    // groupName.mid(prefix.size()) to extract the physical screen ID,
+    // NOT split on ':',  because screen IDs themselves may contain colons
+    // (e.g. "BNQ:BenQ PD3220U:serial").
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_KEY(virtualScreenGroupPrefix, "VirtualScreen:")
+    PZ_CONFIG_KEY(virtualScreenCountKey, "count")
+    PZ_CONFIG_KEY(virtualScreenXKey, "x")
+    PZ_CONFIG_KEY(virtualScreenYKey, "y")
+    PZ_CONFIG_KEY(virtualScreenWidthKey, "width")
+    PZ_CONFIG_KEY(virtualScreenHeightKey, "height")
+    PZ_CONFIG_KEY(virtualScreenNameKey, "name")
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Ordering
     // ═══════════════════════════════════════════════════════════════════════════
 
     PZ_CONFIG_KEY(snappingLayoutOrderKey, "SnappingLayoutOrder")
     PZ_CONFIG_KEY(tilingAlgorithmOrderKey, "TilingAlgorithmOrder")
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-Screen Config Group Prefixes
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    PZ_CONFIG_GROUP(zoneSelectorGroupPrefix, "ZoneSelector:")
+    PZ_CONFIG_GROUP(autotileScreenGroupPrefix, "AutotileScreen:")
+    PZ_CONFIG_GROUP(snappingScreenGroupPrefix, "SnappingScreen:")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Legacy v1 key accessors — used ONLY by migration code.

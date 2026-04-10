@@ -46,6 +46,14 @@ add_executable(test_wts_clearfloat core/test_wts_clearfloat.cpp)
 target_link_libraries(test_wts_clearfloat PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_clearfloat COMMAND test_wts_clearfloat)
 
+add_executable(test_wts_virtual_migration core/test_wts_virtual_migration.cpp)
+target_link_libraries(test_wts_virtual_migration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
+
+add_executable(test_wts_crossmode_float core/test_wts_crossmode_float.cpp)
+target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -102,6 +110,12 @@ pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_ord
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# autotile/ — Autotile + Virtual Screen Integration Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_autotile_virtual autotile/test_autotile_virtual.cpp)
+target_compile_definitions(test_autotile_virtual PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile Engine Extended Tests (startup, float, algoswitch, overflow)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_autotile_ext_startup_float autotile/test_autotile_ext_startup_float.cpp)
@@ -145,6 +159,15 @@ target_link_libraries(test_settings_perscreen PRIVATE Qt6::Test Qt6::Core plasma
 add_test(NAME test_settings_perscreen COMMAND test_settings_perscreen)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# config/ — Virtual Screen Settings Tests (save/load round-trip, staged flow)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_settings_virtualscreen config/test_settings_virtualscreen.cpp)
+target_link_libraries(test_settings_virtualscreen PRIVATE Qt6::Test Qt6::Core plasmazones_core)
+add_test(NAME test_settings_virtualscreen COMMAND test_settings_virtualscreen)
+
+pz_add_test(test_virtualscreen_staged config/test_virtualscreen_staged.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # config/ — ConfigDefaults Tests (standalone, no external dependency)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_configdefaults config/test_configdefaults.cpp)
@@ -171,6 +194,19 @@ pz_add_test(test_layout_zones core/test_layout_zones.cpp)
 pz_add_test(test_layoutmanager_persistence core/test_layoutmanager_persistence.cpp)
 pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Virtual Screen Tests (ID utilities, data model, ScreenManager)
+# ═══════════════════════════════════════════════════════════════════════════════
+pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
+pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# core/ — Snap Assist Virtual Screen Tests (screensMatch, buildOccupiedZoneSet)
+# ═══════════════════════════════════════════════════════════════════════════════
+add_executable(test_snap_assist_virtual core/test_snap_assist_virtual.cpp)
+target_link_libraries(test_snap_assist_virtual PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_snap_assist_virtual COMMAND test_snap_assist_virtual)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — LayerSurface + computeLayerSize Tests
@@ -270,11 +306,13 @@ set(_all_tests
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
     test_overflow_manager
     test_geometry_utils_minsizes test_geometry_utils_overlaps test_geometry_utils_bsp
-    test_geometry_utils_serialization test_wts_clearfloat test_snap_engine
+    test_geometry_utils_serialization test_wts_clearfloat test_wts_virtual_migration test_wts_crossmode_float test_snap_engine
     test_settings_core test_settings_validation test_settings_perscreen
+    test_settings_virtualscreen test_virtualscreen_staged
     test_configdefaults test_configbackend_json test_configmigration
     test_layout_core test_layout_zones
     test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
+    test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
     test_layersurface
     test_support_report
     test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service

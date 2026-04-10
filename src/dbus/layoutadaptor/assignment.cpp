@@ -9,6 +9,8 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
+#include "../../core/screenmanager.h"
+#include "../../core/virtualscreen.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
 #include <QJsonDocument>
@@ -36,6 +38,9 @@ int LayoutAdaptor::getCurrentVirtualDesktop()
 }
 
 // Screen Assignments
+// NOTE: Individual assignment methods do not call saveAssignments() directly.
+// LayoutManager auto-persists in assignLayout(), assignLayoutById(),
+// clearAssignment(), setAssignmentEntryDirect(), and the batch setAll*() methods.
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 {
     int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
@@ -76,7 +81,6 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     QString resolvedId = Utils::screenIdForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, 0, QString(), layoutId);
-    m_layoutManager->saveAssignments();
 
     // Update global active layout when assigning to the primary screen (manual layouts only)
     if (layout) {
@@ -92,7 +96,6 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 void LayoutAdaptor::clearAssignment(const QString& screenId)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId));
-    m_layoutManager->saveAssignments();
 }
 
 void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
@@ -129,9 +132,21 @@ QString LayoutAdaptor::getAllScreenAssignments()
     QJsonObject root;
     const int desktopCount = getVirtualDesktopCount();
 
-    for (QScreen* screen : Utils::allScreens()) {
-        QString connectorName = screen->name();
-        QString screenId = Utils::screenIdentifier(screen);
+    // Use effective screen IDs (includes virtual screens when configured)
+    // so the KCM sees one entry per virtual screen, not per physical monitor.
+    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
+
+    for (const QString& screenId : std::as_const(screenIds)) {
+        // Derive connector name for the JSON key (KCM compatibility)
+        // Virtual screens use their full ID directly (e.g., "physId/vs:0");
+        // physical screens use the QScreen connector name for KCM parity.
+        QString connectorName;
+        if (VirtualScreenId::isVirtual(screenId)) {
+            connectorName = screenId;
+        } else {
+            QScreen* physScreen = Utils::findScreenByIdOrName(screenId);
+            connectorName = physScreen ? physScreen->name() : screenId;
+        }
         QJsonObject screenObj;
 
         // Explicit assignment entry with mode, snappingLayout, tilingAlgorithm
@@ -201,7 +216,6 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 
     QString resolvedId = Utils::screenIdForName(screenId);
     m_layoutManager->assignLayoutById(resolvedId, virtualDesktop, QString(), layoutId);
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
@@ -212,7 +226,6 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
 void LayoutAdaptor::clearAssignmentForScreenDesktop(const QString& screenId, int virtualDesktop)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), virtualDesktop, QString());
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "on desktop" << virtualDesktop;
 }
 
@@ -247,13 +260,15 @@ QString LayoutAdaptor::getScreenStates()
     const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
 
-    for (QScreen* screen : Utils::allScreens()) {
-        const QString screenId = Utils::screenIdentifier(screen);
+    // Use effective screen IDs (includes virtual screens when configured)
+    // so the settings app sees one entry per virtual screen, not per physical monitor.
+    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
 
+    for (const QString& screenId : std::as_const(screenIds)) {
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);
 
         QJsonObject obj;
-        obj[QLatin1String("screenName")] = screenId;
+        obj[QLatin1String("screenId")] = screenId;
         obj[QLatin1String("virtualDesktop")] = desktop;
         obj[QLatin1String("activity")] = activity;
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
@@ -297,6 +312,9 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
             // lastIndexOf is correct here because desktop numbers are always the
             // last component (e.g., "DP-2:3"), and screen IDs contain colons
             // (e.g., "DEL:DELL U2722D:115107:3" → last ':' before "3").
+            // Warning: virtual screen IDs (physId/vs:N) also contain ':' — the
+            // numeric guard below may misparse "physId/vs:0" as desktop=0.
+            // This is caught by the virtualDesktop < 1 check on line below.
             sep = it.key().lastIndexOf(QLatin1Char(':'));
             // Guard: verify the desktop part is actually a number, not part of a screen ID
             if (sep > 0) {
@@ -451,7 +469,6 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     m_layoutManager->assignLayoutById(Utils::screenIdForName(screenId), 0, activityId, layoutId);
-    m_layoutManager->saveAssignments();
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
@@ -462,7 +479,6 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 void LayoutAdaptor::clearAssignmentForScreenActivity(const QString& screenId, const QString& activityId)
 {
     m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), 0, activityId);
-    m_layoutManager->saveAssignments();
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "activity" << activityId;
 }
 
@@ -542,32 +558,20 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     m_layoutManager->assignLayoutById(Utils::screenIdForName(screenId), virtualDesktop, activityId, layoutId);
-    m_layoutManager->saveAssignments();
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
 
-    bool affectsCurrentDesktop = (virtualDesktop == 0);
-    bool affectsCurrentActivity = activityId.isEmpty();
-
-    if (m_virtualDesktopManager) {
-        affectsCurrentDesktop = affectsCurrentDesktop || (virtualDesktop == m_virtualDesktopManager->currentDesktop());
-    }
-    if (m_activityManager) {
-        affectsCurrentActivity = affectsCurrentActivity || (activityId == m_activityManager->currentActivity());
-    }
-
     // Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
-    Q_UNUSED(affectsCurrentDesktop)
-    Q_UNUSED(affectsCurrentActivity)
 }
 
 void LayoutAdaptor::clearAssignmentForScreenDesktopActivity(const QString& screenId, int virtualDesktop,
                                                             const QString& activityId)
 {
-    m_layoutManager->clearAssignment(Utils::screenIdForName(screenId), virtualDesktop, activityId);
-    m_layoutManager->saveAssignments();
+    QString resolvedId = Utils::screenIdForName(screenId);
+    m_layoutManager->clearAssignment(resolvedId, virtualDesktop, activityId);
+    m_changedScreenIds.insert(resolvedId);
     qCInfo(lcDbusLayout) << "Cleared assignment for screen" << screenId << "desktop" << virtualDesktop << "activity"
                          << activityId;
 }
@@ -604,6 +608,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
     entry.tilingAlgorithm = tilingAlgorithm;
 
     m_layoutManager->setAssignmentEntryDirect(resolvedId, virtualDesktop, activity, entry);
+    m_changedScreenIds.insert(resolvedId);
 
     qCInfo(lcDbusLayout) << "setAssignmentEntry: screen=" << resolvedId << "desktop=" << virtualDesktop
                          << "activity=" << activity << "mode=" << mode << "snapping=" << snappingLayout
@@ -617,7 +622,9 @@ void LayoutAdaptor::setSaveBatchMode(bool enabled)
 
 void LayoutAdaptor::applyAssignmentChanges()
 {
-    Q_EMIT assignmentChangesApplied();
+    QSet<QString> changed = std::move(m_changedScreenIds);
+    m_changedScreenIds.clear();
+    Q_EMIT assignmentChangesApplied(changed);
 }
 
 } // namespace PlasmaZones

@@ -12,7 +12,6 @@
 #include <QPalette>
 #include <QFile>
 #include <QTextStream>
-#include <QRegularExpression>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -160,6 +159,7 @@ void Settings::load()
     loadBehaviorConfig(m_configBackend);
     loadZoneSelectorConfig(m_configBackend);
     loadPerScreenOverrides(m_configBackend);
+    loadVirtualScreenConfigs(m_configBackend);
 
     // Rendering backend
     {
@@ -280,7 +280,7 @@ void Settings::deletePerScreenGroups(IConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     for (const QString& groupName : allGroups) {
-        if (isPerScreenPrefix(groupName)) {
+        if (isPerScreenPrefix(groupName) || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
             backend->deleteGroup(groupName);
         }
     }
@@ -307,6 +307,11 @@ void Settings::purgeStaleKeys()
         if (isPerScreenPrefix(groupName)) {
             continue;
         }
+        // VirtualScreen: groups are saved separately by saveVirtualScreenConfigs()
+        // and must not be deleted here as a stale root-level group.
+        if (groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+            continue;
+        }
         const int dotIdx = groupName.indexOf(QLatin1Char('.'));
         const QString topLevel = (dotIdx >= 0) ? groupName.left(dotIdx) : groupName;
         if (deleted.contains(topLevel) || preservedGroups.contains(topLevel)) {
@@ -328,6 +333,7 @@ void Settings::save()
     saveBehaviorConfig(m_configBackend);
     saveZoneSelectorConfig(m_configBackend);
     saveAllPerScreenOverrides(m_configBackend);
+    saveVirtualScreenConfigs(m_configBackend);
     saveShortcutConfig(m_configBackend);
     saveAutotilingConfig(m_configBackend);
     {

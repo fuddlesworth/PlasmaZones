@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "utils.h"
+#include "logging.h"
+#include "screenmanager.h"
+#include "virtualscreen.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QDir>
 #include <QFile>
 #include <QHash>
+#include <QPointer>
 
 namespace PlasmaZones {
 namespace Utils {
@@ -26,6 +30,20 @@ static QHash<QString, int>& edidMissCounter()
 {
     static QHash<QString, int> s_counter;
     return s_counter;
+}
+
+// Cache: QScreen* → EDID-based identifier (never changes while screen is connected)
+static QHash<const QScreen*, QString>& screenIdentifierCache()
+{
+    static QHash<const QScreen*, QString> s_cache;
+    return s_cache;
+}
+
+// Reverse cache: EDID identifier → QScreen* (for findScreenByIdOrName slow path)
+static QHash<QString, QPointer<QScreen>>& screenByIdCache()
+{
+    static QHash<QString, QPointer<QScreen>> s_cache;
+    return s_cache;
 }
 
 QString readEdidHeaderSerial(const QString& connectorName)
@@ -98,9 +116,28 @@ void invalidateEdidCache(const QString& connectorName)
     if (connectorName.isEmpty()) {
         edidSerialCache().clear();
         edidMissCounter().clear();
+        screenIdentifierCache().clear();
+        screenByIdCache().clear();
     } else {
         edidSerialCache().remove(connectorName);
         edidMissCounter().remove(connectorName);
+        // Remove the cached identifier for this connector's QScreen
+        auto& idCache = screenIdentifierCache();
+        for (auto it = idCache.begin(); it != idCache.end(); ++it) {
+            if (it.key() && it.key()->name() == connectorName) {
+                idCache.erase(it);
+                break;
+            }
+        }
+        // Remove reverse cache entries pointing to this connector's screen
+        auto& byIdCache = screenByIdCache();
+        for (auto it = byIdCache.begin(); it != byIdCache.end();) {
+            if (it.value().isNull() || it.value()->name() == connectorName) {
+                it = byIdCache.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 }
 
@@ -110,6 +147,13 @@ static QString screenBaseIdentifier(const QScreen* screen)
 {
     if (!screen) {
         return QString();
+    }
+
+    // Cache: QScreen* → EDID identifier (never changes while screen is connected)
+    auto& cache = screenIdentifierCache();
+    auto cacheIt = cache.constFind(screen);
+    if (cacheIt != cache.constEnd()) {
+        return cacheIt.value();
     }
 
     const QString manufacturer = screen->manufacturer();
@@ -139,14 +183,17 @@ static QString screenBaseIdentifier(const QScreen* screen)
     // manufacturer fields (some cheap/generic monitors). This is intentional —
     // the identifier is still unique and stable, and isConnectorName() correctly
     // classifies it as a screen ID (contains ':').
+    QString result;
     if (!serial.isEmpty()) {
-        return manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+        result = manufacturer + QLatin1Char(':') + model + QLatin1Char(':') + serial;
+    } else if (!manufacturer.isEmpty() || !model.isEmpty()) {
+        result = manufacturer + QLatin1Char(':') + model;
+    } else {
+        // Fallback: connector name (virtual displays, some embedded panels)
+        result = screen->name();
     }
-    if (!manufacturer.isEmpty() || !model.isEmpty()) {
-        return manufacturer + QLatin1Char(':') + model;
-    }
-    // Fallback: connector name (virtual displays, some embedded panels)
-    return screen->name();
+    cache.insert(screen, result);
+    return result;
 }
 
 QString screenIdentifier(const QScreen* screen)
@@ -187,23 +234,9 @@ QString screenNameForId(const QString& screenId)
     if (screenId.isEmpty()) {
         return QString();
     }
-    for (QScreen* screen : QGuiApplication::screens()) {
-        if (screenIdentifier(screen) == screenId) {
-            return screen->name();
-        }
-    }
-    // Fallback: if the ID has a "/connector" suffix, return the connector name
-    // only if a screen with that name actually exists
-    int slashPos = screenId.lastIndexOf(QLatin1Char('/'));
-    if (slashPos > 0) {
-        const QString connector = screenId.mid(slashPos + 1);
-        for (QScreen* screen : QGuiApplication::screens()) {
-            if (screen->name() == connector) {
-                return connector;
-            }
-        }
-    }
-    return QString();
+
+    QScreen* screen = findScreenByIdOrName(screenId);
+    return screen ? screen->name() : QString();
 }
 
 bool isConnectorName(const QString& identifier)
@@ -216,16 +249,35 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     if (identifier.isEmpty()) {
         return QGuiApplication::primaryScreen();
     }
+
+    // Virtual screen IDs (e.g. "LG:Model:Serial/vs:0") resolve to their
+    // backing physical QScreen* — strip the "/vs:N" suffix and look up
+    // the physical parent.
+    const QString physId = VirtualScreenId::extractPhysicalId(identifier);
+
     // Fast path: try connector name match first
     for (QScreen* screen : QGuiApplication::screens()) {
-        if (screen->name() == identifier) {
+        if (screen->name() == physId) {
             return screen;
         }
     }
+
+    // Check reverse cache
+    auto& cache = screenByIdCache();
+    auto cacheIt = cache.constFind(physId);
+    if (cacheIt != cache.constEnd()) {
+        QScreen* cached = cacheIt.value().data();
+        if (cached && QGuiApplication::screens().contains(cached)) {
+            return cached;
+        }
+        cache.remove(physId);
+    }
+
     // Try exact screen ID match (only if it looks like a screen ID)
-    if (identifier.contains(QLatin1Char(':'))) {
+    if (physId.contains(QLatin1Char(':'))) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (screenIdentifier(screen) == identifier) {
+            if (screenIdentifier(screen) == physId) {
+                cache.insert(physId, screen); // cache for next time
                 return screen;
             }
         }
@@ -234,20 +286,24 @@ QScreen* findScreenByIdOrName(const QString& identifier)
     // if the identifier contains '/', try matching the connector suffix directly,
     // then fall back to the base ID (for when a previously-duplicate monitor is
     // now the only one connected, so its ID no longer has the suffix).
-    int slashPos = identifier.lastIndexOf(QLatin1Char('/'));
-    if (slashPos > 0) {
+    // Skip this for virtual screen IDs (physId/vs:N) — the slash in those is
+    // the VirtualScreenId separator, not a connector disambiguator.
+    int slashPos = physId.lastIndexOf(QLatin1Char('/'));
+    if (slashPos > 0 && physId == identifier) {
         const QString connectorPart = identifier.mid(slashPos + 1);
         const QString basePart = identifier.left(slashPos);
         // Try connector name from the suffix, but verify the EDID base matches
         // (prevents returning a different monitor that was plugged into the same port)
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screen->name() == connectorPart && screenBaseIdentifier(screen) == basePart) {
+                cache.insert(identifier, screen);
                 return screen;
             }
         }
         // Try base ID match (monitor is now unique, no suffix needed)
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screenIdentifier(screen) == basePart) {
+                cache.insert(identifier, screen);
                 return screen;
             }
         }
@@ -273,6 +329,19 @@ bool screensMatch(const QString& a, const QString& b)
     if (a.isEmpty() || b.isEmpty()) {
         return false;
     }
+
+    // Virtual screen IDs: exact string match was already handled above (a == b).
+    // Different virtual IDs are never equivalent — even if they share the same
+    // physical parent (e.g. "A/vs:0" vs "A/vs:1" are distinct screens).
+    // A physical ID vs a virtual ID is also not a match (the physical screen
+    // was subdivided; the physical ID no longer represents a usable screen).
+    // Note: callers should pass normalized IDs. If a connector name is passed
+    // for one argument and a virtual screen ID for the other, this will return
+    // false — which is the correct behavior since they represent different things.
+    if (VirtualScreenId::isVirtual(a) || VirtualScreenId::isVirtual(b)) {
+        return false;
+    }
+
     // Resolve both to QScreen* — handles connector names and screen IDs transparently
     QScreen* sa = findScreenByIdOrName(a);
     QScreen* sb = findScreenByIdOrName(b);
@@ -288,11 +357,44 @@ void warnDuplicateScreenIds()
     }
     for (auto it = idToConnectors.constBegin(); it != idToConnectors.constEnd(); ++it) {
         if (it.value().size() > 1) {
-            qInfo("PlasmaZones: identical monitors detected for EDID ID \"%s\" (connectors: %s). "
-                  "Using connector-disambiguated IDs for independent layout assignments.",
-                  qPrintable(it.key()), qPrintable(it.value().join(QStringLiteral(", "))));
+            qCInfo(lcScreen) << "Identical monitors detected for EDID ID" << it.key()
+                             << "(connectors:" << it.value().join(QStringLiteral(", ")) << ")."
+                             << "Using connector-disambiguated IDs for independent layout assignments.";
         }
     }
+}
+
+QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
+{
+    auto* mgr = ScreenManager::instance();
+    if (mgr) {
+        QString id = mgr->effectiveScreenAt(pos);
+        if (!id.isEmpty()) {
+            return id;
+        }
+    }
+    QScreen* screen = fallbackScreen;
+    if (!screen) {
+        screen = findScreenAtPosition(pos);
+    }
+    return screen ? screenIdentifier(screen) : QString();
+}
+
+qreal screenAspectRatio(const QString& screenNameOrId)
+{
+    // For virtual screen IDs, use ScreenManager geometry
+    if (VirtualScreenId::isVirtual(screenNameOrId)) {
+        auto* mgr = ScreenManager::instance();
+        if (mgr) {
+            QRect geom = mgr->screenGeometry(screenNameOrId);
+            if (geom.isValid() && geom.height() > 0) {
+                return static_cast<qreal>(geom.width()) / geom.height();
+            }
+        }
+    }
+
+    // Fallback: physical screen lookup
+    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
 }
 
 } // namespace Utils

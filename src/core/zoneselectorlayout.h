@@ -4,6 +4,7 @@
 #pragma once
 
 #include "settings_interfaces.h"
+#include "constants.h"
 #include <QRect>
 #include <QScreen>
 #include <algorithm>
@@ -56,10 +57,10 @@ struct ZoneSelectorLayout
  * based on size mode (Auto/Manual), layout mode (Grid/Horizontal/Vertical),
  * and screen constraints.
  */
-inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
+inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, const QRect& screenGeom,
+                                                    int layoutCount)
 {
     ZoneSelectorLayout layout;
-    const QRect screenGeom = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
     const qreal screenAspectRatio =
         screenGeom.height() > 0 ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
 
@@ -142,6 +143,16 @@ inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& co
     layout.barWidth = layout.containerSideMargin + layout.containerWidth + layout.containerSideMargin;
 
     return layout;
+}
+
+/// Convenience overload: uses QScreen geometry (for physical screens only).
+/// @warning This overload uses the full physical screen geometry.
+/// For virtual screens, use the QRect overload with the virtual screen's geometry instead.
+inline ZoneSelectorLayout computeZoneSelectorLayout(const ZoneSelectorConfig& config, QScreen* screen, int layoutCount)
+{
+    const QRect screenGeom =
+        screen ? screen->geometry() : QRect(0, 0, Defaults::FallbackScreenWidth, Defaults::FallbackScreenHeight);
+    return computeZoneSelectorLayout(config, screenGeom, layoutCount);
 }
 
 } // namespace PlasmaZones

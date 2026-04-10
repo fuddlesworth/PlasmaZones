@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutadaptor.h"
+#include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
 #include "../core/layoutfactory.h"
@@ -15,6 +16,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
+#include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -95,6 +97,10 @@ void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, 
 
 void LayoutAdaptor::setVirtualDesktopManager(VirtualDesktopManager* vdm)
 {
+    if (m_virtualDesktopManager) {
+        disconnect(m_virtualDesktopManager, nullptr, this, nullptr);
+    }
+
     m_virtualDesktopManager = vdm;
     connectVirtualDesktopSignals();
 }
@@ -126,18 +132,7 @@ void LayoutAdaptor::notifyLayoutListChanged()
 
 std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, const QString& operation) const
 {
-    if (id.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty ID";
-        return std::nullopt;
-    }
-
-    auto uuidOpt = Utils::parseUuid(id);
-    if (!uuidOpt) {
-        qCWarning(lcDbusLayout) << "Invalid UUID format for" << operation << ":" << id;
-        return std::nullopt;
-    }
-
-    return uuidOpt;
+    return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
 Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
@@ -158,11 +153,7 @@ Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& oper
 
 bool LayoutAdaptor::validateNonEmpty(const QString& value, const QString& paramName, const QString& operation) const
 {
-    if (value.isEmpty()) {
-        qCWarning(lcDbusLayout) << "Cannot" << operation << "- empty" << paramName;
-        return false;
-    }
-    return true;
+    return DbusHelpers::validateNonEmpty(value, paramName, operation, lcDbusLayout);
 }
 
 std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonString, const QString& operation) const
@@ -374,10 +365,13 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
     layout->setName(name);
 
-    // Auto-detect aspect ratio class from the primary screen
+    // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
-        QRect geo = screen->geometry();
+        const QString primaryId = Utils::screenIdentifier(screen);
+        auto* mgr = ScreenManager::instance();
+        QRect geo =
+            (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
         layout->setAspectRatioClass(ScreenClassification::classify(geo.width(), geo.height()));
     }
 

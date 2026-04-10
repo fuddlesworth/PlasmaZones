@@ -57,7 +57,7 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
     // Query KDE Plasma via D-Bus for panel information (ASYNC to avoid blocking)
     QDBusInterface* plasmaShell =
         new QDBusInterface(s_plasmaShellService, QStringLiteral("/PlasmaShell"), QStringLiteral("org.kde.PlasmaShell"),
-                           QDBusConnection::sessionBus(), this);
+                           QDBusConnection::sessionBus(), nullptr);
 
     if (!plasmaShell->isValid()) {
         delete plasmaShell;
@@ -122,10 +122,11 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
             [this, plasmaShell, fromDelayedRequery](QDBusPendingCallWatcher* w) {
                 QDBusPendingReply<QString> reply = *w;
 
-                // Clear existing panel offsets before parsing new data
-                m_panelOffsets.clear();
-
                 if (reply.isValid()) {
+                    // Clear existing panel offsets before parsing new data.
+                    // Only clear on success so a D-Bus failure doesn't zero out
+                    // all screens' panel offsets with stale/empty data.
+                    m_panelOffsets.clear();
                     QString output = reply.value();
                     qCDebug(lcScreen) << "queryKdePlasmaPanels D-Bus reply=" << output;
 
@@ -183,13 +184,13 @@ void ScreenManager::queryKdePlasmaPanels(bool fromDelayedRequery)
 
                         ScreenPanelOffsets& offsets = m_panelOffsets[connectorName];
                         if (location == QLatin1String("top")) {
-                            offsets.top = totalOffset;
+                            offsets.top = qMax(offsets.top, totalOffset);
                         } else if (location == QLatin1String("bottom")) {
-                            offsets.bottom = totalOffset;
+                            offsets.bottom = qMax(offsets.bottom, totalOffset);
                         } else if (location == QLatin1String("left")) {
-                            offsets.left = totalOffset;
+                            offsets.left = qMax(offsets.left, totalOffset);
                         } else if (location == QLatin1String("right")) {
-                            offsets.right = totalOffset;
+                            offsets.right = qMax(offsets.right, totalOffset);
                         }
                     }
                 } else {

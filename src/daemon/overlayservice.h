@@ -45,6 +45,28 @@ class OverlayService : public IOverlayService
     Q_PROPERTY(bool zoneSelectorVisible READ isZoneSelectorVisible NOTIFY zoneSelectorVisibilityChanged)
 
 public:
+    /**
+     * @brief Per-screen overlay state, grouping window pointers, physical screen
+     * references, and geometry that were previously stored in parallel QHash maps.
+     */
+    struct PerScreenOverlayState
+    {
+        QQuickWindow* overlayWindow = nullptr;
+        QScreen* overlayPhysScreen = nullptr;
+        QRect overlayGeometry;
+        QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
+        QQuickWindow* zoneSelectorWindow = nullptr;
+        QScreen* zoneSelectorPhysScreen = nullptr;
+        /// Intended geometry of the zone selector window. On Wayland LayerShell, QWindow::geometry()
+        /// is unreliable until the compositor acknowledges the surface position. This field stores
+        /// the geometry we requested so hit-testing in updateSelectorPosition() can use it immediately.
+        QRect zoneSelectorGeometry;
+        QQuickWindow* layoutOsdWindow = nullptr;
+        QScreen* layoutOsdPhysScreen = nullptr;
+        QQuickWindow* navigationOsdWindow = nullptr;
+        QScreen* navigationOsdPhysScreen = nullptr;
+    };
+
     explicit OverlayService(QObject* parent = nullptr);
     ~OverlayService() override;
 
@@ -103,7 +125,7 @@ public:
 
     // Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
-    void showZoneSelector(QScreen* screen = nullptr) override;
+    void showZoneSelector(const QString& targetScreenId = QString()) override;
     void hideZoneSelector() override;
     void updateSelectorPosition(int cursorX, int cursorY) override;
     void scrollZoneSelector(int angleDeltaY) override;
@@ -125,6 +147,7 @@ public:
         return m_selectedZoneIndex;
     }
     QRect getSelectedZoneGeometry(QScreen* screen) const override;
+    QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
 
     // Layout OSD (visual preview when switching layouts)
@@ -211,11 +234,26 @@ private:
     void dismissOverlayWindow(QScreen* screen);
     void updateOverlayWindow(QScreen* screen);
     void recreateOverlayWindowsOnTypeMismatch();
+
+    /**
+     * @brief Create/destroy/update overlay windows keyed by screen ID
+     *
+     * Virtual-screen-aware overloads. The screenId can be a physical screen ID
+     * or a virtual screen ID (format "physicalId/vs:N"). The physScreen is the
+     * backing QScreen* for Wayland layer-shell parenting.
+     */
+    void createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry);
+    void destroyOverlayWindow(const QString& screenId);
+    void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
+
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
+    QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
     QVariantList buildLayoutsList(const QString& screenId = QString()) const;
     QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
+    QVariantMap zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen, const QRect& overlayGeometry,
+                                 Layout* layout = nullptr) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain
@@ -223,10 +261,10 @@ private:
      * Tries: per-screen assignment → activeLayout → m_layout
      */
     Layout* resolveScreenLayout(QScreen* screen) const;
+    Layout* resolveScreenLayout(const QString& screenId) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
-    QHash<QScreen*, QQuickWindow*> m_overlayWindows;
-    QHash<QScreen*, QQuickWindow*> m_zoneSelectorWindows;
+    QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
@@ -234,62 +272,70 @@ private:
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;
     bool m_zoneSelectorVisible = false;
-    QScreen* m_currentOverlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only, for #136)
+    bool m_zoneSelectorRecreationPending =
+        false; // Guard against re-entrant showZoneSelector during deferred recreation
+    QString m_currentOverlayScreenId; // Effective screen ID overlay is shown on (single-monitor mode, for #136)
 
     // Zone selector selection tracking
     QString m_selectedLayoutId;
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // Layout OSD windows
-    QHash<QScreen*, QQuickWindow*> m_layoutOsdWindows;
-
-    // Navigation OSD windows
-    QHash<QScreen*, QQuickWindow*> m_navigationOsdWindows;
+    // Layout OSD and Navigation OSD windows are stored in m_screenStates
 
     // Shader preview overlay (editor dialog)
     QQuickWindow* m_shaderPreviewWindow = nullptr;
-    QScreen* m_shaderPreviewScreen = nullptr;
+    QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
+    QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
     // Snap Assist overlay (window picker after snapping)
     QQuickWindow* m_snapAssistWindow = nullptr;
-    QScreen* m_snapAssistScreen = nullptr;
+    QPointer<QScreen> m_snapAssistScreen;
+    QString m_snapAssistScreenId;
     std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
     QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
     QQuickWindow* m_layoutPickerWindow = nullptr;
+    QPointer<QScreen> m_layoutPickerScreen;
+    QString m_layoutPickerScreenId;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
 
     // Persistent 1x1 keep-alive window that prevents Qt from tearing down
     // global Wayland/Vulkan protocol objects when all other windows are destroyed.
-    QQuickWindow* m_keepAliveWindow = nullptr;
+    QPointer<QQuickWindow> m_keepAliveWindow;
 
     // Track screens with failed window creation to prevent log spam
-    QHash<QScreen*, bool> m_navigationOsdCreationFailed;
+    QHash<QString, bool> m_navigationOsdCreationFailed;
     // Deduplicate navigation feedback (prevent duplicate OSDs from Qt signal + D-Bus signal)
     QString m_lastNavigationActionKey; // "action:reason" composite key
+    QString m_lastNavigationScreenId;
     QElapsedTimer m_lastNavigationTime;
 
-    void createZoneSelectorWindow(QScreen* screen);
-    void destroyZoneSelectorWindow(QScreen* screen);
-    void updateZoneSelectorWindow(QScreen* screen);
+    void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
+    void destroyZoneSelectorWindow(const QString& screenId);
+    void updateZoneSelectorWindow(const QString& screenId);
     void showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked);
-    void createLayoutOsdWindow(QScreen* screen);
-    void destroyLayoutOsdWindow(QScreen* screen);
-    void createNavigationOsdWindow(QScreen* screen);
-    void destroyNavigationOsdWindow(QScreen* screen);
+    void createLayoutOsdWindow(const QString& screenId, QScreen* physScreen);
+    void destroyLayoutOsdWindow(const QString& screenId);
+    void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
+    void destroyNavigationOsdWindow(const QString& screenId);
 
-    void createShaderPreviewWindow(QScreen* screen);
+    void destroyIfTypeMismatch(const QString& screenId);
+    void createShaderPreviewWindow(QScreen* screen, const QString& screenId = QString());
     void destroyShaderPreviewWindow();
 
-    void createSnapAssistWindow();
+    /// Destroy all overlay, OSD, zone selector, snap assist, and layout picker windows
+    /// backed by the given physical screen. Used by both virtualScreensChanged and handleScreenRemoved.
+    void destroyAllWindowsForPhysicalScreen(QScreen* screen);
+
+    void createSnapAssistWindow(QScreen* physScreen);
     void destroySnapAssistWindow();
 
-    void createLayoutPickerWindow(QScreen* screen);
+    void createLayoutPickerWindow(QScreen* physScreen);
     void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
@@ -303,7 +349,7 @@ private:
      * The QPA plugin binds the Wayland output once during LayerSurface/platform
      * window construction. Set QWindow::screen() BEFORE the window is shown.
      */
-    static void assertWindowOnScreen(QWindow* window, QScreen* screen);
+    static void assertWindowOnScreen(QWindow* window, QScreen* screen, const QRect& geometry = QRect());
 
     /**
      * @brief Prepare layout OSD window for display
@@ -313,7 +359,7 @@ private:
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, QRect& screenGeom, qreal& aspectRatio,
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
                                 const QString& screenId = QString());
 
     /**
@@ -334,6 +380,7 @@ private:
 
     // Shader support methods
     bool useShaderForScreen(QScreen* screen) const;
+    bool useShaderForScreen(const QString& screenId) const;
     bool anyScreenUsesShader() const;
     bool canUseShaders() const;
     void startShaderAnimation();
@@ -348,7 +395,7 @@ private:
      * This is the common implementation for show() and showAtPosition().
      * Extracts ~100 lines of duplicate code from both methods.
      */
-    void initializeOverlay(QScreen* cursorScreen);
+    void initializeOverlay(QScreen* cursorScreen, const QPoint& cursorPos = QPoint(-1, -1));
 
 private Q_SLOTS:
     // System sleep/resume handler (connected to logind PrepareForSleep signal)
@@ -370,7 +417,7 @@ private:
     // Appended to each configureLayerSurface() scope so KWin sees every
     // new surface as unique, avoiding configure rate-limiting after rapid
     // destroy/recreate cycles on Vulkan.
-    int m_scopeGeneration = 0;
+    uint64_t m_scopeGeneration = 0;
 
     // CAVA audio visualization
     std::unique_ptr<CavaService> m_cavaService;

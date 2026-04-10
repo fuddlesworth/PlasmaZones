@@ -61,6 +61,19 @@ public:
 
     void onWindowClosed(const QString& windowId, const QString& screenId);
     void onDaemonReady();
+
+    /**
+     * @brief Handle autotile drag-to-float: restore border and pre-autotile size
+     *
+     * Called synchronously at drag-stop time. Restores the KWin border (title bar),
+     * clears tiling state, and defers a size-only restore to the next event loop
+     * tick (after KWin finishes the interactive move).
+     *
+     * @param w The window being floated (may be null for cross-screen drops)
+     * @param windowId Stable window identifier
+     * @param screenId Screen the window was tiled on (pre-drag screen)
+     */
+    void handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId);
     void savePreAutotileForDesktopMove(const QString& windowId, const QString& screenId);
     void handleWindowOutputChanged(KWin::EffectWindow* w);
 
@@ -87,6 +100,29 @@ public:
     const QSet<QString>& autotileScreens() const
     {
         return m_autotileScreens;
+    }
+
+    /// Check if a window is tracked by the autotile handler (in m_notifiedWindows).
+    bool isTrackedWindow(const QString& windowId) const
+    {
+        return m_notifiedWindows.contains(windowId);
+    }
+
+    /**
+     * @brief Update the notified screen ID for a tracked window.
+     *
+     * Called after virtual screen config changes re-resolve window screen IDs,
+     * so that slotWindowFrameGeometryChanged does not compare against stale
+     * screen IDs and trigger spurious cross-VS transfers.
+     *
+     * No-op if the window is not in m_notifiedWindowScreens.
+     */
+    void updateNotifiedScreen(const QString& windowId, const QString& newScreenId)
+    {
+        auto it = m_notifiedWindowScreens.find(windowId);
+        if (it != m_notifiedWindowScreens.end()) {
+            it.value() = newScreenId;
+        }
     }
 
     // Border rendering accessors
@@ -142,6 +178,21 @@ public:
     bool shouldInsetForBorder(const QString& windowId, const QRect& geo) const;
     std::optional<QRect> borderZoneGeometry(const QString& windowId) const;
     QVector<QRect> allBorderZoneGeometries() const;
+
+    /**
+     * @brief Extract pre-autotile geometry from one screen and inject into another.
+     *
+     * Used during virtual screen drag transfers where handleWindowOutputChanged
+     * won't fire (same physical monitor). Snapshots the geometry before
+     * onWindowClosed clears it, then injects into the target screen's map
+     * after notifyWindowAdded.
+     *
+     * @param windowId The window being transferred
+     * @param fromScreenId Source screen to extract geometry from
+     * @param toScreenId Target screen to inject geometry into
+     * @return true if geometry was transferred
+     */
+    bool transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId, const QString& toScreenId);
 
     // Invalidate pending stagger timers (call before triggering retile)
     void invalidateStaggerGeneration()

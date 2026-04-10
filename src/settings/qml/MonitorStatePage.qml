@@ -30,6 +30,19 @@ Flickable {
     property var _screenStates: []
     property string _selectedScreen: ""
     property int _revision: 0
+    // Aspect ratio of the currently selected screen (for layout preview).
+    readonly property real _selectedScreenAspectRatio: {
+        if (!_selectedScreen)
+            return 0;
+
+        var screens = settingsController.screens;
+        for (var i = 0; i < screens.length; i++) {
+            if (screens[i].name === _selectedScreen && screens[i].width > 0 && screens[i].height > 0)
+                return screens[i].width / screens[i].height;
+
+        }
+        return 0;
+    }
 
     function _refresh() {
         _screenStates = settingsController.getScreenStates();
@@ -40,10 +53,10 @@ Flickable {
         var target = _selectedScreen;
         // If no screen selected, use first screen
         if (!target && _screenStates.length > 0)
-            target = _screenStates[0].screenName || "";
+            target = _screenStates[0].screenId || "";
 
         for (var i = 0; i < _screenStates.length; i++) {
-            if (_screenStates[i].screenName === target)
+            if (_screenStates[i].screenId === target)
                 return _screenStates[i];
 
         }
@@ -223,6 +236,7 @@ Flickable {
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
                 maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var l = stateView.currentLayout;
                     return l ? i18n("Snapping layout preview: %1", l.name) : i18n("Snapping layout preview");
@@ -247,6 +261,7 @@ Flickable {
                 isSelected: true
                 baseHeight: Kirigami.Units.gridUnit * 14
                 maxThumbnailWidth: Kirigami.Units.gridUnit * 32
+                screenAspectRatio: root._selectedScreenAspectRatio
                 Accessible.name: {
                     var algoId = "autotile:" + stateView.localAlgorithmId;
                     var found = root._findLayout(algoId);

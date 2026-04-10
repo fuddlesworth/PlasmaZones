@@ -79,13 +79,29 @@ constexpr const char* kPerScreenKeys[] = {
     ZoneSelectorConfigKey::TriggerDistance,
 };
 
+// Per-screen override key strings — defined in PerScreenAutotileKey (settings_interfaces.h).
 constexpr const char* kPerScreenAutotileKeys[] = {
-    "AutotileAlgorithm",          "AutotileSplitRatio",    "AutotileSplitRatioStep",     "AutotileMasterCount",
-    "AutotileInnerGap",           "AutotileOuterGap",      "AutotileUsePerSideOuterGap", "AutotileOuterGapTop",
-    "AutotileOuterGapBottom",     "AutotileOuterGapLeft",  "AutotileOuterGapRight",      "AutotileFocusNewWindows",
-    "AutotileSmartGaps",          "AutotileMaxWindows",    "AutotileInsertPosition",     "AutotileFocusFollowsMouse",
-    "AutotileRespectMinimumSize", "AutotileHideTitleBars", "AnimationsEnabled",          "AnimationDuration",
-    "AnimationEasingCurve",
+    PerScreenAutotileKey::Algorithm,
+    PerScreenAutotileKey::SplitRatio,
+    PerScreenAutotileKey::SplitRatioStep,
+    PerScreenAutotileKey::MasterCount,
+    PerScreenAutotileKey::InnerGap,
+    PerScreenAutotileKey::OuterGap,
+    PerScreenAutotileKey::UsePerSideOuterGap,
+    PerScreenAutotileKey::OuterGapTop,
+    PerScreenAutotileKey::OuterGapBottom,
+    PerScreenAutotileKey::OuterGapLeft,
+    PerScreenAutotileKey::OuterGapRight,
+    PerScreenAutotileKey::FocusNewWindows,
+    PerScreenAutotileKey::SmartGaps,
+    PerScreenAutotileKey::MaxWindows,
+    PerScreenAutotileKey::InsertPosition,
+    PerScreenAutotileKey::FocusFollowsMouse,
+    PerScreenAutotileKey::RespectMinimumSize,
+    PerScreenAutotileKey::HideTitleBars,
+    PerScreenAutotileKey::AnimationsEnabled,
+    PerScreenAutotileKey::AnimationDuration,
+    PerScreenAutotileKey::AnimationEasingCurve,
 };
 
 QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& value)
@@ -106,26 +122,25 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::MasterCount)
         return QVariant(
             qBound(ConfigDefaults::autotileMasterCountMin(), value.toInt(), ConfigDefaults::autotileMasterCountMax()));
-    if (k == QLatin1String("InnerGap"))
+    if (k == PerScreenKeys::InnerGap)
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k == QLatin1String("OuterGap") || k.startsWith(QLatin1String("OuterGap")))
+    if (k.startsWith(PerScreenKeys::OuterGap))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
     if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
-    if (k == QLatin1String("InsertPosition"))
+    if (k == PerScreenKeys::InsertPosition)
         return QVariant(qBound(ConfigDefaults::autotileInsertPositionMin(), value.toInt(),
                                ConfigDefaults::autotileInsertPositionMax()));
-    if (k == PerScreenKeys::Algorithm || key == QLatin1String("AnimationEasingCurve"))
+    if (k == PerScreenKeys::Algorithm || k == PerScreenKeys::AnimationEasingCurve)
         return value;
-    if (k == QLatin1String("UsePerSideOuterGap") || k == QLatin1String("FocusNewWindows")
-        || k == QLatin1String("SmartGaps") || k == QLatin1String("FocusFollowsMouse")
-        || k == QLatin1String("RespectMinimumSize") || k == QLatin1String("HideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
+    if (k == PerScreenKeys::UsePerSideOuterGap || k == PerScreenKeys::FocusNewWindows || k == PerScreenKeys::SmartGaps
+        || k == PerScreenKeys::FocusFollowsMouse || k == PerScreenKeys::RespectMinimumSize
+        || k == PerScreenKeys::HideTitleBars || k == PerScreenKeys::AnimationsEnabled)
         return QVariant(value.toBool());
-    if (key == QLatin1String("AnimationDuration"))
+    if (k == PerScreenKeys::AnimationDuration)
         return QVariant(
             qBound(ConfigDefaults::animationDurationMin(), value.toInt(), ConfigDefaults::animationDurationMax()));
     return QVariant();
@@ -133,51 +148,71 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
 
 QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
 {
-    if (key == QLatin1String("AutotileSplitRatio"))
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
-    if (key == QLatin1String("AutotileAlgorithm") || key == QLatin1String("AnimationEasingCurve"))
+    if (key == QLatin1String(PerScreenAutotileKey::SplitRatioStep))
+        return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatioStep()));
+    if (key == QLatin1String(PerScreenAutotileKey::Algorithm)
+        || key == QLatin1String(PerScreenAutotileKey::AnimationEasingCurve))
         return QVariant(group.readString(key));
-    if (key == QLatin1String("AutotileUsePerSideOuterGap") || key == QLatin1String("AutotileFocusNewWindows")
-        || key == QLatin1String("AutotileSmartGaps") || key == QLatin1String("AutotileFocusFollowsMouse")
-        || key == QLatin1String("AutotileRespectMinimumSize") || key == QLatin1String("AutotileHideTitleBars")
-        || key == QLatin1String("AnimationsEnabled"))
-        return QVariant(group.readBool(key, false));
+    if (key == QLatin1String(PerScreenAutotileKey::UsePerSideOuterGap))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileUsePerSideOuterGap()));
+    if (key == QLatin1String(PerScreenAutotileKey::FocusNewWindows))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusNewWindows()));
+    if (key == QLatin1String(PerScreenAutotileKey::SmartGaps))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileSmartGaps()));
+    if (key == QLatin1String(PerScreenAutotileKey::FocusFollowsMouse))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileFocusFollowsMouse()));
+    if (key == QLatin1String(PerScreenAutotileKey::RespectMinimumSize))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileRespectMinimumSize()));
+    if (key == QLatin1String(PerScreenAutotileKey::HideTitleBars))
+        return QVariant(group.readBool(key, ConfigDefaults::autotileHideTitleBars()));
+    if (key == QLatin1String(PerScreenAutotileKey::AnimationsEnabled))
+        return QVariant(group.readBool(key, ConfigDefaults::animationsEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
+// Per-screen snapping override keys — defined in PerScreenSnappingKey (settings_interfaces.h).
 constexpr const char* kPerScreenSnappingKeys[] = {
-    "SnapAssistEnabled",    "ZoneSelectorEnabled",      "ZoneSelectorTriggerDistance",
-    "ZoneSelectorPosition", "ZoneSelectorLayoutMode",   "ZoneSelectorSizeMode",
-    "ZoneSelectorMaxRows",  "ZoneSelectorPreviewWidth", "ZoneSelectorPreviewHeight",
+    PerScreenSnappingKey::SnapAssistEnabled,           PerScreenSnappingKey::ZoneSelectorEnabled,
+    PerScreenSnappingKey::ZoneSelectorTriggerDistance, PerScreenSnappingKey::ZoneSelectorPosition,
+    PerScreenSnappingKey::ZoneSelectorLayoutMode,      PerScreenSnappingKey::ZoneSelectorSizeMode,
+    PerScreenSnappingKey::ZoneSelectorMaxRows,         PerScreenSnappingKey::ZoneSelectorPreviewWidth,
+    PerScreenSnappingKey::ZoneSelectorPreviewHeight,
 };
 
 QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& value)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
+    namespace K = PerScreenSnappingKey;
+    if (key == QLatin1String(K::SnapAssistEnabled) || key == QLatin1String(K::ZoneSelectorEnabled))
         return QVariant(value.toBool());
-    if (key == QLatin1String("ZoneSelectorTriggerDistance"))
-        return QVariant(qBound(10, value.toInt(), 200));
-    if (key == QLatin1String("ZoneSelectorPosition")) {
+    if (key == QLatin1String(K::ZoneSelectorTriggerDistance))
+        return QVariant(
+            qBound(ConfigDefaults::triggerDistanceMin(), value.toInt(), ConfigDefaults::triggerDistanceMax()));
+    if (key == QLatin1String(K::ZoneSelectorPosition)) {
         int v = value.toInt();
         return (v >= 0 && v <= 8) ? QVariant(v) : QVariant();
     }
-    if (key == QLatin1String("ZoneSelectorLayoutMode"))
+    if (key == QLatin1String(K::ZoneSelectorLayoutMode))
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    if (key == QLatin1String("ZoneSelectorSizeMode"))
+    if (key == QLatin1String(K::ZoneSelectorSizeMode))
         return QVariant(qBound(0, value.toInt(), static_cast<int>(ZoneSelectorSizeMode::Manual)));
-    if (key == QLatin1String("ZoneSelectorMaxRows"))
-        return QVariant(qBound(1, value.toInt(), 10));
-    if (key == QLatin1String("ZoneSelectorPreviewWidth"))
-        return QVariant(qBound(80, value.toInt(), 400));
-    if (key == QLatin1String("ZoneSelectorPreviewHeight"))
-        return QVariant(qBound(60, value.toInt(), 300));
+    if (key == QLatin1String(K::ZoneSelectorMaxRows))
+        return QVariant(qBound(ConfigDefaults::maxRowsMin(), value.toInt(), ConfigDefaults::maxRowsMax()));
+    if (key == QLatin1String(K::ZoneSelectorPreviewWidth))
+        return QVariant(qBound(ConfigDefaults::previewWidthMin(), value.toInt(), ConfigDefaults::previewWidthMax()));
+    if (key == QLatin1String(K::ZoneSelectorPreviewHeight))
+        return QVariant(qBound(ConfigDefaults::previewHeightMin(), value.toInt(), ConfigDefaults::previewHeightMax()));
     return QVariant();
 }
 
 QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
 {
-    if (key == QLatin1String("SnapAssistEnabled") || key == QLatin1String("ZoneSelectorEnabled"))
-        return QVariant(group.readBool(key, false));
+    namespace K = PerScreenSnappingKey;
+    if (key == QLatin1String(K::SnapAssistEnabled))
+        return QVariant(group.readBool(key, ConfigDefaults::snapAssistEnabled()));
+    if (key == QLatin1String(K::ZoneSelectorEnabled))
+        return QVariant(group.readBool(key, ConfigDefaults::zoneSelectorEnabled()));
     return QVariant(group.readInt(key, 0));
 }
 
@@ -185,7 +220,7 @@ QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
-        return QVariant(group.readBool(key, true));
+        return QVariant(group.readBool(key, ConfigDefaults::previewLockAspect()));
     return QVariant(group.readInt(key, 0));
 }
 
@@ -312,15 +347,16 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
 void Settings::loadPerScreenOverrides(IConfigBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("ZoneSelector:"), kPerScreenKeys, std::size(kPerScreenKeys),
-                       readPerScreenZoneSelectorEntry, validatePerScreenValue, m_perScreenZoneSelectorSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("AutotileScreen:"), kPerScreenAutotileKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
+                       std::size(kPerScreenKeys), readPerScreenZoneSelectorEntry, validatePerScreenValue,
+                       m_perScreenZoneSelectorSettings);
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::autotileScreenGroupPrefix(), kPerScreenAutotileKeys,
                        std::size(kPerScreenAutotileKeys), readPerScreenAutotileEntry, validatePerScreenAutotileValue,
                        m_perScreenAutotileSettings);
     // Normalize autotile keys from disk format ("AutotileAlgorithm") to short format
     // ("Algorithm") that QML uses for lookup via PerScreenOverrideHelper.settingValue().
     normalizeAutotileKeys(m_perScreenAutotileSettings);
-    loadPerScreenGroup(backend, allGroups, QStringLiteral("SnappingScreen:"), kPerScreenSnappingKeys,
+    loadPerScreenGroup(backend, allGroups, ConfigDefaults::snappingScreenGroupPrefix(), kPerScreenSnappingKeys,
                        std::size(kPerScreenSnappingKeys), readPerScreenSnappingEntry, validatePerScreenSnappingValue,
                        m_perScreenSnappingSettings);
 }
@@ -335,9 +371,9 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 {
     // Short keys that should NOT get the "Autotile" prefix
     static const QStringList animationKeys = {
-        QStringLiteral("AnimationsEnabled"),
-        QStringLiteral("AnimationDuration"),
-        QStringLiteral("AnimationEasingCurve"),
+        QLatin1String(PerScreenAutotileKey::AnimationsEnabled),
+        QLatin1String(PerScreenAutotileKey::AnimationDuration),
+        QLatin1String(PerScreenAutotileKey::AnimationEasingCurve),
     };
 
     QHash<QString, QVariantMap> expanded;
@@ -358,10 +394,11 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
 
 void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
 {
-    savePerScreenOverrides(backend, QStringLiteral("ZoneSelector:"), m_perScreenZoneSelectorSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving
-    savePerScreenOverrides(backend, QStringLiteral("AutotileScreen:"), expandAutotileKeys(m_perScreenAutotileSettings));
-    savePerScreenOverrides(backend, QStringLiteral("SnappingScreen:"), m_perScreenSnappingSettings);
+    savePerScreenOverrides(backend, ConfigDefaults::autotileScreenGroupPrefix(),
+                           expandAutotileKeys(m_perScreenAutotileSettings));
+    savePerScreenOverrides(backend, ConfigDefaults::snappingScreenGroupPrefix(), m_perScreenSnappingSettings);
 }
 
 template<typename T>

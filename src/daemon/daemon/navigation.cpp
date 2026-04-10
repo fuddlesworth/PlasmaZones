@@ -6,6 +6,7 @@
 #include "macros.h"
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
+#include "../../config/settings.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
@@ -46,12 +47,11 @@ void Daemon::handleRotate(bool clockwise)
     }
     m_rotateDebounce.restart();
 
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "Rotate shortcut: no screen info";
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->rotateWindows(clockwise, screenId);
     } else if (m_windowTrackingAdaptor) {
@@ -79,8 +79,8 @@ void Daemon::handleFloat()
 
 void Daemon::handleMove(NavigationDirection direction)
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
     QString dirStr = navigationDirectionToString(direction);
@@ -88,7 +88,6 @@ void Daemon::handleMove(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->swapFocusedInDirection(dirStr);
     } else if (m_windowTrackingAdaptor) {
@@ -99,8 +98,8 @@ void Daemon::handleMove(NavigationDirection direction)
 
 void Daemon::handleFocus(NavigationDirection direction)
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
     QString dirStr = navigationDirectionToString(direction);
@@ -108,7 +107,6 @@ void Daemon::handleFocus(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("focus"));
     } else if (m_windowTrackingAdaptor) {
@@ -118,12 +116,11 @@ void Daemon::handleFocus(NavigationDirection direction)
 
 void Daemon::handlePush()
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "PushToEmptyZone shortcut: no screen info";
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         return;
     }
@@ -134,23 +131,24 @@ void Daemon::handlePush()
 
 void Daemon::handleRestore()
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         // In autotile mode, "restore" floats the window (equivalent to unsnapping)
         m_autotileEngine->toggleFocusedWindowFloat();
         return;
     }
-    m_windowTrackingAdaptor->restoreWindowSize();
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->restoreWindowSize();
+    }
 }
 
 void Daemon::handleSwap(NavigationDirection direction)
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
     QString dirStr = navigationDirectionToString(direction);
@@ -158,7 +156,6 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->swapInDirection(dirStr, QStringLiteral("swap"));
     } else if (m_windowTrackingAdaptor) {
@@ -168,12 +165,11 @@ void Daemon::handleSwap(NavigationDirection direction)
 
 void Daemon::handleSnap(int zoneNumber)
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "SnapToZone shortcut: no screen info";
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->moveToPosition(QString(), zoneNumber, screenId);
     } else if (m_windowTrackingAdaptor) {
@@ -183,11 +179,10 @@ void Daemon::handleSnap(int zoneNumber)
 
 void Daemon::handleCycle(bool forward)
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         QString dirStr = forward ? QStringLiteral("right") : QStringLiteral("left");
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("cycle"));
@@ -198,11 +193,10 @@ void Daemon::handleCycle(bool forward)
 
 void Daemon::handleResnap()
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
     } else if (m_windowTrackingAdaptor) {
@@ -212,12 +206,11 @@ void Daemon::handleResnap()
 
 void Daemon::handleSnapAll()
 {
-    QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    if (!screen) {
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "SnapAllWindows shortcut: no screen info";
         return;
     }
-    QString screenId = Utils::screenIdentifier(screen);
     if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
     } else if (m_windowTrackingAdaptor) {
@@ -232,8 +225,11 @@ void Daemon::handleIncreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+        return;
+    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+        return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->increaseMasterRatio(step);
 }
@@ -242,8 +238,11 @@ void Daemon::handleDecreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-    const QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+        return;
+    if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
+        return;
     const qreal step = m_autotileEngine->effectiveSplitRatioStep(screenId);
     m_autotileEngine->decreaseMasterRatio(step);
 }
@@ -257,10 +256,12 @@ void Daemon::handleRetile()
     }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QScreen* screen = resolveShortcutScreen(m_windowTrackingAdaptor);
-        QString screenId = screen ? Utils::screenIdentifier(screen) : QString();
+        QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
         if (screenId.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
-            screenId = *m_autotileEngine->autotileScreens().begin();
+            // QSet iteration order is non-deterministic; sort to get a stable fallback
+            QStringList sorted = m_autotileEngine->autotileScreens().values();
+            sorted.sort();
+            screenId = sorted.first();
         }
         m_overlayService->showNavigationOsd(true, QStringLiteral("retile"), QStringLiteral("retiled"), QString(),
                                             QString(), screenId);

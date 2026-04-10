@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <QString>
+#include <QLatin1String>
 
 namespace PlasmaZones {
 
@@ -14,16 +14,18 @@ namespace PlasmaZones {
  * throughout the effect code.
  */
 namespace DBus {
-inline const QString ServiceName = QStringLiteral("org.plasmazones");
-inline const QString ObjectPath = QStringLiteral("/PlasmaZones");
+inline constexpr QLatin1String ServiceName("org.plasmazones");
+inline constexpr QLatin1String ObjectPath("/PlasmaZones");
 
 namespace Interface {
-inline const QString Settings = QStringLiteral("org.plasmazones.Settings");
-inline const QString WindowDrag = QStringLiteral("org.plasmazones.WindowDrag");
-inline const QString WindowTracking = QStringLiteral("org.plasmazones.WindowTracking");
-inline const QString Overlay = QStringLiteral("org.plasmazones.Overlay");
-inline const QString Autotile = QStringLiteral("org.plasmazones.Autotile");
-inline const QString LayoutManager = QStringLiteral("org.plasmazones.LayoutManager");
+inline constexpr QLatin1String Settings("org.plasmazones.Settings");
+inline constexpr QLatin1String WindowDrag("org.plasmazones.WindowDrag");
+inline constexpr QLatin1String WindowTracking("org.plasmazones.WindowTracking");
+inline constexpr QLatin1String Overlay("org.plasmazones.Overlay");
+inline constexpr QLatin1String Autotile("org.plasmazones.Autotile");
+inline constexpr QLatin1String LayoutManager("org.plasmazones.LayoutManager");
+inline constexpr QLatin1String Screen("org.plasmazones.Screen");
+inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 }
 }
 

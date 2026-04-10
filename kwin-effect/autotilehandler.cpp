@@ -21,6 +21,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+#include <QTimer>
 #include <QtMath>
 
 namespace PlasmaZones {
@@ -54,6 +55,32 @@ QString AutotileHandler::findSavedGeometryKey(const QHash<QString, QRectF>& save
 bool AutotileHandler::hasSavedGeometryForWindow(const QHash<QString, QRectF>& savedGeometries, const QString& windowId)
 {
     return !findSavedGeometryKey(savedGeometries, windowId).isEmpty();
+}
+
+bool AutotileHandler::transferPreAutotileGeometry(const QString& windowId, const QString& fromScreenId,
+                                                  const QString& toScreenId)
+{
+    // Extract from source screen
+    auto fromIt = m_preAutotileGeometries.find(fromScreenId);
+    if (fromIt == m_preAutotileGeometries.end()) {
+        return false;
+    }
+    const QString savedKey = findSavedGeometryKey(fromIt.value(), windowId);
+    if (savedKey.isEmpty()) {
+        return false;
+    }
+    QRectF geo = fromIt->take(savedKey);
+    if (fromIt->isEmpty()) {
+        m_preAutotileGeometries.erase(fromIt);
+    }
+    if (!geo.isValid()) {
+        return false;
+    }
+    // Inject into target screen using savedKey (which equals windowId for exact
+    // matches, but using savedKey consistently ensures correctness if
+    // findSavedGeometryKey ever adds fuzzy/app-id matching in the future).
+    m_preAutotileGeometries[toScreenId][savedKey] = geo;
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -196,6 +223,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
         if (!w || w->isMinimized() || !w->isOnCurrentDesktop() || !w->isOnCurrentActivity()) {
             continue;
         }
+        // Geometry check first (cheap QRectF::contains) before shouldHandleWindow (allocates via windowClass())
         if (!w->frameGeometry().contains(pos)) {
             continue;
         }
@@ -254,22 +282,21 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     if (screenGeometries.contains(windowId)) {
         return false;
     }
-    screenGeometries[windowId] = frame;
-    qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
-    if (m_effect->m_daemonServiceRegistered) {
-        // Use overwrite=false so a pre-existing snap geometry is preserved when
-        // autotile activates on a screen with already-snapped windows. The effect-
-        // local cache (screenGeometries) already guards against redundant stores
-        // within an autotile session; overwrite=false prevents cross-mode clobbering.
-        // Re-resolve screen ID (EDID-based) for daemon tracking D-Bus calls;
-        // the screenId parameter may already be correct from callers that use
-        // getWindowScreenId(), but re-resolve to be safe.
-        QString resolvedScreenId = m_effect->getWindowScreenId(m_effect->findWindowById(windowId));
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                                        {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
-                                         static_cast<int>(frame.width()), static_cast<int>(frame.height()),
-                                         resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, false},
-                                        QStringLiteral("storePreTileGeometry"));
+    // Only save geometry for floating windows — snapped/tiled windows have zone
+    // dimensions in frameGeometry(), not the original free-floating size. Storing
+    // zone geometry here would cause handleDragToFloat to restore to zone size.
+    if (m_effect->isWindowFloating(windowId)) {
+        screenGeometries[windowId] = frame;
+        qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
+        if (m_effect->m_daemonServiceRegistered) {
+            m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                                            {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
+                                             static_cast<int>(frame.width()), static_cast<int>(frame.height()),
+                                             screenId, false},
+                                            QStringLiteral("storePreTileGeometry"));
+        }
+    } else {
+        qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
     }
     return true;
 }
@@ -592,37 +619,54 @@ void AutotileHandler::handleWindowOutputChanged(KWin::EffectWindow* w)
                         return;
                     }
 
-                    // If the drag already ended, apply immediately.
+                    // If the drag already ended, apply immediately — unless the
+                    // window was snapped to a zone by dragStopped during this D-Bus
+                    // round-trip. In that case, zone geometry is already correct.
                     if (!safeW->isUserMove() && !safeW->isUserResize()) {
+                        if (!m_effect->isWindowFloating(wid)) {
+                            return; // Snapped to zone — don't clobber zone geometry
+                        }
                         const QRectF frame = safeW->frameGeometry();
                         const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
                         m_effect->applySnapGeometry(safeW, geo);
                         return;
                     }
 
-                    // Still dragging — wait for drop.
-                    m_pendingCrossScreenRestore[wid] =
-                        connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
-                                [this, safeW, wid, restoreW, restoreH](KWin::EffectWindow*) {
-                                    m_pendingCrossScreenRestore.remove(wid);
-                                    if (!safeW || safeW->isDeleted()) {
-                                        return;
-                                    }
-                                    // Guard: window may have bounced back to autotile during drag.
-                                    const QString dropScreen = m_effect->getWindowScreenId(safeW);
-                                    if (m_autotileScreens.contains(dropScreen)) {
-                                        return;
-                                    }
-                                    const QRectF frame = safeW->frameGeometry();
-                                    const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
-                                    m_effect->applySnapGeometry(safeW, geo);
-                                });
+                    // Still dragging — wait for drop, then restore size once.
+                    // Use a shared connection so the lambda can disconnect itself
+                    // after firing once — preventing subsequent user resizes from
+                    // snapping the window back to the pre-autotile size.
+                    auto sharedConn = std::make_shared<QMetaObject::Connection>();
+                    *sharedConn = connect(safeW.data(), &KWin::EffectWindow::windowFinishUserMovedResized, m_effect,
+                                          [this, safeW, wid, restoreW, restoreH, sharedConn](KWin::EffectWindow*) {
+                                              // Disconnect immediately so this only fires once (the drop),
+                                              // not on every subsequent user resize.
+                                              QObject::disconnect(*sharedConn);
+                                              m_pendingCrossScreenRestore.remove(wid);
+                                              if (!safeW || safeW->isDeleted()) {
+                                                  return;
+                                              }
+                                              // Guard: window may have bounced back to autotile during drag.
+                                              const QString dropScreen = m_effect->getWindowScreenId(safeW);
+                                              if (m_autotileScreens.contains(dropScreen)) {
+                                                  return;
+                                              }
+                                              // Guard: window may have been snapped to a zone by dragStopped.
+                                              if (!m_effect->isWindowFloating(wid)) {
+                                                  return;
+                                              }
+                                              const QRectF frame = safeW->frameGeometry();
+                                              const QRect geo(qRound(frame.x()), qRound(frame.y()), restoreW, restoreH);
+                                              m_effect->applySnapGeometry(safeW, geo);
+                                          });
+                    m_pendingCrossScreenRestore[wid] = *sharedConn;
                 });
 
-        // Unsnap the window so it becomes floating on the new screen
-        // instead of retaining a stale zone assignment from autotile.
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("windowUnsnapped"), {windowId},
-                                        QStringLiteral("autotile-to-snap unsnap"));
+        // NOTE: Do NOT call windowUnsnapped here. The drag-drop handler
+        // (WindowDragAdaptor::dragStopped) manages the zone assignment transition.
+        // Firing windowUnsnapped now would race with the snap-to-zone D-Bus call
+        // from the drop handler, destroying the zone assignment that was just created.
+        // The drop handler's cross-screen path already clears stale state.
 
         // Raise above existing windows so it doesn't end up buried behind
         // snapped windows on the target screen.
@@ -749,6 +793,56 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     }
     m_effect->removeWindowBorder(windowId);
     unmaximizeMonocleWindow(windowId);
+}
+
+void AutotileHandler::handleDragToFloat(KWin::EffectWindow* w, const QString& windowId, const QString& screenId)
+{
+    // Restore border and clear tiling state synchronously — don't wait for
+    // the daemon's async windowFloatingChanged signal, which may never arrive
+    // (e.g., cross-screen drag where onWindowClosed removes daemon tracking
+    // before setWindowFloatingForScreen processes).
+    applyFloatCleanup(windowId);
+
+    // Restore pre-autotile SIZE (not position — window stays where dropped).
+    // Defer to next event loop tick so KWin has finished the interactive move
+    // and the window's frame geometry reflects the actual drop position.
+    if (w) {
+        auto screenIt = m_preAutotileGeometries.constFind(screenId);
+        if (screenIt != m_preAutotileGeometries.constEnd()) {
+            const QString geoKey = findSavedGeometryKey(screenIt.value(), windowId);
+            if (!geoKey.isEmpty()) {
+                const QRectF savedGeo = screenIt.value().value(geoKey);
+                if (savedGeo.isValid()) {
+                    QPointer<KWin::EffectWindow> wp = w;
+                    const int savedW = qRound(savedGeo.width());
+                    const int savedH = qRound(savedGeo.height());
+                    // Capture m_effect by value (raw pointer, owned by the timer's
+                    // context object) instead of `this` — avoids implicit coupling
+                    // to AutotileHandler's lifetime via the parent ownership chain.
+                    PlasmaZonesEffect* effect = m_effect;
+                    QTimer::singleShot(0, effect, [effect, wp, windowId, savedW, savedH]() {
+                        if (!wp || wp->isDeleted()) {
+                            return;
+                        }
+                        // Skip if the window was re-snapped during the deferred tick
+                        // (e.g., dropped on a zone on a snap screen during cross-VS drag).
+                        if (!effect->isWindowFloating(effect->getWindowId(wp))) {
+                            qCDebug(lcEffect)
+                                << "Drag-to-float: skipping size restore for re-snapped window" << windowId;
+                            return;
+                        }
+                        QRectF currentFrame = wp->frameGeometry();
+                        QRect sizeRestored(qRound(currentFrame.x()), qRound(currentFrame.y()), savedW, savedH);
+                        effect->applySnapGeometry(wp, sizeRestored);
+                        qCInfo(lcEffect) << "Drag-to-float: restored pre-autotile size for" << windowId << savedW << "x"
+                                         << savedH;
+                    });
+                }
+            }
+        }
+    }
+
+    m_effect->updateAllBorders();
 }
 
 void AutotileHandler::onDaemonReady()

@@ -311,8 +311,9 @@ Q_SIGNALS:
      * to their pre-autotile geometry or leave them at their current position.
      *
      * @param windowIds Window IDs no longer under autotile control
+     * @param releasedScreenIds Screen IDs that triggered the release
      */
-    void windowsReleasedFromTiling(const QStringList& windowIds);
+    void windowsReleasedFromTiling(const QStringList& windowIds, const QSet<QString>& releasedScreenIds);
 
     /**
      * @brief Emitted when a window's floating state changes in autotile

@@ -58,11 +58,11 @@ ToolBar {
                     required property var modelData
                     property bool isActive: editorController && modelData && modelData.name === editorController.targetScreen
 
-                    text: modelData ? (modelData.name || "") : ""
+                    text: modelData ? (modelData.displayName || modelData.name || "") : ""
                     enabled: editorController !== null
                     implicitWidth: Math.max(contentItem.implicitWidth + Kirigami.Units.largeSpacing * 2, Kirigami.Units.gridUnit * 4)
                     implicitHeight: Kirigami.Units.gridUnit * 3
-                    Accessible.name: modelData ? modelData.name : ""
+                    Accessible.name: modelData ? (modelData.displayName || modelData.name || "") : ""
                     Accessible.description: isActive ? i18nc("@info", "Currently selected screen for layout editing") : i18nc("@info", "Select screen for layout editing")
                     Accessible.checkable: true
                     Accessible.checked: isActive
@@ -184,7 +184,7 @@ ToolBar {
                 Accessible.name: i18nc("@label", "Layout name")
                 Accessible.description: i18nc("@info", "Enter name for the layout")
                 // Add right padding when counter is visible to prevent text overlap
-                rightPadding: (showCounter || activeFocus) ? 50 : 0
+                rightPadding: (showCounter || activeFocus) ? Kirigami.Units.gridUnit * 3 : 0
                 onEditingFinished: {
                     if (editorController && text !== editorController.layoutName)
                         editorController.layoutName = text;
@@ -372,12 +372,6 @@ ToolBar {
             ToolTip.visible: hovered
             Accessible.name: i18nc("@action", "Layout Visibility")
             Accessible.description: i18nc("@info", "Configure where this layout appears in the zone selector")
-        }
-
-        // Visual separator
-        Kirigami.Separator {
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
         }
 
         // ═══════════════════════════════════════════════════════════════

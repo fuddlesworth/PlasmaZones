@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QMutex>
+#include <QMutexLocker>
 #include <QQuickWindow>
 #include <QStandardPaths>
 #include <QTextStream>
@@ -107,6 +108,39 @@ QString detail::loadAndExpandShader(const QString& path, QString* outError)
     return err.isEmpty() ? expanded : QString();
 }
 
+QShader detail::cachedBake(QShaderBaker& baker, const QByteArray& source, QShader::Stage stage)
+{
+    // Key by full source + stage to avoid hash collisions returning wrong shaders
+    const ShaderBakeCache::Key key(source, static_cast<int>(stage));
+
+    auto& cache = ShaderBakeCache::instance();
+    {
+        QMutexLocker lock(&cache.mutex);
+        auto it = cache.entries.constFind(key);
+        if (it != cache.entries.constEnd() && it->isValid()) {
+            return *it;
+        }
+    }
+
+    // Cache miss — bake
+    baker.setSourceString(source, stage);
+    QShader result = baker.bake();
+
+    if (result.isValid()) {
+        QMutexLocker lock(&cache.mutex);
+        cache.entries.insert(key, result);
+    }
+
+    return result;
+}
+
+void detail::clearBakeCache()
+{
+    auto& cache = ShaderBakeCache::instance();
+    QMutexLocker lock(&cache.mutex);
+    cache.entries.clear();
+}
+
 QRhi* ZoneShaderNodeRhi::safeRhi() const
 {
     return (m_itemValid.load(std::memory_order_acquire) && m_item && m_item->window()) ? m_item->window()->rhi()
@@ -128,9 +162,13 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     m_customParams2 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
     m_customParams3 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
     m_customParams4 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams5 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams6 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams7 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
+    m_customParams8 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
 
     // 1×1 transparent fallback for when labels are disabled
-    m_transparentFallbackImage = QImage(1, 1, QImage::Format_ARGB32_Premultiplied);
+    m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
     m_transparentFallbackImage.fill(Qt::transparent);
 }
 
@@ -287,8 +325,7 @@ void ZoneShaderNodeRhi::prepare()
             QShaderBaker vertexBaker;
             vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
             vertexBaker.setGeneratedShaders(targets);
-            vertexBaker.setSourceString(m_vertexShaderSource.toUtf8(), QShader::VertexStage);
-            m_vertexShader = vertexBaker.bake();
+            m_vertexShader = detail::cachedBake(vertexBaker, m_vertexShaderSource.toUtf8(), QShader::VertexStage);
             if (!m_vertexShader.isValid()) {
                 const QString msg = vertexBaker.errorMessage();
                 m_shaderError = QStringLiteral("Vertex shader: ")
@@ -298,8 +335,8 @@ void ZoneShaderNodeRhi::prepare()
             QShaderBaker fragmentBaker;
             fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
             fragmentBaker.setGeneratedShaders(targets);
-            fragmentBaker.setSourceString(m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
-            m_fragmentShader = fragmentBaker.bake();
+            m_fragmentShader =
+                detail::cachedBake(fragmentBaker, m_fragmentShaderSource.toUtf8(), QShader::FragmentStage);
             if (!m_fragmentShader.isValid()) {
                 const QString msg = fragmentBaker.errorMessage();
                 m_shaderError = QStringLiteral("Fragment shader: ")
@@ -572,8 +609,7 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     QShaderBaker vertexBaker;
     vertexBaker.setGeneratedShaderVariants({QShader::StandardShader});
     vertexBaker.setGeneratedShaders(targets);
-    vertexBaker.setSourceString(vertSource.toUtf8(), QShader::VertexStage);
-    const QShader vertexShader = vertexBaker.bake();
+    const QShader vertexShader = detail::cachedBake(vertexBaker, vertSource.toUtf8(), QShader::VertexStage);
     if (!vertexShader.isValid()) {
         result.errorMessage = vertexBaker.errorMessage();
         if (result.errorMessage.isEmpty()) {
@@ -584,8 +620,7 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     QShaderBaker fragmentBaker;
     fragmentBaker.setGeneratedShaderVariants({QShader::StandardShader});
     fragmentBaker.setGeneratedShaders(targets);
-    fragmentBaker.setSourceString(fragSource.toUtf8(), QShader::FragmentStage);
-    const QShader fragmentShader = fragmentBaker.bake();
+    const QShader fragmentShader = detail::cachedBake(fragmentBaker, fragSource.toUtf8(), QShader::FragmentStage);
     if (!fragmentShader.isValid()) {
         result.errorMessage = fragmentBaker.errorMessage();
         if (result.errorMessage.isEmpty()) {

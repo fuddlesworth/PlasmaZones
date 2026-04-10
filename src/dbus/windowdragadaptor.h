@@ -80,8 +80,6 @@ public Q_SLOTS:
      * @param y Window Y position
      * @param width Window width
      * @param height Window height
-     * @param appName Application name (for exclusion filtering)
-     * @param windowClass Window class (for exclusion filtering)
      * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
      */
@@ -154,21 +152,39 @@ private:
     // Size tolerance is stricter - snapped windows should match zone size closely
     static constexpr int SizeTolerance = 20;
 
+    /// Pre-parsed trigger (avoids QVariantMap unboxing on every dragMoved tick)
+    struct ParsedTrigger
+    {
+        int modifier = 0;
+        int mouseButton = 0;
+    };
+
     // Check if modifier matches setting
     bool checkModifier(int modifierSetting, Qt::KeyboardModifiers mods) const;
     // Check if any trigger in a list matches current modifiers/mouse buttons
     bool anyTriggerHeld(const QVariantList& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Overload using pre-parsed triggers (hot path during drag)
+    bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
+    // Parse QVariantList triggers into POD structs for repeated use
+    static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
+    // Helper: Returns the effective (virtual-aware) screen ID for a cursor position.
+    // Prefers virtual screen resolution via ScreenManager, falls back to physical screen.
+    QString effectiveScreenIdAt(int x, int y) const;
+
     // Shared preamble for drag handler methods (DRY extraction)
     // Returns layout for the screen at (x,y), or nullptr if screen disabled/no layout.
-    // Shows overlay if not visible. Sets outScreen to the resolved screen.
-    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen);
+    // Shows overlay if not visible. Sets outScreen to the resolved physical screen
+    // and outScreenId to the virtual-aware screen identifier.
+    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId);
 
     // Compute bounding rectangle of multiple zones with gaps applied
-    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout) const;
+    // screenId is the virtual-aware screen identifier for gap/padding lookups.
+    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
+                                       const QString& screenId) const;
 
     // Convert zone UUIDs to string list (for overlay service)
     static QStringList zoneIdsToStringList(const QVector<QUuid>& ids);
@@ -197,6 +213,7 @@ private:
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
     QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
+    QString m_overlayScreenId; // Virtual-aware screen ID for overlay tracking
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;
@@ -214,6 +231,10 @@ private:
     // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
     QAction* m_cancelOverlayAction = nullptr;
 
+    // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
+    QVector<ParsedTrigger> m_cachedActivationTriggers;
+    QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
+
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;
@@ -223,7 +244,16 @@ private:
 
     // Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
-    bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY) const;
+    bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY, const QString& screenId = QString()) const;
+
+    // Screen resolution helper (DRY: used by prepareHandlerContext, dragStopped, checkZoneSelectorTrigger)
+    struct ScreenResolution
+    {
+        QString screenId; // effective (possibly virtual) screen ID
+        QString physicalId; // physical screen ID
+        QScreen* qscreen; // physical QScreen pointer
+    };
+    ScreenResolution resolveScreenAt(const QPointF& globalPos) const;
 
     // dragStopped() helpers
     void hideOverlayAndSelector();

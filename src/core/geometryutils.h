@@ -12,6 +12,7 @@
 #include <functional>
 #include <QVector>
 #include <QSize>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -45,10 +46,75 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * @param innerGap Gap between adjacent zones (zonePadding)
  * @param outerGaps Per-side edge gaps
  * @param useAvailableGeometry If true, calculate relative to available area (excluding panels/taskbars)
+ * @param screenId Optional virtual screen ID for physical-edge lookup.
+ *        When non-empty, used for physicalEdgesFor() so that internal virtual
+ *        screen edges get inner gap instead of outer gap. When empty, falls
+ *        back to Utils::screenIdentifier(screen) (physical ID, all edges outer).
  * @return Geometry with appropriate gaps applied
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
-                                                  bool useAvailableGeometry = true);
+                                                  bool useAvailableGeometry = true, const QString& screenId = {});
+
+/**
+ * @brief Convert zone geometry to overlay-local coordinates using explicit geometry
+ * @param geometry Absolute geometry in screen coordinates
+ * @param overlayGeometry The overlay window's full geometry (origin + size)
+ * @return Geometry in overlay window local coordinates
+ *
+ * For virtual screens, the overlay covers the virtual screen bounds,
+ * so we subtract the virtual screen origin to get overlay-local coords.
+ */
+PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geometry, const QRect& overlayGeometry);
+
+/**
+ * @brief Get zone geometry with gaps, using explicit screen geometry
+ * @param zone Zone to get geometry for
+ * @param screenGeometry Screen (or virtual screen) geometry in absolute pixels
+ * @param availableGeometry Available area within the screen (excluding panels)
+ * @param innerGap Gap between adjacent zones (zonePadding)
+ * @param outerGaps Per-side edge gaps
+ * @param useAvailableGeometry If true, calculate relative to available area
+ * @return Geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry,
+                                                  const QRect& availableGeometry, int innerGap,
+                                                  const EdgeGaps& outerGaps, bool useAvailableGeometry = true,
+                                                  const QString& screenId = {});
+
+/**
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
+ *
+ * Unified helper that resolves virtual screen geometry via ScreenManager when
+ * available, falling back to the physical QScreen* geometry. Eliminates the
+ * repeated pattern of querying ScreenManager + branching on vsGeom.isValid()
+ * that appears in navigation, resnap, snap-all, rotation, and overlay code.
+ *
+ * @param zone Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Snapped integer geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Zone* zone, QScreen* screen, const QString& screenId, Layout* layout,
+                                                  ISettings* settings);
+
+/**
+ * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry (floating-point)
+ *
+ * Same as getZoneGeometryForScreen but returns unsnapped QRectF. Use when the
+ * caller needs to combine multiple zone geometries (e.g. QRectF::united()) before
+ * a final snap, or when floating-point precision is needed for overlay coordinates.
+ *
+ * @param zone Zone to get geometry for
+ * @param screen Physical QScreen* (used as fallback)
+ * @param screenId Screen identifier (physical or virtual)
+ * @param layout Layout for gap overrides
+ * @param settings Global settings for gap fallbacks
+ * @return Floating-point geometry with appropriate gaps applied
+ */
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Zone* zone, QScreen* screen, const QString& screenId,
+                                                    Layout* layout, ISettings* settings);
 
 /**
  * @brief Get effective zone padding for a layout
@@ -98,6 +164,17 @@ PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* set
 PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, QScreen* screen);
 
 /**
+ * @brief Get the effective screen geometry for a layout using a screen ID
+ * @param layout Layout to check (may use full screen geometry)
+ * @param screenId Screen identifier (physical or virtual, e.g. "physicalId/vs:N")
+ * @return Virtual screen geometry if available, otherwise falls back to physical screen geometry
+ *
+ * Virtual-screen-aware overload: resolves geometry via ScreenManager first,
+ * then falls back to finding the physical QScreen by ID.
+ */
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId);
+
+/**
  * @brief Extract geometry as QRectF from a zone QVariantMap
  * @param zone Zone data map containing x, y, width, height keys
  * @return QRectF with the zone's geometry
@@ -128,6 +205,16 @@ PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
  * to avoid duplicating the empty-zones JSON building logic.
  */
 PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, QScreen* screen, ISettings* settings,
+                                               const std::function<bool(const Zone*)>& isZoneEmpty);
+
+/**
+ * @brief Build JSON array of empty zones using explicit screen ID (virtual-screen-aware)
+ *
+ * Uses ScreenManager to resolve virtual screen geometry when available,
+ * falling back to the physical QScreen* geometry.
+ */
+PLASMAZONES_EXPORT QString buildEmptyZonesJson(Layout* layout, const QString& screenId, QScreen* physScreen,
+                                               ISettings* settings,
                                                const std::function<bool(const Zone*)>& isZoneEmpty);
 
 /**
@@ -171,14 +258,14 @@ PLASMAZONES_EXPORT void removeZoneOverlaps(QVector<QRect>& zones, const QVector<
 PLASMAZONES_EXPORT QString rectToJson(const QRect& rect);
 
 /**
- * @brief Serialize rotation/resnap entries to compact JSON array
- * @param entries Vector of rotation entries (window moves with source/target zones)
+ * @brief Serialize zone assignment entries to compact JSON array
+ * @param entries Vector of zone assignment entries (window moves with source/target zones)
  * @return JSON array string suitable for D-Bus signals
  *
  * Shared by SnapEngine navigation (rotate, resnap) and any future code
- * that needs to serialize RotationEntry vectors for D-Bus exchange.
+ * that needs to serialize ZoneAssignmentEntry vectors for D-Bus exchange.
  */
-PLASMAZONES_EXPORT QString serializeRotationEntries(const QVector<RotationEntry>& entries);
+PLASMAZONES_EXPORT QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries);
 
 } // namespace GeometryUtils
 

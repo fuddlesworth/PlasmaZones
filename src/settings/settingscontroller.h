@@ -207,6 +207,7 @@ public:
     {
         return m_screenHelper.screens();
     }
+    Q_INVOKABLE QVariantMap physicalScreenResolution(const QString& screenId) const;
 
     // Virtual desktops / activities (reactive via D-Bus signals)
     Q_PROPERTY(int virtualDesktopCount READ virtualDesktopCount NOTIFY virtualDesktopsChanged)
@@ -630,6 +631,17 @@ public:
     Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenName);
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenName) const;
 
+    // ── Virtual screen configuration ──────────────────────────────────────────
+    Q_INVOKABLE QStringList getPhysicalScreens() const;
+    Q_INVOKABLE QVariantList getVirtualScreenConfig(const QString& physicalScreenId) const;
+    Q_INVOKABLE void applyVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
+    Q_INVOKABLE void removeVirtualScreenConfig(const QString& physicalScreenId);
+    // ── Staged virtual screen configuration (flushed on Apply) ──────────────
+    Q_INVOKABLE void stageVirtualScreenConfig(const QString& physicalScreenId, const QVariantList& screens);
+    Q_INVOKABLE void stageVirtualScreenRemoval(const QString& physicalScreenId);
+    Q_INVOKABLE bool hasUnsavedVirtualScreenConfig(const QString& physicalScreenId) const;
+    Q_INVOKABLE QVariantList getStagedVirtualScreenConfig(const QString& physicalScreenId) const;
+
     // ── Per-screen zone selector overrides ───────────────────────────────────
     Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenName) const;
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenName, const QString& key,
@@ -775,6 +787,9 @@ private:
     QHash<int, QString> m_stagedQuickSlots;
     // Staged tiling quick layout slot changes (flushed on Apply to config)
     QHash<int, QString> m_stagedTilingQuickSlots;
+
+    // Staged virtual screen configurations (physicalScreenId → staged screens; empty list = remove)
+    QHash<QString, QVariantList> m_stagedVirtualScreenConfigs;
 
     // Staged ordering changes (flushed to m_settings on save)
     std::optional<QStringList> m_stagedSnappingOrder;
