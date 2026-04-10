@@ -147,6 +147,8 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
                                   screen,
                                   floating,
                                   floating ? QStringLiteral("floated") : QStringLiteral("unfloated"),
+                                  QStringList{},
+                                  false,
                               });
 }
 

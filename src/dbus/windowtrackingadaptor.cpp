@@ -197,8 +197,9 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 
     // Emit unified state change
-    Q_EMIT windowStateChanged(windowId,
-                              WindowStateEntry{windowId, zoneId, resolvedScreen, false, QStringLiteral("snapped")});
+    Q_EMIT windowStateChanged(
+        windowId,
+        WindowStateEntry{windowId, zoneId, resolvedScreen, false, QStringLiteral("snapped"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -241,7 +242,8 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
                          << resolvedScreen;
 
     Q_EMIT windowStateChanged(
-        windowId, WindowStateEntry{windowId, primaryZoneId, resolvedScreen, false, QStringLiteral("snapped")});
+        windowId,
+        WindowStateEntry{windowId, primaryZoneId, resolvedScreen, false, QStringLiteral("snapped"), zoneIds, false});
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -265,8 +267,9 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
 
     // Emit unified state change
-    Q_EMIT windowStateChanged(windowId,
-                              WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped")});
+    Q_EMIT windowStateChanged(
+        windowId,
+        WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)
@@ -353,8 +356,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap
-    Q_EMIT windowStateChanged(
-        windowId, WindowStateEntry{windowId, QString(), newScreenId, false, QStringLiteral("screen_changed")});
+    Q_EMIT windowStateChanged(windowId,
+                              WindowStateEntry{windowId, QString(), newScreenId, false,
+                                               QStringLiteral("screen_changed"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
