@@ -93,24 +93,24 @@ QString WindowTrackingService::findEmptyZone(const QString& screenId) const
     return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
-QString WindowTrackingService::getEmptyZonesJson(const QString& screenId) const
+EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
 {
     Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
-        return QStringLiteral("[]");
+        return {};
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
     QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
     if (!screen) {
-        return QStringLiteral("[]");
+        return {};
     }
 
     // Use screen-filtered and desktop-filtered occupancy check — without this, zones
     // occupied on screen A (or other desktops) appear occupied on screen B / current desktop.
     int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    return GeometryUtils::buildEmptyZonesJson(layout, screenId, screen, m_settings, [&occupied](const Zone* z) {
+    return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings, [&occupied](const Zone* z) {
         return !occupied.contains(z->id());
     });
 }

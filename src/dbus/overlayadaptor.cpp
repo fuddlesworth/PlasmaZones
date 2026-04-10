@@ -11,9 +11,6 @@
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QTimer>
 
 namespace PlasmaZones {
@@ -42,10 +39,11 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector
         Q_EMIT zoneHighlightChanged(QString());
     });
 
-    connect(m_overlayService, &IOverlayService::snapAssistShown, this,
-            [this](const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) {
-                Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
-            });
+    connect(
+        m_overlayService, &IOverlayService::snapAssistShown, this,
+        [this](const QString& screenId, const EmptyZoneList& emptyZones, const SnapAssistCandidateList& candidates) {
+            Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
+        });
 }
 
 void OverlayAdaptor::showOverlay()
@@ -144,16 +142,15 @@ void OverlayAdaptor::hideShaderPreview()
     m_overlayService->hideShaderPreview();
 }
 
-bool OverlayAdaptor::showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
-                                    const QString& candidatesJson)
+bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                                    const SnapAssistCandidateList& candidates)
 {
     // Respect master toggle — don't show snap assist when the feature is disabled
     if (m_settings && !m_settings->snapAssistFeatureEnabled()) {
         return false;
     }
     // Return false when we know overlay won't be shown (avoids misleading "success")
-    if (emptyZonesJson.isEmpty() || emptyZonesJson == QLatin1String("[]") || candidatesJson.isEmpty()
-        || candidatesJson == QLatin1String("[]")) {
+    if (emptyZones.isEmpty() || candidates.isEmpty()) {
         return false;
     }
     // When the effect sends a physical screen ID for a subdivided monitor,
@@ -163,20 +160,12 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const QString& empt
     QString resolvedScreen = screenId;
     if (!VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = ScreenManager::instance();
-        if (mgr && mgr->hasVirtualScreens(screenId)) {
-            // Parse first zone geometry from emptyZonesJson to get a position hint
-            QJsonDocument doc = QJsonDocument::fromJson(emptyZonesJson.toUtf8());
-            if (doc.isArray() && !doc.array().isEmpty()) {
-                QJsonObject firstZone = doc.array().first().toObject();
-                int zx = firstZone.value(QLatin1String("x")).toInt();
-                int zy = firstZone.value(QLatin1String("y")).toInt();
-                int zw = firstZone.value(QLatin1String("width")).toInt();
-                int zh = firstZone.value(QLatin1String("height")).toInt();
-                QPoint center(zx + zw / 2, zy + zh / 2);
-                QString vsId = mgr->effectiveScreenAt(center);
-                if (!vsId.isEmpty()) {
-                    resolvedScreen = vsId;
-                }
+        if (mgr && mgr->hasVirtualScreens(screenId) && !emptyZones.isEmpty()) {
+            const EmptyZoneEntry& first = emptyZones.first();
+            QPoint center(first.x + first.width / 2, first.y + first.height / 2);
+            QString vsId = mgr->effectiveScreenAt(center);
+            if (!vsId.isEmpty()) {
+                resolvedScreen = vsId;
             }
         }
     }
@@ -184,8 +173,8 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const QString& empt
     // Defer actual work so we return immediately — the KWin effect blocks on this D-Bus
     // call; returning quickly prevents compositor freeze during overlay creation.
     // Note: Return value means "request accepted for deferred processing", not "overlay shown".
-    QTimer::singleShot(0, m_overlayService, [this, resolvedScreen, emptyZonesJson, candidatesJson]() {
-        m_overlayService->showSnapAssist(resolvedScreen, emptyZonesJson, candidatesJson);
+    QTimer::singleShot(0, m_overlayService, [this, resolvedScreen, emptyZones, candidates]() {
+        m_overlayService->showSnapAssist(resolvedScreen, emptyZones, candidates);
     });
     return true;
 }
@@ -200,9 +189,9 @@ bool OverlayAdaptor::isSnapAssistVisible()
     return m_overlayService->isSnapAssistVisible();
 }
 
-void OverlayAdaptor::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
+void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
-    m_overlayService->setSnapAssistThumbnail(kwinHandle, dataUrl);
+    m_overlayService->setSnapAssistThumbnail(compositorHandle, dataUrl);
 }
 
 } // namespace PlasmaZones

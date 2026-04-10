@@ -7,7 +7,9 @@
 #include "../autotilehandler.h"
 #include "../plasmazoneseffect.h"
 #include "../navigationhandler.h"
-#include "../dbus_constants.h"
+#include <dbus_constants.h>
+#include <dbus_helpers.h>
+#include <window_id.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -362,8 +364,8 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     // frame at the tiled position. If a correct pre-tile entry already
                     // exists, preserve it. If no entry exists, the floating window's
                     // current geometry is the best available fallback.
-                    m_effect->fireAndForgetDBusCall(
-                        DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                    DBusHelpers::fireAndForget(
+                        m_effect, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                         {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
                          static_cast<int>(frame.width()), static_cast<int>(frame.height()), screenId, false},
                         QStringLiteral("storePreTileGeometry"));
@@ -426,7 +428,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             for (KWin::EffectWindow* ew : allWindows) {
                                 if (!ew || !m_effect->shouldHandleWindow(ew))
                                     continue;
-                                if (PlasmaZonesEffect::extractAppId(m_effect->getWindowId(ew)) != stableId)
+                                if (WindowIdUtils::extractAppId(m_effect->getWindowId(ew)) != stableId)
                                     continue;
                                 if (!added.contains(m_effect->getWindowScreenId(ew)))
                                     continue;
@@ -593,9 +595,9 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
                              << screenId;
 
             if (m_effect->m_daemonServiceRegistered) {
-                m_effect->fireAndForgetDBusCall(
-                    DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                    {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
+                DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
+                                           QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                                           QStringLiteral("setWindowFloatingForScreen"));
             }
         });
         m_pendingMinimizeFloat.insert(windowId, timer);
@@ -626,8 +628,9 @@ void AutotileHandler::slotWindowMinimizedChanged(KWin::EffectWindow* w)
     qCInfo(lcEffect) << "Autotile: window unminimized, unfloating:" << windowId << "on" << screenId;
 
     if (m_effect->m_daemonServiceRegistered) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                                        {windowId, screenId, false}, QStringLiteral("setWindowFloatingForScreen"));
+        DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
+                                   QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, false},
+                                   QStringLiteral("setWindowFloatingForScreen"));
     }
 
     notifyWindowAdded(w);
@@ -651,8 +654,9 @@ void AutotileHandler::slotWindowMaximizedStateChanged(KWin::EffectWindow* w, boo
     qCInfo(lcEffect) << "Monocle window manually unmaximized:" << windowId << "- floating";
 
     if (m_effect->m_daemonServiceRegistered) {
-        m_effect->fireAndForgetDBusCall(DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                                        {windowId, screenId, true}, QStringLiteral("setWindowFloatingForScreen"));
+        DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking,
+                                   QStringLiteral("setWindowFloatingForScreen"), {windowId, screenId, true},
+                                   QStringLiteral("setWindowFloatingForScreen"));
     }
 }
 

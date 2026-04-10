@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include "enums.h"
 #include "settings_interfaces.h"
+#include <dbus_types.h>
 #include <QObject>
 #include <QColor>
 #include <QString>
@@ -515,11 +516,11 @@ public:
     virtual void hideShaderPreview() = 0;
 
     // Snap Assist overlay (window picker after snapping)
-    virtual void showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
-                                const QString& candidatesJson) = 0;
+    virtual void showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                                const SnapAssistCandidateList& candidates) = 0;
     virtual void hideSnapAssist() = 0;
     virtual bool isSnapAssistVisible() const = 0;
-    virtual void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) = 0;
+    virtual void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) = 0;
 
 Q_SIGNALS:
     void visibilityChanged(bool visible);
@@ -548,7 +549,8 @@ Q_SIGNALS:
     /**
      * @brief Emitted when Snap Assist overlay is shown. KWin script subscribes to create thumbnails.
      */
-    void snapAssistShown(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson);
+    void snapAssistShown(const QString& screenId, const EmptyZoneList& emptyZones,
+                         const SnapAssistCandidateList& candidates);
 
     /**
      * @brief Emitted when Snap Assist overlay is dismissed (by selection, Escape, or any other means).

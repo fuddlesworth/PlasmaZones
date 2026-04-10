@@ -192,10 +192,11 @@ public:
     void hideShaderPreview() override;
 
     // Snap Assist overlay (window picker after snapping)
-    void showSnapAssist(const QString& screenId, const QString& emptyZonesJson, const QString& candidatesJson) override;
+    void showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                        const SnapAssistCandidateList& candidates) override;
     void hideSnapAssist() override;
     bool isSnapAssistVisible() const override;
-    void setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl) override;
+    void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) override;
 
     // Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
@@ -296,7 +297,7 @@ private:
     std::unique_ptr<WindowThumbnailService> m_thumbnailService;
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
-    QHash<QString, QString> m_thumbnailCache; // kwinHandle -> dataUrl; reused across continuation
+    QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
     QQuickWindow* m_layoutPickerWindow = nullptr;
     QPointer<QScreen> m_layoutPickerScreen;
@@ -339,7 +340,7 @@ private:
     void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
-    void updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl);
+    void updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl);
     /** Process next thumbnail in queue (sequential capture to avoid KWin overload). */
     void processNextThumbnailCapture();
 

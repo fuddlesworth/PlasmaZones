@@ -143,28 +143,16 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
     return false;
 }
 
-QString WindowTrackingAdaptor::getUpdatedWindowGeometries()
+WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 {
-    // Delegate to service
     QHash<QString, QRect> geometries = m_service->updatedWindowGeometries();
-
-    if (geometries.isEmpty()) {
-        return QStringLiteral("[]");
-    }
-
-    QJsonArray windowGeometries;
+    WindowGeometryList result;
+    result.reserve(geometries.size());
     for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
-        QJsonObject windowObj;
-        windowObj[QLatin1String("windowId")] = it.key();
-        windowObj[QLatin1String("x")] = it.value().x();
-        windowObj[QLatin1String("y")] = it.value().y();
-        windowObj[QLatin1String("width")] = it.value().width();
-        windowObj[QLatin1String("height")] = it.value().height();
-        windowGeometries.append(windowObj);
+        result.append(WindowGeometryEntry::fromRect(it.key(), it.value()));
     }
-
-    qCDebug(lcDbusWindow) << "Returning updated geometries for" << windowGeometries.size() << "windows";
-    return QString::fromUtf8(QJsonDocument(windowGeometries).toJson(QJsonDocument::Compact));
+    qCDebug(lcDbusWindow) << "Returning updated geometries for" << result.size() << "windows";
+    return result;
 }
 
 QString WindowTrackingAdaptor::getPendingRestoreGeometries()

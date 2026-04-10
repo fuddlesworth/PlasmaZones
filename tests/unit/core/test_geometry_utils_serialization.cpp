@@ -92,6 +92,7 @@ private Q_SLOTS:
             QStringLiteral("zone-tgt-1"),
             {},
             QRect(100, 200, 500, 600),
+            QString(),
         });
 
         QString json = GeometryUtils::serializeZoneAssignments(entries);
@@ -122,6 +123,7 @@ private Q_SLOTS:
             QStringLiteral("tgt-B"),
             {},
             QRect(0, 0, 960, 1080),
+            QString(),
         });
         entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-2"),
@@ -129,6 +131,7 @@ private Q_SLOTS:
             QStringLiteral("tgt-C"),
             {},
             QRect(960, 0, 960, 540),
+            QString(),
         });
         entries.append(ZoneAssignmentEntry{
             QStringLiteral("win-3"),
@@ -136,6 +139,7 @@ private Q_SLOTS:
             QStringLiteral("tgt-A"),
             {},
             QRect(960, 540, 960, 540),
+            QString(),
         });
 
         QString json = GeometryUtils::serializeZoneAssignments(entries);
@@ -168,6 +172,7 @@ private Q_SLOTS:
             QString(),
             {},
             QRect(10, 20, 30, 40),
+            QString(),
         });
 
         QString json = GeometryUtils::serializeZoneAssignments(entries);
@@ -197,6 +202,7 @@ private Q_SLOTS:
             QStringLiteral("{11111111-2222-3333-4444-555555555555}"),
             {},
             QRect(0, 0, 960, 1080),
+            QString(),
         });
         original.append(ZoneAssignmentEntry{
             QStringLiteral("org.kde.dolphin|f5e6d7c8"),
@@ -204,6 +210,7 @@ private Q_SLOTS:
             QStringLiteral("{aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee}"),
             {},
             QRect(960, 0, 960, 1080),
+            QString(),
         });
 
         // Serialize

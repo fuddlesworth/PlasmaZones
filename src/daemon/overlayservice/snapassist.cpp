@@ -15,19 +15,57 @@
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonParseError>
 #include "../../core/layersurface.h"
 
 namespace PlasmaZones {
 
-// parseZonesJson is defined in overlayservice_internal.h (shared inline)
-
-void OverlayService::showSnapAssist(const QString& screenId, const QString& emptyZonesJson,
-                                    const QString& candidatesJson)
+/// Convert EmptyZoneList to QVariantList for QML property push
+static QVariantList emptyZonesToVariantList(const EmptyZoneList& zones)
 {
-    if (emptyZonesJson.isEmpty() || candidatesJson.isEmpty()) {
+    QVariantList result;
+    result.reserve(zones.size());
+    for (const auto& z : zones) {
+        QVariantMap m;
+        m[QStringLiteral("zoneId")] = z.zoneId;
+        m[QStringLiteral("x")] = z.x;
+        m[QStringLiteral("y")] = z.y;
+        m[QStringLiteral("width")] = z.width;
+        m[QStringLiteral("height")] = z.height;
+        m[QStringLiteral("borderWidth")] = z.borderWidth;
+        m[QStringLiteral("borderRadius")] = z.borderRadius;
+        m[QStringLiteral("useCustomColors")] = z.useCustomColors;
+        if (z.useCustomColors) {
+            m[QStringLiteral("highlightColor")] = z.highlightColor;
+            m[QStringLiteral("inactiveColor")] = z.inactiveColor;
+            m[QStringLiteral("borderColor")] = z.borderColor;
+            m[QStringLiteral("activeOpacity")] = z.activeOpacity;
+            m[QStringLiteral("inactiveOpacity")] = z.inactiveOpacity;
+        }
+        result.append(m);
+    }
+    return result;
+}
+
+/// Convert SnapAssistCandidateList to QVariantList for QML property push
+static QVariantList candidatesToVariantList(const SnapAssistCandidateList& candidates)
+{
+    QVariantList result;
+    result.reserve(candidates.size());
+    for (const auto& c : candidates) {
+        QVariantMap m;
+        m[QStringLiteral("windowId")] = c.windowId;
+        m[QStringLiteral("compositorHandle")] = c.compositorHandle;
+        m[QStringLiteral("icon")] = c.icon;
+        m[QStringLiteral("caption")] = c.caption;
+        result.append(m);
+    }
+    return result;
+}
+
+void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
+                                    const SnapAssistCandidateList& candidates)
+{
+    if (emptyZones.isEmpty() || candidates.isEmpty()) {
         qCDebug(lcOverlay) << "showSnapAssist: no empty zones or candidates";
         Q_EMIT snapAssistDismissed(); // Notify listeners that snap assist won't show
         return;
@@ -41,9 +79,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
         return;
     }
 
-    // Parse JSON early — needed for both stale-request check and QML property push.
-    const QVariantList zonesList = parseZonesJson(emptyZonesJson, "showSnapAssist:");
-    QVariantList candidatesList = parseZonesJson(candidatesJson, "showSnapAssist:");
+    // Convert typed lists to QVariantLists for QML property push.
+    const QVariantList zonesList = emptyZonesToVariantList(emptyZones);
+    QVariantList candidatesList = candidatesToVariantList(candidates);
 
     // Guard against stale snap assist requests from a previous layout.
     // The KWin effect computes empty zones asynchronously; by the time the D-Bus
@@ -53,9 +91,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     Layout* currentLayout = resolveScreenLayout(screenId);
     if (currentLayout) {
         bool anyValid = false;
-        for (const QVariant& z : zonesList) {
-            const QString zoneId = z.toMap().value(QLatin1String("zoneId")).toString();
-            if (!zoneId.isEmpty() && currentLayout->zoneById(QUuid::fromString(zoneId))) {
+        for (const auto& z : emptyZones) {
+            if (!z.zoneId.isEmpty() && currentLayout->zoneById(QUuid::fromString(z.zoneId))) {
                 anyValid = true;
                 break;
             }
@@ -106,8 +143,8 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     if (!m_thumbnailService) {
         m_thumbnailService = std::make_unique<WindowThumbnailService>(this);
         connect(m_thumbnailService.get(), &WindowThumbnailService::captureFinished, this,
-                [this](const QString& kwinHandle, const QString& dataUrl) {
-                    updateSnapAssistCandidateThumbnail(kwinHandle, dataUrl);
+                [this](const QString& compositorHandle, const QString& dataUrl) {
+                    updateSnapAssistCandidateThumbnail(compositorHandle, dataUrl);
                     processNextThumbnailCapture();
                 });
     }
@@ -117,13 +154,13 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     if (m_thumbnailService->isAvailable()) {
         for (int i = 0; i < candidatesList.size(); ++i) {
             QVariantMap cand = candidatesList[i].toMap();
-            QString kwinHandle = cand.value(QStringLiteral("kwinHandle")).toString();
-            if (!kwinHandle.isEmpty()) {
-                auto it = m_thumbnailCache.constFind(kwinHandle);
+            QString compositorHandle = cand.value(QStringLiteral("compositorHandle")).toString();
+            if (!compositorHandle.isEmpty()) {
+                auto it = m_thumbnailCache.constFind(compositorHandle);
                 if (it != m_thumbnailCache.constEnd() && !it.value().isEmpty()) {
                     cand[QStringLiteral("thumbnail")] = it.value();
                 } else {
-                    m_thumbnailCaptureQueue.append(kwinHandle);
+                    m_thumbnailCaptureQueue.append(compositorHandle);
                 }
             }
             m_snapAssistCandidates.append(cand);
@@ -181,33 +218,33 @@ void OverlayService::showSnapAssist(const QString& screenId, const QString& empt
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
     m_snapAssistWindow->requestActivate();
-    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << zonesList.size()
-                      << "candidates=" << candidatesList.size() << "reuse=" << reuseWindow;
+    qCInfo(lcOverlay) << "showSnapAssist: screen=" << screenId << "zones=" << emptyZones.size()
+                      << "candidates=" << candidates.size() << "reuse=" << reuseWindow;
 
-    Q_EMIT snapAssistShown(screenId, emptyZonesJson, candidatesJson);
+    Q_EMIT snapAssistShown(screenId, emptyZones, candidates);
 }
 
-void OverlayService::setSnapAssistThumbnail(const QString& kwinHandle, const QString& dataUrl)
+void OverlayService::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
-    updateSnapAssistCandidateThumbnail(kwinHandle, dataUrl);
+    updateSnapAssistCandidateThumbnail(compositorHandle, dataUrl);
 }
 
-void OverlayService::updateSnapAssistCandidateThumbnail(const QString& kwinHandle, const QString& dataUrl)
+void OverlayService::updateSnapAssistCandidateThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
     if (dataUrl.isEmpty()) {
         return;
     }
-    m_thumbnailCache.insert(kwinHandle, dataUrl);
+    m_thumbnailCache.insert(compositorHandle, dataUrl);
     if (!m_snapAssistWindow || !m_snapAssistWindow->isVisible()) {
         return;
     }
     for (int i = 0; i < m_snapAssistCandidates.size(); ++i) {
         QVariantMap cand = m_snapAssistCandidates[i].toMap();
-        if (cand.value(QStringLiteral("kwinHandle")).toString() == kwinHandle) {
+        if (cand.value(QStringLiteral("compositorHandle")).toString() == compositorHandle) {
             cand[QStringLiteral("thumbnail")] = dataUrl;
             m_snapAssistCandidates[i] = cand;
             writeQmlProperty(m_snapAssistWindow, QStringLiteral("candidates"), m_snapAssistCandidates);
-            qCDebug(lcOverlay) << "SnapAssist: thumbnail updated for" << kwinHandle;
+            qCDebug(lcOverlay) << "SnapAssist: thumbnail updated for" << compositorHandle;
             break;
         }
     }
@@ -218,8 +255,8 @@ void OverlayService::processNextThumbnailCapture()
     if (!m_thumbnailService || m_thumbnailCaptureQueue.isEmpty()) {
         return;
     }
-    const QString kwinHandle = m_thumbnailCaptureQueue.takeFirst();
-    m_thumbnailService->captureWindowAsync(kwinHandle, 256);
+    const QString compositorHandle = m_thumbnailCaptureQueue.takeFirst();
+    m_thumbnailService->captureWindowAsync(compositorHandle, 256);
 }
 
 bool OverlayService::eventFilter(QObject* obj, QEvent* event)

@@ -244,32 +244,24 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // getEmptyZonesJson — Virtual Screen scenarios
+    // getEmptyZones — Virtual Screen scenarios
     // =====================================================================
 
-    void testGetEmptyZonesJson_virtualScreen_returnsValidJson()
+    void testGetEmptyZones_virtualScreen_returnsValidList()
     {
-        // getEmptyZonesJson with virtual screen ID should return valid JSON array
-        // (may be empty in headless mode since there's no QScreen, but must not crash
-        // and must return valid JSON)
+        // getEmptyZones with virtual screen ID should return a list
+        // (may be empty in headless mode since there's no QScreen, but must not crash)
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-
-        QString result = m_service->getEmptyZonesJson(vsId);
-
-        // Must be parseable JSON
-        QJsonDocument doc = QJsonDocument::fromJson(result.toUtf8());
-        QVERIFY2(!doc.isNull(), qPrintable(QStringLiteral("getEmptyZonesJson returned invalid JSON: ") + result));
-        QVERIFY2(doc.isArray(), qPrintable(QStringLiteral("getEmptyZonesJson should return array: ") + result));
+        EmptyZoneList result = m_service->getEmptyZones(vsId);
+        // Just verify it doesn't crash and returns a valid (possibly empty) list
+        Q_UNUSED(result);
     }
 
-    void testGetEmptyZonesJson_emptyScreenId_returnsValidJson()
+    void testGetEmptyZones_emptyScreenId_returnsValidList()
     {
-        // Empty screen ID fallback should also produce valid JSON
-        QString result = m_service->getEmptyZonesJson(QString());
-
-        QJsonDocument doc = QJsonDocument::fromJson(result.toUtf8());
-        QVERIFY2(!doc.isNull(), "getEmptyZonesJson with empty screen should return valid JSON");
-        QVERIFY(doc.isArray());
+        // Empty screen ID fallback should not crash
+        EmptyZoneList result = m_service->getEmptyZones(QString());
+        Q_UNUSED(result);
     }
 
     // =====================================================================

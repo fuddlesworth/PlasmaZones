@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <dbus_types.h>
 #include <QAction>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
@@ -118,7 +119,7 @@ public Q_SLOTS:
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     QString& emptyZonesJson);
+                     PlasmaZones::EmptyZoneList& emptyZonesOut);
 
     /**
      * Cancel current snap operation (Escape key)

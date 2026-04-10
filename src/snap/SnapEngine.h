@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include "core/iwindowengine.h"
 #include "core/types.h"
+#include <dbus_types.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -124,7 +125,7 @@ public:
      * @param screenId Screen to snap on
      * @return JSON array of zone assignment entries for KWin effect to apply
      */
-    QString calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
+    SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
     /**
      * @brief Emit a single batched resnapToNewLayoutRequested signal
@@ -230,8 +231,8 @@ Q_SIGNALS:
     void windowFloatingChanged(const QString& windowId, bool floating, const QString& screenId);
 
     /// Daemon-driven geometry application (used by autotile float restore)
-    void applyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
-                                const QString& screenId);
+    void applyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
+                                const QString& screenId, bool sizeOnly);
 
     /// Batched resnap data (routed through WTA::handleBatchedResnap for bookkeeping)
     void resnapToNewLayoutRequested(const QString& resnapData);

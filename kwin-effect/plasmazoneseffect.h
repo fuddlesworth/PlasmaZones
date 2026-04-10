@@ -4,6 +4,11 @@
 #pragma once
 
 #include <cstdint>
+
+#include <compositor_bridge.h>
+#include <dbus_types.h>
+#include <trigger_parser.h>
+
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -32,23 +37,12 @@ namespace PlasmaZones {
 
 // Forward declarations for helper classes
 class AutotileHandler;
+class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
 class SnapAssistHandler;
 class WindowAnimator;
 class DragTracker;
-
-/**
- * @brief Pre-parsed activation trigger (avoids QVariant unboxing in hot path)
- *
- * Each trigger has a modifier (enum value) and optional mouseButton bitmask.
- * Parsed once in loadCachedSettings() from the QVariantList received via D-Bus.
- */
-struct ParsedTrigger
-{
-    int modifier = 0;
-    int mouseButton = 0;
-};
 
 /**
  * @brief KWin C++ Effect for PlasmaZones
@@ -99,15 +93,15 @@ private Q_SLOTS:
 
     // Keyboard Navigation handlers
     // Daemon-driven navigation: daemon computes geometry/target and emits these signals
-    void slotApplyGeometryRequested(const QString& windowId, const QString& geometryJson, const QString& zoneId,
-                                    const QString& screenId);
+    void slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height, const QString& zoneId,
+                                    const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
 
     // Float toggle: daemon handles full flow via toggleFloatForWindow
     void slotToggleWindowFloatRequested(bool shouldFloat);
 
     // Daemon-driven batch operations (rotate, resnap)
-    void slotApplyGeometriesBatch(const QString& batchJson, const QString& action);
+    void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
 
     // Snap-all (effect collects candidates, daemon computes assignments)
@@ -116,8 +110,8 @@ private Q_SLOTS:
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
-    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId,
-                                               const QString& geometryJson);
+    void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
+                                               int height);
 
     // Snap-mode minimize/unminimize float tracking
     void slotWindowMinimizedChanged(KWin::EffectWindow* w);
@@ -154,20 +148,6 @@ private:
 
     // D-Bus communication
 
-    /**
-     * @brief Fire-and-forget async D-Bus call with error logging.
-     *
-     * Creates a QDBusMessage, sends it asynchronously, and attaches a
-     * watcher that logs warnings on failure. No reply data is used.
-     *
-     * @param interface  D-Bus interface (e.g., DBus::Interface::Autotile)
-     * @param method     D-Bus method name
-     * @param args       Method arguments
-     * @param logContext Human-readable label for the warning log
-     */
-    void fireAndForgetDBusCall(const QString& interface, const QString& method, const QVariantList& args,
-                               const QString& logContext = {});
-
     void callDragStarted(const QString& windowId, const QRectF& geometry);
     void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
     void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
@@ -184,29 +164,9 @@ private:
      */
     bool isDaemonReady(const char* methodName) const;
 
-    /**
-     * @brief Create an async D-Bus method call and return the pending result.
-     *
-     * Uses QDBusMessage::createMethodCall (no QDBusInterface) to avoid
-     * synchronous D-Bus introspection that blocks the compositor thread.
-     *
-     * @param interface  D-Bus interface name
-     * @param method     D-Bus method name
-     * @param args       Method arguments
-     * @return QDBusPendingCall for attaching a watcher
-     */
-    QDBusPendingCall asyncMethodCall(const QString& interface, const QString& method, const QVariantList& args = {});
-
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Parse JSON zone geometry string to QRect
-     * @param json JSON string with x, y, width, height fields
-     * @return Valid QRect on success, invalid QRect on parse error
-     */
-    QRect parseZoneGeometry(const QString& json) const;
 
     /**
      * @brief Ensure pre-snap geometry is stored for a window before snapping
@@ -304,17 +264,6 @@ private:
                           std::function<void(const QString&, const QString&)> onSnapSuccess = nullptr,
                           bool skipAnimation = false, std::function<void()> onComplete = nullptr);
 
-    // Extract app identity from window ID (portion before the '|' separator)
-    // Format: "appId|internalUuid" → returns "appId"
-    static QString extractAppId(const QString& windowId);
-
-    /**
-     * @brief Derive short name from app ID for icon/app display
-     * Reverse-DNS: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
-     * Simple name: "firefox" → as-is
-     */
-    static QString deriveShortNameFromWindowClass(const QString& windowClass);
-
     // reserveScreenEdges() and unreserveScreenEdges() have been removed. The daemon
     // disables KWin Quick Tile via kwriteconfig6. Reserving edges would turn on the
     // electric edge effect, which we don't want.
@@ -329,6 +278,18 @@ public Q_SLOTS:
     // These methods are used by NavigationHandler, WindowAnimator, and DragTracker
     // ═══════════════════════════════════════════════════════════════════════════════
 public:
+    /// Access the compositor bridge (for shared code that needs compositor-agnostic window ops)
+    ICompositorBridge* compositorBridge() const
+    {
+        return m_compositorBridge.get();
+    }
+
+    /// Clear the EDID-based screen ID cache (call on screen add/remove/reconfigure)
+    void clearScreenIdCache()
+    {
+        m_screenIdCache.clear();
+    }
+
     // Animation sequence mode: 0=all at once, 1=one by one in zone order (for batch snaps)
     int cachedAnimationSequenceMode() const
     {
@@ -366,7 +327,7 @@ private:
     friend class SnapAssistHandler;
     friend class WindowAnimator;
     friend class DragTracker;
-
+    friend class KWinCompositorBridge;
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper class instances
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -394,6 +355,7 @@ private:
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     std::unique_ptr<DragTracker> m_dragTracker;
+    std::unique_ptr<ICompositorBridge> m_compositorBridge;
 
     // Keyboard modifiers from KWin's input system
     // Updated via mouseChanged; that's the only reliable way to get modifiers in a
@@ -404,7 +366,7 @@ private:
 
     // D-Bus communication uses QDBusMessage::createMethodCall exclusively
     // (no QDBusInterface) to avoid synchronous D-Bus introspection that blocks
-    // the compositor thread. See asyncMethodCall() and fireAndForgetDBusCall().
+    // the compositor thread. See DBusHelpers::asyncCall() and DBusHelpers::fireAndForget().
 
     // Screen change debouncing and reapply handled by ScreenChangeHandler
 
@@ -438,8 +400,6 @@ private:
      * Must stay in sync with WindowDragAdaptor::checkModifier() in the daemon.
      * The enum values are defined in src/core/interfaces.h (DragModifier).
      */
-    static bool checkLocalModifier(int modifierSetting, Qt::KeyboardModifiers mods);
-
     /**
      * @brief Detect activation trigger and grab keyboard if needed
      *
@@ -490,9 +450,8 @@ private:
     // Defaults are PERMISSIVE (matching old always-send behavior) so that during the
     // startup window before async loads complete, no D-Bus calls are incorrectly skipped.
     // Once real settings arrive, they override these conservative defaults.
-    QVariantList m_cachedDragActivationTriggers; // raw D-Bus data, kept for reload
-    QVector<ParsedTrigger>
-        m_parsedTriggers; // pre-parsed from QVariantList at load time (avoids QVariant unboxing in hot path)
+    QVector<ParsedTrigger> m_parsedTriggers; // pre-parsed via TriggerParser::parseTriggers() at load time (avoids
+                                             // QVariant unboxing in hot path)
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
@@ -524,14 +483,6 @@ private:
     QSet<QString> m_dragFloatedWindowIds;
 
     // Autotile: true when the current drag was started on an autotile screen
-
-    /**
-     * @brief Encode a QIcon as a data:image/png;base64 URL string.
-     * @param icon The icon to encode
-     * @param size The pixel size to render
-     * @return Data URL string, or empty string on failure
-     */
-    static QString iconToDataUrl(const QIcon& icon, int size);
 
     // Snap-mode: windows floated due to minimize (mirrors autotile's m_minimizeFloatedWindows)
     QSet<QString> m_minimizeFloatedWindows;

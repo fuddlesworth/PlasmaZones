@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <dbus_types.h>
 #include <QObject>
 #include <QPointer>
 #include <QRect>
@@ -51,7 +52,7 @@ public Q_SLOTS:
 private:
     void applyScreenGeometryChange();
     void fetchAndApplyWindowGeometries();
-    void applyWindowGeometriesFromJson(const QString& geometriesJson);
+    void applyWindowGeometries(const WindowGeometryList& geometries);
 
     PlasmaZonesEffect* m_effect;
     QTimer m_screenChangeDebounce;

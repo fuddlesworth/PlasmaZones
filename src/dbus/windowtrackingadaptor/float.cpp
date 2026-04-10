@@ -4,12 +4,8 @@
 #include "../windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../snap/SnapEngine.h"
-#include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include <QJsonDocument>
-#include <QJsonArray>
-#include <QJsonObject>
 
 namespace PlasmaZones {
 
@@ -37,15 +33,7 @@ void WindowTrackingAdaptor::notifyDragOutUnsnap(const QString& windowId)
         if (geo) {
             // Emit size-only restore: use 0,0 position with the pre-snap dimensions.
             // The effect applies width/height while preserving the window's current position.
-            QJsonObject geoJson;
-            geoJson[QLatin1String("x")] = 0;
-            geoJson[QLatin1String("y")] = 0;
-            geoJson[QLatin1String("width")] = geo->width();
-            geoJson[QLatin1String("height")] = geo->height();
-            geoJson[QLatin1String("sizeOnly")] = true;
-            Q_EMIT applyGeometryRequested(windowId,
-                                          QString::fromUtf8(QJsonDocument(geoJson).toJson(QJsonDocument::Compact)),
-                                          QString(), screenId);
+            Q_EMIT applyGeometryRequested(windowId, 0, 0, geo->width(), geo->height(), QString(), screenId, true);
             m_service->clearPreTileGeometry(windowId);
             qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
         }
@@ -99,36 +87,29 @@ void WindowTrackingAdaptor::clearPreFloatZone(const QString& windowId)
     }
 }
 
-QString WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
+UnfloatRestoreResult WindowTrackingAdaptor::calculateUnfloatRestore(const QString& windowId, const QString& screenId)
 {
-    QJsonObject result;
-    result[QLatin1String("found")] = false;
-
     if (windowId.isEmpty()) {
-        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+        return UnfloatRestoreResult{};
     }
 
     UnfloatResult unfloat = m_service->resolveUnfloatGeometry(windowId, screenId);
     if (!unfloat.found) {
         qCDebug(lcDbusWindow) << "calculateUnfloatRestore: no restore target for" << windowId;
-        return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+        return UnfloatRestoreResult{};
     }
-
-    result[QLatin1String("found")] = true;
-    QJsonArray zoneArray;
-    for (const QString& z : unfloat.zoneIds) {
-        zoneArray.append(z);
-    }
-    result[QLatin1String("zoneIds")] = zoneArray;
-    result[QLatin1String("x")] = unfloat.geometry.x();
-    result[QLatin1String("y")] = unfloat.geometry.y();
-    result[QLatin1String("width")] = unfloat.geometry.width();
-    result[QLatin1String("height")] = unfloat.geometry.height();
-    result[QLatin1String("screenId")] = unfloat.screenId;
 
     qCDebug(lcDbusWindow) << "calculateUnfloatRestore for" << windowId << "-> zones:" << unfloat.zoneIds
                           << "geo:" << unfloat.geometry;
-    return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
+    return UnfloatRestoreResult{
+        true,
+        unfloat.zoneIds,
+        unfloat.screenId,
+        unfloat.geometry.x(),
+        unfloat.geometry.y(),
+        unfloat.geometry.width(),
+        unfloat.geometry.height(),
+    };
 }
 
 bool WindowTrackingAdaptor::isWindowFloating(const QString& windowId)
@@ -159,10 +140,16 @@ void WindowTrackingAdaptor::setWindowFloating(const QString& windowId, bool floa
     Q_EMIT windowFloatingChanged(windowId, floating, screen);
 
     // Emit unified state change
-    QJsonObject stateObj =
-        buildStateObject(windowId, m_service->zoneForWindow(windowId), QJsonArray(), screen, floating,
-                         floating ? QStringLiteral("floated") : QStringLiteral("unfloated"));
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(windowId,
+                              WindowStateEntry{
+                                  windowId,
+                                  m_service->zoneForWindow(windowId),
+                                  screen,
+                                  floating,
+                                  floating ? QStringLiteral("floated") : QStringLiteral("unfloated"),
+                                  QStringList{},
+                                  false,
+                              });
 }
 
 QStringList WindowTrackingAdaptor::getFloatingWindows()
@@ -195,7 +182,8 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
     if (geo) {
         qCInfo(lcDbusWindow) << "applyGeometryForFloat: windowId=" << windowId << "geo=" << *geo
                              << "screen=" << screenId;
-        Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(*geo), QString(), screenId);
+        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
+                                      false);
         return true;
     }
 

@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "types.h"
+#include <dbus_types.h>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -447,11 +448,11 @@ public:
     QString findEmptyZone(const QString& screenId = QString()) const;
 
     /**
-     * @brief Get JSON array of all empty zones for Snap Assist continuation
+     * @brief Get typed list of all empty zones for Snap Assist continuation
      * @param screenId Screen to find layout for (e.g. DP-1)
-     * @return JSON array of {zoneId, x, y, width, height, borderWidth, borderRadius} in overlay coordinates
+     * @return EmptyZoneList of empty zone entries with overlay-local geometry
      */
-    QString getEmptyZonesJson(const QString& screenId) const;
+    EmptyZoneList getEmptyZones(const QString& screenId) const;
 
     /**
      * @brief Get geometry for a zone on a specific screen

@@ -144,8 +144,9 @@
             <arg name="algorithmId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Algorithm ID to query."/>
             </arg>
-            <arg name="info" type="s" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON object with id, name, description, icon."/>
+            <arg name="info" type="(sssbbbbdibsbb)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::AlgorithmInfoEntry"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Struct: (id, name, description, supportsMasterCount, supportsSplitRatio, centerLayout, producesOverlappingZones, defaultSplitRatio, defaultMaxWindows, isScripted, zoneNumberDisplay, isUserScript, supportsMemory)."/>
             </arg>
         </method>
 
@@ -185,9 +186,10 @@
         </signal>
 
         <signal name="windowsTileRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch). JSON array of {windowId,x,y,width,height}."/>
-            <arg name="tileRequestsJson" type="s">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of tile requests, each with windowId, x, y, width, height."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when windows should be moved to new geometries (batch)."/>
+            <arg name="tileRequests" type="a(siiiissbb)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::TileRequestList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of (windowId, x, y, width, height, zoneId, screenId, monocle, floating)."/>
             </arg>
         </signal>
 
@@ -243,9 +245,10 @@
         </method>
 
         <method name="windowsOpenedBatch">
-            <annotation name="org.gtk.GDBus.DocString" value="Batch window-opened notifications: process multiple windowOpened in one D-Bus call. Used on daemon startup/restart and autotile toggle-on. JSON array of {windowId, screenId, minWidth, minHeight}. Optionally includes preTileGeometry {x,y,width,height} per entry to eliminate separate storePreTileGeometry calls."/>
-            <arg name="batchJson" type="s" direction="in">
-                <annotation name="org.gtk.GDBus.DocString" value="JSON array of window-opened entries."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Batch window-opened notifications: process multiple windowOpened in one D-Bus call. Used on daemon startup/restart and autotile toggle-on. Array of (windowId, screenId, minWidth, minHeight)."/>
+            <arg name="entries" type="a(ssii)" direction="in">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In0" value="PlasmaZones::WindowOpenedList"/>
+                <annotation name="org.gtk.GDBus.DocString" value="Array of window-opened entry structs."/>
             </arg>
         </method>
 

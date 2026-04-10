@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include "core/geometryutils.h"
 #include "core/logging.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -88,7 +87,8 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
     assignToZones(windowId, unfloat.zoneIds, unfloat.screenId);
 
     Q_EMIT windowFloatingChanged(windowId, false, unfloat.screenId);
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(unfloat.geometry), QString(), unfloat.screenId);
+    Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
+                                  unfloat.geometry.height(), QString(), unfloat.screenId, false);
     return true;
 }
 
@@ -97,7 +97,8 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     auto geo = m_windowTracker->validatedPreTileGeometry(windowId, screenId);
     if (geo) {
         qCInfo(lcCore) << "applyGeometryForFloat:" << windowId << "restoring to" << *geo;
-        Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(*geo), QString(), screenId);
+        Q_EMIT applyGeometryRequested(windowId, geo->x(), geo->y(), geo->width(), geo->height(), QString(), screenId,
+                                      false);
         return true;
     }
     qCWarning(lcCore) << "applyGeometryForFloat:" << windowId << "no pre-tile geometry found";

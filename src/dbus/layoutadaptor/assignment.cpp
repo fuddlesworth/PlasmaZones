@@ -624,7 +624,9 @@ void LayoutAdaptor::applyAssignmentChanges()
 {
     QSet<QString> changed = std::move(m_changedScreenIds);
     m_changedScreenIds.clear();
-    Q_EMIT assignmentChangesApplied(changed);
+    // Signal is typed as QStringList for D-Bus compatibility (QSet is not
+    // marshallable). Receivers that need set semantics convert back.
+    Q_EMIT assignmentChangesApplied(QStringList(changed.begin(), changed.end()));
 }
 
 } // namespace PlasmaZones

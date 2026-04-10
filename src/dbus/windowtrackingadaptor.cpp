@@ -6,7 +6,6 @@
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
 #include "../config/iconfigbackend.h"
-#include "../core/geometryutils.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
@@ -198,9 +197,9 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
 
     // Emit unified state change
-    QJsonObject stateObj =
-        buildStateObject(windowId, zoneId, QJsonArray{zoneId}, resolvedScreen, false, QStringLiteral("snapped"));
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(
+        windowId,
+        WindowStateEntry{windowId, zoneId, resolvedScreen, false, QStringLiteral("snapped"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -242,12 +241,9 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
                          << resolvedScreen;
 
-    QJsonArray zoneIdsArr;
-    for (const QString& zid : zoneIds)
-        zoneIdsArr.append(zid);
-    QJsonObject stateObj =
-        buildStateObject(windowId, primaryZoneId, zoneIdsArr, resolvedScreen, false, QStringLiteral("snapped"));
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(
+        windowId,
+        WindowStateEntry{windowId, primaryZoneId, resolvedScreen, false, QStringLiteral("snapped"), zoneIds, false});
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -271,43 +267,29 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
 
     // Emit unified state change
-    QJsonObject stateObj =
-        buildStateObject(windowId, QString(), QJsonArray(), QString(), false, QStringLiteral("unsnapped"));
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(
+        windowId,
+        WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped"), QStringList{}, false});
 }
 
-void WindowTrackingAdaptor::windowsSnappedBatch(const QString& batchJson)
+void WindowTrackingAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)
 {
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusWindow) << "windowsSnappedBatch: invalid JSON:" << parseError.errorString();
-        return;
-    }
-
-    const QJsonArray entries = doc.array();
     qCInfo(lcDbusWindow) << "windowsSnappedBatch: processing" << entries.size() << "entries";
 
-    for (const QJsonValue& val : entries) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        // isRestore == true means the window should be unsnapped (its zone no longer
-        // exists in the new layout), NOT restored to a zone. The name is misleading
-        // but preserved for wire compatibility.
-        bool isRestore = obj.value(QLatin1String("isRestore")).toBool(false);
-
-        if (windowId.isEmpty()) {
+    // Note: entry.isRestore == true means the window should be unsnapped (its zone no
+    // longer exists in the new layout), NOT restored to a zone. The name is misleading
+    // but preserved for wire compatibility.
+    for (const auto& entry : entries) {
+        if (entry.windowId.isEmpty()) {
             continue;
         }
 
-        if (isRestore) {
+        if (entry.isRestore) {
             // Window's zone exceeded the new layout — unsnap and clear pre-tile geometry
-            windowUnsnapped(windowId);
-            clearPreTileGeometry(windowId);
+            windowUnsnapped(entry.windowId);
+            clearPreTileGeometry(entry.windowId);
         } else {
-            QString zoneId = obj.value(QLatin1String("zoneId")).toString();
-            QString screenId = obj.value(QLatin1String("screenId")).toString();
-            windowSnapped(windowId, zoneId, screenId);
+            windowSnapped(entry.windowId, entry.zoneId, entry.screenId);
         }
     }
 }
@@ -374,9 +356,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap
-    QJsonObject stateObj =
-        buildStateObject(windowId, QString(), QJsonArray(), newScreenId, false, QStringLiteral("screen_changed"));
-    Q_EMIT windowStateChanged(windowId, QString::fromUtf8(QJsonDocument(stateObj).toJson(QJsonDocument::Compact)));
+    Q_EMIT windowStateChanged(windowId,
+                              WindowStateEntry{windowId, QString(), newScreenId, false,
+                                               QStringLiteral("screen_changed"), QStringList{}, false});
 }
 
 void WindowTrackingAdaptor::setWindowSticky(const QString& windowId, bool sticky)
@@ -521,9 +503,9 @@ void WindowTrackingAdaptor::pruneStaleWindows(const QStringList& aliveWindowIds)
     }
 }
 
-QString WindowTrackingAdaptor::getEmptyZonesJson(const QString& screenId)
+EmptyZoneList WindowTrackingAdaptor::getEmptyZones(const QString& screenId)
 {
-    return m_service->getEmptyZonesJson(screenId);
+    return m_service->getEmptyZones(screenId);
 }
 
 QStringList WindowTrackingAdaptor::getMultiZoneForWindow(const QString& windowId)
@@ -552,26 +534,31 @@ QString WindowTrackingAdaptor::findEmptyZone()
     return m_service->findEmptyZone(m_lastCursorScreenId);
 }
 
-QString WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
+ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometry(const QString& zoneId)
 {
     return getZoneGeometryForScreen(zoneId, QString());
 }
 
-QString WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+ZoneGeometryRect WindowTrackingAdaptor::getZoneGeometryForScreen(const QString& zoneId, const QString& screenId)
+{
+    QRect geo = zoneGeometryRect(zoneId, screenId);
+    if (!geo.isValid()) {
+        return ZoneGeometryRect{};
+    }
+    return ZoneGeometryRect::fromRect(geo);
+}
+
+QRect WindowTrackingAdaptor::zoneGeometryRect(const QString& zoneId, const QString& screenId)
 {
     if (zoneId.isEmpty()) {
-        qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: empty zone ID";
-        return QString();
+        qCDebug(lcDbusWindow) << "zoneGeometryRect: empty zone ID";
+        return QRect();
     }
-
-    // Delegate to service
     QRect geo = m_service->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
-        qCDebug(lcDbusWindow) << "getZoneGeometryForScreen: invalid geometry for zone:" << zoneId;
-        return QString();
+        qCDebug(lcDbusWindow) << "zoneGeometryRect: invalid geometry for zone:" << zoneId;
     }
-
-    return GeometryUtils::rectToJson(geo);
+    return geo;
 }
 
 QJsonObject WindowTrackingAdaptor::buildStateObject(const QString& windowId, const QString& zoneId,

@@ -12,6 +12,7 @@ qt_policy(SET QTP0004 NEW)
 # Shared QML Components (must be built first)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_subdirectory(shared)
+add_subdirectory(compositor-common)
 
 # Generate wlr-layer-shell Wayland protocol client code
 set(_pz_proto_dir ${CMAKE_CURRENT_SOURCE_DIR}/core/protocols)
@@ -251,6 +252,7 @@ target_link_libraries(plasmazones_core
         Qt6::Quick
         Qt6::Gui
         Qt6::DBus
+        plasmazones_compositor_common
     PRIVATE
         Wayland::Client
         Qt6::Concurrent
@@ -300,6 +302,7 @@ target_include_directories(plasmazones_core
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}>  # For shared/ headers (virtualscreenid.h)
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/compositor-common>
         $<INSTALL_INTERFACE:include/plasmazones>
 )
 

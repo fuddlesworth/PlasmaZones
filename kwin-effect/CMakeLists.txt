@@ -54,6 +54,8 @@ set(plasmazones_effect_SRCS
     dragtracker.cpp
     dragtracker.h
     ${CMAKE_SOURCE_DIR}/shared/virtualscreenid.h
+    kwin_compositor_bridge.cpp
+    kwin_compositor_bridge.h
 )
 
 # Create the KWin effect plugin using KDE's plugin macro
@@ -69,6 +71,7 @@ target_link_libraries(kwin_effect_plasmazones PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
+    plasmazones_compositor_common
 )
 
 # Include directories

@@ -4,6 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <window_id.h>
+
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -186,20 +188,11 @@ inline constexpr QLatin1StringView Down{"down"};
 /**
  * @brief Extract app identity from a full window ID
  *
- * Window ID format: "appId|internalId"
- * App ID is the application identity (desktopFileName or normalized windowClass)
- * that persists across KWin restarts.
- *
- * @param windowId Full window ID
- * @return App ID portion, or original string if not in expected format
+ * Delegates to WindowIdUtils::extractAppId (canonical implementation in compositor-common).
  */
 inline QString extractAppId(const QString& windowId)
 {
-    if (windowId.isEmpty()) {
-        return windowId;
-    }
-    int sep = windowId.indexOf(QLatin1Char('|'));
-    return (sep > 0) ? windowId.left(sep) : windowId;
+    return WindowIdUtils::extractAppId(windowId);
 }
 
 /**
@@ -235,44 +228,14 @@ inline QString extractWindowClass(const QString& windowId)
  * because "fire" is not a complete segment and the last segment "firefox"
  * does not start with "fire" (length 4 < 5 threshold to prevent short matches).
  */
+/**
+ * @brief Segment-aware app ID matching for exclusion lists.
+ *
+ * Delegates to WindowIdUtils::appIdMatches (canonical implementation in compositor-common).
+ */
 inline bool appIdMatches(const QString& appId, const QString& pattern)
 {
-    if (appId.isEmpty() || pattern.isEmpty()) {
-        return false;
-    }
-    if (appId.compare(pattern, Qt::CaseInsensitive) == 0) {
-        return true;
-    }
-    // Trailing dot-segment: "org.mozilla.firefox" ends with ".firefox"
-    if (appId.length() > pattern.length() + 1 && appId[appId.length() - pattern.length() - 1] == QLatin1Char('.')
-        && appId.endsWith(pattern, Qt::CaseInsensitive)) {
-        return true;
-    }
-    // Reverse: appId is a trailing dot-segment of pattern
-    if (pattern.length() > appId.length() + 1 && pattern[pattern.length() - appId.length() - 1] == QLatin1Char('.')
-        && pattern.endsWith(appId, Qt::CaseInsensitive)) {
-        return true;
-    }
-    // Last-segment prefix: "systemsettings" matches start of last segment "systemsettings5"
-    // Only for patterns >= 5 chars to prevent short false positives like "fire" → "firefox"
-    if (pattern.length() >= 5) {
-        int lastDot = appId.lastIndexOf(QLatin1Char('.'));
-        if (lastDot >= 0) {
-            QStringView lastSeg = QStringView(appId).mid(lastDot + 1);
-            if (lastSeg.startsWith(pattern, Qt::CaseInsensitive) && lastSeg.length() != pattern.length()) {
-                return true;
-            }
-        }
-        // Reverse: appId matches start of pattern's last segment
-        lastDot = pattern.lastIndexOf(QLatin1Char('.'));
-        if (lastDot >= 0 && appId.length() >= 5) {
-            QStringView lastSeg = QStringView(pattern).mid(lastDot + 1);
-            if (lastSeg.startsWith(appId, Qt::CaseInsensitive) && lastSeg.length() != appId.length()) {
-                return true;
-            }
-        }
-    }
-    return false;
+    return WindowIdUtils::appIdMatches(appId, pattern);
 }
 
 /**

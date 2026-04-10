@@ -230,8 +230,13 @@ Q_SIGNALS:
     /**
      * @brief Emitted when the KCM requests resnap/retile after assignment changes
      * @param changedScreenIds Screen IDs whose assignments were modified in this batch
+     *
+     * Typed as QStringList (not QSet) because this is a Q_SIGNAL on a
+     * QDBusAbstractAdaptor subclass and is therefore auto-exposed over D-Bus;
+     * QSet is not a D-Bus-marshallable type. Internal callers that need
+     * set semantics should convert via `QSet<QString>{list.begin(), list.end()}`.
      */
-    void assignmentChangesApplied(const QSet<QString>& changedScreenIds);
+    void assignmentChangesApplied(const QStringList& changedScreenIds);
 
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals

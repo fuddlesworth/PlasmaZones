@@ -9,6 +9,7 @@
 
 #include "core/logging.h"
 
+#include <dbus_types.h>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -34,7 +35,13 @@ AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
     connect(m_engine, &AutotileEngine::tilingChanged, this, &AutotileAdaptor::tilingChanged);
     connect(m_engine, &AutotileEngine::windowsTiled, this, &AutotileAdaptor::onWindowsTiled);
     connect(m_engine, &AutotileEngine::focusWindowRequested, this, &AutotileAdaptor::focusWindowRequested);
-    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this, &AutotileAdaptor::windowsReleasedFromTiling);
+    // The in-process engine signal has a 2nd QSet<QString> argument for
+    // daemon-side bookkeeping; strip it before forwarding over D-Bus since
+    // QSet is not a D-Bus-marshallable type.
+    connect(m_engine, &AutotileEngine::windowsReleasedFromTiling, this,
+            [this](const QStringList& windowIds, const QSet<QString>& /*releasedScreenIds*/) {
+                Q_EMIT windowsReleasedFromTiling(windowIds);
+            });
     connect(m_engine, &AutotileEngine::windowFloatingChanged, this, &AutotileAdaptor::windowFloatingChanged);
     qCDebug(lcDbusAutotile) << "AutotileAdaptor initialized";
 }
@@ -195,34 +202,20 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
 }
 
-void AutotileAdaptor::windowsOpenedBatch(const QString& batchJson)
+void AutotileAdaptor::windowsOpenedBatch(const WindowOpenedList& entries)
 {
     if (!ensureEngine("windowsOpenedBatch")) {
         return;
     }
 
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(batchJson.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcDbusAutotile) << "windowsOpenedBatch: invalid JSON:" << parseError.errorString();
-        return;
-    }
-
-    const QJsonArray entries = doc.array();
     qCInfo(lcDbusAutotile) << "windowsOpenedBatch: processing" << entries.size() << "windows";
 
-    for (const QJsonValue& val : entries) {
-        QJsonObject obj = val.toObject();
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        QString screenId = obj.value(QLatin1String("screenId")).toString();
-        int minWidth = obj.value(QLatin1String("minWidth")).toInt(0);
-        int minHeight = obj.value(QLatin1String("minHeight")).toInt(0);
-
-        if (windowId.isEmpty() || screenId.isEmpty()) {
+    for (const auto& entry : entries) {
+        if (entry.windowId.isEmpty() || entry.screenId.isEmpty()) {
             continue;
         }
 
-        m_engine->windowOpened(windowId, screenId, qMax(0, minWidth), qMax(0, minHeight));
+        m_engine->windowOpened(entry.windowId, entry.screenId, qMax(0, entry.minWidth), qMax(0, entry.minHeight));
     }
 }
 
@@ -286,30 +279,30 @@ QStringList AutotileAdaptor::availableAlgorithms()
     return AlgorithmRegistry::instance()->availableAlgorithms();
 }
 
-QString AutotileAdaptor::algorithmInfo(const QString& algorithmId)
+AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
     TilingAlgorithm* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;
-        return QStringLiteral("{}");
+        return {};
     }
 
-    QJsonObject info;
-    info[QLatin1String("id")] = algorithmId; // Validated by successful lookup above
-    info[QLatin1String("name")] = algo->name();
-    info[QLatin1String("description")] = algo->description();
-    info[QLatin1String("supportsMasterCount")] = algo->supportsMasterCount();
-    info[QLatin1String("supportsSplitRatio")] = algo->supportsSplitRatio();
-    info[QLatin1String("centerLayout")] = algo->centerLayout();
-    info[QLatin1String("defaultSplitRatio")] = algo->defaultSplitRatio();
-    info[QLatin1String("defaultMaxWindows")] = algo->defaultMaxWindows();
-    info[QLatin1String("producesOverlappingZones")] = algo->producesOverlappingZones();
-    info[QLatin1String("zoneNumberDisplay")] = algo->zoneNumberDisplay();
-    info[QLatin1String("isScripted")] = algo->isScripted();
-    info[QLatin1String("isUserScript")] = algo->isUserScript();
-    info[QLatin1String("supportsMemory")] = algo->supportsMemory();
+    AlgorithmInfoEntry entry;
+    entry.id = algorithmId; // Validated by successful lookup above
+    entry.name = algo->name();
+    entry.description = algo->description();
+    entry.supportsMasterCount = algo->supportsMasterCount();
+    entry.supportsSplitRatio = algo->supportsSplitRatio();
+    entry.centerLayout = algo->centerLayout();
+    entry.producesOverlappingZones = algo->producesOverlappingZones();
+    entry.defaultSplitRatio = algo->defaultSplitRatio();
+    entry.defaultMaxWindows = algo->defaultMaxWindows();
+    entry.isScripted = algo->isScripted();
+    entry.zoneNumberDisplay = algo->zoneNumberDisplay();
+    entry.isUserScript = algo->isUserScript();
+    entry.supportsMemory = algo->supportsMemory();
 
-    return QString::fromUtf8(QJsonDocument(info).toJson(QJsonDocument::Compact));
+    return entry;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -329,27 +322,31 @@ void AutotileAdaptor::onWindowsTiled(const QString& tileRequestsJson)
         return;
     }
 
-    QJsonArray outArr;
+    TileRequestList requests;
     for (const QJsonValue& val : doc.array()) {
         QJsonObject obj = val.toObject();
-        // Float entries (overflow windows) have no geometry — pass through as-is
-        if (obj.value(QLatin1String("floating")).toBool(false)) {
-            outArr.append(obj);
-            continue;
+        TileRequestEntry entry;
+        entry.windowId = obj.value(QLatin1String("windowId")).toString();
+        entry.floating = obj.value(QLatin1String("floating")).toBool(false);
+        if (!entry.floating) {
+            entry.x = obj.value(QLatin1String("x")).toInt();
+            entry.y = obj.value(QLatin1String("y")).toInt();
+            entry.width = obj.value(QLatin1String("width")).toInt();
+            entry.height = obj.value(QLatin1String("height")).toInt();
+            if (entry.width <= 0 || entry.height <= 0) {
+                qCDebug(lcDbusAutotile) << "onWindowsTiled: invalid geometry for" << entry.windowId;
+                continue;
+            }
         }
-        QString windowId = obj.value(QLatin1String("windowId")).toString();
-        QRect geo(obj.value(QLatin1String("x")).toInt(), obj.value(QLatin1String("y")).toInt(),
-                  obj.value(QLatin1String("width")).toInt(), obj.value(QLatin1String("height")).toInt());
-        if (geo.width() <= 0 || geo.height() <= 0) {
-            qCDebug(lcDbusAutotile) << "onWindowsTiled: invalid geometry for" << windowId << geo;
-            continue;
-        }
-        outArr.append(obj);
+        entry.zoneId = obj.value(QLatin1String("zoneId")).toString();
+        entry.screenId = obj.value(QLatin1String("screenId")).toString();
+        entry.monocle = obj.value(QLatin1String("monocle")).toBool(false);
+        requests.append(entry);
     }
 
-    if (!outArr.isEmpty()) {
-        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << outArr.size() << "windows";
-        Q_EMIT windowsTileRequested(QString::fromUtf8(QJsonDocument(outArr).toJson(QJsonDocument::Compact)));
+    if (!requests.isEmpty()) {
+        qCDebug(lcDbusAutotile) << "Emitting windowsTileRequested:" << requests.size() << "windows";
+        Q_EMIT windowsTileRequested(requests);
     }
 }
 

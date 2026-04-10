@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include "core/geometryutils.h"
 #include "core/interfaces.h"
 #include "core/logging.h"
 #include "core/utils.h"
@@ -51,7 +50,8 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
 
     // Emit geometry for KWin effect to apply
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId, result.screenId);
+    Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),
+                                  result.geometry.height(), result.zoneId, result.screenId, false);
 
     qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
                    << result.screenId;

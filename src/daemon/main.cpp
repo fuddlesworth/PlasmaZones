@@ -3,6 +3,7 @@
 
 #include "daemon.h"
 #include "../config/configdefaults.h"
+#include "../core/constants.h"
 #include "../config/configmigration.h"
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
@@ -11,6 +12,7 @@
 #include "version.h"
 #include "rendering/zoneshaderitem.h"
 #include "vulkan_support.h"
+#include <dbus_types.h>
 #include <QGuiApplication>
 #include <QCommandLineParser>
 #include <QDBusConnection>
@@ -90,6 +92,9 @@ int main(int argc, char* argv[])
     }
 #endif
     PlasmaZones::loadTranslations(&app);
+
+    // Register D-Bus struct types for typed signal/method exchange
+    PlasmaZones::registerDBusTypes();
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
@@ -175,7 +180,7 @@ int main(int argc, char* argv[])
     }
 
     // Ensure single instance via D-Bus service name registration
-    const QString serviceName = QStringLiteral("org.plasmazones.daemon");
+    const QString serviceName = QString(DBus::ServiceName);
     QDBusConnection bus = QDBusConnection::sessionBus();
 
     if (!bus.registerService(serviceName)) {
