@@ -263,16 +263,18 @@ CycleTargetResult WindowTrackingAdaptor::getCycleTargetForWindow(const QString& 
 SwapTargetResult WindowTrackingAdaptor::getSwapTargetForWindow(const QString& windowId, const QString& direction,
                                                                const QString& screenId)
 {
+    // On failure, windowId1 is returned empty so that a caller which forgets
+    // to check `success` cannot accidentally act on the calling window.
     if (!validateWindowId(windowId, QStringLiteral("getSwapTargetForWindow"))) {
-        return swapResult(false, QStringLiteral("invalid_window"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
+        return swapResult(false, QStringLiteral("invalid_window"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
                           0, QString(), screenId, QString(), QString());
     }
     if (!validateDirection(direction, QStringLiteral("swap"))) {
-        return swapResult(false, QStringLiteral("invalid_direction"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0,
+        return swapResult(false, QStringLiteral("invalid_direction"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }
     if (!m_zoneDetectionAdaptor) {
-        return swapResult(false, QStringLiteral("no_zone_detection"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0,
+        return swapResult(false, QStringLiteral("no_zone_detection"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }
 
@@ -280,7 +282,7 @@ SwapTargetResult WindowTrackingAdaptor::getSwapTargetForWindow(const QString& wi
     if (currentZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("not_snapped"), QString(), QString(),
                                   screenId);
-        return swapResult(false, QStringLiteral("not_snapped"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0,
+        return swapResult(false, QStringLiteral("not_snapped"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0,
                           QString(), screenId, QString(), QString());
     }
 
@@ -297,7 +299,7 @@ SwapTargetResult WindowTrackingAdaptor::getSwapTargetForWindow(const QString& wi
     if (targetZoneId.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId,
                                   QString(), effectiveScreenId);
-        return swapResult(false, QStringLiteral("no_adjacent_zone"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0,
+        return swapResult(false, QStringLiteral("no_adjacent_zone"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), effectiveScreenId, currentZoneId, QString());
     }
 
@@ -306,7 +308,7 @@ SwapTargetResult WindowTrackingAdaptor::getSwapTargetForWindow(const QString& wi
     if (!targetGeom.isValid() || !currentGeom.isValid()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"), currentZoneId,
                                   targetZoneId, effectiveScreenId);
-        return swapResult(false, QStringLiteral("geometry_error"), windowId, 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
+        return swapResult(false, QStringLiteral("geometry_error"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
                           0, QString(), effectiveScreenId, currentZoneId, targetZoneId);
     }
 

@@ -114,7 +114,10 @@ struct WindowStateEntry
 
 using WindowStateList = QList<WindowStateEntry>;
 
-/// D-Bus struct for unfloat restore result: (bassiiii)
+/// D-Bus struct for unfloat restore result: (bassiiii).
+/// Intentionally scalar-only — `calculateUnfloatRestore` returns exactly one
+/// result per call. No `QList<UnfloatRestoreResult>` metatype is registered;
+/// if a batch variant is ever added, register the list type alongside it.
 struct UnfloatRestoreResult
 {
     bool found = false;

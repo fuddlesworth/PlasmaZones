@@ -69,11 +69,14 @@ public:
         return m_floatingWindows.size();
     }
 
+    /// Convenience alias for setFloating(windowId, true). Kept symmetric
+    /// with remove() so both entry points share the same guard logic.
     void insert(const QString& windowId)
     {
-        m_floatingWindows.insert(windowId);
+        setFloating(windowId, true);
     }
 
+    /// Convenience alias for setFloating(windowId, false).
     void remove(const QString& windowId)
     {
         setFloating(windowId, false);

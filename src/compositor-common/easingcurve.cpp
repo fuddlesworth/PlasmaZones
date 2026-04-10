@@ -66,6 +66,12 @@ EasingCurve EasingCurve::fromString(const QString& str)
     if (str.isEmpty())
         return curve;
 
+    // Detect named curves (e.g. "elastic-in") vs numeric cubic-bezier spec
+    // (e.g. "0.33,1.0,0.68,1.0" or "1.5e-3,…"). The 'e'/'E' exemption is
+    // specifically for floating-point scientific notation exponents so that
+    // numeric strings are not misclassified as named curves — it is NOT
+    // matching the leading 'e' of "elastic-*" (those hit 'l' first and set
+    // hasLetter=true anyway).
     bool hasLetter = false;
     for (const QChar& ch : str) {
         if (ch.isLetter() && ch != QLatin1Char('e') && ch != QLatin1Char('E')) {

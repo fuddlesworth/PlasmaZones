@@ -61,7 +61,15 @@ public:
      */
     void geometryChanged(const QRect& currentGeometry)
     {
+        // If an apply is currently in flight, force a coalesced reapply even
+        // when the geometry is unchanged (e.g., identical-resolution monitor
+        // swap during an ongoing apply) — otherwise the change is silently
+        // dropped because `currentGeometry == m_lastGeometry` and the
+        // in-progress apply is still using pre-change state.
         if (currentGeometry == m_lastGeometry && !m_pending) {
+            if (m_applyInProgress) {
+                requestReapply();
+            }
             return;
         }
         m_lastGeometry = currentGeometry;

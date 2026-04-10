@@ -10,6 +10,7 @@
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 #include <QLineF>
+#include <QMarginsF>
 #include <QVarLengthArray>
 
 namespace PlasmaZones {
@@ -190,51 +191,18 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     // The window's expanded geometry (includes shadow/decoration padding).
     // Guard: once a window enters the "deleted" state, its Item tree may be
     // torn down and expandedGeometry() would dereference a null Item pointer.
-    QRectF expanded = (window && !window->isDeleted()) ? window->expandedGeometry() : QRectF(it->targetGeometry);
+    const QRectF expanded = (window && !window->isDeleted()) ? window->expandedGeometry() : QRectF(it->targetGeometry);
 
-    // Shadow/decoration padding (constant)
+    // Derive positive-margin padding from the expanded/frame delta:
+    //   expanded extends LEFT of frame  => expanded.x() < frame.x(), so margin.left = frame.x - expanded.x
+    //   expanded extends RIGHT of frame => expanded.right() > frame.right(), so margin.right = expanded.right -
+    //   frame.right
     const QRectF frameGeo(it->targetGeometry);
-    const qreal padLeft = expanded.x() - frameGeo.x();
-    const qreal padTop = expanded.y() - frameGeo.y();
-    const qreal padRight = expanded.right() - frameGeo.right();
-    const qreal padBottom = expanded.bottom() - frameGeo.bottom();
+    const QMarginsF padding(frameGeo.x() - expanded.x(), frameGeo.y() - expanded.y(),
+                            expanded.right() - frameGeo.right(), expanded.bottom() - frameGeo.bottom());
 
-    // Footprint at animation start (t=0)
-    QRectF atStart(it->startPosition.x() + padLeft, it->startPosition.y() + padTop,
-                   it->startSize.width() - padLeft + padRight, it->startSize.height() - padTop + padBottom);
-
-    QRectF bounds = expanded.united(atStart);
-
-    // For overshooting easing curves, sample to find extremes.
-    const bool isBounce =
-        (it->easing.type == EasingCurve::Type::BounceIn || it->easing.type == EasingCurve::Type::BounceOut
-         || it->easing.type == EasingCurve::Type::BounceInOut);
-    const bool needsSampling =
-        (it->easing.type == EasingCurve::Type::ElasticIn || it->easing.type == EasingCurve::Type::ElasticOut
-         || it->easing.type == EasingCurve::Type::ElasticInOut)
-        || (isBounce && it->easing.amplitude > 1.0)
-        || (it->easing.type == EasingCurve::Type::CubicBezier
-            && (it->easing.y1 < 0.0 || it->easing.y1 > 1.0 || it->easing.y2 < 0.0 || it->easing.y2 > 1.0));
-
-    if (needsSampling) {
-        const qreal dx = it->startPosition.x() - it->targetGeometry.x();
-        const qreal dy = it->startPosition.y() - it->targetGeometry.y();
-        const qreal dw = it->startSize.width() - it->targetGeometry.width();
-        const qreal dh = it->startSize.height() - it->targetGeometry.height();
-
-        constexpr int nSamples = 50;
-        for (int i = 1; i < nSamples; ++i) {
-            qreal p = it->easing.evaluate(qreal(i) / nSamples);
-            const qreal inv = 1.0 - p;
-            QRectF sampledRect(it->targetGeometry.x() + dx * inv + padLeft, it->targetGeometry.y() + dy * inv + padTop,
-                               it->targetGeometry.width() + dw * inv - padLeft + padRight,
-                               it->targetGeometry.height() + dh * inv - padTop + padBottom);
-            bounds = bounds.united(sampledRect);
-        }
-    }
-
-    bounds.adjust(-2.0, -2.0, 2.0, 2.0);
-    return bounds;
+    return PlasmaZones::AnimationMath::computeOvershootBounds(it->startPosition, it->startSize, it->targetGeometry,
+                                                              it->easing, padding);
 }
 
 } // namespace PlasmaZones
