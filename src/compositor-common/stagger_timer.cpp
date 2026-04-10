@@ -5,6 +5,8 @@
 
 #include <QTimer>
 
+#include <limits>
+
 namespace PlasmaZones {
 
 void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int staggerInterval,
@@ -22,8 +24,14 @@ void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int
 
     if (stagger) {
         applyFn(0);
+        // Use qint64 intermediate + clamp: QTimer::singleShot takes int ms, so
+        // (i * staggerInterval) can silently overflow to negative for large
+        // counts. Clamp at INT_MAX — beyond that the delays are pathological
+        // anyway and clamping yields "fire as soon as possible after the cap".
         for (int i = 1; i < count; ++i) {
-            const int delay = i * staggerInterval;
+            const qint64 rawDelay = static_cast<qint64>(i) * static_cast<qint64>(staggerInterval);
+            const int delay = rawDelay > std::numeric_limits<int>::max() ? std::numeric_limits<int>::max()
+                                                                         : static_cast<int>(rawDelay);
             const bool isLast = (i == count - 1);
             QTimer::singleShot(delay, parent, [applyFn, onComplete, i, isLast]() {
                 applyFn(i);

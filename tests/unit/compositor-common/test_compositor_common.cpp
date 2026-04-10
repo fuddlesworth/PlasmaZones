@@ -1128,6 +1128,63 @@ private Q_SLOTS:
         // so it returns the full string unchanged
         QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("org.kde."));
     }
+
+    // =================================================================
+    // D-Bus types: WindowOpenedEntry roundtrip
+    // =================================================================
+
+    void testWindowOpenedEntryRoundtrip()
+    {
+        PlasmaZones::registerDBusTypes();
+        PlasmaZones::WindowOpenedEntry entry{QStringLiteral("firefox|42"), QStringLiteral("screen-0"), 320, 240};
+
+        const QString sig = dbusSignature(entry);
+        QCOMPARE(sig, QStringLiteral("(ssii)"));
+
+        const int typeId = qMetaTypeId<PlasmaZones::WindowOpenedEntry>();
+        QVERIFY(typeId != QMetaType::UnknownType);
+        const int listTypeId = qMetaTypeId<PlasmaZones::WindowOpenedList>();
+        QVERIFY(listTypeId != QMetaType::UnknownType);
+
+        QCOMPARE(entry.windowId, QStringLiteral("firefox|42"));
+        QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
+        QCOMPARE(entry.minWidth, 320);
+        QCOMPARE(entry.minHeight, 240);
+
+        PlasmaZones::WindowOpenedEntry defaultEntry;
+        QVERIFY(defaultEntry.windowId.isEmpty());
+        QVERIFY(defaultEntry.screenId.isEmpty());
+        QCOMPARE(defaultEntry.minWidth, 0);
+        QCOMPARE(defaultEntry.minHeight, 0);
+    }
+
+    // =================================================================
+    // D-Bus types: SnapConfirmationEntry roundtrip
+    // =================================================================
+
+    void testSnapConfirmationEntryRoundtrip()
+    {
+        PlasmaZones::registerDBusTypes();
+        PlasmaZones::SnapConfirmationEntry entry{QStringLiteral("kate|7"), QStringLiteral("{zone-1}"),
+                                                 QStringLiteral("screen-0"), true};
+
+        const QString sig = dbusSignature(entry);
+        QCOMPARE(sig, QStringLiteral("(sssb)"));
+
+        const int typeId = qMetaTypeId<PlasmaZones::SnapConfirmationEntry>();
+        QVERIFY(typeId != QMetaType::UnknownType);
+        const int listTypeId = qMetaTypeId<PlasmaZones::SnapConfirmationList>();
+        QVERIFY(listTypeId != QMetaType::UnknownType);
+
+        QCOMPARE(entry.windowId, QStringLiteral("kate|7"));
+        QCOMPARE(entry.zoneId, QStringLiteral("{zone-1}"));
+        QCOMPARE(entry.screenId, QStringLiteral("screen-0"));
+        QCOMPARE(entry.isRestore, true);
+
+        PlasmaZones::SnapConfirmationEntry defaultEntry;
+        QVERIFY(defaultEntry.windowId.isEmpty());
+        QCOMPARE(defaultEntry.isRestore, false);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCompositorCommon)

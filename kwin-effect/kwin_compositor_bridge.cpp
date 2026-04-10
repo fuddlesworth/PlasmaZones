@@ -4,19 +4,22 @@
 #include "kwin_compositor_bridge.h"
 #include "plasmazoneseffect.h"
 
-#include <geometry_helpers.h>
-#include <window_id.h>
+#include "geometry_helpers.h"
+#include "window_id.h"
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <window.h>
 #include <workspace.h>
 
+#include <QtGlobal>
+
 namespace PlasmaZones {
 
 KWinCompositorBridge::KWinCompositorBridge(PlasmaZonesEffect* effect)
     : m_effect(effect)
 {
+    Q_ASSERT(m_effect);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

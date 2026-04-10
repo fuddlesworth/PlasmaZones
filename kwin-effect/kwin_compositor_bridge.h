@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <compositor_bridge.h>
+#include "compositor_bridge.h"
 
 namespace KWin {
 class EffectWindow;

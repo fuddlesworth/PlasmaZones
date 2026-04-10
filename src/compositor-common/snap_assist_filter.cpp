@@ -12,6 +12,9 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
                                         const QString& screenId, const QSet<QString>& snappedWindowIds)
 {
     SnapAssistCandidateList candidates;
+    if (!bridge) {
+        return candidates;
+    }
     const auto allWindows = bridge->stackingOrder();
 
     // Pre-compute per-appId window counts for O(1) lookups in the main loop
