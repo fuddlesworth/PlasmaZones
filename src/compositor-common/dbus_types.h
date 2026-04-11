@@ -343,6 +343,8 @@ struct DragOutcome
     int height = 0;
     QString zoneId; ///< populated for ApplySnap
     bool skipAnimation = false;
+    bool requestSnapAssist = false; ///< true → plugin should show snap-assist window picker
+    EmptyZoneList emptyZones; ///< candidate zones for snap assist (empty unless requestSnapAssist)
 
     QRect toRect() const
     {

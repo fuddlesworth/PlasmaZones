@@ -323,7 +323,7 @@ QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o)
 {
     arg.beginStructure();
     arg << o.action << o.windowId << o.targetScreenId << o.x << o.y << o.width << o.height << o.zoneId
-        << o.skipAnimation;
+        << o.skipAnimation << o.requestSnapAssist << o.emptyZones;
     arg.endStructure();
     return arg;
 }
@@ -332,7 +332,7 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
 {
     arg.beginStructure();
     arg >> o.action >> o.windowId >> o.targetScreenId >> o.x >> o.y >> o.width >> o.height >> o.zoneId
-        >> o.skipAnimation;
+        >> o.skipAnimation >> o.requestSnapAssist >> o.emptyZones;
     arg.endStructure();
     return arg;
 }

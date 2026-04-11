@@ -25,6 +25,28 @@
             </arg>
         </method>
 
+        <method name="endDrag">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative end. Returns a DragOutcome the plugin applies verbatim — no further decisions on the plugin side. Handles autotile float, snap, drag-out unsnap, snap assist, and cancelled-drag paths through a single dispatch. Replaces dragStopped as the canonical drag-end entry point."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier (must match the windowId from beginDrag)."/>
+            </arg>
+            <arg name="cursorX" type="i" direction="in"/>
+            <arg name="cursorY" type="i" direction="in"/>
+            <arg name="modifiers" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::KeyboardModifiers at release."/>
+            </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons at release."/>
+            </arg>
+            <arg name="cancelled" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the drag was cancelled (Escape, external cancel). False for normal button release."/>
+            </arg>
+            <arg name="outcome" type="(issiiiisbba(siiiiiibsssdd))" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::DragOutcome"/>
+                <annotation name="org.gtk.GDBus.DocString" value="DragOutcome struct: {action, windowId, targetScreenId, x, y, width, height, zoneId, skipAnimation, requestSnapAssist, emptyZones}."/>
+            </arg>
+        </method>
+
         <method name="dragStarted">
             <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Coordinates are double (KWin QML)."/>
             <arg name="windowId" type="s" direction="in">

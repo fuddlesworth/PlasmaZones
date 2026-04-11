@@ -96,6 +96,25 @@ public Q_SLOTS:
                                       const QString& startScreenId, int mouseButtons);
 
     /**
+     * End a drag session — daemon-authoritative action.
+     *
+     * Replaces dragStopped as the canonical drag-end entry point. Returns a
+     * DragOutcome that the compositor plugin applies verbatim — no further
+     * decisions on the plugin side. Covers the full dispatch matrix:
+     *
+     *   - autotile_screen bypass → ApplyFloat at the release cursor
+     *   - snapping_disabled / context_disabled bypass → NoOp
+     *   - snap path → delegates to legacy dragStopped and packages its
+     *     out-params into the outcome (ApplySnap / RestoreSize / NoOp /
+     *     with snap-assist empty zones if requested)
+     *
+     * Must be called after beginDrag for the same windowId. If beginDrag
+     * was never called (or the ids mismatch), returns NoOp.
+     */
+    PlasmaZones::DragOutcome endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
+                                     bool cancelled);
+
+    /**
      * Called when window drag starts (legacy; kept alive during the phase 3
      * transition for the KWin script path that has not been migrated yet).
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
@@ -247,6 +266,11 @@ private:
 
     // Current drag state
     QString m_draggedWindowId;
+    // Phase 3 drag protocol: bypass reason returned from the last beginDrag
+    // call. Read in endDrag to decide which branch to take — autotile bypass
+    // gets a synthesized ApplyFloat outcome, context/snap disabled gets NoOp,
+    // and snap path delegates to the legacy dragStopped. Cleared by endDrag.
+    QString m_currentDragBypassReason;
     QRect m_originalGeometry;
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;

@@ -84,6 +84,13 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     qCInfo(lcDbusWindow) << "beginDrag:" << windowId << "screen=" << startScreenId << "bypass=" << policy.bypassReason
                          << "stream=" << policy.streamDragMoved << "immediateFloat=" << policy.immediateFloatOnStart;
 
+    // Stash bypass reason so the matching endDrag can dispatch to the
+    // right branch without re-computing policy (daemon state may have
+    // changed mid-drag, but endDrag should act on the policy that was
+    // in force when the drag started, unless cross-VS flip replaced it
+    // via dragPolicyChanged — sub-commit 3d).
+    m_currentDragBypassReason = policy.bypassReason;
+
     if (!policy.bypassReason.isEmpty()) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
@@ -108,10 +115,118 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         DragPolicy fallback;
         fallback.screenId = startScreenId;
         fallback.bypassReason = QStringLiteral("snapping_disabled");
+        m_currentDragBypassReason = fallback.bypassReason;
         return fallback;
     }
 
     return policy;
+}
+
+DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers,
+                                       int mouseButtons, bool cancelled)
+{
+    DragOutcome outcome;
+    outcome.windowId = windowId;
+
+    if (windowId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "endDrag: empty windowId";
+        return outcome;
+    }
+    if (m_draggedWindowId != windowId) {
+        qCWarning(lcDbusWindow) << "endDrag: windowId mismatch — stashed=" << m_draggedWindowId
+                                << "received=" << windowId;
+        return outcome;
+    }
+
+    const QString bypassReason = m_currentDragBypassReason;
+    m_currentDragBypassReason.clear(); // next drag starts fresh
+
+    qCInfo(lcDbusWindow) << "endDrag:" << windowId << "cursor=" << cursorX << cursorY << "cancelled=" << cancelled
+                         << "bypass=" << bypassReason;
+
+    // Cancelled drags on any path: plugin should simply clean up. For
+    // autotile bypass, there's no zone/snap state to unwind. For snap path,
+    // we still delegate to legacy dragStopped so it can reset its own
+    // internal state machine, then emit CancelSnap back.
+    if (cancelled) {
+        if (bypassReason.isEmpty()) {
+            // Snap path cancelled — run dragStopped through the legacy
+            // adaptor so overlay/zone-state cleanup happens, but discard
+            // the geometry outputs.
+            int sx = 0, sy = 0, sw = 0, sh = 0;
+            bool shouldApply = false;
+            bool restoreSizeOnly = false;
+            bool snapAssistRequested = false;
+            QString releaseScreen;
+            EmptyZoneList emptyZones;
+            dragStopped(windowId, cursorX, cursorY, modifiers, mouseButtons, sx, sy, sw, sh, shouldApply, releaseScreen,
+                        restoreSizeOnly, snapAssistRequested, emptyZones);
+        } else {
+            // Bypass paths — no overlay state to clean up; just drop the id.
+            m_draggedWindowId.clear();
+        }
+        outcome.action = DragOutcome::CancelSnap;
+        return outcome;
+    }
+
+    // Autotile bypass — plugin will float the window at the drop location.
+    // Daemon has no placement decision to make; the outcome just carries
+    // the release screen so the plugin can pass it to
+    // setWindowFloatingForScreen.
+    if (bypassReason == QLatin1String("autotile_screen")) {
+        // Release screen is resolved plugin-side from the cursor position,
+        // but we pass the cursor through so the daemon can log it. The
+        // plugin passes its own view of "current screen" to the float call.
+        outcome.action = DragOutcome::ApplyFloat;
+        outcome.targetScreenId.clear(); // plugin resolves from cursor
+        outcome.x = cursorX;
+        outcome.y = cursorY;
+        m_draggedWindowId.clear();
+        return outcome;
+    }
+
+    // Snapping disabled / context disabled — dead drag. No action.
+    if (bypassReason == QLatin1String("snapping_disabled") || bypassReason == QLatin1String("context_disabled")) {
+        outcome.action = DragOutcome::NoOp;
+        m_draggedWindowId.clear();
+        return outcome;
+    }
+
+    // Snap path — delegate to legacy dragStopped and translate its
+    // out-params into a DragOutcome. dragStopped handles the full
+    // dispatch matrix (snap-to-zone, drag-out unsnap, cross-screen
+    // cleanup, zone selector, snap assist).
+    int sx = 0, sy = 0, sw = 0, sh = 0;
+    bool shouldApply = false;
+    bool restoreSizeOnly = false;
+    bool snapAssistRequested = false;
+    QString releaseScreen;
+    EmptyZoneList emptyZones;
+    dragStopped(windowId, cursorX, cursorY, modifiers, mouseButtons, sx, sy, sw, sh, shouldApply, releaseScreen,
+                restoreSizeOnly, snapAssistRequested, emptyZones);
+
+    outcome.targetScreenId = releaseScreen;
+    outcome.x = sx;
+    outcome.y = sy;
+    outcome.width = sw;
+    outcome.height = sh;
+    outcome.requestSnapAssist = snapAssistRequested;
+    outcome.emptyZones = emptyZones;
+
+    if (shouldApply) {
+        outcome.action = restoreSizeOnly ? DragOutcome::RestoreSize : DragOutcome::ApplySnap;
+        // Captured zone id is the primary zone from multi-zone snap or
+        // the single zone for a regular snap. dragStopped cleared its
+        // m_currentZoneId, so we can't read it here — but the plugin
+        // already knows the zone from its own view of daemon-emitted
+        // zoneGeometryDuringDragChanged signals during the drag, and
+        // DragOutcome's zoneId is informational only for painting.
+    } else {
+        outcome.action = DragOutcome::NoOp;
+    }
+
+    m_draggedWindowId.clear();
+    return outcome;
 }
 
 } // namespace PlasmaZones
