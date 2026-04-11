@@ -11,11 +11,13 @@
 // on the D-Bus surface.
 
 #include "../windowdragadaptor.h"
+#include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/settings_interfaces.h"
 #include "../../core/logging.h"
 #include "../../autotile/AutotileEngine.h"
+#include <QGuiApplication>
 
 namespace PlasmaZones {
 
@@ -77,6 +79,10 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         return DragPolicy{};
     }
 
+    // Any stale pending state from a previous drag that didn't complete
+    // cleanly must not bleed into this one.
+    clearPendingSnapDragState();
+
     const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     const DragPolicy policy =
@@ -86,10 +92,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
                          << "stream=" << policy.streamDragMoved << "immediateFloat=" << policy.immediateFloatOnStart;
 
     // Stash bypass reason so the matching endDrag can dispatch to the
-    // right branch without re-computing policy (daemon state may have
-    // changed mid-drag, but endDrag should act on the policy that was
-    // in force when the drag started, unless cross-VS flip replaced it
-    // via dragPolicyChanged — sub-commit 3d).
+    // right branch without re-computing policy.
     m_currentDragBypassReason = policy.bypassReason;
 
     if (!policy.bypassReason.isEmpty()) {
@@ -102,25 +105,69 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         return policy;
     }
 
-    // Snap path — delegate to the legacy dragStarted to set up the rest of
-    // the state machine (pre-parsed triggers, wasSnapped check, zone state
-    // reset). This wraps the existing logic rather than duplicating it so
-    // the snap path stays behavior-identical during the migration.
-    dragStarted(windowId, static_cast<double>(frameX), static_cast<double>(frameY), static_cast<double>(frameWidth),
-                static_cast<double>(frameHeight), mouseButtons);
-
-    // dragStarted may have cleared m_draggedWindowId if snapping is actually
-    // disabled (guard is inside dragStarted for the legacy path); reflect
-    // that back in the policy so the plugin gets the correct answer.
-    if (m_draggedWindowId != windowId) {
-        DragPolicy fallback;
-        fallback.screenId = startScreenId;
-        fallback.bypassReason = QStringLiteral("snapping_disabled");
-        m_currentDragBypassReason = fallback.bypassReason;
-        return fallback;
+    // Snap path — do NOT run the legacy dragStarted setup yet. We defer
+    // m_draggedWindowId population until the user first holds an
+    // activation trigger (checked in updateDragCursor via
+    // activateSnapDragIfNeeded). This restores the lazy drag-state
+    // semantics that used to live in the kwin-effect's
+    // sendDeferredDragStarted() latch: if a user drags a window without
+    // ever holding the activation trigger, the daemon never runs the
+    // overlay show/hide cycle and never pays the Vulkan shader-overlay
+    // destroy/create cost. Pre-parsing triggers here (instead of inside
+    // dragStarted) so activateSnapDragIfNeeded can compare modifier state
+    // against them without a chicken-and-egg dependency.
+    if (m_settings) {
+        m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
+        m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     }
 
+    m_pendingSnapDragWindowId = windowId;
+    m_pendingSnapDragGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
+    m_pendingSnapDragMouseButtons = mouseButtons;
+    m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
+
     return policy;
+}
+
+bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons)
+{
+    // Already active? nothing to do.
+    if (!m_draggedWindowId.isEmpty()) {
+        return true;
+    }
+    // No pending drag to activate.
+    if (m_pendingSnapDragWindowId.isEmpty()) {
+        return false;
+    }
+
+    const Qt::KeyboardModifiers mods = static_cast<Qt::KeyboardModifiers>(modifiers);
+    const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
+    const bool toggleMode = m_settings && m_settings->toggleActivation();
+    if (!triggerHeld && !toggleMode) {
+        return false;
+    }
+
+    const QString pendingId = m_pendingSnapDragWindowId;
+    const QRect pendingGeo = m_pendingSnapDragGeometry;
+    const int pendingButtons = m_pendingSnapDragMouseButtons;
+    m_pendingSnapDragWindowId.clear();
+    m_pendingSnapDragGeometry = QRect();
+    m_pendingSnapDragMouseButtons = 0;
+    // Keep m_pendingSnapDragWasSnapped — dragStarted re-derives m_wasSnapped
+    // from live tracking state.
+
+    qCInfo(lcDbusWindow) << "activateSnapDragIfNeeded: promoting" << pendingId << "to active drag";
+    dragStarted(pendingId, static_cast<double>(pendingGeo.x()), static_cast<double>(pendingGeo.y()),
+                static_cast<double>(pendingGeo.width()), static_cast<double>(pendingGeo.height()), pendingButtons);
+    return !m_draggedWindowId.isEmpty();
+}
+
+void WindowDragAdaptor::clearPendingSnapDragState()
+{
+    m_pendingSnapDragWindowId.clear();
+    m_pendingSnapDragGeometry = QRect();
+    m_pendingSnapDragMouseButtons = 0;
+    m_pendingSnapDragWasSnapped = false;
 }
 
 DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers,
@@ -133,6 +180,27 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
         qCWarning(lcDbusWindow) << "endDrag: empty windowId";
         return outcome;
     }
+
+    // Pending snap-path drag that never activated. Mirrors the main-branch
+    // behavior where sendDeferredDragStarted() never latched and
+    // DragTracker::dragStopped short-circuited at `if (!m_dragStartedSent)`.
+    // If the window was snapped at drag start and the user dragged it
+    // without holding the activation trigger, drive notifyDragOutUnsnap
+    // on the window-tracking side so the window unsnaps and floats at
+    // the drop location — otherwise the stale zone assignment persists.
+    if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
+        const bool wasSnapped = m_pendingSnapDragWasSnapped;
+        qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
+                             << "cancelled=" << cancelled;
+        clearPendingSnapDragState();
+        m_currentDragBypassReason.clear();
+        if (!cancelled && wasSnapped && m_windowTracking) {
+            m_windowTracking->notifyDragOutUnsnap(windowId);
+        }
+        outcome.action = DragOutcome::NoOp;
+        return outcome;
+    }
+
     if (m_draggedWindowId != windowId) {
         qCWarning(lcDbusWindow) << "endDrag: windowId mismatch — stashed=" << m_draggedWindowId
                                 << "received=" << windowId;
@@ -239,7 +307,20 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
 void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers,
                                          int mouseButtons)
 {
-    if (windowId.isEmpty() || windowId != m_draggedWindowId) {
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    // Pending snap-path drag: try to activate if the trigger is now held.
+    // If it's still pending after the check, return — the daemon does no
+    // overlay work until the user commits to zone selection.
+    if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
+        if (!activateSnapDragIfNeeded(modifiers, mouseButtons)) {
+            return;
+        }
+    }
+
+    if (windowId != m_draggedWindowId) {
         return;
     }
 

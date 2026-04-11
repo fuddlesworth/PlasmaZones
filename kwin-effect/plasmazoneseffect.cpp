@@ -983,16 +983,16 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             m_dragTracker->forceEnd(pos);
         } else if (modifiersChanged || buttonsChanged) {
             // Push modifier/button changes to daemon during drag immediately.
-            // This includes activation button press/release — the daemon shows/hides
-            // the overlay based on whether the activation trigger is currently held,
-            // matching keyboard modifier behavior (hold to show, release to hide,
-            // re-press to show again).
+            // This includes activation button press/release — the daemon's
+            // lazy snap-drag activation uses these modifiers to decide when
+            // to promote a pending drag to active (first tick with trigger
+            // held) and when to hide the overlay (trigger released).
             //
-            // Push modifier/button changes through the
-            // updateDragCursor path. The daemon handles cursor-driven
-            // cross-VS detection and activation-trigger gating.
-            // Effect-side detectActivationAndGrab still maintains the
-            // keyboard grab for Escape handling during snap drags.
+            // The daemon's updateDragCursor is cheap for pending drags
+            // (returns early without running dragMoved), so the rapid fire
+            // of modifier-change events during a drag no longer causes the
+            // overlay destroy/create churn that prompted discussion #310's
+            // sibling regression.
             if (!m_dragBypassedForAutotile) {
                 if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
                     DBusHelpers::fireAndForget(this, DBus::Interface::WindowDrag, QStringLiteral("updateDragCursor"),

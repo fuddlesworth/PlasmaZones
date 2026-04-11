@@ -207,6 +207,17 @@ private:
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
                      PlasmaZones::EmptyZoneList& emptyZonesOut);
 
+    // Promote the pending snap-path drag (stashed by beginDrag) to an
+    // active drag by running the legacy dragStarted setup. Called from
+    // updateDragCursor once the activation trigger is first held.
+    // Returns true if promotion happened or the drag was already active.
+    bool activateSnapDragIfNeeded(int modifiers, int mouseButtons);
+
+    // Discard any pending snap-path drag state. Called from endDrag and
+    // handleWindowClosed to prevent leftover pending state leaking into
+    // the next drag.
+    void clearPendingSnapDragState();
+
 public:
     /**
      * @brief Pure policy decision — no side effects, static so tests can
@@ -275,6 +286,21 @@ private:
     // and snap path delegates to the legacy dragStopped. Cleared by endDrag.
     QString m_currentDragBypassReason;
     QRect m_originalGeometry;
+
+    // Pending snap-path drag awaiting first activation. Populated by
+    // beginDrag on the snap path instead of immediately running the full
+    // legacy dragStarted setup — that way updateDragCursor ticks before the
+    // user holds the activation trigger are cheap no-ops (no overlay
+    // show/hide cycle). Promoted to m_draggedWindowId on the first tick
+    // where the activation trigger is held, via activateSnapDragIfNeeded().
+    // Restores the lazy drag-state semantics from before the drag-protocol
+    // refactor — there used to be a sendDeferredDragStarted() latch in the
+    // kwin-effect; the refactor made beginDrag unconditional, so the
+    // laziness now lives on the daemon side.
+    QString m_pendingSnapDragWindowId;
+    QRect m_pendingSnapDragGeometry;
+    int m_pendingSnapDragMouseButtons = 0;
+    bool m_pendingSnapDragWasSnapped = false;
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
@@ -282,8 +308,6 @@ private:
     bool m_activationToggled = false; // Current toggle state (on/off)
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
-    QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
-    QString m_overlayScreenId; // Virtual-aware screen ID for overlay tracking
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;
@@ -308,6 +332,11 @@ private:
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;
+
+    // Last logged activationActive value — used to emit a log entry only on
+    // true transitions so the drag-overlay churn source can be traced from
+    // journalctl without spamming every tick.
+    bool m_lastLoggedActivationActive = false;
 
     void registerCancelOverlayShortcut();
     void unregisterCancelOverlayShortcut();
