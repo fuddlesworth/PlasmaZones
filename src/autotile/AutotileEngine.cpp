@@ -2350,7 +2350,6 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
             targetState->setFloating(windowId, false);
             m_overflow.clearOverflow(windowId);
         }
-        preview.lastInsertIndex = targetState->tiledWindowIndex(windowId);
     } else {
         // Cross-screen adoption or fresh adoption: remove from prior state (if any)
         // and append to the target state's tiled list.
@@ -2367,12 +2366,33 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
         }
         targetState->addWindow(windowId);
         m_windowToStateKey[windowId] = targetKey;
-        preview.lastInsertIndex = targetState->tiledWindowIndex(windowId);
     }
+
+    // Evict last tiled neighbour if adoption pushed us over the maxWindows cap.
+    // Skipped when the dragged window was already tiled on target (same-screen
+    // reorder with priorFloating=false) because that doesn't grow the count.
+    // setFloating preserves the victim's raw position in m_windowOrder, so cancel
+    // can restore it with a simple unfloat — no index bookkeeping needed.
+    const int maxWindows = m_config ? m_config->maxWindows : 0;
+    if (maxWindows > 0 && targetState->tiledWindowCount() > maxWindows) {
+        const QStringList tiled = targetState->tiledWindows();
+        for (int i = tiled.size() - 1; i >= 0; --i) {
+            if (tiled[i] != windowId) {
+                preview.evictedWindowId = tiled[i];
+                targetState->setFloating(tiled[i], true);
+                break;
+            }
+        }
+    }
+
+    preview.lastInsertIndex = targetState->tiledWindowIndex(windowId);
 
     if (preview.lastInsertIndex < 0) {
         // Something went wrong: window isn't in the tiled list after the setup above.
         // Roll back the prior-state capture so we don't leave the engine in a bad state.
+        if (!preview.evictedWindowId.isEmpty()) {
+            targetState->setFloating(preview.evictedWindowId, false);
+        }
         if (preview.hadPriorState && preview.priorSameScreen) {
             // Same-screen: we only mutated the floating flag (if priorFloating).
             // Re-float to restore the original state.
@@ -2443,6 +2463,7 @@ void AutotileEngine::commitDragInsertPreview()
     }
     const QString targetScreenId = m_dragInsertPreview->targetScreenId;
     const QString windowId = m_dragInsertPreview->windowId;
+    const QString evictedWindowId = m_dragInsertPreview->evictedWindowId;
     const bool crossScreenAdoption = m_dragInsertPreview->hadPriorState && !m_dragInsertPreview->priorSameScreen;
     const bool freshAdoption = !m_dragInsertPreview->hadPriorState;
     // Same-screen reorders that unfloated the window also need the WTS sync
@@ -2462,6 +2483,13 @@ void AutotileEngine::commitDragInsertPreview()
     if (crossScreenAdoption || freshAdoption || sameScreenUnfloat) {
         Q_EMIT windowFloatingStateSynced(windowId, false, targetScreenId);
     }
+    // Evicted neighbour: route through the batch-float path so the daemon
+    // restores its pre-tile geometry in one pass. Without this the victim
+    // would stay stuck in its old tile rect visually while flagged floating
+    // in TilingState.
+    if (!evictedWindowId.isEmpty()) {
+        Q_EMIT windowsBatchFloated(QStringList{evictedWindowId}, targetScreenId);
+    }
 }
 
 void AutotileEngine::cancelDragInsertPreview()
@@ -2473,6 +2501,13 @@ void AutotileEngine::cancelDragInsertPreview()
     m_dragInsertPreview.reset();
 
     TilingState* targetState = stateForScreen(p.targetScreenId);
+
+    // Restore eviction first: setFloating(false) returns the victim to its
+    // original raw-order slot, making the subsequent restoration logic see
+    // the same tiled list the user started with.
+    if (!p.evictedWindowId.isEmpty() && targetState) {
+        targetState->setFloating(p.evictedWindowId, false);
+    }
 
     if (p.hadPriorState && p.priorSameScreen) {
         // Same-screen path: window was already in targetState at begin time.
@@ -2528,21 +2563,23 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
         return 0;
     }
     const QStringList tiled = state->tiledWindows();
-    const QString draggedId = m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
     // Walk zones in order; return the first zone whose rect contains the cursor.
-    // Skip the dragged window's own zone so pointing at it doesn't match.
+    // Do NOT skip the dragged window's own zone — cursor-over-own-zone must be a
+    // stable identity (return its current index), otherwise we force a shuffle
+    // to some neighbour slot which immediately re-matches under the cursor and
+    // oscillates every dragMoved tick.
     const int limit = std::min(zones.size(), tiled.size());
     for (int i = 0; i < limit; ++i) {
-        if (tiled[i] == draggedId) {
-            continue;
-        }
         if (zones[i].contains(cursorPos)) {
             return i;
         }
     }
-    // Cursor isn't over any zone on this screen — fall back to the last
-    // non-dragged slot. updateDragInsertPreview() clamps to tileCount-1.
-    return tiled.size() > 0 ? tiled.size() - 1 : 0;
+    // Cursor isn't over any zone — hold the preview at its current index to
+    // avoid snapping to an endpoint when the cursor leaves the stack area.
+    if (m_dragInsertPreview && m_dragInsertPreview->lastInsertIndex >= 0) {
+        return m_dragInsertPreview->lastInsertIndex;
+    }
+    return tiled.isEmpty() ? 0 : tiled.size() - 1;
 }
 
 void AutotileEngine::applyTiling(const QString& screenId)

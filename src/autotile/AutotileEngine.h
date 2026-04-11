@@ -1361,6 +1361,13 @@ private:
         int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
         bool priorFloating = false; // Prior floating flag in priorState
         bool priorSameScreen = false; // priorKey == currentKeyForScreen(targetScreenId)
+
+        // Eviction info (used when the target stack is already at maxWindows
+        // and the dragged window is a new member). The last tiled neighbour
+        // is floated to make room; on cancel the eviction is undone, on
+        // commit the evicted window is sent through the batch-float path so
+        // its pre-tile geometry is restored.
+        QString evictedWindowId;
     };
     std::optional<DragInsertPreview> m_dragInsertPreview;
 
