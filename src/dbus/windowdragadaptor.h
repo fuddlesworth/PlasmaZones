@@ -130,47 +130,8 @@ public Q_SLOTS:
      */
     void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
 
-    /**
-     * Called when window drag starts (legacy; kept alive during the phase 3
-     * transition for the KWin script path that has not been migrated yet).
-     * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
-     */
-    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
-
-    /**
-     * Called while window is being dragged (cursor moved)
-     * @param windowId Unique window identifier
-     * @param cursorX Cursor X position (int32 - matches KWin's QPoint)
-     * @param cursorY Cursor Y position (int32 - matches KWin's QPoint)
-     * @param modifiers Qt keyboard modifiers from KWin (int32 - Qt::KeyboardModifiers flags)
-     * @param mouseButtons Qt::MouseButtons currently held (int32). Enables activation-by-mouse: hold this button during
-     * drag to show overlay (same as modifier).
-     */
-    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
-
     /** Forward mouse wheel delta to zone selector for scrolling during drag. */
     void selectorScrollWheel(int angleDeltaY);
-
-    /**
-     * Called when window drag ends
-     * @param windowId Unique window identifier
-     * @param cursorX Cursor X at release (global; used for release screen detection)
-     * @param cursorY Cursor Y at release (global)
-     * @param modifiers Qt::KeyboardModifiers at release.
-     * @param mouseButtons Qt::MouseButtons at release. With modifiers, used for SnapAssistTriggers.
-     * @param snapX Output: X position for window
-     * @param snapY Output: Y position for window
-     * @param snapWidth Output: Width for window
-     * @param snapHeight Output: Height for window
-     * @param shouldApplyGeometry Output: True if KWin should apply the geometry
-     * @param releaseScreenIdOut Output: Screen ID where the drag was released, for auto-fill on drop
-     * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current
-     * position (drag-to-unsnap)
-     */
-    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
-                     int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
-                     QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     PlasmaZones::EmptyZoneList& emptyZonesOut);
 
     /**
      * Cancel current snap operation (Escape key)
@@ -231,6 +192,21 @@ private:
     bool anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Qt::KeyboardModifiers mods, int mouseButtons) const;
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Legacy drag state-machine helpers (formerly public D-Bus slots). Now
+    // called internally by beginDrag / updateDragCursor / endDrag in
+    // drag_protocol.cpp. They stay as regular C++ member functions to
+    // preserve the intricate snap-path overlay/zone logic without having
+    // to rewrite it into the new protocol wrappers. The D-Bus surface no
+    // longer exposes them — external clients go through the new protocol.
+    // ═══════════════════════════════════════════════════════════════════════
+    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
+    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
+                     int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
+                     QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
+                     PlasmaZones::EmptyZoneList& emptyZonesOut);
 
 public:
     /**
