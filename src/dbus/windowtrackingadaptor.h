@@ -492,8 +492,12 @@ public Q_SLOTS:
     void restoreWindowSize();
 
     /**
-     * @brief Toggle float state for the focused window
-     * @note Emits toggleWindowFloatRequested for effect to call toggleFloatForWindow
+     * @brief Toggle float state for the focused window (daemon-local)
+     *
+     * Reads the active windowId + screen from m_lastActive*, reads fresh
+     * frame geometry from the shadow (phase 1), stores pre-tile geometry,
+     * and calls toggleFloatForWindow to dispatch to the engine. No kwin-effect
+     * round-trip, no stale local cache reads.
      */
     void toggleWindowFloat();
 
@@ -879,12 +883,6 @@ Q_SIGNALS:
                             const QString& targetZoneId, const QString& screenId);
 
     // Navigation signals (daemon → effect)
-    /**
-     * @brief Request to toggle float state for the focused window
-     * @param shouldFloat true to float (exclude), false to unfloat
-     */
-    void toggleWindowFloatRequested(bool shouldFloat);
-
     /**
      * @brief Request KWin effect to collect unsnapped windows and snap them all
      * @param screenId Screen to operate on

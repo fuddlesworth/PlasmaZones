@@ -1851,10 +1851,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("activateWindowRequested"), this,
                                           SLOT(slotActivateWindowRequested(QString)));
 
-    // Float toggle (daemon handles full flow, emits applyGeometryRequested for geometry)
-    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
-                                          QStringLiteral("toggleWindowFloatRequested"), this,
-                                          SLOT(slotToggleWindowFloatRequested(bool)));
+    // Float toggle is now entirely daemon-local (drag-protocol refactor,
+    // phase 2): the daemon reads the active window from its own shadow, calls
+    // toggleFloatForWindow internally, and emits applyGeometryRequested to
+    // paint the outcome. The effect no longer participates in the decision.
 
     // Daemon-driven batch operations (rotate, resnap emit applyGeometriesBatch)
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
@@ -2328,33 +2328,9 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
     }
 }
 
-void PlasmaZonesEffect::slotToggleWindowFloatRequested(bool shouldFloat)
-{
-    Q_UNUSED(shouldFloat)
-    KWin::EffectWindow* activeWindow = getValidActiveWindowOrFail(QStringLiteral("float"));
-    if (!activeWindow) {
-        return;
-    }
-    QString windowId = getWindowId(activeWindow);
-    QString screenId = getWindowScreenId(activeWindow);
-
-    // Store current geometry before the daemon processes the toggle.
-    // D-Bus calls on the same connection are processed in order.
-    //   - Floating → unfloat: capture floating position (overwrite=true)
-    //   - Snapped/tiled → float: first-only (overwrite=false)
-    QRectF frameGeo = activeWindow->frameGeometry();
-    const bool floating = isWindowFloating(windowId);
-
-    // Daemon handles the full flow: pre-snap geometry, zone bookkeeping,
-    // emits applyGeometryRequested for the geometry change.
-    DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                               {windowId, static_cast<int>(frameGeo.x()), static_cast<int>(frameGeo.y()),
-                                static_cast<int>(frameGeo.width()), static_cast<int>(frameGeo.height()), screenId,
-                                floating},
-                               QStringLiteral("storePreTileGeometry"));
-    DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("toggleFloatForWindow"),
-                               {windowId, screenId}, QStringLiteral("toggleFloatForWindow"));
-}
+// slotToggleWindowFloatRequested removed — the daemon now handles float-toggle
+// locally against its active-window + frame-geometry shadow and emits
+// applyGeometryRequested directly. See WindowTrackingAdaptor::toggleWindowFloat.
 
 void PlasmaZonesEffect::slotApplyGeometryRequested(const QString& windowId, int x, int y, int width, int height,
                                                    const QString& zoneId, const QString& screenId, bool sizeOnly)

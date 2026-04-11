@@ -97,8 +97,8 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
 
-    // Float toggle: daemon handles full flow via toggleFloatForWindow
-    void slotToggleWindowFloatRequested(bool shouldFloat);
+    // Float toggle is entirely daemon-local — no effect-side slot needed.
+    // Phase 2 of the drag-protocol refactor.
 
     // Daemon-driven batch operations (rotate, resnap)
     void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);

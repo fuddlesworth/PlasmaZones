@@ -424,12 +424,6 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Zone UUID (or empty if unsnapped)."/>
             </arg>
         </signal>
-        <signal name="toggleWindowFloatRequested">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when keyboard shortcut requests float toggle (KWin effect reacts)."/>
-            <arg name="shouldFloat" type="b">
-                <annotation name="org.gtk.GDBus.DocString" value="True to float, false to unfloat."/>
-            </arg>
-        </signal>
         <signal name="navigationFeedback">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when KWin effect reports navigation result via reportNavigationFeedback (for OSD)."/>
             <arg name="success" type="b">
