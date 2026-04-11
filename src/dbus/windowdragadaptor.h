@@ -115,6 +115,22 @@ public Q_SLOTS:
                                      bool cancelled);
 
     /**
+     * Update drag cursor position — fire-and-forget counterpart to
+     * beginDrag / endDrag. Replaces dragMoved as the canonical hot-path
+     * entry point during a drag. Throttled 30Hz by the compositor plugin.
+     *
+     * For snap-path drags: delegates to legacy dragMoved internally to
+     * keep overlay/zone-detection state current.
+     *
+     * For bypass drags: no-op, but still consulted for cursor screen
+     * detection — if the cursor crosses a virtual-screen boundary that
+     * would change the policy (autotile↔snap), the daemon emits
+     * dragPolicyChanged and the plugin reacts by switching its local
+     * drag mode. This replaces the effect-side cross-VS flip logic.
+     */
+    void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+
+    /**
      * Called when window drag starts (legacy; kept alive during the phase 3
      * transition for the KWin script path that has not been migrated yet).
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
@@ -180,6 +196,18 @@ Q_SIGNALS:
      * KWin effect applies pre-snap size immediately (restore-size-only at current position).
      */
     void restoreSizeDuringDragChanged(const QString& windowId, int width, int height);
+
+    /**
+     * Phase 3 drag protocol — daemon has detected a policy change for an
+     * active drag (typically because the cursor crossed a virtual-screen
+     * boundary that flips autotile↔snap mode). Plugin reacts by applying
+     * the transition: entering/exiting autotile bypass, canceling snap
+     * overlay, calling handleDragToFloat, etc.
+     *
+     * Replaces the effect-side cross-VS flip logic that used a local cache
+     * and could go stale after settings reloads.
+     */
+    void dragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)

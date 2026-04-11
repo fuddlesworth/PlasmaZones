@@ -25,6 +25,15 @@
             </arg>
         </method>
 
+        <method name="updateDragCursor">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: hot-path cursor update. Replaces dragMoved. Fire-and-forget; throttled ~30Hz by the plugin. For snap-path drags the daemon runs overlay/zone detection; for bypass drags it watches for cursor crossing a virtual-screen boundary and emits dragPolicyChanged when the policy flips (autotile↔snap)."/>
+            <arg name="windowId" type="s" direction="in"/>
+            <arg name="cursorX" type="i" direction="in"/>
+            <arg name="cursorY" type="i" direction="in"/>
+            <arg name="modifiers" type="i" direction="in"/>
+            <arg name="mouseButtons" type="i" direction="in"/>
+        </method>
+
         <method name="endDrag">
             <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative end. Returns a DragOutcome the plugin applies verbatim — no further decisions on the plugin side. Handles autotile float, snap, drag-out unsnap, snap assist, and cancelled-drag paths through a single dispatch. Replaces dragStopped as the canonical drag-end entry point."/>
             <arg name="windowId" type="s" direction="in">
@@ -181,6 +190,13 @@
             </arg>
             <arg name="height" type="i">
                 <annotation name="org.gtk.GDBus.DocString" value="Pre-snap height (pixels)."/>
+            </arg>
+        </signal>
+        <signal name="dragPolicyChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon detected a policy flip mid-drag (typically because the cursor crossed a virtual-screen boundary that changes autotile↔snap routing). Plugin reacts by applying the transition: entering/exiting autotile bypass, canceling snap overlay, calling handleDragToFloat, etc. Replaces the effect-side cross-VS flip loop that used a stale local cache."/>
+            <arg name="windowId" type="s"/>
+            <arg name="newPolicy" type="(bbbbbss)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PlasmaZones::DragPolicy"/>
             </arg>
         </signal>
     </interface>

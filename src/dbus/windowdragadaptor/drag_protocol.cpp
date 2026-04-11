@@ -229,4 +229,49 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     return outcome;
 }
 
+void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers,
+                                         int mouseButtons)
+{
+    if (windowId.isEmpty() || windowId != m_draggedWindowId) {
+        return;
+    }
+
+    // Cross-VS flip detection: if the cursor moved to a screen whose policy
+    // differs from the one in force, compute the new policy and emit
+    // dragPolicyChanged. The plugin reacts by calling handleDragToFloat or
+    // re-initializing snap-drag state as needed. This replaces the
+    // effect-side detection loop in the dragMoved lambda that used the
+    // stale m_autotileScreens cache to decide when to flip.
+    auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
+    const QString cursorScreenId = resolved.screenId;
+    if (!cursorScreenId.isEmpty()) {
+        const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+        const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
+        const DragPolicy candidate =
+            computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, curDesktop, curActivity);
+        if (candidate.bypassReason != m_currentDragBypassReason
+            || (candidate.bypassReason == QLatin1String("autotile_screen") && candidate.screenId != cursorScreenId)) {
+            qCInfo(lcDbusWindow) << "updateDragCursor: policy flip" << m_currentDragBypassReason << "->"
+                                 << candidate.bypassReason << "on" << cursorScreenId;
+            m_currentDragBypassReason = candidate.bypassReason;
+            Q_EMIT dragPolicyChanged(windowId, candidate);
+            // After the flip, fall through: if we're now on the snap path
+            // we still want to call legacy dragMoved below for overlay
+            // updates. If we're now bypassed, legacy dragMoved is a
+            // no-op because m_snapCancelled isn't set and dragMoved only
+            // does real work when m_draggedWindowId matches — which it
+            // does — but the overlay/zone state will be hidden by the
+            // effect's reaction handler, so running dragMoved here does
+            // no harm.
+        }
+    }
+
+    // Snap path: forward to legacy dragMoved so overlay/zone-detection
+    // state stays current. Bypass paths: legacy dragMoved is a harmless
+    // no-op because the snap-path state machine isn't initialized (no
+    // m_snapCancelled, no m_draggedWindowId processing for bypass drags
+    // that never called dragStarted internally).
+    dragMoved(windowId, cursorX, cursorY, modifiers, mouseButtons);
+}
+
 } // namespace PlasmaZones
