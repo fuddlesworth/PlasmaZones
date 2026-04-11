@@ -3446,7 +3446,10 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
             ++matchCount;
         }
     }
-    return nullptr;
+    // Only return the fuzzy match if it's unambiguous — two Firefox windows
+    // with different UUIDs would otherwise pick an arbitrary one and silently
+    // misroute daemon requests.
+    return matchCount == 1 ? appMatch : nullptr;
 }
 
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
