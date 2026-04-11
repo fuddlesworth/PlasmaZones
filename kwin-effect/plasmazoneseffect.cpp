@@ -177,8 +177,8 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
 
-                // Phase 3 drag protocol: fire beginDrag async to get a
-                // daemon-authoritative policy. While the reply is pending, we
+                // Fire beginDrag async to get a daemon-authoritative policy.
+                // While the reply is pending, we
                 // default m_currentDragPolicy to a conservative snap-path so
                 // the worst case (stale effect cache would have said autotile
                 // but daemon knows better, or vice-versa) is a brief overlay
@@ -299,7 +299,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             });
     connect(
         m_dragTracker.get(), &DragTracker::dragMoved, this, [this](const QString& windowId, const QPointF& cursorPos) {
-            // Phase 3e: cross-VS flip detection is now daemon-owned. The
+            // Cross-VS flip detection is daemon-owned. The
             // daemon's updateDragCursor handler computes policy at the
             // cursor position and emits dragPolicyChanged when it flips.
             // The effect reacts via slotDragPolicyChanged (see below).
@@ -341,7 +341,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     m_keyboardGrabbed = false;
                 }
 
-                // Phase 3e: single entry point for drag-end dispatch. The
+                // Single entry point for drag-end dispatch. The
                 // daemon owns the decision; callEndDrag sends endDrag and
                 // the reply handler applies whatever DragOutcome comes back
                 // (ApplySnap / ApplyFloat / RestoreSize / NoOp / etc.).
@@ -988,7 +988,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // matching keyboard modifier behavior (hold to show, release to hide,
             // re-press to show again).
             //
-            // Phase 3e: push modifier/button changes through the new
+            // Push modifier/button changes through the
             // updateDragCursor path. The daemon handles cursor-driven
             // cross-VS detection and activation-trigger gating.
             // Effect-side detectActivationAndGrab still maintains the
@@ -1754,10 +1754,9 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     return false;
 }
 
-// sendDeferredDragStarted removed — phase 3e. beginDrag is now called
-// unconditionally at drag-start; there's no deferred "only send dragStarted
-// when zones activate" path because the daemon always knows about the drag
-// from the moment it begins.
+// beginDrag is called unconditionally at drag-start; there's no deferred
+// "only send dragStarted when zones activate" path because the daemon
+// always knows about the drag from the moment it begins.
 
 void PlasmaZonesEffect::connectNavigationSignals()
 {
@@ -1771,10 +1770,10 @@ void PlasmaZonesEffect::connectNavigationSignals()
                                           QStringLiteral("activateWindowRequested"), this,
                                           SLOT(slotActivateWindowRequested(QString)));
 
-    // Float toggle is now entirely daemon-local (drag-protocol refactor,
-    // phase 2): the daemon reads the active window from its own shadow, calls
-    // toggleFloatForWindow internally, and emits applyGeometryRequested to
-    // paint the outcome. The effect no longer participates in the decision.
+    // Float toggle is entirely daemon-local: the daemon reads the active
+    // window from its own shadow, calls toggleFloatForWindow internally, and
+    // emits applyGeometryRequested to paint the outcome. The effect no longer
+    // participates in the decision.
 
     // Daemon-driven batch operations (rotate, resnap emit applyGeometriesBatch)
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
@@ -2807,10 +2806,9 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
                      /*skipAnimation=*/true, onComplete);
 }
 
-// callDragStarted removed — phase 3e. The kwin-effect no longer calls the
-// legacy dragStarted D-Bus method; beginDrag now sets up snap-path state
-// internally on the daemon side, so there's only one code path into the
-// drag state machine.
+// The kwin-effect no longer calls the legacy dragStarted D-Bus method;
+// beginDrag sets up snap-path state internally on the daemon side, so
+// there's only one code path into the drag state machine.
 bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 {
     return w && w->isOnAllDesktops();
@@ -2837,13 +2835,12 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
                                {windowId, sticky}, QStringLiteral("setWindowSticky"));
 }
 
-// callDragMoved removed — phase 3e. The dragMoved lambda now sends
-// updateDragCursor directly via DBusHelpers::fireAndForget. Single
-// entry point for hot-path cursor updates.
+// The dragMoved lambda sends updateDragCursor directly via
+// DBusHelpers::fireAndForget. Single entry point for hot-path cursor updates.
 
 void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled)
 {
-    // Phase 3e drag protocol: single entry point for drag-end dispatch.
+    // Single entry point for drag-end dispatch.
     // Sends endDrag, receives a DragOutcome, and applies exactly the
     // action the daemon decided. Replaces callDragStopped (whose reply
     // shape was a 9-tuple of out-params) with a typed struct.
@@ -3190,7 +3187,7 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const DragPolicy& newPolicy)
 {
-    // Phase 3e: daemon-owned cross-VS flip. The daemon's updateDragCursor
+    // Daemon-owned cross-VS flip. The daemon's updateDragCursor
     // handler computed policy at the current cursor position and found it
     // different from the policy in force — tell us so we can apply the
     // compositor-level transition. Replaces the effect-side cross-VS flip

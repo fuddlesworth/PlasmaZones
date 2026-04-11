@@ -98,14 +98,11 @@ private Q_SLOTS:
     void slotActivateWindowRequested(const QString& windowId);
 
     // Float toggle is entirely daemon-local — no effect-side slot needed.
-    // Phase 2 of the drag-protocol refactor.
 
-    // Phase 3e drag protocol: daemon tells the effect the drag routing
-    // has flipped mid-drag (cursor crossed a virtual-screen boundary that
-    // changes autotile↔snap mode). Effect applies the transition:
-    // entering/exiting autotile bypass, canceling snap overlay, etc.
-    // Replaces the effect-side cross-VS flip loop that used a stale local
-    // m_autotileScreens cache.
+    // Daemon tells the effect the drag routing has flipped mid-drag (cursor
+    // crossed a virtual-screen boundary that changes autotile↔snap mode).
+    // Effect applies the transition: entering/exiting autotile bypass,
+    // canceling snap overlay, etc.
     void slotDragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
     // Daemon-driven batch operations (rotate, resnap)
@@ -211,8 +208,8 @@ private:
     // D-Bus communication
 
     /**
-     * @brief Phase 3 drag protocol — fire endDrag and apply the returned
-     *        DragOutcome. Single entry point for drag-end dispatch,
+     * @brief Fire endDrag and apply the returned DragOutcome.
+     *        Single entry point for drag-end dispatch,
      *        regardless of autotile bypass or snap path.
      *
      * @param window Dragged window (QPointer-protected in the async reply)
@@ -423,8 +420,8 @@ private:
     // round-trip over D-Bus.
     QHash<QString, QString> m_appIdByInstance;
 
-    // Phase 3 drag protocol: policy returned from the daemon's beginDrag
-    // for the currently-active drag. Async-populated a few ms after the
+    // Policy returned from the daemon's beginDrag for the currently-active
+    // drag. Async-populated a few ms after the
     // drag starts; until then, conservative defaults apply (snap-path
     // with streaming) so the worst-case UX is a brief zone-overlay flash
     // rather than a dead drag. Cleared at drag end.
@@ -503,9 +500,8 @@ private:
      */
     bool detectActivationAndGrab();
 
-    // sendDeferredDragStarted removed — phase 3e. beginDrag is now called
-    // unconditionally at drag-start; the deferred-send optimization is
-    // obsolete now that the daemon always knows about the drag.
+    // beginDrag is called unconditionally at drag-start; the deferred-send
+    // optimization is obsolete now that the daemon always knows about the drag.
 
     // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
     // The daemon also enforces these for keyboard navigation, but the effect needs them

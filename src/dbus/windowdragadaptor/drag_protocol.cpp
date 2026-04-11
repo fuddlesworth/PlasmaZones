@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Phase 3 of the v3 drag protocol refactor. Replaces the effect-side
-// m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled distributed state
-// with a daemon-authoritative beginDrag / endDrag protocol.
+// Daemon-authoritative beginDrag / endDrag protocol. Replaces the
+// effect-side m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled
+// distributed state with a single source of truth on the daemon side.
 //
-// The existing dragStarted / dragMoved / dragStopped methods stay alive in
-// parallel while the compositor plugin is being ported over. Once nothing
-// calls them they'll be deleted (sub-commit 3E).
+// The legacy dragStarted / dragMoved / dragStopped methods are kept as
+// internal C++ helpers (called from this file) so the intricate snap-path
+// state machine doesn't need to be rewritten. They're no longer exposed
+// on the D-Bus surface.
 
 #include "../windowdragadaptor.h"
 #include "../../core/interfaces.h"
@@ -196,6 +197,13 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     // out-params into a DragOutcome. dragStopped handles the full
     // dispatch matrix (snap-to-zone, drag-out unsnap, cross-screen
     // cleanup, zone selector, snap assist).
+    //
+    // Snapshot the active zone id BEFORE dragStopped runs — the cleanup
+    // path inside dragStopped clears m_currentZoneId via
+    // hideOverlayAndClearZoneState, and we want that id exposed on the
+    // outcome so the daemon is authoritative for every DragOutcome field.
+    const QString capturedZoneId = m_currentZoneId;
+
     int sx = 0, sy = 0, sw = 0, sh = 0;
     bool shouldApply = false;
     bool restoreSizeOnly = false;
@@ -215,12 +223,11 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
 
     if (shouldApply) {
         outcome.action = restoreSizeOnly ? DragOutcome::RestoreSize : DragOutcome::ApplySnap;
-        // Captured zone id is the primary zone from multi-zone snap or
-        // the single zone for a regular snap. dragStopped cleared its
-        // m_currentZoneId, so we can't read it here — but the plugin
-        // already knows the zone from its own view of daemon-emitted
-        // zoneGeometryDuringDragChanged signals during the drag, and
-        // DragOutcome's zoneId is informational only for painting.
+        // Primary zone captured pre-cleanup. Empty on RestoreSize (drag-out
+        // unsnap has no target zone), populated on ApplySnap.
+        if (!restoreSizeOnly) {
+            outcome.zoneId = capturedZoneId;
+        }
     } else {
         outcome.action = DragOutcome::NoOp;
     }

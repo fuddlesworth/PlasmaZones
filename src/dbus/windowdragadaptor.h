@@ -90,7 +90,6 @@ public Q_SLOTS:
      * snapping-disabled drags, it only stores m_draggedWindowId so later
      * updateDragCursor / endDrag calls match.
      *
-     * Drag protocol v1 (phase 3 of v3 drag refactor).
      */
     PlasmaZones::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth, int frameHeight,
                                       const QString& startScreenId, int mouseButtons);
@@ -159,8 +158,8 @@ Q_SIGNALS:
     void restoreSizeDuringDragChanged(const QString& windowId, int width, int height);
 
     /**
-     * Phase 3 drag protocol — daemon has detected a policy change for an
-     * active drag (typically because the cursor crossed a virtual-screen
+     * Daemon has detected a policy change for an active drag
+     * (typically because the cursor crossed a virtual-screen
      * boundary that flips autotile↔snap mode). Plugin reacts by applying
      * the transition: entering/exiting autotile bypass, canceling snap
      * overlay, calling handleDragToFloat, etc.
@@ -270,8 +269,8 @@ private:
 
     // Current drag state
     QString m_draggedWindowId;
-    // Phase 3 drag protocol: bypass reason returned from the last beginDrag
-    // call. Read in endDrag to decide which branch to take — autotile bypass
+    // Bypass reason returned from the last beginDrag call.
+    // Read in endDrag to decide which branch to take — autotile bypass
     // gets a synthesized ApplyFloat outcome, context/snap disabled gets NoOp,
     // and snap path delegates to the legacy dragStopped. Cleared by endDrag.
     QString m_currentDragBypassReason;

@@ -198,7 +198,7 @@ void WindowTrackingAdaptor::toggleWindowFloat()
 {
     // Daemon-local float toggle: no round-trip through the kwin-effect. We
     // already know the active window (windowActivated pushes), its screen,
-    // and its current frame geometry (setFrameGeometry shadow, phase 1).
+    // and its current frame geometry (setFrameGeometry shadow).
     //
     // Previously this emitted toggleWindowFloatRequested, the effect received
     // it, walked KWin's stacking order to find the active window, did two

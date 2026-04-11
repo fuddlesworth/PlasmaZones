@@ -495,7 +495,7 @@ public Q_SLOTS:
      * @brief Toggle float state for the focused window (daemon-local)
      *
      * Reads the active windowId + screen from m_lastActive*, reads fresh
-     * frame geometry from the shadow (phase 1), stores pre-tile geometry,
+     * frame geometry from the shadow, stores pre-tile geometry,
      * and calls toggleFloatForWindow to dispatch to the engine. No kwin-effect
      * round-trip, no stale local cache reads.
      */

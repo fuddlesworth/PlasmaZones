@@ -304,10 +304,11 @@ struct SwapTargetResult
 /// decide whether to stream dragMoved, grab keyboard, show an overlay, and
 /// whether to apply an immediate float transition for an autotile drag.
 ///
-/// Wire: (bbbbbss)  —  6 bools + 2 strings
-/// v3 drag-protocol refactor (phase 3). Single source of truth replaces the
-/// effect-side m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled cache
-/// that went stale after every settings reload.
+/// Wire: (bbbbbss)  —  5 bools + 2 strings
+///
+/// Single source of truth replaces the effect-side
+/// m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled cache that went
+/// stale after every settings reload.
 struct DragPolicy
 {
     bool streamDragMoved = false; ///< effect should send dragMoved D-Bus ticks

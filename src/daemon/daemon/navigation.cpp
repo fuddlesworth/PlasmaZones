@@ -62,13 +62,12 @@ void Daemon::handleRotate(bool clockwise)
 
 void Daemon::handleFloat()
 {
-    // Phase 2 of the drag-protocol refactor: toggleWindowFloat() is now
-    // fully daemon-local — reads the active window from the shadow, reads
-    // fresh frame geometry from the phase-1 shadow, and dispatches to the
-    // engine in-process. The prior 100ms debounce was there because the
-    // old path bounced through D-Bus 4 times, where rapid retries could
-    // double-fire. A direct call doesn't need it; rapid Meta-F presses
-    // should act as rapid toggles, not be silently dropped.
+    // toggleWindowFloat() is fully daemon-local — reads the active window
+    // from the shadow, reads fresh frame geometry from the shadow, and
+    // dispatches to the engine in-process. The prior 100ms debounce was
+    // there because the old path bounced through D-Bus 4 times, where rapid
+    // retries could double-fire. A direct call doesn't need it; rapid
+    // Meta-F presses should act as rapid toggles, not be silently dropped.
     if (!m_windowTrackingAdaptor) {
         return;
     }

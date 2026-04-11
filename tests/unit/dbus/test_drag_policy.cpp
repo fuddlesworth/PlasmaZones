@@ -5,8 +5,8 @@
  * @file test_drag_policy.cpp
  * @brief Truth-table guard for WindowDragAdaptor::computeDragPolicy
  *
- * Phase 3 of the v3 drag protocol refactor moves drag routing policy out of
- * the compositor plugin (where it lived in m_dragBypassedForAutotile and
+ * The drag protocol refactor moves drag routing policy out of the
+ * compositor plugin (where it lived in m_dragBypassedForAutotile and
  * m_cachedZoneSelectorEnabled caches that went stale after every settings
  * reload — see discussion #310) and into a daemon-side pure function.
  *
