@@ -825,8 +825,10 @@ public:
      * @brief Compute the insert index for a cursor position on an autotile screen.
      *
      * Walks the screen's current calculated zones and returns the index of the
-     * zone that contains the cursor, or the tiled window count if the cursor
-     * is beyond all zones. Returns -1 if the screen has no tiling state.
+     * first zone that contains the cursor. Returns the last tiled index as a
+     * fallback when the cursor is beyond all zones, or -1 if the screen has no
+     * tiling state. updateDragInsertPreview() clamps to [0, tiledWindowCount()-1],
+     * so returning the last slot is equivalent to "append".
      *
      * The dragged window (if any active preview) is excluded from the hit test
      * so pointing at its own tile doesn't produce a no-op reinsert.
@@ -847,6 +849,14 @@ public:
     QString dragInsertPreviewWindowId() const
     {
         return m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
+    }
+
+    /**
+     * @brief Get the target screen ID of the active drag-insert preview, or empty.
+     */
+    QString dragInsertPreviewScreenId() const
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
     }
 
     /**

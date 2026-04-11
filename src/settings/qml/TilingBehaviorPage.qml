@@ -36,7 +36,7 @@ Flickable {
                     description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
 
                     ModifierAndMouseCheckBoxes {
-                        width: Math.min(root.triggerPreferredWidth, Kirigami.Units.gridUnit * 16)
+                        width: root.triggerPreferredWidth
                         allowMultiple: true
                         acceptMode: acceptModeAll
                         triggers: settingsController.autotileDragInsertTriggers

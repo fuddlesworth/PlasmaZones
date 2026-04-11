@@ -191,9 +191,10 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         // where the user drops it, not snap back to a stored rect.
                         m_dragFloatedWindowIds.insert(windowId);
                     }
-                    // Stash pending dragStarted info so sendDeferredDragStarted()
-                    // can forward it to the daemon later if the autotile drag-insert
-                    // trigger gets engaged mid-drag (autotileDragInsertHeld path).
+                    // Stash pending dragStarted info so the autotile drag-insert
+                    // forwarding path (dragMoved when autotileDragInsertHeld) can
+                    // send a fresh dragStarted to the daemon if the trigger
+                    // engages mid-drag on this bypassed autotile screen.
                     m_dragStartedSent = false;
                     m_pendingDragWindowId = windowId;
                     m_pendingDragGeometry = geometry;
@@ -326,13 +327,16 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                         sendDragMovedBypassSafe(windowId, cursorPos, m_currentModifiers,
                                                 static_cast<int>(m_currentMouseButtons));
                     } else if (m_autotileDragInsertForwarded) {
-                        // Trigger released mid-drag: keep forwarding dragMoved so the
-                        // daemon sees the trigger state transition and cancels the
-                        // in-progress preview. After this one more tick the daemon
-                        // clears its state and subsequent dragMoveds are no-ops on
-                        // the autotile side.
+                        // Trigger released mid-drag: forward ONE final dragMoved so
+                        // the daemon sees the trigger state transition and cancels
+                        // the in-progress preview, then stop forwarding for the rest
+                        // of the drag to avoid 60Hz D-Bus traffic. The flag is reset
+                        // so we won't keep forwarding — but if the user presses the
+                        // trigger again we'll re-enter the insertHeld branch and
+                        // resume.
                         sendDragMovedBypassSafe(windowId, cursorPos, m_currentModifiers,
                                                 static_cast<int>(m_currentMouseButtons));
+                        m_autotileDragInsertForwarded = false;
                     }
                     return;
                 }

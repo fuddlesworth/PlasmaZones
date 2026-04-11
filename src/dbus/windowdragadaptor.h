@@ -237,9 +237,9 @@ private:
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
     QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
 
-    // Autotile drag-insert preview state (parallel to snapping's overlay state)
-    bool m_autotileDragInsertActive = false; // True while preview is live in the engine
-    QString m_autotileDragInsertScreenId; // Screen the preview is on
+    // Autotile drag-insert preview state lives on AutotileEngine
+    // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
+    // queries the engine directly to avoid drift between the two caches.
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

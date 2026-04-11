@@ -689,7 +689,7 @@ public:
     }
     QVariantList autotileDragInsertTriggers() const override
     {
-        return {};
+        return ConfigDefaults::autotileDragInsertTriggers();
     }
     void setAutotileDragInsertTriggers(const QVariantList&) override
     {

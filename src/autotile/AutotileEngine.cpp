@@ -2334,14 +2334,29 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
     if (preview.lastInsertIndex < 0) {
         // Something went wrong: window isn't in the tiled list after the setup above.
         // Roll back the prior-state capture so we don't leave the engine in a bad state.
-        if (preview.hadPriorState && !preview.priorSameScreen) {
+        if (preview.hadPriorState && preview.priorSameScreen) {
+            // Same-screen: we only mutated the floating flag (if priorFloating).
+            // Re-float to restore the original state.
+            if (preview.priorFloating) {
+                targetState->setFloating(windowId, true);
+            }
+        } else if (preview.hadPriorState) {
+            // Cross-screen: we removed from prior state and added to target.
+            // Undo both.
+            targetState->removeWindow(windowId);
             if (TilingState* priorState = m_screenStates.value(preview.priorKey)) {
                 priorState->addWindow(windowId, preview.priorRawIndex);
                 if (preview.priorFloating) {
                     priorState->setFloating(windowId, true);
                 }
                 m_windowToStateKey[windowId] = preview.priorKey;
+            } else {
+                m_windowToStateKey.remove(windowId);
             }
+        } else {
+            // Fresh adoption: just undo the add.
+            targetState->removeWindow(windowId);
+            m_windowToStateKey.remove(windowId);
         }
         return false;
     }
@@ -2391,17 +2406,21 @@ void AutotileEngine::commitDragInsertPreview()
     const QString windowId = m_dragInsertPreview->windowId;
     const bool crossScreenAdoption = m_dragInsertPreview->hadPriorState && !m_dragInsertPreview->priorSameScreen;
     const bool freshAdoption = !m_dragInsertPreview->hadPriorState;
+    // Same-screen reorders that unfloated the window also need the WTS sync
+    // below so the daemon drops its stale "floating" bookkeeping.
+    const bool sameScreenUnfloat = m_dragInsertPreview->hadPriorState && m_dragInsertPreview->priorSameScreen
+        && m_dragInsertPreview->priorFloating;
     m_dragInsertPreview.reset();
     // Retile target without the filter so the dragged window's geometry is
     // applied on the next windowsTiled emission (KWin's interactive move has
     // ended and will accept the geometry set).
     retileAfterOperation(targetScreenId, /*operationSucceeded=*/true);
-    // For adopted windows (cross-screen or fresh), emit a float-state sync
-    // signal so the daemon's WTS bridge clears any stale snap/float bookkeeping
-    // and records the window as tiled on the target screen. Passing floating=
-    // false routes through the no-restore path (windowFloatingStateSynced),
-    // avoiding the geometry-restore teleport of windowFloatingChanged.
-    if (crossScreenAdoption || freshAdoption) {
+    // Emit a float-state sync signal whenever the window's tiling/floating
+    // state changed as a result of this drag: cross-screen adoption, fresh
+    // adoption, or a same-screen unfloat. Passing floating=false routes
+    // through the no-restore path (windowFloatingStateSynced), avoiding the
+    // geometry-restore teleport of windowFloatingChanged.
+    if (crossScreenAdoption || freshAdoption || sameScreenUnfloat) {
         Q_EMIT windowFloatingStateSynced(windowId, false, targetScreenId);
     }
 }
@@ -2426,14 +2445,22 @@ void AutotileEngine::cancelDragInsertPreview()
             }
         }
     } else {
-        // Cross-screen / fresh adoption path: remove from target state.
-        if (targetState) {
-            targetState->removeWindow(p.windowId);
-        }
-        m_windowToStateKey.remove(p.windowId);
-        // Restore to the prior state if the window came from one.
-        if (p.hadPriorState) {
-            if (TilingState* priorState = m_screenStates.value(p.priorKey)) {
+        // Cross-screen / fresh adoption path. If the window came from another
+        // state that still exists, restore it there. If the prior state was
+        // evicted (desktop/VS reconfigure between begin and cancel) we cannot
+        // restore — in that case leave the window in target rather than
+        // orphaning it, and notify WTS so bookkeeping stays consistent.
+        TilingState* priorState = (p.hadPriorState) ? m_screenStates.value(p.priorKey) : nullptr;
+        if (p.hadPriorState && !priorState) {
+            // m_windowToStateKey already points at target from begin(); leave
+            // it there and let the window live in target state.
+            Q_EMIT windowFloatingStateSynced(p.windowId, false, p.targetScreenId);
+        } else {
+            if (targetState) {
+                targetState->removeWindow(p.windowId);
+            }
+            m_windowToStateKey.remove(p.windowId);
+            if (priorState) {
                 priorState->addWindow(p.windowId, p.priorRawIndex);
                 if (p.priorFloating) {
                     priorState->setFloating(p.windowId, true);
@@ -2465,15 +2492,17 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     const QString draggedId = m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
     // Walk zones in order; return the first zone whose rect contains the cursor.
     // Skip the dragged window's own zone so pointing at it doesn't match.
-    for (int i = 0; i < zones.size(); ++i) {
-        if (i < tiled.size() && tiled[i] == draggedId) {
+    const int limit = std::min(zones.size(), tiled.size());
+    for (int i = 0; i < limit; ++i) {
+        if (tiled[i] == draggedId) {
             continue;
         }
         if (zones[i].contains(cursorPos)) {
             return i;
         }
     }
-    // Cursor isn't over any zone on this screen — fall back to end of stack.
+    // Cursor isn't over any zone on this screen — fall back to the last
+    // non-dragged slot. updateDragInsertPreview() clamps to tileCount-1.
     return tiled.size() > 0 ? tiled.size() - 1 : 0;
 }
 
