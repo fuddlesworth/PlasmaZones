@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
@@ -79,6 +80,22 @@ public:
     }
 
     /**
+     * @brief Wire up the compositor-facing WindowRegistry.
+     *
+     * The registry is populated by the kwin-effect bridge via the new
+     * setWindowMetadata() D-Bus method and cleared via the existing
+     * windowClosed() path. Consumers (WTS, AutotileEngine, SnapEngine) query
+     * it for current appId instead of parsing composite windowId strings.
+     *
+     * Must be set before start. Not owned.
+     *
+     * Also forwards the pointer to the underlying WindowTrackingService and
+     * subscribes to metadataChanged so we can refresh tracking that mirrors
+     * the app class (e.g. last-used-zone class tag).
+     */
+    void setWindowRegistry(WindowRegistry* registry);
+
+    /**
      * @brief Set engine references for routing operations per-screen
      *
      * The adaptor routes IWindowEngine operations to the correct engine:
@@ -104,6 +121,29 @@ public:
     }
 
 public Q_SLOTS:
+    /**
+     * @brief Register or update metadata for a live window.
+     *
+     * Called by the kwin-effect bridge on window-added and on every mutation
+     * of the window's app class (windowClassChanged / desktopFileNameChanged).
+     * The @p instanceId is the compositor-supplied stable token (KWin's
+     * internalId(); Hyprland's address on a future bridge). It is opaque to
+     * the daemon — never parsed.
+     *
+     * @param instanceId  Opaque compositor handle (stable for window lifetime)
+     * @param appId       Current app class (mutable)
+     * @param desktopFile Current desktop file name (mutable, may be empty)
+     * @param title       Current caption (mutable, may be empty)
+     *
+     * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
+     * subscribe to the registry's Qt signals directly.
+     *
+     * Safe to call unconditionally on every observation — no-op if metadata
+     * is unchanged.
+     */
+    void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
+                           const QString& title);
+
     // Window snapping notifications (from KWin script)
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
     void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
@@ -987,6 +1027,11 @@ private:
     // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
+
+    // Shared registry: compositor-supplied instance id → current metadata.
+    // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
+    // and cleared from the windowClosed path.
+    QPointer<WindowRegistry> m_windowRegistry;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

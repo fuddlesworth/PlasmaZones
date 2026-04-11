@@ -109,8 +109,8 @@ void ScreenChangeHandler::fetchAndApplyWindowGeometries()
         return;
     }
     m_reapplyInProgress = true;
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getUpdatedWindowGeometries"));
+    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                             QStringLiteral("getUpdatedWindowGeometries"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
     QPointer<ScreenChangeHandler> self(this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [self](QDBusPendingCallWatcher* w) {
@@ -164,7 +164,7 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
             continue;
         }
         QString fullId = m_effect->getWindowId(w);
-        QString appId = PlasmaZonesEffect::extractAppId(fullId);
+        QString appId = m_effect->appIdForInstance(fullId);
         windowByFullId.insert(fullId, w);
         if (!windowByAppId.contains(appId)) {
             windowByAppId.insert(appId, w);
@@ -200,7 +200,7 @@ void ScreenChangeHandler::applyWindowGeometriesFromJson(const QString& geometrie
 
         KWin::EffectWindow* window = windowByFullId.value(windowId);
         if (!window) {
-            window = windowByAppId.value(PlasmaZonesEffect::extractAppId(windowId));
+            window = windowByAppId.value(m_effect->appIdForInstance(windowId));
         }
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenId = m_effect->getWindowScreenId(window);

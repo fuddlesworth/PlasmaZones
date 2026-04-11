@@ -66,6 +66,8 @@ set(plasmazones_core_SRCS
     core/windowtrackingservice/navigation.cpp
     core/windowtrackingservice/resnap.cpp
     core/windowtrackingservice/lifecycle.cpp
+    core/windowregistry.h
+    core/windowregistry.cpp
     core/platform.cpp
     core/platform.h
     core/geometryutils.cpp

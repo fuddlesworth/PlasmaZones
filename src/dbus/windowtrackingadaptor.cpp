@@ -15,6 +15,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/types.h"
+#include "../core/windowregistry.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -189,7 +190,7 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
 
     // Update last used zone (skip zone selector special IDs and auto-snapped windows)
     if (!zoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = Utils::extractWindowClass(windowId);
+        QString windowClass = m_service->currentAppIdFor(windowId);
         m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
@@ -237,7 +238,7 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
 
     // Update last used zone with primary (skip zone selector special IDs and auto-snapped)
     if (!primaryZoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = Utils::extractWindowClass(windowId);
+        QString windowClass = m_service->currentAppIdFor(windowId);
         m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
     }
 
@@ -380,7 +381,75 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     }
 
     m_service->windowClosed(windowId);
+
+    // Drop registry state last: consumers subscribed to windowDisappeared may
+    // rely on other WTS state still being present during their cleanup. The
+    // canonical release MUST happen after remove() because WindowRegistry's
+    // disappear signal fires synchronously from remove() and subscribers may
+    // still call canonicalizeForLookup on their way out.
+    if (m_windowRegistry) {
+        const QString instanceId = Utils::extractInstanceId(windowId);
+        m_windowRegistry->remove(instanceId);
+        m_windowRegistry->releaseCanonical(instanceId);
+    }
+
     qCDebug(lcDbusWindow) << "Cleaned up tracking data for closed window" << windowId;
+}
+
+void WindowTrackingAdaptor::setWindowRegistry(WindowRegistry* registry)
+{
+    m_windowRegistry = registry;
+    if (m_service) {
+        m_service->setWindowRegistry(registry);
+    }
+    if (!registry) {
+        return;
+    }
+    // Reactive metadata updates. Per feedback_class_change_exclusion.md we do
+    // NOT retroactively enforce rules — a committed snap/autotile/float state
+    // stays put even if the new class would have behaved differently at open.
+    // The only safe reactive update is refreshing tracking fields that mirror
+    // the app class, so future lookups don't compare against a stale string.
+    QObject::connect(registry, &WindowRegistry::metadataChanged, this,
+                     [this](const QString& instanceId, const WindowMetadata& oldMeta, const WindowMetadata& newMeta) {
+                         if (oldMeta.appId == newMeta.appId || !m_service) {
+                             return;
+                         }
+                         // If the last-used-zone tracking is stamped with the old class and
+                         // the renamed window was the only instance of that class, update
+                         // the tag so the next auto-snap-by-class check sees the live name.
+                         // Any other tracking that's keyed internally by windowId (zone
+                         // assignments, pre-float zones, etc.) already uses the canonical
+                         // key from WindowRegistry::canonicalizeWindowId, so it doesn't
+                         // need migration — only human-readable class tags do.
+                         if (m_service->lastUsedZoneClass() == oldMeta.appId
+                             && m_windowRegistry->instancesWithAppId(oldMeta.appId).isEmpty()) {
+                             m_service->retagLastUsedZoneClass(newMeta.appId);
+                             qCDebug(lcDbusWindow) << "Retagged last-used-zone class after rename:" << oldMeta.appId
+                                                   << "→" << newMeta.appId << "(instance" << instanceId << ")";
+                         }
+                     });
+}
+
+void WindowTrackingAdaptor::setWindowMetadata(const QString& instanceId, const QString& appId,
+                                              const QString& desktopFile, const QString& title)
+{
+    if (!m_windowRegistry) {
+        // Registry not wired yet — during daemon startup the kwin-effect may
+        // fire before setWindowRegistry runs. Drop silently; the effect re-emits
+        // on every class change so state converges.
+        return;
+    }
+    if (instanceId.isEmpty()) {
+        qCWarning(lcDbusWindow) << "setWindowMetadata: rejecting empty instance id";
+        return;
+    }
+
+    WindowMetadata meta;
+    meta.appId = appId;
+    meta.desktopFile = desktopFile;
+    meta.title = title;
+    m_windowRegistry->upsert(instanceId, meta);
 }
 
 void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
@@ -414,7 +483,7 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     QString zoneId = m_service->zoneForWindow(windowId);
     if (!zoneId.isEmpty() && m_settings && m_settings->moveNewWindowsToLastZone()
         && !m_service->isAutoSnapped(windowId)) {
-        QString windowClass = Utils::extractWindowClass(windowId);
+        QString windowClass = m_service->currentAppIdFor(windowId);
         int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
         m_service->updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
     }

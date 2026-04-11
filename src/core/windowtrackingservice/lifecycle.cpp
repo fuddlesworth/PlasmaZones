@@ -23,7 +23,10 @@ namespace PlasmaZones {
 
 void WindowTrackingService::windowClosed(const QString& windowId)
 {
-    QString appId = Utils::extractAppId(windowId);
+    // Query the registry-aware helper so a window that renamed mid-session
+    // (Electron/CEF) lands in the restore queue under its CURRENT class,
+    // not the first-seen one.
+    QString appId = currentAppIdFor(windowId);
 
     // Persist the zone assignment to pending BEFORE removing from active tracking.
     // This ensures the window can be restored to its zone when reopened.
@@ -191,9 +194,10 @@ void WindowTrackingService::onLayoutChanged()
             }
             // Track by exact key (full windowId for live, appId for pending)
             addedIds.insert(windowIdOrStableId);
-            // Also track appId so pending entries don't duplicate live ones
-            QString appId = Utils::extractAppId(windowIdOrStableId);
-            if (appId != windowIdOrStableId) {
+            // Also track appId so pending entries don't duplicate live ones.
+            // Registry-aware so a renamed window dedups against its CURRENT class.
+            QString appId = currentAppIdFor(windowIdOrStableId);
+            if (!appId.isEmpty() && appId != windowIdOrStableId) {
                 addedIds.insert(appId);
             }
             // Collect all zone positions for multi-zone resnap

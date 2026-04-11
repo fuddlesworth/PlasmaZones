@@ -19,6 +19,7 @@
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include "../core/zonedetector.h"
+#include "../core/windowregistry.h"
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
@@ -63,6 +64,7 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<ZoneDetector>(m_settings.get(), nullptr))
+    , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_screenManager(std::make_unique<ScreenManager>(nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
@@ -310,6 +312,7 @@ bool Daemon::init()
     m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
                                                         m_virtualDesktopManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
+    m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers
@@ -335,6 +338,10 @@ bool Daemon::init()
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
                                                         m_screenManager.get(), this);
+    // Attach the shared window registry so the engine queries current class
+    // instead of parsing canonical windowIds — fixes Emby-style mid-session
+    // class mutations (discussion #271).
+    m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
     // user-defined algorithms are registered in AlgorithmRegistry before the

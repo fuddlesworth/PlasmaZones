@@ -123,7 +123,7 @@ void AutotileHandler::slotWindowsTileRequested(const QString& tileRequestsJson)
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
-            appIdToEntryIndices[PlasmaZonesEffect::extractAppId(entries[i].windowId)].append(i);
+            appIdToEntryIndices[m_effect->appIdForInstance(entries[i].windowId)].append(i);
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {

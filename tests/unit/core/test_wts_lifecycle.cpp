@@ -11,6 +11,13 @@
  * 3. Pre-float zone conversion on close
  * 4. Layout change -> stale assignment removal and resnap buffer
  * 5. State change signal emission
+ *
+ * WIRE FORMAT NOTE: These tests construct WTS without a WindowRegistry, so
+ * they drive legacy-compat "appId|uuid" composite fixtures to exercise the
+ * Utils::extractAppId fallback path inside currentAppIdFor(). Production
+ * daemons set a registry and receive bare instance ids — see
+ * test_wts_registry_integration.cpp and test_wta_reactive_metadata.cpp for
+ * coverage of the live path.
  */
 
 #include <QTest>

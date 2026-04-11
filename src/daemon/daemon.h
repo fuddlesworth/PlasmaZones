@@ -45,6 +45,7 @@ class IConfigBackend;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
+class WindowRegistry;
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -99,6 +100,10 @@ public:
     ShortcutManager* shortcutManager() const
     {
         return m_shortcutManager.get();
+    }
+    WindowRegistry* windowRegistry() const
+    {
+        return m_windowRegistry.get();
     }
 
     // Overlay control (delegates to OverlayService)
@@ -280,6 +285,10 @@ private:
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<ZoneDetector> m_zoneDetector;
+    // Single source of truth for live-window instance identity + metadata.
+    // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
+    // instead of parsing composite windowId strings.
+    std::unique_ptr<WindowRegistry> m_windowRegistry;
     std::unique_ptr<OverlayService> m_overlayService;
     std::unique_ptr<ScreenManager> m_screenManager;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
