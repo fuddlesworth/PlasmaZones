@@ -14,6 +14,7 @@ endmacro()
 # core/ — Window Identity Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_window_identity core/test_window_identity.cpp)
+pz_add_test(test_window_registry core/test_window_registry.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Window Tracking Tests (snap/unsnap, floating)
@@ -53,6 +54,10 @@ add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 add_executable(test_wts_crossmode_float core/test_wts_crossmode_float.cpp)
 target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
+
+add_executable(test_wts_registry_integration core/test_wts_registry_integration.cpp)
+target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
@@ -108,6 +113,7 @@ pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow
 pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -272,6 +278,10 @@ add_test(NAME test_overlay_helpers COMMAND test_overlay_helpers)
 add_executable(test_wta_convenience dbus/test_wta_convenience.cpp)
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
+
+add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
+target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
 
 add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)

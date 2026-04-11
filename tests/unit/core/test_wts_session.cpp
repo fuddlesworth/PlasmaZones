@@ -15,6 +15,10 @@
  * 7. Multi-monitor restore edge cases
  * 8. Auto-snap marking
  * 9. Consume pending assignment
+ *
+ * WIRE FORMAT NOTE: fixtures use legacy "appId|uuid" composites because the
+ * WTS is constructed without a WindowRegistry. See header in
+ * test_wts_lifecycle.cpp for the reasoning.
  */
 
 #include <QTest>

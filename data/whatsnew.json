@@ -1,6 +1,15 @@
 {
     "releases": [
         {
+            "version": "2.8.5",
+            "date": "2026-04-10",
+            "highlights": [
+                "Fixed master window ballooning to 100% on every notification (#271) — 75ms debounce coalesces spurious KWin minimize/unminimize cycles triggered by plasmashell popups",
+                "Filtered Plasma shell surfaces (notification popups, emoji picker, krunner) out of autotile tracking entirely",
+                "Settings toggle now recovers the systemd unit from failed state, so users can re-enable PlasmaZones after killing a terminal-run daemon without logging out"
+            ]
+        },
+        {
             "version": "2.8.4",
             "date": "2026-04-09",
             "highlights": [

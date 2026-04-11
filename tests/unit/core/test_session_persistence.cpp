@@ -4,6 +4,14 @@
 /**
  * @file test_session_persistence.cpp
  * @brief Unit tests for session persistence: save/load cycle, collision, consumption
+ *
+ * WIRE FORMAT NOTE: this is a self-contained mock of the persistence pattern
+ * using legacy composite ids. The disk format IS still class-keyed (so that
+ * saves survive KWin restarts where instance ids regenerate) — that part
+ * hasn't changed. Only the in-memory primary key changed from composite to
+ * instance id. Production persistence now uses
+ * WindowTrackingService::currentAppIdFor() to derive the disk key from the
+ * live instance; see src/dbus/windowtrackingadaptor/saveload.cpp.
  */
 
 #include <QTest>

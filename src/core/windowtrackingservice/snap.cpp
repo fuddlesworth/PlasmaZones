@@ -44,7 +44,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         return SnapResult::noSnap();
     }
 
-    QString windowClass = Utils::extractWindowClass(windowId);
+    QString windowClass = currentAppIdFor(windowId);
     if (windowClass.isEmpty()) {
         return SnapResult::noSnap();
     }
@@ -182,7 +182,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
     }
 
     // Check if window class was ever user-snapped
-    QString windowClass = Utils::extractWindowClass(windowId);
+    QString windowClass = currentAppIdFor(windowId);
     if (!m_userSnappedClasses.contains(windowClass)) {
         return SnapResult::noSnap();
     }
@@ -232,7 +232,7 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
     if (isSticky && m_settings) {
         auto handling = m_settings->stickyWindowHandling();
         if (handling == StickyWindowHandling::IgnoreAll || handling == StickyWindowHandling::RestoreOnly) {
-            qCDebug(lcCore) << "snapToEmptyZone: window" << Utils::extractAppId(windowId) << "sticky handling"
+            qCDebug(lcCore) << "snapToEmptyZone: window" << currentAppIdFor(windowId) << "sticky handling"
                             << static_cast<int>(handling);
             return SnapResult::noSnap();
         }
@@ -270,7 +270,7 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
 SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& windowId, const QString& screenId,
                                                               bool isSticky) const
 {
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
 
     // Check if window was floating - floating windows should NOT be auto-snapped
     // They should remain floating when reopened
@@ -302,7 +302,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     // restarts (where UUIDs changed and no window will ever match) are ignored.
     if (appId != windowId) { // windowId contains UUID (full format)
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-            if (it.key() != windowId && Utils::extractAppId(it.key()) == appId
+            if (it.key() != windowId && currentAppIdFor(it.key()) == appId
                 && m_effectReportedWindows.contains(it.key())) {
                 qCDebug(lcCore) << "sessionRestore:" << windowId << "skipped — live sibling" << it.key()
                                 << "has exact assignment";
@@ -425,7 +425,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
 void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUserInitiated)
 {
     if (wasUserInitiated) {
-        QString windowClass = Utils::extractWindowClass(windowId);
+        QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
             m_userSnappedClasses.insert(windowClass);
             scheduleSaveState();
@@ -448,7 +448,7 @@ bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
     // When a user explicitly snaps a window, clear ONE stale pending assignment
     // from a previous session (FIFO, mirroring consumePendingAssignment). Only the
     // first entry is removed so multi-instance apps retain entries for other windows.
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     auto it = m_pendingRestoreQueues.find(appId);
     if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
         return false;
@@ -489,7 +489,7 @@ bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
 
 void WindowTrackingService::consumePendingAssignment(const QString& windowId)
 {
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     auto it = m_pendingRestoreQueues.find(appId);
     if (it != m_pendingRestoreQueues.end() && !it->isEmpty()) {
         it->removeFirst();
