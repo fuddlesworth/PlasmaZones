@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Drag protocol refactor** ([#310](https://github.com/fuddlesworth/PlasmaZones/discussions/310)): the kwin-effect is now a dumb relay for drag events — the daemon owns all drag routing decisions through a new `beginDrag` / `updateDragCursor` / `endDrag` protocol with typed `DragPolicy` and `DragOutcome` structs. The previous effect-side distributed state (`m_dragBypassedForAutotile` / `m_cachedZoneSelectorEnabled` / `m_autotileScreens` local cache) went stale during the asynchronous settings-reload window and produced ~40 seconds of dead drags in the reporter's log on #310. The new protocol makes the daemon the single source of truth at drag start, drag cursor update (30Hz fire-and-forget), and drag end. Cross-VS mid-drag flips are emitted by the daemon via `dragPolicyChanged` and applied locally by the plugin, replacing the effect-side flip loop that walked `KWin::effects->screens()` against a local autotile-screen cache. Pinned against drift by a new 8-state truth table test.
+- **Meta-F float toggle now runs daemon-local** ([#310](https://github.com/fuddlesworth/PlasmaZones/discussions/310)): the keyboard shortcut previously made 4 D-Bus hops across 3 processes (KWin → daemon → effect → daemon → engine → effect), stalling under any D-Bus backpressure and producing the "pressed Meta-F, nothing happened, seconds later it toggled" symptom. It now reads the active window from `WindowTrackingAdaptor::m_lastActiveWindowId`, fresh frame geometry from a 50ms-debounced shadow (`setFrameGeometry`), and dispatches to the engine in-process. One D-Bus hop (the daemon → effect `applyGeometryRequested` paint), targeting sub-50ms latency from keypress to visible toggle. The 100ms debounce on `handleFloat` has been dropped since the in-process path has no D-Bus latency to coalesce.
+- **Settings nesting made compile-time**: `ISettings` gains `isZoneSelectorActive()` and `isSnapAssistActive()` composite accessors that return `snappingEnabled() && <child>Enabled()`. Consumers can no longer forget the parent-gate check when reading a nested `Snapping.*` flag. Raw child accessors remain for KCM settings UI code that genuinely needs the unaffected value.
+
 ## [2.8.5] - 2026-04-10
 
 ### Fixed
