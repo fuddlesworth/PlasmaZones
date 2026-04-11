@@ -51,8 +51,7 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
     assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
 
     // Emit geometry for KWin effect to apply
-    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId,
-                                  result.screenId);
+    Q_EMIT applyGeometryRequested(windowId, GeometryUtils::rectToJson(result.geometry), result.zoneId, result.screenId);
 
     qCInfo(lcCore) << "SnapEngine::windowOpened: snapped" << windowId << "to zone" << result.zoneId << "on"
                    << result.screenId;
@@ -89,8 +88,14 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     // Exclusion check: skip auto-snap for excluded applications/window classes.
     // This must run before any calculate method so excluded apps are never snapped
     // by app rules, session restore, empty zone, or last zone features.
-    if (m_settings) {
-        const QString appId = Utils::extractAppId(windowId);
+    //
+    // Use the WTS's registry-aware lookup so a window whose class the effect
+    // has already updated (Electron/CEF apps renaming themselves) matches
+    // against its CURRENT class, not a stale first-seen one. m_windowTracker
+    // is non-null at runtime; production code never reaches this with a null
+    // tracker.
+    if (m_settings && m_windowTracker) {
+        const QString appId = m_windowTracker->currentAppIdFor(windowId);
         for (const QString& excluded : m_settings->excludedApplications()) {
             if (Utils::appIdMatches(appId, excluded)) {
                 qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;

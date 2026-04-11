@@ -933,7 +933,12 @@ QJSValue ScriptedAlgorithm::buildJsState(const TilingState* state) const
 
     const int winCount = state->tiledWindowCount();
     int focusedIdx = -1;
-    const QVector<WindowInfo> infos = buildWindowInfos(state, winCount, focusedIdx);
+    // Resolver injected by AutotileEngine::setWindowRegistry → every scripted
+    // algorithm sees the CURRENT app class for each tiled window, not a
+    // first-seen parse. User JS that switches on window.appId (e.g. "pin
+    // firefox as master") now sees "media.emby.client.beta" after Emby's
+    // mid-session rename instead of the stale "emby-beta".
+    const QVector<WindowInfo> infos = buildWindowInfos(state, winCount, appIdResolver(), focusedIdx);
 
     jsState.setProperty(QStringLiteral("windows"), buildJsWindowArray(infos, infos.size()));
     jsState.setProperty(QStringLiteral("focusedIndex"), focusedIdx);

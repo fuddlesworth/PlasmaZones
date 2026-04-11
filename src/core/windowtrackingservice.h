@@ -21,6 +21,7 @@ class ISettings;
 class VirtualDesktopManager;
 class Layout;
 class Zone;
+class WindowRegistry;
 
 /**
  * @brief Window-zone tracking service (business logic layer)
@@ -53,6 +54,28 @@ public:
     explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
+
+    /**
+     * @brief Wire up the shared WindowRegistry.
+     *
+     * Optional — unit tests construct WTS without a registry and fall back to
+     * parsing composite windowIds. Production daemons set this so the service
+     * queries live class via appIdFor() and ignores first-seen strings.
+     *
+     * Must be set before start. Not owned.
+     */
+    void setWindowRegistry(WindowRegistry* registry)
+    {
+        m_windowRegistry = registry;
+    }
+
+    /**
+     * @brief Accessor for consumers that need direct access (effect, adaptor).
+     */
+    WindowRegistry* windowRegistry() const
+    {
+        return m_windowRegistry;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Zone Assignment Management
@@ -353,6 +376,30 @@ public:
     QString lastUsedZoneId() const
     {
         return m_lastUsedZoneId;
+    }
+
+    /**
+     * @brief App class string stamped on the last-used-zone tracking.
+     *
+     * Used by the reactive metadata handler to detect stale class tags after
+     * a mid-session rename.
+     */
+    QString lastUsedZoneClass() const
+    {
+        return m_lastUsedZoneClass;
+    }
+
+    /**
+     * @brief Update the last-used-zone class tag without touching zone/screen.
+     *
+     * Called by the reactive metadata handler when a window renames mid-session
+     * and its old class was the class tracked on last-used-zone. Only the
+     * class string is refreshed so the next auto-snap-by-class lookup matches
+     * against the live name.
+     */
+    void retagLastUsedZoneClass(const QString& newClass)
+    {
+        m_lastUsedZoneClass = newClass;
     }
 
     /**
@@ -738,12 +785,34 @@ public:
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
 
+public:
+    /**
+     * @brief Current app class for a windowId, preferring the live registry.
+     *
+     * Equivalent to Utils::extractAppId() when no registry is attached. With
+     * a registry, returns the latest appId for the instance id — so snap rule
+     * matching against a freshly-renamed window (Electron/CEF) sees the
+     * current class.
+     */
+    QString currentAppIdFor(const QString& anyWindowId) const;
+
+    /**
+     * @brief Canonicalize for read-only callers (no map mutation).
+     *
+     * Delegates to the registry's canonicalizeForLookup when available.
+     * Unit tests that don't attach a registry get a passthrough.
+     */
+    QString canonicalizeForLookup(const QString& rawWindowId) const;
+
 private:
     // Dependencies
     LayoutManager* m_layoutManager;
     IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
+    // Shared registry for current-class queries and canonical key translation.
+    // Not owned. Null in unit tests.
+    WindowRegistry* m_windowRegistry = nullptr;
 
     // Zone assignments: windowId -> zoneIds (supports multi-zone snap)
     QHash<QString, QStringList> m_windowZoneAssignments;

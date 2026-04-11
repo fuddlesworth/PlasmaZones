@@ -530,7 +530,12 @@ bool WindowTrackingAdaptor::isWindowExcluded(const QString& windowId, const QStr
         return false;
     }
 
-    const QString appId = Utils::extractAppId(windowId);
+    // Current class, not first-seen — matches rules against the window's
+    // live appId so mid-session mutations don't bypass exclusions on fresh
+    // operations. (Per feedback_class_change_exclusion.md, existing snapped
+    // state is NOT re-evaluated — only new decision points, like this one.)
+    // m_service is constructed in the adaptor ctor and is never null here.
+    const QString appId = m_service->currentAppIdFor(windowId);
     for (const QString& excluded : m_settings->excludedApplications()) {
         if (Utils::appIdMatches(appId, excluded)) {
             qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by app rule:" << excluded;

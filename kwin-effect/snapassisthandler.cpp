@@ -37,8 +37,8 @@ void SnapAssistHandler::showContinuationIfNeeded(const QString& screenId)
         return;
     }
     qCInfo(lcSnapAssist) << "Snap assist continuation: querying empty zones for screen" << screenId;
-    QDBusPendingCall emptyCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getEmptyZonesJson"), {screenId});
+    QDBusPendingCall emptyCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                           QStringLiteral("getEmptyZonesJson"), {screenId});
     auto* watcher = new QDBusPendingCallWatcher(emptyCall, this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, screenId](QDBusPendingCallWatcher* w) {
         w->deleteLater();
@@ -58,34 +58,34 @@ void SnapAssistHandler::asyncShow(const QString& excludeWindowId, const QString&
     if (!m_effect->isDaemonReady("snap assist snapped windows")) {
         return;
     }
-    QDBusPendingCall snapCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
+    QDBusPendingCall snapCall =
+        m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getSnappedWindows"));
     auto* snapWatcher = new QDBusPendingCallWatcher(snapCall, this);
-    connect(snapWatcher, &QDBusPendingCallWatcher::finished, this,
-            [this, excludeWindowId, screenId, emptyZonesJson](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
-                QDBusPendingReply<QStringList> reply = *w;
-                QSet<QString> snappedWindowIds;
-                if (reply.isValid()) {
-                    for (const QString& id : reply.value()) {
-                        snappedWindowIds.insert(id);
-                    }
+    connect(
+        snapWatcher, &QDBusPendingCallWatcher::finished, this,
+        [this, excludeWindowId, screenId, emptyZonesJson](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<QStringList> reply = *w;
+            QSet<QString> snappedWindowIds;
+            if (reply.isValid()) {
+                for (const QString& id : reply.value()) {
+                    snappedWindowIds.insert(id);
                 }
-                QJsonArray candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
-                if (candidates.isEmpty()) {
-                    qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
-                    return;
-                }
-                if (!m_effect->isDaemonReady("snap assist show")) {
-                    return;
-                }
-                m_effect->fireAndForgetDBusCall(
-                    PlasmaZones::DBus::Interface::Overlay, QStringLiteral("showSnapAssist"),
-                    {screenId, emptyZonesJson,
-                     QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact))},
-                    QStringLiteral("showSnapAssist"));
-                qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
-            });
+            }
+            QJsonArray candidates = buildCandidates(excludeWindowId, screenId, snappedWindowIds);
+            if (candidates.isEmpty()) {
+                qCInfo(lcSnapAssist) << "Snap assist skipped: no unsnapped candidate windows on" << screenId;
+                return;
+            }
+            if (!m_effect->isDaemonReady("snap assist show")) {
+                return;
+            }
+            m_effect->fireAndForgetDBusCall(
+                PlasmaZones::DBus::Interface::Overlay, QStringLiteral("showSnapAssist"),
+                {screenId, emptyZonesJson, QString::fromUtf8(QJsonDocument(candidates).toJson(QJsonDocument::Compact))},
+                QStringLiteral("showSnapAssist"));
+            qCInfo(lcSnapAssist) << "Snap Assist shown with" << candidates.size() << "candidates";
+        });
 }
 
 QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, const QString& screenId,
@@ -107,10 +107,10 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
         if (snappedWindowIds.contains(windowId)) {
             continue;
         }
-        QString appId = PlasmaZonesEffect::extractAppId(windowId);
+        QString appId = m_effect->appIdForInstance(windowId);
         bool snappedByAppId = false;
         for (const QString& snappedId : snappedWindowIds) {
-            if (PlasmaZonesEffect::extractAppId(snappedId) == appId) {
+            if (m_effect->appIdForInstance(snappedId) == appId) {
                 snappedByAppId = true;
                 break;
             }
@@ -119,7 +119,7 @@ QJsonArray SnapAssistHandler::buildCandidates(const QString& excludeWindowId, co
             int sameAppCount = 0;
             for (KWin::EffectWindow* other : windows) {
                 if (other && m_effect->shouldHandleWindow(other)
-                    && PlasmaZonesEffect::extractAppId(m_effect->getWindowId(other)) == appId) {
+                    && m_effect->appIdForInstance(m_effect->getWindowId(other)) == appId) {
                     ++sameAppCount;
                 }
             }

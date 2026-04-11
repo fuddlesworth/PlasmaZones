@@ -34,15 +34,25 @@ inline QJsonObject rectToJsonObject(const QRect& rect)
     return obj;
 }
 
-inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::PreTileGeometry>& map)
+inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::PreTileGeometry>& map,
+                                    const WindowTrackingService* service)
 {
+    // Runtime map keys are bare instance ids, not composites. Parsing them
+    // as strings would write per-instance uuids into the disk format where
+    // they'd never match on next launch. Look up the current class via the
+    // WTS (which consults the registry) to get a stable class-based disk
+    // key that survives KWin restarts.
     QJsonObject result;
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        const QString appId = service ? service->currentAppIdFor(it.key()) : it.key();
+        if (appId.isEmpty()) {
+            continue;
+        }
         QJsonObject obj = rectToJsonObject(it.value().geometry);
         if (!it.value().connectorName.isEmpty()) {
             obj[QLatin1String("screen")] = Utils::screenIdForName(it.value().connectorName);
         }
-        result[Utils::extractAppId(it.key())] = obj;
+        result[appId] = obj;
     }
     return QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
 }

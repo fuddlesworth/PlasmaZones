@@ -29,7 +29,7 @@ bool NavigationHandler::isWindowFloating(const QString& windowId) const
     if (m_floatingWindows.contains(windowId)) {
         return true;
     }
-    QString appId = m_effect->extractAppId(windowId);
+    QString appId = m_effect->appIdForInstance(windowId);
     return (appId != windowId && m_floatingWindows.contains(appId));
 }
 
@@ -39,7 +39,7 @@ void NavigationHandler::setWindowFloating(const QString& windowId, bool floating
         m_floatingWindows.insert(windowId);
     } else {
         m_floatingWindows.remove(windowId);
-        QString appId = m_effect->extractAppId(windowId);
+        QString appId = m_effect->appIdForInstance(windowId);
         if (appId != windowId) {
             m_floatingWindows.remove(appId);
         }
@@ -52,8 +52,8 @@ void NavigationHandler::syncFloatingWindowsFromDaemon()
         return;
     }
 
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
+    QDBusPendingCall pendingCall =
+        m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("getFloatingWindows"));
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
@@ -86,8 +86,8 @@ void NavigationHandler::syncFloatingStateForWindow(const QString& windowId)
         return;
     }
 
-    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(
-        PlasmaZones::DBus::Interface::WindowTracking, QStringLiteral("queryWindowFloating"), {windowId});
+    QDBusPendingCall pendingCall = m_effect->asyncMethodCall(PlasmaZones::DBus::Interface::WindowTracking,
+                                                             QStringLiteral("queryWindowFloating"), {windowId});
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, windowId](QDBusPendingCallWatcher* w) {

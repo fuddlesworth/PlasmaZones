@@ -51,6 +51,26 @@ namespace PlasmaZones {
 
 Q_LOGGING_CATEGORY(lcEffect, "plasmazones.effect", QtInfoMsg)
 
+namespace {
+/**
+ * @brief Local copy of effectExtractInstanceId() for the effect.
+ *
+ * kwin-effect can't include src/core/utils.h because it depends on
+ * plasmazones_export.h which isn't in the effect's include path. The helper
+ * is three lines — duplicating it is cheaper than plumbing a separate
+ * header. Both copies must stay in sync; effectExtractInstanceId is the
+ * authoritative definition.
+ */
+inline QString effectExtractInstanceId(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return windowId;
+    }
+    const int sep = windowId.indexOf(QLatin1Char('|'));
+    return (sep >= 0) ? windowId.mid(sep + 1) : windowId;
+}
+} // namespace
+
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -524,6 +544,11 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     setupWindowConnections(w);
     updateWindowStickyState(w);
 
+    // Populate the daemon's WindowRegistry with this window's initial metadata.
+    // Runs before any other daemon notification so consumers querying the
+    // registry from their windowOpened handlers see a record (sessions 2+).
+    pushWindowMetadata(w);
+
     // Sync floating state for this window from daemon
     // This ensures windows that were floating when closed remain floating when reopened
     // Use full windowId so daemon can do per-instance lookup with appId fallback
@@ -581,6 +606,10 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // Remove the window's border item (parent WindowItem is being destroyed anyway,
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
+
+    // Drop the effect-local app-id cache entry. closedWindowId is the bare
+    // instance id under the new wire format, which is exactly the cache key.
+    m_appIdByInstance.remove(closedWindowId);
 
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
@@ -691,6 +720,24 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         connect(safeW, &QObject::destroyed, this, [trackedScreen]() {
             delete trackedScreen;
         });
+
+        // Metadata mutations: KWin fires these when an app swaps its class or
+        // desktop file after the surface is already mapped. Electron/CEF apps
+        // (Emby, some Discord forks) do this mid-session and silently break any
+        // daemon state keyed to the first-seen class. Push the latest metadata
+        // to the WindowRegistry so consumers query the current value.
+        //
+        // Per feedback_class_change_exclusion.md: the registry only updates its
+        // record. It does NOT retroactively unsnap, re-snap, or re-evaluate
+        // rules — that would surprise users. Committed state stays committed.
+        auto pushLatest = [this, safeW]() {
+            if (safeW && !safeW->isDeleted()) {
+                pushWindowMetadata(safeW);
+            }
+        };
+        connect(kw, &KWin::Window::windowClassChanged, this, pushLatest);
+        connect(kw, &KWin::Window::desktopFileNameChanged, this, pushLatest);
+        connect(kw, &KWin::Window::captionChanged, this, pushLatest);
     }
 
     // Detect drag start/end via KWin's per-window signals instead of polling.
@@ -971,7 +1018,7 @@ void PlasmaZonesEffect::slotDaemonReady()
             if (reply.isValid()) {
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
-                    QString appId = extractAppId(windowId);
+                    QString appId = appIdForInstance(windowId);
                     if (!appId.isEmpty()) {
                         trackedAppIds.insert(appId);
                     }
@@ -1003,7 +1050,7 @@ void PlasmaZonesEffect::slotDaemonReady()
                 if (m_autotileHandler->isAutotileScreen(getWindowScreenId(window))) {
                     continue;
                 }
-                QString appId = extractAppId(getWindowId(window));
+                QString appId = appIdForInstance(getWindowId(window));
                 if (trackedAppIds.contains(appId)) {
                     continue;
                 }
@@ -1087,31 +1134,87 @@ void PlasmaZonesEffect::slotSettingsChanged()
 
 QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
 {
+    // windowId IS the instance id. The daemon's runtime primary key is this
+    // opaque, compositor-supplied string. It's stable for the window's
+    // lifetime regardless of class mutations, so every map/set keyed by
+    // windowId inside the daemon is immune to Electron/CEF apps swapping
+    // their WM_CLASS after the surface is mapped.
+    //
+    // App class is looked up separately — via getWindowAppId() here in the
+    // effect, and via WindowRegistry in the daemon. Both read the live
+    // value rather than trusting a frozen first-seen string.
+    //
+    // Populates m_appIdByInstance as a side-effect so appIdForInstance()
+    // can answer later D-Bus calls without walking the stacking order.
     if (!w) {
         return QString();
     }
-
     KWin::Window* window = w->window();
     if (!window) {
         return QString();
     }
+    const QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
+    const QString appId = getWindowAppId(w);
+    if (!appId.isEmpty()) {
+        const_cast<PlasmaZonesEffect*>(this)->m_appIdByInstance.insert(instanceId, appId);
+    }
+    return instanceId;
+}
 
-    // App identity: prefer desktopFileName (most stable cross-session identifier)
+QString PlasmaZonesEffect::getWindowInstanceId(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return QString();
+    }
+    KWin::Window* window = w->window();
+    if (!window) {
+        return QString();
+    }
+    return window->internalId().toString(QUuid::WithoutBraces);
+}
+
+QString PlasmaZonesEffect::getWindowAppId(KWin::EffectWindow* w) const
+{
+    if (!w) {
+        return QString();
+    }
+    KWin::Window* window = w->window();
+    if (!window) {
+        return QString();
+    }
+    // Prefer desktopFileName (stable cross-session identifier when available).
     QString appId = window->desktopFileName();
     if (appId.isEmpty()) {
         // Fallback: normalize windowClass
-        // X11: "resourceName resourceClass" -> extract resourceClass
-        // Wayland: app_id as-is
+        //   X11: "resourceName resourceClass" → extract resourceClass
+        //   Wayland: app_id as-is
         QString wc = w->windowClass();
         int spaceIdx = wc.indexOf(QLatin1Char(' '));
         appId = (spaceIdx > 0) ? wc.mid(spaceIdx + 1) : wc;
     }
-    appId = appId.toLower();
+    return appId.toLower();
+}
 
-    // Instance identity: KWin's internal UUID (unique within KWin session)
-    QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
+void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
+{
+    if (!w) {
+        return;
+    }
+    const QString instanceId = getWindowInstanceId(w);
+    if (instanceId.isEmpty()) {
+        return;
+    }
 
-    return appId + QLatin1Char('|') + instanceId;
+    const QString appId = getWindowAppId(w);
+    KWin::Window* window = w->window();
+    const QString desktopFile = window ? window->desktopFileName() : QString();
+    const QString title = w->caption();
+
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking, QStringLiteral("setWindowMetadata"));
+    msg << instanceId << appId << desktopFile << title;
+    // Fire-and-forget — the daemon side is idempotent.
+    QDBusConnection::sessionBus().asyncCall(msg);
 }
 
 bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)
@@ -1810,9 +1913,9 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         }
     }
     if (!targetWindow) {
-        QString appId = extractAppId(windowId);
+        QString appId = appIdForInstance(windowId);
         for (KWin::EffectWindow* w : windows) {
-            if (w && shouldHandleWindow(w) && extractAppId(getWindowId(w)) == appId) {
+            if (w && shouldHandleWindow(w) && appIdForInstance(getWindowId(w)) == appId) {
                 targetWindow = w;
                 break;
             }
@@ -2001,11 +2104,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const QString& batchJson, const
         // Exact match first, appId fallback for single-instance apps
         KWin::EffectWindow* window = windowMap.value(windowId);
         if (!window) {
-            QString appId = extractAppId(windowId);
+            QString appId = appIdForInstance(windowId);
             KWin::EffectWindow* candidate = nullptr;
             int matchCount = 0;
             for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-                if (extractAppId(it.key()) == appId) {
+                if (appIdForInstance(it.key()) == appId) {
                     candidate = it.value();
                     if (++matchCount > 1)
                         break;
@@ -2115,7 +2218,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
         if (snapReply.isValid()) {
             for (const QString& id : snapReply.value()) {
                 snappedFullIds.insert(id);
-                snappedAppIds.insert(extractAppId(id));
+                snappedAppIds.insert(appIdForInstance(id));
             }
         }
 
@@ -2129,7 +2232,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
             }
 
             QString windowId = getWindowId(w);
-            QString appId = extractAppId(windowId);
+            QString appId = appIdForInstance(windowId);
 
             // User-initiated snap commands override floating state.
             // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
@@ -2251,7 +2354,7 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
             // Extract app IDs from tracked windows for comparison
             const QStringList trackedWindows = reply.value();
             for (const QString& windowId : trackedWindows) {
-                QString appId = extractAppId(windowId);
+                QString appId = appIdForInstance(windowId);
                 if (!appId.isEmpty()) {
                     trackedAppIds.insert(appId);
                 }
@@ -2276,7 +2379,7 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
 
             // Check if this window is already tracked using local set lookup (O(1))
             QString windowId = getWindowId(window);
-            QString appId = extractAppId(windowId);
+            QString appId = appIdForInstance(windowId);
             if (trackedAppIds.contains(appId)) {
                 continue; // Already tracked
             }
@@ -2800,13 +2903,44 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     }
 }
 
-QString PlasmaZonesEffect::extractAppId(const QString& windowId)
+QString PlasmaZonesEffect::appIdForInstance(const QString& windowId)
 {
     if (windowId.isEmpty()) {
-        return windowId;
+        return QString();
     }
-    int sep = windowId.indexOf(QLatin1Char('|'));
-    return (sep > 0) ? windowId.left(sep) : windowId;
+    // Normalize to a bare instance id regardless of whether the caller passed
+    // the new wire format (bare uuid) or a legacy composite.
+    const QString instanceId = effectExtractInstanceId(windowId);
+
+    // Fast path: cache populated by getWindowId / pushWindowMetadata.
+    auto cacheHit = m_appIdByInstance.constFind(instanceId);
+    if (cacheHit != m_appIdByInstance.constEnd()) {
+        return cacheHit.value();
+    }
+
+    // Slow path: walk the stacking order. Callers reach this branch only when
+    // asking about a window that hasn't passed through getWindowId() yet
+    // (e.g. a synchronous query from a KWin effect handler on startup), which
+    // is rare. The result is cached so subsequent lookups stay fast.
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow* w : windows) {
+        KWin::Window* kw = w ? w->window() : nullptr;
+        if (!kw) {
+            continue;
+        }
+        if (kw->internalId().toString(QUuid::WithoutBraces) == instanceId) {
+            const QString appId = getWindowAppId(w);
+            if (!appId.isEmpty()) {
+                m_appIdByInstance.insert(instanceId, appId);
+            }
+            return appId;
+        }
+    }
+
+    // Unknown window — return empty rather than a stale parse. String
+    // parsing on a bare instance id would return the uuid itself, which is
+    // worse than returning "". Callers must tolerate missing metadata.
+    return QString();
 }
 
 QString PlasmaZonesEffect::deriveShortNameFromWindowClass(const QString& windowClass)
@@ -2918,49 +3052,38 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
     if (windowId.isEmpty()) {
         return nullptr;
     }
-
-    // Single-pass lookup: exact ID match preferred, appId fallback only if unambiguous.
-    const QString targetAppId = extractAppId(windowId);
-    KWin::EffectWindow* appMatch = nullptr;
-    int matchCount = 0;
-
+    // windowId is the KWin instance id, which uniquely identifies a window.
+    // No ambiguity, no class fallback needed — and the class fallback was
+    // exactly where the Emby-style rename bug hid before, because it
+    // assumed the first-seen class would still match at lookup time.
+    //
+    // Legacy callers might still pass an "appId|uuid" composite;
+    // effectExtractInstanceId normalizes both forms to the same uuid string.
+    const QString target = effectExtractInstanceId(windowId);
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
-        const QString wId = getWindowId(w);
-        if (wId == windowId) {
-            return w; // Exact match — return immediately
+        KWin::Window* kw = w ? w->window() : nullptr;
+        if (!kw) {
+            continue;
         }
-        if (extractAppId(wId) == targetAppId) {
-            appMatch = w;
-            ++matchCount;
+        if (kw->internalId().toString(QUuid::WithoutBraces) == target) {
+            return w;
         }
     }
-
-    // Only use appId fallback when unambiguous (single instance of that app)
-    return (matchCount == 1) ? appMatch : nullptr;
+    return nullptr;
 }
 
 QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString& windowId) const
 {
+    // Instance ids are unique — "all windows for a given id" is at most one
+    // window. findAllWindowsById exists as an API seam for the (historical)
+    // case where callers wanted every instance of an app class matching a
+    // given composite; that semantic now lives on the daemon's
+    // WindowRegistry::instancesWithAppId() + per-instance lookups. The
+    // single-instance behavior here is the only case that remains.
     QVector<KWin::EffectWindow*> out;
-    if (windowId.isEmpty()) {
-        return out;
-    }
-    const QString targetAppId = extractAppId(windowId);
-    const auto windows = KWin::effects->stackingOrder();
-    for (KWin::EffectWindow* w : windows) {
-        const QString wId = getWindowId(w);
-        if (wId == windowId) {
-            // Exact match — discard any appId matches accumulated from earlier
-            // windows in the stacking order. Without this clear, a second instance
-            // of the same app (same appId) triggers the disambiguation path in
-            // slotWindowsTileRequested, which can assign the wrong EffectWindow to
-            // the tile entry — leaving the new window untiled.
-            return {w};
-        }
-        if (extractAppId(wId) == targetAppId) {
-            out.append(w);
-        }
+    if (KWin::EffectWindow* w = findWindowById(windowId)) {
+        out.append(w);
     }
     return out;
 }
