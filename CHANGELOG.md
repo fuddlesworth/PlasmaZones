@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.6] - 2026-04-11
+
+### Fixed
+- **Emby and other Electron/CEF apps silently break after class rename** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The daemon's runtime primary key was `"appId|uuid"` — a composite that baked a mutable attribute into the identity used for every per-window map. Emby opens as `emby-beta`, gets tracked, then KWin rebroadcasts it as `media.emby.client.beta`; every subsequent lookup under the new composite missed, so `toggleWindowFloat`, focus navigation, and snap operations silently failed until a mode toggle rebuilt state from scratch. Introduced `WindowRegistry` as the single source of truth for live-window metadata keyed by the stable KWin instance id; the kwin-effect pushes class/desktop-file/title on `windowAdded` and on every `windowClassChanged` / `desktopFileNameChanged` / `captionChanged` so the daemon always reads the live class instead of parsing a frozen first-seen composite. Session persistence uses `currentAppIdFor()` at save time so a renamed window lands under its live class on disk.
+
 ## [2.8.5] - 2026-04-10
 
 ### Fixed
