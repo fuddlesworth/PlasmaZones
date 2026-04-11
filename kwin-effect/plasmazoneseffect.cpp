@@ -176,14 +176,86 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             [this](KWin::EffectWindow* w, const QString& windowId, const QRectF& geometry) {
                 qCDebug(lcEffect) << "Window move started -" << w->windowClass()
                                   << "current modifiers:" << static_cast<int>(m_currentModifiers);
-                // On autotile screens, don't show manual zone overlay or grab keyboard.
-                // The drag proceeds freely; floatWindow is called on drag end.
-                // Capture this decision so dragStopped uses the same state — prevents
-                // a race where m_autotileScreens changes mid-drag (async D-Bus signal)
-                // and leaves the popup visible with no snap.
-                if (m_autotileHandler->isAutotileScreen(getWindowScreenId(w))) {
+
+                // Phase 3 drag protocol: fire beginDrag async to get a
+                // daemon-authoritative policy. While the reply is pending, we
+                // default m_currentDragPolicy to a conservative snap-path so
+                // the worst case (stale effect cache would have said autotile
+                // but daemon knows better, or vice-versa) is a brief overlay
+                // flash rather than a dead drag. The reply handler flips the
+                // bypass flag retroactively a few ms later if the daemon says
+                // this is an autotile drag.
+                //
+                // This replaces the previous stale-cache read of
+                // m_autotileHandler->isAutotileScreen() as the single source
+                // of truth for drag-start routing — root cause of the
+                // post-settings-reload dead-drag window found in #310 log
+                // forensics.
+                m_currentDragPolicy = DragPolicy{};
+                m_currentDragPolicy.streamDragMoved = true;
+                m_currentDragPolicy.showOverlay = true;
+                m_currentDragPolicy.grabKeyboard = true;
+                m_currentDragPolicy.captureGeometry = true;
+
+                const QString startScreenId = getWindowScreenId(w);
+                const QRect frame = geometry.toRect();
+                QDBusMessage beginMsg = QDBusMessage::createMethodCall(
+                    DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag, QStringLiteral("beginDrag"));
+                beginMsg << windowId << frame.x() << frame.y() << frame.width() << frame.height() << startScreenId
+                         << static_cast<int>(m_currentMouseButtons);
+                QDBusPendingCall beginPending = QDBusConnection::sessionBus().asyncCall(beginMsg);
+                auto* beginWatcher = new QDBusPendingCallWatcher(beginPending, this);
+                QPointer<KWin::EffectWindow> safeW = w;
+                const QString capturedWindowId = windowId;
+                const QString capturedScreenId = startScreenId;
+                connect(beginWatcher, &QDBusPendingCallWatcher::finished, this,
+                        [this, safeW, capturedWindowId, capturedScreenId](QDBusPendingCallWatcher* bw) {
+                            bw->deleteLater();
+                            QDBusPendingReply<DragPolicy> reply = *bw;
+                            if (!reply.isValid()) {
+                                qCWarning(lcEffect) << "beginDrag reply invalid:" << reply.error().message();
+                                return;
+                            }
+                            m_currentDragPolicy = reply.value();
+                            qCInfo(lcEffect) << "beginDrag reply:" << capturedWindowId
+                                             << "bypass=" << m_currentDragPolicy.bypassReason
+                                             << "stream=" << m_currentDragPolicy.streamDragMoved
+                                             << "immediateFloat=" << m_currentDragPolicy.immediateFloatOnStart;
+                            // If the daemon confirms autotile, flip the effect
+                            // state to bypass mode. Usually the effect-side
+                            // fast path below already did this synchronously;
+                            // this catches the stale-cache case where the fast
+                            // path missed.
+                            if (m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen")) {
+                                if (!m_dragBypassedForAutotile) {
+                                    m_dragBypassedForAutotile = true;
+                                    m_dragBypassScreenId = capturedScreenId;
+                                    qCInfo(lcEffect)
+                                        << "beginDrag: retroactive autotile bypass for" << capturedWindowId;
+                                }
+                                // Apply immediate float transition if the policy
+                                // says so and the window wasn't already floated
+                                // by the fast path. Using QPointer so we skip
+                                // if the window was destroyed between drag-start
+                                // and reply.
+                                if (safeW && m_currentDragPolicy.immediateFloatOnStart
+                                    && !isWindowFloating(capturedWindowId)
+                                    && !m_dragFloatedWindowIds.contains(capturedWindowId)) {
+                                    m_autotileHandler->handleDragToFloat(safeW, capturedWindowId, capturedScreenId,
+                                                                         /*immediate=*/true);
+                                    m_dragFloatedWindowIds.insert(capturedWindowId);
+                                }
+                            }
+                        });
+
+                // Fast path: the effect-side autotile cache is USUALLY correct.
+                // We still consult it synchronously so the common case runs at
+                // zero latency. The async beginDrag reply above runs as a
+                // correction layer for the cases where the cache is stale
+                // (post-settings-reload — the #310 scenario).
+                if (m_autotileHandler->isAutotileScreen(startScreenId)) {
                     m_dragBypassedForAutotile = true;
-                    m_dragBypassScreenId = getWindowScreenId(w);
+                    m_dragBypassScreenId = startScreenId;
                     // If the window is currently autotile-tiled, restore its
                     // title bar and pre-autotile size NOW (synchronously, during
                     // the interactive move). This mirrors snap mode, where

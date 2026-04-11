@@ -409,6 +409,13 @@ private:
     // round-trip over D-Bus.
     QHash<QString, QString> m_appIdByInstance;
 
+    // Phase 3 drag protocol: policy returned from the daemon's beginDrag
+    // for the currently-active drag. Async-populated a few ms after the
+    // drag starts; until then, conservative defaults apply (snap-path
+    // with streaming) so the worst-case UX is a brief zone-overlay flash
+    // rather than a dead drag. Cleared at drag end.
+    DragPolicy m_currentDragPolicy;
+
     // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
     // signals per-window to ~50ms and pushes the latest geometry to the daemon via
     // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
