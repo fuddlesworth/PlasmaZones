@@ -75,13 +75,29 @@ public:
 
 public Q_SLOTS:
     /**
-     * Called when window drag starts
-     * @param windowId Unique window identifier
-     * @param x Window X position
-     * @param y Window Y position
-     * @param width Window width
-     * @param height Window height
-     * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
+     * Begin a drag session — daemon-authoritative policy decision.
+     *
+     * Replaces dragStarted as the canonical drag-begin entry point. Compositor
+     * plugin calls this synchronously at drag start and uses the returned
+     * DragPolicy to decide whether to stream cursor updates, grab keyboard,
+     * apply an immediate float transition (autotile), etc. Single source of
+     * truth replaces the effect-side m_dragBypassedForAutotile cache that
+     * went stale after every settings reload.
+     *
+     * Internally, for snap-path drags, this also performs the same drag-start
+     * setup as the legacy dragStarted method (original geometry, pre-parsed
+     * triggers, was-snapped check). For autotile-bypass or
+     * snapping-disabled drags, it only stores m_draggedWindowId so later
+     * updateDragCursor / endDrag calls match.
+     *
+     * Drag protocol v1 (phase 3 of v3 drag refactor).
+     */
+    PlasmaZones::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth, int frameHeight,
+                                      const QString& startScreenId, int mouseButtons);
+
+    /**
+     * Called when window drag starts (legacy; kept alive during the phase 3
+     * transition for the KWin script path that has not been migrated yet).
      * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
      */
     void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
@@ -169,6 +185,32 @@ private:
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
+public:
+    /**
+     * @brief Pure policy decision — no side effects, static so tests can
+     *        invoke it without constructing a full adaptor.
+     *
+     * Consulted from daemon-authoritative state. The result is what
+     * beginDrag returns to the compositor plugin and what is emitted on
+     * dragPolicyChanged during cross-VS cursor crossings.
+     *
+     * Precedence: context_disabled → autotile_screen → snapping_disabled →
+     * snap path (canonical). First match wins so the bypassReason string is
+     * stable across coincidental disables.
+     *
+     * @param settings Settings interface (snappingEnabled, zone-span triggers, etc.)
+     * @param autotileEngine May be nullptr in tests that don't exercise autotile
+     * @param windowId Dragged window (used for the isWindowTracked lookup
+     *                 that decides immediateFloatOnStart)
+     * @param screenId Virtual-screen-aware screen ID at drag start
+     * @param curDesktop Current virtual desktop (for context-disabled check)
+     * @param curActivity Current activity (for context-disabled check)
+     */
+    static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings, const AutotileEngine* autotileEngine,
+                                                     const QString& windowId, const QString& screenId, int curDesktop,
+                                                     const QString& curActivity);
+
+private:
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 

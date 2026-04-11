@@ -151,6 +151,18 @@ public:
      */
     bool isAutotileScreen(const QString& screenId) const;
 
+    /**
+     * @brief Check if a window is currently tracked in any autotile state.
+     *
+     * Used by the drag protocol (beginDrag) to decide whether to apply an
+     * immediate free-floating-size restore when a tiled window is picked up.
+     * Reads m_windowToStateKey which is authoritative.
+     */
+    bool isWindowTracked(const QString& windowId) const
+    {
+        return m_windowToStateKey.contains(windowId);
+    }
+
     // IWindowEngine
     bool isActiveOnScreen(const QString& screenId) const override;
 

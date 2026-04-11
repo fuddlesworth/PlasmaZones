@@ -301,6 +301,42 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e
     return arg;
 }
 
+QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p)
+{
+    arg.beginStructure();
+    arg << p.streamDragMoved << p.showOverlay << p.grabKeyboard << p.captureGeometry << p.immediateFloatOnStart
+        << p.screenId << p.bypassReason;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p)
+{
+    arg.beginStructure();
+    arg >> p.streamDragMoved >> p.showOverlay >> p.grabKeyboard >> p.captureGeometry >> p.immediateFloatOnStart
+        >> p.screenId >> p.bypassReason;
+    arg.endStructure();
+    return arg;
+}
+
+QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o)
+{
+    arg.beginStructure();
+    arg << o.action << o.windowId << o.targetScreenId << o.x << o.y << o.width << o.height << o.zoneId
+        << o.skipAnimation;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o)
+{
+    arg.beginStructure();
+    arg >> o.action >> o.windowId >> o.targetScreenId >> o.x >> o.y >> o.width >> o.height >> o.zoneId
+        >> o.skipAnimation;
+    arg.endStructure();
+    return arg;
+}
+
 void registerDBusTypes()
 {
     // IMPORTANT: register each type under BOTH its qualified and unqualified
@@ -348,6 +384,8 @@ void registerDBusTypes()
     PZ_REGISTER_DBUS_TYPE(CycleTargetResult);
     PZ_REGISTER_DBUS_TYPE(SwapTargetResult);
     PZ_REGISTER_DBUS_TYPE(RestoreTargetResult);
+    PZ_REGISTER_DBUS_TYPE(DragPolicy);
+    PZ_REGISTER_DBUS_TYPE(DragOutcome);
 
 #undef PZ_REGISTER_DBUS_TYPE
 }

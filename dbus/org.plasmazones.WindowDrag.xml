@@ -4,6 +4,27 @@
     <!-- Window Drag Interface (KWin script -> Daemon) -->
     <interface name="org.plasmazones.WindowDrag">
         <annotation name="org.gtk.GDBus.DocString" value="Window drag handling: KWin script calls dragStarted/dragMoved/dragStopped; daemon returns snap geometry. Uses double for window rect (KWin QML) and int for cursor/modifiers."/>
+        <method name="beginDrag">
+            <annotation name="org.gtk.GDBus.DocString" value="Phase 3 drag protocol: daemon-authoritative begin. Returns a DragPolicy that the compositor plugin uses to decide streaming, keyboard grab, and immediate-float behavior. Replaces dragStarted as the canonical drag-begin entry point. Single source of truth — no effect-side cache to go stale after settings reloads."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="frameX" type="i" direction="in"/>
+            <arg name="frameY" type="i" direction="in"/>
+            <arg name="frameWidth" type="i" direction="in"/>
+            <arg name="frameHeight" type="i" direction="in"/>
+            <arg name="startScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual-screen-aware screen identifier at drag start."/>
+            </arg>
+            <arg name="mouseButtons" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Qt::MouseButtons flags."/>
+            </arg>
+            <arg name="policy" type="(bbbbbss)" direction="out">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="PlasmaZones::DragPolicy"/>
+                <annotation name="org.gtk.GDBus.DocString" value="DragPolicy struct: {streamDragMoved, showOverlay, grabKeyboard, captureGeometry, immediateFloatOnStart, screenId, bypassReason}."/>
+            </arg>
+        </method>
+
         <method name="dragStarted">
             <annotation name="org.gtk.GDBus.DocString" value="Called when a window drag begins. Coordinates are double (KWin QML)."/>
             <arg name="windowId" type="s" direction="in">
