@@ -97,8 +97,13 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
 
-    // Float toggle: daemon handles full flow via toggleFloatForWindow
-    void slotToggleWindowFloatRequested(bool shouldFloat);
+    // Float toggle is entirely daemon-local — no effect-side slot needed.
+
+    // Daemon tells the effect the drag routing has flipped mid-drag (cursor
+    // crossed a virtual-screen boundary that changes autotile↔snap mode).
+    // Effect applies the transition: entering/exiting autotile bypass,
+    // canceling snap overlay, etc.
+    void slotDragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
     // Daemon-driven batch operations (rotate, resnap)
     void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
@@ -202,10 +207,16 @@ private:
 
     // D-Bus communication
 
-    void callDragStarted(const QString& windowId, const QRectF& geometry);
-    void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
-    void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
-                         const QString& snapDragStartScreenId = {});
+    /**
+     * @brief Fire endDrag and apply the returned DragOutcome.
+     *        Single entry point for drag-end dispatch,
+     *        regardless of autotile bypass or snap path.
+     *
+     * @param window Dragged window (QPointer-protected in the async reply)
+     * @param windowId Window identifier
+     * @param cancelled True if the drag was cancelled (Escape / external)
+     */
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void connectNavigationSignals();
@@ -409,6 +420,22 @@ private:
     // round-trip over D-Bus.
     QHash<QString, QString> m_appIdByInstance;
 
+    // Policy returned from the daemon's beginDrag for the currently-active
+    // drag. Async-populated a few ms after the
+    // drag starts; until then, conservative defaults apply (snap-path
+    // with streaming) so the worst-case UX is a brief zone-overlay flash
+    // rather than a dead drag. Cleared at drag end.
+    DragPolicy m_currentDragPolicy;
+
+    // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
+    // signals per-window to ~50ms and pushes the latest geometry to the daemon via
+    // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
+    // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
+    // can read fresh geometry without a round-trip.
+    QHash<QString, QRect> m_pendingFrameGeometry;
+    QTimer* m_frameGeometryFlushTimer = nullptr;
+    void flushPendingFrameGeometry();
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
@@ -473,14 +500,8 @@ private:
      */
     bool detectActivationAndGrab();
 
-    /**
-     * @brief Send the deferred dragStarted D-Bus call to the daemon
-     *
-     * Called lazily on first activation detection or zone selector need.
-     * Uses stored pending drag info from the DragTracker::dragStarted signal.
-     * No-op if already sent for the current drag.
-     */
-    void sendDeferredDragStarted();
+    // beginDrag is called unconditionally at drag-start; the deferred-send
+    // optimization is obsolete now that the daemon always knows about the drag.
 
     // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
     // The daemon also enforces these for keyboard navigation, but the effect needs them

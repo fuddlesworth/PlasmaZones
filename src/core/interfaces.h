@@ -51,6 +51,37 @@ public:
     ~ISettings() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Composite convenience accessors — implemented inline to enforce the
+    // parent-gate invariant that was previously consumer-side.
+    //
+    // Nested settings like zoneSelectorEnabled live under the Snapping.*
+    // config tree but were checked independently by consumers, so a consumer
+    // could read zoneSelectorEnabled=true even with the top-level
+    // Snapping.Enabled=false (exactly the reporter's config in #310 —
+    // Snapping.Enabled=false + Snapping.ZoneSelector.Enabled=true left the
+    // effect in a confused state that the drag path didn't handle).
+    //
+    // These composite methods make the parent gate compile-time: a consumer
+    // can't forget to check snappingEnabled() when they read
+    // isZoneSelectorActive().
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// True only when the zone selector is enabled AND snapping is enabled
+    /// at the top level. Use this in consumers instead of
+    /// zoneSelectorEnabled() unless you need the raw child flag value.
+    bool isZoneSelectorActive() const
+    {
+        return snappingEnabled() && zoneSelectorEnabled();
+    }
+
+    /// True only when snap assist is enabled AND snapping is enabled at
+    /// the top level. Same pattern as isZoneSelectorActive.
+    bool isSnapAssistActive() const
+    {
+        return snappingEnabled() && snapAssistEnabled();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // All settings methods are inherited from the segregated interfaces:
     //   - IZoneActivationSettings: drag modifiers, activation triggers
     //   - IZoneVisualizationSettings: colors, opacity, blur, shader effects

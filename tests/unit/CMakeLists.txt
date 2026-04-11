@@ -307,6 +307,14 @@ target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Co
                                                                  plasmazones_core)
 add_test(NAME test_autotile_adaptor_panel_gate COMMAND test_autotile_adaptor_panel_gate)
 
+# Truth-table guard for WindowDragAdaptor::computeDragPolicy — pins the
+# (snap, autotile, context) matrix so the daemon's drag routing decision
+# can't drift relative to the compositor plugin's deleted local caches.
+# Regression guard for #310.
+add_executable(test_drag_policy dbus/test_drag_policy.cpp)
+target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_drag_policy COMMAND test_drag_policy)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -355,6 +363,7 @@ set(_all_tests
     test_wta_convenience test_settings_schema test_compositor_bridge
     test_dbus_adaptor_routing
     test_autotile_adaptor_panel_gate
+    test_drag_policy
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -245,7 +245,20 @@ private:
      */
     void createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry);
     void destroyOverlayWindow(const QString& screenId);
+    void dismissOverlayWindow(const QString& screenId);
     void updateOverlayWindow(const QString& screenId, QScreen* physScreen);
+
+    // Move a live overlay entry from oldKey to newKey. Used when the effective
+    // screen id for the same physical monitor flips between a virtual variant
+    // ("...:115107/vs:0") and the bare physical id ("...:115107"), so the
+    // existing QQuickWindow + VkSwapchainKHR is reused instead of torn down.
+    // Returns true if a rekey happened.
+    bool rekeyOverlayState(const QString& oldKey, const QString& newKey);
+
+    // Debug-build invariant check: every m_screenStates entry either has a key
+    // present in targetIds or is a distinct physical monitor from every target.
+    // Catches orphan accumulation from effective-id jitter. No-op in release.
+    void validateScreenStateInvariant(const QStringList& targetIds) const;
 
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);

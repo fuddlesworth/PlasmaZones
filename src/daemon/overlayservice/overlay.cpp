@@ -68,96 +68,143 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // Store the effective screen ID for cross-virtual-screen detection in showAtPosition()
     m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
 
-    // When single-monitor mode, destroy overlay on screens we're switching away from (#136).
-    // Must destroy (not just hide) because on Vulkan, window->hide() destroys the
-    // VkSwapchainKHR but Qt doesn't properly reinitialize it on re-show. Destroying
-    // the window ensures a fresh window is created via createOverlayWindow() below.
-    if (!showOnAllMonitors) {
-        const QStringList screenIds = m_screenStates.keys();
-        for (const QString& screenId : screenIds) {
-            if (screenId != cursorEffectiveId && m_screenStates[screenId].overlayWindow) {
-                destroyOverlayWindow(screenId);
-            }
-        }
-    }
-
-    // Iterate effective screen IDs (includes virtual screens when configured)
+    // Phase 0: build the set of target screen ids — the effective ids that
+    // should have a live overlay window after this call completes. Filters
+    // on single-monitor mode, disabled contexts, autotile exclusion, and
+    // physical-screen resolvability.
     auto* mgr = ScreenManager::instance();
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
+    const bool haveEffective = mgr && !effectiveIds.isEmpty();
 
-    // Use effective screen IDs if ScreenManager is available, otherwise fall back to physical screens
-    if (mgr && !effectiveIds.isEmpty()) {
+    QStringList targetIds;
+    QHash<QString, QScreen*> targetPhysScreens;
+    QHash<QString, QRect> targetGeometries;
+    if (haveEffective) {
         for (const QString& screenId : effectiveIds) {
             QScreen* physScreen = mgr->physicalQScreenFor(screenId);
             if (!physScreen) {
                 continue;
             }
-            // Skip screens that aren't the cursor's effective screen when single-monitor mode is enabled
             if (!showOnAllMonitors && screenId != cursorEffectiveId) {
                 continue;
             }
-            // Skip monitors/desktops/activities where PlasmaZones is disabled
             if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
-            // Skip autotile-managed screens (overlay is for manual zone selection)
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-
-            const QRect geom = mgr->screenGeometry(screenId);
-
-            // Destroy and recreate if the window type no longer matches shader settings.
-            destroyIfTypeMismatch(screenId);
-            if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
-                createOverlayWindow(screenId, physScreen, geom);
-            }
-            if (auto* window = m_screenStates.value(screenId).overlayWindow) {
-                const QRect storedGeom =
-                    (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
-                         ? m_screenStates[screenId].overlayGeometry
-                         : geom);
-                assertWindowOnScreen(window, physScreen, storedGeom);
-                qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
-                                   << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
-                updateOverlayWindow(screenId, physScreen);
-                window->show();
-                window->update();
-            }
+            targetIds.append(screenId);
+            targetPhysScreens.insert(screenId, physScreen);
+            targetGeometries.insert(screenId, mgr->screenGeometry(screenId));
         }
     } else {
-        // Fallback: no ScreenManager, use physical screens directly
         for (auto* screen : Utils::allScreens()) {
             if (!showOnAllMonitors && screen != cursorScreen) {
                 continue;
             }
-            if (isContextDisabled(m_settings, Utils::screenIdentifier(screen), m_currentVirtualDesktop,
-                                  m_currentActivity)) {
-                continue;
-            }
-            if (m_excludedScreens.contains(Utils::screenIdentifier(screen))) {
-                continue;
-            }
-
             const QString screenId = Utils::screenIdentifier(screen);
-
-            // Destroy and recreate if the window type no longer matches shader settings.
-            destroyIfTypeMismatch(screenId);
-            if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
-                createOverlayWindow(screen);
+            if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
+                continue;
             }
-            if (auto* window = m_screenStates.value(screenId).overlayWindow) {
-                assertWindowOnScreen(window, screen);
-                qCDebug(lcOverlay) << "initializeOverlay (physical fallback): screenId=" << screenId
-                                   << "physGeom=" << screen->geometry()
-                                   << "availGeom=" << ScreenManager::actualAvailableGeometry(screen) << "windowScreen="
-                                   << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
-                updateOverlayWindow(screen);
-                window->show();
-                window->update();
+            if (m_excludedScreens.contains(screenId)) {
+                continue;
             }
+            targetIds.append(screenId);
+            targetPhysScreens.insert(screenId, screen);
+            targetGeometries.insert(screenId, screen->geometry());
         }
     }
+
+    const QSet<QString> targetSet(targetIds.cbegin(), targetIds.cend());
+
+    // Phase 1 — REKEY. For every target id that lacks a live overlay window,
+    // look for an existing m_screenStates entry under a different key but with
+    // the SAME physical monitor. Move (rekey) its state to the target id.
+    //
+    // This preserves the live QQuickWindow and its VkSwapchainKHR across
+    // effective-id "flavor flips" — for example when Utils::effectiveScreenIdAt
+    // jitters between "LG..:115107" and "LG..:115107/vs:0" because a VS config
+    // entry was added/removed/re-cached mid-session. Before this fix, each
+    // flip forced a full Vulkan swap-chain teardown + layer-shell surface
+    // reinit, and rapid flips during a drag (via updateDragCursor) stacked
+    // on the daemon main thread long enough to starve D-Bus delivery and
+    // manifest as the runaway overlay-create loop this refactor is fixing.
+    for (const QString& targetId : targetIds) {
+        auto it = m_screenStates.constFind(targetId);
+        if (it != m_screenStates.constEnd() && it->overlayWindow) {
+            continue; // Already correctly keyed with a live window.
+        }
+        const QString targetPhys = VirtualScreenId::extractPhysicalId(targetId);
+        QString donorKey;
+        for (auto sit = m_screenStates.constBegin(); sit != m_screenStates.constEnd(); ++sit) {
+            if (targetSet.contains(sit.key())) {
+                continue; // Another target's entry, leave it alone.
+            }
+            if (!sit.value().overlayWindow) {
+                continue;
+            }
+            if (VirtualScreenId::extractPhysicalId(sit.key()) != targetPhys) {
+                continue;
+            }
+            donorKey = sit.key();
+            break;
+        }
+        if (!donorKey.isEmpty()) {
+            rekeyOverlayState(donorKey, targetId);
+        }
+    }
+
+    // Phase 2 — DISMISS. Every remaining m_screenStates entry whose key is
+    // not in targetSet is either a different physical monitor we're switching
+    // away from, or a leftover from a removed/excluded screen. Hide
+    // non-shader overlays (cheap, no Vulkan churn — mirrors the 9e0cb05f
+    // "hide-not-destroy" policy that dismissOverlayWindow(QScreen*) uses)
+    // and destroy shader overlays (QSGRenderNode pipelines are bound to the
+    // per-window QRhi context, so destroy-on-hide is mandatory there).
+    const QStringList allKeys = m_screenStates.keys();
+    for (const QString& key : allKeys) {
+        if (targetSet.contains(key)) {
+            continue;
+        }
+        dismissOverlayWindow(key);
+    }
+
+    // Phase 3 — CREATE & SHOW. For each target id, create a window if we
+    // still don't have one (rekey phase didn't find a donor), push current
+    // geometry to rekeyed donors, and call show().
+    for (const QString& screenId : targetIds) {
+        QScreen* physScreen = targetPhysScreens.value(screenId);
+        const QRect geom = targetGeometries.value(screenId);
+        if (!physScreen) {
+            continue;
+        }
+
+        destroyIfTypeMismatch(screenId);
+        if (!m_screenStates.contains(screenId) || !m_screenStates[screenId].overlayWindow) {
+            if (haveEffective) {
+                createOverlayWindow(screenId, physScreen, geom);
+            } else {
+                createOverlayWindow(physScreen);
+            }
+        }
+        if (auto* window = m_screenStates.value(screenId).overlayWindow) {
+            m_screenStates[screenId].overlayPhysScreen = physScreen;
+            if (geom.isValid()) {
+                m_screenStates[screenId].overlayGeometry = geom;
+            }
+            const QRect storedGeom =
+                m_screenStates[screenId].overlayGeometry.isValid() ? m_screenStates[screenId].overlayGeometry : geom;
+            assertWindowOnScreen(window, physScreen, storedGeom);
+            qCDebug(lcOverlay) << "initializeOverlay: screenId=" << screenId << "geom=" << geom << "windowScreen="
+                               << (window->screen() ? window->screen()->name() : QStringLiteral("null"));
+            updateOverlayWindow(screenId, physScreen);
+            window->show();
+            window->update();
+        }
+    }
+
+    validateScreenStateInvariant(targetIds);
 
     if (anyScreenUsesShader()) {
         updateZonesForAllWindows(); // Push initial zone data
@@ -493,21 +540,95 @@ void OverlayService::dismissOverlayWindow(QScreen* screen)
     }
 
     for (const QString& screenId : matchingKeys) {
-        auto* window = m_screenStates.value(screenId).overlayWindow;
-        if (!window) {
+        dismissOverlayWindow(screenId);
+    }
+}
+
+void OverlayService::dismissOverlayWindow(const QString& screenId)
+{
+    auto it = m_screenStates.find(screenId);
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    auto* window = it->overlayWindow;
+    if (!window) {
+        return;
+    }
+    // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
+    // to the per-window QRhi which gets invalidated when hide() tears down the
+    // wl_surface and show() creates a new one.
+    // Non-shader overlays: hide() is safe — standard QML items recover from
+    // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
+    if (window->property("isShaderOverlay").toBool()) {
+        destroyOverlayWindow(screenId);
+    } else {
+        window->hide();
+    }
+}
+
+bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& newKey)
+{
+    if (oldKey == newKey) {
+        return false;
+    }
+    auto donor = m_screenStates.find(oldKey);
+    if (donor == m_screenStates.end() || !donor->overlayWindow) {
+        return false;
+    }
+    // If a stale (empty) entry already exists under newKey, drop it so the
+    // move lands cleanly. It has no live window — if it did the caller
+    // should not have selected this donor.
+    auto existing = m_screenStates.find(newKey);
+    if (existing != m_screenStates.end()) {
+        if (existing->overlayWindow) {
+            qCWarning(lcOverlay) << "rekeyOverlayState: refusing to clobber live entry under" << newKey << "with donor"
+                                 << oldKey;
+            return false;
+        }
+        m_screenStates.erase(existing);
+    }
+    PerScreenOverlayState state = std::move(donor.value());
+    m_screenStates.erase(donor);
+    m_screenStates.insert(newKey, std::move(state));
+    qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
+                      << "(same physical monitor, preserving Vulkan surface)";
+    return true;
+}
+
+void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) const
+{
+#ifndef QT_NO_DEBUG
+    // Invariant: at most one live overlay entry per physical monitor, and
+    // every live entry must either have its key in targetIds or share a
+    // physical monitor with NO target id (meaning it's awaiting dismissal
+    // on the next init). Any violation indicates orphan accumulation from
+    // effective-id jitter and points at a missed rekey/dismiss site.
+    QSet<QString> seenPhys;
+    const QSet<QString> targetSet(targetIds.cbegin(), targetIds.cend());
+    QSet<QString> targetPhys;
+    for (const QString& id : targetIds) {
+        targetPhys.insert(VirtualScreenId::extractPhysicalId(id));
+    }
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        if (!it.value().overlayWindow) {
             continue;
         }
-        // Shader overlays: must destroy — QSGRenderNode Vulkan pipelines are tied
-        // to the per-window QRhi which gets invalidated when hide() tears down the
-        // wl_surface and show() creates a new one.
-        // Non-shader overlays: hide() is safe — standard QML items recover from
-        // scene graph pause/resume, avoiding Vulkan surface create/destroy churn.
-        if (window->property("isShaderOverlay").toBool()) {
-            destroyOverlayWindow(screenId);
-        } else {
-            window->hide();
+        const QString physId = VirtualScreenId::extractPhysicalId(it.key());
+        if (seenPhys.contains(physId)) {
+            qCWarning(lcOverlay) << "validateScreenStateInvariant: duplicate live overlay for physical monitor"
+                                 << physId << "key=" << it.key() << "— orphan accumulation detected";
+            Q_ASSERT_X(false, "OverlayService", "duplicate live overlay for one physical monitor");
+        }
+        seenPhys.insert(physId);
+        if (!targetSet.contains(it.key()) && targetPhys.contains(physId)) {
+            qCWarning(lcOverlay) << "validateScreenStateInvariant: live overlay" << it.key()
+                                 << "shares physical monitor with a target id but was not rekeyed";
+            Q_ASSERT_X(false, "OverlayService", "un-rekeyed overlay on a target's physical monitor");
         }
     }
+#else
+    Q_UNUSED(targetIds);
+#endif
 }
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)

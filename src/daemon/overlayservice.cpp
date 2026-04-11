@@ -453,17 +453,31 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
     const QPoint cursorPos(cursorX, cursorY);
 
     if (m_visible) {
-        // Already visible: when single-monitor mode, switch overlay if cursor moved to different screen (#136)
-        // Use effective (virtual-aware) screen ID to detect cross-virtual-screen movement
+        // Already visible: when single-monitor mode, switch overlay if cursor moved to a different
+        // PHYSICAL monitor (#136). Previously this compared effective screen IDs (virtual-aware),
+        // but Utils::effectiveScreenIdAt can jitter between the physical ID and a virtual variant
+        // ("LG..:115107" ↔ "LG..:115107/vs:0") on successive calls at the same cursor position —
+        // for example when a stale virtual-screen entry is dropped mid-session and subsequent
+        // lookups fall back to the physical ID. Every flicker would fire initializeOverlay →
+        // destroyOverlayWindow(old) → createOverlayWindow(new), paying a full Vulkan RHI
+        // init + wl_surface round-trip each cycle. The destroy/create loop blocked the daemon
+        // main thread long enough to stall endDrag D-Bus delivery by 10+ seconds.
+        //
+        // Comparing extracted physical IDs matches main's QScreen*-pointer comparison in
+        // semantics while staying virtual-screen aware for genuine cross-monitor crossings.
         if (!cursorScreen) {
             cursorScreen = Utils::findScreenAtPosition(cursorPos);
         }
         if (!cursorScreen) {
             return;
         }
-        QString cursorEffectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
-        if (!showOnAllMonitors && !cursorEffectiveId.isEmpty() && m_currentOverlayScreenId != cursorEffectiveId) {
-            initializeOverlay(cursorScreen, cursorPos);
+        const QString cursorEffectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
+        if (!showOnAllMonitors && !cursorEffectiveId.isEmpty()) {
+            const QString currentPhys = VirtualScreenId::extractPhysicalId(m_currentOverlayScreenId);
+            const QString cursorPhys = VirtualScreenId::extractPhysicalId(cursorEffectiveId);
+            if (currentPhys != cursorPhys) {
+                initializeOverlay(cursorScreen, cursorPos);
+            }
         }
         return;
     }

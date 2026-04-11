@@ -62,15 +62,12 @@ void Daemon::handleRotate(bool clockwise)
 
 void Daemon::handleFloat()
 {
-    if (m_floatDebounce.isValid() && m_floatDebounce.elapsed() < kShortcutDebounceMs) {
-        return;
-    }
-    m_floatDebounce.restart();
-
-    // Delegate to WTA → effect → unified toggleFloatForWindow.
-    // The effect resolves the active KWin window + screen, stores both pre-snap
-    // and pre-autotile geometry, then calls toggleFloatForWindow which the daemon
-    // routes internally to snapping toggle or autotile engine based on screen mode.
+    // toggleWindowFloat() is fully daemon-local — reads the active window
+    // from the shadow, reads fresh frame geometry from the shadow, and
+    // dispatches to the engine in-process. The prior 100ms debounce was
+    // there because the old path bounced through D-Bus 4 times, where rapid
+    // retries could double-fire. A direct call doesn't need it; rapid
+    // Meta-F presses should act as rapid toggles, not be silently dropped.
     if (!m_windowTrackingAdaptor) {
         return;
     }

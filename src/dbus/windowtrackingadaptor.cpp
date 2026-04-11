@@ -388,6 +388,9 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
         m_lastActiveWindowId.clear();
     }
 
+    // Drop frame-geometry shadow entry for this window.
+    m_frameGeometry.remove(windowId);
+
     m_service->windowClosed(windowId);
 
     // Drop registry state last: consumers subscribed to windowDisappeared may
@@ -493,6 +496,19 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
 
     m_lastCursorScreenId = resolvedId;
     qCDebug(lcDbusWindow) << "Cursor screen changed to" << resolvedId;
+}
+
+void WindowTrackingAdaptor::setFrameGeometry(const QString& windowId, int x, int y, int width, int height)
+{
+    if (windowId.isEmpty() || width <= 0 || height <= 0) {
+        return;
+    }
+    m_frameGeometry[windowId] = QRect(x, y, width, height);
+}
+
+QRect WindowTrackingAdaptor::frameGeometry(const QString& windowId) const
+{
+    return m_frameGeometry.value(windowId);
 }
 
 void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QString& screenId)
