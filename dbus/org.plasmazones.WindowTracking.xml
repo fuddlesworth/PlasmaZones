@@ -554,6 +554,16 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Screen where window is located."/>
             </arg>
         </method>
+        <method name="setFrameGeometry">
+            <annotation name="org.gtk.GDBus.DocString" value="Push current frame geometry for a window into the daemon's shadow. Called by the compositor plugin on windowFrameGeometryChanged (debounced). Enables daemon-local shortcut handlers (e.g. float toggle) to read fresh geometry without a cross-process round-trip."/>
+            <arg name="windowId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window identifier."/>
+            </arg>
+            <arg name="x" type="i" direction="in"/>
+            <arg name="y" type="i" direction="in"/>
+            <arg name="width" type="i" direction="in"/>
+            <arg name="height" type="i" direction="in"/>
+        </method>
         <method name="resnapToNewLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Resnap all windows from the previous layout to the current layout. Maps by zone number (1-&gt;1, 2-&gt;2) with cycling when new layout has fewer zones. Call after switching layouts."/>
         </method>

@@ -155,6 +155,18 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
 {
     PlasmaZones::registerDBusTypes();
+
+    // Frame-geometry shadow flush timer. Debounces per-window
+    // windowFrameGeometryChanged signals and pushes the latest geometry to
+    // the daemon at ~20Hz so daemon-local shortcut handlers (float toggle,
+    // etc.) have fresh geometry without a round-trip. Single-shot timer
+    // re-armed on each incoming change — the flush fires at most one D-Bus
+    // call per window per 50ms window regardless of how many pixels moved.
+    m_frameGeometryFlushTimer = new QTimer(this);
+    m_frameGeometryFlushTimer->setSingleShot(true);
+    m_frameGeometryFlushTimer->setInterval(50);
+    connect(m_frameGeometryFlushTimer, &QTimer::timeout, this, &PlasmaZonesEffect::flushPendingFrameGeometry);
+
     // Connect DragTracker signals
     //
     // Performance optimization: keyboard grab and D-Bus dragMoved calls are deferred
@@ -981,6 +993,29 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
     connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowFrameGeometryChanged);
 
+    // Frame-geometry shadow: push the latest geometry to the daemon so
+    // daemon-local shortcut handlers (float toggle, etc.) can read fresh
+    // geometry without round-tripping. Debounced at ~50ms per window via
+    // m_frameGeometryFlushTimer so rapid move/resize sequences collapse
+    // into at most one D-Bus push.
+    connect(w, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, w]() {
+        if (!w || !shouldHandleWindow(w)) {
+            return;
+        }
+        const QString windowId = getWindowId(w);
+        if (windowId.isEmpty()) {
+            return;
+        }
+        const QRect geo = w->frameGeometry().toRect();
+        if (geo.width() <= 0 || geo.height() <= 0) {
+            return;
+        }
+        m_pendingFrameGeometry[windowId] = geo;
+        if (!m_frameGeometryFlushTimer->isActive()) {
+            m_frameGeometryFlushTimer->start();
+        }
+    });
+
     // Autotile: track minimize/unminimize to remove/re-add windows from tiling
     connect(w, &KWin::EffectWindow::minimizedChanged, m_autotileHandler.get(),
             &AutotileHandler::slotWindowMinimizedChanged);
@@ -1495,6 +1530,22 @@ void PlasmaZonesEffect::pushWindowMetadata(KWin::EffectWindow* w)
     // Fire-and-forget — the daemon side is idempotent.
     DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("setWindowMetadata"),
                                {instanceId, appId, desktopFile, title}, QStringLiteral("setWindowMetadata"));
+}
+
+void PlasmaZonesEffect::flushPendingFrameGeometry()
+{
+    if (m_pendingFrameGeometry.isEmpty()) {
+        return;
+    }
+    // Move into a local so reentrancy from D-Bus (or later pushes) can't
+    // disturb the iteration.
+    const auto batch = std::exchange(m_pendingFrameGeometry, {});
+    for (auto it = batch.constBegin(); it != batch.constEnd(); ++it) {
+        const QRect& geo = it.value();
+        DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("setFrameGeometry"),
+                                   {it.key(), geo.x(), geo.y(), geo.width(), geo.height()},
+                                   QStringLiteral("setFrameGeometry"));
+    }
 }
 
 bool PlasmaZonesEffect::isPlasmaShellSurface(const QString& windowClass)

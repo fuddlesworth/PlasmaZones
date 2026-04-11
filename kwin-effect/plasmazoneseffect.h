@@ -409,6 +409,15 @@ private:
     // round-trip over D-Bus.
     QHash<QString, QString> m_appIdByInstance;
 
+    // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
+    // signals per-window to ~50ms and pushes the latest geometry to the daemon via
+    // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
+    // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
+    // can read fresh geometry without a round-trip.
+    QHash<QString, QRect> m_pendingFrameGeometry;
+    QTimer* m_frameGeometryFlushTimer = nullptr;
+    void flushPendingFrameGeometry();
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();

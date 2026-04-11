@@ -279,6 +279,27 @@ public Q_SLOTS:
     void windowActivated(const QString& windowId, const QString& screenId);
 
     /**
+     * Push current frame geometry for a window into the daemon's shadow.
+     *
+     * Called by the compositor plugin on windowFrameGeometryChanged (debounced
+     * at ~50ms per window). The shadow is read by daemon-local shortcut
+     * handlers (float toggle, etc.) so they can compose pre-tile geometry
+     * without a round-trip back to the effect.
+     *
+     * @param windowId Window identifier
+     * @param rect Current frame geometry in compositor coordinates
+     */
+    void setFrameGeometry(const QString& windowId, int x, int y, int width, int height);
+
+    /**
+     * Query the daemon's shadow for a window's last-known frame geometry.
+     *
+     * Returns an invalid QRect if the window has not pushed a geometry yet.
+     * Used by daemon-local shortcut handlers.
+     */
+    QRect frameGeometry(const QString& windowId) const;
+
+    /**
      * Update cursor screen when cursor crosses to a different monitor
      * Called by the KWin effect's slotMouseChanged when screen changes.
      * @param screenId Name of the screen the cursor is now on
@@ -1056,6 +1077,12 @@ private:
     QString m_lastActiveWindowId; // From windowActivated (focused window's ID)
     QString m_lastActiveScreenId; // From windowActivated (focused window's screen)
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
+
+    // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
+    // the compositor plugin. Entries are removed on windowClosed. Used by
+    // daemon-local shortcut handlers (float toggle, etc.) so they can read
+    // fresh geometry without round-tripping through the effect.
+    QHash<QString, QRect> m_frameGeometry;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)
