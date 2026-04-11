@@ -242,10 +242,13 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     screenGeometries[windowId] = frame;
     qCDebug(lcEffect) << "Saved pre-autotile geometry for" << windowId << "on" << screenId << ":" << frame;
     if (m_effect->m_daemonServiceRegistered) {
-        // Use overwrite=false so a pre-existing snap geometry is preserved when
-        // autotile activates on a screen with already-snapped windows. The effect-
-        // local cache (screenGeometries) already guards against redundant stores
-        // within an autotile session; overwrite=false prevents cross-mode clobbering.
+        // overwrite=true: the isWindowFloating() guard above already skipped
+        // this path for snapped windows, so when we reach here the frame is
+        // the window's authoritative free-floating geometry for THIS session.
+        // The daemon persists pre-tile entries across window close/reopen
+        // (keyed by appId for session restore), so a stale entry from a
+        // prior session would otherwise block the fresh capture and leave
+        // float-restore teleporting the window to ancient coordinates.
         // Re-resolve screen ID (EDID-based) for daemon tracking D-Bus calls;
         // the screenId parameter may already be correct from callers that use
         // getWindowScreenId(), but re-resolve to be safe.
@@ -253,7 +256,7 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
         DBusHelpers::fireAndForget(m_effect, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
                                    {windowId, static_cast<int>(frame.x()), static_cast<int>(frame.y()),
                                     static_cast<int>(frame.width()), static_cast<int>(frame.height()),
-                                    resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, false},
+                                    resolvedScreenId.isEmpty() ? screenId : resolvedScreenId, true},
                                    QStringLiteral("storePreTileGeometry"));
     }
     return true;
