@@ -124,7 +124,8 @@ void WindowTrackingAdaptor::saveState()
     // Save appId format as fallback for KWin restarts (UUIDs change).
     tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
                           serializeGeometryMapFull(m_service->preTileGeometries()));
-    tracking->writeString(ConfigKeys::preTileGeometriesKey(), serializeGeometryMap(m_service->preTileGeometries()));
+    tracking->writeString(ConfigKeys::preTileGeometriesKey(),
+                          serializeGeometryMap(m_service->preTileGeometries(), m_service));
 
     // Save last used zone info (from service)
     tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
@@ -135,23 +136,29 @@ void WindowTrackingAdaptor::saveState()
     tracking->deleteKey(ConfigKeys::obsoleteFloatingWindowsKey());
 
     // Save pre-float zone assignments (for unfloating after session restore).
-    // Runtime keys may be full window IDs; convert to
-    // app IDs for cross-restart compatibility.
+    // Runtime keys are full window IDs; convert to the CURRENT app class so
+    // that a window which renamed mid-session persists under the live class.
     QJsonObject preFloatZonesObj;
     for (auto it = m_service->preFloatZoneAssignments().constBegin();
          it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
-        QString key = Utils::extractAppId(it.key());
+        QString key = m_service->currentAppIdFor(it.key());
+        if (key.isEmpty()) {
+            continue;
+        }
         preFloatZonesObj[key] = toJsonArray(it.value());
     }
     tracking->writeString(ConfigKeys::preFloatZoneAssignmentsKey(),
                           QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-float screen assignments (for unfloating to correct monitor).
-    // Same app ID conversion as above, plus translate to screen IDs.
+    // Same current-class conversion as above, plus translate to screen IDs.
     QJsonObject preFloatScreensObj;
     for (auto it = m_service->preFloatScreenAssignments().constBegin();
          it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        QString key = Utils::extractAppId(it.key());
+        QString key = m_service->currentAppIdFor(it.key());
+        if (key.isEmpty()) {
+            continue;
+        }
         preFloatScreensObj[key] =
             VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
     }
@@ -304,7 +311,10 @@ void WindowTrackingAdaptor::loadState()
                 // (UUIDs change, so exact matches won't work). For daemon-only restarts,
                 // calculateRestoreFromSession() guards against wrong-instance consumption.
                 // Collected separately — merged after loading persisted queues to prevent duplication.
-                QString appId = Utils::extractAppId(windowId);
+                // Registry is typically empty during load, so currentAppIdFor
+                // falls back to string parsing — same behavior as the old code
+                // but consistent with the rest of the codebase.
+                QString appId = m_service->currentAppIdFor(windowId);
                 PendingRestore pending;
                 pending.zoneIds = zoneIds;
                 pending.screenId = screen;
@@ -474,9 +484,10 @@ void WindowTrackingAdaptor::loadState()
                     QString screen = entry[QLatin1String("screen")].toString();
                     PreTileGeometry ptg{geom, screen};
                     preTileGeometries[windowId] = ptg;
-                    // Also store under appId for fallback (mirrors storePreTileGeometry)
-                    QString appId = Utils::extractAppId(windowId);
-                    if (appId != windowId) {
+                    // Also store under appId for fallback (mirrors storePreTileGeometry).
+                    // Registry is empty during load so this resolves to string parsing.
+                    QString appId = m_service->currentAppIdFor(windowId);
+                    if (!appId.isEmpty() && appId != windowId) {
                         preTileGeometries[appId] = ptg;
                     }
                 }

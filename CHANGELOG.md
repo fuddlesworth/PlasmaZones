@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.5] - 2026-04-10
+
+### Fixed
+- **Master window balloons to 100% on notifications** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): KWin transiently flipped a tiled window's `isMinimized()` state to true and back within ~1-2ms whenever a plasmashell notification popup rearranged stacking. The autotile engine recalculated with N-1 windows, tiling the surviving master to the full screen, before unfloating ~ms later. Users saw the master briefly balloon to 100% on every notification; in the worst reported log, the stack window cycled float/unfloat 34 times in a single day with no user interaction. Fixed with two layers of defense: (1) a class-based filter for Plasma shell layer-shell surfaces (`plasmashell`, `plasma.emojier`, `plasma.notifications`, `krunner`) that don't reliably set `isNotification()`/`isPopupWindow()` on Wayland — 508 stray tracking events a day, gone; (2) a 75ms debounce on the minimize→float commit that coalesces spurious minimize/unminimize cycles to zero D-Bus calls. Real user minimizes always last longer than 75ms so they commit normally.
+- **Cannot re-enable PlasmaZones from settings after killing a terminal-run daemon** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): When users ran `plasmazonesd` manually for log collection, systemd's managed instance lost the D-Bus name race and exited; `Restart=on-failure` retried until `StartLimitBurst` was exhausted, leaving the unit wedged in `failed` state. `systemctl --user start` then silently did nothing until logout. `DaemonController::startDaemon` now chains `reset-failed` → `start` so the settings toggle recovers the unit automatically.
+
 ## [2.8.4] - 2026-04-09
 
 ### Fixed

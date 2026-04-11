@@ -30,6 +30,7 @@
 #include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/virtualscreen.h"
+#include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include "core/zone.h"
 
@@ -842,10 +843,17 @@ AutotileConfig* AutotileEngine::config() const noexcept
 // Zone-ordered window transitions
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStringList& windowIds)
+void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStringList& rawWindowIds)
 {
-    if (windowIds.isEmpty()) {
+    if (rawWindowIds.isEmpty()) {
         return;
+    }
+    // Canonicalize every id up front so the pending order is consistent with
+    // the keys used by TilingState when windowOpened() arrives next.
+    QStringList windowIds;
+    windowIds.reserve(rawWindowIds.size());
+    for (const QString& raw : rawWindowIds) {
+        windowIds.append(canonicalizeWindowId(raw));
     }
     // Only take effect when the screen's TilingState is empty (no prior windows —
     // including floating — from session restore). Uses windowCount() instead of
@@ -880,8 +888,8 @@ void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStrin
 
 void AutotileEngine::clearSavedFloatingForWindows(const QStringList& windowIds)
 {
-    for (const QString& id : windowIds) {
-        removeSavedFloatingEntry(id);
+    for (const QString& raw : windowIds) {
+        removeSavedFloatingEntry(canonicalizeWindowId(raw));
     }
 }
 
@@ -1157,8 +1165,10 @@ void AutotileEngine::retile(const QString& screenId)
     }
 }
 
-void AutotileEngine::swapWindows(const QString& windowId1, const QString& windowId2)
+void AutotileEngine::swapWindows(const QString& rawId1, const QString& rawId2)
 {
+    const QString windowId1 = canonicalizeWindowId(rawId1);
+    const QString windowId2 = canonicalizeWindowId(rawId2);
     // Early return if same window (no-op)
     if (windowId1 == windowId2) {
         return;
@@ -1191,8 +1201,9 @@ void AutotileEngine::swapWindows(const QString& windowId1, const QString& window
     retileAfterOperation(screen1, swapped);
 }
 
-void AutotileEngine::promoteToMaster(const QString& windowId)
+void AutotileEngine::promoteToMaster(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeWindowId(rawWindowId);
     QString screenId;
     TilingState* state = stateForWindow(windowId, &screenId);
     if (!state) {
@@ -1203,8 +1214,9 @@ void AutotileEngine::promoteToMaster(const QString& windowId)
     retileAfterOperation(screenId, promoted);
 }
 
-void AutotileEngine::demoteFromMaster(const QString& windowId)
+void AutotileEngine::demoteFromMaster(const QString& rawWindowId)
 {
+    const QString windowId = canonicalizeWindowId(rawWindowId);
     QString screenId;
     TilingState* state = stateForWindow(windowId, &screenId);
     if (!state) {
@@ -1247,9 +1259,9 @@ void AutotileEngine::focusMaster()
     m_navigation->focusMaster();
 }
 
-void AutotileEngine::setFocusedWindow(const QString& windowId)
+void AutotileEngine::setFocusedWindow(const QString& rawWindowId)
 {
-    onWindowFocused(windowId);
+    onWindowFocused(canonicalizeWindowId(rawWindowId));
 }
 
 void AutotileEngine::setActiveScreenHint(const QString& screenId)
@@ -1380,11 +1392,15 @@ void AutotileEngine::toggleFocusedWindowFloat()
     performToggleFloat(state, focused, screenId);
 }
 
-void AutotileEngine::toggleWindowFloat(const QString& windowId, const QString& screenId)
+void AutotileEngine::toggleWindowFloat(const QString& rawWindowId, const QString& screenId)
 {
-    if (!warnIfEmptyWindowId(windowId, "toggleWindowFloat")) {
+    if (!warnIfEmptyWindowId(rawWindowId, "toggleWindowFloat")) {
         return;
     }
+    // This is the path that broke for Emby (discussion #271): the incoming
+    // composite has a mutated appId, so a raw lookup in m_windowToStateKey
+    // missed. Canonicalize resolves it back to the first-seen form.
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     if (screenId.isEmpty()) {
         qCWarning(lcAutotile) << "toggleWindowFloat: empty screenId for window" << windowId;
@@ -1481,11 +1497,12 @@ void AutotileEngine::adoptWindowAsFloating(const QString& windowId, const QStrin
     qCInfo(lcAutotile) << "adoptWindowAsFloating:" << windowId << "on" << screenId;
 }
 
-void AutotileEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
+void AutotileEngine::setWindowFloat(const QString& rawWindowId, bool shouldFloat)
 {
-    if (!warnIfEmptyWindowId(windowId, shouldFloat ? "floatWindow" : "unfloatWindow")) {
+    if (!warnIfEmptyWindowId(rawWindowId, shouldFloat ? "floatWindow" : "unfloatWindow")) {
         return;
     }
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     // floatWindow checks autotile screen membership; unfloatWindow does not
     // (window might be on a screen that was removed from autotile after it was floated)
@@ -1554,11 +1571,16 @@ void AutotileEngine::unfloatWindow(const QString& windowId)
 // Public window event handlers (called by Daemon via D-Bus signals)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileEngine::windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight)
+void AutotileEngine::windowOpened(const QString& rawWindowId, const QString& screenId, int minWidth, int minHeight)
 {
-    if (!warnIfEmptyWindowId(windowId, "windowOpened")) {
+    if (!warnIfEmptyWindowId(rawWindowId, "windowOpened")) {
         return;
     }
+    // First observation of this window — canonicalize locks the canonical key
+    // used by every internal map from here on. Subsequent arrivals with a
+    // mutated appId (Electron/CEF apps) resolve back to the same string so
+    // m_windowToStateKey / TilingState / m_windowMinSizes stay consistent.
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     qCInfo(lcAutotile) << "windowOpened:" << windowId << "screen=" << screenId << "minSize=" << minWidth << "x"
                        << minHeight;
@@ -1600,11 +1622,12 @@ void AutotileEngine::windowOpened(const QString& windowId, const QString& screen
     onWindowAdded(windowId);
 }
 
-void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth, int minHeight)
+void AutotileEngine::windowMinSizeUpdated(const QString& rawWindowId, int minWidth, int minHeight)
 {
-    if (!warnIfEmptyWindowId(windowId, "windowMinSizeUpdated")) {
+    if (!warnIfEmptyWindowId(rawWindowId, "windowMinSizeUpdated")) {
         return;
     }
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     qCDebug(lcAutotile) << "windowMinSizeUpdated:" << windowId << "minSize=" << minWidth << "x" << minHeight;
 
@@ -1620,8 +1643,9 @@ void AutotileEngine::windowMinSizeUpdated(const QString& windowId, int minWidth,
     }
 }
 
-bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, int minHeight)
+bool AutotileEngine::storeWindowMinSize(const QString& rawWindowId, int minWidth, int minHeight)
 {
+    const QString windowId = canonicalizeWindowId(rawWindowId);
     // Cap min-sizes against the screen geometry to prevent a single window's
     // min-size from overwhelming the split ratio. Without this cap, a transiently
     // inflated min-size (e.g., from a browser loading media) can dominate the
@@ -1664,11 +1688,12 @@ bool AutotileEngine::storeWindowMinSize(const QString& windowId, int minWidth, i
     return true;
 }
 
-void AutotileEngine::windowClosed(const QString& windowId)
+void AutotileEngine::windowClosed(const QString& rawWindowId)
 {
-    if (!warnIfEmptyWindowId(windowId, "windowClosed")) {
+    if (!warnIfEmptyWindowId(rawWindowId, "windowClosed")) {
         return;
     }
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     // Clean up saved floating state even if window isn't currently tracked
     // (it may have been floating when autotile was disabled on its screen).
@@ -1677,13 +1702,17 @@ void AutotileEngine::windowClosed(const QString& windowId)
     removeSavedFloatingEntry(windowId);
 
     onWindowRemoved(windowId);
+    // Release the canonical translation last — downstream cleanup above may
+    // still need to resolve lookups keyed by this window's instance id.
+    cleanupCanonical(rawWindowId);
 }
 
-void AutotileEngine::windowFocused(const QString& windowId, const QString& screenId)
+void AutotileEngine::windowFocused(const QString& rawWindowId, const QString& screenId)
 {
-    if (!warnIfEmptyWindowId(windowId, "windowFocused")) {
+    if (!warnIfEmptyWindowId(rawWindowId, "windowFocused")) {
         return;
     }
+    const QString windowId = canonicalizeWindowId(rawWindowId);
 
     // Detect cross-screen moves. When a window's focus moves to a different
     // screen, migrate its TilingState membership so m_windowToStateKey and the
@@ -1886,12 +1915,11 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         return false;
     }
 
-    // Extract appId once — used by both the initial-order fallback and the
-    // pending restore queue below. Only valid when the windowId contains
-    // the "appId|internalId" separator — bare IDs without a separator
-    // aren't stable across restarts, so skip appId-based matching for them.
-    const QString appId = Utils::extractAppId(windowId);
-    const bool hasStableAppId = (appId != windowId);
+    // Resolve appId via the registry so mid-session class mutations (Emby and
+    // friends) land in the correct restore bucket. Falls back to parsing the
+    // canonical windowId when no registry is attached (unit tests).
+    const QString appId = currentAppIdFor(windowId);
+    const bool hasStableAppId = !appId.isEmpty() && (appId != windowId);
 
     // Check if this window has a pre-seeded position from zone-ordered transition.
     // Take a value copy of the pending list — the erase below invalidates iterators/refs.
@@ -1906,7 +1934,9 @@ bool AutotileEngine::insertWindow(const QString& windowId, const QString& screen
         // prevents multi-instance apps from all matching the first entry.
         if (desiredPos < 0 && hasStableAppId) {
             for (int i = 0; i < pendingOrder.size(); ++i) {
-                if (Utils::extractAppId(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {
+                // Compare using currentAppIdFor so both sides resolve to the
+                // latest class — an entry saved before a rename still matches.
+                if (currentAppIdFor(pendingOrder.at(i)) == appId && !state->containsWindow(pendingOrder.at(i))) {
                     desiredPos = i;
                     // Replace stale UUID in the live map so it won't match again
                     m_pendingInitialOrders[screenId][i] = windowId;
@@ -2065,8 +2095,10 @@ void AutotileEngine::removeWindow(const QString& windowId)
         // insertWindow() restores it to the saved position (FIFO per appId).
         const int pos = state->windowOrder().indexOf(windowId);
         if (pos >= 0) {
-            const QString appId = Utils::extractAppId(windowId);
-            if (appId != windowId) {
+            // Save under the CURRENT class, not the first-seen one, so a
+            // mid-session rename still routes the restore to the right bucket.
+            const QString appId = currentAppIdFor(windowId);
+            if (!appId.isEmpty() && appId != windowId) {
                 PendingAutotileRestore entry(pos, key, state->isFloating(windowId));
                 auto& queue = m_pendingAutotileRestores[appId];
                 // Cap per-appId queue to prevent unbounded growth from windows
@@ -2166,9 +2198,16 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
         }
     }
 
-    // Build per-window metadata for algorithm context
+    // Build per-window metadata for algorithm context. Live class lookup
+    // via currentAppIdFor so scripted algorithms see the CURRENT app class
+    // rather than a first-seen string baked into the instance id.
     int focusedIndex = -1;
-    QVector<WindowInfo> windowInfos = buildWindowInfos(state, windowCount, focusedIndex);
+    QVector<WindowInfo> windowInfos = buildWindowInfos(
+        state, windowCount,
+        [this](const QString& wid) {
+            return currentAppIdFor(wid);
+        },
+        focusedIndex);
 
     // Build screen metadata for orientation-aware algorithms
     TilingScreenInfo screenInfo;
@@ -2361,11 +2400,12 @@ void AutotileEngine::applyTiling(const QString& screenId)
     }
 }
 
-bool AutotileEngine::shouldTileWindow(const QString& windowId) const
+bool AutotileEngine::shouldTileWindow(const QString& rawWindowId) const
 {
-    if (windowId.isEmpty()) {
+    if (rawWindowId.isEmpty()) {
         return false;
     }
+    const QString windowId = canonicalizeForLookup(rawWindowId);
 
     // Respect autotile-specific sticky window handling setting.
     // IgnoreAll: sticky windows are never autotiled.
@@ -2402,8 +2442,9 @@ bool AutotileEngine::shouldTileWindow(const QString& windowId) const
     return true;
 }
 
-QString AutotileEngine::screenForWindow(const QString& windowId) const
+QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
 {
+    const QString windowId = canonicalizeForLookup(rawWindowId);
     // Check if already tracked
     auto it = m_windowToStateKey.constFind(windowId);
     if (it != m_windowToStateKey.constEnd()) {
@@ -2637,6 +2678,109 @@ bool AutotileEngine::warnIfEmptyWindowId(const QString& windowId, const char* op
         return false;
     }
     return true;
+}
+
+void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
+{
+    m_windowRegistry = registry;
+    if (!registry) {
+        return;
+    }
+    // Push a live-class resolver onto every existing algorithm so
+    // ScriptedAlgorithm lifecycle hooks (buildJsState) can expose the
+    // current appId to user JS. The resolver closes over `this` and calls
+    // currentAppIdFor, which itself consults the registry and falls back
+    // to parsing for legacy composites.
+    //
+    // Algorithms are shared singletons (one instance per id in the
+    // AlgorithmRegistry), so setting the resolver here is global for the
+    // daemon. That's fine — there's a single AutotileEngine per daemon.
+    auto resolver = [this](const QString& windowId) {
+        return currentAppIdFor(windowId);
+    };
+    auto* algoRegistry = AlgorithmRegistry::instance();
+    for (TilingAlgorithm* algo : algoRegistry->allAlgorithms()) {
+        if (algo) {
+            algo->setAppIdResolver(resolver);
+        }
+    }
+    // Newly-registered (hot-reloaded) scripted algorithms must also pick up
+    // the resolver at the moment they appear, otherwise the first
+    // post-registration windowAdded hook would see empty class strings.
+    connect(algoRegistry, &AlgorithmRegistry::algorithmRegistered, this, [this, resolver](const QString& id) {
+        auto* reg = AlgorithmRegistry::instance();
+        if (auto* algo = reg->algorithm(id)) {
+            algo->setAppIdResolver(resolver);
+        }
+    });
+}
+
+QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)
+{
+    if (rawWindowId.isEmpty()) {
+        return rawWindowId;
+    }
+    // When a registry is attached (production daemon), delegate so every
+    // service in the daemon agrees on the same canonical form for a given
+    // instance id. Unit tests construct the engine without a registry and
+    // fall back to a local map to keep the canonicalization invariant.
+    if (m_windowRegistry) {
+        return m_windowRegistry->canonicalizeWindowId(rawWindowId);
+    }
+    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    auto it = m_canonicalByInstance.constFind(instanceId);
+    if (it != m_canonicalByInstance.constEnd()) {
+        return it.value();
+    }
+    m_canonicalByInstance.insert(instanceId, rawWindowId);
+    return rawWindowId;
+}
+
+void AutotileEngine::cleanupCanonical(const QString& anyWindowId)
+{
+    if (anyWindowId.isEmpty()) {
+        return;
+    }
+    // Do NOT release the registry-owned canonical map here: the registry is
+    // shared across services and only the compositor bridge's close path
+    // (via WindowTrackingAdaptor::windowClosed) is authorized to release it.
+    // Other services might still resolve this instance id after the engine
+    // has cleaned up its own state.
+    if (m_windowRegistry) {
+        return;
+    }
+    const QString instanceId = Utils::extractInstanceId(anyWindowId);
+    m_canonicalByInstance.remove(instanceId);
+}
+
+QString AutotileEngine::canonicalizeForLookup(const QString& rawWindowId) const
+{
+    if (rawWindowId.isEmpty()) {
+        return rawWindowId;
+    }
+    if (m_windowRegistry) {
+        return m_windowRegistry->canonicalizeForLookup(rawWindowId);
+    }
+    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    auto it = m_canonicalByInstance.constFind(instanceId);
+    return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
+}
+
+QString AutotileEngine::currentAppIdFor(const QString& anyWindowId) const
+{
+    if (anyWindowId.isEmpty()) {
+        return QString();
+    }
+    if (m_windowRegistry) {
+        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
+        if (!fromRegistry.isEmpty()) {
+            return fromRegistry;
+        }
+    }
+    // Fallback: parse the string. Note this returns the FIRST-seen class for
+    // canonical ids; accurate only when the window has never renamed.
+    return Utils::extractAppId(anyWindowId);
 }
 
 bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)

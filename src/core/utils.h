@@ -195,21 +195,35 @@ inline QString extractAppId(const QString& windowId)
     return WindowIdUtils::extractAppId(windowId);
 }
 
+// extractWindowClass() was removed — it was an alias for extractAppId() that
+// only made call sites read "windowClass" instead of "appId". Runtime class
+// lookups now go through WindowTrackingService::currentAppIdFor or
+// PlasmaZonesEffect::appIdForInstance so they hit the live registry instead
+// of parsing a composite string that no longer exists on the wire.
+
 /**
- * @brief Extract window class from a window ID
+ * @brief Extract the stable KWin instance identifier (UUID) from a full window ID.
  *
- * With the new "appId|internalId" format, the app ID is the window class.
- * Examples:
- *   "firefox|a1b2c3d4-..." -> "firefox"
- *   "org.kde.dolphin|a1b2c3d4-..." -> "org.kde.dolphin"
+ * Window ID format: "appId|internalId" where internalId is KWin's QUuid string.
+ * The instance id is stable for the window's lifetime; the appId is mutable
+ * (KWin emits windowClassChanged / desktopFileNameChanged for apps like
+ * Electron/CEF that swap their identity after the surface is mapped).
  *
- * @param windowId Full window ID or app ID
- * @return Window class (app ID portion), or entire string if no separator found
+ * Use this as the primary runtime key for any per-window storage so lookups
+ * remain valid across class mutations.
+ *
+ * @param windowId Full window ID
+ * @return Instance id portion, or the original string if no separator found
  */
-inline QString extractWindowClass(const QString& windowId)
+inline QString extractInstanceId(const QString& windowId)
 {
-    return extractAppId(windowId);
+    return WindowIdUtils::extractInstanceId(windowId);
 }
+
+// composeWindowId() was removed — the "appId|uuid" composite format is no
+// longer used. Runtime windowIds are the compositor's opaque instance id;
+// class metadata lives separately in WindowRegistry and is never joined
+// back into a single string.
 
 /**
  * @brief Segment-aware app ID matching.

@@ -12,6 +12,7 @@
 #include "virtualdesktopmanager.h"
 #include "utils.h"
 #include "logging.h"
+#include "windowregistry.h"
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -47,6 +48,32 @@ WindowTrackingService::~WindowTrackingService()
 {
     // Note: Persistence is handled by WindowTrackingAdaptor via KConfig
     // Service is purely in-memory state management
+}
+
+QString WindowTrackingService::currentAppIdFor(const QString& anyWindowId) const
+{
+    if (anyWindowId.isEmpty()) {
+        return QString();
+    }
+    if (m_windowRegistry) {
+        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
+        if (!fromRegistry.isEmpty()) {
+            return fromRegistry;
+        }
+    }
+    return Utils::extractAppId(anyWindowId);
+}
+
+QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId) const
+{
+    if (rawWindowId.isEmpty()) {
+        return rawWindowId;
+    }
+    if (m_windowRegistry) {
+        return m_windowRegistry->canonicalizeForLookup(rawWindowId);
+    }
+    return rawWindowId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -242,7 +269,7 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         return;
     }
 
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
 
     if (!overwrite) {
         // First-only mode (snap): don't overwrite when moving A→B
@@ -300,7 +327,7 @@ std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windo
                         << "screen:" << entry.connectorName;
         return entry.geometry;
     }
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     if (appId != windowId && m_preTileGeometries.contains(appId)) {
         const auto& entry = m_preTileGeometries.value(appId);
         qCDebug(lcCore) << "preTileGeometry: found by appId" << appId << "=" << entry.geometry
@@ -319,7 +346,7 @@ bool WindowTrackingService::hasPreTileGeometry(const QString& windowId) const
     if (m_preTileGeometries.contains(windowId)) {
         return true;
     }
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     return (appId != windowId && m_preTileGeometries.contains(appId));
 }
 
@@ -329,7 +356,7 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
         return;
     }
     bool removed = m_preTileGeometries.remove(windowId) > 0;
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     if (appId != windowId) {
         removed |= (m_preTileGeometries.remove(appId) > 0);
     }
@@ -359,7 +386,7 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
         return true;
     };
     if (!lookupEntry(windowId)) {
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = currentAppIdFor(windowId);
         if (appId == windowId || !lookupEntry(appId)) {
             return std::nullopt;
         }
@@ -415,7 +442,7 @@ bool WindowTrackingService::isWindowFloating(const QString& windowId) const
         return true;
     }
     // Fall back to app ID (session restore - pointer addresses change across restarts)
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     return (appId != windowId && m_floatingWindows.contains(appId));
 }
 
@@ -428,7 +455,7 @@ void WindowTrackingService::setWindowFloating(const QString& windowId, bool floa
     } else {
         m_floatingWindows.remove(windowId);
         // Also remove app ID entry (session-restored entries)
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = currentAppIdFor(windowId);
         if (appId != windowId) {
             m_floatingWindows.remove(appId);
         }
@@ -510,7 +537,7 @@ QString WindowTrackingService::preFloatZone(const QString& windowId) const
     QStringList zones = m_preFloatZoneAssignments.value(windowId);
     if (zones.isEmpty()) {
         // Fall back to app ID (session restore - pointer addresses change across restarts)
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = currentAppIdFor(windowId);
         zones = m_preFloatZoneAssignments.value(appId);
     }
     return zones.isEmpty() ? QString() : zones.first();
@@ -521,7 +548,7 @@ QStringList WindowTrackingService::preFloatZones(const QString& windowId) const
     // Try full window ID first, fall back to app ID for session restore
     QStringList zones = m_preFloatZoneAssignments.value(windowId);
     if (zones.isEmpty()) {
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = currentAppIdFor(windowId);
         zones = m_preFloatZoneAssignments.value(appId);
     }
     return zones;
@@ -532,7 +559,7 @@ QString WindowTrackingService::preFloatScreen(const QString& windowId) const
     // Try full window ID first, fall back to app ID for session restore
     QString screen = m_preFloatScreenAssignments.value(windowId);
     if (screen.isEmpty()) {
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = currentAppIdFor(windowId);
         screen = m_preFloatScreenAssignments.value(appId);
     }
     return screen;
@@ -553,7 +580,7 @@ void WindowTrackingService::clearPreFloatZone(const QString& windowId)
     m_preFloatZoneAssignments.remove(windowId);
     m_preFloatScreenAssignments.remove(windowId);
     // Also remove by app ID (session-restored entries)
-    QString appId = Utils::extractAppId(windowId);
+    QString appId = currentAppIdFor(windowId);
     if (appId != windowId) {
         m_preFloatZoneAssignments.remove(appId);
         m_preFloatScreenAssignments.remove(appId);

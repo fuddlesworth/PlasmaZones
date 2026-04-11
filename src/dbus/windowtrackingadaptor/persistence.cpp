@@ -83,7 +83,7 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
 
 QString WindowTrackingAdaptor::getPreTileGeometriesJson()
 {
-    return serializeGeometryMap(m_service->preTileGeometries());
+    return serializeGeometryMap(m_service->preTileGeometries(), m_service);
 }
 
 bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width,

@@ -245,8 +245,13 @@ CycleTargetResult WindowTrackingAdaptor::getCycleTargetForWindow(const QString& 
     int currentIndex = windowsInZone.indexOf(windowId);
     if (currentIndex < 0) {
         currentIndex = 0;
+        // Fallback: match by current class — handles the case where the
+        // stored windowId and the incoming windowId represent the same
+        // instance but carry different appIds due to a mid-session rename.
+        const QString targetAppId = m_service->currentAppIdFor(windowId);
         for (int i = 0; i < windowsInZone.size(); ++i) {
-            if (Utils::extractAppId(windowsInZone[i]) == Utils::extractAppId(windowId)) {
+            const QString entryAppId = m_service->currentAppIdFor(windowsInZone[i]);
+            if (entryAppId == targetAppId) {
                 currentIndex = i;
                 break;
             }

@@ -5,14 +5,14 @@
 #include "TilingState.h"
 #include "config/configdefaults.h"
 #include "core/constants.h"
-#include "core/utils.h"
 #include <algorithm>
 
 namespace PlasmaZones {
 
 using namespace AutotileDefaults;
 
-QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex)
+QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
+                                     const std::function<QString(const QString&)>& appIdResolver, int& focusedIndex)
 {
     focusedIndex = -1;
     if (!state) {
@@ -24,7 +24,11 @@ QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, 
     infos.reserve(windowCount);
     for (int i = 0; i < windowCount && i < windows.size(); ++i) {
         WindowInfo info;
-        info.appId = Utils::extractAppId(windows[i]);
+        // Live class lookup via the caller-supplied resolver so ScriptedAlgorithm
+        // user-JS sees the current appId, not a stale first-seen parse. Callers
+        // that don't care about the class (pure geometry algorithms) can pass
+        // a no-op lambda; the resolver is cheap either way.
+        info.appId = appIdResolver ? appIdResolver(windows[i]) : QString();
         info.focused = (windows[i] == focusedWin);
         if (info.focused) {
             focusedIndex = i;

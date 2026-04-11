@@ -9,6 +9,13 @@
  * 1. Floating window state management
  * 2. Window close cleanup
  * 3. Multi-window queries (windows-in-zone, snapped-windows)
+ *
+ * WIRE FORMAT NOTE: uses a local MockWindowTrackerFloat that mirrors the
+ * shape of the old WTS + "appId|uuid" composite handling. It's an isolated
+ * unit-level test of the bookkeeping pattern, not the production wire
+ * format — in production, WTS receives bare instance ids and consults
+ * WindowRegistry for class info. Live-path coverage lives in
+ * test_wts_registry_integration.cpp and test_wta_reactive_metadata.cpp.
  */
 
 #include <QTest>

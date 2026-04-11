@@ -83,6 +83,7 @@ class Settings;
 class SettingsBridge;
 class TilingAlgorithm;
 class TilingState;
+class WindowRegistry;
 class WindowTrackingService;
 
 /**
@@ -108,6 +109,24 @@ public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
                             ScreenManager* screenManager, QObject* parent = nullptr);
     ~AutotileEngine() override;
+
+    /**
+     * @brief Wire up the shared WindowRegistry.
+     *
+     * Optional — tests construct the engine without a registry and fall back
+     * to string parsing (Utils::extractAppId). Production daemons set this to
+     * the daemon-root registry so class lookups return the latest value after
+     * an Electron/CEF app renames itself mid-session.
+     *
+     * Side effect: installs a live-class resolver on every TilingAlgorithm in
+     * the AlgorithmRegistry so ScriptedAlgorithm's lifecycle hooks see the
+     * current appId on each tiled window. Future algorithm registrations
+     * (hot-reloaded JS algorithms) pick up the resolver from the
+     * algorithmRegistered signal bound inside this method.
+     *
+     * Must be set before start. Not owned.
+     */
+    void setWindowRegistry(WindowRegistry* registry);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Per-screen autotile state (derived from layout assignments)
@@ -1062,6 +1081,54 @@ private:
     bool warnIfEmptyWindowId(const QString& windowId, const char* operation) const;
 
     /**
+     * @brief Normalize a window id received from D-Bus to the canonical key
+     *        used by internal storage (m_windowToStateKey, TilingState::m_windowOrder, …).
+     *
+     * Why this exists: KWin apps like Emby (CEF/Electron) mutate their
+     * resourceClass / desktopFileName after the surface is already mapped, so
+     * successive calls arrive with different "appId|uuid" composites for the
+     * same underlying window. The uuid portion is stable — the canonical form
+     * is the FIRST composite ever seen for a given uuid, and every subsequent
+     * mention of the same window is translated back to that canonical string
+     * so map lookups don't miss.
+     *
+     * Populates m_canonicalByInstance on first observation. Stale entries are
+     * cleared by cleanupCanonical() when the window closes.
+     */
+    QString canonicalizeWindowId(const QString& rawWindowId);
+
+    /**
+     * @brief Release the canonical translation for a window that's going away.
+     *
+     * Called from removeWindow / windowClosed paths. Safe to call with an id
+     * that's already canonical or unknown.
+     */
+    void cleanupCanonical(const QString& anyWindowId);
+
+    /**
+     * @brief Const-safe translation for read-only methods.
+     *
+     * Same as canonicalizeWindowId(), but does not mutate m_canonicalByInstance:
+     * unknown windows return their raw input. Use in shouldTileWindow(),
+     * screenForWindow(), and other const methods.
+     */
+    QString canonicalizeForLookup(const QString& rawWindowId) const;
+
+    /**
+     * @brief Return the CURRENT app class for a window, not the first-seen one.
+     *
+     * Prefers m_windowRegistry (populated live by the kwin-effect bridge) so
+     * that apps which mutate their appId mid-session (Electron/CEF — Emby)
+     * hit the most recent value. Falls back to parsing the composite form
+     * when no registry is attached (unit tests, legacy callers).
+     *
+     * Use this anywhere you'd otherwise call Utils::extractAppId(windowId)
+     * on the canonical form — the canonical string is frozen at first
+     * observation, so parsing it returns a stale class after mutation.
+     */
+    QString currentAppIdFor(const QString& anyWindowId) const;
+
+    /**
      * @brief Sync shortcut-adjusted ratio/count to config and settings
      *
      * Called by NavigationController after increase/decreaseMasterRatio/Count.
@@ -1092,6 +1159,7 @@ private:
     LayoutManager* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
     ScreenManager* m_screenManager = nullptr;
+    WindowRegistry* m_windowRegistry = nullptr; ///< Shared registry for class lookups; not owned
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;
@@ -1110,6 +1178,18 @@ private:
 
     QHash<QString, TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
+
+    // Instance id → first-seen canonical windowId.
+    //
+    // Fallback for when no shared WindowRegistry is attached (unit tests).
+    // With a registry, canonicalization delegates to it instead. Production
+    // daemons always take the registry path, so this map stays empty.
+    //
+    // The canonical form is the FIRST windowId string we saw for a given
+    // instance id. Subsequent arrivals with a mutated appId (Electron/CEF
+    // apps that swap WM_CLASS mid-session) resolve back to that canonical
+    // form so every map/TilingState key in the engine stays consistent.
+    QHash<QString, QString> m_canonicalByInstance;
 
     // Current desktop/activity context — used by stateForScreen() to construct
     // TilingStateKey. Updated by setCurrentDesktop()/setCurrentActivity() BEFORE
