@@ -284,15 +284,11 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 m_pendingDragGeometry = geometry;
                 m_snapDragStartScreenId = getWindowScreenId(w);
 
-                // Check if zones are needed right now. If so, send dragStarted
-                // immediately and grab keyboard. Otherwise defer until activation
-                // is detected mid-drag (or skip entirely if user never activates).
-                //
-                // When triggers haven't loaded yet (!m_triggersLoaded), stay
-                // permissive — send immediately to avoid masking trigger issues (#175).
-                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
-                    sendDeferredDragStarted();
-                }
+                // beginDrag already initialized daemon-side snap-drag state
+                // (called internally from the adaptor). The effect only needs
+                // to decide whether to grab the keyboard for local Escape
+                // handling.
+                detectActivationAndGrab();
                 // Grab keyboard to intercept Escape before KWin's MoveResizeFilter.
                 // Without this, Escape cancels the interactive move AND the overlay.
                 // With the grab, Escape only dismisses the overlay while the drag continues.
@@ -301,95 +297,42 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     m_keyboardGrabbed = true;
                 }
             });
-    connect(m_dragTracker.get(), &DragTracker::dragMoved, this,
-            [this](const QString& windowId, const QPointF& cursorPos) {
-                // Cross-VS drag mode transitions: when the cursor crosses between
-                // autotile and snap screens mid-drag, switch the drag handling mode
-                // so zone overlay and snap activation match the screen under the cursor.
-                if (!m_virtualScreenDefs.isEmpty()) {
-                    QPoint cursorPt(qRound(cursorPos.x()), qRound(cursorPos.y()));
-                    const KWin::LogicalOutput* cursorOutput = nullptr;
-                    for (const auto* output : KWin::effects->screens()) {
-                        if (output->geometry().contains(cursorPt)) {
-                            cursorOutput = output;
-                            break;
-                        }
-                    }
-                    if (cursorOutput) {
-                        QString cursorScreenId = resolveEffectiveScreenId(cursorPt, cursorOutput);
-                        bool cursorOnAutotile = m_autotileHandler->isAutotileScreen(cursorScreenId);
+    connect(
+        m_dragTracker.get(), &DragTracker::dragMoved, this, [this](const QString& windowId, const QPointF& cursorPos) {
+            // Phase 3e: cross-VS flip detection is now daemon-owned. The
+            // daemon's updateDragCursor handler computes policy at the
+            // cursor position and emits dragPolicyChanged when it flips.
+            // The effect reacts via slotDragPolicyChanged (see below).
+            //
+            // Here we only forward the cursor to the daemon as a
+            // fire-and-forget call. The daemon-side dispatch handles
+            // both the snap-path overlay updates and the cross-VS
+            // detection in a single round trip.
 
-                        if (m_dragBypassedForAutotile && !cursorOnAutotile) {
-                            // Autotile→snap: exit bypass mode and initialize snap-drag
-                            // state as if the drag started on this snap screen.
-                            // Remove the window from autotile tracking NOW so that
-                            // slotWindowFrameGeometryChanged doesn't detect a stale
-                            // VS crossing on every subsequent geometry change (including
-                            // user resize), which would call handleWindowOutputChanged
-                            // and fight the snap geometry.
-                            //
-                            // Deliberately DO NOT call handleDragToFloat here: it runs
-                            // mid-drag, reads the current (mid-drag) frame position, and
-                            // schedules an applySnapGeometry that defers via
-                            // windowFinishUserMovedResized. When the drop eventually
-                            // completes the deferred lambda fires with that stale
-                            // mid-drag position and races against the zone snap applied
-                            // by dragStopped — causing the window to jump and resize
-                            // itself after the user drops. Border/float cleanup at drop
-                            // time is handled by the dragStopped path or by snap-zone
-                            // restore; onWindowClosed alone is sufficient to kill the
-                            // resize-lock this crossover path was added to fix.
-                            KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
-                            if (dragW) {
-                                m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
-                            }
-                            m_dragBypassedForAutotile = false;
-                            m_dragActivationDetected = false;
-                            m_dragStartedSent = false;
-                            m_pendingDragWindowId = windowId;
-                            m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
-                            m_snapDragStartScreenId = cursorScreenId;
-                            qCInfo(lcEffect) << "Drag crossed from autotile" << m_dragBypassScreenId << "to snap screen"
-                                             << cursorScreenId << "- activating zones";
-                            if (!m_keyboardGrabbed) {
-                                KWin::effects->grabKeyboard(this);
-                                m_keyboardGrabbed = true;
-                            }
-                        } else if (!m_dragBypassedForAutotile && cursorOnAutotile && m_dragStartedSent) {
-                            // Snap→autotile: re-enter bypass mode. Cancel the active
-                            // snap overlay so zones disappear while cursor is on the
-                            // autotile screen. If the user drags back to snap, the
-                            // autotile→snap path above re-initializes snap state.
-                            callCancelSnap();
-                            m_dragBypassedForAutotile = true;
-                            m_dragBypassScreenId = cursorScreenId; // Track the autotile VS we entered
-                            m_dragStartedSent = false;
-                            m_pendingDragWindowId.clear();
-                            m_pendingDragGeometry = QRectF();
-                            m_snapDragStartScreenId.clear();
-                            qCInfo(lcEffect)
-                                << "Drag crossed from snap to autotile" << cursorScreenId << "- deactivating zones";
-                        }
-                    }
-                }
-
-                // In autotile bypass — skip snap zone processing
-                if (m_dragBypassedForAutotile) {
-                    return;
-                }
-
-                // Gate D-Bus calls: if no activation trigger is held, toggle mode is off,
-                // and zone selector is disabled, skip the D-Bus call entirely. This
-                // eliminates 60Hz D-Bus traffic during non-zone drags.
-                //
-                // When triggers haven't loaded yet, stay permissive (#175).
+            // In autotile bypass — skip snap zone processing locally;
+            // the daemon's updateDragCursor still watches for a flip
+            // BACK to snap mode.
+            const bool bypassed =
+                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+            if (!bypassed) {
+                // Gate D-Bus calls on activation trigger state so a drag
+                // without any intent to use zones doesn't flood the bus
+                // at 30Hz. This is a local input-event optimization; it
+                // isn't policy and doesn't come from the daemon.
                 if (!detectActivationAndGrab() && !m_cachedZoneSelectorEnabled && m_triggersLoaded) {
                     return;
                 }
-                // Ensure dragStarted was sent before any dragMoved
-                sendDeferredDragStarted();
-                callDragMoved(windowId, cursorPos, m_currentModifiers, static_cast<int>(m_currentMouseButtons));
-            });
+            }
+
+            // Forward the cursor to the daemon. For snap drags, this
+            // drives overlay/zone detection. For bypass drags, the
+            // daemon watches the cursor for a cross-VS flip and emits
+            // dragPolicyChanged when the policy changes.
+            DBusHelpers::fireAndForget(this, DBus::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
+                                       {windowId, qRound(cursorPos.x()), qRound(cursorPos.y()),
+                                        static_cast<int>(m_currentModifiers), static_cast<int>(m_currentMouseButtons)},
+                                       QStringLiteral("updateDragCursor"));
+        });
     connect(m_dragTracker.get(), &DragTracker::dragStopped, this,
             [this](KWin::EffectWindow* w, const QString& windowId, bool cancelled) {
                 // Release keyboard grab before handling drag end
@@ -397,118 +340,27 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     KWin::effects->ungrabKeyboard();
                     m_keyboardGrabbed = false;
                 }
-                // Use the captured autotile state from drag start (not live m_autotileScreens)
-                // to ensure consistent behavior even if autotile screens changed mid-drag.
-                if (m_dragBypassedForAutotile) {
-                    if (!cancelled) {
-                        const QString dropScreenId = w ? getWindowScreenId(w) : m_dragBypassScreenId;
-                        const bool windowWasInAutotile = m_autotileHandler->isTrackedWindow(windowId);
 
-                        if (!windowWasInAutotile) {
-                            // Snap→autotile drag: the window was on a snap screen and
-                            // the cursor crossed to an autotile VS mid-drag. The window
-                            // was never in autotile tracking — just add it now.
-                            const bool dropIsAutotile = m_autotileHandler->isAutotileScreen(dropScreenId);
-                            if (w && dropIsAutotile) {
-                                m_autotileHandler->notifyWindowAdded(w);
-                                qCInfo(lcEffect)
-                                    << "Snap→autotile drag: added" << windowId << "to autotile on" << dropScreenId;
-                            }
-                        } else if (dropScreenId != m_dragBypassScreenId) {
-                            // Autotile drag: virtual screen changed.
-                            qCInfo(lcEffect) << "Autotile drag: virtual screen changed" << m_dragBypassScreenId << "->"
-                                             << dropScreenId;
-                            const bool dropIsAutotile = m_autotileHandler->isAutotileScreen(dropScreenId);
-                            if (dropIsAutotile) {
-                                m_autotileHandler->transferPreAutotileGeometry(windowId, m_dragBypassScreenId,
-                                                                               dropScreenId);
-                            }
+                // Phase 3e: single entry point for drag-end dispatch. The
+                // daemon owns the decision; callEndDrag sends endDrag and
+                // the reply handler applies whatever DragOutcome comes back
+                // (ApplySnap / ApplyFloat / RestoreSize / NoOp / etc.).
+                //
+                // The autotile branch special-casing that used to live here
+                // is gone — cross-VS transitions were applied mid-drag by
+                // slotDragPolicyChanged, and final drop-time actions are
+                // encoded in the DragOutcome.
+                callEndDrag(w, windowId, cancelled);
 
-                            if (!dropIsAutotile) {
-                                m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId);
-                            }
-
-                            m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
-                            if (w && dropIsAutotile) {
-                                m_autotileHandler->notifyWindowAdded(w);
-                                m_autotileHandler->handleDragToFloat(w, windowId, dropScreenId);
-                                m_dragFloatedWindowIds.insert(windowId);
-                                DBusHelpers::fireAndForget(
-                                    this, DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                                    {windowId, dropScreenId, true},
-                                    QStringLiteral("setWindowFloatingForScreen - cross-VS drag"));
-                                qCInfo(lcEffect) << "Autotile cross-VS drag-to-float:" << windowId
-                                                 << m_dragBypassScreenId << "->" << dropScreenId;
-                            }
-                        } else {
-                            // Same virtual screen — normal drag-to-float behavior.
-                            m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId);
-                            m_dragFloatedWindowIds.insert(windowId);
-                            DBusHelpers::fireAndForget(
-                                this, DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                                {windowId, m_dragBypassScreenId, true}, QStringLiteral("setWindowFloatingForScreen"));
-                            qCInfo(lcEffect) << "Autotile drag-to-float:" << windowId;
-                        }
-                    }
-                    m_snapDragStartScreenId.clear();
-                    m_dragBypassedForAutotile = false;
-                    m_dragBypassScreenId.clear();
-                    return;
-                }
-                m_dragActivationDetected = false;
-
-                // Virtual screen crossing for snap-mode: KWin's outputChanged
-                // doesn't fire when moving between virtual screens on the same
-                // physical monitor, and the frameGeometryChanged handler skips
-                // during drag. Re-resolve now and notify the daemon if changed.
-                if (!cancelled && w && !m_snapDragStartScreenId.isEmpty()) {
-                    const QString dropScreenId = getWindowScreenId(w);
-                    if (dropScreenId != m_snapDragStartScreenId && !dropScreenId.isEmpty()
-                        && VirtualScreenId::samePhysical(dropScreenId, m_snapDragStartScreenId)
-                        && !m_autotileHandler->isAutotileScreen(dropScreenId)) {
-                        // Only send windowScreenChanged for snap-to-snap VS crossings.
-                        // Snap-to-autotile crossings are handled by callDragStopped's callback
-                        // which does notifyWindowAdded + setWindowFloatingForScreen.
-                        qCInfo(lcEffect) << "Snap drag: virtual screen changed" << m_snapDragStartScreenId << "->"
-                                         << dropScreenId;
-                        DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking,
-                                                   QStringLiteral("windowScreenChanged"), {windowId, dropScreenId},
-                                                   QStringLiteral("snap drag VS crossing"));
-                    }
-                }
-                // Capture snap-mode start screen ID BEFORE clearing — callDragStopped's
-                // async callback needs it for cross-VS autotile transfer detection.
-                // m_dragBypassScreenId is only set for autotile-bypass drags, not snap drags,
-                // so without this capture the cross-VS path in callDragStopped is dead code.
-                const QString snapDragStartScreenId = m_snapDragStartScreenId;
+                // Clear drag state for the next session.
+                m_currentDragPolicy = DragPolicy{};
+                m_dragBypassedForAutotile = false;
+                m_dragBypassScreenId.clear();
                 m_snapDragStartScreenId.clear();
-
-                if (!m_dragStartedSent) {
-                    // Drag ended without ever activating zones — no D-Bus state to clean up.
-                    // BUT: if the window was snapped, notify the daemon so it can handle
-                    // unsnap (restore original size, clear zone assignment, mark floating).
-                    // Without this, dragging a snapped window without the activation trigger
-                    // leaves stale zone state that persists across close/reopen.
-                    if (!cancelled && !m_pendingDragWindowId.isEmpty()) {
-                        DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking,
-                                                   QStringLiteral("notifyDragOutUnsnap"), {m_pendingDragWindowId},
-                                                   QStringLiteral("notifyDragOutUnsnap"));
-                    }
-                    m_pendingDragWindowId.clear();
-                    m_pendingDragGeometry = QRectF();
-                    return;
-                }
+                m_dragActivationDetected = false;
                 m_dragStartedSent = false;
                 m_pendingDragWindowId.clear();
                 m_pendingDragGeometry = QRectF();
-
-                if (cancelled) {
-                    // Drag was cancelled externally (e.g. window went fullscreen).
-                    // Tell the daemon to cancel rather than snap to the hovered zone.
-                    callCancelSnap();
-                } else {
-                    callDragStopped(w, windowId, snapDragStartScreenId);
-                }
             });
 
     // Connect to window lifecycle signals
@@ -1136,18 +988,18 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // matching keyboard modifier behavior (hold to show, release to hide,
             // re-press to show again).
             //
-            // Skip on autotile screens — no zone overlay to update, and calling
-            // detectActivationAndGrab() would wastefully grab the keyboard and
-            // sendDeferredDragStarted() would send a D-Bus call the daemon can't use.
-            //
-            // Gating: same logic as dragMoved lambda — skip if no activation
-            // detected and no reason to send (avoids D-Bus traffic for non-zone drags).
+            // Phase 3e: push modifier/button changes through the new
+            // updateDragCursor path. The daemon handles cursor-driven
+            // cross-VS detection and activation-trigger gating.
+            // Effect-side detectActivationAndGrab still maintains the
+            // keyboard grab for Escape handling during snap drags.
             if (!m_dragBypassedForAutotile) {
-                // When triggers haven't loaded yet, stay permissive (#175).
                 if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
-                    sendDeferredDragStarted();
-                    callDragMoved(m_dragTracker->draggedWindowId(), pos, m_currentModifiers,
-                                  static_cast<int>(m_currentMouseButtons));
+                    DBusHelpers::fireAndForget(this, DBus::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
+                                               {m_dragTracker->draggedWindowId(), qRound(pos.x()), qRound(pos.y()),
+                                                static_cast<int>(m_currentModifiers),
+                                                static_cast<int>(m_currentMouseButtons)},
+                                               QStringLiteral("updateDragCursor - modifier/button change"));
                 }
             }
         } else {
@@ -1902,14 +1754,10 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     return false;
 }
 
-void PlasmaZonesEffect::sendDeferredDragStarted()
-{
-    if (m_dragStartedSent) {
-        return;
-    }
-    m_dragStartedSent = true;
-    callDragStarted(m_pendingDragWindowId, m_pendingDragGeometry);
-}
+// sendDeferredDragStarted removed — phase 3e. beginDrag is now called
+// unconditionally at drag-start; there's no deferred "only send dragStarted
+// when zones activate" path because the daemon always knows about the drag
+// from the moment it begins.
 
 void PlasmaZonesEffect::connectNavigationSignals()
 {
@@ -1972,6 +1820,14 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
                                           QStringLiteral("restoreSizeDuringDragChanged"), this,
                                           SLOT(slotRestoreSizeDuringDrag(QString, int, int)));
+
+    // WindowDrag: cross-VS policy flip. Daemon detects the cursor crossing
+    // a virtual-screen boundary that changes autotile↔snap routing and
+    // emits this signal so the effect can apply the transition locally
+    // (handleDragToFloat, onWindowClosed, overlay cancel, etc.).
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                          QStringLiteral("dragPolicyChanged"), this,
+                                          SLOT(slotDragPolicyChanged(QString, PlasmaZones::DragPolicy)));
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
 }
@@ -2951,21 +2807,10 @@ void PlasmaZonesEffect::callResolveWindowRestore(KWin::EffectWindow* window, std
                      /*skipAnimation=*/true, onComplete);
 }
 
-void PlasmaZonesEffect::callDragStarted(const QString& windowId, const QRectF& geometry)
-{
-    updateWindowStickyState(m_dragTracker->draggedWindow());
-
-    // Use QDBusMessage::createMethodCall instead of QDBusInterface to avoid
-    // synchronous D-Bus introspection. QDBusInterface's constructor blocks the
-    // compositor thread (~25s timeout) if the daemon is registered but not yet
-    // processing messages. QDBusMessage is purely local — no D-Bus communication
-    // until asyncCall, which returns immediately.
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-                                                      QStringLiteral("dragStarted"));
-    msg << windowId << geometry.x() << geometry.y() << geometry.width() << geometry.height()
-        << static_cast<int>(m_currentMouseButtons);
-    QDBusConnection::sessionBus().asyncCall(msg);
-}
+// callDragStarted removed — phase 3e. The kwin-effect no longer calls the
+// legacy dragStarted D-Bus method; beginDrag now sets up snap-path state
+// internally on the daemon side, so there's only one code path into the
+// drag state machine.
 bool PlasmaZonesEffect::isWindowSticky(KWin::EffectWindow* w) const
 {
     return w && w->isOnAllDesktops();
@@ -2992,162 +2837,140 @@ void PlasmaZonesEffect::updateWindowStickyState(KWin::EffectWindow* w)
                                {windowId, sticky}, QStringLiteral("setWindowSticky"));
 }
 
-void PlasmaZonesEffect::callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods,
-                                      int mouseButtons)
-{
-    // Don't send manual zone drag updates when drag was started on an autotile screen.
-    // Use captured flag (not live m_autotileScreens) for consistency with drag start/stop.
-    if (m_dragBypassedForAutotile) {
-        return;
-    }
+// callDragMoved removed — phase 3e. The dragMoved lambda now sends
+// updateDragCursor directly via DBusHelpers::fireAndForget. Single
+// entry point for hot-path cursor updates.
 
-    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
-    // See callDragStarted() comment for rationale.
-    QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-                                                      QStringLiteral("dragMoved"));
-    msg << windowId << static_cast<int>(cursorPos.x()) << static_cast<int>(cursorPos.y()) << static_cast<int>(mods)
-        << mouseButtons;
-    QDBusConnection::sessionBus().asyncCall(msg);
-}
-
-void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QString& windowId,
-                                        const QString& snapDragStartScreenId)
+void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled)
 {
-    // Cursor position at release (from last poll during drag) - daemon uses this for release screen
+    // Phase 3e drag protocol: single entry point for drag-end dispatch.
+    // Sends endDrag, receives a DragOutcome, and applies exactly the
+    // action the daemon decided. Replaces callDragStopped (whose reply
+    // shape was a 9-tuple of out-params) with a typed struct.
     QPointF cursorAtRelease = m_dragTracker->lastCursorPos();
 
-    // Modifiers: m_currentModifiers is updated by slotMouseChanged. When drag ends via forceEnd (LMB
-    // release), modifiers reflect the state at that moment. When drag ends via poll (isUserMove went
-    // false), we use the last slotMouseChanged state; modifier released just before mouse may be stale.
-    // This is acceptable for Snap Assist triggers - best-effort detection.
-
-    // QDBusMessage::createMethodCall — purely local, no D-Bus introspection.
-    // See callDragStarted() comment for rationale.
     QDBusMessage msg = QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
-                                                      QStringLiteral("dragStopped"));
+                                                      QStringLiteral("endDrag"));
     msg << windowId << static_cast<int>(cursorAtRelease.x()) << static_cast<int>(cursorAtRelease.y())
-        << static_cast<int>(m_currentModifiers) << static_cast<int>(m_currentMouseButtons);
+        << static_cast<int>(m_currentModifiers) << static_cast<int>(m_currentMouseButtons) << cancelled;
     QDBusPendingCall pendingCall = QDBusConnection::sessionBus().asyncCall(msg);
 
-    // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = window;
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    connect(
+        watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<DragOutcome> reply = *w;
+            if (reply.isError()) {
+                qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
+                return;
+            }
+            const DragOutcome outcome = reply.value();
+            qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
+                             << "screen=" << outcome.targetScreenId << "geo=" << outcome.toRect()
+                             << "snapAssist=" << outcome.requestSnapAssist;
 
-    // Create watcher to handle the reply
-    QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, snapDragStartScreenId](QDBusPendingCallWatcher* w) {
-                w->deleteLater();
+            switch (outcome.action) {
+            case DragOutcome::NoOp:
+            case DragOutcome::CancelSnap:
+            case DragOutcome::NotifyDragOutUnsnap:
+                // Daemon handled any internal cleanup. Nothing for the
+                // effect to paint.
+                break;
 
-                QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, PlasmaZones::EmptyZoneList> reply = *w;
-                if (reply.isError()) {
-                    qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
-                    return;
+            case DragOutcome::ApplyFloat: {
+                // Autotile bypass drag ended — float the window at its
+                // current screen. The plugin-side compositor work
+                // (handleDragToFloat, setWindowFloatingForScreen) was
+                // previously inlined in the dragStopped lambda; now it
+                // fires here off the daemon's authoritative answer.
+                //
+                // Cross-VS transitions that happened mid-drag were
+                // applied by slotDragPolicyChanged at the moment of
+                // crossing, so by the time we get here the autotile
+                // handler has the right tracking state.
+                if (!safeWindow) {
+                    break;
                 }
+                const QString dropScreenId = getWindowScreenId(safeWindow);
+                if (dropScreenId.isEmpty()) {
+                    break;
+                }
+                m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
+                m_dragFloatedWindowIds.insert(windowId);
+                DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking,
+                                           QStringLiteral("setWindowFloatingForScreen"), {windowId, dropScreenId, true},
+                                           QStringLiteral("setWindowFloatingForScreen - endDrag ApplyFloat"));
+                qCInfo(lcEffect) << "endDrag ApplyFloat:" << windowId << "on" << dropScreenId;
+                break;
+            }
 
-                int snapX = reply.argumentAt<0>();
-                int snapY = reply.argumentAt<1>();
-                int snapWidth = reply.argumentAt<2>();
-                int snapHeight = reply.argumentAt<3>();
-                bool shouldSnap = reply.argumentAt<4>();
-                QString releaseScreenId = reply.argumentAt<5>();
-                bool restoreSizeOnly = reply.argumentAt<6>();
-                bool snapAssistRequested = reply.argumentAt<7>();
-                EmptyZoneList emptyZones = reply.argumentAt<8>();
-
-                qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
-                                 << "releaseScreenId=" << releaseScreenId << "restoreSizeOnly=" << restoreSizeOnly
-                                 << "geometry=" << QRect(snapX, snapY, snapWidth, snapHeight);
-
-                if (shouldSnap && safeWindow) {
-                    // Final fullscreen check before applying geometry - window could have
-                    // transitioned to fullscreen between drag stop and this point
-                    if (safeWindow->isFullScreen()) {
-                        qCDebug(lcEffect) << "Window is fullscreen at drag stop, skipping snap";
-                    } else {
-                        QRect snapGeometry;
-                        bool shouldApply = true;
-                        if (restoreSizeOnly) {
-                            // Drag-to-unsnap: apply only pre-snap width/height, keep current position
-                            QRectF frame = safeWindow->frameGeometry();
-                            snapGeometry =
-                                QRect(static_cast<int>(frame.x()), static_cast<int>(frame.y()), snapWidth, snapHeight);
-                            // Skip if already restored during drag (slotRestoreSizeDuringDrag) to avoid redundant
-                            // moveResize
-                            if (qAbs(frame.width() - snapWidth) <= 1 && qAbs(frame.height() - snapHeight) <= 1) {
-                                shouldApply = false;
-                                qCDebug(lcEffect)
-                                    << "restore apply: already at correct size from during-drag restore, skipping";
-                            }
-                        } else {
-                            snapGeometry = QRect(snapX, snapY, snapWidth, snapHeight);
-                        }
-                        if (shouldApply) {
-                            // If the window is still in user-move state because only the
-                            // activation mouse button is held (LMB already released),
-                            // cancel KWin's interactive move so we can snap immediately.
-                            // Without this, applySnapGeometry defers (100 ms retry) until
-                            // ALL buttons are released, causing a noticeable delay when
-                            // using a mouse button (e.g. RMB) for zone activation.
-                            if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
-                                KWin::Window* kw = safeWindow->window();
-                                if (kw) {
-                                    qCDebug(lcEffect) << "Cancelling interactive move"
-                                                         " (activation button held, LMB released)";
-                                    kw->cancelInteractiveMoveResize();
-                                }
-                            }
-                            applySnapGeometry(safeWindow, snapGeometry);
-                        }
+            case DragOutcome::ApplySnap: {
+                if (!safeWindow || safeWindow->isFullScreen()) {
+                    break;
+                }
+                const QRect snapGeometry = outcome.toRect();
+                // If the window is still in user-move state because only
+                // the activation mouse button is held (LMB already
+                // released), cancel KWin's interactive move so we can
+                // snap immediately. Without this, applySnapGeometry
+                // defers (100ms retry) until ALL buttons are released —
+                // noticeable delay when using a mouse button (RMB) for
+                // zone activation.
+                if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
+                    if (KWin::Window* kw = safeWindow->window()) {
+                        kw->cancelInteractiveMoveResize();
                     }
                 }
+                applySnapGeometry(safeWindow, snapGeometry);
+                break;
+            }
 
-                // Auto-fill: if window was dropped without snapping to a zone, try snapping to
-                // the first empty zone on the release screen (where the user released the drag).
-                // Use daemon-provided releaseScreenId (cursor position), not window's current
-                // screen - after cross-screen drag the window may still report the old screen.
-                if (!shouldSnap && safeWindow && !releaseScreenId.isEmpty() && isDaemonReady("auto-fill on drop")) {
-                    bool sticky = isWindowSticky(safeWindow);
-                    auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
-                        m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
-                    };
-                    tryAsyncSnapCall(DBus::Interface::WindowTracking, QStringLiteral("snapToEmptyZone"),
-                                     {windowId, releaseScreenId, sticky}, safeWindow, windowId, true, nullptr,
-                                     onSnapSuccess);
+            case DragOutcome::RestoreSize: {
+                if (!safeWindow || safeWindow->isFullScreen()) {
+                    break;
                 }
-
-                // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist.
-                // All D-Bus calls are async to prevent compositor freeze if daemon is busy with
-                // overlay teardown / layout change (see discussion #158).
-                if (snapAssistRequested && !emptyZones.isEmpty() && !releaseScreenId.isEmpty()) {
-                    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
+                // Drag-to-unsnap: apply pre-snap width/height at current
+                // position. Skip if slotRestoreSizeDuringDrag already
+                // applied during the drag (size within 1px).
+                QRectF frame = safeWindow->frameGeometry();
+                const QRect geo(static_cast<int>(frame.x()), static_cast<int>(frame.y()), outcome.width,
+                                outcome.height);
+                if (qAbs(frame.width() - outcome.width) <= 1 && qAbs(frame.height() - outcome.height) <= 1) {
+                    qCDebug(lcEffect) << "endDrag RestoreSize: already at correct size, skipping";
+                    break;
                 }
-
-                // Cross-VS autotile transfer: if the window was dropped on an autotile
-                // virtual screen from a different VS on the SAME physical monitor,
-                // add it to autotile. KWin's outputChanged won't fire (same physical
-                // monitor), so the autotile handler doesn't see the transfer.
-                // Use m_dragBypassScreenId for autotile-bypass drags, or the captured
-                // snapDragStartScreenId for snap-mode drags (m_snapDragStartScreenId
-                // is already cleared by the time this async callback runs).
-                if (safeWindow && !releaseScreenId.isEmpty() && m_autotileHandler->isAutotileScreen(releaseScreenId)) {
-                    const QString oldScreenId =
-                        !m_dragBypassScreenId.isEmpty() ? m_dragBypassScreenId : snapDragStartScreenId;
-                    if (!oldScreenId.isEmpty() && VirtualScreenId::samePhysical(releaseScreenId, oldScreenId)) {
-                        m_autotileHandler->notifyWindowAdded(safeWindow);
-                        // The window was floating (snap-dragged from a non-autotile VS) —
-                        // keep it floating on the destination. notifyWindowAdded tiles the
-                        // window, so immediately restore its floating state and size.
-                        m_autotileHandler->handleDragToFloat(safeWindow, windowId, releaseScreenId);
-                        m_dragFloatedWindowIds.insert(windowId);
-                        DBusHelpers::fireAndForget(
-                            this, DBus::Interface::WindowTracking, QStringLiteral("setWindowFloatingForScreen"),
-                            {windowId, releaseScreenId, true},
-                            QStringLiteral("setWindowFloatingForScreen - snap→autotile VS crossing"));
-                        qCInfo(lcEffect) << "Snap→autotile cross-VS drag-to-float:" << windowId << oldScreenId << "->"
-                                         << releaseScreenId;
+                if (safeWindow->isUserMove() && !(m_currentMouseButtons & Qt::LeftButton)) {
+                    if (KWin::Window* kw = safeWindow->window()) {
+                        kw->cancelInteractiveMoveResize();
                     }
                 }
-            });
+                applySnapGeometry(safeWindow, geo);
+                break;
+            }
+            }
+
+            // Auto-fill: if window was dropped without snapping to a
+            // zone and wasn't floated, try the first empty zone on the
+            // release screen. Daemon-provided targetScreenId wins over
+            // window's current screen (cross-screen drags).
+            const bool applied = outcome.action == DragOutcome::ApplySnap || outcome.action == DragOutcome::ApplyFloat;
+            if (!applied && safeWindow && !outcome.targetScreenId.isEmpty() && isDaemonReady("auto-fill on drop")) {
+                const bool sticky = isWindowSticky(safeWindow);
+                auto onSnapSuccess = [this](const QString&, const QString& snappedScreenId) {
+                    m_snapAssistHandler->showContinuationIfNeeded(snappedScreenId);
+                };
+                tryAsyncSnapCall(DBus::Interface::WindowTracking, QStringLiteral("snapToEmptyZone"),
+                                 {windowId, outcome.targetScreenId, sticky}, safeWindow, windowId, true, nullptr,
+                                 onSnapSuccess);
+            }
+
+            // Snap Assist: show the window picker if the daemon
+            // requested it. asyncShow is non-blocking.
+            if (outcome.requestSnapAssist && !outcome.emptyZones.isEmpty() && !outcome.targetScreenId.isEmpty()) {
+                m_snapAssistHandler->asyncShow(windowId, outcome.targetScreenId, outcome.emptyZones);
+            }
+        });
 }
 
 void PlasmaZonesEffect::callCancelSnap()
@@ -3363,6 +3186,94 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     applySnapGeometry(window, geometry, true);
+}
+
+void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const DragPolicy& newPolicy)
+{
+    // Phase 3e: daemon-owned cross-VS flip. The daemon's updateDragCursor
+    // handler computed policy at the current cursor position and found it
+    // different from the policy in force — tell us so we can apply the
+    // compositor-level transition. Replaces the effect-side cross-VS flip
+    // loop in the dragMoved lambda that walked KWin::effects->screens()
+    // with a stale m_autotileScreens cache.
+    //
+    // Guards: this slot only acts if we're actively tracking the drag for
+    // this windowId. Stray signals (daemon restart, out-of-order delivery)
+    // are ignored.
+    if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
+        qCDebug(lcEffect) << "slotDragPolicyChanged: drag no longer active for" << windowId;
+        return;
+    }
+
+    const QString oldReason = m_currentDragPolicy.bypassReason;
+    const QString newReason = newPolicy.bypassReason;
+    if (oldReason == newReason) {
+        // Same reason but different screenId (autotile→autotile cross-VS):
+        // update the captured screen so endDrag's ApplyFloat uses the right one.
+        m_currentDragPolicy = newPolicy;
+        if (newReason == QLatin1String("autotile_screen")) {
+            m_dragBypassScreenId = newPolicy.screenId;
+        }
+        return;
+    }
+
+    qCInfo(lcEffect) << "slotDragPolicyChanged:" << windowId << oldReason << "->" << newReason
+                     << "screen=" << newPolicy.screenId;
+
+    m_currentDragPolicy = newPolicy;
+
+    KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
+
+    if (newReason == QLatin1String("autotile_screen")) {
+        // Snap → autotile (or context-disabled → autotile). Cancel any
+        // active snap overlay, enter bypass mode. Mirrors the old
+        // effect-side flip block's "snap→autotile" branch, but driven by
+        // daemon truth rather than an effect-cached screen set.
+        if (!m_dragBypassedForAutotile) {
+            callCancelSnap();
+            m_dragBypassedForAutotile = true;
+            m_dragBypassScreenId = newPolicy.screenId;
+            m_dragStartedSent = false;
+            m_pendingDragWindowId.clear();
+            m_pendingDragGeometry = QRectF();
+            m_snapDragStartScreenId.clear();
+        } else {
+            // Already in bypass but on a different autotile screen — just
+            // update the captured screen id.
+            m_dragBypassScreenId = newPolicy.screenId;
+        }
+        return;
+    }
+
+    if (oldReason == QLatin1String("autotile_screen")) {
+        // Autotile → snap (or autotile → context-disabled). Drop the
+        // bypass flag and initialize snap-drag state as if the drag just
+        // started on this snap screen. Remove the window from autotile
+        // tracking so slotWindowFrameGeometryChanged doesn't fight the
+        // snap geometry on subsequent geometry changes.
+        //
+        // Do NOT call handleDragToFloat here: the mid-drag schedule would
+        // race against the zone snap at drop, making the window jump after
+        // the user lets go. onWindowClosed alone clears the tracking state.
+        if (dragW) {
+            m_autotileHandler->onWindowClosed(windowId, m_dragBypassScreenId);
+        }
+        m_dragBypassedForAutotile = false;
+        m_dragActivationDetected = false;
+        m_dragStartedSent = false;
+        m_pendingDragWindowId = windowId;
+        m_pendingDragGeometry = dragW ? dragW->frameGeometry() : QRectF();
+        m_snapDragStartScreenId = newPolicy.screenId;
+        if (!m_keyboardGrabbed) {
+            KWin::effects->grabKeyboard(this);
+            m_keyboardGrabbed = true;
+        }
+        return;
+    }
+
+    // Other transitions (snap ↔ context_disabled / snapping_disabled):
+    // no compositor-level work needed. The daemon will return a NoOp at
+    // endDrag for disabled paths.
 }
 
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)

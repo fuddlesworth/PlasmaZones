@@ -100,6 +100,14 @@ private Q_SLOTS:
     // Float toggle is entirely daemon-local — no effect-side slot needed.
     // Phase 2 of the drag-protocol refactor.
 
+    // Phase 3e drag protocol: daemon tells the effect the drag routing
+    // has flipped mid-drag (cursor crossed a virtual-screen boundary that
+    // changes autotile↔snap mode). Effect applies the transition:
+    // entering/exiting autotile bypass, canceling snap overlay, etc.
+    // Replaces the effect-side cross-VS flip loop that used a stale local
+    // m_autotileScreens cache.
+    void slotDragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
+
     // Daemon-driven batch operations (rotate, resnap)
     void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
     void slotRaiseWindowsRequested(const QStringList& windowIds);
@@ -202,10 +210,16 @@ private:
 
     // D-Bus communication
 
-    void callDragStarted(const QString& windowId, const QRectF& geometry);
-    void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
-    void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
-                         const QString& snapDragStartScreenId = {});
+    /**
+     * @brief Phase 3 drag protocol — fire endDrag and apply the returned
+     *        DragOutcome. Single entry point for drag-end dispatch,
+     *        regardless of autotile bypass or snap path.
+     *
+     * @param window Dragged window (QPointer-protected in the async reply)
+     * @param windowId Window identifier
+     * @param cancelled True if the drag was cancelled (Escape / external)
+     */
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void connectNavigationSignals();
@@ -489,14 +503,9 @@ private:
      */
     bool detectActivationAndGrab();
 
-    /**
-     * @brief Send the deferred dragStarted D-Bus call to the daemon
-     *
-     * Called lazily on first activation detection or zone selector need.
-     * Uses stored pending drag info from the DragTracker::dragStarted signal.
-     * No-op if already sent for the current drag.
-     */
-    void sendDeferredDragStarted();
+    // sendDeferredDragStarted removed — phase 3e. beginDrag is now called
+    // unconditionally at drag-start; the deferred-send optimization is
+    // obsolete now that the daemon always knows about the drag.
 
     // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
     // The daemon also enforces these for keyboard navigation, but the effect needs them
