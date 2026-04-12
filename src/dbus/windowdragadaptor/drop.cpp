@@ -13,7 +13,9 @@
 #include "../../core/utils.h"
 #include "../../core/virtualscreen.h"
 #include "../../autotile/AutotileEngine.h"
+#include <QGuiApplication>
 #include <QScreen>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -281,20 +283,14 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     const bool requestSnapAssist = actuallySnapped && snapAssistFeatureOn
         && (snapAssistBySetting || snapAssistByTrigger) && releaseScreen && m_layoutManager && m_windowTracking;
     if (requestSnapAssist) {
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);
-        if (layout) {
-            // Use screen-filtered occupancy — without this, zones occupied on
-            // other screens appear occupied here when layouts share zone IDs.
-            QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, releaseScreenId, releaseScreen,
-                                                                         m_settings, [&occupied](const Zone* z) {
-                                                                             return !occupied.contains(z->id());
-                                                                         });
-            if (!emptyZones.isEmpty()) {
-                snapAssistRequestedOut = true;
-                emptyZonesOut = emptyZones;
-            }
-        }
+        // Snap assist compute is deferred to after the endDrag reply returns —
+        // the caller schedules computeAndEmitSnapAssist() via QTimer::singleShot(0)
+        // so the compositor is unblocked before buildEmptyZoneList walks the
+        // zone list. Here we only flag the request; emptyZonesOut stays empty
+        // and the actual list arrives via the snapAssistReady signal.
+        snapAssistRequestedOut = true;
+        m_snapAssistPendingWindowId = windowId;
+        m_snapAssistPendingScreenId = releaseScreenId;
     }
 
     // Reset drag state for next operation.
@@ -302,6 +298,52 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // KGlobalAccel can still dismiss it (the snap assist window may not have
     // Wayland keyboard focus yet when the user presses Escape).
     resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
+}
+
+void WindowDragAdaptor::computeAndEmitSnapAssist()
+{
+    // Consume pending state — cleared regardless of whether we emit, so a
+    // follow-up drag never sees stale IDs.
+    const QString windowId = m_snapAssistPendingWindowId;
+    const QString screenId = m_snapAssistPendingScreenId;
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
+
+    if (windowId.isEmpty() || screenId.isEmpty() || !m_layoutManager || !m_windowTracking) {
+        return;
+    }
+
+    // Resolve the physical QScreen from the stored screen id. The
+    // buildEmptyZoneList(layout, screenId, physScreen, ...) overload falls
+    // back to the physScreen path if no valid virtual-screen geometry is
+    // found, so we pass nullptr when we can't match — the VS path will
+    // handle it via screenId lookup inside buildEmptyZoneList itself.
+    QScreen* releaseScreen = nullptr;
+    for (QScreen* s : QGuiApplication::screens()) {
+        if (Utils::screenIdentifier(s) == screenId || s->name() == screenId) {
+            releaseScreen = s;
+            break;
+        }
+    }
+
+    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    if (!layout) {
+        return;
+    }
+
+    QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId);
+    EmptyZoneList emptyZones =
+        GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings, [&occupied](const Zone* z) {
+            return !occupied.contains(z->id());
+        });
+
+    if (emptyZones.isEmpty()) {
+        return;
+    }
+
+    qCDebug(lcDbusWindow) << "snapAssistReady: emitting" << emptyZones.size() << "empty zones for window" << windowId
+                          << "on screen" << screenId;
+    Q_EMIT snapAssistReady(windowId, screenId, emptyZones);
 }
 
 } // namespace PlasmaZones

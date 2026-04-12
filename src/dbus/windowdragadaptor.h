@@ -180,6 +180,15 @@ Q_SIGNALS:
      */
     void dragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
+    /**
+     * Emitted asynchronously after endDrag returns, when the drop requested
+     * snap assist. Carries the list of empty zones on the release screen so
+     * the effect can show a window picker without blocking the fast endDrag
+     * reply path. The effect discards this if a new drag has already started.
+     */
+    void snapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                         const PlasmaZones::EmptyZoneList& emptyZones);
+
 private:
     // Tolerance constants for geometry matching (fallback detection)
     // Position tolerance is generous due to KWin window decoration/shadow offsets
@@ -289,6 +298,14 @@ private:
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
     IShortcutBackend* m_shortcutBackend = nullptr; // Non-owning: owned by ShortcutManager
 
+    // Snap-assist deferred compute state. Populated in dragStopped when snap
+    // assist is requested; consumed by computeAndEmitSnapAssist() which runs
+    // after the endDrag D-Bus reply has been sent, so the expensive
+    // buildEmptyZoneList walk doesn't block the compositor waiting on the
+    // reply.
+    QString m_snapAssistPendingWindowId;
+    QString m_snapAssistPendingScreenId;
+
     // Current drag state
     QString m_draggedWindowId;
     // Bypass reason returned from the last beginDrag call.
@@ -368,6 +385,15 @@ private:
     // dragStopped() helpers
     void hideOverlayAndSelector();
     void resetDragState(bool keepEscapeShortcut = false);
+
+    /**
+     * Compute the empty-zone list for snap assist and emit the snapAssistReady
+     * signal. Runs AFTER endDrag has already returned its reply to the
+     * compositor, so the expensive buildEmptyZoneList walk doesn't block the
+     * D-Bus reply path. Scheduled from endDrag via QTimer::singleShot(0) when
+     * dragStopped set m_snapAssistPendingWindowId / m_snapAssistPendingScreenId.
+     */
+    void computeAndEmitSnapAssist();
 
     // Pre-snap geometry helper (reduces code duplication)
     // Overload with captured values to prevent race conditions in dragStopped()

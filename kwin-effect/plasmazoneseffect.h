@@ -115,6 +115,8 @@ private Q_SLOTS:
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
+    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                             const PlasmaZones::EmptyZoneList& emptyZones);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                                int height);
 

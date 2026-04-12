@@ -18,6 +18,7 @@
 #include "../../core/logging.h"
 #include "../../autotile/AutotileEngine.h"
 #include <QGuiApplication>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -287,7 +288,12 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     outcome.width = sw;
     outcome.height = sh;
     outcome.requestSnapAssist = snapAssistRequested;
-    outcome.emptyZones = emptyZones;
+    // emptyZones intentionally left empty here — the expensive
+    // buildEmptyZoneList walk is deferred to computeAndEmitSnapAssist() which
+    // runs after this D-Bus reply has been sent, so the compositor is
+    // unblocked before the list is built. The effect receives the list via
+    // the snapAssistReady signal and shows the window picker from its slot.
+    outcome.emptyZones.clear();
 
     if (shouldApply) {
         outcome.action = restoreSizeOnly ? DragOutcome::RestoreSize : DragOutcome::ApplySnap;
@@ -301,6 +307,15 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     }
 
     m_draggedWindowId.clear();
+
+    // Schedule the snap-assist compute to run after this function returns and
+    // the D-Bus reply has been dispatched. QTimer::singleShot(0) queues the
+    // call for the next event loop iteration, which happens after Qt finishes
+    // handing the DragOutcome off to the D-Bus marshaller.
+    if (snapAssistRequested) {
+        QTimer::singleShot(0, this, &WindowDragAdaptor::computeAndEmitSnapAssist);
+    }
+
     return outcome;
 }
 
