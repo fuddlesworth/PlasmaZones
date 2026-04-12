@@ -70,13 +70,14 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     // the caller on the same stack, which is surprising; defer it.
     if (screenGeometry == layout->lastRecalcGeometry()) {
         const QString sid = screenId;
+        const QUuid lid = layout->id();
         QPointer<Layout> lp(layout);
         QMetaObject::invokeMethod(
             this,
-            [this, sid, lp]() {
-                if (lp) {
-                    Q_EMIT geometriesComputed(sid, lp.data());
-                }
+            [this, sid, lid, lp]() {
+                // Always fire so barriers keyed on (screenId, layoutId)
+                // drain even if the Layout was destroyed on this tick.
+                Q_EMIT geometriesComputed(sid, lid, lp.data());
             },
             Qt::QueuedConnection);
         return true;
@@ -96,6 +97,9 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
 
 void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
 {
+    if (!layout) {
+        return;
+    }
     layout->recalculateZoneGeometries(screenGeometry);
 }
 
@@ -132,10 +136,13 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
 
     // Find the live layout. QPointer catches destruction between request
     // and result (layout removed, session swap, etc.) — a dangling raw
-    // Layout* here would be a use-after-free.
+    // Layout* here would be a use-after-free. Even in the destroyed case
+    // we still emit geometriesComputed(…, nullptr) so completion barriers
+    // keyed on (screenId, layoutId) drain exactly once per request.
     auto layoutIt = m_trackedLayouts.constFind(result.layoutId);
     if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
         qCDebug(lcCore) << "LayoutComputeService: dropping result for destroyed layout" << result.layoutId.toString();
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
         return;
     }
     Layout* layout = layoutIt->data();
@@ -146,7 +153,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     // same input; applying the async one would just re-emit signals.
     if (layout->lastRecalcGeometry() == result.screenGeometry) {
         qCDebug(lcCore) << "LayoutComputeService: sync path already applied for" << result.screenId;
-        Q_EMIT geometriesComputed(result.screenId, layout);
+        Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
         return;
     }
 
@@ -161,7 +168,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     layout->setLastRecalcGeometry(result.screenGeometry);
     layout->endBatchModify();
 
-    Q_EMIT geometriesComputed(result.screenId, layout);
+    Q_EMIT geometriesComputed(result.screenId, result.layoutId, layout);
 }
 
 void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)

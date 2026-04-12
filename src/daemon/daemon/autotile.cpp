@@ -531,14 +531,14 @@ void Daemon::processPendingGeometryUpdates()
     // Completion barrier: only fire the continuation once every pending
     // (screen, layout) pair has reported back. Unrelated emissions for
     // keys not in `pending` are ignored, so a concurrent async caller
-    // cannot drain our barrier prematurely.
+    // cannot drain our barrier prematurely. We key off the signal's
+    // `layoutId` (not `layout->id()`), so the barrier still drains when
+    // a tracked Layout is destroyed mid-compute — LayoutComputeService
+    // emits with layout==nullptr in that case.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
-                    [this, pending, conn](const QString& screenId, Layout* layout) {
-                        if (!layout) {
-                            return;
-                        }
-                        const PendingKey key{screenId, layout->id()};
+                    [this, pending, conn](const QString& screenId, const QUuid& layoutId, Layout* /*layout*/) {
+                        const PendingKey key{screenId, layoutId};
                         if (!pending->remove(key)) {
                             return; // not one of ours
                         }

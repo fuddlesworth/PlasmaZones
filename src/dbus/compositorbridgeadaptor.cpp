@@ -10,11 +10,10 @@
 
 namespace PlasmaZones {
 
-// Protocol version constants live in core/constants.h and are mirrored in
-// compositor-common/dbus_constants.h (the effect's canonical copy). Both
-// headers cannot be included from the same TU because they historically
-// define the same DBus namespace — when that duplication is cleaned up
-// this will collapse to a single source of truth.
+// Protocol version constants are the single source of truth in
+// compositor-common/dbus_constants.h, re-exported into the DBus namespace
+// via core/constants.h. The effect links compositor-common directly;
+// the daemon pulls the same symbols through core/constants.h.
 namespace {
 constexpr int DaemonApiVersion = DBus::ApiVersion;
 constexpr int DaemonMinPeerApiVersion = DBus::MinPeerApiVersion;

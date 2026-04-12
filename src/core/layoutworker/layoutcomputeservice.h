@@ -71,10 +71,17 @@ Q_SIGNALS:
      * Emitted on the main thread after the worker completes geometry
      * computation for a layout-screen pair. The live Layout/Zone objects
      * have already been updated when this signal fires. Also emitted
-     * synchronously from requestRecalculate() when the request hit the
-     * geometry cache (no work needed) so completion barriers stay armed.
+     * from requestRecalculate() when the request hit the geometry cache
+     * (no work needed), and from applyResult() when the tracked Layout
+     * was destroyed mid-compute — so completion barriers always drain
+     * exactly once per accepted requestRecalculate() call.
+     *
+     * @param layout may be nullptr if the Layout was destroyed while
+     *               the worker was running; @p layoutId is always the
+     *               id of the originally-requested Layout and is the
+     *               key completion barriers should match on.
      */
-    void geometriesComputed(const QString& screenId, Layout* layout);
+    void geometriesComputed(const QString& screenId, const QUuid& layoutId, Layout* layout);
 
     // Internal: forward snapshot to worker thread via QueuedConnection.
     // Publicly visible because Qt signals cannot be private, but must

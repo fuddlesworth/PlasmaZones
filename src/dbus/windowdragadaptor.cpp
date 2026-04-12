@@ -462,6 +462,12 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
     m_overlayIdled = false;
+    // Drop any pending async snapAssistReady payload. Without this, a
+    // compositor reconnect between endDrag and the QTimer::singleShot(0)
+    // that emits snapAssistReady would deliver the prior session's
+    // windowId/screenId to the freshly-registered effect.
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)

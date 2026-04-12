@@ -58,7 +58,6 @@ struct LayoutSnapshot {
     QString screenId;
     QRectF screenGeometry;
     QVector<ZoneSnapshot> zones;
-    bool useFullScreenGeometry;
 };
 
 struct ComputedZoneGeometry {
@@ -132,7 +131,7 @@ private:
 
 `buildSnapshot` reads from live Layout/Zone objects — all const accessors:
 - `zone->id()`, `zone->relativeGeometry()`, `zone->geometryMode()`, `zone->fixedGeometry()`
-- `layout->id()`, `layout->useFullScreenGeometry()`
+- `layout->id()`, `layout->zones()`, `layout->zoneCount()`
 
 This is a shallow copy of ~300 bytes per zone. For a 100-zone layout: ~30 KB. Negligible.
 
