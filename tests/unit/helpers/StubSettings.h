@@ -687,6 +687,20 @@ public:
     void setAutotileStickyWindowHandling(StickyWindowHandling) override
     {
     }
+    QVariantList autotileDragInsertTriggers() const override
+    {
+        return ConfigDefaults::autotileDragInsertTriggers();
+    }
+    void setAutotileDragInsertTriggers(const QVariantList&) override
+    {
+    }
+    bool autotileDragInsertToggle() const override
+    {
+        return false;
+    }
+    void setAutotileDragInsertToggle(bool) override
+    {
+    }
     QStringList lockedScreens() const override
     {
         return {};

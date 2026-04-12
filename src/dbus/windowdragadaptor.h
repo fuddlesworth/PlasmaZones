@@ -307,6 +307,8 @@ private:
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
     bool m_activationToggled = false; // Current toggle state (on/off)
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
+    bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
+    bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_overlayShown = false;
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
@@ -328,6 +330,14 @@ private:
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;
     QVector<ParsedTrigger> m_cachedZoneSpanTriggers;
+    QVector<ParsedTrigger> m_cachedAutotileDragInsertTriggers;
+
+    // Autotile drag-insert preview state lives on AutotileEngine
+    // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
+    // queries the engine directly to avoid drift between the two caches.
+
+    // DRY helper: cancel any active autotile drag-insert preview.
+    void cancelDragInsertIfActive();
 
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;

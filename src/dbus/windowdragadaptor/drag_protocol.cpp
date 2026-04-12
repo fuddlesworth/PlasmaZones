@@ -80,8 +80,31 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     }
 
     // Any stale pending state from a previous drag that didn't complete
-    // cleanly must not bleed into this one.
+    // cleanly must not bleed into this one. clearPendingSnapDragState also
+    // cancels any leftover drag-insert preview so a new drag always starts
+    // from a clean slate.
     clearPendingSnapDragState();
+
+    // Reset autotile drag-insert toggle state on every drag start. This runs
+    // before branching so it covers both the bypass path (drag starts on an
+    // autotile screen, dragStarted() is never called) and the snap path.
+    // Prev is seeded to true so the first dragMoved tick can't register a
+    // spurious rising edge when the user initiated the drag with the autotile
+    // trigger already held (e.g. Alt+Click, where Alt is KWin's move-window
+    // modifier and also the default drag-insert trigger). The user must
+    // release and re-press to toggle.
+    m_autotileDragInsertToggled = false;
+    m_prevAutotileDragInsertHeld = true;
+
+    // Cache autotile drag-insert triggers unconditionally. The snap path may
+    // defer dragStarted (where the cache was historically populated) until
+    // the user first holds a snap activation trigger. If drag-insert fires
+    // before that (e.g. user holds the drag-insert trigger directly, or the
+    // cursor crosses to an autotile screen and the policy flips to bypass),
+    // dragMoved would otherwise read a stale cache from the previous drag.
+    if (m_settings) {
+        m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    }
 
     const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
@@ -98,6 +121,8 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     if (!policy.bypassReason.isEmpty()) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
+        // Trigger cache and stale-preview cleanup both happen above so bypass
+        // and snap paths behave identically.
         m_draggedWindowId = windowId;
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
@@ -168,6 +193,10 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     m_pendingSnapDragGeometry = QRect();
     m_pendingSnapDragMouseButtons = 0;
     m_pendingSnapDragWasSnapped = false;
+    // Any drag-insert preview left over from an incomplete previous drag
+    // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
+    // must be cleared too — its referenced window may no longer exist.
+    cancelDragInsertIfActive();
 }
 
 DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers,
@@ -232,6 +261,9 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
                         restoreSizeOnly, snapAssistRequested, emptyZones);
         } else {
             // Bypass paths — no overlay state to clean up; just drop the id.
+            // An active autotile drag-insert preview must be cancelled so
+            // neighbours snap back to their original order.
+            cancelDragInsertIfActive();
             m_draggedWindowId.clear();
         }
         outcome.action = DragOutcome::CancelSnap;
@@ -243,6 +275,15 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     // the release screen so the plugin can pass it to
     // setWindowFloatingForScreen.
     if (bypassReason == QLatin1String("autotile_screen")) {
+        // Autotile drag-insert: if a preview is live, commit it so the
+        // window takes its picked slot in the stack on the next retile.
+        // The autotile engine owns final geometry; no float outcome needed.
+        if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+            m_autotileEngine->commitDragInsertPreview();
+            outcome.action = DragOutcome::NoOp;
+            m_draggedWindowId.clear();
+            return outcome;
+        }
         // Release screen is resolved plugin-side from the cursor position,
         // but we pass the cursor through so the daemon can log it. The
         // plugin passes its own view of "current screen" to the float call.

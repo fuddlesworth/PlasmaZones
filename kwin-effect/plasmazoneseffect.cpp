@@ -988,19 +988,27 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // to promote a pending drag to active (first tick with trigger
             // held) and when to hide the overlay (trigger released).
             //
+            // For bypass (autotile) drags, modifier changes must also flow
+            // so the daemon's autotile drag-insert rising-edge detection
+            // (hold and toggle modes) can fire without requiring cursor
+            // motion. Without this, tapping the trigger while stationary
+            // was silently dropped.
+            //
             // The daemon's updateDragCursor is cheap for pending drags
             // (returns early without running dragMoved), so the rapid fire
             // of modifier-change events during a drag no longer causes the
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
-            if (!m_dragBypassedForAutotile) {
-                if (detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded) {
-                    DBusHelpers::fireAndForget(this, DBus::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
-                                               {m_dragTracker->draggedWindowId(), qRound(pos.x()), qRound(pos.y()),
-                                                static_cast<int>(m_currentModifiers),
-                                                static_cast<int>(m_currentMouseButtons)},
-                                               QStringLiteral("updateDragCursor - modifier/button change"));
-                }
+            const bool bypassed =
+                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+            const bool shouldForward =
+                bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
+            if (shouldForward) {
+                DBusHelpers::fireAndForget(this, DBus::Interface::WindowDrag, QStringLiteral("updateDragCursor"),
+                                           {m_dragTracker->draggedWindowId(), qRound(pos.x()), qRound(pos.y()),
+                                            static_cast<int>(m_currentModifiers),
+                                            static_cast<int>(m_currentMouseButtons)},
+                                           QStringLiteral("updateDragCursor - modifier/button change"));
             }
         } else {
             // Position-only change: drive cursor tracking through DragTracker's
@@ -1663,6 +1671,9 @@ void PlasmaZonesEffect::loadCachedSettings()
     loadSettingAsync(QStringLiteral("toggleActivation"), [this](const QVariant& v) {
         m_cachedToggleActivation = v.toBool();
     });
+    loadSettingAsync(QStringLiteral("autotileDragInsertToggle"), [this](const QVariant& v) {
+        m_cachedAutotileDragInsertToggle = v.toBool();
+    });
     loadSettingAsync(QStringLiteral("zoneSelectorEnabled"), [this](const QVariant& v) {
         m_cachedZoneSelectorEnabled = v.toBool();
     });
@@ -1743,7 +1754,12 @@ bool PlasmaZonesEffect::detectActivationAndGrab()
     if (m_dragActivationDetected) {
         return true;
     }
-    if (anyLocalTriggerHeld() || m_cachedToggleActivation) {
+    // Autotile drag-insert toggle mode also forces activation so the daemon
+    // receives dragMoved ticks for rising-edge detection even when the drag
+    // started on a non-autotile screen and the user hasn't held any snap
+    // trigger. Without this, the cross-to-autotile policy flip never fires
+    // because the gate below (drag lambda, slotMouseChanged) swallows ticks.
+    if (anyLocalTriggerHeld() || m_cachedToggleActivation || m_cachedAutotileDragInsertToggle) {
         m_dragActivationDetected = true;
         if (!m_keyboardGrabbed) {
             KWin::effects->grabKeyboard(this);
