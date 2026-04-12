@@ -200,17 +200,20 @@ One coordinated PR touching effect + daemon. Single version bump via `Compositor
 
 ## Tracking
 
-| Phase | PRs | Status | Owner |
+| Phase | PRs | Status | Notes |
 |---|---|---|---|
-| A1 | effect dragStopped timeout | planned | — |
-| A2 | zone geometry dirty flag | planned | — |
-| A3 | daemon drag state reset on reconnect | planned | — |
-| A4 | async VirtualDesktopManager startup | planned | — |
-| A5 | OverlayService mutex audit | planned | — |
-| B | layout compute worker thread | planned | — |
-| B-flag-removal | delete main-thread fallback | planned | — |
-| C | bundled protocol hardening (apiVersion bump) | planned | — |
-| D | D-Bus handler thread (conditional) | deferred | — |
+| A1 | effect dragStopped timeout | **done** | 500ms timeout + shared handled flag |
+| A2 | zone geometry dirty flag | **no-op** | Already implemented via m_lastRecalcGeometry |
+| A3 | daemon drag state reset on reconnect | **done** | clearForCompositorReconnect() wired to bridgeRegistered |
+| A4 | async VirtualDesktopManager startup | **deferred** | Existing 1s-bounded sync is adequate |
+| A5 | OverlayService mutex audit | **no race** | All callers on main thread; mutex harmless |
+| B | layout compute worker thread | **skipped** | Premise eroded: A2 cache + C1 split eliminate hot-path need |
+| C1 | split dragStopped + snapAssistReady signal | **done** | 9→7 out-params; EmptyZoneList via async signal |
+| C2 | type getPreTileGeometriesJson | deferred | Follow-up PR |
+| C3 | enforce apiVersion gate | **done** | v1→v2; mismatch = clear rejection + log |
+| C4 | type Shader + LayoutManager maps | deferred | Follow-up PR |
+| C5 | compile-time struct registration guard | deferred | Follow-up PR |
+| D | D-Bus handler thread (conditional) | deferred | Only if profiling demands post-C |
 
 ## Resolved decisions
 
