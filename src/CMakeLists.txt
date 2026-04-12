@@ -160,6 +160,7 @@ set(plasmazones_core_SRCS
     dbus/screenadaptor.h
     dbus/windowdragadaptor.cpp
     dbus/windowdragadaptor/drag.cpp
+    dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor.h
     daemon/shortcutbackend.h
@@ -241,6 +242,7 @@ set_source_files_properties(
     # between AutotileEngine.h (forward-declares Settings) and
     # SettingsBridge.h (uses QPointer<Settings>, needs full definition)
     dbus/windowdragadaptor/drag.cpp
+    dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )

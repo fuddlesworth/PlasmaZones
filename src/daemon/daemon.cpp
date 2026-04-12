@@ -257,11 +257,13 @@ bool Daemon::init()
         //   (a) Snapping toggled OFF while autotile is already enabled, OR
         //   (b) Autotile toggled ON (regardless of snapping state)
         // Both paths need per-screen autotile assignments created.
-        // Guard: skip if already in autotile mode to avoid resetting per-screen
-        // algorithm customizations with the global algorithm.
+        // handleSnappingToAutotile() skips screens already on an autotile
+        // assignment, so mixed-mode setups (screen A snapping, screen B
+        // autotile) correctly flip screen A without clobbering screen B's
+        // per-screen algorithm customization.
         const bool enteringAutotile =
             (snappingToggled && !snappingNow && autotileNow) || (autotileToggled && autotileNow && !snappingNow);
-        if (enteringAutotile && !(m_modeTracker && m_modeTracker->isAnyScreenAutotile())) {
+        if (enteringAutotile) {
             handleSnappingToAutotile();
         }
 

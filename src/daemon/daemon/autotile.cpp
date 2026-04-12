@@ -193,55 +193,55 @@ void Daemon::updateAutotileScreens()
  */
 void Daemon::handleAutotileDisabled()
 {
-    // Feature disabled: clear all autotile assignments.
-    // Block signals to avoid N intermediate updateAutotileScreens()
-    // from layoutAssigned — one final call below is sufficient.
+    // Feature disabled: flip every autotile assignment's mode to Snapping.
+    // clearAutotileAssignments() preserves each screen's saved snappingLayout
+    // and tilingAlgorithm fields, so a screen that was previously autotile
+    // reverts to the snap layout it had before entering autotile. Screens
+    // already in Snapping mode are untouched — this is what makes mixed-mode
+    // setups (screen A snap + screen B autotile) recover correctly.
     if (m_layoutManager) {
         QSignalBlocker blocker(m_layoutManager.get());
         m_layoutManager->clearAutotileAssignments();
     }
-    // Restore last manual layout so windows aren't stuck in tiled positions.
-    // Assign per-screen (not just globally) so layoutForScreen() finds explicit
-    // assignments instead of falling through to the default layout.
+
+    // Some screens may have entered autotile without ever having a snap layout
+    // assigned (fresh installs, imported configs). For those, assignmentEntry's
+    // snappingLayout is empty, and layoutForScreen() would fall through to the
+    // default layout — which is fine except the overlay/layout model prefers
+    // an explicit per-screen assignment. Fill those in individually without
+    // clobbering screens that already have a valid snap layout.
     if (m_layoutManager && m_screenManager) {
+        const int desktop = currentDesktop();
+        const QString activity = currentActivity();
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-        // Resolve a manual layout to restore. Use the first screen's snappingLayout
-        // from AssignmentEntry (preserved when mode flips to Snapping).
-        QString lastLayoutId;
-        if (!effectiveIds.isEmpty()) {
-            lastLayoutId =
-                m_layoutManager->snappingLayoutForScreen(effectiveIds.first(), currentDesktop(), currentActivity());
-        } else if (!m_screenManager->screens().isEmpty()) {
-            QString screenId = Utils::screenIdentifier(m_screenManager->screens().first());
-            lastLayoutId = m_layoutManager->snappingLayoutForScreen(screenId, currentDesktop(), currentActivity());
+
+        Layout* fallbackLayout = m_layoutManager->activeLayout();
+        if (!fallbackLayout && !m_layoutManager->layouts().isEmpty()) {
+            fallbackLayout = m_layoutManager->layouts().first();
         }
-        Layout* layout =
-            lastLayoutId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(lastLayoutId));
-        // Fallback to active layout or first available layout
-        if (!layout) {
-            layout = m_layoutManager->activeLayout();
-        }
-        if (!layout && !m_layoutManager->layouts().isEmpty()) {
-            layout = m_layoutManager->layouts().first();
-        }
-        if (layout) {
-            const int desktop = currentDesktop();
-            const QString activity = currentActivity();
-            // Block signals: per-screen assignments are batch-written here
-            // and the caller will call updateAutotileScreens() afterward.
-            // Write with empty activity so entries are visible to D-Bus/KCM queries.
-            {
-                QSignalBlocker blocker(m_layoutManager.get());
-                for (const QString& screenId : effectiveIds) {
-                    if (!activity.isEmpty()) {
-                        m_layoutManager->clearAssignment(screenId, desktop, activity);
-                    }
-                    m_layoutManager->assignLayout(screenId, desktop, QString(), layout);
+
+        {
+            QSignalBlocker blocker(m_layoutManager.get());
+            for (const QString& screenId : effectiveIds) {
+                const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
+                Layout* existing =
+                    existingSnapId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(existingSnapId));
+                if (existing) {
+                    continue; // Per-screen snap layout already valid — don't overwrite.
                 }
+                if (!fallbackLayout) {
+                    continue;
+                }
+                if (!activity.isEmpty()) {
+                    m_layoutManager->clearAssignment(screenId, desktop, activity);
+                }
+                m_layoutManager->assignLayout(screenId, desktop, QString(), fallbackLayout);
             }
-            // Set active layout OUTSIDE blocker so activeLayoutChanged fires
-            // and UnifiedLayoutController syncs its internal state.
-            m_layoutManager->setActiveLayout(layout);
+        }
+        // Set active layout OUTSIDE the blocker so activeLayoutChanged fires
+        // and UnifiedLayoutController syncs its internal state.
+        if (fallbackLayout && !m_layoutManager->activeLayout()) {
+            m_layoutManager->setActiveLayout(fallbackLayout);
         }
     }
     // Clear ALL saved floating state when autotile is disabled globally.
@@ -285,24 +285,40 @@ void Daemon::handleSnappingToAutotile()
     // Pre-save snap-float state before autotile entry (same rationale as toggle handler)
     presaveSnapFloats();
 
-    // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch.
-    // This ensures deterministic window ordering: zone 1 → master, zone 2 → second, etc.
-    const QStringList seedIds = m_screenManager->effectiveScreenIds();
-    for (const QString& sid : seedIds) {
+    // Determine which screens need to be converted to autotile. Skip screens
+    // that already have an autotile assignment so we preserve their per-screen
+    // algorithm customization (mixed-mode: screen A snap → autotile, screen B
+    // already autotile stays on its configured algorithm).
+    const int desktop = currentDesktop();
+    const QString activity = currentActivity();
+    QStringList screensToConvert;
+    const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+    for (const QString& screenId : effectiveIds) {
+        const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+        if (!LayoutId::isAutotile(existing)) {
+            screensToConvert.append(screenId);
+        }
+    }
+
+    if (screensToConvert.isEmpty()) {
+        return;
+    }
+
+    // Pre-seed autotile engine with zone-ordered windows BEFORE layout switch
+    // so we get deterministic window ordering (zone 1 → master, zone 2 → second).
+    // Only seed screens that are actually being converted.
+    for (const QString& sid : screensToConvert) {
         seedAutotileOrderForScreen(sid);
     }
 
-    // Assign autotile layout to ALL screens (global toggle).
-    // Block signals to avoid N intermediate updateAutotileScreens()
-    // from layoutAssigned — one final call below is sufficient.
-    // Write with empty activity so the entry is visible to D-Bus/KCM
-    // queries that use empty activity for cascading resolution.
-    const int desktop = currentDesktop();
-    const QString activity = currentActivity();
+    // Assign autotile layout to the screens being converted. Block signals to
+    // avoid N intermediate updateAutotileScreens() from layoutAssigned — one
+    // final call from the caller is sufficient. Write with empty activity so
+    // the entry is visible to D-Bus/KCM queries that use empty activity for
+    // cascading resolution.
     {
         QSignalBlocker blocker(m_layoutManager.get());
-        const QStringList assignIds = m_screenManager->effectiveScreenIds();
-        for (const QString& screenId : assignIds) {
+        for (const QString& screenId : screensToConvert) {
             if (!activity.isEmpty()) {
                 m_layoutManager->clearAssignment(screenId, desktop, activity);
             }

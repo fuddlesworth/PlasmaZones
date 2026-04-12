@@ -260,6 +260,14 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_originalGeometry = QRect();
         m_snapCancelled = false;
         m_wasSnapped = false;
+        m_currentDragBypassReason.clear();
+    }
+
+    // Drop pending snap-drag state if this window was the pending target
+    // (beginDrag ran but activation was never held before close).
+    if (windowId == m_pendingSnapDragWindowId) {
+        clearPendingSnapDragState();
+        m_currentDragBypassReason.clear();
     }
 
     // Delegate tracking cleanup to WindowTrackingAdaptor
@@ -406,8 +414,6 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     if (m_overlayShown && m_overlayService) {
         m_overlayService->hide();
         m_overlayShown = false;
-        m_overlayScreen = nullptr;
-        m_overlayScreenId.clear();
     }
 
     // Hide zone selector and clear selection
