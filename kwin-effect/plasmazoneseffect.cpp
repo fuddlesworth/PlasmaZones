@@ -29,6 +29,7 @@
 #include <QScreen>
 #include <QtMath>
 #include <QPointer>
+#include <QTimer>
 #include <window.h>
 #include <workspace.h>
 #include <core/output.h> // For Output::name() for multi-monitor support
@@ -56,6 +57,14 @@ namespace {
 // Duplicated from daemon's configkeys.h — effect cannot include daemon headers
 constexpr QLatin1String TriggerModifierField("modifier");
 constexpr QLatin1String TriggerMouseButtonField("mouseButton");
+
+// Upper bound on how long the effect waits for the daemon's dragStopped reply.
+// If the daemon is blocked (layout recompute, overlay teardown, heavy handler),
+// exceeding this budget means the compositor would otherwise stall waiting on a
+// reply that may never come. On expiry the window is left at its release
+// position and a warning is logged. Budget is one-ish display refresh periods,
+// chosen so a transient daemon stall does not produce a visible window freeze.
+constexpr int DragStoppedTimeoutMs = 500;
 } // namespace
 
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
@@ -2851,11 +2860,39 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
     // Use QPointer to safely handle window destruction during async call
     QPointer<KWin::EffectWindow> safeWindow = window;
 
-    // Create watcher to handle the reply
+    // Create watcher to handle the reply, paired with a timeout timer. A shared
+    // `handled` flag guarantees exactly-once handling: whichever fires first
+    // (reply or timeout) takes the transition, the other path is a no-op.
+    // Deleting the watcher does NOT cancel the underlying QDBusPendingCall —
+    // any late reply from the daemon is silently discarded by Qt, which is
+    // exactly what we want: the window stays at its release position.
     QDBusPendingCallWatcher* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    auto handled = std::make_shared<bool>(false);
+    QTimer* timeoutTimer = new QTimer(this);
+    timeoutTimer->setSingleShot(true);
+
+    connect(timeoutTimer, &QTimer::timeout, this, [this, windowId, handled, watcher, timeoutTimer]() {
+        if (*handled) {
+            return;
+        }
+        *handled = true;
+        qCWarning(lcEffect) << "dragStopped timed out after" << DragStoppedTimeoutMs
+                            << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
+        watcher->deleteLater();
+        timeoutTimer->deleteLater();
+    });
+    timeoutTimer->start(DragStoppedTimeoutMs);
+
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, windowId, snapDragStartScreenId](QDBusPendingCallWatcher* w) {
+            [this, safeWindow, windowId, snapDragStartScreenId, handled, timeoutTimer](QDBusPendingCallWatcher* w) {
                 w->deleteLater();
+                if (*handled) {
+                    // Timeout already fired; this is a late reply — discard.
+                    return;
+                }
+                *handled = true;
+                timeoutTimer->stop();
+                timeoutTimer->deleteLater();
 
                 QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, PlasmaZones::EmptyZoneList> reply = *w;
                 if (reply.isError()) {

@@ -296,8 +296,11 @@ bool Daemon::init()
     // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
     new ShaderAdaptor(ShaderRegistry::instance(), this);
 
-    // Compositor bridge adaptor - compositor-agnostic window control protocol
-    new CompositorBridgeAdaptor(this);
+    // Compositor bridge adaptor - compositor-agnostic window control protocol.
+    // Captured as a local so we can wire its bridgeRegistered signal to
+    // WindowDragAdaptor::resetDragState below. Ownership stays with `this`
+    // via QObject parent (passed to constructor).
+    auto* compositorBridge = new CompositorBridgeAdaptor(this);
 
     // Overlay adaptor - overlay visibility and highlighting
     m_overlayAdaptor =
@@ -336,6 +339,19 @@ bool Daemon::init()
     // Give the window drag adaptor access to the shortcut backend for
     // registering/unregistering the Escape cancel shortcut during drags
     m_windowDragAdaptor->setShortcutBackend(m_shortcutManager->shortcutBackend());
+
+    // When the compositor bridge re-registers (e.g. KWin reloaded the effect,
+    // effect process restarted, or daemon itself restarted mid-drag), any drag
+    // state the daemon is still holding is stale — the new effect instance has
+    // no knowledge of the prior drag. Clear it eagerly so the next dragStarted
+    // from the fresh effect lands on a clean slate instead of silently
+    // colliding with a mismatched windowId in the next handler.
+    connect(compositorBridge, &CompositorBridgeAdaptor::bridgeRegistered, m_windowDragAdaptor,
+            [this](const QString& compositorName, const QString&, const QStringList&) {
+                qCInfo(lcDaemon) << "Compositor bridge registered (" << compositorName
+                                 << ") — clearing any stale drag state held by daemon";
+                m_windowDragAdaptor->clearForCompositorReconnect();
+            });
 
     // Initialize autotile engine
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),

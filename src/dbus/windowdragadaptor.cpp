@@ -417,6 +417,12 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     }
 }
 
+void WindowDragAdaptor::clearForCompositorReconnect()
+{
+    hideOverlayAndClearZoneState();
+    resetDragState(/*keepEscapeShortcut=*/false);
+}
+
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
 {
     if (!keepEscapeShortcut) {

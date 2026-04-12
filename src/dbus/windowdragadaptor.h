@@ -133,6 +133,17 @@ public Q_SLOTS:
      */
     void handleWindowClosed(const QString& windowId);
 
+    /**
+     * Clear any drag state the daemon is still holding. Called when the
+     * compositor bridge re-registers (e.g. KWin reloaded the effect, the
+     * effect process restarted, or the daemon is being re-adopted by a fresh
+     * effect instance). Any drag in flight from the prior effect is
+     * abandoned: the new effect has no knowledge of it and the next
+     * dragStarted from the fresh connection must land on a clean slate.
+     * Also hides any leftover overlay so stale visuals don't linger.
+     */
+    void clearForCompositorReconnect();
+
 Q_SIGNALS:
     /**
      * Emitted when the zone geometry under the cursor changes during drag.
