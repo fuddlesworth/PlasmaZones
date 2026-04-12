@@ -87,40 +87,29 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
         return;
     }
 
-    QPointer<KWin::EffectWindow> safeWindow = w;
-    QString capturedWindowId = windowId;
-    QRectF capturedGeom = preCapturedGeometry;
+    // Use pre-captured geometry if provided, otherwise read from window.
+    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : w->frameGeometry();
+    if (geom.width() <= 0 || geom.height() <= 0) {
+        return;
+    }
 
-    QDBusPendingCall pendingCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("hasPreTileGeometry"), {windowId});
-    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    // Use virtual-screen-aware ID — getWindowScreenId() falls back to the physical
+    // ID when virtual screen defs haven't loaded yet, so it is safe to call
+    // unconditionally. Using it here ensures the stored screen ID always matches
+    // the ID used by later lookups.
+    const QString screenId = getWindowScreenId(w);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, capturedWindowId, capturedGeom](QDBusPendingCallWatcher* watcher) {
-                watcher->deleteLater();
-
-                QDBusPendingReply<bool> reply = *watcher;
-                bool hasGeometry = reply.isValid() && reply.value();
-
-                if (!hasGeometry && m_daemonServiceRegistered) {
-                    // Use pre-captured geometry if provided, otherwise read from window
-                    QRectF geom =
-                        capturedGeom.isValid() ? capturedGeom : (safeWindow ? safeWindow->frameGeometry() : QRectF());
-                    if (geom.width() > 0 && geom.height() > 0) {
-                        // Use virtual-screen-aware ID — getWindowScreenId() falls back to the
-                        // physical ID when virtual screen defs haven't loaded yet, so it is
-                        // safe to call unconditionally. Using it here ensures the stored
-                        // screen ID always matches the ID used by later lookups.
-                        QString screenId = safeWindow ? getWindowScreenId(safeWindow) : QString();
-                        DBusHelpers::fireAndForget(
-                            this, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                            {capturedWindowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
-                             static_cast<int>(geom.width()), static_cast<int>(geom.height()), screenId, false},
-                            QStringLiteral("storePreTileGeometry"));
-                        qCInfo(lcEffect) << "Stored pre-tile geometry for window" << capturedWindowId;
-                    }
-                }
-            });
+    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
+    // enforces per-windowId idempotency — a second capture for the same runtime
+    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
+    // pre-check: that path matched on appId too, so a stale cross-session entry from
+    // a prior window instance (keyed by appId) would block the fresh per-instance
+    // capture and freeze float-restore at ancient coordinates.
+    DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                               {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
+                                static_cast<int>(geom.width()), static_cast<int>(geom.height()), screenId, false},
+                               QStringLiteral("storePreTileGeometry"));
+    qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
