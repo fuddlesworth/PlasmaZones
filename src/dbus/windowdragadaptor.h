@@ -334,6 +334,9 @@ private:
     // (hasDragInsertPreview(), dragInsertPreviewScreenId()). The adaptor
     // queries the engine directly to avoid drift between the two caches.
 
+    // DRY helper: cancel any active autotile drag-insert preview.
+    void cancelDragInsertIfActive();
+
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;

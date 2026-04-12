@@ -41,9 +41,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
     m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
     // Ensure no stale preview carries over from a prior drag.
-    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->cancelDragInsertPreview();
-    }
+    cancelDragInsertIfActive();
 
     // Check if snapping is enabled
     if (!m_settings->snappingEnabled()) {

@@ -861,8 +861,10 @@ public:
      * tiling state. updateDragInsertPreview() clamps to [0, tiledWindowCount()-1],
      * so returning the last slot is equivalent to "append".
      *
-     * The dragged window (if any active preview) is excluded from the hit test
-     * so pointing at its own tile doesn't produce a no-op reinsert.
+     * The dragged window's zone is intentionally NOT excluded from the hit
+     * test: cursor-over-own-zone returns its current index (stable identity),
+     * preventing an oscillating shuffle where moving to a neighbour slot
+     * immediately re-matches under the cursor every dragMoved tick.
      */
     int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
 

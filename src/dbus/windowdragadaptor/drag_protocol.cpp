@@ -110,9 +110,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         if (m_settings) {
             m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
         }
-        if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-            m_autotileEngine->cancelDragInsertPreview();
-        }
+        cancelDragInsertIfActive();
         return policy;
     }
 
@@ -245,9 +243,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
             // Bypass paths — no overlay state to clean up; just drop the id.
             // An active autotile drag-insert preview must be cancelled so
             // neighbours snap back to their original order.
-            if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-                m_autotileEngine->cancelDragInsertPreview();
-            }
+            cancelDragInsertIfActive();
             m_draggedWindowId.clear();
         }
         outcome.action = DragOutcome::CancelSnap;

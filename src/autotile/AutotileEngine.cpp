@@ -2332,12 +2332,16 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
     const TilingStateKey targetKey = currentKeyForScreen(screenId);
 
     // Capture prior engine state (if any) for restoration on cancel.
+    // Look up the prior TilingState once and reuse below to avoid a redundant
+    // m_screenStates hash lookup in the cross-screen branch.
+    TilingState* priorState = nullptr;
     auto it = m_windowToStateKey.constFind(windowId);
     if (it != m_windowToStateKey.constEnd()) {
         preview.hadPriorState = true;
         preview.priorKey = it.value();
         preview.priorSameScreen = (preview.priorKey == targetKey);
-        if (TilingState* priorState = m_screenStates.value(preview.priorKey)) {
+        priorState = m_screenStates.value(preview.priorKey);
+        if (priorState) {
             preview.priorRawIndex = priorState->windowOrder().indexOf(windowId);
             preview.priorFloating = priorState->isFloating(windowId);
         }
@@ -2353,10 +2357,8 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
     } else {
         // Cross-screen adoption or fresh adoption: remove from prior state (if any)
         // and append to the target state's tiled list.
-        if (preview.hadPriorState) {
-            if (TilingState* priorState = m_screenStates.value(preview.priorKey)) {
-                priorState->removeWindow(windowId);
-            }
+        if (preview.hadPriorState && priorState) {
+            priorState->removeWindow(windowId);
         }
         if (targetState->containsWindow(windowId)) {
             // Defensive: stale m_screenStates entry left the window in the target

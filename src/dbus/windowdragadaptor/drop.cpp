@@ -45,7 +45,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // dragged window's final geometry is applied on the next retile. Snapping
     // logic is skipped entirely — the window's place in the stack IS the drop.
     if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
-        m_autotileEngine->commitDragInsertPreview();
+        m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
         hideOverlayAndSelector();
         resetDragState();
         return;
