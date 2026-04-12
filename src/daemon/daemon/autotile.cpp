@@ -22,6 +22,7 @@
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
 #include <QGuiApplication>
+#include <memory>
 #include <QScreen>
 
 namespace PlasmaZones {
@@ -457,16 +458,23 @@ void Daemon::processPendingGeometryUpdates()
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.
+    // Async: each screen's computation runs on the worker thread. A shared
+    // counter tracks completion; the continuation (overlay update + reapply)
+    // fires once all results are in.
     const int desktop = m_virtualDesktopManager->currentDesktop();
     const QString activity =
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
     QSet<QUuid> processedLayouts;
+
+    int totalRequests = 0;
     for (const QString& screenId : screenIds) {
         Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
-            LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            m_layoutComputeService->requestRecalculate(layout, screenId,
+                                                       GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
+            ++totalRequests;
         }
     }
 
@@ -478,20 +486,35 @@ void Daemon::processPendingGeometryUpdates()
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
-                LayoutComputeService::recalculateSync(
-                    layout, GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
+                QString primaryId = Utils::screenIdentifier(primaryScreen);
+                m_layoutComputeService->requestRecalculate(layout, primaryId,
+                                                           GeometryUtils::effectiveScreenGeometry(layout, primaryId));
+                ++totalRequests;
             }
         }
     }
 
     m_geometryUpdatePending = false;
 
-    // Single overlay update after all geometry recalculations
-    m_overlayService->updateGeometries();
+    if (totalRequests == 0) {
+        m_overlayService->updateGeometries();
+        m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+        m_reapplyGeometriesTimer.start();
+        return;
+    }
 
-    // Ask effect to reapply snapped window positions (next event loop when REAPPLY_DELAY_MS is 0).
-    m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-    m_reapplyGeometriesTimer.start();
+    // Completion barrier: fire continuation when all async results arrive.
+    auto remaining = std::make_shared<int>(totalRequests);
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+                    [this, remaining, conn](const QString&, Layout*) {
+                        if (--(*remaining) <= 0) {
+                            disconnect(*conn);
+                            m_overlayService->updateGeometries();
+                            m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+                            m_reapplyGeometriesTimer.start();
+                        }
+                    });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.

@@ -174,13 +174,15 @@ bool Daemon::init()
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
     connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
         if (layout) {
-            // Recalculate zone geometries once using primary screen geometry.
+            // Recalculate zone geometries asynchronously using primary screen geometry.
             // Active layout is global; recalculating per-screen overwrites each
             // iteration (last-wins bug). The overlay computes per-screen geometry
             // on the fly via GeometryUtils::getZoneGeometryWithGaps().
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+                QString screenId = Utils::screenIdentifier(primary);
+                m_layoutComputeService->requestRecalculate(layout, screenId,
+                                                           GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -204,8 +206,8 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenId);
                 if (screen) {
-                    LayoutComputeService::recalculateSync(layout,
-                                                          GeometryUtils::effectiveScreenGeometry(layout, screen));
+                    m_layoutComputeService->requestRecalculate(layout, screenId,
+                                                               GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts

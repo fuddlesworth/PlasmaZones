@@ -106,6 +106,16 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     }
     Layout* layout = *layoutIt;
 
+    // Race guard: if a sync caller (recalculateSync) already computed for
+    // this exact screen geometry while the async result was in flight, skip
+    // the redundant apply. Both paths produce identical results for the
+    // same input; applying the async one would just re-emit signals.
+    if (layout->lastRecalcGeometry() == result.screenGeometry) {
+        qCDebug(lcCore) << "LayoutComputeService: sync path already applied for" << result.screenId;
+        Q_EMIT geometriesComputed(result.screenId, layout);
+        return;
+    }
+
     // Batch-apply: update all zone geometries with a single layoutModified signal at end
     layout->beginBatchModify();
     for (const auto& computed : result.zones) {
