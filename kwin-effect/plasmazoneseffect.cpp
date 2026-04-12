@@ -1078,7 +1078,43 @@ void PlasmaZonesEffect::slotDaemonReady()
     }
 
     m_daemonServiceRegistered = true;
-    qCInfo(lcEffect) << "daemon ready: re-pushing state";
+    qCInfo(lcEffect) << "daemon ready: registering bridge and re-pushing state";
+
+    // Register the compositor bridge with the daemon, passing our protocol
+    // version so the daemon can reject us if we're too old. The daemon returns
+    // its own API version and a session ID; "REJECTED" means version mismatch.
+    {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::CompositorBridge, QStringLiteral("registerBridge"));
+        msg << QStringLiteral("kwin") << QString::number(DBus::ApiVersion)
+            << QStringList{QStringLiteral("borderless"), QStringLiteral("animation")};
+        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+            w->deleteLater();
+            QDBusPendingReply<PlasmaZones::BridgeRegistrationResult> reply = *w;
+            if (reply.isError()) {
+                qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message();
+                return;
+            }
+            BridgeRegistrationResult result = reply.value();
+            if (result.sessionId == QLatin1String("REJECTED")) {
+                qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
+                                     << "but this effect speaks" << DBus::ApiVersion
+                                     << "— update the effect to match the daemon.";
+                m_daemonServiceRegistered = false;
+                return;
+            }
+            int daemonVersion = result.apiVersion.toInt();
+            if (daemonVersion < DBus::MinPeerApiVersion) {
+                qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
+                                     << DBus::MinPeerApiVersion << "— update the daemon to match the effect.";
+                m_daemonServiceRegistered = false;
+                return;
+            }
+            qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
+                             << "session=" << result.sessionId;
+        });
+    }
 
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
@@ -1776,6 +1812,11 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
                                           QStringLiteral("restoreSizeDuringDragChanged"), this,
                                           SLOT(slotRestoreSizeDuringDrag(QString, int, int)));
+
+    // WindowDrag: snap assist (delivered asynchronously, separate from the fast dragStopped reply)
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                          QStringLiteral("snapAssistReady"), this,
+                                          SLOT(slotSnapAssistReady(QString, QString, PlasmaZones::EmptyZoneList)));
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
 }
@@ -2894,7 +2935,7 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 timeoutTimer->stop();
                 timeoutTimer->deleteLater();
 
-                QDBusPendingReply<int, int, int, int, bool, QString, bool, bool, PlasmaZones::EmptyZoneList> reply = *w;
+                QDBusPendingReply<int, int, int, int, bool, QString, bool> reply = *w;
                 if (reply.isError()) {
                     qCWarning(lcEffect) << "dragStopped call failed:" << reply.error().message();
                     return;
@@ -2907,8 +2948,6 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                 bool shouldSnap = reply.argumentAt<4>();
                 QString releaseScreenId = reply.argumentAt<5>();
                 bool restoreSizeOnly = reply.argumentAt<6>();
-                bool snapAssistRequested = reply.argumentAt<7>();
-                EmptyZoneList emptyZones = reply.argumentAt<8>();
 
                 qCInfo(lcEffect) << "dragStopped returned shouldSnap=" << shouldSnap
                                  << "releaseScreenId=" << releaseScreenId << "restoreSizeOnly=" << restoreSizeOnly
@@ -2971,12 +3010,8 @@ void PlasmaZonesEffect::callDragStopped(KWin::EffectWindow* window, const QStrin
                                      onSnapSuccess);
                 }
 
-                // Snap Assist: if daemon requested, build candidates (unsnapped only) and call showSnapAssist.
-                // All D-Bus calls are async to prevent compositor freeze if daemon is busy with
-                // overlay teardown / layout change (see discussion #158).
-                if (snapAssistRequested && !emptyZones.isEmpty() && !releaseScreenId.isEmpty()) {
-                    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
-                }
+                // Snap Assist is now delivered via the snapAssistReady signal
+                // (separate from the fast dragStopped reply). See slotSnapAssistReady().
 
                 // Cross-VS autotile transfer: if the window was dropped on an autotile
                 // virtual screen from a different VS on the SAME physical monitor,
@@ -3219,6 +3254,20 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     applySnapGeometry(window, geometry, true);
+}
+
+void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                                            const PlasmaZones::EmptyZoneList& emptyZones)
+{
+    // Discard if a new drag has already started — this signal was from a prior drop.
+    if (m_dragTracker->isDragging()) {
+        qCDebug(lcEffect) << "Discarding snapAssistReady: new drag in progress";
+        return;
+    }
+    if (emptyZones.isEmpty() || releaseScreenId.isEmpty()) {
+        return;
+    }
+    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
 }
 
 void PlasmaZonesEffect::notifyWindowClosed(KWin::EffectWindow* w)

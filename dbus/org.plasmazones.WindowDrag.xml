@@ -90,13 +90,6 @@
             <arg name="restoreSizeOnly" type="b" direction="out">
                 <annotation name="org.gtk.GDBus.DocString" value="If true with shouldSnap: apply only width/height; keep window at current position (drag-to-unsnap). Float-toggle shortcut restores full x/y/w/h."/>
             </arg>
-            <arg name="snapAssistRequested" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="If true: effect should call showSnapAssist with candidate windows to fill empty zones."/>
-            </arg>
-            <arg name="emptyZones" type="a(siiiiiibsssdd)" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs: (zoneId, x, y, width, height, borderWidth, borderRadius, useCustomColors, highlightColor, inactiveColor, borderColor, activeOpacity, inactiveOpacity). Only set when snapAssistRequested is true."/>
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out8" value="PlasmaZones::EmptyZoneList"/>
-            </arg>
         </method>
 
         <method name="cancelSnap">
@@ -138,6 +131,19 @@
             </arg>
             <arg name="height" type="i">
                 <annotation name="org.gtk.GDBus.DocString" value="Pre-snap height (pixels)."/>
+            </arg>
+        </signal>
+        <signal name="snapAssistReady">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted asynchronously after a successful snap when Snap Assist is active. Carries the list of empty zones on the release screen so the effect can show a window picker without blocking the fast dragStopped reply path. The effect discards this if a new drag has already started."/>
+            <arg name="windowId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Window that was just snapped."/>
+            </arg>
+            <arg name="releaseScreenId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Screen where the window was snapped."/>
+            </arg>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)">
+                <annotation name="org.gtk.GDBus.DocString" value="Array of EmptyZoneEntry structs for the window picker."/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PlasmaZones::EmptyZoneList"/>
             </arg>
         </signal>
     </interface>

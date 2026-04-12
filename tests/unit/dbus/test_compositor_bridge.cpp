@@ -152,14 +152,14 @@ private Q_SLOTS:
     void testRegisterBridge_returnsApiVersion()
     {
         BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless"), QStringLiteral("animation")});
+            QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QCOMPARE(result.apiVersion, QStringLiteral("1"));
+        QCOMPARE(result.apiVersion, QStringLiteral("2"));
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -167,7 +167,7 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -176,12 +176,11 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("0.40"),
-                                        {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("2"), {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("0.40"));
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("2"));
     }
 
     // =====================================================================
@@ -190,14 +189,14 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }

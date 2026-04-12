@@ -19,8 +19,7 @@ namespace PlasmaZones {
 
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                                     int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
-                                    QString& releaseScreenIdOut, bool& restoreSizeOnlyOut, bool& snapAssistRequestedOut,
-                                    EmptyZoneList& emptyZonesOut)
+                                    QString& releaseScreenIdOut, bool& restoreSizeOnlyOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
@@ -33,8 +32,6 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     shouldApplyGeometry = false;
     releaseScreenIdOut.clear();
     restoreSizeOnlyOut = false;
-    snapAssistRequestedOut = false;
-    emptyZonesOut.clear();
 
     if (windowId != m_draggedWindowId) {
         return;
@@ -280,18 +277,24 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         && anyTriggerHeld(snapAssistTriggers, static_cast<Qt::KeyboardModifiers>(modifiers), mouseButtons);
     const bool requestSnapAssist = actuallySnapped && snapAssistFeatureOn
         && (snapAssistBySetting || snapAssistByTrigger) && releaseScreen && m_layoutManager && m_windowTracking;
+    bool keepEscapeForSnapAssist = false;
     if (requestSnapAssist) {
         Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);
         if (layout) {
             // Use screen-filtered occupancy — without this, zones occupied on
             // other screens appear occupied here when layouts share zone IDs.
             QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
-            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(
-                layout, releaseScreenId, releaseScreen, m_settings,
-                [&occupied](const Zone* z) { return !occupied.contains(z->id()); });
+            EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, releaseScreenId, releaseScreen,
+                                                                         m_settings, [&occupied](const Zone* z) {
+                                                                             return !occupied.contains(z->id());
+                                                                         });
             if (!emptyZones.isEmpty()) {
-                snapAssistRequestedOut = true;
-                emptyZonesOut = emptyZones;
+                keepEscapeForSnapAssist = true;
+                // Emit asynchronously so the fast dragStopped reply reaches the
+                // compositor before the empty-zone-list computation cost is felt.
+                // The effect subscribes to this signal and shows snap-assist
+                // independently of the dragStopped reply path.
+                Q_EMIT snapAssistReady(windowId, releaseScreenId, emptyZones);
             }
         }
     }
@@ -300,7 +303,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     // If snap assist will be shown, keep the Escape shortcut registered so
     // KGlobalAccel can still dismiss it (the snap assist window may not have
     // Wayland keyboard focus yet when the user presses Escape).
-    resetDragState(/*keepEscapeShortcut=*/snapAssistRequestedOut);
+    resetDragState(/*keepEscapeShortcut=*/keepEscapeForSnapAssist);
 }
 
 } // namespace PlasmaZones

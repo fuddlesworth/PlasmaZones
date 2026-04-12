@@ -118,8 +118,7 @@ public Q_SLOTS:
      */
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
-                     QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     PlasmaZones::EmptyZoneList& emptyZonesOut);
+                     QString& releaseScreenIdOut, bool& restoreSizeOnly);
 
     /**
      * Cancel current snap operation (Escape key)
@@ -156,6 +155,15 @@ Q_SIGNALS:
      * KWin effect applies pre-snap size immediately (restore-size-only at current position).
      */
     void restoreSizeDuringDragChanged(const QString& windowId, int width, int height);
+
+    /**
+     * Emitted asynchronously after a successful snap when Snap Assist is active.
+     * Carries the list of empty zones on the release screen so the effect can
+     * show a window picker without blocking the fast dragStopped reply path.
+     * The effect discards this signal if a new drag has already started.
+     */
+    void snapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                         const PlasmaZones::EmptyZoneList& emptyZones);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)
