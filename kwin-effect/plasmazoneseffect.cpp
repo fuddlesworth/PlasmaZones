@@ -349,6 +349,20 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     m_keyboardGrabbed = false;
                 }
 
+                // Clear the drag-floated marker on every drag end. Historically
+                // this marker was used to suppress a post-drag pre-tile geometry
+                // restore (applyGeometryForFloat), but the current daemon-side
+                // drag-end path goes through AutotileEngine::setWindowFloat →
+                // windowFloatingStateSynced → syncAutotileFloatStatePassive,
+                // which never emits applyGeometryForFloat. Leaving the marker
+                // set after a drag leaks it into subsequent Meta+F toggles:
+                // the next user float is silently skipped, the window's visual
+                // position diverges from the daemon's shadow, and then a
+                // float→tile toggle overwrites the stored pre-tile rect with
+                // the stale tile zone — permanently corrupting the restore
+                // target (#bug: zed/firefox/plasmazones-settings resize issues).
+                m_dragFloatedWindowIds.remove(windowId);
+
                 // Single entry point for drag-end dispatch. The
                 // daemon owns the decision; callEndDrag sends endDrag and
                 // the reply handler applies whatever DragOutcome comes back
@@ -2993,7 +3007,11 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                     break;
                 }
                 m_autotileHandler->handleDragToFloat(safeWindow, windowId, dropScreenId);
-                m_dragFloatedWindowIds.insert(windowId);
+                // Note: m_dragFloatedWindowIds is intentionally NOT re-set here.
+                // See dragStopped handler — the marker is cleared at drag end
+                // because the daemon's drag-end float path (setWindowFloat →
+                // windowFloatingStateSynced) never emits applyGeometryForFloat,
+                // so there's nothing for the marker to suppress.
                 DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking,
                                            QStringLiteral("setWindowFloatingForScreen"), {windowId, dropScreenId, true},
                                            QStringLiteral("setWindowFloatingForScreen - endDrag ApplyFloat"));
