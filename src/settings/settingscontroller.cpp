@@ -1731,16 +1731,33 @@ QVariantList SettingsController::convertTriggersForStorage(const QVariantList& t
 // Trigger getters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-bool SettingsController::alwaysActivateOnDrag() const
+static bool hasAlwaysActiveTrigger(const QVariantList& triggers)
 {
     const int alwaysActive = static_cast<int>(DragModifier::AlwaysActive);
-    const auto triggers = m_settings.dragActivationTriggers();
     for (const auto& t : triggers) {
         if (t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt() == alwaysActive) {
             return true;
         }
     }
     return false;
+}
+
+static QVariantList makeAlwaysActiveTriggerList()
+{
+    QVariantMap trigger;
+    trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
+    trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+    return {trigger};
+}
+
+bool SettingsController::alwaysActivateOnDrag() const
+{
+    return hasAlwaysActiveTrigger(m_settings.dragActivationTriggers());
+}
+
+bool SettingsController::alwaysReinsertIntoStack() const
+{
+    return hasAlwaysActiveTrigger(m_settings.autotileDragInsertTriggers());
 }
 
 QVariantList SettingsController::dragActivationTriggers() const
@@ -1806,16 +1823,8 @@ void SettingsController::setAlwaysActivateOnDrag(bool enabled)
     if (alwaysActivateOnDrag() == enabled) {
         return;
     }
-    if (enabled) {
-        // Single AlwaysActive trigger -- written directly in storage format (DragModifier enum)
-        QVariantMap trigger;
-        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(DragModifier::AlwaysActive);
-        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-        m_settings.setDragActivationTriggers({trigger});
-    } else {
-        // Revert to default triggers
-        m_settings.setDragActivationTriggers(ConfigDefaults::dragActivationTriggers());
-    }
+    m_settings.setDragActivationTriggers(enabled ? makeAlwaysActiveTriggerList()
+                                                 : ConfigDefaults::dragActivationTriggers());
     Q_EMIT alwaysActivateOnDragChanged();
     Q_EMIT dragActivationTriggersChanged();
     setNeedsSave(true);
@@ -1843,12 +1852,28 @@ void SettingsController::setSnapAssistTriggers(const QVariantList& triggers)
 
 void SettingsController::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
+    const bool wasAlwaysActive = alwaysReinsertIntoStack();
     const QVariantList converted = convertTriggersForStorage(triggers);
     if (m_settings.autotileDragInsertTriggers() != converted) {
         m_settings.setAutotileDragInsertTriggers(converted);
         Q_EMIT autotileDragInsertTriggersChanged();
+        if (alwaysReinsertIntoStack() != wasAlwaysActive) {
+            Q_EMIT alwaysReinsertIntoStackChanged();
+        }
         setNeedsSave(true);
     }
+}
+
+void SettingsController::setAlwaysReinsertIntoStack(bool enabled)
+{
+    if (alwaysReinsertIntoStack() == enabled) {
+        return;
+    }
+    m_settings.setAutotileDragInsertTriggers(enabled ? makeAlwaysActiveTriggerList()
+                                                     : ConfigDefaults::autotileDragInsertTriggers());
+    Q_EMIT alwaysReinsertIntoStackChanged();
+    Q_EMIT autotileDragInsertTriggersChanged();
+    setNeedsSave(true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -76,6 +76,10 @@ public:
         trigger[ConfigKeys::triggerMouseButtonField()] = 0;
         return {trigger};
     }
+    static bool autotileDragInsertToggle()
+    {
+        return false;
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Display Settings

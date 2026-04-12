@@ -488,6 +488,8 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
         m_autotileDragInsertTriggers =
             parseTriggerListJson(tilingBehaviorTriggers->readString(ConfigDefaults::triggersKey()))
                 .value_or(ConfigDefaults::autotileDragInsertTriggers());
+        m_autotileDragInsertToggle = tilingBehaviorTriggers->readBool(ConfigDefaults::toggleActivationKey(),
+                                                                      ConfigDefaults::autotileDragInsertToggle());
     }
     {
         auto tilingDecorations = backend->group(ConfigDefaults::tilingAppearanceDecorationsGroup());
@@ -895,6 +897,7 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
     {
         auto tilingBehaviorTriggers = backend->group(ConfigDefaults::tilingBehaviorTriggersGroup());
         saveTriggerList(*tilingBehaviorTriggers, ConfigDefaults::triggersKey(), m_autotileDragInsertTriggers);
+        tilingBehaviorTriggers->writeBool(ConfigDefaults::toggleActivationKey(), m_autotileDragInsertToggle);
     }
     {
         auto tilingDecorations = backend->group(ConfigDefaults::tilingAppearanceDecorationsGroup());

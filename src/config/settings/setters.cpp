@@ -36,6 +36,8 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
     }
 }
 
+SETTINGS_SETTER(bool, AutotileDragInsertToggle, m_autotileDragInsertToggle, autotileDragInsertToggleChanged)
+
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
     if (m_zoneSpanModifier != modifier) {

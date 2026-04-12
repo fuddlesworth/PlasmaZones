@@ -73,7 +73,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
-    m_prevTriggerHeld = false;
+    // Seeded true so the first dragMoved tick can't register a spurious
+    // rising edge when the drag was initiated with the activation trigger
+    // already held (e.g. Alt+Click, where Alt is KWin's move-window modifier
+    // and is also commonly the configured snap activation trigger). The user
+    // must perform a real release→press cycle to toggle.
+    m_prevTriggerHeld = true;
     m_overlayShown = false;
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
@@ -400,7 +405,20 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // Autotile drag-insert lives on an independent trigger list, so it should
     // activate regardless of snap-overlay cancel state.
     if (m_autotileEngine) {
-        const bool autotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
+        const bool rawAutotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
+
+        // Toggle mode: detect rising edge (release→press) to flip insert-active state
+        bool autotileInsertHeld;
+        if (m_settings->autotileDragInsertToggle()) {
+            if (rawAutotileInsertHeld && !m_prevAutotileDragInsertHeld) {
+                m_autotileDragInsertToggled = !m_autotileDragInsertToggled;
+            }
+            m_prevAutotileDragInsertHeld = rawAutotileInsertHeld;
+            autotileInsertHeld = m_autotileDragInsertToggled;
+        } else {
+            autotileInsertHeld = rawAutotileInsertHeld;
+        }
+
         const QString autotileScreenId = effectiveScreenIdAt(cursorX, cursorY);
         const bool onAutotileScreen =
             !autotileScreenId.isEmpty() && m_autotileEngine->isAutotileScreen(autotileScreenId);

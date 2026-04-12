@@ -83,6 +83,17 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     // cleanly must not bleed into this one.
     clearPendingSnapDragState();
 
+    // Reset autotile drag-insert toggle state on every drag start. This runs
+    // before branching so it covers both the bypass path (drag starts on an
+    // autotile screen, dragStarted() is never called) and the snap path.
+    // Prev is seeded to true so the first dragMoved tick can't register a
+    // spurious rising edge when the user initiated the drag with the autotile
+    // trigger already held (e.g. Alt+Click, where Alt is KWin's move-window
+    // modifier and also the default drag-insert trigger). The user must
+    // release and re-press to toggle.
+    m_autotileDragInsertToggled = false;
+    m_prevAutotileDragInsertHeld = true;
+
     const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
     const DragPolicy policy =

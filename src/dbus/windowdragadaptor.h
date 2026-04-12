@@ -307,6 +307,8 @@ private:
     bool m_triggerReleasedAfterCancel = false; // Tracks release→press cycle for retrigger after Escape
     bool m_activationToggled = false; // Current toggle state (on/off)
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
+    bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
+    bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_overlayShown = false;
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;

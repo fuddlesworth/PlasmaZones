@@ -88,6 +88,8 @@ class SettingsController : public QObject
     Q_PROPERTY(QVariantList snapAssistTriggers READ snapAssistTriggers WRITE setSnapAssistTriggers NOTIFY
                    snapAssistTriggersChanged)
     Q_PROPERTY(QVariantList defaultSnapAssistTriggers READ defaultSnapAssistTriggers CONSTANT)
+    Q_PROPERTY(bool alwaysReinsertIntoStack READ alwaysReinsertIntoStack WRITE setAlwaysReinsertIntoStack NOTIFY
+                   alwaysReinsertIntoStackChanged)
     Q_PROPERTY(QVariantList autotileDragInsertTriggers READ autotileDragInsertTriggers WRITE
                    setAutotileDragInsertTriggers NOTIFY autotileDragInsertTriggersChanged)
     Q_PROPERTY(QVariantList defaultAutotileDragInsertTriggers READ defaultAutotileDragInsertTriggers CONSTANT)
@@ -365,6 +367,7 @@ public:
 
     // ── Trigger configuration ────────────────────────────────────────────────
     bool alwaysActivateOnDrag() const;
+    bool alwaysReinsertIntoStack() const;
     QVariantList dragActivationTriggers() const;
     QVariantList defaultDragActivationTriggers() const;
     QVariantList zoneSpanTriggers() const;
@@ -375,6 +378,7 @@ public:
     QVariantList defaultAutotileDragInsertTriggers() const;
 
     void setAlwaysActivateOnDrag(bool enabled);
+    void setAlwaysReinsertIntoStack(bool enabled);
     void setDragActivationTriggers(const QVariantList& triggers);
     void setZoneSpanTriggers(const QVariantList& triggers);
     void setSnapAssistTriggers(const QVariantList& triggers);
@@ -686,6 +690,7 @@ Q_SIGNALS:
 
     // Trigger signals
     void alwaysActivateOnDragChanged();
+    void alwaysReinsertIntoStackChanged();
     void dragActivationTriggersChanged();
     void zoneSpanTriggersChanged();
     void snapAssistTriggersChanged();
