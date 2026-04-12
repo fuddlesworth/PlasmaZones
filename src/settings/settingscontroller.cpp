@@ -24,6 +24,7 @@
 #include <QFileInfo>
 #include <QFontDatabase>
 #include <QGuiApplication>
+#include <QPointer>
 #include <QScreen>
 #include <QWindow>
 #include <QDBusPendingCallWatcher>
@@ -393,15 +394,40 @@ bool SettingsController::registerDBusService()
 
 void SettingsController::raise()
 {
+    // Find the primary top-level window. On Wayland a plain show/raise/requestActivate
+    // on an already-visible xdg_toplevel is a no-op — the compositor won't steal focus
+    // without an activation token. Destroying the platform window and re-showing forces
+    // a fresh xdg_toplevel mapping, which KWin treats as a new window presentation and
+    // brings it to the front. This mirrors the editor's single-instance raise path.
+    QWindow* primary = nullptr;
     const auto windows = QGuiApplication::allWindows();
     for (auto* w : windows) {
         if (w->type() != Qt::Window)
             continue;
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break; // Only raise the primary application window
+        primary = w;
+        break;
     }
+    if (!primary) {
+        return;
+    }
+
+    if (primary->isVisible()) {
+        QPointer<QWindow> safeWindow(primary);
+        QTimer::singleShot(0, primary, [safeWindow]() {
+            if (!safeWindow) {
+                return;
+            }
+            safeWindow->destroy();
+            safeWindow->show();
+            safeWindow->raise();
+            safeWindow->requestActivate();
+        });
+        return;
+    }
+
+    primary->show();
+    primary->raise();
+    primary->requestActivate();
 }
 
 void SettingsController::load()
