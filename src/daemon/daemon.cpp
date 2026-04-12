@@ -18,6 +18,7 @@
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/zonedetector.h"
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
@@ -62,6 +63,7 @@ Daemon::Daemon(QObject* parent)
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
     , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<ZoneDetector>(m_settings.get(), nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))

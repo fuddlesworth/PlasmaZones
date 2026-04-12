@@ -388,6 +388,10 @@ public:
     {
         return m_lastRecalcGeometry;
     }
+    void setLastRecalcGeometry(const QRectF& geom)
+    {
+        m_lastRecalcGeometry = geom;
+    }
 
     // Serialization
     QJsonObject toJson() const;

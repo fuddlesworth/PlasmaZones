@@ -85,6 +85,11 @@ set(plasmazones_core_SRCS
     core/layoutmanager/persistence.cpp
     core/layoutmanager/assignments.cpp
     core/layoutmanager.h
+    core/layoutworker/layoutworker.cpp
+    core/layoutworker/layoutworker.h
+    core/layoutworker/layoutcomputeservice.cpp
+    core/layoutworker/layoutcomputeservice.h
+    core/layoutworker/types.h
     core/layoututils.cpp
     core/layoututils.h
     core/supportreport.cpp

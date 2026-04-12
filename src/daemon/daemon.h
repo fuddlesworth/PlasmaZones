@@ -21,6 +21,7 @@ namespace PlasmaZones {
 enum class DisabledReason;
 class Layout;
 class LayoutManager;
+class LayoutComputeService;
 class ZoneDetector;
 class Settings;
 class OverlayService;
@@ -289,6 +290,7 @@ private:
 
     std::unique_ptr<IConfigBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
+    std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<ZoneDetector> m_zoneDetector;
     std::unique_ptr<OverlayService> m_overlayService;
