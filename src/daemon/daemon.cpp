@@ -154,7 +154,7 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (Layout* layout : m_layoutManager->layouts()) {
-            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
+            LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
         }
     }
 
@@ -180,7 +180,7 @@ bool Daemon::init()
             // on the fly via GeometryUtils::getZoneGeometryWithGaps().
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, primary));
+                LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -204,7 +204,8 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenId);
                 if (screen) {
-                    layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screen));
+                    LayoutComputeService::recalculateSync(layout,
+                                                          GeometryUtils::effectiveScreenGeometry(layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts

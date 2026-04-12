@@ -9,6 +9,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/layoutworker/layoutcomputeservice.h"
 #include "../../core/layout.h"
 #include "../../core/zone.h"
 #include "../../core/geometryutils.h"
@@ -102,7 +103,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
                 screenId = Utils::screenIdentifier(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
-                layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
+                LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, screenId));
 
                 for (auto* zone : layout->zones()) {
                     QRect zoneRect =
@@ -191,7 +192,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
     if (!effectiveGeom.isValid()) {
         effectiveGeom = GeometryUtils::effectiveScreenGeometry(layout, outScreen);
     }
-    layout->recalculateZoneGeometries(effectiveGeom);
+    LayoutComputeService::recalculateSync(layout, effectiveGeom);
     return layout;
 }
 

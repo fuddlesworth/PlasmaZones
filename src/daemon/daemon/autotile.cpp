@@ -6,6 +6,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/layoutworker/layoutcomputeservice.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -464,7 +465,7 @@ void Daemon::processPendingGeometryUpdates()
     for (const QString& screenId : screenIds) {
         Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
-            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
         }
     }
@@ -477,8 +478,8 @@ void Daemon::processPendingGeometryUpdates()
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
-                layout->recalculateZoneGeometries(
-                    GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
+                LayoutComputeService::recalculateSync(
+                    layout, GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
             }
         }
     }
