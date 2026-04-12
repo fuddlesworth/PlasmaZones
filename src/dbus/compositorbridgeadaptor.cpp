@@ -2,12 +2,22 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "compositorbridgeadaptor.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 #include <dbus_types.h>
 #include <QUuid>
 
 namespace PlasmaZones {
+
+// Protocol version constants are the single source of truth in
+// compositor-common/dbus_constants.h, re-exported into the DBus namespace
+// via core/constants.h. The effect links compositor-common directly;
+// the daemon pulls the same symbols through core/constants.h.
+namespace {
+constexpr int DaemonApiVersion = DBus::ApiVersion;
+constexpr int DaemonMinPeerApiVersion = DBus::MinPeerApiVersion;
+} // namespace
 
 CompositorBridgeAdaptor::CompositorBridgeAdaptor(QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -22,17 +32,31 @@ BridgeRegistrationResult CompositorBridgeAdaptor::registerBridge(const QString& 
                                 << "with" << compositorName << version;
     }
 
+    // Version gate: reject effects that speak an older protocol version.
+    // The effect passes its apiVersion as the `version` string.
+    const int peerApiVersion = version.toInt();
+    if (peerApiVersion < DaemonMinPeerApiVersion) {
+        qCWarning(lcDbusWindow) << "Compositor bridge REJECTED: peer apiVersion" << peerApiVersion << "is below minimum"
+                                << DaemonMinPeerApiVersion << "(compositor:" << compositorName << ")."
+                                << "Update the effect to match the daemon.";
+        BridgeRegistrationResult result;
+        result.apiVersion = QString::number(DaemonApiVersion);
+        result.bridgeName = compositorName;
+        result.sessionId = QStringLiteral("REJECTED");
+        return result;
+    }
+
     m_bridgeName = compositorName;
     m_bridgeVersion = version;
     m_capabilities = capabilities;
 
-    qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << version
+    qCInfo(lcDbusWindow) << "Compositor bridge registered:" << compositorName << "apiVersion=" << version
                          << "capabilities:" << capabilities;
 
     Q_EMIT bridgeRegistered(compositorName, version, capabilities);
 
     BridgeRegistrationResult result;
-    result.apiVersion = QStringLiteral("1");
+    result.apiVersion = QString::number(DaemonApiVersion);
     result.bridgeName = compositorName;
     result.sessionId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     return result;

@@ -17,6 +17,7 @@
 #include <QScopedPointer>
 
 #include "core/layout.h"
+#include "core/layoutworker/layoutcomputeservice.h"
 #include "core/zone.h"
 #include "core/zonedetector.h"
 #include "../helpers/StubSettings.h"
@@ -72,7 +73,7 @@ private Q_SLOTS:
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 150);
@@ -112,7 +113,7 @@ private Q_SLOTS:
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         QVector<Zone*> painted = {subLeft, subRight};
@@ -140,7 +141,7 @@ private Q_SLOTS:
         z3->setRelativeGeometry(QRectF(0.67, 0.0, 0.33, 1.0));
         m_layout->addZone(z3);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 900, 900));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 900, 900));
         m_detector->setLayout(m_layout);
 
         QVector<Zone*> painted = {z1, z3};
@@ -174,7 +175,7 @@ private Q_SLOTS:
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.5));
         m_layout->addZone(subRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         QVector<Zone*> painted = {subLeft, subRight};
@@ -216,7 +217,7 @@ private Q_SLOTS:
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         // Cursor at dead center of screen — background zone center
@@ -249,7 +250,7 @@ private Q_SLOTS:
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         // Cursor at center of top-left quadrant
@@ -289,7 +290,7 @@ private Q_SLOTS:
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         // Cursor at center of left-half zone (250, 500)
@@ -323,7 +324,7 @@ private Q_SLOTS:
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 150);
@@ -347,7 +348,7 @@ private Q_SLOTS:
         z2->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 1.0));
         m_layout->addZone(z2);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 500);

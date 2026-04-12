@@ -17,6 +17,25 @@ Window {
     // contentWrapper
     // Note: Escape shortcut removed - layer-shell overlay windows do not
     // receive keyboard focus on Wayland (KeyboardInteractivityNone)
+    // Dismiss state used for input gating. True while the OSD is logically
+    // hidden (pre-first-show or after a full hide animation). When true, we
+    // bind Qt.WindowTransparentForInput into the window flags so the
+    // invisible-but-still-mapped layer surface doesn't eat clicks at its
+    // screen position. Toggled on discrete show/dismiss events — NOT tied
+    // to opacity — so the flag doesn't churn during the fade animation
+    // (which would cause repeated QWindow::setFlags() calls and potential
+    // input-region reconfiguration on every animation tick).
+    // (No signals — previously emitted dismissed() to a C++ slot that did
+    // nothing; both were removed in L3 v2. The flip of _osdDismissed at the
+    // end of hideAnimation's ScriptAction is the entire dismiss mechanism.)
+    // Hide the OSD with animation.
+    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland.
+    // We keep root.visible == true after the first show() for the window's entire
+    // lifetime (never cycling back to false in the hide animation), because Qt's
+    // Vulkan backend on Wayland layer-shell doesn't reliably reinitialize the
+    // VkSwapchainKHR after the wl_surface is torn down by a hide. The OSD's
+    // visual "hidden" state is entirely opacity-driven (contentWrapper.opacity
+    // goes to 0), not Qt-window-visibility-driven.
 
     id: root
 
@@ -71,9 +90,12 @@ Window {
     property bool locked: false
     property bool disabled: false
     property string disabledReason
-
-    // Signals
-    signal dismissed()
+    // Initial value is true because the window is first created via
+    // OverlayService::warmUpLayoutOsd() with visible:false — at that point
+    // the layer surface isn't live yet, but setting the flag here is
+    // harmless and ensures the very first frame after show() has the
+    // correct input-accepting state.
+    property bool _osdDismissed: true
 
     // Show the OSD with animation
     function show() {
@@ -84,24 +106,34 @@ Window {
         // Reset state for fresh animation (animate wrapper, not window)
         contentWrapper.opacity = 0;
         container.scale = 0.8;
+        root._osdDismissed = false;
         root.visible = true;
         showAnimation.start();
         dismissTimer.restart();
     }
 
-    // Hide the OSD with animation
+    // After L3 v2, root.visible stays true for the window's entire lifetime
+    // once show() has been called; the original `if (root.visible)` guard
+    // became dead code after first show. We now gate on _osdDismissed
+    // instead: if we're already in the dismissed state, the hide animation
+    // is a no-op (another hide() mid-dismiss would just re-run the same
+    // fade-out against already-zero opacity). Also guards the pre-first-show
+    // case: warm-upped windows start with _osdDismissed == true, so an
+    // errant hide() before any show() short-circuits cleanly.
     function hide() {
-        // Stop show animation if running
+        if (root._osdDismissed)
+            return ;
+
         showAnimation.stop();
         dismissTimer.stop();
-        // Only hide if visible
-        if (root.visible)
-            hideAnimation.start();
-
+        hideAnimation.start();
     }
 
-    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    // To keep an invisible-but-Qt-visible window from eating clicks at its
+    // position, we toggle Qt.WindowTransparentForInput via a property binding on
+    // _osdDismissed. Qt Wayland translates this flag to wl_surface.set_input_region
+    // updates on the live surface — no surface recreation required.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._osdDismissed ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
     width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
@@ -169,8 +201,12 @@ Window {
 
         ScriptAction {
             script: {
-                root.visible = false;
-                root.dismissed();
+                // Do NOT set root.visible = false — see the Window flags
+                // comment at the top of this file for why. We flip
+                // _osdDismissed instead, which binds Qt.WindowTransparentForInput
+                // into the window flags so the (still Qt-visible) layer
+                // surface stops eating input at its screen position.
+                root._osdDismissed = true;
             }
         }
 
@@ -324,9 +360,12 @@ Window {
 
         }
 
-        // Click to dismiss
+        // Click to dismiss. Gated on _osdDismissed so that in the post-hide
+        // transparent state we don't consume events at the Qt Quick level
+        // even if the wl_surface input region hasn't been updated yet.
         MouseArea {
             anchors.fill: parent
+            enabled: !root._osdDismissed
             onClicked: root.hide()
         }
 

@@ -81,9 +81,27 @@ void WindowTrackingAdaptor::clearPreTileGeometry(const QString& windowId)
     }
 }
 
-QString WindowTrackingAdaptor::getPreTileGeometriesJson()
+PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
 {
-    return serializeGeometryMap(m_service->preTileGeometries(), m_service);
+    PreTileGeometryList result;
+    const auto& map = m_service->preTileGeometries();
+    for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
+        PreTileGeometryEntry entry;
+        // V3 added WindowRegistry-based appId lookup — use currentAppIdFor to
+        // get the live class name (handles mid-session app renames).
+        entry.appId = m_service->currentAppIdFor(it.key());
+        entry.x = it.value().geometry.x();
+        entry.y = it.value().geometry.y();
+        entry.width = it.value().geometry.width();
+        entry.height = it.value().geometry.height();
+        if (!it.value().connectorName.isEmpty()) {
+            entry.screenId = VirtualScreenId::isVirtual(it.value().connectorName)
+                ? it.value().connectorName
+                : Utils::screenIdForName(it.value().connectorName);
+        }
+        result.append(entry);
+    }
+    return result;
 }
 
 bool WindowTrackingAdaptor::getValidatedPreTileGeometry(const QString& windowId, int& x, int& y, int& width,

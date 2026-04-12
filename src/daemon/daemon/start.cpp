@@ -7,6 +7,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/layoutworker/layoutcomputeservice.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -97,7 +98,8 @@ void Daemon::connectScreenSignals()
         for (const QString& sid : vsIds) {
             Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
-                screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+                LayoutComputeService::recalculateSync(screenLayout,
+                                                      GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
             }
         }
     });
@@ -622,7 +624,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            screenLayout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+            LayoutComputeService::recalculateSync(screenLayout,
+                                                  GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
         }
     }
 

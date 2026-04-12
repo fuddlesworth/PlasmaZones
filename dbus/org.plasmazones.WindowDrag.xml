@@ -117,5 +117,13 @@
                 <annotation name="org.qtproject.QtDBus.QtTypeName.In1" value="PlasmaZones::DragPolicy"/>
             </arg>
         </signal>
+        <signal name="snapAssistReady">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted asynchronously after endDrag returns, when the drop requested snap assist (outcome.requestSnapAssist=true). Carries the list of empty zones on the release screen. The effect subscribes and shows the window picker from its slot, discarding the signal if a new drag has already started. Deferring the empty-zone-list computation here keeps the endDrag D-Bus reply fast — the compositor is unblocked before buildEmptyZoneList walks the zone list."/>
+            <arg name="windowId" type="s"/>
+            <arg name="releaseScreenId" type="s"/>
+            <arg name="emptyZones" type="a(siiiiiibsssdd)">
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PlasmaZones::EmptyZoneList"/>
+            </arg>
+        </signal>
     </interface>
 </node>

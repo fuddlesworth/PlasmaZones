@@ -21,8 +21,6 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QLoggingCategory>
 #include <QPointer>
 #include <QTimer>
@@ -386,7 +384,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             // kept advancing while no frames were rendered.
             QDBusMessage fetchMsg =
                 QDBusMessage::createMethodCall(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowTracking,
-                                               QStringLiteral("getPreTileGeometriesJson"));
+                                               QStringLiteral("getPreTileGeometries"));
             auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(fetchMsg), this);
             // Capture expected screen set for staleness detection — if the user
             // rapidly toggles autotile, a stale reply must not overwrite fresh data.
@@ -394,7 +392,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
             connect(watcher, &QDBusPendingCallWatcher::finished, this,
                     [this, added, expectedScreens](QDBusPendingCallWatcher* w) {
                         w->deleteLater();
-                        QDBusPendingReply<QString> reply = *w;
+                        QDBusPendingReply<PlasmaZones::PreTileGeometryList> reply = *w;
                         if (!reply.isValid()) {
                             return;
                         }
@@ -403,21 +401,11 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             qCDebug(lcEffect) << "Stale async pre-autotile geometry reply, screen set changed";
                             return;
                         }
-                        const QString json = reply.value();
-                        QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
-                        if (!doc.isObject()) {
-                            return;
-                        }
+                        const PlasmaZones::PreTileGeometryList entries = reply.value();
                         const auto allWindows = KWin::effects->stackingOrder();
-                        QJsonObject obj = doc.object();
-                        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-                            const QString stableId = it.key();
-                            if (!it.value().isObject())
-                                continue;
-                            QJsonObject geomObj = it.value().toObject();
-                            QRectF geom(geomObj[QLatin1String("x")].toInt(), geomObj[QLatin1String("y")].toInt(),
-                                        geomObj[QLatin1String("width")].toInt(),
-                                        geomObj[QLatin1String("height")].toInt());
+                        for (const auto& entry : entries) {
+                            const QString stableId = entry.appId;
+                            QRectF geom = QRectF(entry.toRect());
                             if (geom.width() <= 0 || geom.height() <= 0)
                                 continue;
                             // Find all windows on added screens matching this stableId.

@@ -23,6 +23,7 @@ namespace PlasmaZones {
 
 class AutotileEngine;
 class LayoutManager; // Concrete type needed for signal connections
+class PersistenceWorker;
 class Layout;
 class IConfigBackend;
 class Zone;
@@ -259,10 +260,10 @@ public Q_SLOTS:
     void clearPreTileGeometry(const QString& windowId);
 
     /**
-     * Get all pre-tile geometries as JSON (for effect pre-population on restart)
-     * @return JSON object: {"appId": {"x":N, "y":N, "width":N, "height":N}, ...}
+     * Get all pre-tile geometries as a typed list (for effect pre-population on restart).
+     * Each entry carries appId, geometry rect, and the screen it was on.
      */
-    QString getPreTileGeometriesJson();
+    PlasmaZones::PreTileGeometryList getPreTileGeometries();
 
     /**
      * Clean up all tracking data for a closed window
@@ -1110,6 +1111,7 @@ private:
     // Persistence (adaptor responsibility: session.json save/load)
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
+    std::unique_ptr<PersistenceWorker> m_persistenceWorker;
 
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;

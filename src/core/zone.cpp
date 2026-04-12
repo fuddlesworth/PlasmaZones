@@ -177,18 +177,24 @@ qreal Zone::distanceToPoint(const QPointF& point) const
     return std::sqrt(dx * dx + dy * dy);
 }
 
-QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry) const
+QRectF Zone::computeAbsoluteGeometry(ZoneGeometryMode mode, const QRectF& relativeGeometry, const QRectF& fixedGeometry,
+                                     const QRectF& screenGeometry)
 {
-    if (m_geometryMode == ZoneGeometryMode::Fixed) {
+    if (mode == ZoneGeometryMode::Fixed) {
         // Fixed mode: pixel coords relative to screen origin
-        return QRectF(screenGeometry.x() + m_fixedGeometry.x(), screenGeometry.y() + m_fixedGeometry.y(),
-                      m_fixedGeometry.width(), m_fixedGeometry.height());
+        return QRectF(screenGeometry.x() + fixedGeometry.x(), screenGeometry.y() + fixedGeometry.y(),
+                      fixedGeometry.width(), fixedGeometry.height());
     }
     // Relative mode: multiply by screen dimensions
-    return QRectF(screenGeometry.x() + m_relativeGeometry.x() * screenGeometry.width(),
-                  screenGeometry.y() + m_relativeGeometry.y() * screenGeometry.height(),
-                  m_relativeGeometry.width() * screenGeometry.width(),
-                  m_relativeGeometry.height() * screenGeometry.height());
+    return QRectF(screenGeometry.x() + relativeGeometry.x() * screenGeometry.width(),
+                  screenGeometry.y() + relativeGeometry.y() * screenGeometry.height(),
+                  relativeGeometry.width() * screenGeometry.width(),
+                  relativeGeometry.height() * screenGeometry.height());
+}
+
+QRectF Zone::calculateAbsoluteGeometry(const QRectF& screenGeometry) const
+{
+    return computeAbsoluteGeometry(m_geometryMode, m_relativeGeometry, m_fixedGeometry, screenGeometry);
 }
 
 QRectF Zone::normalizedGeometry(const QRectF& referenceGeometry) const

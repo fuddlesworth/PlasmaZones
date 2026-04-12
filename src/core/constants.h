@@ -7,6 +7,12 @@
 #include <QLatin1String>
 #include <QString>
 
+// Pull in the canonical effect↔daemon protocol-version constants
+// (PlasmaZones::DBus::ApiVersion / MinPeerApiVersion). Defined in
+// compositor-common so the KWin effect, which does not link
+// plasmazones_core, shares exactly one definition with the daemon.
+#include <dbus_constants.h>
+
 namespace PlasmaZones {
 
 /**
@@ -472,26 +478,19 @@ inline constexpr QLatin1StringView RestoreSentinel("__restore__");
 
 /**
  * @brief D-Bus service constants
+ *
+ * ServiceName, ObjectPath, ApiVersion / MinPeerApiVersion, and the
+ * per-interface name table all live in compositor-common/dbus_constants.h
+ * (included at the top of this file) — that's the single source of truth
+ * shared with the KWin effect, which doesn't link plasmazones_core.
+ * This re-opens `namespace DBus` only to add daemon-only constants.
  */
 namespace DBus {
-inline constexpr QLatin1String ServiceName{"org.plasmazones"};
-inline constexpr QLatin1String ObjectPath{"/PlasmaZones"};
 
 namespace SettingsApp {
 inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
 inline constexpr QLatin1String ObjectPath{"/SettingsApp"};
 inline constexpr QLatin1String Interface{"org.plasmazones.SettingsController"};
-}
-
-namespace Interface {
-inline constexpr QLatin1String LayoutManager{"org.plasmazones.LayoutManager"};
-inline constexpr QLatin1String Overlay{"org.plasmazones.Overlay"};
-inline constexpr QLatin1String Settings{"org.plasmazones.Settings"};
-inline constexpr QLatin1String Screen{"org.plasmazones.Screen"};
-inline constexpr QLatin1String WindowDrag{"org.plasmazones.WindowDrag"};
-inline constexpr QLatin1String WindowTracking{"org.plasmazones.WindowTracking"};
-inline constexpr QLatin1String ZoneDetection{"org.plasmazones.ZoneDetection"};
-inline constexpr QLatin1String Autotile{"org.plasmazones.Autotile"};
 }
 
 }

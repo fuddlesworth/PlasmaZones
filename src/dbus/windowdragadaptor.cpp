@@ -418,6 +418,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         m_overlayService->hide();
         m_overlayShown = false;
     }
+    m_overlayIdled = false;
 
     // Hide zone selector and clear selection
     if (m_zoneSelectorShown && m_overlayService) {
@@ -432,6 +433,12 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     if (m_zoneDetector) {
         m_zoneDetector->clearHighlights();
     }
+}
+
+void WindowDragAdaptor::clearForCompositorReconnect()
+{
+    hideOverlayAndClearZoneState();
+    resetDragState(/*keepEscapeShortcut=*/false);
 }
 
 void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
@@ -454,6 +461,13 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
+    m_overlayIdled = false;
+    // Drop any pending async snapAssistReady payload. Without this, a
+    // compositor reconnect between endDrag and the QTimer::singleShot(0)
+    // that emits snapAssistReady would deliver the prior session's
+    // windowId/screenId to the freshly-registered effect.
+    m_snapAssistPendingWindowId.clear();
+    m_snapAssistPendingScreenId.clear();
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)

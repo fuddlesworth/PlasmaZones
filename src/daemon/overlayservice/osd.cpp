@@ -246,25 +246,17 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
     qCInfo(lcOverlay) << "Disabled OSD: reason=" << reason << "screen=" << screenId;
 }
 
-void OverlayService::hideLayoutOsd()
-{
-    // Per-screen destroy: only destroy the sending window's screen so multi-screen
-    // desktop-switch OSDs don't kill each other mid-animation.
-    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
-    if (senderWindow) {
-        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().layoutOsdWindow == senderWindow) {
-                destroyLayoutOsdWindow(it.key());
-                return;
-            }
-        }
-    }
-    // Fallback: no sender (direct call) — destroy all
-    const QStringList osdScreenIds = m_screenStates.keys();
-    for (const QString& sid : osdScreenIds) {
-        destroyLayoutOsdWindow(sid);
-    }
-}
+// hideLayoutOsd / hideNavigationOsd (formerly Q_SLOTS connected to the QML
+// dismissed() signal) are intentionally gone. The OSD dismiss path is now
+// entirely QML-driven: the hide animation's ScriptAction flips _osdDismissed
+// which re-evaluates the Window flags binding to include
+// Qt.WindowTransparentForInput, and that's the whole mechanism. No C++ work
+// runs on dismiss, so destroying the QQuickWindow (and paying the blocking
+// ~QQuickWindow Vulkan teardown) never happens in the hot path. Windows are
+// pre-warmed by warmUpLayoutOsd() / warmUpNavigationOsd() and stay alive
+// for the daemon's lifetime; destroyLayoutOsdWindow() / destroy-
+// NavigationOsdWindow() are only invoked from screen-removal / shutdown
+// cleanup paths.
 
 void OverlayService::warmUpLayoutOsd()
 {
@@ -337,10 +329,9 @@ void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* phy
         return;
     }
 
-    auto layoutOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutOsd()));
-    if (!layoutOsdConn) {
-        qCWarning(lcOverlay) << "Failed to connect dismissed signal for layout OSD on screen" << screenId;
-    }
+    // No dismissed()-signal connection: L3 v2 handles dismiss entirely in QML
+    // (see LayoutOsd.qml hideAnimation → ScriptAction → _osdDismissed = true).
+    // The C++ side no longer needs to react per-dismiss; the window is reused.
     window->setVisible(false);
     m_screenStates[screenId].layoutOsdWindow = window;
     m_screenStates[screenId].layoutOsdPhysScreen = physScreen;
@@ -503,29 +494,12 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                       << "highlightedZones=" << highlightedZoneIds;
 }
 
-void OverlayService::hideNavigationOsd()
-{
-    // Per-screen destroy (same rationale as hideLayoutOsd).
-    auto* senderWindow = qobject_cast<QQuickWindow*>(sender());
-    if (senderWindow) {
-        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-            if (it.value().navigationOsdWindow == senderWindow) {
-                m_lastNavigationActionKey.clear();
-                m_lastNavigationScreenId.clear();
-                destroyNavigationOsdWindow(it.key());
-                return;
-            }
-        }
-    }
-    // Clear dedup state so the next show isn't spuriously suppressed within 200ms
-    m_lastNavigationActionKey.clear();
-    m_lastNavigationScreenId.clear();
-    // Fallback: no sender (direct call) — destroy all
-    const QStringList navScreenIds = m_screenStates.keys();
-    for (const QString& sid : navScreenIds) {
-        destroyNavigationOsdWindow(sid);
-    }
-}
+// hideNavigationOsd removed together with hideLayoutOsd — see the comment
+// block above warmUpLayoutOsd() for the rationale. The m_lastNavigation*
+// dedup state is cleared implicitly by the 200 ms timeout check in
+// showNavigationOsd() itself (the OSD's ~1000 ms dismiss timer is far
+// longer than the dedup window, so any dismiss is always past the
+// relevant timeout by the time it fires — no manual clear needed).
 
 void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)
 {
@@ -549,10 +523,7 @@ void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen*
         return;
     }
 
-    auto navOsdConn = connect(window, SIGNAL(dismissed()), this, SLOT(hideNavigationOsd()));
-    if (!navOsdConn) {
-        qCWarning(lcOverlay) << "Failed to connect dismissed signal for navigation OSD on screen" << screenId;
-    }
+    // No dismissed()-signal connection: L3 v2 handles dismiss in QML.
     window->setVisible(false);
     m_screenStates[screenId].navigationOsdWindow = window;
     m_screenStates[screenId].navigationOsdPhysScreen = physScreen;

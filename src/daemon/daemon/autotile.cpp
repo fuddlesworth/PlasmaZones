@@ -6,6 +6,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../../core/layoutmanager.h"
+#include "../../core/layoutworker/layoutcomputeservice.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -21,6 +22,7 @@
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../autotile/TilingAlgorithm.h"
 #include <QGuiApplication>
+#include <memory>
 #include <QScreen>
 
 namespace PlasmaZones {
@@ -472,15 +474,33 @@ void Daemon::processPendingGeometryUpdates()
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.
+    // Async: each screen's computation runs on the worker thread. A barrier
+    // tracks pending (screenId, layoutId) pairs explicitly so unrelated
+    // geometriesComputed emissions (e.g. from an async layoutAssigned firing
+    // mid-barrier) cannot drain it prematurely.
     const int desktop = m_virtualDesktopManager->currentDesktop();
     const QString activity =
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
     QSet<QUuid> processedLayouts;
+
+    // Key = (screenId, layoutId). Matches what geometriesComputed carries.
+    using PendingKey = QPair<QString, QUuid>;
+    auto pending = std::make_shared<QSet<PendingKey>>();
+
+    auto requestFor = [this, pending](Layout* layout, const QString& screenId, const QRectF& geom) {
+        if (!layout) {
+            return;
+        }
+        if (m_layoutComputeService->requestRecalculate(layout, screenId, geom)) {
+            pending->insert({screenId, layout->id()});
+        }
+    };
+
     for (const QString& screenId : screenIds) {
         Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
-            layout->recalculateZoneGeometries(GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            requestFor(layout, screenId, GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
         }
     }
@@ -493,20 +513,42 @@ void Daemon::processPendingGeometryUpdates()
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
-                layout->recalculateZoneGeometries(
-                    GeometryUtils::effectiveScreenGeometry(layout, Utils::screenIdentifier(primaryScreen)));
+                QString primaryId = Utils::screenIdentifier(primaryScreen);
+                requestFor(layout, primaryId, GeometryUtils::effectiveScreenGeometry(layout, primaryId));
             }
         }
     }
 
     m_geometryUpdatePending = false;
 
-    // Single overlay update after all geometry recalculations
-    m_overlayService->updateGeometries();
+    if (pending->isEmpty()) {
+        m_overlayService->updateGeometries();
+        m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+        m_reapplyGeometriesTimer.start();
+        return;
+    }
 
-    // Ask effect to reapply snapped window positions (next event loop when REAPPLY_DELAY_MS is 0).
-    m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-    m_reapplyGeometriesTimer.start();
+    // Completion barrier: only fire the continuation once every pending
+    // (screen, layout) pair has reported back. Unrelated emissions for
+    // keys not in `pending` are ignored, so a concurrent async caller
+    // cannot drain our barrier prematurely. We key off the signal's
+    // `layoutId` (not `layout->id()`), so the barrier still drains when
+    // a tracked Layout is destroyed mid-compute — LayoutComputeService
+    // emits with layout==nullptr in that case.
+    auto conn = std::make_shared<QMetaObject::Connection>();
+    *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+                    [this, pending, conn](const QString& screenId, const QUuid& layoutId, Layout* /*layout*/) {
+                        const PendingKey key{screenId, layoutId};
+                        if (!pending->remove(key)) {
+                            return; // not one of ours
+                        }
+                        if (pending->isEmpty()) {
+                            QObject::disconnect(*conn);
+                            m_overlayService->updateGeometries();
+                            m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+                            m_reapplyGeometriesTimer.start();
+                        }
+                    });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.

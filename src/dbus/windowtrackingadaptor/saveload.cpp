@@ -3,6 +3,8 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
+#include "persistenceworker.h"
+#include "../../config/configbackend_json.h"
 #include "../../core/interfaces.h"
 #include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
@@ -204,8 +206,20 @@ void WindowTrackingAdaptor::saveState()
         tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
     }
 
-    tracking.reset(); // release group before sync
-    m_sessionBackend->sync();
+    tracking.reset(); // release group before write
+
+    // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
+    // to the persistence worker thread. The main thread returns immediately.
+    // The dirty flag is cleared asynchronously when the worker's
+    // writeCompleted(success=true) signal lands (see ctor wiring) — so a
+    // failed write is retried on the next timer tick instead of silently
+    // losing state.
+    auto* jsonBackend = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get());
+    if (jsonBackend && m_persistenceWorker) {
+        m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
+    } else {
+        m_sessionBackend->sync(); // fallback: synchronous write
+    }
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
@@ -222,6 +236,15 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
     if (m_saveTimer && m_saveTimer->isActive()) {
         m_saveTimer->stop();
     }
+
+    // Destroy the persistence worker first. Its destructor posts a quit to
+    // the I/O thread and waits, which drains any pending async writes. If we
+    // did the sync write before draining, a previously-queued async snapshot
+    // could land after and silently clobber the fresh shutdown save.
+    m_persistenceWorker.reset();
+
+    // With the worker gone, saveState() falls through to the synchronous
+    // m_sessionBackend->sync() path — guaranteed to be the last write.
     saveState();
 
     // Block all subsequent saves. During Qt object destruction after stop(),
