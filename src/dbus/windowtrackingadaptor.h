@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "../core/windowregistry.h"
 #include "../core/windowtrackingservice.h"
 #include <dbus_types.h>
 #include <QObject>
@@ -89,6 +90,22 @@ public:
     }
 
     /**
+     * @brief Wire up the compositor-facing WindowRegistry.
+     *
+     * The registry is populated by the kwin-effect bridge via the new
+     * setWindowMetadata() D-Bus method and cleared via the existing
+     * windowClosed() path. Consumers (WTS, AutotileEngine, SnapEngine) query
+     * it for current appId instead of parsing composite windowId strings.
+     *
+     * Must be set before start. Not owned.
+     *
+     * Also forwards the pointer to the underlying WindowTrackingService and
+     * subscribes to metadataChanged so we can refresh tracking that mirrors
+     * the app class (e.g. last-used-zone class tag).
+     */
+    void setWindowRegistry(WindowRegistry* registry);
+
+    /**
      * @brief Set engine references for routing operations per-screen
      *
      * The adaptor routes IWindowEngine operations to the correct engine:
@@ -114,6 +131,29 @@ public:
     }
 
 public Q_SLOTS:
+    /**
+     * @brief Register or update metadata for a live window.
+     *
+     * Called by the kwin-effect bridge on window-added and on every mutation
+     * of the window's app class (windowClassChanged / desktopFileNameChanged).
+     * The @p instanceId is the compositor-supplied stable token (KWin's
+     * internalId(); Hyprland's address on a future bridge). It is opaque to
+     * the daemon — never parsed.
+     *
+     * @param instanceId  Opaque compositor handle (stable for window lifetime)
+     * @param appId       Current app class (mutable)
+     * @param desktopFile Current desktop file name (mutable, may be empty)
+     * @param title       Current caption (mutable, may be empty)
+     *
+     * Emits no D-Bus signal. Populates the daemon's WindowRegistry; consumers
+     * subscribe to the registry's Qt signals directly.
+     *
+     * Safe to call unconditionally on every observation — no-op if metadata
+     * is unchanged.
+     */
+    void setWindowMetadata(const QString& instanceId, const QString& appId, const QString& desktopFile,
+                           const QString& title);
+
     // Window snapping notifications (from KWin script)
     void windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId);
     void windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
@@ -238,6 +278,27 @@ public Q_SLOTS:
      * @param screenId Screen where the window is located
      */
     void windowActivated(const QString& windowId, const QString& screenId);
+
+    /**
+     * Push current frame geometry for a window into the daemon's shadow.
+     *
+     * Called by the compositor plugin on windowFrameGeometryChanged (debounced
+     * at ~50ms per window). The shadow is read by daemon-local shortcut
+     * handlers (float toggle, etc.) so they can compose pre-tile geometry
+     * without a round-trip back to the effect.
+     *
+     * @param windowId Window identifier
+     * @param rect Current frame geometry in compositor coordinates
+     */
+    void setFrameGeometry(const QString& windowId, int x, int y, int width, int height);
+
+    /**
+     * Query the daemon's shadow for a window's last-known frame geometry.
+     *
+     * Returns an invalid QRect if the window has not pushed a geometry yet.
+     * Used by daemon-local shortcut handlers.
+     */
+    QRect frameGeometry(const QString& windowId) const;
 
     /**
      * Update cursor screen when cursor crosses to a different monitor
@@ -432,8 +493,12 @@ public Q_SLOTS:
     void restoreWindowSize();
 
     /**
-     * @brief Toggle float state for the focused window
-     * @note Emits toggleWindowFloatRequested for effect to call toggleFloatForWindow
+     * @brief Toggle float state for the focused window (daemon-local)
+     *
+     * Reads the active windowId + screen from m_lastActive*, reads fresh
+     * frame geometry from the shadow, stores pre-tile geometry,
+     * and calls toggleFloatForWindow to dispatch to the engine. No kwin-effect
+     * round-trip, no stale local cache reads.
      */
     void toggleWindowFloat();
 
@@ -820,12 +885,6 @@ Q_SIGNALS:
 
     // Navigation signals (daemon → effect)
     /**
-     * @brief Request to toggle float state for the focused window
-     * @param shouldFloat true to float (exclude), false to unfloat
-     */
-    void toggleWindowFloatRequested(bool shouldFloat);
-
-    /**
      * @brief Request KWin effect to collect unsnapped windows and snap them all
      * @param screenId Screen to operate on
      */
@@ -1018,6 +1077,12 @@ private:
     QString m_lastActiveScreenId; // From windowActivated (focused window's screen)
     QString m_lastCursorScreenId; // From cursorScreenChanged (cursor's screen)
 
+    // Frame-geometry shadow: populated via setFrameGeometry D-Bus pushes from
+    // the compositor plugin. Entries are removed on windowClosed. Used by
+    // daemon-local shortcut handlers (float toggle, etc.) so they can read
+    // fresh geometry without round-tripping through the effect.
+    QHash<QString, QRect> m_frameGeometry;
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Dependencies (kept for signal connections and settings access)
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -1036,6 +1101,11 @@ private:
     // Business logic service
     // ═══════════════════════════════════════════════════════════════════════════════
     WindowTrackingService* m_service = nullptr;
+
+    // Shared registry: compositor-supplied instance id → current metadata.
+    // Not owned (daemon root owns it). Populated via setWindowMetadata D-Bus calls
+    // and cleared from the windowClosed path.
+    QPointer<WindowRegistry> m_windowRegistry;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Persistence (adaptor responsibility: session.json save/load)

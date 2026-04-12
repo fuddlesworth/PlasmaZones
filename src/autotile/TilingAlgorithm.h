@@ -12,6 +12,7 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QVector>
+#include <functional>
 
 namespace PlasmaZones {
 
@@ -81,15 +82,25 @@ struct TilingParams
  * @brief Build per-window metadata from a TilingState
  *
  * Shared between AutotileEngine (for TilingParams construction) and
- * ScriptedAlgorithm (for lifecycle hook JS state). Extracts appId via
- * Utils::extractAppId() and identifies the focused window.
+ * ScriptedAlgorithm (for lifecycle hook JS state). Identifies the focused
+ * window; app class is resolved via the caller-supplied @p appIdResolver so
+ * live class lookups hit the WindowRegistry instead of parsing stale strings.
  *
- * @param state Current tiling state (may be null — returns empty vector)
- * @param windowCount Number of windows to process (may differ from state->tiledWindowCount())
+ * TilingState::m_windowOrder contains bare instance ids; parsing them as
+ * "appId|uuid" would hand hex strings to user-authored JS algorithms. The
+ * resolver lets each caller plug in whatever knows the live class for a
+ * given instance id (typically AutotileEngine::currentAppIdFor bound as a
+ * lambda, which consults the shared WindowRegistry).
+ *
+ * @param state         Current tiling state (may be null — returns empty vector)
+ * @param windowCount   Number of windows to process (may differ from state->tiledWindowCount())
+ * @param appIdResolver Function that maps an instance id to its current class.
+ *                      Pass a no-op returning QString() to keep info.appId empty.
  * @param[out] focusedIndex Set to the index of the focused window, or -1
  * @return WindowInfo vector (empty if state is null; size may be less than windowCount)
  */
-QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount, int& focusedIndex);
+QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
+                                     const std::function<QString(const QString&)>& appIdResolver, int& focusedIndex);
 
 /**
  * @brief Abstract base class for tiling algorithms
@@ -130,6 +141,42 @@ public:
     // Prevent copying (QObject rule)
     TilingAlgorithm(const TilingAlgorithm&) = delete;
     TilingAlgorithm& operator=(const TilingAlgorithm&) = delete;
+
+    /**
+     * @brief Inject a resolver that maps an opaque instance id to its live app class.
+     *
+     * Used by algorithms that need per-window class info (currently only
+     * ScriptedAlgorithm, which exposes class to user-authored JS). Built-in
+     * geometry algorithms don't care and ignore the resolver.
+     *
+     * Injected by AutotileEngine::setWindowRegistry() so every algorithm
+     * returned from AlgorithmRegistry::algorithm() is seeded with the live
+     * registry's lookup before any lifecycle hook fires. The resolver is a
+     * std::function rather than a raw WindowRegistry* so tests can plug in
+     * canned answers without constructing a real registry.
+     *
+     * Thread safety: setter must be called from the main thread; the resolver
+     * itself is invoked only from algorithm methods that already run on the
+     * main thread (buildJsState / onWindowAdded / etc.).
+     */
+    void setAppIdResolver(std::function<QString(const QString&)> resolver)
+    {
+        m_appIdResolver = std::move(resolver);
+    }
+
+    /**
+     * @brief Access the current resolver. Returns a no-op (empty-string) resolver
+     *        if none has been injected.
+     */
+    std::function<QString(const QString&)> appIdResolver() const
+    {
+        if (m_appIdResolver) {
+            return m_appIdResolver;
+        }
+        return [](const QString&) {
+            return QString();
+        };
+    }
 
     /**
      * @brief Human-readable name of the algorithm
@@ -393,6 +440,12 @@ public:
     virtual bool hasCustomParam(const QString& name) const;
 
 protected:
+    // Resolver from instance id → live app class. Set by AutotileEngine via
+    // setAppIdResolver after constructing/looking up the algorithm. Default
+    // is an empty std::function; appIdResolver() returns a no-op lambda in
+    // that case so call sites can invoke it unconditionally.
+    std::function<QString(const QString&)> m_appIdResolver;
+
     /**
      * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling
      *

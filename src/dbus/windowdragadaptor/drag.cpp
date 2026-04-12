@@ -67,13 +67,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_modifierConflictWarned = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
+    m_lastLoggedActivationActive = false;
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
     m_prevTriggerHeld = false;
     m_overlayShown = false;
-    m_overlayScreen = nullptr;
-    m_overlayScreenId.clear();
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
     m_lastCursorY = 0;
@@ -141,8 +140,6 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
-            m_overlayScreen = nullptr;
-            m_overlayScreenId.clear();
         }
         return nullptr;
     }
@@ -152,23 +149,25 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
         if (m_overlayShown && m_overlayService) {
             m_overlayService->hide();
             m_overlayShown = false;
-            m_overlayScreen = nullptr;
-            m_overlayScreenId.clear();
         }
         return nullptr;
     }
 
+    // Call showAtPosition unconditionally on every tick. OverlayService
+    // short-circuits on same-physical-monitor re-shows (compares extracted
+    // physical ids of m_currentOverlayScreenId vs the cursor's effective id),
+    // so rapid drag ticks that stay on one monitor cost only two findScreen
+    // calls and a string extract — no Vulkan churn. The adaptor-side
+    // m_overlayScreenId comparator that used to gate this was fed by the
+    // same jittery effective-id source, and its string mismatches triggered
+    // a second path into initializeOverlay even when the cursor hadn't
+    // left the physical monitor. Dropping the comparator makes
+    // OverlayService the single source of truth for "is a re-init needed".
     if (!m_overlayShown) {
-        m_overlayService->showAtPosition(x, y);
-        m_overlayShown = true;
-        m_overlayScreen = outScreen;
-        m_overlayScreenId = outScreenId;
-    } else if (m_settings && !m_settings->showZonesOnAllMonitors() && m_overlayScreenId != outScreenId) {
-        // Cursor moved to different screen (physical or virtual) - switch overlay to follow (fixes #136)
-        m_overlayService->showAtPosition(x, y);
-        m_overlayScreen = outScreen;
-        m_overlayScreenId = outScreenId;
+        qCInfo(lcDbusWindow) << "prepareHandlerContext: show overlay at" << x << y << "screen=" << outScreenId;
     }
+    m_overlayService->showAtPosition(x, y);
+    m_overlayShown = true;
 
     auto* layout = m_layoutManager->resolveLayoutForScreen(outScreenId);
     if (!layout) {
@@ -208,10 +207,9 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     }
 
     if (m_overlayShown && m_overlayService) {
+        qCInfo(lcDbusWindow) << "hideOverlayAndClearZoneState: hide overlay triggerHeld=false";
         m_overlayService->hide();
         m_overlayShown = false;
-        m_overlayScreen = nullptr;
-        m_overlayScreenId.clear();
     }
     if (m_zoneDetector) {
         m_zoneDetector->clearHighlights();
@@ -433,6 +431,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         activationActive = m_activationToggled;
     } else {
         activationActive = zoneActivationHeld;
+    }
+
+    // Log activation-state transitions so overlay show/hide churn can be traced.
+    if (activationActive != m_lastLoggedActivationActive) {
+        qCInfo(lcDbusWindow) << "dragMoved activationActive" << m_lastLoggedActivationActive << "->" << activationActive
+                             << "mods=" << static_cast<int>(mods) << "buttons=" << mouseButtons
+                             << "triggerHeld=" << triggerHeld << "toggleActivation=" << m_settings->toggleActivation();
+        m_lastLoggedActivationActive = activationActive;
     }
 
     // Check all configured zone span triggers (multi-bind support)

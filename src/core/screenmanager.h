@@ -199,6 +199,15 @@ public:
 
     /**
      * @brief Get available geometry (minus panels) for a virtual or physical screen
+     *
+     * @warning Before the first panel D-Bus query completes, this returns the full
+     * (panel-included) rect because the availability cache is still empty. Call sites
+     * that run at daemon startup — especially those that compute zone geometry for
+     * initial autotile or snap-restore — must gate on @c isPanelGeometryReady() or
+     * defer their work until @c panelGeometryReady fires. Without that gate, the first
+     * tile/restore batch computes zones against the unreserved screen rect and the
+     * daemon emits a correction one frame later, producing a visible jump at login.
+     *
      * @param screenId Virtual or physical screen identifier
      * @return Available geometry in global compositor coordinates
      */

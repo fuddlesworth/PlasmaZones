@@ -63,6 +63,15 @@ public:
     explicit AutotileAdaptor(AutotileEngine* engine, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
+    /**
+     * @brief Number of windowOpened entries waiting for panel geometry
+     *
+     * Observable state for tests and for support-bundle output: returns the size
+     * of the deferred windowOpened queue (see windowsOpenedBatch rationale).
+     * Always zero once @c panelGeometryReady has fired.
+     */
+    int pendingWindowOpensCount() const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Property Accessors
     // ═══════════════════════════════════════════════════════════════════════════
@@ -340,6 +349,14 @@ Q_SIGNALS:
 private Q_SLOTS:
     void onWindowsTiled(const QString& tileRequestsJson);
 
+    /**
+     * @brief Flush any windowOpened events that were deferred waiting for panel geometry
+     *
+     * Connected to ScreenManager::panelGeometryReady. See the rationale comment on
+     * windowsOpenedBatch() for why deferral is needed.
+     */
+    void flushPendingWindowOpens();
+
 private:
     /**
      * @brief Check if engine is available, logging warning if not
@@ -355,7 +372,32 @@ private:
      */
     bool ensureEngineAndConfig(const char* methodName) const;
 
+    /**
+     * @brief Forward a single window-opened notification to the engine
+     *
+     * Shared tail between windowOpened(), windowsOpenedBatch(), and
+     * flushPendingWindowOpens() so all three paths validate arguments and
+     * invoke the engine identically.
+     */
+    void dispatchWindowOpened(const WindowOpenedEntry& entry);
+
+    /**
+     * @brief Decide whether an incoming windowOpened must be deferred
+     *
+     * Returns true if panel geometry is not yet ready (the caller should queue the
+     * entry and return). Lazily connects flushPendingWindowOpens() on first deferral.
+     * Exposed as a helper so windowOpened() and windowsOpenedBatch() share the gate.
+     */
+    bool deferUntilPanelReady();
+
     AutotileEngine* m_engine = nullptr;
+
+    // Window-opened events received before the first panel D-Bus query completed.
+    // Processing them immediately would compute zones against the unreserved screen rect
+    // (the s_availableGeometryCache in ScreenManager is still empty), so we queue them
+    // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
+    WindowOpenedList m_pendingOpens;
+    bool m_pendingOpensListenerInstalled = false;
 
 public:
     /**

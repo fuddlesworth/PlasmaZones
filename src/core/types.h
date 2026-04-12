@@ -88,7 +88,9 @@ struct PLASMAZONES_EXPORT DragInfo
         return !windowId.isEmpty();
     }
 
-    // Note: Use Utils::extractAppId(dragInfo.windowId) to get app ID
+    // Note: Use WindowTrackingService::currentAppIdFor(dragInfo.windowId) or
+    // PlasmaZonesEffect::appIdForInstance() to get the live app class.
+    // windowId is the opaque compositor instance id — never parse it.
 };
 
 /**

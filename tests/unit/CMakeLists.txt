@@ -14,6 +14,7 @@ endmacro()
 # core/ — Window Identity Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_window_identity core/test_window_identity.cpp)
+pz_add_test(test_window_registry core/test_window_registry.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — Window Tracking Tests (snap/unsnap, floating)
@@ -53,6 +54,10 @@ add_test(NAME test_wts_virtual_migration COMMAND test_wts_virtual_migration)
 add_executable(test_wts_crossmode_float core/test_wts_crossmode_float.cpp)
 target_link_libraries(test_wts_crossmode_float PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_crossmode_float COMMAND test_wts_crossmode_float)
+
+add_executable(test_wts_registry_integration core/test_wts_registry_integration.cpp)
+target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
@@ -108,6 +113,7 @@ pz_add_test(test_autotile_engine_overflow autotile/test_autotile_engine_overflow
 pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -273,6 +279,10 @@ add_executable(test_wta_convenience dbus/test_wta_convenience.cpp)
 target_link_libraries(test_wta_convenience PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wta_convenience COMMAND test_wta_convenience)
 
+add_executable(test_wta_reactive_metadata dbus/test_wta_reactive_metadata.cpp)
+target_link_libraries(test_wta_reactive_metadata PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wta_reactive_metadata COMMAND test_wta_reactive_metadata)
+
 add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_schema COMMAND test_settings_schema)
@@ -288,6 +298,22 @@ add_executable(test_dbus_adaptor_routing dbus/test_dbus_adaptor_routing.cpp)
 target_link_libraries(test_dbus_adaptor_routing PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                           plasmazones_compositor_common)
 add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
+
+# Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
+# for the stale-VS-geometry race: entries arriving before the first panel
+# D-Bus query must be deferred until ScreenManager::panelGeometryReady fires.
+add_executable(test_autotile_adaptor_panel_gate dbus/test_autotile_adaptor_panel_gate.cpp)
+target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
+                                                                 plasmazones_core)
+add_test(NAME test_autotile_adaptor_panel_gate COMMAND test_autotile_adaptor_panel_gate)
+
+# Truth-table guard for WindowDragAdaptor::computeDragPolicy — pins the
+# (snap, autotile, context) matrix so the daemon's drag routing decision
+# can't drift relative to the compositor plugin's deleted local caches.
+# Regression guard for #310.
+add_executable(test_drag_policy dbus/test_drag_policy.cpp)
+target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
@@ -336,6 +362,8 @@ set(_all_tests
     test_zone_shader_item test_overlay_helpers
     test_wta_convenience test_settings_schema test_compositor_bridge
     test_dbus_adaptor_routing
+    test_autotile_adaptor_panel_gate
+    test_drag_policy
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

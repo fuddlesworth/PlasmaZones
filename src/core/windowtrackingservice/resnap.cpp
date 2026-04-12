@@ -34,7 +34,9 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
     auto tryAppendRestore = [this, &result](const ResnapEntry* entry) {
         auto preTile = preTileGeometry(entry->windowId);
         if (!preTile) {
-            preTile = preTileGeometry(Utils::extractAppId(entry->windowId));
+            // Second attempt: look up by current class so a renamed window
+            // still finds its persisted pre-tile geometry.
+            preTile = preTileGeometry(currentAppIdFor(entry->windowId));
         }
         if (preTile && preTile->isValid()) {
             ZoneAssignmentEntry restoreEntry;

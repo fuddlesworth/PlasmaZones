@@ -3,25 +3,21 @@
 
 /**
  * @file test_window_identity.cpp
- * @brief Unit tests for window identity extraction and collision detection
+ * @brief Unit tests for Utils::extractAppId() — the legacy composite parser.
  *
- * Bug context: Windows were auto-snapping to wrong zones because extractAppId()
- * creates non-unique identifiers for windows of the same application class.
- * This is now BY DESIGN -- the daemon uses consumption queues to handle
- * multiple instances of the same app.
+ * IMPORTANT: the runtime wire format is no longer "appId|uuid" composite —
+ * the kwin-effect bridge sends opaque instance ids (bare UUIDs).
+ * Utils::extractAppId() is preserved as a fallback inside
+ * WindowTrackingService::currentAppIdFor() for unit tests and code paths
+ * that don't have a WindowRegistry attached — on a bare instance id the
+ * helper is a passthrough (no '|' separator to split on).
  *
- * Window ID format: "appId|internalUuid"
- * App ID format: "appId" (UUID stripped)
- *
- * Example collision (by design):
- *   Window A: "org.kde.konsole|uuid1" -> appId: "org.kde.konsole"
- *   Window B: "org.kde.konsole|uuid2" -> appId: "org.kde.konsole"
- *   Both windows share the same appId; consumption queues handle disambiguation.
- *
- * This test suite validates:
- * 1. extractAppId() behavior for various window ID formats
- * 2. Detection of same-class window collisions (by design)
- * 3. Edge cases in window ID parsing
+ * This file validates the parser's behavior on both legacy composites and
+ * bare instance ids so that the compat fallback stays well-defined. It does
+ * NOT describe how production looks up app class for a window — for that,
+ * see WindowTrackingService::currentAppIdFor() and
+ * PlasmaZonesEffect::appIdForInstance(), which query the live
+ * WindowRegistry.
  */
 
 #include <QTest>
@@ -104,42 +100,30 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Window identity collision (by design -- handled by consumption queues)
+    // Wire format: bare instance id passthrough
+    //
+    // These cases pin the parser's behavior on the production wire format
+    // (no '|' separator). The helper must return the input unchanged so the
+    // WTS fallback in unit tests can still return something sensible for
+    // lookup-by-string comparisons in the legacy compat path.
     // =====================================================================
 
-    void testSameClassWindowsProduceIdenticalAppIds()
+    void testExtractAppId_bareInstanceId_returnsUnchanged()
     {
-        // BY DESIGN: Two Konsole windows have identical app IDs
-        QString konsole1 = QStringLiteral("org.kde.konsole|uuid-11111");
-        QString konsole2 = QStringLiteral("org.kde.konsole|uuid-22222");
-
-        QString appId1 = extractAppId(konsole1);
-        QString appId2 = extractAppId(konsole2);
-
-        // Same-class windows share the same appId -- consumption queues handle this
-        QEXPECT_FAIL("", "By design: same-class windows share appId, handled by consumption queues", Continue);
-        QVERIFY(appId1 != appId2);
-        QCOMPARE(appId1, QStringLiteral("org.kde.konsole"));
+        // This is what getWindowId() emits in production: a bare KWin UUID.
+        // Parsing it must not throw away data — the helper is a passthrough
+        // when there's no separator.
+        const QString instanceId = QStringLiteral("cef1ba31-3316-4f05-84f5-ef627674b504");
+        QCOMPARE(extractAppId(instanceId), instanceId);
     }
 
-    void testCollisionCountWithMultipleSameClassWindows()
+    void testExtractAppId_legacyComposite_stillParses()
     {
-        // Simulate 5 instances of the same application
-        QStringList windowIds = {
-            QStringLiteral("org.kde.konsole|uuid-11111"), QStringLiteral("org.kde.konsole|uuid-22222"),
-            QStringLiteral("org.kde.konsole|uuid-33333"), QStringLiteral("org.kde.konsole|uuid-44444"),
-            QStringLiteral("org.kde.konsole|uuid-55555")};
-
-        QHash<QString, int> appIdCounts;
-        for (const QString& windowId : windowIds) {
-            QString appId = extractAppId(windowId);
-            appIdCounts[appId]++;
-        }
-
-        // BY DESIGN: All 5 windows map to the same app ID
-        QEXPECT_FAIL("", "By design: all same-class windows share one appId, handled by consumption queues", Continue);
-        QVERIFY(appIdCounts.size() == 5);
-        QCOMPARE(appIdCounts.value(QStringLiteral("org.kde.konsole")), 5);
+        // Legacy callers (disk fixtures from old config files, etc.) may
+        // still carry composite strings. The helper continues to accept
+        // them so migration paths don't silently corrupt data.
+        const QString composite = QStringLiteral("org.kde.kate|old-uuid-55555");
+        QCOMPARE(extractAppId(composite), QStringLiteral("org.kde.kate"));
     }
 
     void testDifferentClassWindowsHaveUniqueAppIds()
@@ -156,62 +140,6 @@ private Q_SLOTS:
         QVERIFY(appKonsole != appDolphin);
         QVERIFY(appDolphin != appKate);
         QVERIFY(appKonsole != appKate);
-    }
-
-    // =====================================================================
-    // Session Persistence Collision Simulation
-    // =====================================================================
-
-    void testSessionRestoreCollisionScenario()
-    {
-        // Simulate session restore with same-class windows
-        // Session 1: User had Konsole window in Zone A
-        QHash<QString, QStringList> persistedAssignments;
-        QString session1Window = QStringLiteral("org.kde.konsole|uuid-11111");
-        QString zone1 = QStringLiteral("zone-uuid-a");
-
-        // Save appId -> zone mapping
-        QString appId = extractAppId(session1Window);
-        persistedAssignments[appId] = QStringList{zone1};
-
-        // Session 2: New Konsole window opens (different UUID, never was snapped)
-        QString session2Window = QStringLiteral("org.kde.konsole|uuid-22222");
-        QString newAppId = extractAppId(session2Window);
-
-        // By design: New window matches the old session's appId
-        // Consumption queues in the daemon handle this correctly
-        QEXPECT_FAIL("", "By design: same appId, consumption queues handle disambiguation", Continue);
-        QVERIFY(!persistedAssignments.contains(newAppId));
-
-        // This is expected -- the daemon uses consumption queues to handle this
-        QString assignedZone = persistedAssignments.value(newAppId).value(0);
-        QCOMPARE(assignedZone, zone1);
-    }
-
-    void testMultipleSessionRestoreConfusion()
-    {
-        // Simulate: User had 3 Konsole windows in zones A, B, C (session 1)
-        // With consumption queues, all 3 would be stored as a list under one appId
-        QHash<QString, QStringList> persistedAssignments;
-
-        // All 3 windows have the same appId - only LAST one is stored in this simple hash!
-        QString konsole1 = QStringLiteral("org.kde.konsole|uuid-11111");
-        QString konsole2 = QStringLiteral("org.kde.konsole|uuid-22222");
-        QString konsole3 = QStringLiteral("org.kde.konsole|uuid-33333");
-
-        QString appId1 = extractAppId(konsole1);
-        QString appId2 = extractAppId(konsole2);
-        QString appId3 = extractAppId(konsole3);
-
-        // Simulate saving: last write wins (in a simple hash; real daemon uses QList)
-        persistedAssignments[appId1] = QStringList{QStringLiteral("zone-a")};
-        persistedAssignments[appId2] = QStringList{QStringLiteral("zone-b")}; // Overwrites zone-a!
-        persistedAssignments[appId3] = QStringList{QStringLiteral("zone-c")}; // Overwrites zone-b!
-
-        // Expected: Only one assignment survives in simple hash (daemon uses list)
-        QEXPECT_FAIL("", "By design: same appId in simple hash, daemon uses consumption queues with QList", Continue);
-        QVERIFY(persistedAssignments.size() == 3);
-        QCOMPARE(persistedAssignments.value(QStringLiteral("org.kde.konsole")).value(0), QStringLiteral("zone-c"));
     }
 
     // =====================================================================

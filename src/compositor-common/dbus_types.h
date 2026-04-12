@@ -321,6 +321,62 @@ struct SwapTargetResult
     QString targetZoneId;
 };
 
+/// Drag policy — daemon-authoritative decision about how a drag should be
+/// handled. Returned from WindowDragAdaptor::beginDrag at drag start and
+/// re-emitted via dragPolicyChanged if the cursor crosses a screen boundary
+/// that flips the mode (autotile↔snap). The compositor plugin uses this to
+/// decide whether to stream dragMoved, grab keyboard, show an overlay, and
+/// whether to apply an immediate float transition for an autotile drag.
+///
+/// Wire: (bbbbbss)  —  5 bools + 2 strings
+///
+/// Single source of truth replaces the effect-side
+/// m_dragBypassedForAutotile / m_cachedZoneSelectorEnabled cache that went
+/// stale after every settings reload.
+struct DragPolicy
+{
+    bool streamDragMoved = false; ///< effect should send dragMoved D-Bus ticks
+    bool showOverlay = false; ///< daemon will show zone overlay during this drag
+    bool grabKeyboard = false; ///< effect should grab keyboard (Escape cancel)
+    bool captureGeometry = false; ///< effect should capture pre-drag geometry
+    bool immediateFloatOnStart = false; ///< effect should call handleDragToFloat(immediate) at drag start
+    QString screenId; ///< screen the drag started/currently is on (virtual-screen-aware)
+    QString bypassReason; ///< empty if snap path; "autotile_screen" / "snapping_disabled" / "context_disabled"
+};
+
+/// Drag outcome — daemon-authoritative decision about what to apply at drag
+/// end. Returned from WindowDragAdaptor::endDrag. The compositor plugin
+/// executes exactly the action specified; no further decisions on the effect
+/// side. Wire: (issiiiisb)  —  int action + 2 strings + 4 ints + string + bool
+struct DragOutcome
+{
+    enum Action : int {
+        NoOp = 0, ///< drag produced no state change (e.g. cancelled with no prior snap)
+        ApplyFloat = 1, ///< autotile path: mark window floating at current position
+        ApplySnap = 2, ///< snap path: apply snap geometry to a zone
+        RestoreSize = 3, ///< drag-out unsnap: restore original size, keep current position
+        CancelSnap = 4, ///< snap cancelled via Escape
+        NotifyDragOutUnsnap = 5 ///< drag ended without activation trigger on a previously-snapped window
+    };
+
+    int action = NoOp;
+    QString windowId;
+    QString targetScreenId;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    QString zoneId; ///< populated for ApplySnap
+    bool skipAnimation = false;
+    bool requestSnapAssist = false; ///< true → plugin should show snap-assist window picker
+    EmptyZoneList emptyZones; ///< candidate zones for snap assist (empty unless requestSnapAssist)
+
+    QRect toRect() const
+    {
+        return QRect(x, y, width, height);
+    }
+};
+
 /// D-Bus struct for restore navigation result: (bbiiii)
 struct RestoreTargetResult
 {
@@ -395,6 +451,10 @@ QDBusArgument& operator<<(QDBusArgument& arg, const RestoreTargetResult& e);
 const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e);
 QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e);
 const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e);
+QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p);
+const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p);
+QDBusArgument& operator<<(QDBusArgument& arg, const DragOutcome& o);
+const QDBusArgument& operator>>(const QDBusArgument& arg, DragOutcome& o);
 
 // Compile-time verification that all D-Bus struct types have streaming operators.
 // If you add a new struct above and forget the operator<</>> declarations, the
@@ -419,6 +479,8 @@ static_assert(HasDBusStreaming<CycleTargetResult>::value, "CycleTargetResult mis
 static_assert(HasDBusStreaming<SwapTargetResult>::value, "SwapTargetResult missing QDBusArgument operators");
 static_assert(HasDBusStreaming<RestoreTargetResult>::value, "RestoreTargetResult missing QDBusArgument operators");
 static_assert(HasDBusStreaming<PreTileGeometryEntry>::value, "PreTileGeometryEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<DragPolicy>::value, "DragPolicy missing QDBusArgument operators");
+static_assert(HasDBusStreaming<DragOutcome>::value, "DragOutcome missing QDBusArgument operators");
 
 /// Call once at startup (daemon and plugin) to register types with Qt D-Bus
 void registerDBusTypes();
@@ -457,3 +519,5 @@ Q_DECLARE_METATYPE(PlasmaZones::SwapTargetResult)
 Q_DECLARE_METATYPE(PlasmaZones::RestoreTargetResult)
 Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryEntry)
 Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryList)
+Q_DECLARE_METATYPE(PlasmaZones::DragPolicy)
+Q_DECLARE_METATYPE(PlasmaZones::DragOutcome)

@@ -87,7 +87,9 @@ PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
     const auto& map = m_service->preTileGeometries();
     for (auto it = map.constBegin(); it != map.constEnd(); ++it) {
         PreTileGeometryEntry entry;
-        entry.appId = Utils::extractAppId(it.key());
+        // V3 added WindowRegistry-based appId lookup — use currentAppIdFor to
+        // get the live class name (handles mid-session app renames).
+        entry.appId = m_service->currentAppIdFor(it.key());
         entry.x = it.value().geometry.x();
         entry.y = it.value().geometry.y();
         entry.width = it.value().geometry.width();

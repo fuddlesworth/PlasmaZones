@@ -196,10 +196,44 @@ void WindowTrackingAdaptor::restoreWindowSize()
 
 void WindowTrackingAdaptor::toggleWindowFloat()
 {
-    qCInfo(lcDbusWindow) << "toggleWindowFloat";
-    // Delegate to toggleFloatForWindow which already handles the full flow
-    // (pre-snap geometry, applyGeometryRequested, navigationFeedback)
-    Q_EMIT toggleWindowFloatRequested(true);
+    // Daemon-local float toggle: no round-trip through the kwin-effect. We
+    // already know the active window (windowActivated pushes), its screen,
+    // and its current frame geometry (setFrameGeometry shadow).
+    //
+    // Previously this emitted toggleWindowFloatRequested, the effect received
+    // it, walked KWin's stacking order to find the active window, did two
+    // fire-and-forget D-Bus calls back into us, and finally we routed to the
+    // engine. That chain stalled under any D-Bus backpressure and produced
+    // the "pressed Meta-F, nothing happens, seconds later it toggles"
+    // symptom from discussion #310.
+    if (m_lastActiveWindowId.isEmpty() || m_lastActiveScreenId.isEmpty()) {
+        qCInfo(lcDbusWindow) << "toggleWindowFloat: no active window in shadow";
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_active_window"), QString(),
+                                  QString(), m_lastActiveScreenId);
+        return;
+    }
+
+    const QString windowId = m_lastActiveWindowId;
+    const QString screenId = m_lastActiveScreenId;
+    qCInfo(lcDbusWindow) << "toggleWindowFloat: windowId=" << windowId << "screen=" << screenId;
+
+    // Capture pre-tile geometry from the shadow so unfloat restores to the
+    // user's last position. The shadow is refreshed on every
+    // windowFrameGeometryChanged the effect sees (debounced to 50ms).
+    //
+    // Skipping the store when the shadow has no entry is safe: that means
+    // this window hasn't had its geometry pushed yet (freshly opened and
+    // never moved), so there's nothing meaningful to preserve. The engine
+    // will use the window's current frame geometry on the effect side when
+    // it applies the outcome.
+    const QRect geo = frameGeometry(windowId);
+    if (geo.isValid()) {
+        const bool wasFloating = m_service && m_service->isWindowFloating(windowId);
+        storePreTileGeometry(windowId, geo.x(), geo.y(), geo.width(), geo.height(), screenId,
+                             /*overwrite=*/wasFloating);
+    }
+
+    toggleFloatForWindow(windowId, screenId);
 }
 
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
@@ -564,7 +598,12 @@ bool WindowTrackingAdaptor::isWindowExcluded(const QString& windowId, const QStr
         return false;
     }
 
-    const QString appId = Utils::extractAppId(windowId);
+    // Current class, not first-seen — matches rules against the window's
+    // live appId so mid-session mutations don't bypass exclusions on fresh
+    // operations. (Per feedback_class_change_exclusion.md, existing snapped
+    // state is NOT re-evaluated — only new decision points, like this one.)
+    // m_service is constructed in the adaptor ctor and is never null here.
+    const QString appId = m_service->currentAppIdFor(windowId);
     for (const QString& excluded : m_settings->excludedApplications()) {
         if (Utils::appIdMatches(appId, excluded)) {
             qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by app rule:" << excluded;

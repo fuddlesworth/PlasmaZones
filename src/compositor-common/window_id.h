@@ -31,6 +31,23 @@ inline QString extractAppId(const QString& windowId)
 }
 
 /**
+ * @brief Extract the stable KWin instance identifier (UUID) from a full window ID.
+ *
+ * Legacy composite format: "appId|internalId". The instance id is stable for
+ * the window's lifetime; the appId is mutable (Electron/CEF apps rebroadcast
+ * WM_CLASS mid-session). Per discussion #271, runtime keys use the bare
+ * instance id — this helper exists for legacy fixtures and compat paths.
+ */
+inline QString extractInstanceId(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return windowId;
+    }
+    int sep = windowId.indexOf(QLatin1Char('|'));
+    return (sep >= 0) ? windowId.mid(sep + 1) : windowId;
+}
+
+/**
  * @brief Derive short name from app ID for icon/app display
  * Reverse-DNS: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
  * Simple name: "firefox" → as-is

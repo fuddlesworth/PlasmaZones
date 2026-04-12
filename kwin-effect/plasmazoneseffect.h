@@ -97,8 +97,13 @@ private Q_SLOTS:
                                     const QString& screenId, bool sizeOnly);
     void slotActivateWindowRequested(const QString& windowId);
 
-    // Float toggle: daemon handles full flow via toggleFloatForWindow
-    void slotToggleWindowFloatRequested(bool shouldFloat);
+    // Float toggle is entirely daemon-local — no effect-side slot needed.
+
+    // Daemon tells the effect the drag routing has flipped mid-drag (cursor
+    // crossed a virtual-screen boundary that changes autotile↔snap mode).
+    // Effect applies the transition: entering/exiting autotile bypass,
+    // canceling snap overlay, etc.
+    void slotDragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
     // Daemon-driven batch operations (rotate, resnap)
     void slotApplyGeometriesBatch(const WindowGeometryList& geometries, const QString& action);
@@ -110,8 +115,6 @@ private Q_SLOTS:
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
-    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                             const PlasmaZones::EmptyZoneList& emptyZones);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                                int height);
 
@@ -121,12 +124,66 @@ private Q_SLOTS:
     // Daemon lifecycle
     void slotDaemonReady();
 
+public:
+    /**
+     * @brief Window identification — returns the opaque instance id.
+     *
+     * This is KWin's internalId() as a UUID string, which the daemon uses
+     * as its runtime primary key. Populates m_appIdByInstance as a
+     * side-effect so appIdForInstance() can answer quickly for subsequent
+     * callers.
+     */
+    QString getWindowId(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Extract the compositor-supplied stable instance token.
+     *
+     * Alias for getWindowId() — kept so callers that want to be explicit
+     * about wanting the instance id can say so. Both return the same bare
+     * UUID string.
+     */
+    QString getWindowInstanceId(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Current app class for a window, read live from KWin.
+     *
+     * Prefers desktopFileName; falls back to normalized windowClass. Mutable —
+     * KWin emits windowClassChanged / desktopFileNameChanged when the class
+     * updates (Electron/CEF apps).
+     */
+    QString getWindowAppId(KWin::EffectWindow* w) const;
+
+    /**
+     * @brief Current app class for a windowId string (instance id).
+     *
+     * Accepts either a bare instance id or a legacy "appId|uuid" composite —
+     * normalized via effectExtractInstanceId.
+     *
+     * Resolution order:
+     *   1. Cached class for this instance id (m_appIdByInstance, populated
+     *      by getWindowId()).
+     *   2. Walk the stacking order to find a live EffectWindow with that
+     *      internalId(), then call getWindowAppId(). Result is cached.
+     *   3. Return empty if the window isn't currently known.
+     *
+     * A mid-session class mutation (Electron/CEF apps) returns the latest
+     * value instead of a frozen first-seen parse.
+     */
+    QString appIdForInstance(const QString& windowId);
+
 private:
     // Window management
     void setupWindowConnections(KWin::EffectWindow* w);
 
-    // Window identification
-    QString getWindowId(KWin::EffectWindow* w) const;
+    /**
+     * @brief Push current metadata for a window to the daemon's WindowRegistry.
+     *
+     * Safe to call unconditionally on every observation — the daemon de-dupes.
+     * Called from slotWindowAdded for initial registration, and from
+     * windowClassChanged / desktopFileNameChanged handlers for live updates.
+     */
+    void pushWindowMetadata(KWin::EffectWindow* w);
+
     bool shouldHandleWindow(KWin::EffectWindow* w) const;
     bool isTileableWindow(KWin::EffectWindow* w) const;
 
@@ -150,10 +207,16 @@ private:
 
     // D-Bus communication
 
-    void callDragStarted(const QString& windowId, const QRectF& geometry);
-    void callDragMoved(const QString& windowId, const QPointF& cursorPos, Qt::KeyboardModifiers mods, int mouseButtons);
-    void callDragStopped(KWin::EffectWindow* window, const QString& windowId,
-                         const QString& snapDragStartScreenId = {});
+    /**
+     * @brief Fire endDrag and apply the returned DragOutcome.
+     *        Single entry point for drag-end dispatch,
+     *        regardless of autotile bypass or snap path.
+     *
+     * @param window Dragged window (QPointer-protected in the async reply)
+     * @param windowId Window identifier
+     * @param cancelled True if the drag was cancelled (Escape / external)
+     */
+    void callEndDrag(KWin::EffectWindow* window, const QString& windowId, bool cancelled);
     void callCancelSnap();
     void callResolveWindowRestore(KWin::EffectWindow* window, std::function<void()> onComplete = nullptr);
     void connectNavigationSignals();
@@ -347,6 +410,32 @@ private:
     };
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
 
+    // instance id → last observed appId. Populated lazily by getWindowId()
+    // and pushWindowMetadata() so appIdForInstance() can answer without
+    // walking the stacking order. Entries are removed in slotWindowClosed().
+    //
+    // This mirrors (but is independent of) the daemon's WindowRegistry — the
+    // effect needs its own local view because appIdForInstance() is called
+    // on hot paths (findWindowById, drag/snap decision logic) and shouldn't
+    // round-trip over D-Bus.
+    QHash<QString, QString> m_appIdByInstance;
+
+    // Policy returned from the daemon's beginDrag for the currently-active
+    // drag. Async-populated a few ms after the
+    // drag starts; until then, conservative defaults apply (snap-path
+    // with streaming) so the worst-case UX is a brief zone-overlay flash
+    // rather than a dead drag. Cleared at drag end.
+    DragPolicy m_currentDragPolicy;
+
+    // Frame-geometry shadow push state. Effect debounces windowFrameGeometryChanged
+    // signals per-window to ~50ms and pushes the latest geometry to the daemon via
+    // WindowTracking::setFrameGeometry. Populates the daemon's frame-geometry
+    // shadow used by daemon-local shortcut handlers (float toggle, etc.) so they
+    // can read fresh geometry without a round-trip.
+    QHash<QString, QRect> m_pendingFrameGeometry;
+    QTimer* m_frameGeometryFlushTimer = nullptr;
+    void flushPendingFrameGeometry();
+
     void updateWindowBorder(const QString& windowId, KWin::EffectWindow* w);
     void removeWindowBorder(const QString& windowId);
     void updateAllBorders();
@@ -411,14 +500,8 @@ private:
      */
     bool detectActivationAndGrab();
 
-    /**
-     * @brief Send the deferred dragStarted D-Bus call to the daemon
-     *
-     * Called lazily on first activation detection or zone selector need.
-     * Uses stored pending drag info from the DragTracker::dragStarted signal.
-     * No-op if already sent for the current drag.
-     */
-    void sendDeferredDragStarted();
+    // beginDrag is called unconditionally at drag-start; the deferred-send
+    // optimization is obsolete now that the daemon always knows about the drag.
 
     // User-configured exclusion lists — cached from daemon for shouldHandleWindow() gating.
     // The daemon also enforces these for keyboard navigation, but the effect needs them

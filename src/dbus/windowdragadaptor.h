@@ -75,50 +75,62 @@ public:
 
 public Q_SLOTS:
     /**
-     * Called when window drag starts
-     * @param windowId Unique window identifier
-     * @param x Window X position
-     * @param y Window Y position
-     * @param width Window width
-     * @param height Window height
-     * @param mouseButtons Qt::MouseButtons flags for the button(s) that started the drag (for activation-by-mouse)
-     * @note Parameters are double because KWin QML DBusCall sends JS numbers as D-Bus doubles
+     * Begin a drag session — daemon-authoritative policy decision.
+     *
+     * Replaces dragStarted as the canonical drag-begin entry point. Compositor
+     * plugin calls this synchronously at drag start and uses the returned
+     * DragPolicy to decide whether to stream cursor updates, grab keyboard,
+     * apply an immediate float transition (autotile), etc. Single source of
+     * truth replaces the effect-side m_dragBypassedForAutotile cache that
+     * went stale after every settings reload.
+     *
+     * Internally, for snap-path drags, this also performs the same drag-start
+     * setup as the legacy dragStarted method (original geometry, pre-parsed
+     * triggers, was-snapped check). For autotile-bypass or
+     * snapping-disabled drags, it only stores m_draggedWindowId so later
+     * updateDragCursor / endDrag calls match.
+     *
      */
-    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
+    PlasmaZones::DragPolicy beginDrag(const QString& windowId, int frameX, int frameY, int frameWidth, int frameHeight,
+                                      const QString& startScreenId, int mouseButtons);
 
     /**
-     * Called while window is being dragged (cursor moved)
-     * @param windowId Unique window identifier
-     * @param cursorX Cursor X position (int32 - matches KWin's QPoint)
-     * @param cursorY Cursor Y position (int32 - matches KWin's QPoint)
-     * @param modifiers Qt keyboard modifiers from KWin (int32 - Qt::KeyboardModifiers flags)
-     * @param mouseButtons Qt::MouseButtons currently held (int32). Enables activation-by-mouse: hold this button during
-     * drag to show overlay (same as modifier).
+     * End a drag session — daemon-authoritative action.
+     *
+     * Replaces dragStopped as the canonical drag-end entry point. Returns a
+     * DragOutcome that the compositor plugin applies verbatim — no further
+     * decisions on the plugin side. Covers the full dispatch matrix:
+     *
+     *   - autotile_screen bypass → ApplyFloat at the release cursor
+     *   - snapping_disabled / context_disabled bypass → NoOp
+     *   - snap path → delegates to legacy dragStopped and packages its
+     *     out-params into the outcome (ApplySnap / RestoreSize / NoOp /
+     *     with snap-assist empty zones if requested)
+     *
+     * Must be called after beginDrag for the same windowId. If beginDrag
+     * was never called (or the ids mismatch), returns NoOp.
      */
-    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+    PlasmaZones::DragOutcome endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
+                                     bool cancelled);
+
+    /**
+     * Update drag cursor position — fire-and-forget counterpart to
+     * beginDrag / endDrag. Replaces dragMoved as the canonical hot-path
+     * entry point during a drag. Throttled 30Hz by the compositor plugin.
+     *
+     * For snap-path drags: delegates to legacy dragMoved internally to
+     * keep overlay/zone-detection state current.
+     *
+     * For bypass drags: no-op, but still consulted for cursor screen
+     * detection — if the cursor crosses a virtual-screen boundary that
+     * would change the policy (autotile↔snap), the daemon emits
+     * dragPolicyChanged and the plugin reacts by switching its local
+     * drag mode. This replaces the effect-side cross-VS flip logic.
+     */
+    void updateDragCursor(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
 
     /** Forward mouse wheel delta to zone selector for scrolling during drag. */
     void selectorScrollWheel(int angleDeltaY);
-
-    /**
-     * Called when window drag ends
-     * @param windowId Unique window identifier
-     * @param cursorX Cursor X at release (global; used for release screen detection)
-     * @param cursorY Cursor Y at release (global)
-     * @param modifiers Qt::KeyboardModifiers at release.
-     * @param mouseButtons Qt::MouseButtons at release. With modifiers, used for SnapAssistTriggers.
-     * @param snapX Output: X position for window
-     * @param snapY Output: Y position for window
-     * @param snapWidth Output: Width for window
-     * @param snapHeight Output: Height for window
-     * @param shouldApplyGeometry Output: True if KWin should apply the geometry
-     * @param releaseScreenIdOut Output: Screen ID where the drag was released, for auto-fill on drop
-     * @param restoreSizeOnly Output: If true with shouldApplyGeometry, effect applies only width/height at current
-     * position (drag-to-unsnap)
-     */
-    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
-                     int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
-                     QString& releaseScreenIdOut, bool& restoreSizeOnly);
 
     /**
      * Cancel current snap operation (Escape key)
@@ -157,13 +169,16 @@ Q_SIGNALS:
     void restoreSizeDuringDragChanged(const QString& windowId, int width, int height);
 
     /**
-     * Emitted asynchronously after a successful snap when Snap Assist is active.
-     * Carries the list of empty zones on the release screen so the effect can
-     * show a window picker without blocking the fast dragStopped reply path.
-     * The effect discards this signal if a new drag has already started.
+     * Daemon has detected a policy change for an active drag
+     * (typically because the cursor crossed a virtual-screen
+     * boundary that flips autotile↔snap mode). Plugin reacts by applying
+     * the transition: entering/exiting autotile bypass, canceling snap
+     * overlay, calling handleDragToFloat, etc.
+     *
+     * Replaces the effect-side cross-VS flip logic that used a local cache
+     * and could go stale after settings reloads.
      */
-    void snapAssistReady(const QString& windowId, const QString& releaseScreenId,
-                         const PlasmaZones::EmptyZoneList& emptyZones);
+    void dragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)
@@ -188,6 +203,58 @@ private:
     // Parse QVariantList triggers into POD structs for repeated use
     static QVector<ParsedTrigger> parseTriggers(const QVariantList& triggers);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Legacy drag state-machine helpers (formerly public D-Bus slots). Now
+    // called internally by beginDrag / updateDragCursor / endDrag in
+    // drag_protocol.cpp. They stay as regular C++ member functions to
+    // preserve the intricate snap-path overlay/zone logic without having
+    // to rewrite it into the new protocol wrappers. The D-Bus surface no
+    // longer exposes them — external clients go through the new protocol.
+    // ═══════════════════════════════════════════════════════════════════════
+    void dragStarted(const QString& windowId, double x, double y, double width, double height, int mouseButtons);
+    void dragMoved(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons);
+    void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
+                     int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
+                     QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
+                     PlasmaZones::EmptyZoneList& emptyZonesOut);
+
+    // Promote the pending snap-path drag (stashed by beginDrag) to an
+    // active drag by running the legacy dragStarted setup. Called from
+    // updateDragCursor once the activation trigger is first held.
+    // Returns true if promotion happened or the drag was already active.
+    bool activateSnapDragIfNeeded(int modifiers, int mouseButtons);
+
+    // Discard any pending snap-path drag state. Called from endDrag and
+    // handleWindowClosed to prevent leftover pending state leaking into
+    // the next drag.
+    void clearPendingSnapDragState();
+
+public:
+    /**
+     * @brief Pure policy decision — no side effects, static so tests can
+     *        invoke it without constructing a full adaptor.
+     *
+     * Consulted from daemon-authoritative state. The result is what
+     * beginDrag returns to the compositor plugin and what is emitted on
+     * dragPolicyChanged during cross-VS cursor crossings.
+     *
+     * Precedence: context_disabled → autotile_screen → snapping_disabled →
+     * snap path (canonical). First match wins so the bypassReason string is
+     * stable across coincidental disables.
+     *
+     * @param settings Settings interface (snappingEnabled, zone-span triggers, etc.)
+     * @param autotileEngine May be nullptr in tests that don't exercise autotile
+     * @param windowId Dragged window (used for the isWindowTracked lookup
+     *                 that decides immediateFloatOnStart)
+     * @param screenId Virtual-screen-aware screen ID at drag start
+     * @param curDesktop Current virtual desktop (for context-disabled check)
+     * @param curActivity Current activity (for context-disabled check)
+     */
+    static PlasmaZones::DragPolicy computeDragPolicy(const ISettings* settings, const AutotileEngine* autotileEngine,
+                                                     const QString& windowId, const QString& screenId, int curDesktop,
+                                                     const QString& curActivity);
+
+private:
     // Helper: Find screen containing a point (returns primary screen if not found)
     QScreen* screenAtPoint(int x, int y) const;
 
@@ -224,7 +291,27 @@ private:
 
     // Current drag state
     QString m_draggedWindowId;
+    // Bypass reason returned from the last beginDrag call.
+    // Read in endDrag to decide which branch to take — autotile bypass
+    // gets a synthesized ApplyFloat outcome, context/snap disabled gets NoOp,
+    // and snap path delegates to the legacy dragStopped. Cleared by endDrag.
+    QString m_currentDragBypassReason;
     QRect m_originalGeometry;
+
+    // Pending snap-path drag awaiting first activation. Populated by
+    // beginDrag on the snap path instead of immediately running the full
+    // legacy dragStarted setup — that way updateDragCursor ticks before the
+    // user holds the activation trigger are cheap no-ops (no overlay
+    // show/hide cycle). Promoted to m_draggedWindowId on the first tick
+    // where the activation trigger is held, via activateSnapDragIfNeeded().
+    // Restores the lazy drag-state semantics from before the drag-protocol
+    // refactor — there used to be a sendDeferredDragStarted() latch in the
+    // kwin-effect; the refactor made beginDrag unconditional, so the
+    // laziness now lives on the daemon side.
+    QString m_pendingSnapDragWindowId;
+    QRect m_pendingSnapDragGeometry;
+    int m_pendingSnapDragMouseButtons = 0;
+    bool m_pendingSnapDragWasSnapped = false;
     QString m_currentZoneId;
     QRect m_currentZoneGeometry;
     bool m_snapCancelled = false;
@@ -232,8 +319,6 @@ private:
     bool m_activationToggled = false; // Current toggle state (on/off)
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_overlayShown = false;
-    QScreen* m_overlayScreen = nullptr; // Screen overlay is shown on (single-monitor mode only)
-    QString m_overlayScreenId; // Virtual-aware screen ID for overlay tracking
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;
@@ -258,6 +343,11 @@ private:
     // Last emitted zone geometry (emit only when changed)
     QRect m_lastEmittedZoneGeometry;
     bool m_restoreSizeEmittedDuringDrag = false;
+
+    // Last logged activationActive value — used to emit a log entry only on
+    // true transitions so the drag-overlay churn source can be traced from
+    // journalctl without spamming every tick.
+    bool m_lastLoggedActivationActive = false;
 
     void registerCancelOverlayShortcut();
     void unregisterCancelOverlayShortcut();
