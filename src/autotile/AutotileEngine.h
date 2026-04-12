@@ -17,6 +17,7 @@
 #include <QTimer>
 #include <functional>
 #include <memory>
+#include <optional>
 
 #include "OverflowManager.h"
 #include "core/utils.h"
@@ -812,6 +813,85 @@ public:
      */
     void scheduleRetileForScreen(const QString& screenId);
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Drag-insert preview (trigger-held window drag reorders autotile stack)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Begin a drag-insert preview for a window already tiled on a screen.
+     *
+     * Captures the window's current position so it can be restored on cancel.
+     * While a preview is active, applyTiling() skips emitting geometry for the
+     * dragged window — KWin's interactive move remains in control — but still
+     * animates the other windows shifting to leave a gap at the preview index.
+     *
+     * @return true if the window is tiled on the screen and preview was started.
+     */
+    bool beginDragInsertPreview(const QString& windowId, const QString& screenId);
+
+    /**
+     * @brief Update the target insert index for the active drag preview.
+     *
+     * Moves the dragged window within TilingState to the new index (clamped
+     * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
+     * changed from the last update.
+     */
+    void updateDragInsertPreview(int insertIndex);
+
+    /**
+     * @brief Commit the active drag-insert preview.
+     *
+     * Clears preview state and retiles normally so the dragged window's
+     * geometry is applied (KWin is finishing the interactive move and will
+     * accept the geometry set).
+     */
+    void commitDragInsertPreview();
+
+    /**
+     * @brief Cancel the active drag-insert preview, restoring the original order.
+     */
+    void cancelDragInsertPreview();
+
+    /**
+     * @brief Compute the insert index for a cursor position on an autotile screen.
+     *
+     * Walks the screen's current calculated zones and returns the index of the
+     * first zone that contains the cursor. Returns the last tiled index as a
+     * fallback when the cursor is beyond all zones, or -1 if the screen has no
+     * tiling state. updateDragInsertPreview() clamps to [0, tiledWindowCount()-1],
+     * so returning the last slot is equivalent to "append".
+     *
+     * The dragged window's zone is intentionally NOT excluded from the hit
+     * test: cursor-over-own-zone returns its current index (stable identity),
+     * preventing an oscillating shuffle where moving to a neighbour slot
+     * immediately re-matches under the cursor every dragMoved tick.
+     */
+    int computeDragInsertIndexAtPoint(const QString& screenId, const QPoint& cursorPos) const;
+
+    /**
+     * @brief Query whether a drag-insert preview is currently active.
+     */
+    bool hasDragInsertPreview() const
+    {
+        return m_dragInsertPreview.has_value();
+    }
+
+    /**
+     * @brief Get the window ID of the active drag-insert preview, or empty.
+     */
+    QString dragInsertPreviewWindowId() const
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->windowId : QString();
+    }
+
+    /**
+     * @brief Get the target screen ID of the active drag-insert preview, or empty.
+     */
+    QString dragInsertPreviewScreenId() const
+    {
+        return m_dragInsertPreview ? m_dragInsertPreview->targetScreenId : QString();
+    }
+
     /**
      * @brief Helper to retile a screen after a window operation
      *
@@ -1275,6 +1355,35 @@ private:
     // focus request arrives at KWin AFTER windowsTiled (whose onComplete raises
     // windows in tiling order). Without this, the raise loop buries the new window.
     QString m_pendingFocusWindowId;
+
+    // Drag-insert preview state. When set, applyTiling() filters the dragged
+    // window out of the windowsTiled batch so the KWin interactive move isn't
+    // fought, while the remaining windows animate into their new positions.
+    // Supports three entry modes (captured at begin() time for cancel restoration):
+    //   - Same-screen reorder: window was already tiled/floating on targetScreenId
+    //   - Cross-screen adoption: window was tracked on a different autotile screen
+    //   - Fresh adoption: window was not tracked by the engine at all
+    struct DragInsertPreview
+    {
+        QString windowId;
+        QString targetScreenId;
+        int lastInsertIndex = -1;
+
+        // Prior-state restoration info (used on cancel)
+        bool hadPriorState = false; // True if m_windowToStateKey contained windowId at begin
+        TilingStateKey priorKey; // Key of the prior TilingState (meaningful iff hadPriorState)
+        int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
+        bool priorFloating = false; // Prior floating flag in priorState
+        bool priorSameScreen = false; // priorKey == currentKeyForScreen(targetScreenId)
+
+        // Eviction info (used when the target stack is already at maxWindows
+        // and the dragged window is a new member). The last tiled neighbour
+        // is floated to make room; on cancel the eviction is undone, on
+        // commit the evicted window is sent through the batch-float path so
+        // its pre-tile geometry is restored.
+        QString evictedWindowId;
+    };
+    std::optional<DragInsertPreview> m_dragInsertPreview;
 
     /**
      * @brief Process all pending retiles (fires via QueuedConnection)

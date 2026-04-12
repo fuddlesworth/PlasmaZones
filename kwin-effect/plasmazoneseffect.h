@@ -542,6 +542,7 @@ private:
     bool m_triggersLoaded =
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
+    bool m_cachedAutotileDragInsertToggle = false;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
     int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon

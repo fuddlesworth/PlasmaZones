@@ -114,6 +114,8 @@ pz_add_test(test_autotile_engine_retry autotile/test_autotile_engine_retry.cpp)
 pz_add_test(test_autotile_engine_order_cycling autotile/test_autotile_engine_order_cycling.cpp)
 target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
+pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
+target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -343,6 +345,7 @@ set(_all_tests
     test_autotile_engine_minsize test_autotile_engine_overflow
     test_autotile_engine_retry
     test_autotile_engine_order_cycling
+    test_autotile_drag_insert
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
     test_autotile_ext_overflow
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial

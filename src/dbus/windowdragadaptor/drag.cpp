@@ -40,6 +40,9 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // Pre-parse triggers to avoid QVariantMap unboxing on every dragMoved tick
     m_cachedActivationTriggers = parseTriggers(m_settings->dragActivationTriggers());
     m_cachedZoneSpanTriggers = parseTriggers(m_settings->zoneSpanTriggers());
+    m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    // Ensure no stale preview carries over from a prior drag.
+    cancelDragInsertIfActive();
 
     // Check if snapping is enabled
     if (!m_settings->snappingEnabled()) {
@@ -71,7 +74,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     m_snapCancelled = false;
     m_triggerReleasedAfterCancel = false;
     m_activationToggled = false;
-    m_prevTriggerHeld = false;
+    // Seeded true so the first dragMoved tick can't register a spurious
+    // rising edge when the drag was initiated with the activation trigger
+    // already held (e.g. Alt+Click, where Alt is KWin's move-window modifier
+    // and is also commonly the configured snap activation trigger). The user
+    // must perform a real release→press cycle to toggle.
+    m_prevTriggerHeld = true;
     m_overlayShown = false;
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
@@ -389,6 +397,66 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
 
     // Use pre-parsed triggers (cached on dragStarted) to avoid QVariantMap unboxing per tick.
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
+
+    // ── Autotile drag-insert preview (runs even when m_snapCancelled) ───────
+    // This block is intentionally ABOVE the snap-cancelled early return because
+    // the KWin effect calls callCancelSnap() when the cursor crosses from a snap
+    // screen to an autotile screen mid-drag. That sets m_snapCancelled=true, and
+    // would otherwise starve this block for the entire remainder of the drag.
+    // Autotile drag-insert lives on an independent trigger list, so it should
+    // activate regardless of snap-overlay cancel state.
+    if (m_autotileEngine && m_settings) {
+        const bool rawAutotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
+
+        // Toggle mode: detect rising edge (release→press) to flip insert-active state
+        bool autotileInsertHeld;
+        if (m_settings->autotileDragInsertToggle()) {
+            if (rawAutotileInsertHeld && !m_prevAutotileDragInsertHeld) {
+                m_autotileDragInsertToggled = !m_autotileDragInsertToggled;
+            }
+            m_prevAutotileDragInsertHeld = rawAutotileInsertHeld;
+            autotileInsertHeld = m_autotileDragInsertToggled;
+        } else {
+            autotileInsertHeld = rawAutotileInsertHeld;
+        }
+
+        const QString autotileScreenId = effectiveScreenIdAt(cursorX, cursorY);
+        const bool onAutotileScreen =
+            !autotileScreenId.isEmpty() && m_autotileEngine->isAutotileScreen(autotileScreenId);
+
+        const bool previewActive = m_autotileEngine->hasDragInsertPreview();
+        const QString previewScreenId = m_autotileEngine->dragInsertPreviewScreenId();
+
+        if (autotileInsertHeld && onAutotileScreen) {
+            // Cursor crossed between two autotile screens while the trigger is
+            // held: cancel the old preview before starting a fresh one on the
+            // new screen. Without this the old preview stays stuck on the
+            // departed screen until the trigger is released.
+            if (previewActive && previewScreenId != autotileScreenId) {
+                m_autotileEngine->cancelDragInsertPreview();
+            }
+            if (!m_autotileEngine->hasDragInsertPreview()) {
+                const bool began = m_autotileEngine->beginDragInsertPreview(windowId, autotileScreenId);
+                qCDebug(lcDbusWindow) << "autotile drag-insert preview begin:" << windowId << "on" << autotileScreenId
+                                      << "=>" << began;
+            }
+            if (m_autotileEngine->hasDragInsertPreview()
+                && m_autotileEngine->dragInsertPreviewScreenId() == autotileScreenId) {
+                const int targetIdx =
+                    m_autotileEngine->computeDragInsertIndexAtPoint(autotileScreenId, QPoint(cursorX, cursorY));
+                if (targetIdx >= 0) {
+                    m_autotileEngine->updateDragInsertPreview(targetIdx);
+                }
+                m_lastCursorX = cursorX;
+                m_lastCursorY = cursorY;
+                return;
+            }
+        } else if (previewActive) {
+            // Trigger released or cursor left the autotile screen mid-drag —
+            // cancel the preview so neighbours snap back to their original order.
+            m_autotileEngine->cancelDragInsertPreview();
+        }
+    }
 
     if (m_snapCancelled) {
         // Allow retriggering the overlay after Escape: the user must release the

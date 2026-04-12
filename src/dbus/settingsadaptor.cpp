@@ -199,6 +199,19 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("zoneSpanTriggers")] = QStringLiteral("stringlist");
 
+    // Autotile drag-insert triggers list (multi-bind) — consumed by the KWin
+    // effect so it knows which modifier/mouse-button combos should forward
+    // dragMoved events to the daemon during an autotile-bypassed drag.
+    m_getters[QStringLiteral("autotileDragInsertTriggers")] = [this]() {
+        return QVariant::fromValue(m_settings->autotileDragInsertTriggers());
+    };
+    m_setters[QStringLiteral("autotileDragInsertTriggers")] = [this](const QVariant& v) {
+        m_settings->setAutotileDragInsertTriggers(v.toList());
+        return true;
+    };
+    m_schemas[QStringLiteral("autotileDragInsertTriggers")] = QStringLiteral("stringlist");
+
+    REGISTER_BOOL_SETTING("autotileDragInsertToggle", autotileDragInsertToggle, setAutotileDragInsertToggle)
     REGISTER_BOOL_SETTING("toggleActivation", toggleActivation, setToggleActivation)
     REGISTER_BOOL_SETTING("snappingEnabled", snappingEnabled, setSnappingEnabled)
 

@@ -75,6 +75,7 @@ public:
     PZ_CONFIG_GROUP(tilingAppearanceGroup, "Tiling.Appearance")
     PZ_CONFIG_GROUP(tilingAlgorithmGroup, "Tiling.Algorithm")
     PZ_CONFIG_GROUP(tilingBehaviorGroup, "Tiling.Behavior")
+    PZ_CONFIG_GROUP(tilingBehaviorTriggersGroup, "Tiling.Behavior.Triggers")
     PZ_CONFIG_GROUP(tilingAppearanceColorsGroup, "Tiling.Appearance.Colors")
     PZ_CONFIG_GROUP(tilingAppearanceDecorationsGroup, "Tiling.Appearance.Decorations")
     PZ_CONFIG_GROUP(tilingAppearanceBordersGroup, "Tiling.Appearance.Borders")

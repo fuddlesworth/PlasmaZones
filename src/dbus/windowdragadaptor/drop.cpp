@@ -42,6 +42,17 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         return;
     }
 
+    // ── Autotile drag-insert commit ─────────────────────────────────────────
+    // If a drag-insert preview is live, finalize it: commit the reorder so the
+    // dragged window's final geometry is applied on the next retile. Snapping
+    // logic is skipped entirely — the window's place in the stack IS the drop.
+    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+        m_autotileEngine->commitDragInsertPreview(); // commit, not cancel — drop finalizes the reorder
+        hideOverlayAndSelector();
+        resetDragState();
+        return;
+    }
+
     // Release screen: use cursor position passed from effect (at release time), not last dragMoved.
     // Resolve the effective (virtual-aware) screen ID so zones are calculated against
     // virtual screen bounds, not physical screen bounds.

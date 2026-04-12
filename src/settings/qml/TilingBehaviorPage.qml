@@ -9,6 +9,8 @@ import org.kde.kirigami as Kirigami
 Flickable {
     id: root
 
+    readonly property int triggerPreferredWidth: Kirigami.Units.gridUnit * 16
+
     contentHeight: content.implicitHeight
     clip: true
 
@@ -17,6 +19,79 @@ Flickable {
 
         width: parent.width
         spacing: Kirigami.Units.largeSpacing
+
+        // =================================================================
+        // Triggers Card
+        // =================================================================
+        SettingsCard {
+            Layout.fillWidth: true
+            headerText: i18n("Triggers")
+            collapsible: true
+
+            contentItem: ColumnLayout {
+                spacing: Kirigami.Units.smallSpacing
+
+                SettingsRow {
+                    title: i18n("Always re-insert on drag")
+                    description: i18n("Dynamically insert dragged windows into the autotile stack at the cursor position without requiring a modifier key or mouse button")
+
+                    SettingsSwitch {
+                        id: alwaysReinsertSwitch
+
+                        checked: settingsController.alwaysReinsertIntoStack
+                        accessibleName: i18n("Always re-insert into stack on drag")
+                        onToggled: function(newValue) {
+                            settingsController.alwaysReinsertIntoStack = newValue;
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Hold to re-insert into stack")
+                    description: i18n("Hold a modifier or mouse button while dragging a window to dynamically insert it into the autotile stack at the cursor position")
+                    enabled: !alwaysReinsertSwitch.checked
+                    opacity: enabled ? 1 : 0.4
+
+                    ModifierAndMouseCheckBoxes {
+                        width: root.triggerPreferredWidth
+                        allowMultiple: true
+                        acceptMode: acceptModeAll
+                        triggers: settingsController.autotileDragInsertTriggers
+                        defaultTriggers: settingsController.defaultAutotileDragInsertTriggers
+                        tooltipEnabled: false
+                        onTriggersModified: (triggers) => {
+                            settingsController.autotileDragInsertTriggers = triggers;
+                        }
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Toggle mode")
+                    description: i18n("Tap the re-insert trigger once to activate the stack preview, tap again to deactivate it")
+                    enabled: !alwaysReinsertSwitch.checked
+                    opacity: enabled ? 1 : 0.4
+
+                    SettingsSwitch {
+                        checked: appSettings.autotileDragInsertToggle
+                        accessibleName: i18n("Toggle mode for re-insert into stack")
+                        onToggled: function(newValue) {
+                            appSettings.autotileDragInsertToggle = newValue;
+                        }
+                    }
+
+                }
+
+            }
+
+        }
 
         // =================================================================
         // Behavior Card

@@ -165,6 +165,12 @@ void Daemon::connectDesktopActivity()
         if (m_unifiedLayoutController) {
             m_unifiedLayoutController->setCurrentVirtualDesktop(desktop);
         }
+        // Desktop switch invalidates the TilingStateKey context — cancel any
+        // active drag-insert preview before the engine's desktop changes,
+        // otherwise cancel/commit would operate on the wrong TilingState.
+        if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+            m_autotileEngine->cancelDragInsertPreview();
+        }
         // Pin screens where all autotiled windows are sticky (on all desktops)
         // BEFORE changing the desktop context. This ensures currentKeyForScreen()
         // continues to resolve existing TilingStates for screens managed by the
@@ -283,6 +289,11 @@ void Daemon::connectDesktopActivity()
                     m_layoutManager->setCurrentActivity(activityId);
                     if (m_unifiedLayoutController) {
                         m_unifiedLayoutController->setCurrentActivity(activityId);
+                    }
+                    // Activity switch invalidates the TilingStateKey context — cancel
+                    // any active drag-insert preview before the engine's activity changes.
+                    if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
+                        m_autotileEngine->cancelDragInsertPreview();
                     }
                     // Pin sticky screens before changing activity context
                     if (m_autotileEngine && m_windowTrackingAdaptor) {

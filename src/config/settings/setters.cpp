@@ -26,6 +26,18 @@ void Settings::setDragActivationTriggers(const QVariantList& triggers)
     }
 }
 
+void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
+{
+    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (m_autotileDragInsertTriggers != capped) {
+        m_autotileDragInsertTriggers = capped;
+        Q_EMIT autotileDragInsertTriggersChanged();
+        Q_EMIT settingsChanged();
+    }
+}
+
+SETTINGS_SETTER(bool, AutotileDragInsertToggle, m_autotileDragInsertToggle, autotileDragInsertToggleChanged)
+
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
     if (m_zoneSpanModifier != modifier) {
