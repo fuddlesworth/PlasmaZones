@@ -15,6 +15,8 @@ import org.kde.kirigami as Kirigami
 Window {
     // Note: Accessible properties moved to container (Window doesn't support Accessible)
     // contentWrapper
+    // (No signals — see matching comment in LayoutOsd.qml. The dismiss
+    // mechanism is the _osdDismissed flip in hideAnimation's ScriptAction.)
 
     id: root
 
@@ -139,9 +141,13 @@ Window {
             return i18n("Action completed");
         }
     }
-
-    // Signals
-    signal dismissed()
+    // Dismiss state used for input gating — see identical comment in
+    // LayoutOsd.qml for the full rationale. Short version: we never set
+    // root.visible = false after first show (Qt Vulkan + Wayland layer-shell
+    // can't reliably reinit the swap chain on reshow), so an otherwise
+    // invisible-but-Qt-visible window would eat clicks at its screen position.
+    // Toggling Qt.WindowTransparentForInput via this boolean avoids that.
+    property bool _osdDismissed: true
 
     // Helper function to normalize UUID format for comparison
     // Handles both "{uuid}" and "uuid" formats by stripping braces
@@ -199,24 +205,27 @@ Window {
         // Reset state for fresh animation (animate wrapper, not window)
         contentWrapper.opacity = 0;
         container.scale = 0.8;
+        root._osdDismissed = false;
         root.visible = true;
         showAnimation.start();
         dismissTimer.restart();
     }
 
-    // Hide the OSD with animation
+    // Hide the OSD with animation — see matching comment in LayoutOsd.qml.
     function hide() {
-        // Stop show animation if running
+        if (root._osdDismissed)
+            return ;
+
         showAnimation.stop();
         dismissTimer.stop();
-        // Only hide if visible
-        if (root.visible)
-            hideAnimation.start();
-
+        hideAnimation.start();
     }
 
-    // Window configuration - QPA layer-shell plugin handles overlay behavior on Wayland
-    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus
+    // Window configuration — see identical comment in LayoutOsd.qml. We keep
+    // root.visible == true after the first show for the window's lifetime
+    // and toggle Qt.WindowTransparentForInput via _osdDismissed to release
+    // the input region when the OSD is visually gone.
+    flags: Qt.FramelessWindowHint | Qt.WindowDoesNotAcceptFocus | (root._osdDismissed ? Qt.WindowTransparentForInput : 0)
     color: "transparent"
     // Size based on container (which is inside contentWrapper)
     width: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
@@ -284,8 +293,10 @@ Window {
 
         ScriptAction {
             script: {
-                root.visible = false;
-                root.dismissed();
+                // Do NOT set root.visible = false — see LayoutOsd.qml for
+                // the full rationale. Flip _osdDismissed so the window
+                // flags binding engages Qt.WindowTransparentForInput.
+                root._osdDismissed = true;
             }
         }
 
@@ -343,9 +354,10 @@ Window {
 
         }
 
-        // Click to dismiss
+        // Click to dismiss. Gated on _osdDismissed — see LayoutOsd.qml.
         MouseArea {
             anchors.fill: parent
+            enabled: !root._osdDismissed
             onClicked: root.hide()
         }
 

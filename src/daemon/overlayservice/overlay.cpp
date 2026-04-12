@@ -655,6 +655,8 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
         it->overlayPhysScreen = nullptr;
         it->overlayGeometry = QRect();
         it->overlayGeomConnection = {};
+        // Fresh QQuickWindow on next createOverlayWindow needs a fresh cache.
+        it->labelsTextureHash = 0;
     }
 }
 

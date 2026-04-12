@@ -14,6 +14,7 @@
 #include "../../core/virtualscreen.h"
 #include "../rendering/zonelabeltexturebuilder.h"
 #include <QCursor>
+#include <QHashFunctions>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QMutexLocker>
@@ -38,6 +39,68 @@ constexpr QLatin1String BorderB{"borderB"};
 constexpr QLatin1String BorderA{"borderA"};
 constexpr QLatin1String ShaderBorderRadius{"shaderBorderRadius"};
 constexpr QLatin1String ShaderBorderWidth{"shaderBorderWidth"};
+
+// Hash only the inputs that ZoneLabelTextureBuilder::build actually reads.
+// Highlight state, colors, opacities, etc. do NOT affect the labels texture
+// — they're consumed downstream by the shader uniforms — so they're
+// deliberately excluded from the cache key. Including them would churn the
+// cache on every highlight change and defeat the whole optimization.
+quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, bool showNumbers,
+                                const LabelFontSettings& lfs)
+{
+    // NOTE: inside `namespace PlasmaZones {}` the unqualified name `qHash`
+    // resolves to user-defined overloads (TilingStateKey, LayoutAssignmentKey)
+    // and never falls through to Qt's global `::qHash`. Always fully qualify.
+    //
+    // Mixer is the standard boost::hash_combine / Fibonacci-constant form.
+    // Earlier iterations used (h << 12) + (h >> 4), which has asymmetric and
+    // poor avalanche on the low bits — the standard (h << 6) + (h >> 2)
+    // distribution is well studied and substantially reduces false collision
+    // risk. A collision here means updateLabelsTextureForWindow believes its
+    // inputs are unchanged when they aren't, which displays stale zone-number
+    // labels to the user: silent wrong output, so it's worth the tighter
+    // mixer.
+    size_t h = 0;
+    const auto mix = [&h](size_t v) {
+        h ^= v + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+    };
+    mix(::qHash(static_cast<int>(size.width())));
+    mix(::qHash(static_cast<int>(size.height())));
+    mix(::qHash(static_cast<uint>(showNumbers)));
+    mix(::qHash(static_cast<uint>(lfs.fontColor.rgba())));
+    mix(::qHash(static_cast<uint>(lfs.backgroundColor.rgba())));
+    mix(::qHash(lfs.fontFamily));
+    // fontSizeScale is a qreal — bit-cast through quint64 so sub-integer
+    // differences still distinguish hash entries.
+    quint64 scaleBits = 0;
+    const double scale = lfs.fontSizeScale;
+    std::memcpy(&scaleBits, &scale, sizeof(scaleBits));
+    mix(::qHash(scaleBits));
+    mix(::qHash(static_cast<int>(lfs.fontWeight)));
+    mix(::qHash(static_cast<uint>(lfs.fontItalic)));
+    mix(::qHash(static_cast<uint>(lfs.fontUnderline)));
+    mix(::qHash(static_cast<uint>(lfs.fontStrikeout)));
+    for (const QVariant& zoneVar : patched) {
+        const QVariantMap z = zoneVar.toMap();
+        mix(::qHash(z.value(QLatin1String(JsonKeys::ZoneNumber)).toInt()));
+        // Zone rects in the overlay use qreal; hash the full bit pattern so
+        // sub-pixel geometry changes still produce a distinct key.
+        const double fields[4] = {
+            z.value(QLatin1String(JsonKeys::X)).toDouble(),
+            z.value(QLatin1String(JsonKeys::Y)).toDouble(),
+            z.value(QLatin1String(JsonKeys::Width)).toDouble(),
+            z.value(QLatin1String(JsonKeys::Height)).toDouble(),
+        };
+        for (double f : fields) {
+            quint64 bits = 0;
+            std::memcpy(&bits, &f, sizeof(bits));
+            mix(::qHash(bits));
+        }
+    }
+    // Never return 0 — it's the sentinel for "cache invalid". Collapse the
+    // zero-hash corner case to a fixed non-zero value.
+    return h ? static_cast<quint64>(h) : 1ULL;
+}
 } // namespace
 
 void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
@@ -51,6 +114,44 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
         (m_settings ? m_settings->showZoneNumbers() : true) && (!screenLayout || screenLayout->showZoneNumbers());
     const LabelFontSettings lfs = extractLabelFontSettings(m_settings);
     const QSize size(qMax(1, static_cast<int>(window->width())), qMax(1, static_cast<int>(window->height())));
+
+    // Hash-cache short-circuit.
+    //
+    // Without this, every call rebuilds a fresh QImage at the overlay's full
+    // size (3200×1800 = 23 MB on a 4K monitor) and ships it through
+    // QObject::setProperty, which Qt's QML meta-object layer change-detects
+    // via QVariant::equals → QImage::operator== — a pixel-by-pixel memcmp of
+    // that same 23 MB. The inputs change rarely (only when a zone layout or
+    // font setting changes), so caching by an input hash lets us skip BOTH
+    // the rebuild and the O(pixels) property-write equality check.
+    //
+    // This is what keeps refreshFromIdle() cheap — re-pushing zones after a
+    // mid-drag trigger release hits the cache and costs one hash compute.
+    //
+    // Find the owning PerScreenOverlayState entry. updateZonesForAllWindows
+    // is the only caller and iterates m_screenStates itself, so this lookup
+    // must always succeed — warn + fail loudly otherwise, because a
+    // nullptr state would silently defeat the cache (hash never stored →
+    // next call rebuilds again → wasted 23 MB × 2 per tick).
+    PerScreenOverlayState* state = nullptr;
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        if (it.value().overlayWindow == window) {
+            state = &it.value();
+            break;
+        }
+    }
+    if (!state) {
+        qCWarning(lcOverlay) << "updateLabelsTextureForWindow: window not tracked in m_screenStates — "
+                                "labels-texture cache bypassed";
+        // Continue without caching so rendering stays correct; the user will
+        // see label updates, just without the hot-path optimization.
+    }
+
+    const quint64 newHash = hashLabelsTextureInputs(patched, size, showNumbers, lfs);
+    if (state && state->labelsTextureHash == newHash) {
+        return; // inputs unchanged — skip the 23 MB build and the setProperty equality compare
+    }
+
     QImage labelsImage = ZoneLabelTextureBuilder::build(patched, size, lfs.fontColor, showNumbers, lfs.backgroundColor,
                                                         lfs.fontFamily, lfs.fontSizeScale, lfs.fontWeight,
                                                         lfs.fontItalic, lfs.fontUnderline, lfs.fontStrikeout);
@@ -59,6 +160,9 @@ void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QV
         labelsImage.fill(Qt::transparent);
     }
     window->setProperty("labelsTexture", QVariant::fromValue(labelsImage));
+    if (state) {
+        state->labelsTextureHash = newHash;
+    }
 }
 
 QVariantList OverlayService::buildZonesList(QScreen* screen) const

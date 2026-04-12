@@ -526,6 +526,21 @@ public:
     virtual void highlightZones(const QStringList& zoneIds) = 0;
     virtual void clearHighlight() = 0;
 
+    // Mid-drag idle: blank the overlay's shader output (clear zones + highlights)
+    // WITHOUT destroying the underlying QQuickWindow. Used when a drag's activation
+    // trigger is released mid-drag. The full hide() path pays a Vulkan swap-chain
+    // teardown that blocks the main thread (~QQuickWindow waits on the scene graph
+    // render thread), which — combined with modifier-key thrash during a drag —
+    // stalled D-Bus dispatch long enough for kwin-effect endDrag calls to time out.
+    // Callers must pair with refreshFromIdle() before the overlay needs to render
+    // zones again.
+    virtual void setIdleForDragPause() = 0;
+
+    // Counterpart to setIdleForDragPause(): re-push the current zone data to
+    // overlay windows so the shader starts drawing zones again. Cheap because
+    // the labels-texture build path is hash-cached on unchanged inputs.
+    virtual void refreshFromIdle() = 0;
+
     // Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
     virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;

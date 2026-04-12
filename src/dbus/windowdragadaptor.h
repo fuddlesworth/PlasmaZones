@@ -290,6 +290,11 @@ private:
     void handleMultiZoneModifier(int x, int y);
     void hideOverlayAndClearZoneState();
 
+    // Mid-drag trigger release: clear zone state and blank the overlay's shader
+    // output WITHOUT destroying overlay windows. See the call site in dragMoved
+    // and the rationale comment in IOverlayService::setIdleForDragPause().
+    void clearOverlayForTriggerRelease();
+
     IOverlayService* m_overlayService;
     IZoneDetector* m_zoneDetector;
     LayoutManager* m_layoutManager; // Concrete type for signal connections
@@ -338,6 +343,11 @@ private:
     bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_overlayShown = false;
+    // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
+    // (trigger released, but the drag is still live). Windows stay alive;
+    // only the shader output is cleared. Cleared when the overlay shows zones
+    // again (refreshFromIdle) or when the drag ends.
+    bool m_overlayIdled = false;
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;

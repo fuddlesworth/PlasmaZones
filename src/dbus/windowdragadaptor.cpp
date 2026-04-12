@@ -418,6 +418,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         m_overlayService->hide();
         m_overlayShown = false;
     }
+    m_overlayIdled = false;
 
     // Hide zone selector and clear selection
     if (m_zoneSelectorShown && m_overlayService) {
@@ -460,6 +461,7 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
+    m_overlayIdled = false;
 }
 
 void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId)

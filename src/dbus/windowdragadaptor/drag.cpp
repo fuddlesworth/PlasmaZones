@@ -81,6 +81,12 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // must perform a real release→press cycle to toggle.
     m_prevTriggerHeld = true;
     m_overlayShown = false;
+    // m_overlayIdled is NOT reset here — endDrag / dragStopped / compositor
+    // reconnect all route through resetDragState() (windowdragadaptor.cpp)
+    // which clears it, so any new drag landing here from the normal lifecycle
+    // starts with m_overlayIdled already false. Leaving it alone here avoids
+    // a redundant assignment and documents that the reset belongs to the
+    // END of the previous drag, not the START of this one.
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
     m_lastCursorY = 0;
@@ -149,6 +155,11 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
             m_overlayService->hide();
             m_overlayShown = false;
         }
+        // Crosses real hide(): the overlay window is destroyed, so the "blanked
+        // but alive" invariant that m_overlayIdled documents is broken. Clear
+        // it so a later activation-return doesn't call refreshFromIdle() on a
+        // dead surface.
+        m_overlayIdled = false;
         return nullptr;
     }
 
@@ -158,6 +169,7 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
             m_overlayService->hide();
             m_overlayShown = false;
         }
+        m_overlayIdled = false;
         return nullptr;
     }
 
@@ -206,10 +218,14 @@ Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScre
 void WindowDragAdaptor::hideOverlayAndClearZoneState()
 {
     // Fast path: if overlay isn't shown and zone state is already clear, skip all work.
-    // dragMoved calls this on every poll tick when no activation trigger is held, so
-    // avoiding redundant clearHighlights()/clearHighlight() calls (which may touch QML
-    // objects) prevents daemon event-loop congestion and D-Bus back-pressure on the
-    // compositor thread (see discussion #167).
+    //
+    // NOTE the asymmetry with clearOverlayForTriggerRelease()'s fast path:
+    // this method is the full-destroy variant (called from drag end /
+    // compositor reconnect / window closed), so it keys on m_overlayShown,
+    // not m_overlayIdled. When idled, m_overlayShown is true by design
+    // (the window is still alive), so we correctly proceed to the real
+    // hide() call and destroy — which is what the idle state's consumers
+    // want at real drag end anyway.
     if (!m_overlayShown && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
         return;
     }
@@ -231,6 +247,55 @@ void WindowDragAdaptor::hideOverlayAndClearZoneState()
     m_currentZoneGeometry = QRect();
     m_currentMultiZoneGeometry = QRect();
     m_paintedZoneIds.clear();
+    m_overlayIdled = false;
+}
+
+void WindowDragAdaptor::clearOverlayForTriggerRelease()
+{
+    // Mid-drag trigger release. The user let go of the activation modifier,
+    // but the drag is still live — the overlay must visually go away, but the
+    // backing QQuickWindow must STAY ALIVE. Destroying the window on every
+    // trigger toggle pays a Vulkan swap-chain teardown (~QQuickWindow blocks
+    // on the scene graph render thread) plus a labels-texture rebuild on the
+    // next show. With modifier-key thrashing mid-drag, these stacked on the
+    // main thread and stalled D-Bus dispatch long enough for kwin-effect's
+    // endDrag to time out ("daemon unresponsive") and queued shortcut events
+    // to deliver in a microsecond burst when the thread finally drained.
+    //
+    // Compare to hideOverlayAndClearZoneState() which IS destructive — that
+    // path runs on actual drag end / compositor reconnect / dragged-window
+    // closed.
+    //
+    // Intentional side effect: we clear m_currentZoneId / the zone geometry
+    // state alongside the visual blank. If the user then drops the window
+    // while the trigger is still released, dragStopped captures an empty
+    // zone and the window lands at its release position with no snap. This
+    // matches the activation-trigger contract — "hold the trigger to snap,
+    // release to float-drop" — and is the same behavior the legacy
+    // destructive hide path produced. Intentional, not a regression.
+
+    // Fast path: already idled and zone state already clear. dragMoved still
+    // calls us on every tick while the trigger is released, so this hot loop
+    // must be cheap.
+    if (m_overlayIdled && m_currentZoneId.isEmpty() && !m_isMultiZoneMode && m_paintedZoneIds.isEmpty()) {
+        return;
+    }
+
+    if (m_overlayService) {
+        m_overlayService->setIdleForDragPause();
+    }
+    if (m_zoneDetector) {
+        m_zoneDetector->clearHighlights();
+    }
+
+    m_currentZoneId.clear();
+    m_currentAdjacentZoneIds.clear();
+    m_isMultiZoneMode = false;
+    m_currentZoneGeometry = QRect();
+    m_currentMultiZoneGeometry = QRect();
+    m_paintedZoneIds.clear();
+    m_overlayIdled = true;
+    // NOTE: m_overlayShown intentionally left true — the window is still alive.
 }
 
 void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
@@ -509,6 +574,19 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         m_lastLoggedActivationActive = activationActive;
     }
 
+    // Resume the overlay out of its mid-drag idle state whenever the
+    // activation trigger is currently held AND we're currently idled,
+    // regardless of whether this was the tick that logged the transition.
+    // Keeping this independent of the logging predicate above means a
+    // missed transition log (or a coalesced dragMoved) can still refresh
+    // the overlay. refreshFromIdle() is cheap when inputs are unchanged —
+    // L2's labels-texture hash cache skips the 23 MB QImage rebuild, and
+    // the QVariantList zones push is small.
+    if (activationActive && m_overlayIdled && m_overlayService) {
+        m_overlayService->refreshFromIdle();
+        m_overlayIdled = false;
+    }
+
     // Check all configured zone span triggers (multi-bind support)
     const bool zoneSpanModifierHeld = anyTriggerHeld(m_cachedZoneSpanTriggers, mods, mouseButtons);
 
@@ -550,11 +628,14 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
             handleMultiZoneModifier(cursorX, cursorY);
         }
     } else {
-        // No modifier: hide overlay, clear painted zones, allow zone selector
+        // No modifier: blank overlay shader output + clear painted zones.
+        // CRITICAL: do NOT destroy the overlay window here — we're mid-drag.
+        // Destroying on every trigger toggle caused multi-second D-Bus stalls.
+        // See clearOverlayForTriggerRelease() for the full rationale.
         if (!m_paintedZoneIds.isEmpty()) {
             m_paintedZoneIds.clear();
         }
-        hideOverlayAndClearZoneState();
+        clearOverlayForTriggerRelease();
         checkZoneSelectorTrigger(cursorX, cursorY);
     }
 
