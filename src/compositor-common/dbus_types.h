@@ -12,6 +12,30 @@
 
 namespace PlasmaZones {
 
+/**
+ * @brief Compile-time check that a type has QDBusArgument streaming operators.
+ *
+ * Use in adaptor headers to catch missing operator<</>/>> definitions at build
+ * time rather than hitting a runtime "demarshalling function failed" crash.
+ *
+ * @code
+ *   static_assert(HasDBusStreaming<MyEntry>::value,
+ *       "MyEntry needs QDBusArgument operator<< and operator>> — see dbus_types.h");
+ * @endcode
+ */
+template<typename T, typename = void>
+struct HasDBusStreaming : std::false_type
+{
+};
+
+template<typename T>
+struct HasDBusStreaming<T,
+                        std::void_t<decltype(std::declval<QDBusArgument&>() << std::declval<const T&>()),
+                                    decltype(std::declval<const QDBusArgument&>() >> std::declval<T&>())>>
+    : std::true_type
+{
+};
+
 /// D-Bus struct for batch geometry entries: (siiii)
 struct WindowGeometryEntry
 {
@@ -313,6 +337,25 @@ struct RestoreTargetResult
     }
 };
 
+/// D-Bus struct for pre-tile geometry entries: (siiiiis)
+/// Replaces the JSON blob previously returned by getPreTileGeometriesJson.
+struct PreTileGeometryEntry
+{
+    QString appId;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    QString screenId;
+
+    QRect toRect() const
+    {
+        return QRect(x, y, width, height);
+    }
+};
+
+using PreTileGeometryList = QList<PreTileGeometryEntry>;
+
 // QDBusArgument streaming operators (implemented in dbus_types.cpp)
 QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e);
 const QDBusArgument& operator>>(const QDBusArgument& arg, WindowGeometryEntry& e);
@@ -350,6 +393,32 @@ QDBusArgument& operator<<(QDBusArgument& arg, const SwapTargetResult& e);
 const QDBusArgument& operator>>(const QDBusArgument& arg, SwapTargetResult& e);
 QDBusArgument& operator<<(QDBusArgument& arg, const RestoreTargetResult& e);
 const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e);
+QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e);
+const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e);
+
+// Compile-time verification that all D-Bus struct types have streaming operators.
+// If you add a new struct above and forget the operator<</>> declarations, the
+// build will fail here with a clear message instead of crashing at runtime.
+static_assert(HasDBusStreaming<WindowGeometryEntry>::value, "WindowGeometryEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<TileRequestEntry>::value, "TileRequestEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<SnapAllResultEntry>::value, "SnapAllResultEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<SnapConfirmationEntry>::value, "SnapConfirmationEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<WindowOpenedEntry>::value, "WindowOpenedEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<WindowStateEntry>::value, "WindowStateEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<UnfloatRestoreResult>::value, "UnfloatRestoreResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<ZoneGeometryRect>::value, "ZoneGeometryRect missing QDBusArgument operators");
+static_assert(HasDBusStreaming<EmptyZoneEntry>::value, "EmptyZoneEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<SnapAssistCandidate>::value, "SnapAssistCandidate missing QDBusArgument operators");
+static_assert(HasDBusStreaming<NamedZoneGeometry>::value, "NamedZoneGeometry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<AlgorithmInfoEntry>::value, "AlgorithmInfoEntry missing QDBusArgument operators");
+static_assert(HasDBusStreaming<BridgeRegistrationResult>::value,
+              "BridgeRegistrationResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<MoveTargetResult>::value, "MoveTargetResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<FocusTargetResult>::value, "FocusTargetResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<CycleTargetResult>::value, "CycleTargetResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<SwapTargetResult>::value, "SwapTargetResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<RestoreTargetResult>::value, "RestoreTargetResult missing QDBusArgument operators");
+static_assert(HasDBusStreaming<PreTileGeometryEntry>::value, "PreTileGeometryEntry missing QDBusArgument operators");
 
 /// Call once at startup (daemon and plugin) to register types with Qt D-Bus
 void registerDBusTypes();
@@ -386,3 +455,5 @@ Q_DECLARE_METATYPE(PlasmaZones::FocusTargetResult)
 Q_DECLARE_METATYPE(PlasmaZones::CycleTargetResult)
 Q_DECLARE_METATYPE(PlasmaZones::SwapTargetResult)
 Q_DECLARE_METATYPE(PlasmaZones::RestoreTargetResult)
+Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryEntry)
+Q_DECLARE_METATYPE(PlasmaZones::PreTileGeometryList)

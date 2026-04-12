@@ -301,6 +301,22 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e
     return arg;
 }
 
+QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e)
+{
+    arg.beginStructure();
+    arg << e.appId << e.x << e.y << e.width << e.height << e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e)
+{
+    arg.beginStructure();
+    arg >> e.appId >> e.x >> e.y >> e.width >> e.height >> e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
 void registerDBusTypes()
 {
     // IMPORTANT: register each type under BOTH its qualified and unqualified
@@ -348,6 +364,8 @@ void registerDBusTypes()
     PZ_REGISTER_DBUS_TYPE(CycleTargetResult);
     PZ_REGISTER_DBUS_TYPE(SwapTargetResult);
     PZ_REGISTER_DBUS_TYPE(RestoreTargetResult);
+    PZ_REGISTER_DBUS_TYPE(PreTileGeometryEntry);
+    PZ_REGISTER_DBUS_TYPE(PreTileGeometryList);
 
 #undef PZ_REGISTER_DBUS_TYPE
 }
