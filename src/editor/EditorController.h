@@ -450,7 +450,19 @@ public:
      */
     Q_INVOKABLE void stopAudioCapture();
 
+    /**
+     * @brief Register the editor as the single-instance owner on the session bus.
+     * @return true if registration succeeded; false if another instance already owns the name.
+     */
+    bool registerDBusService();
+
 public Q_SLOTS:
+    // Single-instance D-Bus methods — called by a second launch to forward args
+    // to the already-running editor instead of spawning a parallel process.
+    Q_SCRIPTABLE void raise();
+    Q_SCRIPTABLE void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
+                                          bool preview);
+
     // Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);

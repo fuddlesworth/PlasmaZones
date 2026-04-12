@@ -11,11 +11,15 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 #include <QClipboard>
+#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QPointer>
+#include <QQuickWindow>
+#include <QWindow>
 
 namespace PlasmaZones {
 
@@ -100,7 +104,81 @@ EditorController::~EditorController()
     // Save editor settings to KConfig
     saveEditorSettings();
 
+    // Release the single-instance D-Bus name so a later launch can reclaim it.
+    auto bus = QDBusConnection::sessionBus();
+    bus.unregisterObject(DBus::EditorApp::ObjectPath);
+    bus.unregisterService(DBus::EditorApp::ServiceName);
+
     // Services are QObjects with this as parent, so they'll be deleted automatically
+}
+
+bool EditorController::registerDBusService()
+{
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.registerService(DBus::EditorApp::ServiceName)) {
+        return false;
+    }
+    // ExportScriptableSlots exposes raise() + handleLaunchRequest() on D-Bus.
+    bus.registerObject(DBus::EditorApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
+    return true;
+}
+
+void EditorController::raise()
+{
+    // Match SettingsController::raise() — find the primary top-level Window and
+    // show/raise/activate it. Wayland compositors may require a valid activation
+    // token for requestActivate() to actually steal focus; within the same D-Bus
+    // session, KWin accepts the request.
+    const auto windows = QGuiApplication::allWindows();
+    for (auto* w : windows) {
+        if (w->type() != Qt::Window)
+            continue;
+        w->show();
+        w->raise();
+        w->requestActivate();
+        break;
+    }
+}
+
+void EditorController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
+                                           bool preview)
+{
+    // Apply the forwarded command-line args to the running instance. This mirrors
+    // the arg-handling block in main.cpp so a second launch is equivalent to a
+    // fresh launch with the same args — minus spawning a new process.
+    if (createNew) {
+        if (!screenId.isEmpty() && targetScreen() != screenId) {
+            setTargetScreenDirect(screenId);
+        }
+        createNewLayout();
+    } else if (!layoutId.isEmpty()) {
+        if (preview || LayoutId::isAutotile(layoutId)) {
+            setPreviewMode(true);
+        }
+        loadLayout(layoutId);
+        if (!screenId.isEmpty() && targetScreen() != screenId) {
+            setTargetScreenDirect(screenId);
+        }
+    } else if (!screenId.isEmpty() && targetScreen() != screenId) {
+        // No layout specified — switch screen, which loads the assigned layout.
+        setTargetScreen(screenId);
+    }
+
+    // Move the existing editor window to the (possibly new) target screen and
+    // raise it. On Wayland switching screens requires destroying + recreating
+    // the native surface — showFullScreenOnTargetScreen() handles that.
+    const auto windows = QGuiApplication::allWindows();
+    for (auto* w : windows) {
+        if (w->type() != Qt::Window)
+            continue;
+        if (auto* qw = qobject_cast<QQuickWindow*>(w)) {
+            showFullScreenOnTargetScreen(qw);
+        }
+        w->show();
+        w->raise();
+        w->requestActivate();
+        break;
+    }
 }
 
 // Preview mode

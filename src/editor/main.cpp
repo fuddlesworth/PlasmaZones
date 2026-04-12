@@ -23,7 +23,9 @@
 #include <QScreen>
 #include <QCursor>
 #include <QDBusConnection>
+#include <QDBusInterface>
 #include <QDBusMessage>
+#include <QDBusReply>
 #include <QObject>
 
 #include "pz_i18n.h"
@@ -31,6 +33,29 @@
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
+
+namespace {
+
+/// Try to forward a launch request to an already-running editor instance.
+/// Returns true if the running instance accepted the request (caller should exit).
+bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+{
+    auto bus = QDBusConnection::sessionBus();
+    if (!bus.isConnected())
+        return false;
+
+    QDBusInterface iface(DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath, DBus::EditorApp::Interface, bus);
+    if (!iface.isValid())
+        return false;
+
+    iface.setTimeout(3000); // 3s — avoid long hang if the existing instance is frozen
+    QDBusMessage reply = iface.call(QStringLiteral("handleLaunchRequest"), screenId, layoutId, createNew, preview);
+    if (reply.type() == QDBusMessage::ErrorMessage)
+        return false;
+    return true;
+}
+
+} // anonymous namespace
 
 int main(int argc, char* argv[])
 {
@@ -124,11 +149,8 @@ int main(int argc, char* argv[])
     // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Create controller
-    EditorController controller;
-
-    // Handle command line arguments
-    // Determine target screen first (but don't trigger layout loading yet)
+    // Resolve target screen and collect launch args up front so we can forward
+    // them to an already-running editor instance before doing any heavy setup.
     QString targetScreen;
     if (parser.isSet(screenOption)) {
         targetScreen = parser.value(screenOption);
@@ -163,21 +185,34 @@ int main(int argc, char* argv[])
         qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
     }
 
+    const bool createNewLayout = parser.isSet(newLayoutOption);
+    const QString layoutIdArg = parser.isSet(layoutIdOption) ? parser.value(layoutIdOption) : QString();
+    const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
+
+    // Single-instance: if another editor is already running, forward the launch
+    // request and exit. Avoids spawning parallel editor processes when the user
+    // hits the shortcut repeatedly while the first editor is still starting up.
+    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+        return 0;
+    }
+
+    // Create controller
+    EditorController controller;
+
     // Handle layout loading based on mode
-    if (parser.isSet(newLayoutOption)) {
+    if (createNewLayout) {
         // Create new layout - set target screen first (without loading), then create new layout
         if (!targetScreen.isEmpty()) {
             controller.setTargetScreenDirect(targetScreen);
         }
         controller.createNewLayout();
-    } else if (parser.isSet(layoutIdOption)) {
-        QString layoutId = parser.value(layoutIdOption);
+    } else if (!layoutIdArg.isEmpty()) {
         // Auto-detect preview mode for autotile layouts, or explicit --preview flag
-        if (parser.isSet(previewOption) || LayoutId::isAutotile(layoutId)) {
+        if (previewArg || LayoutId::isAutotile(layoutIdArg)) {
             controller.setPreviewMode(true);
         }
         // Edit/preview specific layout - load it, then set target screen (without reloading)
-        controller.loadLayout(layoutId);
+        controller.loadLayout(layoutIdArg);
         if (!targetScreen.isEmpty()) {
             controller.setTargetScreenDirect(targetScreen);
         }
@@ -187,6 +222,18 @@ int main(int argc, char* argv[])
         if (!targetScreen.isEmpty()) {
             controller.setTargetScreen(targetScreen);
         }
+    }
+
+    // Register the single-instance D-Bus service so future launches forward here.
+    // If registration fails, another instance claimed the name between our earlier
+    // activateRunningInstance() check and now — retry forwarding and exit.
+    if (!controller.registerDBusService()) {
+        qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
+        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+            return 0;
+        }
+        qCCritical(lcEditor) << "Cannot register editor D-Bus service and cannot reach existing instance; exiting";
+        return 1;
     }
 
     // Set up QML engine
