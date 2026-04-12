@@ -377,6 +377,111 @@ private Q_SLOTS:
         }
         QVERIFY(found);
     }
+
+    // =========================================================================
+    // Eviction path: maxWindows cap forces a neighbour float on adoption
+    // =========================================================================
+
+    void testEviction_cancelRestoresFloatedNeighbour()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 3;
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
+
+        const QStringList originalTiled = engine.stateForScreen(screen)->tiledWindows();
+        QCOMPARE(originalTiled.size(), 3);
+
+        // Fresh adoption pushes count to 4 > maxWindows=3 → last neighbour is floated.
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
+        QVERIFY(engine.hasDragInsertPreview());
+        QCOMPARE(engine.stateForScreen(screen)->tiledWindowCount(), 3);
+
+        // Cancel must unfloat the evicted neighbour and remove the newcomer.
+        engine.cancelDragInsertPreview();
+        QVERIFY(!engine.hasDragInsertPreview());
+        QCOMPARE(engine.stateForScreen(screen)->tiledWindows(), originalTiled);
+    }
+
+    void testEviction_commitEmitsBatchFloated()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 2;
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
+
+        QSignalSpy batchSpy(&engine, &AutotileEngine::windowsBatchFloated);
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
+        engine.commitDragInsertPreview();
+
+        // Evicted neighbour should be routed through the batch-float signal.
+        QVERIFY(batchSpy.count() >= 1);
+    }
+
+    // =========================================================================
+    // Window-close bookkeeping
+    // =========================================================================
+
+    void testWindowClosed_draggedWindowClearsPreview()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("A"), screen));
+        QVERIFY(engine.hasDragInsertPreview());
+
+        // Dragged window closed mid-preview — preview must vanish, not crash.
+        engine.windowClosed(QStringLiteral("A"));
+        QVERIFY(!engine.hasDragInsertPreview());
+    }
+
+    void testWindowClosed_evictedNeighbourClearsEviction()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QLatin1String(Screen1);
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 2;
+        openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("newcomer"), screen));
+        QVERIFY(engine.hasDragInsertPreview());
+
+        // The evicted window is B (last in tiled order before adoption).
+        // Close it while the preview is live.
+        engine.windowClosed(QStringLiteral("B"));
+
+        // Preview still live (newcomer is the dragged window, not B) and
+        // commit/cancel must not crash on the vanished eviction id.
+        QVERIFY(engine.hasDragInsertPreview());
+        engine.commitDragInsertPreview(); // should be safe
+        QVERIFY(!engine.hasDragInsertPreview());
+    }
+
+    // =========================================================================
+    // setAutotileScreens cancels preview when target screen is removed
+    // =========================================================================
+
+    void testSetAutotileScreens_cancelsPreviewOnTargetRemoval()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString s1 = QLatin1String(Screen1);
+        const QString s2 = QLatin1String(Screen2);
+        engine.setAutotileScreens({s1, s2});
+        openWindows(engine, s2, {QStringLiteral("X"), QStringLiteral("Y")});
+
+        QVERIFY(engine.beginDragInsertPreview(QStringLiteral("X"), s2));
+        QVERIFY(engine.hasDragInsertPreview());
+
+        // Remove s2 from autotile — preview must be cancelled before its
+        // TilingState gets torn down.
+        engine.setAutotileScreens({s1});
+        QVERIFY(!engine.hasDragInsertPreview());
+    }
 };
 
 QTEST_MAIN(TestAutotileDragInsert)

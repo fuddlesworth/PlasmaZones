@@ -415,6 +415,19 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
     const QSet<QString> added = screens - m_autotileScreens;
     const QSet<QString> removed = m_autotileScreens - screens;
 
+    // If an active drag-insert preview touches any screen being removed (or
+    // its prior screen), cancel it before states get torn down below. The
+    // cancel path restores the window to its prior location; otherwise the
+    // dangling preview would reference a TilingState about to be deleted.
+    if (m_dragInsertPreview) {
+        const QString targetScreen = m_dragInsertPreview->targetScreenId;
+        const QString priorScreen =
+            m_dragInsertPreview->hadPriorState ? m_dragInsertPreview->priorKey.screenId : QString();
+        if (removed.contains(targetScreen) || (!priorScreen.isEmpty() && removed.contains(priorScreen))) {
+            cancelDragInsertPreview();
+        }
+    }
+
     m_autotileScreens = screens;
 
     // R1 fix: Retile newly-added screens without requiring pre-existing state.
@@ -1695,6 +1708,23 @@ void AutotileEngine::windowClosed(const QString& rawWindowId)
     }
     const QString windowId = canonicalizeWindowId(rawWindowId);
 
+    // Drag-insert preview bookkeeping: if the closed window is involved in
+    // an active preview (as either the dragged window or the evicted
+    // neighbour), we must react before onWindowRemoved tears down state.
+    // Leaving a stale evictedWindowId would later drive setFloating or
+    // windowsBatchFloated on a dead window id.
+    if (m_dragInsertPreview) {
+        if (m_dragInsertPreview->windowId == windowId) {
+            // Dragged window closed mid-preview — drop the preview entirely.
+            // Cannot "restore" or "commit" a gone window; clear and move on.
+            m_dragInsertPreview.reset();
+        } else if (m_dragInsertPreview->evictedWindowId == windowId) {
+            // Evicted neighbour closed mid-preview — forget the eviction so
+            // commit/cancel don't try to operate on it.
+            m_dragInsertPreview->evictedWindowId.clear();
+        }
+    }
+
     // Clean up saved floating state even if window isn't currently tracked
     // (it may have been floating when autotile was disabled on its screen).
     // This must happen before onWindowRemoved because removeWindow() early-returns
@@ -2537,6 +2567,14 @@ void AutotileEngine::cancelDragInsertPreview()
             }
             m_windowToStateKey.remove(p.windowId);
             if (priorState) {
+                // Defensive: if the prior state was torn down and rebuilt
+                // between begin() and cancel(), it may already contain an
+                // entry for this window (e.g. the rebuild re-adopted it from
+                // a pending order). Mirror the begin() guard so addWindow()
+                // can place it at the captured raw index cleanly.
+                if (priorState->containsWindow(p.windowId)) {
+                    priorState->removeWindow(p.windowId);
+                }
                 priorState->addWindow(p.windowId, p.priorRawIndex);
                 if (p.priorFloating) {
                     priorState->setFloating(p.windowId, true);
@@ -2570,14 +2608,24 @@ int AutotileEngine::computeDragInsertIndexAtPoint(const QString& screenId, const
     // stable identity (return its current index), otherwise we force a shuffle
     // to some neighbour slot which immediately re-matches under the cursor and
     // oscillates every dragMoved tick.
+    //
+    // maxWindows may cap the layout so zones.size() < tiled.size(). In that
+    // case, windows past `limit` have no zone and can't be hit-tested. If the
+    // dragged window fell past the cap (e.g. evicted-to-floating in a tight
+    // monocle-style layout), the stable-identity contract can't hold — hold
+    // the preview at its last index instead.
     const int limit = std::min(zones.size(), tiled.size());
-    for (int i = 0; i < limit; ++i) {
-        if (zones[i].contains(cursorPos)) {
-            return i;
+    const int draggedIdx = m_dragInsertPreview ? tiled.indexOf(m_dragInsertPreview->windowId) : -1;
+    const bool draggedBeyondCap = draggedIdx >= 0 && draggedIdx >= limit;
+    if (!draggedBeyondCap) {
+        for (int i = 0; i < limit; ++i) {
+            if (zones[i].contains(cursorPos)) {
+                return i;
+            }
         }
     }
-    // Cursor isn't over any zone — hold the preview at its current index to
-    // avoid snapping to an endpoint when the cursor leaves the stack area.
+    // Cursor isn't over any zone (or the dragged window is past the cap) —
+    // hold the preview at its current index to avoid snapping to an endpoint.
     if (m_dragInsertPreview && m_dragInsertPreview->lastInsertIndex >= 0) {
         return m_dragInsertPreview->lastInsertIndex;
     }

@@ -404,7 +404,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
     // would otherwise starve this block for the entire remainder of the drag.
     // Autotile drag-insert lives on an independent trigger list, so it should
     // activate regardless of snap-overlay cancel state.
-    if (m_autotileEngine) {
+    if (m_autotileEngine && m_settings) {
         const bool rawAutotileInsertHeld = anyTriggerHeld(m_cachedAutotileDragInsertTriggers, mods, mouseButtons);
 
         // Toggle mode: detect rising edge (release→press) to flip insert-active state

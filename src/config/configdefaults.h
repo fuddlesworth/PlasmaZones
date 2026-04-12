@@ -35,13 +35,20 @@ public:
     // Activation Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Build a single-entry trigger list with the given modifier and mouse
+    // button. Shared by the default accessors below so the canonical
+    // {modifier, mouseButton} shape lives in one place.
+    static QVariantList makeSingleTriggerList(int modifier, int mouseButton = 0)
+    {
+        QVariantMap trigger;
+        trigger[ConfigKeys::triggerModifierField()] = modifier;
+        trigger[ConfigKeys::triggerMouseButtonField()] = mouseButton;
+        return {trigger};
+    }
+
     static QVariantList dragActivationTriggers()
     {
-        // Default: single trigger with Alt modifier, no mouse button
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Alt);
-        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
-        return {trigger};
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
     static bool toggleActivation()
     {
@@ -61,20 +68,13 @@ public:
     }
     static QVariantList zoneSpanTriggers()
     {
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = zoneSpanModifier();
-        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
-        return {trigger};
+        return makeSingleTriggerList(zoneSpanModifier());
     }
     static QVariantList autotileDragInsertTriggers()
     {
-        // Default: single trigger with Alt modifier, no mouse button.
         // Held while dragging a window to dynamically insert it into the
         // autotile stack at the cursor position.
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Alt);
-        trigger[ConfigKeys::triggerMouseButtonField()] = 0;
-        return {trigger};
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Alt));
     }
     static bool autotileDragInsertToggle()
     {
@@ -428,10 +428,7 @@ public:
     static QVariantList snapAssistTriggers()
     {
         // Default: Middle mouse
-        QVariantMap trigger;
-        trigger[ConfigKeys::triggerModifierField()] = static_cast<int>(DragModifier::Disabled);
-        trigger[ConfigKeys::triggerMouseButtonField()] = static_cast<int>(Qt::MiddleButton);
-        return {trigger};
+        return makeSingleTriggerList(static_cast<int>(DragModifier::Disabled), static_cast<int>(Qt::MiddleButton));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

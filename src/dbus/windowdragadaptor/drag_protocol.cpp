@@ -80,7 +80,9 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     }
 
     // Any stale pending state from a previous drag that didn't complete
-    // cleanly must not bleed into this one.
+    // cleanly must not bleed into this one. clearPendingSnapDragState also
+    // cancels any leftover drag-insert preview so a new drag always starts
+    // from a clean slate.
     clearPendingSnapDragState();
 
     // Reset autotile drag-insert toggle state on every drag start. This runs
@@ -93,6 +95,16 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     // release and re-press to toggle.
     m_autotileDragInsertToggled = false;
     m_prevAutotileDragInsertHeld = true;
+
+    // Cache autotile drag-insert triggers unconditionally. The snap path may
+    // defer dragStarted (where the cache was historically populated) until
+    // the user first holds a snap activation trigger. If drag-insert fires
+    // before that (e.g. user holds the drag-insert trigger directly, or the
+    // cursor crosses to an autotile screen and the policy flips to bypass),
+    // dragMoved would otherwise read a stale cache from the previous drag.
+    if (m_settings) {
+        m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
+    }
 
     const int curDesktop = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
@@ -109,19 +121,12 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     if (!policy.bypassReason.isEmpty()) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
+        // Trigger cache and stale-preview cleanup both happen above so bypass
+        // and snap paths behave identically.
         m_draggedWindowId = windowId;
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
-        // Autotile drag-insert lives on the bypass path (cursor on an
-        // autotile screen). dragMoved's drag-insert preview block reads
-        // m_cachedAutotileDragInsertTriggers, so cache them here — the
-        // legacy dragStarted setup that normally does this never runs for
-        // bypass drags. Any stale preview from a prior drag is cleared too.
-        if (m_settings) {
-            m_cachedAutotileDragInsertTriggers = parseTriggers(m_settings->autotileDragInsertTriggers());
-        }
-        cancelDragInsertIfActive();
         return policy;
     }
 
@@ -188,6 +193,10 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     m_pendingSnapDragGeometry = QRect();
     m_pendingSnapDragMouseButtons = 0;
     m_pendingSnapDragWasSnapped = false;
+    // Any drag-insert preview left over from an incomplete previous drag
+    // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
+    // must be cleared too — its referenced window may no longer exist.
+    cancelDragInsertIfActive();
 }
 
 DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int cursorY, int modifiers,
