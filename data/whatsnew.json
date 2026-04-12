@@ -1,6 +1,14 @@
 {
     "releases": [
         {
+            "version": "2.8.6",
+            "date": "2026-04-11",
+            "highlights": [
+                "Fixed Emby and other Electron/CEF apps silently breaking after mid-session WM_CLASS rename (#271) — float toggle, focus navigation, and snap operations now survive class mutations",
+                "New WindowRegistry decouples runtime state from mutable app classes; daemon always reads the live class instead of a frozen first-seen string"
+            ]
+        },
+        {
             "version": "2.8.5",
             "date": "2026-04-10",
             "highlights": [

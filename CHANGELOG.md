@@ -13,6 +13,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Meta-F float toggle now runs daemon-local** ([#310](https://github.com/fuddlesworth/PlasmaZones/discussions/310)): the keyboard shortcut previously made 4 D-Bus hops across 3 processes (KWin → daemon → effect → daemon → engine → effect), stalling under any D-Bus backpressure and producing the "pressed Meta-F, nothing happened, seconds later it toggled" symptom. It now reads the active window from `WindowTrackingAdaptor::m_lastActiveWindowId`, fresh frame geometry from a 50ms-debounced shadow (`setFrameGeometry`), and dispatches to the engine in-process. One D-Bus hop (the daemon → effect `applyGeometryRequested` paint), targeting sub-50ms latency from keypress to visible toggle. The 100ms debounce on `handleFloat` has been dropped since the in-process path has no D-Bus latency to coalesce.
 - **Settings nesting made compile-time**: `ISettings` gains `isZoneSelectorActive()` and `isSnapAssistActive()` composite accessors that return `snappingEnabled() && <child>Enabled()`. Consumers can no longer forget the parent-gate check when reading a nested `Snapping.*` flag. Raw child accessors remain for KCM settings UI code that genuinely needs the unaffected value.
 
+## [2.8.6] - 2026-04-11
+
+### Fixed
+- **Emby and other Electron/CEF apps silently break after class rename** ([#271](https://github.com/fuddlesworth/PlasmaZones/discussions/271)): The daemon's runtime primary key was `"appId|uuid"` — a composite that baked a mutable attribute into the identity used for every per-window map. Emby opens as `emby-beta`, gets tracked, then KWin rebroadcasts it as `media.emby.client.beta`; every subsequent lookup under the new composite missed, so `toggleWindowFloat`, focus navigation, and snap operations silently failed until a mode toggle rebuilt state from scratch. Introduced `WindowRegistry` as the single source of truth for live-window metadata keyed by the stable KWin instance id; the kwin-effect pushes class/desktop-file/title on `windowAdded` and on every `windowClassChanged` / `desktopFileNameChanged` / `captionChanged` so the daemon always reads the live class instead of parsing a frozen first-seen composite. Session persistence uses `currentAppIdFor()` at save time so a renamed window lands under its live class on disk.
+
 ## [2.8.5] - 2026-04-10
 
 ### Fixed
