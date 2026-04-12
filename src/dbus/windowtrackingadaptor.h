@@ -22,6 +22,7 @@ namespace PlasmaZones {
 
 class AutotileEngine;
 class LayoutManager; // Concrete type needed for signal connections
+class PersistenceWorker;
 class Layout;
 class IConfigBackend;
 class Zone;
@@ -1040,6 +1041,7 @@ private:
     // Persistence (adaptor responsibility: session.json save/load)
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
+    std::unique_ptr<PersistenceWorker> m_persistenceWorker;
 
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;

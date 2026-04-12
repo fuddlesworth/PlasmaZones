@@ -3,6 +3,8 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
+#include "persistenceworker.h"
+#include "../../config/configbackend_json.h"
 #include "../../core/interfaces.h"
 #include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
@@ -197,8 +199,17 @@ void WindowTrackingAdaptor::saveState()
         tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
     }
 
-    tracking.reset(); // release group before sync
-    m_sessionBackend->sync();
+    tracking.reset(); // release group before write
+
+    // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
+    // to the persistence worker thread. The main thread returns immediately.
+    auto* jsonBackend = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get());
+    if (jsonBackend && m_persistenceWorker) {
+        m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
+        jsonBackend->clearDirty();
+    } else {
+        m_sessionBackend->sync(); // fallback: synchronous write
+    }
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
@@ -215,7 +226,12 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
     if (m_saveTimer && m_saveTimer->isActive()) {
         m_saveTimer->stop();
     }
+
+    // Force synchronous save for shutdown — must complete before exit.
+    // Temporarily null the worker so saveState() falls through to sync().
+    auto worker = std::move(m_persistenceWorker);
     saveState();
+    m_persistenceWorker = std::move(worker);
 
     // Block all subsequent saves. During Qt object destruction after stop(),
     // LayoutManager destruction can trigger activeLayoutChanged → onLayoutChanged()

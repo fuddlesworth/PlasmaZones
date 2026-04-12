@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowtrackingadaptor.h"
+#include "windowtrackingadaptor/persistenceworker.h"
 #include "zonedetectionadaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
@@ -49,6 +50,9 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     m_saveTimer->setSingleShot(true);
     m_saveTimer->setInterval(500);
     connect(m_saveTimer, &QTimer::timeout, this, &WindowTrackingAdaptor::saveState);
+
+    // Persistence I/O worker — disk writes happen off the main thread
+    m_persistenceWorker = std::make_unique<PersistenceWorker>(nullptr);
 
     // Connect to layout changes for pending restores notification
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
