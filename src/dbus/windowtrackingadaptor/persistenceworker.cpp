@@ -3,38 +3,12 @@
 
 #include "persistenceworker.h"
 
-#include <QDir>
-#include <QFileInfo>
-#include <QJsonDocument>
-#include <QSaveFile>
+#include "../../config/configbackend_json.h"
+#include "../../core/logging.h"
+
 #include <QThread>
 
 namespace PlasmaZones {
-
-static bool writeJsonAtomically(const QString& filePath, const QJsonObject& root)
-{
-    QDir dir = QFileInfo(filePath).absoluteDir();
-    if (!dir.exists() && !dir.mkpath(QLatin1String("."))) {
-        qWarning("PersistenceIO: failed to create directory %s", qPrintable(dir.absolutePath()));
-        return false;
-    }
-
-    QSaveFile f(filePath);
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        qWarning("PersistenceIO: failed to open %s: %s", qPrintable(filePath), qPrintable(f.errorString()));
-        return false;
-    }
-
-    QJsonDocument doc(root);
-    f.write(doc.toJson(QJsonDocument::Indented));
-
-    if (!f.commit()) {
-        qWarning("PersistenceIO: commit failed %s: %s", qPrintable(filePath), qPrintable(f.errorString()));
-        return false;
-    }
-
-    return true;
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PersistenceIO — lives on the I/O thread
@@ -42,8 +16,15 @@ static bool writeJsonAtomically(const QString& filePath, const QJsonObject& root
 
 void PersistenceIO::processWrite(const QString& filePath, const QJsonObject& root)
 {
-    bool ok = writeJsonAtomically(filePath, root);
-    Q_EMIT writeCompleted(ok);
+    // Reuse JsonConfigBackend's existing atomic-write helper instead of
+    // duplicating the QSaveFile/QDir/QJsonDocument dance. Keeping one
+    // implementation means format/permission changes only need to land
+    // in one place.
+    const bool ok = JsonConfigBackend::writeJsonAtomically(filePath, root);
+    if (!ok) {
+        qCWarning(lcDbusWindow) << "PersistenceIO: atomic write failed for" << filePath;
+    }
+    Q_EMIT writeCompleted(filePath, ok);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -59,6 +40,9 @@ PersistenceWorker::PersistenceWorker(QObject* parent)
     m_io->moveToThread(m_thread);
 
     connect(this, &PersistenceWorker::requestWrite, m_io, &PersistenceIO::processWrite);
+    // Forward completion back to main thread so callers (e.g. saveState)
+    // can react to success/failure without touching the I/O thread.
+    connect(m_io, &PersistenceIO::writeCompleted, this, &PersistenceWorker::writeCompleted);
     connect(m_thread, &QThread::finished, m_io, &QObject::deleteLater);
 
     m_thread->start();
@@ -77,7 +61,7 @@ void PersistenceWorker::enqueueWrite(const QString& filePath, const QJsonObject&
 
 bool PersistenceWorker::writeSync(const QString& filePath, const QJsonObject& root)
 {
-    return writeJsonAtomically(filePath, root);
+    return JsonConfigBackend::writeJsonAtomically(filePath, root);
 }
 
 } // namespace PlasmaZones

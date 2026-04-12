@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "compositorbridgeadaptor.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 #include <dbus_types.h>
@@ -9,12 +10,14 @@
 
 namespace PlasmaZones {
 
-// Protocol version constants — must match dbus_constants.h in compositor-common.
-// Duplicated here because the daemon's unity build cannot reliably include the
-// compositor-common header (different include-path resolution breaks #pragma once).
+// Protocol version constants live in core/constants.h and are mirrored in
+// compositor-common/dbus_constants.h (the effect's canonical copy). Both
+// headers cannot be included from the same TU because they historically
+// define the same DBus namespace — when that duplication is cleaned up
+// this will collapse to a single source of truth.
 namespace {
-constexpr int DaemonApiVersion = 2;
-constexpr int DaemonMinPeerApiVersion = 2;
+constexpr int DaemonApiVersion = DBus::ApiVersion;
+constexpr int DaemonMinPeerApiVersion = DBus::MinPeerApiVersion;
 } // namespace
 
 CompositorBridgeAdaptor::CompositorBridgeAdaptor(QObject* parent)

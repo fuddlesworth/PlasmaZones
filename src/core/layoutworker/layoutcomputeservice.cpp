@@ -4,6 +4,7 @@
 #include "layoutcomputeservice.h"
 #include "layoutworker.h"
 #include "../layout.h"
+#include "../layoutmanager.h"
 #include "../zone.h"
 #include "../logging.h"
 
@@ -41,18 +42,48 @@ LayoutComputeService::~LayoutComputeService()
     m_thread->wait(5000);
 }
 
-void LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
+void LayoutComputeService::setLayoutManager(LayoutManager* manager)
+{
+    m_layoutManager = manager;
+    if (!manager) {
+        return;
+    }
+    // Evict tracked entries when layouts disappear, so the hash doesn't
+    // accumulate dangling QPointers over long-running sessions.
+    connect(manager, &LayoutManager::layoutRemoved, this, [this](Layout* layout) {
+        if (layout) {
+            onLayoutRemoved(layout->id());
+        }
+    });
+}
+
+bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
 {
     if (!layout || !screenGeometry.isValid()) {
-        return;
+        return false;
     }
 
-    // Skip if geometry hasn't changed (same cache logic as Layout::recalculateZoneGeometries)
+    // Cache hit: geometry already current. Emit the completion signal
+    // synchronously (next event-loop tick via QueuedConnection to self)
+    // so completion barriers armed by the caller still fire exactly
+    // once per requestRecalculate call. Emitting inline would re-enter
+    // the caller on the same stack, which is surprising; defer it.
     if (screenGeometry == layout->lastRecalcGeometry()) {
-        return;
+        const QString sid = screenId;
+        QPointer<Layout> lp(layout);
+        QMetaObject::invokeMethod(
+            this,
+            [this, sid, lp]() {
+                if (lp) {
+                    Q_EMIT geometriesComputed(sid, lp.data());
+                }
+            },
+            Qt::QueuedConnection);
+        return true;
     }
 
-    // Track layout for result application
+    // Track layout for result application (QPointer guards against
+    // destruction while the worker is computing).
     m_trackedLayouts[layout->id()] = layout;
 
     // Increment per-screen generation for coalescing
@@ -60,6 +91,7 @@ void LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
 
     LayoutSnapshot snapshot = buildSnapshot(layout, screenId, screenGeometry);
     Q_EMIT requestCompute(snapshot, gen);
+    return true;
 }
 
 void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
@@ -74,14 +106,13 @@ LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString
     snapshot.layoutId = layout->id();
     snapshot.screenId = screenId;
     snapshot.screenGeometry = screenGeometry;
-    snapshot.useFullScreenGeometry = layout->useFullScreenGeometry();
     snapshot.zones.reserve(layout->zoneCount());
 
     for (const auto* zone : layout->zones()) {
         ZoneSnapshot zs;
         zs.id = zone->id();
+        zs.geometryMode = zone->geometryMode();
         zs.relativeGeometry = zone->relativeGeometry();
-        zs.fixedMode = zone->isFixedGeometry();
         zs.fixedGeometry = zone->fixedGeometry();
         snapshot.zones.append(zs);
     }
@@ -99,12 +130,15 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
         return;
     }
 
-    // Find the live layout
+    // Find the live layout. QPointer catches destruction between request
+    // and result (layout removed, session swap, etc.) — a dangling raw
+    // Layout* here would be a use-after-free.
     auto layoutIt = m_trackedLayouts.constFind(result.layoutId);
-    if (layoutIt == m_trackedLayouts.constEnd() || !*layoutIt) {
+    if (layoutIt == m_trackedLayouts.constEnd() || layoutIt->isNull()) {
+        qCDebug(lcCore) << "LayoutComputeService: dropping result for destroyed layout" << result.layoutId.toString();
         return;
     }
-    Layout* layout = *layoutIt;
+    Layout* layout = layoutIt->data();
 
     // Race guard: if a sync caller (recalculateSync) already computed for
     // this exact screen geometry while the async result was in flight, skip
@@ -128,6 +162,11 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     layout->endBatchModify();
 
     Q_EMIT geometriesComputed(result.screenId, layout);
+}
+
+void LayoutComputeService::onLayoutRemoved(const QUuid& layoutId)
+{
+    m_trackedLayouts.remove(layoutId);
 }
 
 } // namespace PlasmaZones

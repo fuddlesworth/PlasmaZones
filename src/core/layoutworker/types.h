@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "../constants.h"
 #include <QRectF>
 #include <QUuid>
 #include <QVector>
@@ -13,8 +14,8 @@ namespace PlasmaZones {
 struct ZoneSnapshot
 {
     QUuid id;
+    ZoneGeometryMode geometryMode = ZoneGeometryMode::Relative;
     QRectF relativeGeometry;
-    bool fixedMode = false;
     QRectF fixedGeometry;
 };
 
@@ -26,7 +27,6 @@ struct LayoutSnapshot
     QString screenId;
     QRectF screenGeometry;
     QVector<ZoneSnapshot> zones;
-    bool useFullScreenGeometry = false;
 };
 
 /// Computed absolute geometry for a single zone.

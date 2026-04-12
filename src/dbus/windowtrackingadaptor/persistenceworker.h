@@ -25,7 +25,9 @@ public Q_SLOTS:
     void processWrite(const QString& filePath, const QJsonObject& root);
 
 Q_SIGNALS:
-    void writeCompleted(bool success);
+    /// Emitted on the I/O thread after each write attempt. The filePath
+    /// identifies which request completed (distinguishes coalesced writes).
+    void writeCompleted(const QString& filePath, bool success);
 };
 
 /**
@@ -51,6 +53,11 @@ public:
 
 Q_SIGNALS:
     void requestWrite(const QString& filePath, const QJsonObject& root);
+
+    /// Forwarded from PersistenceIO, delivered on the main thread via
+    /// QueuedConnection. Connect here to react to write outcome (e.g.
+    /// clear a dirty flag only after a verified-successful write).
+    void writeCompleted(const QString& filePath, bool success);
 
 private:
     QThread* m_thread = nullptr;

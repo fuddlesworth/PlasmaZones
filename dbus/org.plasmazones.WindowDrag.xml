@@ -122,7 +122,7 @@
             <arg name="windowId" type="s"/>
             <arg name="releaseScreenId" type="s"/>
             <arg name="emptyZones" type="a(siiiiiibsssdd)">
-                <annotation name="org.qtproject.QtDBus.QtTypeName.Out2" value="PlasmaZones::EmptyZoneList"/>
+                <annotation name="org.qtproject.QtDBus.QtTypeName.In2" value="PlasmaZones::EmptyZoneList"/>
             </arg>
         </signal>
     </interface>

@@ -148,6 +148,9 @@ bool Daemon::init()
     }
 
     m_layoutManager->setSettings(m_settings.get());
+    // Wire the compute service to the layout manager so tracked layouts
+    // are evicted on removal (bounds m_trackedLayouts over time).
+    m_layoutComputeService->setLayoutManager(m_layoutManager.get());
     // Load layouts (defaultLayout() reads settings internally)
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();

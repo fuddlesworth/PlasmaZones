@@ -3,6 +3,8 @@
 
 #include "layoutworker.h"
 
+#include "../zone.h"
+
 namespace PlasmaZones {
 
 LayoutWorker::LayoutWorker(QObject* parent)
@@ -19,22 +21,13 @@ void LayoutWorker::computeGeometries(const LayoutSnapshot& snapshot, uint64_t ge
     result.generation = generation;
     result.zones.reserve(snapshot.zones.size());
 
-    const QRectF& screen = snapshot.screenGeometry;
-
     for (const auto& zone : snapshot.zones) {
         ComputedZoneGeometry computed;
         computed.zoneId = zone.id;
-
-        if (zone.fixedMode) {
-            computed.absoluteGeometry = QRectF(screen.x() + zone.fixedGeometry.x(), screen.y() + zone.fixedGeometry.y(),
-                                               zone.fixedGeometry.width(), zone.fixedGeometry.height());
-        } else {
-            computed.absoluteGeometry = QRectF(screen.x() + zone.relativeGeometry.x() * screen.width(),
-                                               screen.y() + zone.relativeGeometry.y() * screen.height(),
-                                               zone.relativeGeometry.width() * screen.width(),
-                                               zone.relativeGeometry.height() * screen.height());
-        }
-
+        // Shared pure helper: same math Zone::calculateAbsoluteGeometry uses
+        // on the main thread. Keeps the two paths byte-identical.
+        computed.absoluteGeometry = Zone::computeAbsoluteGeometry(zone.geometryMode, zone.relativeGeometry,
+                                                                  zone.fixedGeometry, snapshot.screenGeometry);
         result.zones.append(computed);
     }
 

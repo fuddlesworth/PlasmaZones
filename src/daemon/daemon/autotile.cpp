@@ -474,23 +474,34 @@ void Daemon::processPendingGeometryUpdates()
 
     // Recalculate zone geometries for each effective screen (virtual or physical)
     // so fixed-mode zones stay normalized correctly against the correct screen geometry.
-    // Async: each screen's computation runs on the worker thread. A shared
-    // counter tracks completion; the continuation (overlay update + reapply)
-    // fires once all results are in.
+    // Async: each screen's computation runs on the worker thread. A barrier
+    // tracks pending (screenId, layoutId) pairs explicitly so unrelated
+    // geometriesComputed emissions (e.g. from an async layoutAssigned firing
+    // mid-barrier) cannot drain it prematurely.
     const int desktop = m_virtualDesktopManager->currentDesktop();
     const QString activity =
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList screenIds = m_screenManager->effectiveScreenIds();
     QSet<QUuid> processedLayouts;
 
-    int totalRequests = 0;
+    // Key = (screenId, layoutId). Matches what geometriesComputed carries.
+    using PendingKey = QPair<QString, QUuid>;
+    auto pending = std::make_shared<QSet<PendingKey>>();
+
+    auto requestFor = [this, pending](Layout* layout, const QString& screenId, const QRectF& geom) {
+        if (!layout) {
+            return;
+        }
+        if (m_layoutComputeService->requestRecalculate(layout, screenId, geom)) {
+            pending->insert({screenId, layout->id()});
+        }
+    };
+
     for (const QString& screenId : screenIds) {
         Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
-            m_layoutComputeService->requestRecalculate(layout, screenId,
-                                                       GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            requestFor(layout, screenId, GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
-            ++totalRequests;
         }
     }
 
@@ -503,29 +514,36 @@ void Daemon::processPendingGeometryUpdates()
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
                 QString primaryId = Utils::screenIdentifier(primaryScreen);
-                m_layoutComputeService->requestRecalculate(layout, primaryId,
-                                                           GeometryUtils::effectiveScreenGeometry(layout, primaryId));
-                ++totalRequests;
+                requestFor(layout, primaryId, GeometryUtils::effectiveScreenGeometry(layout, primaryId));
             }
         }
     }
 
     m_geometryUpdatePending = false;
 
-    if (totalRequests == 0) {
+    if (pending->isEmpty()) {
         m_overlayService->updateGeometries();
         m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
         m_reapplyGeometriesTimer.start();
         return;
     }
 
-    // Completion barrier: fire continuation when all async results arrive.
-    auto remaining = std::make_shared<int>(totalRequests);
+    // Completion barrier: only fire the continuation once every pending
+    // (screen, layout) pair has reported back. Unrelated emissions for
+    // keys not in `pending` are ignored, so a concurrent async caller
+    // cannot drain our barrier prematurely.
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
-                    [this, remaining, conn](const QString&, Layout*) {
-                        if (--(*remaining) <= 0) {
-                            disconnect(*conn);
+                    [this, pending, conn](const QString& screenId, Layout* layout) {
+                        if (!layout) {
+                            return;
+                        }
+                        const PendingKey key{screenId, layout->id()};
+                        if (!pending->remove(key)) {
+                            return; // not one of ours
+                        }
+                        if (pending->isEmpty()) {
+                            QObject::disconnect(*conn);
                             m_overlayService->updateGeometries();
                             m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
                             m_reapplyGeometriesTimer.start();

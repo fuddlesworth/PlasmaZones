@@ -1084,45 +1084,52 @@ void PlasmaZonesEffect::slotDaemonReady()
         return; // Already ready — idempotent guard
     }
 
-    m_daemonServiceRegistered = true;
-    qCInfo(lcEffect) << "daemon ready: registering bridge and re-pushing state";
+    qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
     // Register the compositor bridge with the daemon, passing our protocol
     // version so the daemon can reject us if we're too old. The daemon returns
     // its own API version and a session ID; "REJECTED" means version mismatch.
-    {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            DBus::ServiceName, DBus::ObjectPath, DBus::Interface::CompositorBridge, QStringLiteral("registerBridge"));
-        msg << QStringLiteral("kwin") << QString::number(DBus::ApiVersion)
-            << QStringList{QStringLiteral("borderless"), QStringLiteral("animation")};
-        auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
-        connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
-            w->deleteLater();
-            QDBusPendingReply<PlasmaZones::BridgeRegistrationResult> reply = *w;
-            if (reply.isError()) {
-                qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message();
-                return;
-            }
-            BridgeRegistrationResult result = reply.value();
-            if (result.sessionId == QLatin1String("REJECTED")) {
-                qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
-                                     << "but this effect speaks" << DBus::ApiVersion
-                                     << "— update the effect to match the daemon.";
-                m_daemonServiceRegistered = false;
-                return;
-            }
-            int daemonVersion = result.apiVersion.toInt();
-            if (daemonVersion < DBus::MinPeerApiVersion) {
-                qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
-                                     << DBus::MinPeerApiVersion << "— update the daemon to match the effect.";
-                m_daemonServiceRegistered = false;
-                return;
-            }
-            qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
-                             << "session=" << result.sessionId;
-        });
-    }
+    //
+    // All post-registration work (state re-push, virtual screen fetch, etc.) is
+    // deferred into the reply callback so that on REJECTED / protocol mismatch
+    // we never send a single stateful call to an incompatible daemon. Any such
+    // call would either fail noisily or risk silent marshalling mismatches —
+    // the very failure mode this PR is designed to prevent.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::CompositorBridge, QStringLiteral("registerBridge"));
+    msg << QStringLiteral("kwin") << QString::number(DBus::ApiVersion)
+        << QStringList{QStringLiteral("borderless"), QStringLiteral("animation")};
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<PlasmaZones::BridgeRegistrationResult> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
+                                << "— effect remains idle until the daemon signals ready again.";
+            return;
+        }
+        BridgeRegistrationResult result = reply.value();
+        if (result.sessionId == QLatin1String("REJECTED")) {
+            qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
+                                 << "but this effect speaks" << DBus::ApiVersion
+                                 << "— update the effect to match the daemon.";
+            return;
+        }
+        int daemonVersion = result.apiVersion.toInt();
+        if (daemonVersion < DBus::MinPeerApiVersion) {
+            qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
+                                 << DBus::MinPeerApiVersion << "— update the daemon to match the effect.";
+            return;
+        }
+        qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
+                         << "session=" << result.sessionId;
+        m_daemonServiceRegistered = true;
+        continueDaemonReadySetup();
+    });
+}
 
+void PlasmaZonesEffect::continueDaemonReadySetup()
+{
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
 

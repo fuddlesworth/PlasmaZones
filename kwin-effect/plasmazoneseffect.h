@@ -126,6 +126,13 @@ private Q_SLOTS:
     // Daemon lifecycle
     void slotDaemonReady();
 
+private:
+    /// Continuation of slotDaemonReady() after the registerBridge reply has
+    /// confirmed the daemon speaks a compatible protocol version. Separated
+    /// so none of the state-pushing D-Bus calls can fire against a daemon
+    /// that rejected the bridge handshake.
+    void continueDaemonReadySetup();
+
 public:
     /**
      * @brief Window identification — returns the opaque instance id.

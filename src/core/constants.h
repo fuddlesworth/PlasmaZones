@@ -477,6 +477,12 @@ namespace DBus {
 inline constexpr QLatin1String ServiceName{"org.plasmazones"};
 inline constexpr QLatin1String ObjectPath{"/PlasmaZones"};
 
+// Effect↔daemon protocol version. Mirrored in compositor-common/dbus_constants.h
+// (the effect's canonical copy); the two MUST stay in sync. Bump both together
+// when the D-Bus method/signal schema changes in a backwards-incompatible way.
+inline constexpr int ApiVersion = 2;
+inline constexpr int MinPeerApiVersion = 2;
+
 namespace SettingsApp {
 inline constexpr QLatin1String ServiceName{"org.plasmazones.Settings.App"};
 inline constexpr QLatin1String ObjectPath{"/SettingsApp"};

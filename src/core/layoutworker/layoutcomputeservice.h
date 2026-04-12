@@ -7,12 +7,14 @@
 #include "plasmazones_export.h"
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 
 class QThread;
 
 namespace PlasmaZones {
 
 class Layout;
+class LayoutManager;
 class LayoutWorker;
 
 /**
@@ -39,11 +41,24 @@ public:
     ~LayoutComputeService() override;
 
     /**
+     * Optional: wire in the LayoutManager so tracked layouts are evicted
+     * when layouts are removed/destroyed. Without this m_trackedLayouts
+     * would grow unbounded over a long process lifetime.
+     */
+    void setLayoutManager(LayoutManager* manager);
+
+    /**
      * Request async geometry computation for a layout on a given screen.
      * Snapshots the layout, sends to worker. geometriesComputed() fires
-     * when results are ready.
+     * when results are ready OR when the request was a no-op (cache hit).
+     * Callers that track a completion barrier can rely on the signal
+     * firing exactly once per successful requestRecalculate() call.
+     *
+     * @return true if the signal will fire, false if the request was
+     *         rejected (null layout or invalid geometry). A rejected
+     *         request never fires geometriesComputed.
      */
-    void requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
 
     /**
      * Synchronous fallback — runs computation inline on the main thread.
@@ -55,26 +70,33 @@ Q_SIGNALS:
     /**
      * Emitted on the main thread after the worker completes geometry
      * computation for a layout-screen pair. The live Layout/Zone objects
-     * have already been updated when this signal fires.
+     * have already been updated when this signal fires. Also emitted
+     * synchronously from requestRecalculate() when the request hit the
+     * geometry cache (no work needed) so completion barriers stay armed.
      */
     void geometriesComputed(const QString& screenId, Layout* layout);
+
+    // Internal: forward snapshot to worker thread via QueuedConnection.
+    // Publicly visible because Qt signals cannot be private, but must
+    // only be emitted by LayoutComputeService itself.
+    void requestCompute(const PlasmaZones::LayoutSnapshot& snapshot, uint64_t generation);
 
 private:
     static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
     void applyResult(const LayoutComputeResult& result);
+    void onLayoutRemoved(const QUuid& layoutId);
 
-    /// Map layout ID → live Layout* for result application
-    QHash<QUuid, Layout*> m_trackedLayouts;
+    /// Map layout ID → live Layout* (QPointer guards against destruction
+    /// while a compute result is in flight on the worker thread).
+    QHash<QUuid, QPointer<Layout>> m_trackedLayouts;
 
     /// Per-screen generation counters for coalescing
     QHash<QString, uint64_t> m_screenGeneration;
 
+    QPointer<LayoutManager> m_layoutManager;
+
     QThread* m_thread = nullptr;
     LayoutWorker* m_worker = nullptr;
-
-Q_SIGNALS:
-    // Internal: forward snapshot to worker thread via QueuedConnection
-    void requestCompute(const PlasmaZones::LayoutSnapshot& snapshot, uint64_t generation);
 };
 
 } // namespace PlasmaZones
