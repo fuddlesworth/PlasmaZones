@@ -35,7 +35,7 @@ public Q_SLOTS:
     void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
 
 private:
-    EditorLaunchController* m_launcher; ///< Non-owning; parent object.
+    EditorLaunchController* m_launcher; ///< Non-owning; parent object, guaranteed non-null.
 };
 
 } // namespace PlasmaZones

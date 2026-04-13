@@ -153,9 +153,13 @@ int main(int argc, char* argv[])
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
         qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
     }
+    if (parser.isSet(newLayoutOption) && parser.isSet(layoutIdOption)) {
+        qWarning() << "--new and --layout are mutually exclusive; ignoring --layout";
+    }
 
     const bool createNewLayout = parser.isSet(newLayoutOption);
-    const QString layoutIdArg = parser.isSet(layoutIdOption) ? parser.value(layoutIdOption) : QString();
+    const QString layoutIdArg =
+        (!createNewLayout && parser.isSet(layoutIdOption)) ? parser.value(layoutIdOption) : QString();
     const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
 
     // Single-instance: if another editor is already running, forward the launch

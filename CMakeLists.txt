@@ -320,10 +320,12 @@ endif()
 # Install D-Bus interface XMLs (one per interface)
 install(FILES
     dbus/org.plasmazones.Autotile.xml
+    dbus/org.plasmazones.EditorApp.xml
     dbus/org.plasmazones.LayoutManager.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
     dbus/org.plasmazones.Settings.xml
+    dbus/org.plasmazones.SettingsApp.xml
     dbus/org.plasmazones.WindowDrag.xml
     dbus/org.plasmazones.WindowTracking.xml
     DESTINATION ${KDE_INSTALL_DBUSINTERFACEDIR}

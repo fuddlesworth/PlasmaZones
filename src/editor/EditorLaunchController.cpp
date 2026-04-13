@@ -18,9 +18,12 @@ EditorLaunchController::EditorLaunchController(EditorController* controller, QOb
           this))
 {
     Q_ASSERT(m_controller);
-    // The adaptor parents itself to `this`, so Qt D-Bus picks it up when
-    // SingleInstanceService::claim() registers this object at /EditorApp.
-    // The adaptor is destroyed automatically with this QObject.
+    // Parent the adaptor to `this`. SingleInstanceService already has `this`
+    // as its export object (set in the init list above), but it only
+    // dereferences the export object later during claim() — by which point
+    // the adaptor created below has been attached as a QObject child, so Qt
+    // D-Bus's ExportAdaptors walk finds it. Destruction is automatic via
+    // QObject parent/child.
     new EditorAppAdaptor(this);
 }
 
@@ -28,7 +31,7 @@ EditorLaunchController::~EditorLaunchController() = default;
 
 bool EditorLaunchController::registerDBusService()
 {
-    return m_singleInstance && m_singleInstance->claim();
+    return m_singleInstance->claim();
 }
 
 void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew,
@@ -53,9 +56,12 @@ void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QStr
         maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
         m_controller->createNewLayout();
     } else if (!layoutId.isEmpty()) {
+        // Switch screen first (direct, no auto-load) so loadLayout resolves
+        // per-screen geometry and virtual-screen context against the target
+        // screen rather than whatever was current before the forward.
+        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
         m_controller->setPreviewMode(preview || LayoutId::isAutotile(layoutId));
         m_controller->loadLayout(layoutId);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
     } else {
         m_controller->setPreviewMode(false);
         maybeSwitchScreen(screenId, /*loadAssignedLayout*/ true);

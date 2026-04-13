@@ -5,12 +5,15 @@
 
 #include "EditorLaunchController.h"
 
+#include <QtGlobal>
+
 namespace PlasmaZones {
 
 EditorAppAdaptor::EditorAppAdaptor(EditorLaunchController* launcher)
     : QDBusAbstractAdaptor(launcher)
     , m_launcher(launcher)
 {
+    Q_ASSERT(m_launcher);
     setAutoRelaySignals(false);
 }
 
@@ -19,9 +22,7 @@ EditorAppAdaptor::~EditorAppAdaptor() = default;
 void EditorAppAdaptor::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
                                            bool preview)
 {
-    if (m_launcher) {
-        m_launcher->handleLaunchRequest(screenId, layoutId, createNew, preview);
-    }
+    m_launcher->handleLaunchRequest(screenId, layoutId, createNew, preview);
 }
 
 } // namespace PlasmaZones

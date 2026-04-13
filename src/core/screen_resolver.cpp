@@ -7,6 +7,7 @@
 
 #include <QCursor>
 #include <QDBusConnection>
+#include <QDBusConnectionInterface>
 #include <QDBusMessage>
 #include <QGuiApplication>
 #include <QPoint>
@@ -18,16 +19,26 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, int daemonTimeoutMs
 {
     // Ask the daemon first — it's the only component that knows about
     // virtual-screen carve-outs and disambiguates identical monitors via
-    // connector-suffixed IDs.
-    QDBusMessage msg = QDBusMessage::createMethodCall(
-        QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-        QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getEffectiveScreenAt"));
-    msg << pos.x() << pos.y();
-    QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, daemonTimeoutMs);
-    if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-        const QString daemonId = reply.arguments().at(0).toString();
-        if (!daemonId.isEmpty()) {
-            return daemonId;
+    // connector-suffixed IDs. Skip the call entirely if the daemon isn't
+    // already on the bus so we don't trigger D-Bus auto-activation as a
+    // side-effect of a cursor-screen lookup (the editor can legitimately
+    // run before the daemon — e.g. `plasmazones-editor --help`).
+    auto bus = QDBusConnection::sessionBus();
+    auto* busIface = bus.interface();
+    const bool daemonOnBus =
+        bus.isConnected() && busIface && busIface->isServiceRegistered(QString::fromLatin1(DBus::ServiceName));
+    if (daemonOnBus) {
+        QDBusMessage msg = QDBusMessage::createMethodCall(
+            QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+            QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getEffectiveScreenAt"));
+        msg.setAutoStartService(false);
+        msg << pos.x() << pos.y();
+        QDBusMessage reply = bus.call(msg, QDBus::Block, daemonTimeoutMs);
+        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
+            const QString daemonId = reply.arguments().at(0).toString();
+            if (!daemonId.isEmpty()) {
+                return daemonId;
+            }
         }
     }
 

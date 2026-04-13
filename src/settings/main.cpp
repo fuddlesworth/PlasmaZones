@@ -6,6 +6,7 @@
 #include "../core/translationloader.h"
 #include "../config/configmigration.h"
 #include "settingscontroller.h"
+#include "settingslaunchcontroller.h"
 #include "version.h"
 #include "pz_i18n.h"
 #include "pz_qml_i18n.h"
@@ -89,10 +90,16 @@ int main(int argc, char* argv[])
 
     PlasmaZones::SettingsController controller;
 
+    // The launch controller owns the D-Bus single-instance lifecycle. Holds a
+    // non-owning pointer to `controller`, which must outlive it (guaranteed by
+    // reverse destruction order: `controller` is declared first and destroyed
+    // last).
+    PlasmaZones::SettingsLaunchController launcher(&controller);
+
     // Register D-Bus service so future launches can forward to us.
     // If registration fails, another instance registered between our
     // activateRunningInstance() check and now — retry forwarding and exit.
-    if (!controller.registerDBusService()) {
+    if (!launcher.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
         if (activateRunningInstance(requestedPage)) {
             return 0;
