@@ -751,13 +751,34 @@ ApplicationWindow {
 
                             }
 
-                            // Unsaved changes badge
+                            // Unsaved changes badge — per-page tracking.
+                            // Read settingsController.dirtyPages directly in the
+                            // binding so QML tracks it as a dependency and
+                            // re-evaluates when the dirty set changes.
                             Rectangle {
                                 width: Kirigami.Units.smallSpacing * 1.5
                                 height: Kirigami.Units.smallSpacing * 1.5
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
-                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                visible: {
+                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                        return false;
+
+                                    const dirty = settingsController.dirtyPages;
+                                    if (dirty.indexOf(navDelegate.name) >= 0)
+                                        return true;
+
+                                    // Parent category: dirty if any child page is dirty
+                                    const children = window._childItems[navDelegate.name];
+                                    if (children) {
+                                        for (let i = 0; i < children.length; i++) {
+                                            if (dirty.indexOf(children[i].name) >= 0)
+                                                return true;
+
+                                        }
+                                    }
+                                    return false;
+                                }
                                 Layout.alignment: Qt.AlignVCenter
 
                                 SequentialAnimation {
@@ -766,7 +787,7 @@ ApplicationWindow {
                                     property Item target: parent
 
                                     loops: Animation.Infinite
-                                    running: navDelegate.isActive && settingsController.needsSave
+                                    running: parent.visible
                                     onRunningChanged: {
                                         if (!running)
                                             target.opacity = 1;

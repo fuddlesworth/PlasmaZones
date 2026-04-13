@@ -35,6 +35,7 @@ class SettingsController : public QObject
 
     Q_PROPERTY(QString activePage READ activePage WRITE setActivePage NOTIFY activePageChanged)
     Q_PROPERTY(bool needsSave READ needsSave NOTIFY needsSaveChanged)
+    Q_PROPERTY(QStringList dirtyPages READ dirtyPages NOTIFY dirtyPagesChanged)
     Q_PROPERTY(bool daemonRunning READ daemonRunning NOTIFY daemonRunningChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
     Q_PROPERTY(DaemonController* daemonController READ daemonController CONSTANT)
@@ -166,8 +167,12 @@ public:
 
     bool needsSave() const
     {
-        return m_needsSave;
+        return !m_dirtyPages.isEmpty();
     }
+    QStringList dirtyPages() const;
+    /// Returns true if the page (or any of its children, for parent categories
+    /// like "snapping" / "tiling") currently has unsaved changes.
+    Q_INVOKABLE bool isPageDirty(const QString& page) const;
     bool daemonRunning() const
     {
         return m_daemonController.isRunning();
@@ -673,6 +678,7 @@ public:
 Q_SIGNALS:
     void activePageChanged();
     void needsSaveChanged();
+    void dirtyPagesChanged();
     void daemonRunningChanged();
     void layoutsChanged();
     void layoutAdded(const QString& layoutId);
@@ -766,7 +772,7 @@ private:
     QVariantList m_whatsNewEntries;
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
-    bool m_needsSave = false;
+    QSet<QString> m_dirtyPages;
     bool m_saving = false;
     bool m_loading = false;
 
