@@ -1267,15 +1267,13 @@ public:
     }
     static QString rotateVirtualScreensClockwiseShortcut()
     {
-        // Use the shifted glyph directly: on X11/Wayland, pressing Shift+]
-        // produces the keysym `braceright` (Shift is consumed by the keyboard
-        // level mapping), so a grab registered as "Meta+Ctrl+Shift+]" never
-        // matches the event. "Meta+Ctrl+}" does.
-        return QStringLiteral("Meta+Ctrl+}");
+        // +Alt over the window rotate (Meta+Ctrl+]) escalates from zone
+        // scope to VS scope, matching the swap-window → swap-VS convention.
+        return QStringLiteral("Meta+Ctrl+Alt+]");
     }
     static QString rotateVirtualScreensCounterclockwiseShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+{");
+        return QStringLiteral("Meta+Ctrl+Alt+[");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

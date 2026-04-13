@@ -591,7 +591,7 @@ void ShortcutManager::setupRotateVirtualScreensShortcuts()
                    "rotate_virtual_screens_counterclockwise", rotateVirtualScreensCounterclockwiseShortcut,
                    &ShortcutManager::onRotateVirtualScreensCounterclockwise);
 
-    qCInfo(lcShortcuts) << "Rotate virtual screens shortcuts registered (Meta+Ctrl+} / Meta+Ctrl+{)";
+    qCInfo(lcShortcuts) << "Rotate virtual screens shortcuts registered (Meta+Ctrl+Alt+] / Meta+Ctrl+Alt+[)";
 }
 
 void ShortcutManager::setupCycleWindowsShortcuts()
