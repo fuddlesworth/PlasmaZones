@@ -11,11 +11,11 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
+#include "../core/constants.h"
 #include "../core/logging.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
-#include <QPointer>
 
 namespace PlasmaZones {
 
@@ -100,7 +100,7 @@ EditorController::~EditorController()
     // Save editor settings to KConfig
     saveEditorSettings();
 
-    // Services are QObjects with this as parent, so they'll be deleted automatically
+    // Services are QObjects with this as parent, so they'll be deleted automatically.
 }
 
 // Preview mode

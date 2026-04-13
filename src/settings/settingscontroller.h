@@ -146,17 +146,20 @@ public:
     explicit SettingsController(QObject* parent = nullptr);
     ~SettingsController() override;
 
-    /// Register on the session bus so a second instance can forward page requests.
-    bool registerDBusService();
-
     QString activePage() const
     {
         return m_activePage;
     }
-    Q_SCRIPTABLE void setActivePage(const QString& page);
 
-    /// Raise the settings window to the foreground.
-    Q_SCRIPTABLE void raise();
+    /// Switch the active settings page.
+    ///
+    /// Used by QML (via the `activePage` Q_PROPERTY WRITE), directly from
+    /// `main.cpp` for the initial `--page` arg, and indirectly by
+    /// `SettingsLaunchController::handleSetActivePage` when a second
+    /// launcher forwards its `--page` request over D-Bus. Does not raise
+    /// the window; the D-Bus forward path just updates state and lets the
+    /// user focus the existing window themselves.
+    void setActivePage(const QString& page);
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
@@ -753,6 +756,7 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;
     DaemonController m_daemonController;

@@ -26,6 +26,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QWindow>
+
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -83,12 +84,6 @@ VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QStr
 
 SettingsController::~SettingsController()
 {
-    // Unregister D-Bus service so a stale name doesn't linger if the
-    // QDBusConnection outlives this object.
-    auto bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(DBus::SettingsApp::ObjectPath);
-    bus.unregisterService(DBus::SettingsApp::ServiceName);
-
     // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
@@ -376,31 +371,6 @@ void SettingsController::setActivePage(const QString& page)
         // Any NOTIFY signals that fired during page creation were suppressed
         // by m_loading and should not mark the settings as dirty.
         setNeedsSave(wasDirty);
-    }
-}
-
-bool SettingsController::registerDBusService()
-{
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(DBus::SettingsApp::ServiceName)) {
-        return false;
-    }
-    // ExportScriptableSlots exposes all Q_SCRIPTABLE methods on this object (raise + setActivePage).
-    // Adding new Q_SCRIPTABLE slots will automatically expose them on D-Bus.
-    bus.registerObject(DBus::SettingsApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
-    return true;
-}
-
-void SettingsController::raise()
-{
-    const auto windows = QGuiApplication::allWindows();
-    for (auto* w : windows) {
-        if (w->type() != Qt::Window)
-            continue;
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break; // Only raise the primary application window
     }
 }
 

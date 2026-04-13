@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configmigration.h"
 #include "settingscontroller.h"
+#include "settingslaunchcontroller.h"
 #include "version.h"
 #include "pz_i18n.h"
 #include "pz_qml_i18n.h"
@@ -13,9 +15,6 @@
 
 #include <QGuiApplication>
 #include <QCommandLineParser>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusMessage>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -23,29 +22,25 @@
 
 namespace {
 
+constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::SettingsApp::ServiceName,
+                                                      PlasmaZones::DBus::SettingsApp::ObjectPath,
+                                                      PlasmaZones::DBus::SettingsApp::Interface};
+
 /// Try to forward a --page request to an already-running instance.
-/// Returns true if the running instance handled it (caller should exit).
+/// Returns true if a running instance exists (caller should exit).
+///
+/// Forwards only the page switch — does not try to raise the running window.
+/// No Wayland workaround reliably convinces KWin to bring an already-mapped
+/// xdg_toplevel to the front from a programmatic caller, so the user has to
+/// focus the existing window themselves.
 bool activateRunningInstance(const QString& page)
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.isConnected())
+    if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
-    QDBusInterface iface(PlasmaZones::DBus::SettingsApp::ServiceName, PlasmaZones::DBus::SettingsApp::ObjectPath,
-                         PlasmaZones::DBus::SettingsApp::Interface, bus);
-    if (!iface.isValid())
-        return false;
-
-    iface.setTimeout(3000); // 3s timeout — avoid long hang if existing instance is frozen
     if (!page.isEmpty()) {
-        QDBusMessage pageReply = iface.call(QStringLiteral("setActivePage"), page);
-        if (pageReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to forward page to running instance:" << pageReply.errorMessage();
-        }
+        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
     }
-    QDBusMessage reply = iface.call(QStringLiteral("raise"));
-    if (reply.type() == QDBusMessage::ErrorMessage)
-        return false;
     return true;
 }
 
@@ -95,10 +90,16 @@ int main(int argc, char* argv[])
 
     PlasmaZones::SettingsController controller;
 
+    // The launch controller owns the D-Bus single-instance lifecycle. Holds a
+    // non-owning pointer to `controller`, which must outlive it (guaranteed by
+    // reverse destruction order: `controller` is declared first and destroyed
+    // last).
+    PlasmaZones::SettingsLaunchController launcher(&controller);
+
     // Register D-Bus service so future launches can forward to us.
     // If registration fails, another instance registered between our
     // activateRunningInstance() check and now — retry forwarding and exit.
-    if (!controller.registerDBusService()) {
+    if (!launcher.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
         if (activateRunningInstance(requestedPage)) {
             return 0;
