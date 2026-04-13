@@ -9,6 +9,7 @@
 #include "../core/zone.h"
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
+#include "../core/spatialadjacency.h"
 #include "../core/utils.h"
 #include <QGuiApplication>
 #include <QScreen>
@@ -220,59 +221,20 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
         return QString();
     }
 
-    QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
-    QPointF currentCenter(currentGeom.center());
+    const QRectF currentGeom = currentZone->normalizedGeometry(refGeom);
 
-    Zone* bestZone = nullptr;
-    qreal bestDistance = std::numeric_limits<qreal>::max();
-
-    for (auto* zone : layout->zones()) {
-        if (zone == currentZone) {
-            continue;
-        }
-
-        QRectF zoneGeom = zone->normalizedGeometry(refGeom);
-        QPointF zoneCenter(zoneGeom.center());
-
-        // Check if zone is in the correct direction
-        bool isValidDirection = false;
-        qreal distance = 0;
-
-        if (direction == Utils::Direction::Left) {
-            // Zone must be to the left (its right edge <= current left edge, or center is left)
-            if (zoneCenter.x() < currentCenter.x()) {
-                isValidDirection = true;
-                distance = currentCenter.x() - zoneCenter.x();
-                // Prefer zones with similar vertical position
-                distance += std::abs(zoneCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Utils::Direction::Right) {
-            if (zoneCenter.x() > currentCenter.x()) {
-                isValidDirection = true;
-                distance = zoneCenter.x() - currentCenter.x();
-                distance += std::abs(zoneCenter.y() - currentCenter.y()) * 2;
-            }
-        } else if (direction == Utils::Direction::Up) {
-            if (zoneCenter.y() < currentCenter.y()) {
-                isValidDirection = true;
-                distance = currentCenter.y() - zoneCenter.y();
-                distance += std::abs(zoneCenter.x() - currentCenter.x()) * 2;
-            }
-        } else if (direction == Utils::Direction::Down) {
-            if (zoneCenter.y() > currentCenter.y()) {
-                isValidDirection = true;
-                distance = zoneCenter.y() - currentCenter.y();
-                distance += std::abs(zoneCenter.x() - currentCenter.x()) * 2;
-            }
-        }
-
-        if (isValidDirection && distance < bestDistance) {
-            bestDistance = distance;
-            bestZone = zone;
-        }
+    const auto zones = layout->zones();
+    QList<QRectF> candidateGeoms;
+    candidateGeoms.reserve(zones.size());
+    for (auto* zone : zones) {
+        candidateGeoms.append(zone->normalizedGeometry(refGeom));
     }
 
-    return bestZone ? bestZone->id().toString() : QString();
+    const int bestIndex = SpatialAdjacency::findAdjacentRect(currentGeom, candidateGeoms, direction);
+    if (bestIndex < 0) {
+        return QString();
+    }
+    return zones.at(bestIndex)->id().toString();
 }
 
 QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, const QString& screenId)
