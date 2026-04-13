@@ -155,13 +155,15 @@ public:
         return m_activePage;
     }
 
-    /// D-Bus entry point used by a forwarding launcher to switch the running
-    /// instance to a specific settings page. Exposed as Q_SCRIPTABLE so
-    /// ExportScriptableSlots picks it up. Does not attempt to raise the
-    /// window — no reliable way to do that from a programmatic caller on
-    /// Wayland, so the user has to bring the existing window to the front
+    /// Switch the active settings page.
+    ///
+    /// Used by QML (via the `activePage` Q_PROPERTY WRITE), directly from
+    /// `main.cpp` for the initial `--page` arg, and forwarded over D-Bus by
+    /// `SettingsAppAdaptor::setActivePage` when a second launcher hands off
+    /// its `--page` request. Does not raise the window; the D-Bus forward
+    /// path just updates state and lets the user focus the existing window
     /// themselves.
-    Q_SCRIPTABLE void setActivePage(const QString& page);
+    void setActivePage(const QString& page);
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();

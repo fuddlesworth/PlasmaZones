@@ -43,7 +43,14 @@ bool SingleInstanceService::claim()
     if (!bus.registerService(m_ids.serviceName)) {
         return false;
     }
-    if (!bus.registerObject(m_ids.objectPath, m_exportObject, QDBusConnection::ExportScriptableSlots)) {
+    // ExportAdaptors (the default) exposes any QDBusAbstractAdaptor child of
+    // the registered object. Callers attach their adaptor to the object
+    // before calling claim() — see EditorLaunchController and
+    // SettingsController, which each instantiate their *AppAdaptor in their
+    // constructors. We deliberately don't include ExportScriptableSlots: the
+    // adaptor is the D-Bus contract, and leaking Q_SCRIPTABLE annotations
+    // into the domain objects mixes transport with model.
+    if (!bus.registerObject(m_ids.objectPath, m_exportObject, QDBusConnection::ExportAdaptors)) {
         // Object export failed — release the name immediately so forwarders
         // don't connect to a well-known name with no reachable object.
         qCWarning(lcCore) << "Failed to export object at" << m_ids.objectPath << "— releasing service name"

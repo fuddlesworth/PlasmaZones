@@ -9,6 +9,8 @@ set(plasmazones_settings_SRCS
     main.cpp
     settingscontroller.h
     settingscontroller.cpp
+    settingsappadaptor.h
+    settingsappadaptor.cpp
     # DaemonController — daemon lifecycle management (start/stop/status)
     ${CMAKE_SOURCE_DIR}/src/common/daemoncontroller.h
     ${CMAKE_SOURCE_DIR}/src/common/daemoncontroller.cpp

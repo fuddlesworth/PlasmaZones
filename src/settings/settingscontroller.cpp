@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingscontroller.h"
+#include "settingsappadaptor.h"
 #include "../core/constants.h"
 #include "version.h"
 #include "../core/logging.h"
@@ -105,6 +106,11 @@ SettingsController::SettingsController(QObject* parent)
                                                                this))
     , m_screenHelper(&m_settings, this)
 {
+    // The adaptor parents itself to `this`, so Qt D-Bus picks it up when
+    // SingleInstanceService::claim() registers this object at /SettingsApp.
+    // Destroyed automatically with the controller.
+    new SettingsAppAdaptor(this);
+
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));

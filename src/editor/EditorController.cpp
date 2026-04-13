@@ -13,7 +13,6 @@
 #include "helpers/ZoneSerialization.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../core/single_instance_service.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
@@ -27,9 +26,6 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
-    , m_singleInstance(std::make_unique<SingleInstanceService>(
-          SingleInstanceIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath, DBus::EditorApp::Interface},
-          this))
 {
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
@@ -104,68 +100,7 @@ EditorController::~EditorController()
     // Save editor settings to KConfig
     saveEditorSettings();
 
-    // m_singleInstance destructor releases the D-Bus name + object. Services
-    // are QObjects with this as parent, so they'll be deleted automatically.
-}
-
-bool EditorController::registerDBusService()
-{
-    return m_singleInstance && m_singleInstance->claim();
-}
-
-void EditorController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
-{
-    // Single source of truth for "turn a set of CLI args into controller state".
-    // Called from main.cpp for the initial launch and from handleLaunchRequest
-    // for forwarded launches, so the two paths cannot drift out of sync.
-    //
-    // Preview mode is set *unconditionally* so state from a previous forwarded
-    // launch (e.g. an autotile opened in preview) cannot leak into a subsequent
-    // non-preview launch on the same running instance.
-    //
-    // The loadAssignedLayout flag distinguishes the "no layout arg" path, which
-    // should follow the screen's assigned layout, from the paths where we
-    // already know what layout to load and must not trigger a second load.
-    auto maybeSwitchScreen = [this](const QString& id, bool loadAssignedLayout) {
-        if (id.isEmpty() || targetScreen() == id) {
-            return;
-        }
-        if (loadAssignedLayout) {
-            setTargetScreen(id);
-        } else {
-            setTargetScreenDirect(id);
-        }
-    };
-
-    if (createNew) {
-        setPreviewMode(false);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
-        createNewLayout();
-    } else if (!layoutId.isEmpty()) {
-        setPreviewMode(preview || LayoutId::isAutotile(layoutId));
-        loadLayout(layoutId);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
-    } else {
-        setPreviewMode(false);
-        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ true);
-    }
-}
-
-void EditorController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                           bool preview)
-{
-    // Apply the forwarded CLI args to the running editor. Screen and layout
-    // changes propagate through targetScreenChanged / layoutIdChanged signals,
-    // which QML observes and reacts to (EditorWindow.qml calls
-    // showFullScreenOnTargetScreen on screen changes, which handles the
-    // destroy-and-remap dance for cross-monitor moves on Wayland).
-    //
-    // Deliberately does not try to raise/activate the window: neither the
-    // Wayland destroy-and-remap nor XDG activation tokens reliably convince
-    // KWin to bring an already-mapped fullscreen xdg_toplevel to the front
-    // for a programmatic caller. A forwarded launch whose args don't change
-    // anything is a no-op — the user has to focus the window themselves.
-    applyLaunchArgs(screenId, layoutId, createNew, preview);
+    // Services are QObjects with this as parent, so they'll be deleted automatically.
 }
 
 // Preview mode
