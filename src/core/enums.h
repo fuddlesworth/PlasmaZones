@@ -107,4 +107,22 @@ enum class AutotileDragBehavior {
     Reorder = 1 ///< Drag-to-reorder: swaps tile position within the layout
 };
 
+/**
+ * @brief Behavior when more windows exist than the algorithm's `maxWindows` cap.
+ *
+ * Float (default, PlasmaZones-native): excess windows are auto-floated by
+ * OverflowManager so the layout stays within the cap. New windows past the
+ * cap are rejected at onWindowAdded. The cap is algorithm-dependent and
+ * defaults to 4–6 on most bundled algorithms.
+ *
+ * Unlimited (dwm/Krohnkite-style): the cap is ignored. All windows on an
+ * autotile screen are tiled regardless of count. The layout algorithm handles
+ * arbitrary N — master-stack's stack area just keeps subdividing. Users who
+ * dislike very thin stack slices can still set masterCount or switch layouts.
+ */
+enum class AutotileOverflowBehavior {
+    Float = 0, ///< Float windows past the maxWindows cap (default)
+    Unlimited = 1 ///< Ignore the cap entirely — every window tiles
+};
+
 } // namespace PlasmaZones

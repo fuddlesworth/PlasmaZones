@@ -475,6 +475,19 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("autotileDragBehavior")] = QStringLiteral("int");
+    m_getters[QStringLiteral("autotileOverflowBehavior")] = [this]() {
+        return static_cast<int>(m_settings->autotileOverflowBehavior());
+    };
+    m_setters[QStringLiteral("autotileOverflowBehavior")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= static_cast<int>(AutotileOverflowBehavior::Float)
+            && val <= static_cast<int>(AutotileOverflowBehavior::Unlimited)) {
+            m_settings->setAutotileOverflowBehavior(static_cast<AutotileOverflowBehavior>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("autotileOverflowBehavior")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Autotile shortcuts (concrete Settings only)

@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include "config/configdefaults.h"
+#include "core/enums.h"
 #include <QColor>
 #include <QHash>
 #include <QJsonObject>
@@ -218,6 +219,17 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Default: 6
      */
     int maxWindows = ConfigDefaults::autotileMaxWindows();
+
+    /**
+     * @brief Overflow behavior when window count exceeds maxWindows
+     *
+     * Float (default): auto-float excess windows via OverflowManager.
+     * Unlimited: ignore the cap and tile every window — the
+     * `effectiveMaxWindows` path returns INT_MAX so the std::min clamp in
+     * recalculateLayout becomes idempotent and onWindowAdded's gate is
+     * always open.
+     */
+    AutotileOverflowBehavior overflowBehavior = AutotileOverflowBehavior::Float;
 
     // ═══════════════════════════════════════════════════════════════════════
     // Comparison and Serialization

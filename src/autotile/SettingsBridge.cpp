@@ -146,6 +146,18 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         }
     }
 
+    // OverflowBehavior needs a cast — tracked so the backfill path below fires
+    // when the user toggles Unlimited (recovery of previously-overflowed windows
+    // is handled there via the same mechanism as a maxWindows increase).
+    const AutotileOverflowBehavior oldOverflowBehavior = cfg->overflowBehavior;
+    {
+        auto newOverflow = settings->autotileOverflowBehavior();
+        if (cfg->overflowBehavior != newOverflow) {
+            cfg->overflowBehavior = newOverflow;
+            configChanged = true;
+        }
+    }
+
 #undef SYNC_FIELD
 
     // Sync algorithm via setAlgorithm (handles validation + fallback + m_config sync)
@@ -172,9 +184,12 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     m_engine->propagateGlobalSplitRatio();
     m_engine->propagateGlobalMasterCount();
 
-    // Backfill windows when maxWindows increased: windows rejected by the old
-    // gate check in onWindowAdded() stay untiled unless we add them here.
-    if (cfg->maxWindows > oldMaxWindows) {
+    // Backfill windows when maxWindows increased OR overflow behavior flipped
+    // to Unlimited: windows rejected by the old gate check in onWindowAdded()
+    // stay untiled unless we add them here.
+    const bool flippedToUnlimited = oldOverflowBehavior == AutotileOverflowBehavior::Float
+        && cfg->overflowBehavior == AutotileOverflowBehavior::Unlimited;
+    if (cfg->maxWindows > oldMaxWindows || flippedToUnlimited) {
         m_engine->backfillWindows();
     }
 
@@ -331,6 +346,23 @@ void SettingsBridge::connectToSettings(Settings* settings)
         // When max increases, try to add windows that exist on autotile screens
         // but were rejected when the previous limit was reached.
         if (m_engine->config()->maxWindows > oldMax) {
+            m_engine->backfillWindows();
+        }
+        scheduleSettingsRetile();
+    });
+
+    // OverflowBehavior needs the same custom handler: when the user flips to
+    // Unlimited, previously-overflowed (floating) windows must be backfilled
+    // into the tile layout. effectiveMaxWindows now returns INT_MAX in
+    // Unlimited mode so the onWindowAdded gate is wide open — backfill just
+    // re-inserts everything that was rejected before.
+    QObject::connect(settings, &Settings::autotileOverflowBehaviorChanged, m_engine, [this]() {
+        if (!m_settings)
+            return;
+        const AutotileOverflowBehavior oldBehavior = m_engine->config()->overflowBehavior;
+        m_engine->config()->overflowBehavior = m_settings->autotileOverflowBehavior();
+        if (oldBehavior == AutotileOverflowBehavior::Float
+            && m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
             m_engine->backfillWindows();
         }
         scheduleSettingsRetile();

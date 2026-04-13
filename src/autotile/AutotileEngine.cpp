@@ -2413,10 +2413,12 @@ bool AutotileEngine::beginDragInsertPreview(const QString& windowId, const QStri
     // Evict last tiled neighbour if adoption pushed us over the maxWindows cap.
     // Skipped when the dragged window was already tiled on target (same-screen
     // reorder with priorFloating=false) because that doesn't grow the count.
+    // Also skipped in Unlimited overflow mode — no cap, no eviction.
     // setFloating preserves the victim's raw position in m_windowOrder, so cancel
     // can restore it with a simple unfloat — no index bookkeeping needed.
+    const bool overflowUnlimited = m_config && m_config->overflowBehavior == AutotileOverflowBehavior::Unlimited;
     const int maxWindows = m_config ? m_config->maxWindows : 0;
-    if (maxWindows > 0 && targetState->tiledWindowCount() > maxWindows) {
+    if (!overflowUnlimited && maxWindows > 0 && targetState->tiledWindowCount() > maxWindows) {
         const QStringList tiled = targetState->tiledWindows();
         for (int i = tiled.size() - 1; i >= 0; --i) {
             if (tiled[i] != windowId) {

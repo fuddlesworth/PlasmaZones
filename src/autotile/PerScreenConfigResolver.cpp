@@ -10,6 +10,8 @@
 #include "core/constants.h"
 #include "core/logging.h"
 
+#include <limits>
+
 namespace PlasmaZones {
 
 PerScreenConfigResolver::PerScreenConfigResolver(AutotileEngine* engine)
@@ -208,6 +210,15 @@ bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenI
 
 int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 {
+    // Global Unlimited short-circuit: Krohnkite-style "no cap" mode bypasses
+    // both the per-screen override and the algorithm-default lookup. A huge
+    // sentinel (not INT_MAX, to avoid overflow if anything adds to it) is
+    // passed to std::min in recalculateLayout, making the clamp idempotent.
+    // Also opens onWindowAdded's gate (tiledWindowCount >= maxWin never true).
+    if (m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
+        return std::numeric_limits<int>::max() / 2;
+    }
+
     // 1. Explicit per-screen MaxWindows override — highest priority
     if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
         return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);

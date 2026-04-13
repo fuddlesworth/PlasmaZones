@@ -129,6 +129,8 @@ public:
     virtual void setAutotileStickyWindowHandling(StickyWindowHandling handling) = 0;
     virtual AutotileDragBehavior autotileDragBehavior() const = 0;
     virtual void setAutotileDragBehavior(AutotileDragBehavior behavior) = 0;
+    virtual AutotileOverflowBehavior autotileOverflowBehavior() const = 0;
+    virtual void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) = 0;
 
     // Autotile drag-insert triggers: hold-to-activate list for live
     // re-inserting a dragged window into the autotile stack.
@@ -322,6 +324,7 @@ Q_SIGNALS:
     void autotileUseSystemBorderColorsChanged();
     void autotileStickyWindowHandlingChanged();
     void autotileDragBehaviorChanged();
+    void autotileOverflowBehaviorChanged();
     void lockedScreensChanged();
     void virtualScreenConfigsChanged();
     // Ordering
