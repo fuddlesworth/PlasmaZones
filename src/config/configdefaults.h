@@ -1267,11 +1267,15 @@ public:
     }
     static QString rotateVirtualScreensClockwiseShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+]");
+        // Use the shifted glyph directly: on X11/Wayland, pressing Shift+]
+        // produces the keysym `braceright` (Shift is consumed by the keyboard
+        // level mapping), so a grab registered as "Meta+Ctrl+Shift+]" never
+        // matches the event. "Meta+Ctrl+}" does.
+        return QStringLiteral("Meta+Ctrl+}");
     }
     static QString rotateVirtualScreensCounterclockwiseShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Shift+[");
+        return QStringLiteral("Meta+Ctrl+{");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
