@@ -306,6 +306,8 @@ public:
     PZ_CONFIG_KEY(focusFollowsMouseKey, "FocusFollowsMouse")
     PZ_CONFIG_KEY(respectMinimumSizeKey, "RespectMinimumSize")
     // (also uses stickyWindowHandlingKey)
+    PZ_CONFIG_KEY(dragBehaviorKey, "DragBehavior")
+    PZ_CONFIG_KEY(overflowBehaviorKey, "OverflowBehavior")
     PZ_CONFIG_KEY(lockedScreensKey, "LockedScreens")
 
     // ═══════════════════════════════════════════════════════════════════════════

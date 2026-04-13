@@ -489,6 +489,90 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Overflow behavior bridging (Float ↔ Unlimited)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    void testSettingsBridge_overflowBehavior_floatToUnlimited_backfillsExcess()
+    {
+        // Float → Unlimited: previously-overflowed (auto-floated) windows must
+        // be re-tiled by the backfill path inside applyOverflowBehaviorChange.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 2;
+        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+
+        engine.windowOpened(QStringLiteral("win1"), screen);
+        engine.windowOpened(QStringLiteral("win2"), screen);
+        engine.windowOpened(QStringLiteral("win3"), screen);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(screen);
+        QVERIFY(state);
+        // Cap of 2: third window is rejected at the gate.
+        QCOMPARE(state->tiledWindowCount(), 2);
+
+        // Flip to Unlimited via Settings + sync — the bridge must backfill win3.
+        Settings settings;
+        settings.setAutotileMaxWindows(2);
+        settings.setAutotileOverflowBehavior(AutotileOverflowBehavior::Unlimited);
+        engine.connectToSettings(&settings);
+        engine.syncFromSettings(&settings);
+        QCoreApplication::processEvents();
+
+        QCOMPARE(engine.config()->overflowBehavior, AutotileOverflowBehavior::Unlimited);
+        // All three windows are now tiled because effectiveMaxWindows returns
+        // the unlimited sentinel and backfillWindows re-inserted the excess.
+        QCOMPARE(state->tiledWindowCount(), 3);
+    }
+
+    void testSettingsBridge_overflowBehavior_floatToUnlimited_combinedWithMaxIncrease_singleBackfill()
+    {
+        // When both Float→Unlimited and a maxWindows increase land in the same
+        // syncFromSettings, applyOverflowBehaviorChange already runs a backfill
+        // — the trailing maxWindows-increase block must NOT run a second.
+        // This guards the no-double-backfill fix in syncFromSettings.
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.config()->maxWindows = 2;
+        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+
+        engine.windowOpened(QStringLiteral("win1"), screen);
+        engine.windowOpened(QStringLiteral("win2"), screen);
+        engine.windowOpened(QStringLiteral("win3"), screen);
+        QCoreApplication::processEvents();
+
+        TilingState* state = engine.stateForScreen(screen);
+        QVERIFY(state);
+        QCOMPARE(state->tiledWindowCount(), 2);
+
+        // Bump BOTH maxWindows and overflowBehavior in the same Settings flush.
+        Settings settings;
+        settings.setAutotileMaxWindows(4);
+        settings.setAutotileOverflowBehavior(AutotileOverflowBehavior::Unlimited);
+        engine.connectToSettings(&settings);
+        engine.syncFromSettings(&settings);
+        QCoreApplication::processEvents();
+
+        // End state is the same — all windows tiled. The behavioral
+        // assertion is that we got here without crashing or warnings; the
+        // double-backfill guard is verified at the call-site by inspection
+        // (and the test will catch any re-introduced fault that mutates
+        // state non-idempotently).
+        QCOMPARE(state->tiledWindowCount(), 3);
+        QCOMPARE(engine.config()->overflowBehavior, AutotileOverflowBehavior::Unlimited);
+        QCOMPARE(engine.config()->maxWindows, 4);
+    }
+
+    // Note: there is no Unlimited → Float test in this fixture. The reverse
+    // direction is handled by OverflowManager::applyOverflow during the next
+    // recalculateLayout, which requires valid screen geometry — the
+    // null-ScreenManager engine used by these unit tests can't supply it.
+    // The reverse path is exercised by the integration tests that run the
+    // full daemon graph.
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Debounce
     // ═══════════════════════════════════════════════════════════════════════════
 

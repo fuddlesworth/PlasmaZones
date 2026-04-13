@@ -43,10 +43,18 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     //    plugin applies handleDragToFloat immediately if the window is
     //    currently tiled, so the user sees the free-floating size restored
     //    during the interactive move (not deferred to drop).
+    //
+    //    In Reorder mode (Krohnkite-style drag-to-swap), the plugin must
+    //    NOT float the window on drag-start — the daemon tracks the cursor
+    //    across calculated zones via drag-insert preview and reorders the
+    //    window within its stack on drop instead. Clear immediateFloatOnStart
+    //    so both the effect fast path and its async reply handler skip the
+    //    handleDragToFloat call.
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isAutotileScreen(screenId)) {
         policy.bypassReason = QStringLiteral("autotile_screen");
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
-        if (!windowId.isEmpty()) {
+        const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+        if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = autotileEngine->isWindowTracked(windowId);
         }
         return policy;
@@ -112,14 +120,19 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     const DragPolicy policy =
         computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, curDesktop, curActivity);
 
-    qCInfo(lcDbusWindow) << "beginDrag:" << windowId << "screen=" << startScreenId << "bypass=" << policy.bypassReason
-                         << "stream=" << policy.streamDragMoved << "immediateFloat=" << policy.immediateFloatOnStart;
+    // Reusable mutable copy — the reorder fallback path below may need to
+    // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
+    DragPolicy effectivePolicy = policy;
+
+    qCInfo(lcDbusWindow) << "beginDrag:" << windowId << "screen=" << startScreenId
+                         << "bypass=" << effectivePolicy.bypassReason << "stream=" << effectivePolicy.streamDragMoved
+                         << "immediateFloat=" << effectivePolicy.immediateFloatOnStart;
 
     // Stash bypass reason so the matching endDrag can dispatch to the
     // right branch without re-computing policy.
-    m_currentDragBypassReason = policy.bypassReason;
+    m_currentDragBypassReason = effectivePolicy.bypassReason;
 
-    if (!policy.bypassReason.isEmpty()) {
+    if (!effectivePolicy.bypassReason.isEmpty()) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
         // Trigger cache and stale-preview cleanup both happen above so bypass
@@ -128,7 +141,37 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
-        return policy;
+        m_dragReorderActive = false;
+
+        // Reorder mode: eagerly begin a drag-insert preview so even
+        // zero-movement drops have something to commit on endDrag (otherwise
+        // the autotile-bypass endDrag path falls through to ApplyFloat and
+        // we'd float the very tile the user was trying to reorder). Gated on
+        // isWindowTiled so floating/untracked windows still drag free and
+        // take the normal ApplyFloat path — matches Krohnkite's "floating
+        // windows are first-class" semantics.
+        //
+        // If beginDragInsertPreview returns false (target state missing,
+        // window lost between tiled-check and the call, etc.) the daemon
+        // can't run the swap pipeline. computeDragPolicy already cleared
+        // immediateFloatOnStart on the assumption that reorder would take
+        // over; without that override the user would see no float-restore
+        // during the drag and a sudden float on drop. Restore the
+        // legacy float-on-start behavior here so the UX matches the Float
+        // mode default for the rest of this drag.
+        if (effectivePolicy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
+            && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
+            && m_autotileEngine->isWindowTiled(windowId)) {
+            if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
+                m_dragReorderActive = true;
+            } else {
+                qCWarning(lcDbusWindow) << "beginDrag: reorder mode requested but beginDragInsertPreview failed for"
+                                        << windowId << "screen=" << startScreenId
+                                        << "— restoring float-on-start fallback";
+                effectivePolicy.immediateFloatOnStart = m_autotileEngine->isWindowTracked(windowId);
+            }
+        }
+        return effectivePolicy;
     }
 
     // Snap path — do NOT run the legacy dragStarted setup yet. We defer
@@ -152,7 +195,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     m_pendingSnapDragMouseButtons = mouseButtons;
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
 
-    return policy;
+    return effectivePolicy;
 }
 
 bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons)
@@ -194,6 +237,7 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     m_pendingSnapDragGeometry = QRect();
     m_pendingSnapDragMouseButtons = 0;
     m_pendingSnapDragWasSnapped = false;
+    m_dragReorderActive = false;
     // Any drag-insert preview left over from an incomplete previous drag
     // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
     // must be cleared too — its referenced window may no longer exist.
@@ -239,6 +283,9 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
 
     const QString bypassReason = m_currentDragBypassReason;
     m_currentDragBypassReason.clear(); // next drag starts fresh
+    // m_dragReorderActive lives for one drag only. Reset here (before the
+    // various early-return branches below) so no branch has to remember.
+    m_dragReorderActive = false;
 
     qCInfo(lcDbusWindow) << "endDrag:" << windowId << "cursor=" << cursorX << cursorY << "cancelled=" << cancelled
                          << "bypass=" << bypassReason;

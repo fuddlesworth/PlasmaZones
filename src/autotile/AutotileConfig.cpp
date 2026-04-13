@@ -39,6 +39,25 @@ AutotileConfig::InsertPosition stringToInsertPosition(const QString& str)
     }
     return AutotileConfig::InsertPosition::End;
 }
+
+QString overflowBehaviorToString(AutotileOverflowBehavior behavior)
+{
+    switch (behavior) {
+    case AutotileOverflowBehavior::Unlimited:
+        return OverflowUnlimited;
+    case AutotileOverflowBehavior::Float:
+    default:
+        return OverflowFloat;
+    }
+}
+
+AutotileOverflowBehavior stringToOverflowBehavior(const QString& str)
+{
+    if (str == OverflowUnlimited) {
+        return AutotileOverflowBehavior::Unlimited;
+    }
+    return AutotileOverflowBehavior::Float;
+}
 } // anonymous namespace
 
 QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QVariantMap& map)
@@ -100,7 +119,8 @@ bool AutotileConfig::operator==(const AutotileConfig& other) const
         && outerGapLeft == other.outerGapLeft && outerGapRight == other.outerGapRight
         && insertPosition == other.insertPosition && focusFollowsMouse == other.focusFollowsMouse
         && focusNewWindows == other.focusNewWindows && smartGaps == other.smartGaps
-        && respectMinimumSize == other.respectMinimumSize && maxWindows == other.maxWindows;
+        && respectMinimumSize == other.respectMinimumSize && maxWindows == other.maxWindows
+        && overflowBehavior == other.overflowBehavior;
 }
 
 bool AutotileConfig::operator!=(const AutotileConfig& other) const
@@ -132,6 +152,7 @@ QJsonObject AutotileConfig::toJson() const
     json[SmartGaps] = smartGaps;
     json[RespectMinimumSize] = respectMinimumSize;
     json[MaxWindows] = maxWindows;
+    json[OverflowBehavior] = overflowBehaviorToString(overflowBehavior);
     return json;
 }
 
@@ -203,6 +224,9 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
     if (json.contains(MaxWindows)) {
         config.maxWindows = json[MaxWindows].toInt(config.maxWindows);
         config.maxWindows = std::clamp(config.maxWindows, MinMaxWindows, MaxMaxWindows);
+    }
+    if (json.contains(OverflowBehavior)) {
+        config.overflowBehavior = stringToOverflowBehavior(json[OverflowBehavior].toString());
     }
     return config;
 }

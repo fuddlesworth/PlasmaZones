@@ -92,4 +92,37 @@ enum class OverlayDisplayMode {
     LayoutPreview = 1 ///< kZones-style: small layout thumbnail per zone
 };
 
+/**
+ * @brief Behavior when a user drags a tiled window on an autotile screen.
+ *
+ * Float (default, PlasmaZones-native): dragging a tile converts it to a free-floating
+ * window that restores its pre-tile geometry. Matches snap-mode semantics.
+ *
+ * Reorder (dwm/Krohnkite-style): dragging a tile keeps it tiled; the daemon tracks the
+ * cursor over calculated zones and, on drop, reorders the window to the target slot.
+ * Empty-space drops snap back to the original position.
+ */
+enum class AutotileDragBehavior {
+    Float = 0, ///< Drag-to-float: converts dragged tile to floating (default)
+    Reorder = 1 ///< Drag-to-reorder: swaps tile position within the layout
+};
+
+/**
+ * @brief Behavior when more windows exist than the algorithm's `maxWindows` cap.
+ *
+ * Float (default, PlasmaZones-native): excess windows are auto-floated by
+ * OverflowManager so the layout stays within the cap. New windows past the
+ * cap are rejected at onWindowAdded. The cap is algorithm-dependent and
+ * defaults to 4–6 on most bundled algorithms.
+ *
+ * Unlimited (dwm/Krohnkite-style): the cap is ignored. All windows on an
+ * autotile screen are tiled regardless of count. The layout algorithm handles
+ * arbitrary N — master-stack's stack area just keeps subdividing. Users who
+ * dislike very thin stack slices can still set masterCount or switch layouts.
+ */
+enum class AutotileOverflowBehavior {
+    Float = 0, ///< Float windows past the maxWindows cap (default)
+    Unlimited = 1 ///< Ignore the cap entirely — every window tiles
+};
+
 } // namespace PlasmaZones

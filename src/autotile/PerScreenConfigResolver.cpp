@@ -208,11 +208,22 @@ bool PerScreenConfigResolver::effectiveRespectMinimumSize(const QString& screenI
 
 int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
 {
-    // 1. Explicit per-screen MaxWindows override — highest priority
+    // 1. Explicit per-screen MaxWindows override — highest priority. Wins even
+    //    over global Unlimited mode so users can clamp individual screens
+    //    (e.g. keep a secondary monitor at maxWindows=3 while the primary
+    //    runs unlimited).
     if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
         return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);
 
-    // 2. When the per-screen algorithm differs from the global algorithm,
+    // 2. Global Unlimited: Krohnkite-style "no cap". The sentinel
+    //    (AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
+    //    in recalculateLayout, making the clamp idempotent. Also opens
+    //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
+    if (m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
+        return AutotileDefaults::UnlimitedMaxWindowsSentinel;
+    }
+
+    // 3. When the per-screen algorithm differs from the global algorithm,
     //    the global m_config->maxWindows may be for the WRONG algorithm.
     //    E.g. global=master-stack(maxWindows=4) but per-screen=bsp(default=5).
     //    Use the per-screen algorithm's default — but only if the user hasn't
@@ -234,7 +245,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
                               << screenId << "- falling back to global maxWindows";
     }
 
-    // 3. Same algorithm globally and per-screen — use the global setting
+    // 4. Same algorithm globally and per-screen — use the global setting
     return m_engine->config()->maxWindows;
 }
 

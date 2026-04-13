@@ -164,6 +164,15 @@ public:
         return m_windowToStateKey.contains(windowId);
     }
 
+    /**
+     * @brief Check if a window is currently tiled (tracked AND not floating).
+     *
+     * Used by the drag protocol's Reorder mode to decide whether a dragged
+     * window should enter the drag-insert preview (tiled windows reorder;
+     * floating / untracked windows drag free and float on drop as before).
+     */
+    bool isWindowTiled(const QString& windowId) const;
+
     // IWindowEngine
     bool isActiveOnScreen(const QString& screenId) const override;
 

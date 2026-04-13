@@ -489,6 +489,18 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         const bool onAutotileScreen =
             !autotileScreenId.isEmpty() && m_autotileEngine->isAutotileScreen(autotileScreenId);
 
+        // Reorder-mode override: the Krohnkite-style drag-to-swap setting makes
+        // drag-insert the default behavior on autotile screens (no modifier
+        // required). Gated on the beginDrag-time snapshot m_dragReorderActive
+        // so we don't re-query settings + engine tiled-state per cursor tick.
+        // Also scoped to onAutotileScreen — if the cursor leaves the autotile
+        // screen mid-drag, the normal cross-screen cancel logic below should
+        // run, not the force-held override. Explicit held trigger still wins
+        // downstream, but is redundant.
+        if (m_dragReorderActive && onAutotileScreen) {
+            autotileInsertHeld = true;
+        }
+
         const bool previewActive = m_autotileEngine->hasDragInsertPreview();
         const QString previewScreenId = m_autotileEngine->dragInsertPreviewScreenId();
 

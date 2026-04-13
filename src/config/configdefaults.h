@@ -949,6 +949,14 @@ public:
     {
         return 0;
     }
+    static int autotileDragBehavior()
+    {
+        return 0; // AutotileDragBehavior::Float — native drag-to-float
+    }
+    static int autotileOverflowBehavior()
+    {
+        return 0; // AutotileOverflowBehavior::Float — cap-enforcing (current)
+    }
     static QStringList lockedScreens()
     {
         return {};

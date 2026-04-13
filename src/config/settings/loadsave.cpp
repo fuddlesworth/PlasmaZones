@@ -474,6 +474,39 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
         m_autotileStickyWindowHandling = static_cast<StickyWindowHandling>(
             qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), autotileStickyHandling,
                    static_cast<int>(StickyWindowHandling::IgnoreAll)));
+        // Drag/Overflow behavior: snap unknown values to the safe default
+        // (Float) instead of qBound-clamping to the nearest enum. Clamping
+        // to nearest would silently misinterpret a future config value
+        // (e.g. DragBehavior=2 for a hypothetical ReorderAcrossScreens) as
+        // the highest known mode, exactly the failure pattern the effect-
+        // side cache (plasmazoneseffect.cpp:loadCachedSettings) carefully
+        // avoids. Both readers must agree.
+        const int dragBehaviorRaw =
+            tilingBehavior->readInt(ConfigDefaults::dragBehaviorKey(), ConfigDefaults::autotileDragBehavior());
+        switch (dragBehaviorRaw) {
+        case static_cast<int>(AutotileDragBehavior::Float):
+            m_autotileDragBehavior = AutotileDragBehavior::Float;
+            break;
+        case static_cast<int>(AutotileDragBehavior::Reorder):
+            m_autotileDragBehavior = AutotileDragBehavior::Reorder;
+            break;
+        default:
+            m_autotileDragBehavior = AutotileDragBehavior::Float;
+            break;
+        }
+        const int overflowBehaviorRaw =
+            tilingBehavior->readInt(ConfigDefaults::overflowBehaviorKey(), ConfigDefaults::autotileOverflowBehavior());
+        switch (overflowBehaviorRaw) {
+        case static_cast<int>(AutotileOverflowBehavior::Float):
+            m_autotileOverflowBehavior = AutotileOverflowBehavior::Float;
+            break;
+        case static_cast<int>(AutotileOverflowBehavior::Unlimited):
+            m_autotileOverflowBehavior = AutotileOverflowBehavior::Unlimited;
+            break;
+        default:
+            m_autotileOverflowBehavior = AutotileOverflowBehavior::Float;
+            break;
+        }
         QString lockedScreensStr = tilingBehavior->readString(ConfigDefaults::lockedScreensKey());
         QStringList newLocked = lockedScreensStr.isEmpty() ? QStringList() : lockedScreensStr.split(QLatin1Char(','));
         for (auto& s : newLocked)
@@ -892,6 +925,8 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
         tilingBehavior->writeBool(ConfigDefaults::respectMinimumSizeKey(), m_autotileRespectMinimumSize);
         tilingBehavior->writeInt(ConfigDefaults::stickyWindowHandlingKey(),
                                  static_cast<int>(m_autotileStickyWindowHandling));
+        tilingBehavior->writeInt(ConfigDefaults::dragBehaviorKey(), static_cast<int>(m_autotileDragBehavior));
+        tilingBehavior->writeInt(ConfigDefaults::overflowBehaviorKey(), static_cast<int>(m_autotileOverflowBehavior));
         tilingBehavior->writeString(ConfigDefaults::lockedScreensKey(), m_lockedScreens.join(QLatin1Char(',')));
     }
     {

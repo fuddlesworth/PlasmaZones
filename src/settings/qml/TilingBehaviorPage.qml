@@ -207,6 +207,56 @@ Flickable {
 
                 }
 
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Drag behavior")
+                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Autotile drag behavior")
+                        Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Float on drag"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Reorder on drag"),
+                            "value": 1
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
+                        onActivated: appSettings.autotileDragBehavior = currentValue
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Overflow behavior")
+                    description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Autotile overflow behavior")
+                        Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Float excess"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Unlimited"),
+                            "value": 1
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
+                        onActivated: appSettings.autotileOverflowBehavior = currentValue
+                    }
+
+                }
+
             }
 
         }
