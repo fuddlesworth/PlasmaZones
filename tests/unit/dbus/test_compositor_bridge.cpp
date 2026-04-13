@@ -152,14 +152,14 @@ private Q_SLOTS:
     void testRegisterBridge_returnsApiVersion()
     {
         BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(
-            QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless"), QStringLiteral("animation")});
+            QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless"), QStringLiteral("animation")});
 
-        QCOMPARE(result.apiVersion, QStringLiteral("1"));
+        QCOMPARE(result.apiVersion, QStringLiteral("2"));
     }
 
     void testRegisterBridge_storesBridgeName()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {});
 
         QCOMPARE(m_bridgeAdaptor->bridgeName(), QStringLiteral("kwin"));
     }
@@ -167,7 +167,7 @@ private Q_SLOTS:
     void testRegisterBridge_storesCapabilities()
     {
         QStringList caps = {QStringLiteral("borderless"), QStringLiteral("maximize"), QStringLiteral("animation")};
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), caps);
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), caps);
 
         QCOMPARE(m_bridgeAdaptor->bridgeCapabilities(), caps);
     }
@@ -176,12 +176,40 @@ private Q_SLOTS:
     {
         QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
 
-        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("0.40"),
-                                        {QStringLiteral("modifiers")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("hyprland"), QStringLiteral("2"), {QStringLiteral("modifiers")});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.at(0).at(0).toString(), QStringLiteral("hyprland"));
-        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("0.40"));
+        QCOMPARE(spy.at(0).at(1).toString(), QStringLiteral("2"));
+    }
+
+    // Version gate regression test: a peer speaking an older protocol
+    // version (< MinPeerApiVersion) must be rejected with the REJECTED
+    // sentinel in sessionId, must NOT update the stored bridge name, and
+    // must NOT emit bridgeRegistered. If this regresses, stale effects
+    // would silently connect and crash on marshalling mismatches.
+    void testRegisterBridge_rejectsOldVersion()
+    {
+        QSignalSpy spy(m_bridgeAdaptor, &CompositorBridgeAdaptor::bridgeRegistered);
+
+        BridgeRegistrationResult result = m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("1"),
+                                                                          {QStringLiteral("borderless")});
+
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QCOMPARE(result.apiVersion, QStringLiteral("2"));
+        QCOMPARE(spy.count(), 0);
+        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
+    }
+
+    // Non-numeric versions parse as 0 via QString::toInt(), which is
+    // below MinPeerApiVersion and must also be rejected.
+    void testRegisterBridge_rejectsNonNumericVersion()
+    {
+        BridgeRegistrationResult result =
+            m_bridgeAdaptor->registerBridge(QStringLiteral("weird-compositor"), QStringLiteral("garbage"), {});
+
+        QCOMPARE(result.sessionId, QStringLiteral("REJECTED"));
+        QVERIFY(m_bridgeAdaptor->bridgeName().isEmpty());
     }
 
     // =====================================================================
@@ -190,14 +218,14 @@ private Q_SLOTS:
 
     void testHasCapability_registered_returnsTrue()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(m_bridgeAdaptor->hasCapability(QStringLiteral("borderless")));
     }
 
     void testHasCapability_notRegistered_returnsFalse()
     {
-        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("6.0"), {QStringLiteral("borderless")});
+        m_bridgeAdaptor->registerBridge(QStringLiteral("kwin"), QStringLiteral("2"), {QStringLiteral("borderless")});
 
         QVERIFY(!m_bridgeAdaptor->hasCapability(QStringLiteral("unknown_capability")));
     }

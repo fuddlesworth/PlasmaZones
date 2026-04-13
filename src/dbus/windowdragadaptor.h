@@ -144,6 +144,17 @@ public Q_SLOTS:
      */
     void handleWindowClosed(const QString& windowId);
 
+    /**
+     * Clear any drag state the daemon is still holding. Called when the
+     * compositor bridge re-registers (e.g. KWin reloaded the effect, the
+     * effect process restarted, or the daemon is being re-adopted by a fresh
+     * effect instance). Any drag in flight from the prior effect is
+     * abandoned: the new effect has no knowledge of it and the next
+     * dragStarted from the fresh connection must land on a clean slate.
+     * Also hides any leftover overlay so stale visuals don't linger.
+     */
+    void clearForCompositorReconnect();
+
 Q_SIGNALS:
     /**
      * Emitted when the zone geometry under the cursor changes during drag.
@@ -168,6 +179,15 @@ Q_SIGNALS:
      * and could go stale after settings reloads.
      */
     void dragPolicyChanged(const QString& windowId, const PlasmaZones::DragPolicy& newPolicy);
+
+    /**
+     * Emitted asynchronously after endDrag returns, when the drop requested
+     * snap assist. Carries the list of empty zones on the release screen so
+     * the effect can show a window picker without blocking the fast endDrag
+     * reply path. The effect discards this if a new drag has already started.
+     */
+    void snapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                         const PlasmaZones::EmptyZoneList& emptyZones);
 
 private:
     // Tolerance constants for geometry matching (fallback detection)
@@ -270,6 +290,11 @@ private:
     void handleMultiZoneModifier(int x, int y);
     void hideOverlayAndClearZoneState();
 
+    // Mid-drag trigger release: clear zone state and blank the overlay's shader
+    // output WITHOUT destroying overlay windows. See the call site in dragMoved
+    // and the rationale comment in IOverlayService::setIdleForDragPause().
+    void clearOverlayForTriggerRelease();
+
     IOverlayService* m_overlayService;
     IZoneDetector* m_zoneDetector;
     LayoutManager* m_layoutManager; // Concrete type for signal connections
@@ -277,6 +302,14 @@ private:
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
     IShortcutBackend* m_shortcutBackend = nullptr; // Non-owning: owned by ShortcutManager
+
+    // Snap-assist deferred compute state. Populated in dragStopped when snap
+    // assist is requested; consumed by computeAndEmitSnapAssist() which runs
+    // after the endDrag D-Bus reply has been sent, so the expensive
+    // buildEmptyZoneList walk doesn't block the compositor waiting on the
+    // reply.
+    QString m_snapAssistPendingWindowId;
+    QString m_snapAssistPendingScreenId;
 
     // Current drag state
     QString m_draggedWindowId;
@@ -310,6 +343,11 @@ private:
     bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
     bool m_overlayShown = false;
+    // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
+    // (trigger released, but the drag is still live). Windows stay alive;
+    // only the shader output is cleared. Cleared when the overlay shows zones
+    // again (refreshFromIdle) or when the drag ends.
+    bool m_overlayIdled = false;
     bool m_zoneSelectorShown = false;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;
@@ -367,6 +405,15 @@ private:
     // dragStopped() helpers
     void hideOverlayAndSelector();
     void resetDragState(bool keepEscapeShortcut = false);
+
+    /**
+     * Compute the empty-zone list for snap assist and emit the snapAssistReady
+     * signal. Runs AFTER endDrag has already returned its reply to the
+     * compositor, so the expensive buildEmptyZoneList walk doesn't block the
+     * D-Bus reply path. Scheduled from endDrag via QTimer::singleShot(0) when
+     * dragStopped set m_snapAssistPendingWindowId / m_snapAssistPendingScreenId.
+     */
+    void computeAndEmitSnapAssist();
 
     // Pre-snap geometry helper (reduces code duplication)
     // Overload with captured values to prevent race conditions in dragStopped()

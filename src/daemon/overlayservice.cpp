@@ -526,6 +526,72 @@ void OverlayService::toggle()
     }
 }
 
+void OverlayService::setIdleForDragPause()
+{
+    // Blank the overlay's shader output without destroying QQuickWindows.
+    // The heavy hide() path pays a ~QQuickWindow Vulkan teardown per screen
+    // which blocks the main thread on the scene graph render thread — and
+    // with modifier-key thrashing during a drag we ended up paying that cost
+    // many times per second, stalling D-Bus dispatch long enough for
+    // kwin-effect's endDrag to time out and the user to see multi-second lag.
+    //
+    // Here we only clear the per-window QML properties that drive the shader
+    // (zones, zoneCount, highlights). Windows, Vulkan swap chains, and layer
+    // surfaces stay alive. On the next activation tick, refreshFromIdle()
+    // re-pushes the current zone data — cheap because the labels-texture
+    // build is hash-cached on unchanged inputs.
+    if (!m_visible) {
+        return;
+    }
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        QQuickWindow* window = it.value().overlayWindow;
+        if (!window) {
+            continue;
+        }
+        writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
+        writeQmlProperty(window, QStringLiteral("zoneCount"), 0);
+        writeQmlProperty(window, QStringLiteral("highlightedCount"), 0);
+        writeQmlProperty(window, QStringLiteral("highlightedZoneId"), QString());
+        writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), QVariantList());
+        // NOTE: labelsTextureHash is intentionally NOT cleared here. The QML
+        // side's labelsTexture property still holds the previously-built image
+        // (setProperty was never called with a new one); it just isn't sampled
+        // while zoneCount is 0. Keeping the hash means refreshFromIdle() with
+        // unchanged zones hits the cache and costs one hash compute instead
+        // of rebuilding 23 MB of pixels.
+    }
+    // CRITICAL: mark zone data CLEAN, not dirty. The shader animation tick
+    // (shader.cpp:245) re-runs updateZonesForAllWindows() whenever dirty is
+    // set, which would rebuild the real zones and undo the blank. The idle
+    // state is "what we just wrote, do not re-derive from layout data until
+    // refreshFromIdle() is called."
+    m_zoneDataDirty = false;
+    // NOTE: we deliberately do NOT call stopShaderAnimation() here. The
+    // shader timer keeps ticking at ~60 Hz while idled, but with zoneCount
+    // set to 0 the per-frame work collapses to a handful of uniform uploads
+    // to a surface that's rendering no visible geometry — bounded cost, O(1)
+    // per screen. Pausing and restarting the timer across the idle cycle
+    // would require additional state tracking in refreshFromIdle() and add
+    // a startup transient on every modifier re-press. Left unchanged for
+    // simplicity; revisit if profiling ever shows it as a hot spot.
+}
+
+void OverlayService::refreshFromIdle()
+{
+    // Restore zone data after a setIdleForDragPause() blank.
+    //
+    // setIdleForDragPause() unconditionally clears the `zones`, `zoneCount`
+    // and highlight QML properties on every live overlay window (both shader
+    // and non-shader paths), so refreshFromIdle() must also unconditionally
+    // re-push — not gate on anyScreenUsesShader(). The L2 labels-texture
+    // hash cache makes the shader-path re-push cheap on unchanged inputs,
+    // and the non-shader path just writes a QVariantList to a QML property.
+    if (!m_visible) {
+        return;
+    }
+    updateZonesForAllWindows();
+}
+
 void OverlayService::updateSettings(ISettings* settings)
 {
     setSettings(settings);

@@ -15,6 +15,7 @@
 #include <QScopedPointer>
 
 #include "core/layout.h"
+#include "core/layoutworker/layoutcomputeservice.h"
 #include "core/zone.h"
 
 using namespace PlasmaZones;
@@ -51,7 +52,7 @@ private Q_SLOTS:
         smallZone->setZoneNumber(2);
         m_layout->addZone(smallZone);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(350, 350);
         Zone* detected = m_layout->zoneAtPoint(point);
@@ -72,7 +73,7 @@ private Q_SLOTS:
         zone2->setZoneNumber(2);
         m_layout->addZone(zone2);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(350, 350);
         Zone* detected = m_layout->zoneAtPoint(point);
@@ -88,7 +89,7 @@ private Q_SLOTS:
         zone->setZoneNumber(1);
         m_layout->addZone(zone);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF point(800, 800);
         Zone* detected = m_layout->zoneAtPoint(point);
@@ -107,7 +108,7 @@ private Q_SLOTS:
         zone->setZoneNumber(1);
         m_layout->addZone(zone);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QPointF farPoint(900, 900);
         Zone* nearest = m_layout->nearestZone(farPoint, 50.0);
@@ -131,7 +132,7 @@ private Q_SLOTS:
         zone2->setZoneNumber(2);
         m_layout->addZone(zone2);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 1000, 1000));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
 
         QRectF queryRect(400, 100, 200, 200);
         QVector<Zone*> result = m_layout->zonesInRect(queryRect);
@@ -199,7 +200,7 @@ private Q_SLOTS:
         z3->setZoneNumber(3);
         m_layout->addZone(z3);
 
-        m_layout->recalculateZoneGeometries(QRectF(0, 0, 900, 900));
+        LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 900, 900));
 
         // Rect covering only zone 1 and zone 2 boundary (not zone 3).
         // With 900px width and zone boundaries at 0.33/0.67, zone edges are

@@ -28,6 +28,18 @@ inline constexpr QLatin1String Screen("org.plasmazones.Screen");
 inline constexpr QLatin1String ZoneDetection("org.plasmazones.ZoneDetection");
 inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridge");
 }
+
+// Protocol version. Bumped when the D-Bus method/signal schema changes in a
+// backwards-incompatible way (e.g. dragStopped out-params changed, new
+// required signal). Both sides check the peer's version at bridge registration
+// and reject if below their minimum. The version is a simple integer string
+// ("1", "2", …) to keep comparison trivial.
+//
+//   v1: original protocol (PlasmaZones v3.0–v3.x)
+//   v2: split dragStopped + snapAssistReady signal (Phase C)
+//
+inline constexpr int ApiVersion = 2;
+inline constexpr int MinPeerApiVersion = 2;
 }
 
 } // namespace PlasmaZones

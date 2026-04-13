@@ -27,6 +27,7 @@
 #include <QKeyEvent>
 #include <QLoggingCategory>
 #include <QScreen>
+#include <QTimer>
 #include <QtMath>
 #include <QPointer>
 #include <window.h>
@@ -56,6 +57,13 @@ namespace {
 // Duplicated from daemon's configkeys.h — effect cannot include daemon headers
 constexpr QLatin1String TriggerModifierField("modifier");
 constexpr QLatin1String TriggerMouseButtonField("mouseButton");
+
+// Upper bound on how long the effect waits for the daemon's endDrag reply.
+// If the daemon is blocked (layout recompute, overlay teardown, heavy
+// handler), exceeding this budget means the compositor would otherwise
+// stall waiting on a reply that may never come. On expiry the window is
+// left at its release position and a warning is logged.
+constexpr int EndDragTimeoutMs = 500;
 } // namespace
 
 // NavigateDirectivePrefix moved to navigationhandler.cpp to avoid redefinition
@@ -79,40 +87,29 @@ void PlasmaZonesEffect::ensurePreSnapGeometryStored(KWin::EffectWindow* w, const
         return;
     }
 
-    QPointer<KWin::EffectWindow> safeWindow = w;
-    QString capturedWindowId = windowId;
-    QRectF capturedGeom = preCapturedGeometry;
+    // Use pre-captured geometry if provided, otherwise read from window.
+    QRectF geom = preCapturedGeometry.isValid() ? preCapturedGeometry : w->frameGeometry();
+    if (geom.width() <= 0 || geom.height() <= 0) {
+        return;
+    }
 
-    QDBusPendingCall pendingCall =
-        DBusHelpers::asyncCall(DBus::Interface::WindowTracking, QStringLiteral("hasPreTileGeometry"), {windowId});
-    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    // Use virtual-screen-aware ID — getWindowScreenId() falls back to the physical
+    // ID when virtual screen defs haven't loaded yet, so it is safe to call
+    // unconditionally. Using it here ensures the stored screen ID always matches
+    // the ID used by later lookups.
+    const QString screenId = getWindowScreenId(w);
 
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, safeWindow, capturedWindowId, capturedGeom](QDBusPendingCallWatcher* watcher) {
-                watcher->deleteLater();
-
-                QDBusPendingReply<bool> reply = *watcher;
-                bool hasGeometry = reply.isValid() && reply.value();
-
-                if (!hasGeometry && m_daemonServiceRegistered) {
-                    // Use pre-captured geometry if provided, otherwise read from window
-                    QRectF geom =
-                        capturedGeom.isValid() ? capturedGeom : (safeWindow ? safeWindow->frameGeometry() : QRectF());
-                    if (geom.width() > 0 && geom.height() > 0) {
-                        // Use virtual-screen-aware ID — getWindowScreenId() falls back to the
-                        // physical ID when virtual screen defs haven't loaded yet, so it is
-                        // safe to call unconditionally. Using it here ensures the stored
-                        // screen ID always matches the ID used by later lookups.
-                        QString screenId = safeWindow ? getWindowScreenId(safeWindow) : QString();
-                        DBusHelpers::fireAndForget(
-                            this, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
-                            {capturedWindowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
-                             static_cast<int>(geom.width()), static_cast<int>(geom.height()), screenId, false},
-                            QStringLiteral("storePreTileGeometry"));
-                        qCInfo(lcEffect) << "Stored pre-tile geometry for window" << capturedWindowId;
-                    }
-                }
-            });
+    // Post the store directly with overwrite=false. The daemon's storePreTileGeometry
+    // enforces per-windowId idempotency — a second capture for the same runtime
+    // instance is a no-op. We deliberately skip the prior async hasPreTileGeometry
+    // pre-check: that path matched on appId too, so a stale cross-session entry from
+    // a prior window instance (keyed by appId) would block the fresh per-instance
+    // capture and freeze float-restore at ancient coordinates.
+    DBusHelpers::fireAndForget(this, DBus::Interface::WindowTracking, QStringLiteral("storePreTileGeometry"),
+                               {windowId, static_cast<int>(geom.x()), static_cast<int>(geom.y()),
+                                static_cast<int>(geom.width()), static_cast<int>(geom.height()), screenId, false},
+                               QStringLiteral("storePreTileGeometry"));
+    qCInfo(lcEffect) << "Stored pre-tile geometry for window" << windowId << "geom=" << geom;
 }
 
 QHash<QString, KWin::EffectWindow*> PlasmaZonesEffect::buildWindowMap(bool filterHandleable) const
@@ -1076,9 +1073,52 @@ void PlasmaZonesEffect::slotDaemonReady()
         return; // Already ready — idempotent guard
     }
 
-    m_daemonServiceRegistered = true;
-    qCInfo(lcEffect) << "daemon ready: re-pushing state";
+    qCInfo(lcEffect) << "daemon ready: registering bridge before re-pushing state";
 
+    // Register the compositor bridge with the daemon, passing our protocol
+    // version so the daemon can reject us if we're too old. The daemon returns
+    // its own API version and a session ID; "REJECTED" means version mismatch.
+    //
+    // All post-registration work (state re-push, virtual screen fetch, etc.) is
+    // deferred into the reply callback so that on REJECTED / protocol mismatch
+    // we never send a single stateful call to an incompatible daemon. Any such
+    // call would either fail noisily or risk silent marshalling mismatches —
+    // the very failure mode this PR is designed to prevent.
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        DBus::ServiceName, DBus::ObjectPath, DBus::Interface::CompositorBridge, QStringLiteral("registerBridge"));
+    msg << QStringLiteral("kwin") << QString::number(DBus::ApiVersion)
+        << QStringList{QStringLiteral("borderless"), QStringLiteral("animation")};
+    auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
+        w->deleteLater();
+        QDBusPendingReply<PlasmaZones::BridgeRegistrationResult> reply = *w;
+        if (reply.isError()) {
+            qCWarning(lcEffect) << "registerBridge call failed:" << reply.error().message()
+                                << "— effect remains idle until the daemon signals ready again.";
+            return;
+        }
+        BridgeRegistrationResult result = reply.value();
+        if (result.sessionId == QLatin1String("REJECTED")) {
+            qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
+                                 << "but this effect speaks" << DBus::ApiVersion
+                                 << "— update the effect to match the daemon.";
+            return;
+        }
+        int daemonVersion = result.apiVersion.toInt();
+        if (daemonVersion < DBus::MinPeerApiVersion) {
+            qCCritical(lcEffect) << "Daemon apiVersion" << daemonVersion << "is below this effect's minimum"
+                                 << DBus::MinPeerApiVersion << "— update the daemon to match the effect.";
+            return;
+        }
+        qCInfo(lcEffect) << "Bridge registered: daemon apiVersion=" << result.apiVersion
+                         << "session=" << result.sessionId;
+        m_daemonServiceRegistered = true;
+        continueDaemonReadySetup();
+    });
+}
+
+void PlasmaZonesEffect::continueDaemonReadySetup()
+{
     // All D-Bus calls use QDBusMessage::createMethodCall + asyncCall (no QDBusInterface)
     // to avoid synchronous D-Bus introspection that blocks the compositor thread.
 
@@ -1857,6 +1897,13 @@ void PlasmaZonesEffect::connectNavigationSignals()
     QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
                                           QStringLiteral("dragPolicyChanged"), this,
                                           SLOT(slotDragPolicyChanged(QString, PlasmaZones::DragPolicy)));
+
+    // WindowDrag: snap assist (delivered asynchronously, separate from the
+    // fast endDrag reply). The daemon schedules the empty-zone-list compute
+    // after endDrag returns, so the compositor is unblocked first.
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::WindowDrag,
+                                          QStringLiteral("snapAssistReady"), this,
+                                          SLOT(slotSnapAssistReady(QString, QString, PlasmaZones::EmptyZoneList)));
 
     qCInfo(lcEffect) << "Connected to navigation D-Bus signals";
 }
@@ -2884,9 +2931,41 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
 
     QPointer<KWin::EffectWindow> safeWindow = window;
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    // Pair the watcher with a timeout. If the daemon is blocked (layout
+    // recompute, overlay teardown, heavy handler), the compositor would
+    // otherwise wait indefinitely for a reply that may never come. The
+    // shared `handled` flag guarantees exactly-once handling: whichever
+    // fires first (reply or timeout) takes the transition, the other path
+    // is a no-op. Deleting the watcher does NOT cancel the underlying
+    // QDBusPendingCall — any late reply is silently discarded by Qt.
+    auto handled = std::make_shared<bool>(false);
+    QTimer* timeoutTimer = new QTimer(this);
+    timeoutTimer->setSingleShot(true);
+    connect(timeoutTimer, &QTimer::timeout, this, [this, windowId, handled, watcher, timeoutTimer]() {
+        if (*handled) {
+            return;
+        }
+        *handled = true;
+        qCWarning(lcEffect) << "endDrag timed out after" << EndDragTimeoutMs
+                            << "ms; daemon unresponsive. Leaving window" << windowId << "at release position.";
+        watcher->deleteLater();
+        timeoutTimer->deleteLater();
+    });
+    timeoutTimer->start(EndDragTimeoutMs);
+
     connect(
-        watcher, &QDBusPendingCallWatcher::finished, this, [this, safeWindow, windowId](QDBusPendingCallWatcher* w) {
+        watcher, &QDBusPendingCallWatcher::finished, this,
+        [this, safeWindow, windowId, handled, timeoutTimer](QDBusPendingCallWatcher* w) {
             w->deleteLater();
+            if (*handled) {
+                // Timeout already fired; this is a late reply — discard.
+                return;
+            }
+            *handled = true;
+            timeoutTimer->stop();
+            timeoutTimer->deleteLater();
+
             QDBusPendingReply<DragOutcome> reply = *w;
             if (reply.isError()) {
                 qCWarning(lcEffect) << "endDrag call failed:" << reply.error().message();
@@ -3217,6 +3296,22 @@ void PlasmaZonesEffect::slotRestoreSizeDuringDrag(const QString& windowId, int w
 
     qCDebug(lcEffect) << "Restoring size during drag:" << windowId << geometry;
     applySnapGeometry(window, geometry, true);
+}
+
+void PlasmaZonesEffect::slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                                            const PlasmaZones::EmptyZoneList& emptyZones)
+{
+    // Discard if a new drag has already started — this signal was from a
+    // prior drop. The daemon defers the compute to after endDrag returns,
+    // so by the time this slot fires the user may already be dragging again.
+    if (m_dragTracker->isDragging()) {
+        qCDebug(lcEffect) << "Discarding snapAssistReady: new drag in progress";
+        return;
+    }
+    if (emptyZones.isEmpty() || releaseScreenId.isEmpty()) {
+        return;
+    }
+    m_snapAssistHandler->asyncShow(windowId, releaseScreenId, emptyZones);
 }
 
 void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const DragPolicy& newPolicy)

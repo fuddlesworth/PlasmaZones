@@ -6,6 +6,7 @@
 #include <geometry_helpers.h>
 #include "logging.h"
 #include "layout.h"
+#include "layoutworker/layoutcomputeservice.h"
 #include "interfaces.h"
 #include "constants.h"
 #include "screenmanager.h"
@@ -484,7 +485,7 @@ EmptyZoneList buildEmptyZoneList(Layout* layout, QScreen* screen, ISettings* set
     }
 
     bool useAvail = !layout->useFullScreenGeometry();
-    layout->recalculateZoneGeometries(effectiveScreenGeometry(layout, screen));
+    LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(layout, screen));
 
     QString screenId = Utils::screenIdentifier(screen);
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
@@ -506,7 +507,7 @@ EmptyZoneList buildEmptyZoneList(Layout* layout, const QString& screenId, QScree
     if (vsGeom.isValid()) {
         bool useAvail = !layout->useFullScreenGeometry();
         QRectF effectiveGeom = useAvail && vsAvailGeom.isValid() ? QRectF(vsAvailGeom) : QRectF(vsGeom);
-        layout->recalculateZoneGeometries(effectiveGeom);
+        LayoutComputeService::recalculateSync(layout, effectiveGeom);
 
         int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
         EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);

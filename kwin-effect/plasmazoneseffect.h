@@ -115,6 +115,8 @@ private Q_SLOTS:
     void slotWindowFloatingChanged(const QString& windowId, bool isFloating, const QString& screenId);
     void slotRunningWindowsRequested();
     void slotRestoreSizeDuringDrag(const QString& windowId, int width, int height);
+    void slotSnapAssistReady(const QString& windowId, const QString& releaseScreenId,
+                             const PlasmaZones::EmptyZoneList& emptyZones);
     void slotMoveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                                int height);
 
@@ -123,6 +125,13 @@ private Q_SLOTS:
 
     // Daemon lifecycle
     void slotDaemonReady();
+
+private:
+    /// Continuation of slotDaemonReady() after the registerBridge reply has
+    /// confirmed the daemon speaks a compatible protocol version. Separated
+    /// so none of the state-pushing D-Bus calls can fire against a daemon
+    /// that rejected the bridge handshake.
+    void continueDaemonReadySetup();
 
 public:
     /**

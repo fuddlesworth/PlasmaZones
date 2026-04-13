@@ -382,11 +382,14 @@ public:
     Q_INVOKABLE QVector<Zone*> adjacentZones(const QPointF& point, qreal threshold = 20) const;
 
     // Geometry calculations
-    Q_INVOKABLE void recalculateZoneGeometries(const QRectF& screenGeometry);
     Q_INVOKABLE void renumberZones();
     QRectF lastRecalcGeometry() const
     {
         return m_lastRecalcGeometry;
+    }
+    void setLastRecalcGeometry(const QRectF& geom)
+    {
+        m_lastRecalcGeometry = geom;
     }
 
     // Serialization
@@ -440,6 +443,12 @@ Q_SIGNALS:
     void layoutModified();
 
 private:
+    friend class LayoutComputeService;
+
+    // Only callable via LayoutComputeService (sync or async worker path).
+    // Direct calls bypass the service's coalescing and threading contract.
+    void recalculateZoneGeometries(const QRectF& screenGeometry);
+
     void emitModifiedIfNotBatched();
 
     QUuid m_id;

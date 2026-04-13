@@ -214,7 +214,7 @@ void AutotileHandler::handleCursorMoved(const QPointF& pos, const QString& scree
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId,
-                                                       const QRectF& frame)
+                                                       const QRectF& frame, bool knownFreeFloating)
 {
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return false;
@@ -235,7 +235,14 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
     // Only save geometry for floating windows — snapped/tiled windows have zone
     // dimensions in frameGeometry(), not the original free-floating size. Storing
     // zone geometry here would cause handleDragToFloat to restore to zone size.
-    if (!m_effect->isWindowFloating(windowId)) {
+    //
+    // EXCEPTION: freshly-opened windows are not tracked in the FloatingCache yet,
+    // so isWindowFloating() returns false even though their frame IS the authoritative
+    // free-floating spawn geometry. Callers that know they are processing a fresh
+    // window pass knownFreeFloating=true to bypass the guard. Without that bypass,
+    // the save is silently dropped and every later float-restore for this window
+    // falls through to stale cross-session data (or, with exact-only lookups, nothing).
+    if (!knownFreeFloating && !m_effect->isWindowFloating(windowId)) {
         qCDebug(lcEffect) << "Skipped pre-autotile geometry for snapped window" << windowId << "on" << screenId;
         return true;
     }
@@ -335,7 +342,13 @@ void AutotileHandler::notifyWindowAdded(KWin::EffectWindow* w)
         // Without this, a window launched directly into autotile has no saved
         // geometry — floating it would leave it at its tiled position instead
         // of restoring to its original free-floating size.
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+        //
+        // knownFreeFloating=true: this is the window-opened path, so the frame
+        // is KWin's spawn geometry — the authoritative pre-autotile position.
+        // The FloatingCache is not yet populated for fresh windows, so without
+        // this flag the isWindowFloating() guard would drop the one-shot save.
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
+                                         /*knownFreeFloating=*/true);
 
         int minWidth = 0;
         int minHeight = 0;
@@ -406,7 +419,10 @@ void AutotileHandler::notifyWindowsAddedBatch(const QList<KWin::EffectWindow*>& 
         m_notifiedWindows.insert(windowId);
         m_notifiedWindowScreens[windowId] = screenId;
 
-        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry());
+        // knownFreeFloating=true: window-opened path — see notifyWindowAdded()
+        // for rationale. Fresh windows aren't in the FloatingCache yet.
+        saveAndRecordPreAutotileGeometry(windowId, screenId, w->frameGeometry(),
+                                         /*knownFreeFloating=*/true);
 
         int minWidth = 0;
         int minHeight = 0;

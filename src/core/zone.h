@@ -202,6 +202,16 @@ public:
     Q_INVOKABLE QRectF calculateAbsoluteGeometry(const QRectF& screenGeometry) const;
     Q_INVOKABLE QRectF applyPadding(int padding) const;
 
+    /**
+     * @brief Pure helper shared between Zone::calculateAbsoluteGeometry and
+     *        LayoutWorker (which runs off-thread and cannot touch QObjects).
+     *
+     * Fixed mode: pixel coords relative to screen origin.
+     * Relative mode: 0..1 coords multiplied by screen dimensions.
+     */
+    static QRectF computeAbsoluteGeometry(ZoneGeometryMode mode, const QRectF& relativeGeometry,
+                                          const QRectF& fixedGeometry, const QRectF& screenGeometry);
+
     // Serialization
     QJsonObject toJson(const QRectF& referenceGeometry = QRectF()) const;
     static Zone* fromJson(const QJsonObject& json, QObject* parent = nullptr);

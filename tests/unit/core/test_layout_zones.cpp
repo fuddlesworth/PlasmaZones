@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 
 #include "core/layout.h"
+#include "core/layoutworker/layoutcomputeservice.h"
 #include "core/zone.h"
 
 using namespace PlasmaZones;
@@ -287,18 +288,18 @@ private Q_SLOTS:
 
         QRectF screenGeom(0, 0, 1920, 1080);
 
-        layout.recalculateZoneGeometries(screenGeom);
+        LayoutComputeService::recalculateSync(&layout, screenGeom);
         QRectF firstGeom = zone->geometry();
         QVERIFY(!firstGeom.isEmpty());
 
         QCOMPARE(layout.lastRecalcGeometry(), screenGeom);
 
         zone->setGeometry(QRectF(0, 0, 100, 100));
-        layout.recalculateZoneGeometries(screenGeom);
+        LayoutComputeService::recalculateSync(&layout, screenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 100, 100));
 
         QRectF newScreenGeom(0, 0, 2560, 1440);
-        layout.recalculateZoneGeometries(newScreenGeom);
+        LayoutComputeService::recalculateSync(&layout, newScreenGeom);
         QCOMPARE(layout.lastRecalcGeometry(), newScreenGeom);
         QCOMPARE(zone->geometry(), QRectF(0, 0, 2560, 1440));
     }

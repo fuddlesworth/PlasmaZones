@@ -55,6 +55,12 @@ public:
         QScreen* overlayPhysScreen = nullptr;
         QRect overlayGeometry;
         QMetaObject::Connection overlayGeomConnection; ///< geometryChanged connection for overlay
+        // Cache key for the last successful labelsTexture rebuild on this window.
+        // Hashes (size, showNumbers, font settings, per-zone {number,x,y,w,h}). When
+        // updateLabelsTextureForWindow is called with the same hash, both the 23 MB
+        // QImage rebuild AND Qt's QVariant(QImage) property-write equality compare
+        // are skipped. 0 = never computed / cache invalid.
+        quint64 labelsTextureHash = 0;
         QQuickWindow* zoneSelectorWindow = nullptr;
         QScreen* zoneSelectorPhysScreen = nullptr;
         /// Intended geometry of the zone selector window. On Wayland LayerShell, QWindow::geometry()
@@ -85,6 +91,10 @@ public:
     void highlightZone(const QString& zoneId) override;
     void highlightZones(const QStringList& zoneIds) override;
     void clearHighlight() override;
+
+    // Mid-drag idle / resume — see IOverlayService for rationale.
+    void setIdleForDragPause() override;
+    void refreshFromIdle() override;
 
     // Additional methods
     void setLayout(Layout* layout);
@@ -206,8 +216,13 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 public Q_SLOTS:
-    void hideLayoutOsd();
-    void hideNavigationOsd();
+    // hideLayoutOsd / hideNavigationOsd intentionally removed in the L3 v2
+    // refactor: the QML side's _osdDismissed property (bound into
+    // Qt.WindowTransparentForInput) is the sole mechanism for dismissing an
+    // OSD — no C++ slot needs to run in response, because destroying the
+    // QQuickWindow would re-introduce the blocking ~QQuickWindow Vulkan
+    // teardown that the refactor is designed to avoid. Pre-warmed OSD
+    // windows are reused for the daemon's entire lifetime.
     void hideLayoutPicker();
     void onZoneSelected(const QString& layoutId, int zoneIndex, const QVariant& relativeGeometry);
 

@@ -146,13 +146,14 @@ void Daemon::initializeAutotile()
         // ═══════════════════════════════════════════════════════════════════════════
 
         connect(m_shortcutManager.get(), &ShortcutManager::toggleAutotileRequested, this, [this]() {
-            // Feature gate: toggle only works when autotile is enabled in KCM
-            if (!m_settings || !m_settings->autotileEnabled()) {
+            if (!m_settings) {
                 return;
             }
             if (!m_unifiedLayoutController || !m_layoutManager) {
                 return;
             }
+            // Feature gate happens below, after the current mode is known,
+            // so we can check the flag for the TARGET mode (not just autotile).
 
             // Resolve focused screen
             const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
@@ -194,6 +195,21 @@ void Daemon::initializeAutotile()
             bool applied = false;
             const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
             qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment << "wasAutotile=" << wasAutotile;
+
+            // Feature gate: only allow toggling INTO a mode whose feature flag is enabled.
+            // Without this, disabling snapping in the KCM while autotile remains on still
+            // lets the user toggle back into snapping — and vice versa.
+            const bool targetAutotile = !wasAutotile;
+            if (targetAutotile && !m_settings->autotileEnabled()) {
+                qCInfo(lcDaemon) << "Mode toggle: ignored — autotile disabled in settings";
+                updateLayoutFilter();
+                return;
+            }
+            if (!targetAutotile && !m_settings->snappingEnabled()) {
+                qCInfo(lcDaemon) << "Mode toggle: ignored — snapping disabled in settings";
+                updateLayoutFilter();
+                return;
+            }
 
             // Capture autotile window order BEFORE layout switch destroys TilingState.
             // Merge (not replace) into m_lastAutotileOrders so other desktops' saved

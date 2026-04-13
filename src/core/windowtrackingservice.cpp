@@ -272,15 +272,18 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
     QString appId = currentAppIdFor(windowId);
 
     if (!overwrite) {
-        // First-only mode (snap): don't overwrite when moving A→B
+        // First-only mode (snap): don't overwrite this runtime instance's already-
+        // captured pre-snap entry when moving A→B. Match on the EXACT windowId only.
+        //
+        // Do NOT skip on a matching appId entry: appId-keyed entries are persisted
+        // across daemon restarts and window close/reopen (for cross-session restore).
+        // A stale appId entry from a prior session must never block the fresh per-
+        // instance capture — otherwise float-restore/mode-change teleports the new
+        // window back to ancient coordinates. The fresh write below replaces the
+        // appId entry with current-session data.
         if (m_preTileGeometries.contains(windowId)) {
             qCDebug(lcCore) << "storePreTileGeometry: skipping (windowId exists)" << windowId
                             << "existing:" << m_preTileGeometries.value(windowId).geometry << "proposed:" << geometry;
-            return;
-        }
-        if (appId != windowId && m_preTileGeometries.contains(appId)) {
-            qCDebug(lcCore) << "storePreTileGeometry: skipping (appId exists)" << appId
-                            << "existing:" << m_preTileGeometries.value(appId).geometry << "proposed:" << geometry;
             return;
         }
     }
@@ -369,6 +372,18 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
 std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QString& windowId,
                                                                      const QString& currentScreenName) const
 {
+    return validatePreTileEntry(windowId, currentScreenName, /*exactOnly=*/false);
+}
+
+std::optional<QRect> WindowTrackingService::validatedPreTileGeometryExact(const QString& windowId,
+                                                                          const QString& currentScreenName) const
+{
+    return validatePreTileEntry(windowId, currentScreenName, /*exactOnly=*/true);
+}
+
+std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& windowId,
+                                                                 const QString& currentScreenName, bool exactOnly) const
+{
     if (windowId.isEmpty()) {
         return std::nullopt;
     }
@@ -386,6 +401,9 @@ std::optional<QRect> WindowTrackingService::validatedPreTileGeometry(const QStri
         return true;
     };
     if (!lookupEntry(windowId)) {
+        if (exactOnly) {
+            return std::nullopt;
+        }
         QString appId = currentAppIdFor(windowId);
         if (appId == windowId || !lookupEntry(appId)) {
             return std::nullopt;

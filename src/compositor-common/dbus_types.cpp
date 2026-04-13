@@ -301,6 +301,22 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, RestoreTargetResult& e
     return arg;
 }
 
+QDBusArgument& operator<<(QDBusArgument& arg, const PreTileGeometryEntry& e)
+{
+    arg.beginStructure();
+    arg << e.appId << e.x << e.y << e.width << e.height << e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& e)
+{
+    arg.beginStructure();
+    arg >> e.appId >> e.x >> e.y >> e.width >> e.height >> e.screenId;
+    arg.endStructure();
+    return arg;
+}
+
 QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p)
 {
     arg.beginStructure();
@@ -384,6 +400,8 @@ void registerDBusTypes()
     PZ_REGISTER_DBUS_TYPE(CycleTargetResult);
     PZ_REGISTER_DBUS_TYPE(SwapTargetResult);
     PZ_REGISTER_DBUS_TYPE(RestoreTargetResult);
+    PZ_REGISTER_DBUS_TYPE(PreTileGeometryEntry);
+    PZ_REGISTER_DBUS_TYPE(PreTileGeometryList);
     PZ_REGISTER_DBUS_TYPE(DragPolicy);
     PZ_REGISTER_DBUS_TYPE(DragOutcome);
 

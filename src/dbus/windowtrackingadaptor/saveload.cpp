@@ -3,6 +3,8 @@
 
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
+#include "persistenceworker.h"
+#include "../../config/configbackend_json.h"
 #include "../../core/interfaces.h"
 #include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
@@ -204,8 +206,20 @@ void WindowTrackingAdaptor::saveState()
         tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
     }
 
-    tracking.reset(); // release group before sync
-    m_sessionBackend->sync();
+    tracking.reset(); // release group before write
+
+    // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
+    // to the persistence worker thread. The main thread returns immediately.
+    // The dirty flag is cleared asynchronously when the worker's
+    // writeCompleted(success=true) signal lands (see ctor wiring) — so a
+    // failed write is retried on the next timer tick instead of silently
+    // losing state.
+    auto* jsonBackend = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get());
+    if (jsonBackend && m_persistenceWorker) {
+        m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
+    } else {
+        m_sessionBackend->sync(); // fallback: synchronous write
+    }
     qCInfo(lcDbusWindow) << "Saved state:"
                          << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
                          << "preTile=" << m_service->preTileGeometries().size()
@@ -222,6 +236,15 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
     if (m_saveTimer && m_saveTimer->isActive()) {
         m_saveTimer->stop();
     }
+
+    // Destroy the persistence worker first. Its destructor posts a quit to
+    // the I/O thread and waits, which drains any pending async writes. If we
+    // did the sync write before draining, a previously-queued async snapshot
+    // could land after and silently clobber the fresh shutdown save.
+    m_persistenceWorker.reset();
+
+    // With the worker gone, saveState() falls through to the synchronous
+    // m_sessionBackend->sync() path — guaranteed to be the last write.
     saveState();
 
     // Block all subsequent saves. During Qt object destruction after stop(),
@@ -462,9 +485,13 @@ void WindowTrackingAdaptor::loadState()
         }
     };
 
-    // Load full windowId format first (preserves multi-instance distinction for
-    // daemon-only restarts where KWin UUIDs are still valid). Each entry stores
-    // both the full windowId key AND the appId key, mirroring storePreTileGeometry().
+    // Load full windowId format (per-runtime-instance data from a daemon-only
+    // restart where KWin UUIDs are still valid). These are instance-scoped —
+    // deliberately NOT mirrored to the appId key on load. The appId slot is
+    // the cross-session inheritance baseline owned exclusively by the legacy
+    // format below, so a ghost per-instance entry (e.g. from a window that
+    // was never cleanly closed) cannot poison the appId fallback used by
+    // validatedPreTileGeometry on window reopen.
     QString fullTileJson = readVal(ConfigKeys::preTileGeometriesFullKey(), QString());
     if (!fullTileJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullTileJson.toUtf8());
@@ -482,26 +509,23 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
-                    PreTileGeometry ptg{geom, screen};
-                    preTileGeometries[windowId] = ptg;
-                    // Also store under appId for fallback (mirrors storePreTileGeometry).
-                    // Registry is empty during load so this resolves to string parsing.
-                    QString appId = m_service->currentAppIdFor(windowId);
-                    if (!appId.isEmpty() && appId != windowId) {
-                        preTileGeometries[appId] = ptg;
-                    }
+                    preTileGeometries[windowId] = PreTileGeometry{geom, screen};
                 }
             }
         }
     }
 
-    // Load appId-keyed format (fallback for KWin restarts or entries without full format)
+    // Load appId-keyed format (cross-session baseline — the "what this app
+    // looked like last time a user explicitly floated it" fallback).
     QString tileJson = readVal(ConfigKeys::preTileGeometriesKey(), QString());
     if (!tileJson.isEmpty()) {
-        // Only fill in keys not already loaded from full format
         QHash<QString, PreTileGeometry> appIdGeometries;
         loadGeometries(tileJson, appIdGeometries);
         for (auto it = appIdGeometries.constBegin(); it != appIdGeometries.constEnd(); ++it) {
+            // Do not overwrite a full-windowId entry that happens to collide
+            // (shouldn't happen — appId keys never contain '|'), but the
+            // general rule is: full entries are per-instance, appId entries
+            // are cross-session, they live in separate key namespaces.
             if (!preTileGeometries.contains(it.key())) {
                 preTileGeometries[it.key()] = it.value();
             }

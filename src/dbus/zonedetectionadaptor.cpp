@@ -5,6 +5,7 @@
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
 #include "../core/layout.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/zone.h"
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
@@ -57,7 +58,7 @@ QString ZoneDetectionAdaptor::detectZoneAtPosition(int x, int y)
     }
 
     // Recalculate zone geometries so detectZone operates on absolute coords
-    layout->recalculateZoneGeometries(refGeom);
+    LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Use ZoneDetector::detectZone which resolves overlapping zones via
@@ -162,7 +163,7 @@ QStringList ZoneDetectionAdaptor::detectMultiZoneAtPosition(int x, int y)
         return zoneIds;
     }
 
-    layout->recalculateZoneGeometries(refGeom);
+    LayoutComputeService::recalculateSync(layout, refGeom);
     m_zoneDetector->setLayout(layout);
 
     // Convert cursor position to QPointF for detection

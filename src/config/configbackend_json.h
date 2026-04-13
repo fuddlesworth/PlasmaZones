@@ -92,6 +92,22 @@ public:
     /// Returns true on success.
     static bool writeJsonAtomically(const QString& filePath, const QJsonObject& root);
 
+    /// Accessors for async I/O: snapshot the current state for off-thread writing.
+    /// The returned QJsonObject is implicitly shared (COW) — cheap to copy,
+    /// isolated from further main-thread mutations.
+    QString filePath() const
+    {
+        return m_filePath;
+    }
+    QJsonObject jsonRootSnapshot() const
+    {
+        return m_root;
+    }
+    void clearDirty()
+    {
+        m_dirty = false;
+    }
+
 private:
     friend class JsonConfigGroup; // for group-count tracking and dirty flag
 

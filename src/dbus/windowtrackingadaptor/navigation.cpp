@@ -217,20 +217,30 @@ void WindowTrackingAdaptor::toggleWindowFloat()
     const QString screenId = m_lastActiveScreenId;
     qCInfo(lcDbusWindow) << "toggleWindowFloat: windowId=" << windowId << "screen=" << screenId;
 
-    // Capture pre-tile geometry from the shadow so unfloat restores to the
-    // user's last position. The shadow is refreshed on every
+    // Capture pre-tile geometry from the shadow ONLY when the window is
+    // currently floating. The shadow is refreshed on every
     // windowFrameGeometryChanged the effect sees (debounced to 50ms).
     //
-    // Skipping the store when the shadow has no entry is safe: that means
-    // this window hasn't had its geometry pushed yet (freshly opened and
-    // never moved), so there's nothing meaningful to preserve. The engine
-    // will use the window's current frame geometry on the effect side when
-    // it applies the outcome.
-    const QRect geo = frameGeometry(windowId);
-    if (geo.isValid()) {
-        const bool wasFloating = m_service && m_service->isWindowFloating(windowId);
-        storePreTileGeometry(windowId, geo.x(), geo.y(), geo.width(), geo.height(), screenId,
-                             /*overwrite=*/wasFloating);
+    // wasFloating=true → window is at a free-float position; capturing
+    //   (and overwriting any prior entry) lets the next un-float restore
+    //   to the user's most recent floated location.
+    //
+    // wasFloating=false → window is tiled/snapped; the shadow holds the
+    //   zone rect, NOT a meaningful pre-float position. Storing it would
+    //   poison the pre-tile entry with tile coordinates — a subsequent
+    //   float-restore would "restore" the window right back to the zone
+    //   it was already in. Leave the existing entry (if any) untouched.
+    //
+    // Skipping the store when the shadow has no entry is safe: the engine
+    // will use the window's current frame geometry on the effect side
+    // when it applies the outcome.
+    const bool wasFloating = m_service && m_service->isWindowFloating(windowId);
+    if (wasFloating) {
+        const QRect geo = frameGeometry(windowId);
+        if (geo.isValid()) {
+            storePreTileGeometry(windowId, geo.x(), geo.y(), geo.width(), geo.height(), screenId,
+                                 /*overwrite=*/true);
+        }
     }
 
     toggleFloatForWindow(windowId, screenId);

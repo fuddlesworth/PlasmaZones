@@ -294,7 +294,23 @@ private:
      */
     void clearAllPendingMinimizeFloats();
 
-    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame);
+    /**
+     * @brief Save the pre-autotile free-float geometry for @p windowId.
+     *
+     * The caller passes the window's current frame. The default safety
+     * guard skips the save when the window is not currently floating —
+     * snapped/tiled windows have zone dimensions in frameGeometry() and
+     * capturing them would poison the pre-tile entry.
+     *
+     * @param knownFreeFloating Bypass the isWindowFloating guard when the
+     *        caller knows the frame is authoritatively a free-float rect.
+     *        Use true from the window-added paths (notifyWindowAdded and
+     *        notifyWindowsAddedBatch) — fresh windows are NOT tracked in
+     *        the FloatingCache yet, so isWindowFloating() returns false
+     *        and would incorrectly reject the one-shot initial capture.
+     */
+    bool saveAndRecordPreAutotileGeometry(const QString& windowId, const QString& screenId, const QRectF& frame,
+                                          bool knownFreeFloating = false);
     void reportDiscoveredMinSize(const QString& windowId, int minWidth, int minHeight);
 
     // ═══════════════════════════════════════════════════════════════════
