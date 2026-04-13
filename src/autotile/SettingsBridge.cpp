@@ -63,6 +63,25 @@ SettingsBridge::SettingsBridge(AutotileEngine* engine)
 // Settings synchronization
 // ═══════════════════════════════════════════════════════════════════════════════
 
+bool SettingsBridge::applyOverflowBehaviorChange(AutotileOverflowBehavior newBehavior)
+{
+    AutotileConfig* cfg = m_engine->config();
+    const AutotileOverflowBehavior oldBehavior = cfg->overflowBehavior;
+    if (oldBehavior == newBehavior) {
+        return false;
+    }
+    cfg->overflowBehavior = newBehavior;
+    // Float → Unlimited: previously-overflowed floating windows were rejected
+    // at onWindowAdded when the cap was hit. The gate is now wide open
+    // (effectiveMaxWindows returns INT_MAX/2), so backfill re-inserts them.
+    // Unlimited → Float recovery is handled by the scheduled retile downstream
+    // (OverflowManager::applyOverflow floats excess during recalculateLayout).
+    if (oldBehavior == AutotileOverflowBehavior::Float && newBehavior == AutotileOverflowBehavior::Unlimited) {
+        m_engine->backfillWindows();
+    }
+    return true;
+}
+
 void SettingsBridge::syncFromSettings(Settings* settings)
 {
     if (!settings) {
@@ -146,16 +165,11 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         }
     }
 
-    // OverflowBehavior needs a cast — tracked so the backfill path below fires
-    // when the user toggles Unlimited (recovery of previously-overflowed windows
-    // is handled there via the same mechanism as a maxWindows increase).
-    const AutotileOverflowBehavior oldOverflowBehavior = cfg->overflowBehavior;
-    {
-        auto newOverflow = settings->autotileOverflowBehavior();
-        if (cfg->overflowBehavior != newOverflow) {
-            cfg->overflowBehavior = newOverflow;
-            configChanged = true;
-        }
+    // OverflowBehavior: shared helper handles both the value update and the
+    // Float→Unlimited backfill, so syncFromSettings and the live-change signal
+    // handler in connectToSettings stay in lockstep.
+    if (applyOverflowBehaviorChange(settings->autotileOverflowBehavior())) {
+        configChanged = true;
     }
 
 #undef SYNC_FIELD
@@ -184,12 +198,10 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     m_engine->propagateGlobalSplitRatio();
     m_engine->propagateGlobalMasterCount();
 
-    // Backfill windows when maxWindows increased OR overflow behavior flipped
-    // to Unlimited: windows rejected by the old gate check in onWindowAdded()
-    // stay untiled unless we add them here.
-    const bool flippedToUnlimited = oldOverflowBehavior == AutotileOverflowBehavior::Float
-        && cfg->overflowBehavior == AutotileOverflowBehavior::Unlimited;
-    if (cfg->maxWindows > oldMaxWindows || flippedToUnlimited) {
+    // Backfill windows when maxWindows increased: windows rejected by the old
+    // gate check in onWindowAdded() stay untiled unless we add them here.
+    // (The Float→Unlimited backfill is handled inside applyOverflowBehaviorChange.)
+    if (cfg->maxWindows > oldMaxWindows) {
         m_engine->backfillWindows();
     }
 
@@ -353,18 +365,14 @@ void SettingsBridge::connectToSettings(Settings* settings)
 
     // OverflowBehavior needs the same custom handler: when the user flips to
     // Unlimited, previously-overflowed (floating) windows must be backfilled
-    // into the tile layout. effectiveMaxWindows now returns INT_MAX in
+    // into the tile layout. effectiveMaxWindows returns INT_MAX/2 in
     // Unlimited mode so the onWindowAdded gate is wide open — backfill just
-    // re-inserts everything that was rejected before.
+    // re-inserts everything that was rejected before. Logic shared with
+    // syncFromSettings via applyOverflowBehaviorChange.
     QObject::connect(settings, &Settings::autotileOverflowBehaviorChanged, m_engine, [this]() {
         if (!m_settings)
             return;
-        const AutotileOverflowBehavior oldBehavior = m_engine->config()->overflowBehavior;
-        m_engine->config()->overflowBehavior = m_settings->autotileOverflowBehavior();
-        if (oldBehavior == AutotileOverflowBehavior::Float
-            && m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
-            m_engine->backfillWindows();
-        }
+        applyOverflowBehaviorChange(m_settings->autotileOverflowBehavior());
         scheduleSettingsRetile();
     });
 

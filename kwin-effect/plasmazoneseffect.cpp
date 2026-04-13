@@ -258,7 +258,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     // the tile to stay visually in place while the daemon runs
                     // moveToTiledPosition on each cursor tick. The effect still
                     // flips into bypass state so snap-path logic is suppressed.
-                    const bool reorderMode = (m_cachedAutotileDragBehavior == 1);
+                    const bool reorderMode = m_cachedAutotileDragBehavior == EffectAutotileDragBehavior::Reorder;
                     // If the window is currently autotile-tiled, restore its
                     // title bar and pre-autotile size NOW (synchronously, during
                     // the interactive move). This mirrors snap mode, where
@@ -1735,7 +1735,22 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAutotileDragInsertToggle = v.toBool();
     });
     loadSettingAsync(QStringLiteral("autotileDragBehavior"), [this](const QVariant& v) {
-        m_cachedAutotileDragBehavior = qBound(0, v.toInt(), 1);
+        // Clamp unknown values to the safe default (Float) rather than the
+        // highest known value — an older effect build against a newer daemon
+        // must not silently map e.g. a future `ReorderAcrossScreens=2` onto
+        // the nearest mode it happens to recognize.
+        const int raw = v.toInt();
+        switch (raw) {
+        case static_cast<int>(EffectAutotileDragBehavior::Float):
+            m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
+            break;
+        case static_cast<int>(EffectAutotileDragBehavior::Reorder):
+            m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Reorder;
+            break;
+        default:
+            m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
+            break;
+        }
     });
     loadSettingAsync(QStringLiteral("zoneSelectorEnabled"), [this](const QVariant& v) {
         m_cachedZoneSelectorEnabled = v.toBool();

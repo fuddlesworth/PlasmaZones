@@ -3,6 +3,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <limits>
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
@@ -98,6 +99,49 @@ private Q_SLOTS:
         // Should honor the user-customized global, not the per-screen algo default
         int effective = engine.effectiveMaxWindows(screen);
         QCOMPARE(effective, engine.config()->maxWindows);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Unlimited overflow mode returns a huge sentinel so std::min clamps
+    // become idempotent and onWindowAdded's gate is wide open. Sentinel is
+    // INT_MAX/2, not INT_MAX, to leave headroom for any `+1` callers.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_unlimitedReturnsSentinel()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        engine.setAutotileScreens({screen});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+
+        const int effective = engine.effectiveMaxWindows(screen);
+        QCOMPARE(effective, std::numeric_limits<int>::max() / 2);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // A per-screen MaxWindows override wins even when global overflow is
+    // Unlimited — users must be able to clamp individual screens while
+    // running unlimited elsewhere. The override path is checked BEFORE the
+    // Unlimited short-circuit in PerScreenConfigResolver::effectiveMaxWindows.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_unlimitedRespectsPerScreenOverride()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screenA = QStringLiteral("eDP-1");
+        const QString screenB = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screenA, screenB});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
+
+        // Screen A clamps to 3 via per-screen override; screen B inherits Unlimited.
+        QVariantMap overrides;
+        overrides[QStringLiteral("MaxWindows")] = 3;
+        engine.applyPerScreenConfig(screenA, overrides);
+
+        QCOMPARE(engine.effectiveMaxWindows(screenA), 3);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), std::numeric_limits<int>::max() / 2);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

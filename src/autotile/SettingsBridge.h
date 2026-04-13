@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "core/enums.h"
 #include "plasmazones_export.h"
 #include <QJsonArray>
 #include <QPointer>
@@ -144,6 +145,19 @@ public:
 private:
     void scheduleSettingsRetile();
     void processSettingsRetile();
+
+    /**
+     * @brief Apply an overflow-behavior change with backfill on flip-to-Unlimited
+     *
+     * Updates engine config and, if the transition is Float→Unlimited, runs
+     * backfillWindows() so previously-overflowed floating windows re-enter the
+     * tile layout. Unified helper used by both syncFromSettings (bulk reload)
+     * and the live-change signal handler in connectToSettings — keeps the
+     * transition logic in one place.
+     *
+     * @returns true if the stored value changed (caller may use as configChanged hint)
+     */
+    bool applyOverflowBehaviorChange(AutotileOverflowBehavior newBehavior);
 
     AutotileEngine* m_engine = nullptr;
     QPointer<Settings> m_settings;

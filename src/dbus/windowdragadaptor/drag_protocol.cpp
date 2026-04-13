@@ -136,6 +136,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
+        m_dragReorderActive = false;
 
         // Reorder mode: eagerly begin a drag-insert preview so even
         // zero-movement drops have something to commit on endDrag (otherwise
@@ -144,10 +145,22 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         // isWindowTiled so floating/untracked windows still drag free and
         // take the normal ApplyFloat path — matches Krohnkite's "floating
         // windows are first-class" semantics.
+        //
+        // If beginDragInsertPreview returns false (target state missing,
+        // window lost between tiled-check and the call, etc.) we deliberately
+        // fall through WITHOUT setting m_dragReorderActive. dragMoved then
+        // won't force autotileInsertHeld, and endDrag will see no active
+        // preview — the bypass path lands on ApplyFloat, which is the safe
+        // legacy behavior for a drag the daemon couldn't latch onto.
         if (policy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
             && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
             && m_autotileEngine->isWindowTiled(windowId)) {
-            m_autotileEngine->beginDragInsertPreview(windowId, startScreenId);
+            if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
+                m_dragReorderActive = true;
+            } else {
+                qCWarning(lcDbusWindow) << "beginDrag: reorder mode requested but beginDragInsertPreview failed for"
+                                        << windowId << "screen=" << startScreenId << "— falling back to float-on-drop";
+            }
         }
         return policy;
     }
@@ -215,6 +228,7 @@ void WindowDragAdaptor::clearPendingSnapDragState()
     m_pendingSnapDragGeometry = QRect();
     m_pendingSnapDragMouseButtons = 0;
     m_pendingSnapDragWasSnapped = false;
+    m_dragReorderActive = false;
     // Any drag-insert preview left over from an incomplete previous drag
     // (daemon lost track, client disconnect, snapping-disabled flip, etc.)
     // must be cleared too — its referenced window may no longer exist.
@@ -260,6 +274,9 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
 
     const QString bypassReason = m_currentDragBypassReason;
     m_currentDragBypassReason.clear(); // next drag starts fresh
+    // m_dragReorderActive lives for one drag only. Reset here (before the
+    // various early-return branches below) so no branch has to remember.
+    m_dragReorderActive = false;
 
     qCInfo(lcDbusWindow) << "endDrag:" << windowId << "cursor=" << cursorX << cursorY << "cancelled=" << cancelled
                          << "bypass=" << bypassReason;

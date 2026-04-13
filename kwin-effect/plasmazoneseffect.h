@@ -35,6 +35,14 @@ class SurfaceItem;
 
 namespace PlasmaZones {
 
+// Mirror of core/enums.h AutotileDragBehavior. The effect can't include daemon
+// headers (KWin plugin ABI constraints), so the values are duplicated here.
+// MUST stay in sync with core/enums.h — bump both in the same commit.
+enum class EffectAutotileDragBehavior : int {
+    Float = 0, ///< Drag-to-float (PlasmaZones default)
+    Reorder = 1, ///< Drag-to-reorder (Krohnkite-style)
+};
+
 // Forward declarations for helper classes
 class AutotileHandler;
 class KWinCompositorBridge;
@@ -550,11 +558,13 @@ private:
         false; // false until D-Bus reply arrives — permissive default bypasses trigger gating (#175)
     bool m_cachedToggleActivation = false;
     bool m_cachedAutotileDragInsertToggle = false;
-    // AutotileDragBehavior as int (0=Float default, 1=Reorder). Cached so the
-    // synchronous drag-start fast path can decide whether to skip the
-    // handleDragToFloat(immediate=true) call. Refreshed by loadCachedSettings
-    // on every settingsChanged D-Bus notification.
-    int m_cachedAutotileDragBehavior = 0;
+    // AutotileDragBehavior cached so the synchronous drag-start fast path can
+    // decide whether to skip the handleDragToFloat(immediate=true) call.
+    // Refreshed by loadCachedSettings on every settingsChanged D-Bus
+    // notification. Unknown values clamp to the safe default (Float) rather
+    // than the highest-known value so an older effect build against a newer
+    // daemon doesn't silently enter the wrong mode.
+    EffectAutotileDragBehavior m_cachedAutotileDragBehavior = EffectAutotileDragBehavior::Float;
     bool m_cachedZoneSelectorEnabled = true; // true until proven false — ensures dragMoved passes through at startup
     int m_cachedAnimationSequenceMode = 0; // 0=all at once, 1=one by one in zone order
     int m_cachedAnimationDuration = 150; // ms, fallback until loaded from daemon

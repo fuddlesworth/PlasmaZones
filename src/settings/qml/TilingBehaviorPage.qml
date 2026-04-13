@@ -216,6 +216,7 @@ Flickable {
 
                     WideComboBox {
                         Accessible.name: i18n("Autotile drag behavior")
+                        Accessible.description: i18n("Selects how dragging a tiled window on an autotile screen behaves: Float converts it to free-floating, Reorder keeps it tiled and swaps it into the drop slot.")
                         textRole: "text"
                         valueRole: "value"
                         model: [{
@@ -240,6 +241,7 @@ Flickable {
 
                     WideComboBox {
                         Accessible.name: i18n("Autotile overflow behavior")
+                        Accessible.description: i18n("Selects how windows beyond the max-windows cap are handled: Float excess windows, or Unlimited to tile every window regardless of count.")
                         textRole: "text"
                         valueRole: "value"
                         model: [{

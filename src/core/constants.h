@@ -413,6 +413,10 @@ inline constexpr QLatin1String FocusFollowsMouse{"focusFollowsMouse"};
 inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
+inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
+// OverflowBehavior values
+inline constexpr QLatin1String OverflowFloat{"float"};
+inline constexpr QLatin1String OverflowUnlimited{"unlimited"};
 inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
 inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 // InsertPosition values

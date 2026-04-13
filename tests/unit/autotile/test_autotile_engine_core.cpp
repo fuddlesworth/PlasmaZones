@@ -243,6 +243,7 @@ private Q_SLOTS:
         original.focusFollowsMouse = true;
         original.respectMinimumSize = false;
         original.insertPosition = AutotileConfig::InsertPosition::AfterFocused;
+        original.overflowBehavior = AutotileOverflowBehavior::Unlimited;
 
         QJsonObject json = original.toJson();
         AutotileConfig restored = AutotileConfig::fromJson(json);
@@ -257,6 +258,64 @@ private Q_SLOTS:
         QCOMPARE(restored.focusFollowsMouse, original.focusFollowsMouse);
         QCOMPARE(restored.respectMinimumSize, original.respectMinimumSize);
         QCOMPARE(restored.insertPosition, original.insertPosition);
+        // Round-trip must preserve overflowBehavior — not including it in
+        // toJson/fromJson silently reset the field on any layout reload or
+        // per-screen config snapshot (pre-fix landmine).
+        QCOMPARE(restored.overflowBehavior, original.overflowBehavior);
+    }
+
+    // =========================================================================
+    // AutotileConfig equality: overflowBehavior must participate so change
+    // detection (syncFromSettings, per-screen propagation) sees real deltas.
+    // =========================================================================
+
+    void testConfigEquality_overflowBehaviorParticipates()
+    {
+        AutotileConfig a;
+        AutotileConfig b;
+        QVERIFY(a == b);
+
+        b.overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        QVERIFY(a != b);
+
+        a.overflowBehavior = AutotileOverflowBehavior::Unlimited;
+        QVERIFY(a == b);
+    }
+
+    // =========================================================================
+    // isWindowTiled: helper used by WindowDragAdaptor to decide whether to
+    // enter drag-insert preview on a reorder drag. A window is "tiled" iff it
+    // is tracked (m_windowToStateKey maps it to a state) AND not floating in
+    // that state.
+    // =========================================================================
+
+    void testIsWindowTiled_untrackedReturnsFalse()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        QVERIFY(!engine.isWindowTiled(QStringLiteral("never-opened")));
+    }
+
+    void testIsWindowTiled_trackedAndFloatingReturnsFalse()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screen = QStringLiteral("eDP-1");
+        const QString windowId = QStringLiteral("win-1");
+        engine.setAutotileScreens({screen});
+        engine.windowOpened(windowId, screen);
+        QCoreApplication::processEvents();
+
+        // Tracked, not yet floating → tiled.
+        QVERIFY(engine.isWindowTiled(windowId));
+
+        // Flip to floating via the tiling state — the helper must now return false.
+        TilingState* state = engine.stateForScreen(screen);
+        QVERIFY(state);
+        state->setFloating(windowId, true);
+        QVERIFY(!engine.isWindowTiled(windowId));
+
+        // Unfloat → tiled again.
+        state->setFloating(windowId, false);
+        QVERIFY(engine.isWindowTiled(windowId));
     }
 
     // =========================================================================

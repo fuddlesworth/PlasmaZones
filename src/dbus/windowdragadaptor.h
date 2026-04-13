@@ -342,6 +342,12 @@ private:
     bool m_prevTriggerHeld = false; // Previous frame's trigger state for edge detection
     bool m_autotileDragInsertToggled = false; // Current toggle state for autotile drag-insert
     bool m_prevAutotileDragInsertHeld = false; // Previous frame's autotile drag-insert trigger state
+    // Drag-to-reorder mode is active for the current drag: cached at beginDrag
+    // time so per-tick dragMoved work (60+ Hz) doesn't have to re-query the
+    // settings + engine on every cursor update. Requires (a) autotile-bypass
+    // path, (b) AutotileDragBehavior::Reorder, and (c) window was tracked+tiled
+    // at drag-start. Cleared by endDrag / clearPendingSnapDragState.
+    bool m_dragReorderActive = false;
     bool m_overlayShown = false;
     // Overlay was blanked mid-drag via IOverlayService::setIdleForDragPause()
     // (trigger released, but the drag is still live). Windows stay alive;
