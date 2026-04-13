@@ -756,6 +756,8 @@ ApplicationWindow {
                             // binding so QML tracks it as a dependency and
                             // re-evaluates when the dirty set changes.
                             Rectangle {
+                                id: dirtyBadge
+
                                 width: Kirigami.Units.smallSpacing * 1.5
                                 height: Kirigami.Units.smallSpacing * 1.5
                                 radius: width / 2
@@ -784,18 +786,16 @@ ApplicationWindow {
                                 SequentialAnimation {
                                     id: dirtyBadgePulse
 
-                                    property Item target: parent
-
                                     loops: Animation.Infinite
-                                    running: parent.visible
+                                    running: dirtyBadge.visible
                                     onRunningChanged: {
                                         if (!running)
-                                            target.opacity = 1;
+                                            dirtyBadge.opacity = 1;
 
                                     }
 
                                     NumberAnimation {
-                                        target: dirtyBadgePulse.target
+                                        target: dirtyBadge
                                         property: "opacity"
                                         from: 1
                                         to: 0.4
@@ -804,7 +804,7 @@ ApplicationWindow {
                                     }
 
                                     NumberAnimation {
-                                        target: dirtyBadgePulse.target
+                                        target: dirtyBadge
                                         property: "opacity"
                                         from: 0.4
                                         to: 1
