@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configmigration.h"
 #include "settingscontroller.h"
@@ -13,40 +14,33 @@
 
 #include <QGuiApplication>
 #include <QCommandLineParser>
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusMessage>
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QWindow>
 
 namespace {
+
+constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::SettingsApp::ServiceName,
+                                                      PlasmaZones::DBus::SettingsApp::ObjectPath,
+                                                      PlasmaZones::DBus::SettingsApp::Interface};
 
 /// Try to forward a --page request to an already-running instance.
 /// Returns true if the running instance handled it (caller should exit).
 bool activateRunningInstance(const QString& page)
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.isConnected())
+    // Skip entirely if there's no running instance. Avoids a speculative
+    // setActivePage call logging a bogus error when we know no one's home.
+    if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
-    QDBusInterface iface(PlasmaZones::DBus::SettingsApp::ServiceName, PlasmaZones::DBus::SettingsApp::ObjectPath,
-                         PlasmaZones::DBus::SettingsApp::Interface, bus);
-    if (!iface.isValid())
-        return false;
-
-    iface.setTimeout(3000); // 3s timeout — avoid long hang if existing instance is frozen
     if (!page.isEmpty()) {
-        QDBusMessage pageReply = iface.call(QStringLiteral("setActivePage"), page);
-        if (pageReply.type() == QDBusMessage::ErrorMessage) {
-            qCWarning(PlasmaZones::lcCore) << "Failed to forward page to running instance:" << pageReply.errorMessage();
-        }
+        // Best-effort: page navigation doesn't gate the raise. A failure here
+        // still lets us raise the window — the user can navigate manually.
+        PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
     }
-    QDBusMessage reply = iface.call(QStringLiteral("raise"));
-    if (reply.type() == QDBusMessage::ErrorMessage)
-        return false;
-    return true;
+    return PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("raise"), {});
 }
 
 } // anonymous namespace
@@ -126,6 +120,15 @@ int main(int argc, char* argv[])
     if (engine.rootObjects().isEmpty()) {
         qCCritical(PlasmaZones::lcCore) << "Failed to load settings QML";
         return 1;
+    }
+
+    // Hand the QML root window to the controller so raise() can target it
+    // directly instead of scanning QGuiApplication::allWindows().
+    for (QObject* obj : engine.rootObjects()) {
+        if (auto* window = qobject_cast<QWindow*>(obj)) {
+            controller.setPrimaryWindow(window);
+            break;
+        }
     }
 
     return app.exec();

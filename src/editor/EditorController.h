@@ -4,6 +4,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPointer>
 #include <QVariantList>
 #include <QFont>
 #include <QImage>
@@ -13,9 +14,11 @@
 #include <QQuickWindow>
 #include <QSize>
 #include <QVector>
+#include <memory>
 #include "../config/iconfigbackend.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
 #include "undo/UndoController.h"
 
 namespace PlasmaZones {
@@ -452,17 +455,35 @@ public:
 
     /**
      * @brief Register the editor as the single-instance owner on the session bus.
-     * @return true if registration succeeded; false if another instance already owns the name.
+     *
+     * Claims `org.plasmazones.Editor.App` and exports `raise()` +
+     * `handleLaunchRequest()` at `/EditorApp`. Must be called early — before any
+     * heavy startup work — so parallel launches forward here instead of racing on
+     * the daemon's event loop.
+     *
+     * @return true if the well-known name and object were both registered.
      */
     bool registerDBusService();
 
+    /**
+     * @brief Apply command-line launch arguments to this controller.
+     *
+     * Shared entry point for both the initial launch (main.cpp) and forwarded
+     * launches (handleLaunchRequest), so the two paths cannot drift.
+     */
+    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+
+    // ───── D-Bus single-instance interface ────────────────────────────────────
+    // Exported via QDBusConnection::ExportScriptableSlots at /EditorApp, called
+    // by a second launch to forward args to the already-running editor instead
+    // of spawning a parallel process. Declared as Q_SLOTS so the moc-generated
+    // metadata exposes them over D-Bus.
 public Q_SLOTS:
-    // Single-instance D-Bus methods — called by a second launch to forward args
-    // to the already-running editor instead of spawning a parallel process.
     Q_SCRIPTABLE void raise();
     Q_SCRIPTABLE void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
                                           bool preview);
 
+    // ───── Internal slots (not exposed on D-Bus) ──────────────────────────────
     // Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
@@ -857,12 +878,25 @@ private:
     bool m_isNewLayout = false;
     bool m_previewMode = false;
 
+    // Cached main editor window — populated by showFullScreenOnTargetScreen() on
+    // first call from QML, used by raise() / handleLaunchRequest() instead of
+    // iterating QGuiApplication::allWindows() (which has no stable ordering and
+    // may surface popup/dialog windows first).
+    QPointer<QQuickWindow> m_primaryWindow;
+
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;
     ZoneManager* m_zoneManager = nullptr;
     SnappingService* m_snappingService = nullptr;
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
+
+    // Single-instance D-Bus registration. Owned here so destruction releases
+    // the well-known name automatically. claim() is invoked by the main.cpp
+    // launcher before heavy startup work runs. Declared last among the
+    // service members so its destructor runs first (releasing the D-Bus name
+    // before the services it would export go away).
+    std::unique_ptr<SingleInstanceService> m_singleInstance;
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

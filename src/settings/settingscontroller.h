@@ -16,9 +16,11 @@
 #include "../core/constants.h"
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
+#include "../core/single_instance_service.h"
 
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QDBusConnection>
@@ -26,6 +28,8 @@
 #include <QTimer>
 #include <memory>
 #include <optional>
+
+class QWindow;
 
 namespace PlasmaZones {
 
@@ -148,6 +152,12 @@ public:
 
     /// Register on the session bus so a second instance can forward page requests.
     bool registerDBusService();
+
+    /// Cache the primary application window so raise() can target it without
+    /// scanning QGuiApplication::allWindows() (order not guaranteed, may
+    /// surface popup/dialog windows first). Called from main.cpp after the
+    /// QML engine has created its root window.
+    void setPrimaryWindow(QWindow* window);
 
     QString activePage() const
     {
@@ -753,6 +763,15 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+
+    // Single-instance D-Bus registration (owns the well-known name while the
+    // controller is alive). Claimed via registerDBusService() from main.cpp.
+    std::unique_ptr<SingleInstanceService> m_singleInstance;
+
+    // Cached main settings window for raise(). Set from main.cpp after the
+    // QML engine produces its root window.
+    QPointer<QWindow> m_primaryWindow;
+
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;
     DaemonController m_daemonController;

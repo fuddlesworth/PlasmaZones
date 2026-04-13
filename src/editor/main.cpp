@@ -6,6 +6,7 @@
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
 #include "../core/layersurface.h"
+#include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configdefaults.h"
 #include "version.h"
@@ -23,9 +24,7 @@
 #include <QScreen>
 #include <QCursor>
 #include <QDBusConnection>
-#include <QDBusInterface>
 #include <QDBusMessage>
-#include <QDBusReply>
 #include <QObject>
 
 #include "pz_i18n.h"
@@ -36,23 +35,15 @@ using namespace PlasmaZones;
 
 namespace {
 
+constexpr PlasmaZones::SingleInstanceIds kEditorIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath,
+                                                    DBus::EditorApp::Interface};
+
 /// Try to forward a launch request to an already-running editor instance.
 /// Returns true if the running instance accepted the request (caller should exit).
 bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.isConnected())
-        return false;
-
-    QDBusInterface iface(DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath, DBus::EditorApp::Interface, bus);
-    if (!iface.isValid())
-        return false;
-
-    iface.setTimeout(3000); // 3s — avoid long hang if the existing instance is frozen
-    QDBusMessage reply = iface.call(QStringLiteral("handleLaunchRequest"), screenId, layoutId, createNew, preview);
-    if (reply.type() == QDBusMessage::ErrorMessage)
-        return false;
-    return true;
+    return PlasmaZones::SingleInstanceService::forward(kEditorIds, QStringLiteral("handleLaunchRequest"),
+                                                       {screenId, layoutId, createNew, preview});
 }
 
 } // anonymous namespace
@@ -196,45 +187,34 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    // Create controller
+    // Create controller. This is cheap: it wires up services and loads local
+    // KConfig, but does not make any blocking D-Bus calls to the daemon — those
+    // happen only when applyLaunchArgs() invokes loadLayout/createNewLayout.
     EditorController controller;
 
-    // Handle layout loading based on mode
-    if (createNewLayout) {
-        // Create new layout - set target screen first (without loading), then create new layout
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreenDirect(targetScreen);
-        }
-        controller.createNewLayout();
-    } else if (!layoutIdArg.isEmpty()) {
-        // Auto-detect preview mode for autotile layouts, or explicit --preview flag
-        if (previewArg || LayoutId::isAutotile(layoutIdArg)) {
-            controller.setPreviewMode(true);
-        }
-        // Edit/preview specific layout - load it, then set target screen (without reloading)
-        controller.loadLayout(layoutIdArg);
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreenDirect(targetScreen);
-        }
-    } else {
-        // No layout specified - set target screen which will load the assigned layout
-        // or create a new one if none assigned
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreen(targetScreen);
-        }
-    }
-
-    // Register the single-instance D-Bus service so future launches forward here.
-    // If registration fails, another instance claimed the name between our earlier
-    // activateRunningInstance() check and now — retry forwarding and exit.
+    // Claim the D-Bus well-known name BEFORE applyLaunchArgs(). applyLaunchArgs
+    // triggers blocking daemon calls (queryShadersEnabled, queryAvailableShaders,
+    // loadLayout) — if we registered after those, a second launch racing during
+    // startup would run its own heavy init before discovering the conflict,
+    // redundantly contending on the daemon's event loop. Registering first means
+    // rapid-fire launches forward cleanly the moment they check the bus.
+    //
+    // If registration fails, another instance claimed the name between our
+    // earlier activateRunningInstance() check and now — retry forwarding and
+    // exit. If the other instance is unreachable (hung or crashed mid-shutdown),
+    // surface the error so the user knows the shortcut silently failed.
     if (!controller.registerDBusService()) {
         qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
         if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
             return 0;
         }
-        qCCritical(lcEditor) << "Cannot register editor D-Bus service and cannot reach existing instance; exiting";
+        qCCritical(lcEditor) << "Editor D-Bus name" << DBus::EditorApp::ServiceName
+                             << "is held by an unreachable instance. The existing editor may be hung —"
+                             << "kill the stale plasmazones-editor process and try again.";
         return 1;
     }
+
+    controller.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
 
     // Set up QML engine
     QQmlApplicationEngine engine;

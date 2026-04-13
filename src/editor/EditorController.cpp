@@ -13,9 +13,10 @@
 #include "helpers/ZoneSerialization.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
+#include "../core/wayland_raise.h"
 
 #include <QClipboard>
-#include <QDBusConnection>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QQuickWindow>
@@ -30,6 +31,9 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
+    , m_singleInstance(std::make_unique<SingleInstanceService>(
+          SingleInstanceIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath, DBus::EditorApp::Interface},
+          this))
 {
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
@@ -104,80 +108,71 @@ EditorController::~EditorController()
     // Save editor settings to KConfig
     saveEditorSettings();
 
-    // Release the single-instance D-Bus name so a later launch can reclaim it.
-    auto bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(DBus::EditorApp::ObjectPath);
-    bus.unregisterService(DBus::EditorApp::ServiceName);
-
-    // Services are QObjects with this as parent, so they'll be deleted automatically
+    // m_singleInstance destructor releases the D-Bus name + object. Services
+    // are QObjects with this as parent, so they'll be deleted automatically.
 }
 
 bool EditorController::registerDBusService()
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(DBus::EditorApp::ServiceName)) {
-        return false;
+    return m_singleInstance && m_singleInstance->claim();
+}
+
+void EditorController::applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+{
+    // Single source of truth for "turn a set of CLI args into controller state".
+    // Called from main.cpp for the initial launch and from handleLaunchRequest
+    // for forwarded launches, so the two paths cannot drift out of sync.
+    //
+    // Preview mode is set *unconditionally* so state from a previous forwarded
+    // launch (e.g. an autotile opened in preview) cannot leak into a subsequent
+    // non-preview launch on the same running instance.
+    //
+    // The loadAssignedLayout flag distinguishes the "no layout arg" path, which
+    // should follow the screen's assigned layout, from the paths where we
+    // already know what layout to load and must not trigger a second load.
+    auto maybeSwitchScreen = [this](const QString& id, bool loadAssignedLayout) {
+        if (id.isEmpty() || targetScreen() == id) {
+            return;
+        }
+        if (loadAssignedLayout) {
+            setTargetScreen(id);
+        } else {
+            setTargetScreenDirect(id);
+        }
+    };
+
+    if (createNew) {
+        setPreviewMode(false);
+        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
+        createNewLayout();
+    } else if (!layoutId.isEmpty()) {
+        setPreviewMode(preview || LayoutId::isAutotile(layoutId));
+        loadLayout(layoutId);
+        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
+    } else {
+        setPreviewMode(false);
+        maybeSwitchScreen(screenId, /*loadAssignedLayout*/ true);
     }
-    // ExportScriptableSlots exposes raise() + handleLaunchRequest() on D-Bus.
-    bus.registerObject(DBus::EditorApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
-    return true;
 }
 
 void EditorController::raise()
 {
-    // Match SettingsController::raise() — find the primary top-level Window and
-    // show/raise/activate it. Wayland compositors may require a valid activation
-    // token for requestActivate() to actually steal focus; within the same D-Bus
-    // session, KWin accepts the request.
-    const auto windows = QGuiApplication::allWindows();
-    for (auto* w : windows) {
-        if (w->type() != Qt::Window)
-            continue;
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break;
-    }
+    // Bring the cached primary window to the front. On Wayland this needs the
+    // destroy-and-remap dance (forceBringToFront) because plain show/raise on an
+    // already-mapped xdg_toplevel is a no-op without a valid activation token.
+    forceBringToFront(m_primaryWindow.data());
 }
 
 void EditorController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
                                            bool preview)
 {
-    // Apply the forwarded command-line args to the running instance. This mirrors
-    // the arg-handling block in main.cpp so a second launch is equivalent to a
-    // fresh launch with the same args — minus spawning a new process.
-    if (createNew) {
-        if (!screenId.isEmpty() && targetScreen() != screenId) {
-            setTargetScreenDirect(screenId);
-        }
-        createNewLayout();
-    } else if (!layoutId.isEmpty()) {
-        if (preview || LayoutId::isAutotile(layoutId)) {
-            setPreviewMode(true);
-        }
-        loadLayout(layoutId);
-        if (!screenId.isEmpty() && targetScreen() != screenId) {
-            setTargetScreenDirect(screenId);
-        }
-    } else if (!screenId.isEmpty() && targetScreen() != screenId) {
-        // No layout specified — switch screen, which loads the assigned layout.
-        setTargetScreen(screenId);
-    }
-
-    // Move the existing editor window to the (possibly new) target screen and
-    // raise it. On Wayland switching screens requires destroying + recreating
-    // the native surface — showFullScreenOnTargetScreen() handles that.
-    const auto windows = QGuiApplication::allWindows();
-    for (auto* w : windows) {
-        if (w->type() != Qt::Window)
-            continue;
-        if (auto* qw = qobject_cast<QQuickWindow*>(w)) {
-            showFullScreenOnTargetScreen(qw);
-        }
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break;
+    applyLaunchArgs(screenId, layoutId, createNew, preview);
+    if (QQuickWindow* win = m_primaryWindow.data()) {
+        // showFullScreenOnTargetScreen handles both cases in one call:
+        //   • same screen + visible → forceBringToFront for focus steal
+        //   • different screen / hidden → destroy-and-remap with new plan
+        // Either path ends with the window raised and activated.
+        showFullScreenOnTargetScreen(win);
     }
 }
 
