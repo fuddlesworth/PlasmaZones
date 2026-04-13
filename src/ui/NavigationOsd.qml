@@ -61,9 +61,9 @@ Window {
             else if (action === "swap")
                 return i18n("Nothing to swap");
             else if (action === "swap_vs")
-                return i18n("No virtual screen in that direction");
+                return reason === "no_subdivision" ? i18n("No VS split") : i18n("No adjacent VS");
             else if (action === "rotate_vs")
-                return i18n("Nothing to rotate");
+                return i18n("No VS to rotate");
             else if (action === "focus_master")
                 return i18n("No windows to focus");
             else if (action === "swap_master")
@@ -143,10 +143,10 @@ Window {
             return i18n("Autotile: %1", reason || "");
         } else if (action === "swap_vs") {
             var vsSwapArrow = directionArrow(reason);
-            return vsSwapArrow + " " + i18n("Virtual screens swapped");
+            return vsSwapArrow + " " + i18n("Swap VS");
         } else if (action === "rotate_vs") {
             var vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
-            return vsRotateArrow + " " + i18n("Virtual screens rotated");
+            return vsRotateArrow + " " + i18n("Rotate VS");
         } else {
             return i18n("Action completed");
         }
