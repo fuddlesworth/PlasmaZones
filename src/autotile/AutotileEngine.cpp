@@ -245,6 +245,16 @@ bool AutotileEngine::isActiveOnScreen(const QString& screenId) const
     return isAutotileScreen(screenId);
 }
 
+bool AutotileEngine::isWindowTiled(const QString& windowId) const
+{
+    auto it = m_windowToStateKey.constFind(windowId);
+    if (it == m_windowToStateKey.constEnd()) {
+        return false;
+    }
+    const TilingState* state = m_screenStates.value(it.value());
+    return state && !state->isFloating(windowId);
+}
+
 void AutotileEngine::swapInDirection(const QString& direction, const QString& action)
 {
     swapFocusedInDirection(direction, action);

@@ -949,6 +949,10 @@ public:
     {
         return 0;
     }
+    static int autotileDragBehavior()
+    {
+        return 0; // AutotileDragBehavior::Float — native drag-to-float
+    }
     static QStringList lockedScreens()
     {
         return {};

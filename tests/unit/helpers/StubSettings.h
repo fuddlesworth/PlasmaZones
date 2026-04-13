@@ -687,6 +687,13 @@ public:
     void setAutotileStickyWindowHandling(StickyWindowHandling) override
     {
     }
+    AutotileDragBehavior autotileDragBehavior() const override
+    {
+        return AutotileDragBehavior::Float;
+    }
+    void setAutotileDragBehavior(AutotileDragBehavior) override
+    {
+    }
     QVariantList autotileDragInsertTriggers() const override
     {
         return ConfigDefaults::autotileDragInsertTriggers();

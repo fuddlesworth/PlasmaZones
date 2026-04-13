@@ -474,6 +474,11 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
         m_autotileStickyWindowHandling = static_cast<StickyWindowHandling>(
             qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), autotileStickyHandling,
                    static_cast<int>(StickyWindowHandling::IgnoreAll)));
+        int autotileDragBehavior =
+            tilingBehavior->readInt(ConfigDefaults::dragBehaviorKey(), ConfigDefaults::autotileDragBehavior());
+        m_autotileDragBehavior = static_cast<AutotileDragBehavior>(
+            qBound(static_cast<int>(AutotileDragBehavior::Float), autotileDragBehavior,
+                   static_cast<int>(AutotileDragBehavior::Reorder)));
         QString lockedScreensStr = tilingBehavior->readString(ConfigDefaults::lockedScreensKey());
         QStringList newLocked = lockedScreensStr.isEmpty() ? QStringList() : lockedScreensStr.split(QLatin1Char(','));
         for (auto& s : newLocked)
@@ -892,6 +897,7 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
         tilingBehavior->writeBool(ConfigDefaults::respectMinimumSizeKey(), m_autotileRespectMinimumSize);
         tilingBehavior->writeInt(ConfigDefaults::stickyWindowHandlingKey(),
                                  static_cast<int>(m_autotileStickyWindowHandling));
+        tilingBehavior->writeInt(ConfigDefaults::dragBehaviorKey(), static_cast<int>(m_autotileDragBehavior));
         tilingBehavior->writeString(ConfigDefaults::lockedScreensKey(), m_lockedScreens.join(QLatin1Char(',')));
     }
     {

@@ -92,4 +92,19 @@ enum class OverlayDisplayMode {
     LayoutPreview = 1 ///< kZones-style: small layout thumbnail per zone
 };
 
+/**
+ * @brief Behavior when a user drags a tiled window on an autotile screen.
+ *
+ * Float (default, PlasmaZones-native): dragging a tile converts it to a free-floating
+ * window that restores its pre-tile geometry. Matches snap-mode semantics.
+ *
+ * Reorder (dwm/Krohnkite-style): dragging a tile keeps it tiled; the daemon tracks the
+ * cursor over calculated zones and, on drop, reorders the window to the target slot.
+ * Empty-space drops snap back to the original position.
+ */
+enum class AutotileDragBehavior {
+    Float = 0, ///< Drag-to-float: converts dragged tile to floating (default)
+    Reorder = 1 ///< Drag-to-reorder: swaps tile position within the layout
+};
+
 } // namespace PlasmaZones

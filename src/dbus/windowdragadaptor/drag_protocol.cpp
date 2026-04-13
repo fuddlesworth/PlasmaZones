@@ -43,10 +43,18 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     //    plugin applies handleDragToFloat immediately if the window is
     //    currently tiled, so the user sees the free-floating size restored
     //    during the interactive move (not deferred to drop).
+    //
+    //    In Reorder mode (Krohnkite-style drag-to-swap), the plugin must
+    //    NOT float the window on drag-start — the daemon tracks the cursor
+    //    across calculated zones via drag-insert preview and reorders the
+    //    window within its stack on drop instead. Clear immediateFloatOnStart
+    //    so both the effect fast path and its async reply handler skip the
+    //    handleDragToFloat call.
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isAutotileScreen(screenId)) {
         policy.bypassReason = QStringLiteral("autotile_screen");
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
-        if (!windowId.isEmpty()) {
+        const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
+        if (!windowId.isEmpty() && !reorderMode) {
             policy.immediateFloatOnStart = autotileEngine->isWindowTracked(windowId);
         }
         return policy;
@@ -128,6 +136,19 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         m_originalGeometry = QRect(frameX, frameY, frameWidth, frameHeight);
         m_snapCancelled = false;
         m_wasSnapped = false;
+
+        // Reorder mode: eagerly begin a drag-insert preview so even
+        // zero-movement drops have something to commit on endDrag (otherwise
+        // the autotile-bypass endDrag path falls through to ApplyFloat and
+        // we'd float the very tile the user was trying to reorder). Gated on
+        // isWindowTiled so floating/untracked windows still drag free and
+        // take the normal ApplyFloat path — matches Krohnkite's "floating
+        // windows are first-class" semantics.
+        if (policy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
+            && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
+            && m_autotileEngine->isWindowTiled(windowId)) {
+            m_autotileEngine->beginDragInsertPreview(windowId, startScreenId);
+        }
         return policy;
     }
 

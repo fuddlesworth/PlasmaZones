@@ -247,6 +247,8 @@ public:
                    setAutotileUseSystemBorderColors NOTIFY autotileUseSystemBorderColorsChanged)
     Q_PROPERTY(int autotileStickyWindowHandling READ autotileStickyWindowHandlingInt WRITE
                    setAutotileStickyWindowHandlingInt NOTIFY autotileStickyWindowHandlingChanged)
+    Q_PROPERTY(int autotileDragBehavior READ autotileDragBehaviorInt WRITE setAutotileDragBehaviorInt NOTIFY
+                   autotileDragBehaviorChanged)
     // Autotile Shortcuts
     Q_PROPERTY(QString autotileToggleShortcut READ autotileToggleShortcut WRITE setAutotileToggleShortcut NOTIFY
                    autotileToggleShortcutChanged)
@@ -1142,6 +1144,17 @@ public:
     }
     void setAutotileStickyWindowHandlingInt(int handling);
 
+    AutotileDragBehavior autotileDragBehavior() const override
+    {
+        return m_autotileDragBehavior;
+    }
+    void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
+    int autotileDragBehaviorInt() const
+    {
+        return static_cast<int>(m_autotileDragBehavior);
+    }
+    void setAutotileDragBehaviorInt(int behavior);
+
     QStringList lockedScreens() const override
     {
         return m_lockedScreens;
@@ -1768,6 +1781,7 @@ private:
     QColor m_autotileInactiveBorderColor = ConfigDefaults::autotileInactiveBorderColor();
     bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
     StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
+    AutotileDragBehavior m_autotileDragBehavior = AutotileDragBehavior::Float;
     QStringList m_lockedScreens;
     // Autotile Shortcuts (defaults from ConfigDefaults, canonical source)
     QString m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();

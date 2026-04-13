@@ -606,6 +606,11 @@ SETTINGS_SETTER_ENUM_INT(AutotileStickyWindowHandling, StickyWindowHandling,
                          static_cast<int>(StickyWindowHandling::TreatAsNormal),
                          static_cast<int>(StickyWindowHandling::IgnoreAll))
 
+SETTINGS_SETTER(AutotileDragBehavior, AutotileDragBehavior, m_autotileDragBehavior, autotileDragBehaviorChanged)
+
+SETTINGS_SETTER_ENUM_INT(AutotileDragBehavior, AutotileDragBehavior, static_cast<int>(AutotileDragBehavior::Float),
+                         static_cast<int>(AutotileDragBehavior::Reorder))
+
 void Settings::setLockedScreens(const QStringList& screens)
 {
     if (m_lockedScreens != screens) {

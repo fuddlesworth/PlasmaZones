@@ -253,6 +253,12 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                 if (m_autotileHandler->isAutotileScreen(startScreenId)) {
                     m_dragBypassedForAutotile = true;
                     m_dragBypassScreenId = startScreenId;
+                    // Reorder mode: the daemon owns drag-insert preview for tile
+                    // swapping. Skip the synchronous float transition — we want
+                    // the tile to stay visually in place while the daemon runs
+                    // moveToTiledPosition on each cursor tick. The effect still
+                    // flips into bypass state so snap-path logic is suppressed.
+                    const bool reorderMode = (m_cachedAutotileDragBehavior == 1);
                     // If the window is currently autotile-tiled, restore its
                     // title bar and pre-autotile size NOW (synchronously, during
                     // the interactive move). This mirrors snap mode, where
@@ -263,7 +269,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                     //
                     // Guarded on isTrackedWindow so we don't touch windows that
                     // are already floating (not in the autotile tree).
-                    if (m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
+                    if (!reorderMode && m_autotileHandler->isTrackedWindow(windowId) && !isWindowFloating(windowId)) {
                         m_autotileHandler->handleDragToFloat(w, windowId, m_dragBypassScreenId, /*immediate=*/true);
                         // Mark as drag-floated so the daemon's pre-tile geometry
                         // restore (applyGeometryForFloat, triggered by the
@@ -1727,6 +1733,9 @@ void PlasmaZonesEffect::loadCachedSettings()
     });
     loadSettingAsync(QStringLiteral("autotileDragInsertToggle"), [this](const QVariant& v) {
         m_cachedAutotileDragInsertToggle = v.toBool();
+    });
+    loadSettingAsync(QStringLiteral("autotileDragBehavior"), [this](const QVariant& v) {
+        m_cachedAutotileDragBehavior = qBound(0, v.toInt(), 1);
     });
     loadSettingAsync(QStringLiteral("zoneSelectorEnabled"), [this](const QVariant& v) {
         m_cachedZoneSelectorEnabled = v.toBool();

@@ -462,6 +462,19 @@ void SettingsAdaptor::initializeRegistry()
         return false;
     };
     m_schemas[QStringLiteral("autotileStickyWindowHandling")] = QStringLiteral("int");
+    m_getters[QStringLiteral("autotileDragBehavior")] = [this]() {
+        return static_cast<int>(m_settings->autotileDragBehavior());
+    };
+    m_setters[QStringLiteral("autotileDragBehavior")] = [this](const QVariant& v) {
+        int val = v.toInt();
+        if (val >= static_cast<int>(AutotileDragBehavior::Float)
+            && val <= static_cast<int>(AutotileDragBehavior::Reorder)) {
+            m_settings->setAutotileDragBehavior(static_cast<AutotileDragBehavior>(val));
+            return true;
+        }
+        return false;
+    };
+    m_schemas[QStringLiteral("autotileDragBehavior")] = QStringLiteral("int");
     REGISTER_STRINGLIST_SETTING("lockedScreens", lockedScreens, setLockedScreens)
 
     // Autotile shortcuts (concrete Settings only)
