@@ -76,6 +76,8 @@ set(plasmazones_core_SRCS
     core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
+    core/virtualscreenswapper.cpp
+    core/virtualscreenswapper.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     core/zone.cpp

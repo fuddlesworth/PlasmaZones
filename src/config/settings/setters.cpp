@@ -827,6 +827,20 @@ SETTINGS_SETTER(const QString&, SnapAllWindowsShortcut, m_snapAllWindowsShortcut
 SETTINGS_SETTER(const QString&, LayoutPickerShortcut, m_layoutPickerShortcut, layoutPickerShortcutChanged)
 SETTINGS_SETTER(const QString&, ToggleLayoutLockShortcut, m_toggleLayoutLockShortcut, toggleLayoutLockShortcutChanged)
 
+// Virtual Screen Swap / Rotate Shortcuts
+SETTINGS_SETTER(const QString&, SwapVirtualScreenLeftShortcut, m_swapVirtualScreenLeftShortcut,
+                swapVirtualScreenLeftShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapVirtualScreenRightShortcut, m_swapVirtualScreenRightShortcut,
+                swapVirtualScreenRightShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapVirtualScreenUpShortcut, m_swapVirtualScreenUpShortcut,
+                swapVirtualScreenUpShortcutChanged)
+SETTINGS_SETTER(const QString&, SwapVirtualScreenDownShortcut, m_swapVirtualScreenDownShortcut,
+                swapVirtualScreenDownShortcutChanged)
+SETTINGS_SETTER(const QString&, RotateVirtualScreensClockwiseShortcut, m_rotateVirtualScreensClockwiseShortcut,
+                rotateVirtualScreensClockwiseShortcutChanged)
+SETTINGS_SETTER(const QString&, RotateVirtualScreensCounterclockwiseShortcut,
+                m_rotateVirtualScreensCounterclockwiseShortcut, rotateVirtualScreensCounterclockwiseShortcutChanged)
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Virtual screen config setters
 // ═══════════════════════════════════════════════════════════════════════════════

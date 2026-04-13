@@ -372,6 +372,19 @@ void Settings::loadShortcutConfig(IConfigBackend* backend)
         shortcuts->readString(ConfigDefaults::layoutPickerKey(), ConfigDefaults::layoutPickerShortcut());
     m_toggleLayoutLockShortcut =
         shortcuts->readString(ConfigDefaults::toggleLayoutLockKey(), ConfigDefaults::toggleLayoutLockShortcut());
+    m_swapVirtualScreenLeftShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenLeftKey(),
+                                                            ConfigDefaults::swapVirtualScreenLeftShortcut());
+    m_swapVirtualScreenRightShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenRightKey(),
+                                                             ConfigDefaults::swapVirtualScreenRightShortcut());
+    m_swapVirtualScreenUpShortcut =
+        shortcuts->readString(ConfigDefaults::swapVirtualScreenUpKey(), ConfigDefaults::swapVirtualScreenUpShortcut());
+    m_swapVirtualScreenDownShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenDownKey(),
+                                                            ConfigDefaults::swapVirtualScreenDownShortcut());
+    m_rotateVirtualScreensClockwiseShortcut = shortcuts->readString(
+        ConfigDefaults::rotateVirtualScreensClockwiseKey(), ConfigDefaults::rotateVirtualScreensClockwiseShortcut());
+    m_rotateVirtualScreensCounterclockwiseShortcut =
+        shortcuts->readString(ConfigDefaults::rotateVirtualScreensCounterclockwiseKey(),
+                              ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut());
 }
 
 void Settings::loadAutotilingConfig(IConfigBackend* backend)
@@ -881,6 +894,13 @@ void Settings::saveShortcutConfig(IConfigBackend* backend)
     shortcuts->writeString(ConfigDefaults::snapAllWindowsKey(), m_snapAllWindowsShortcut);
     shortcuts->writeString(ConfigDefaults::layoutPickerKey(), m_layoutPickerShortcut);
     shortcuts->writeString(ConfigDefaults::toggleLayoutLockKey(), m_toggleLayoutLockShortcut);
+    shortcuts->writeString(ConfigDefaults::swapVirtualScreenLeftKey(), m_swapVirtualScreenLeftShortcut);
+    shortcuts->writeString(ConfigDefaults::swapVirtualScreenRightKey(), m_swapVirtualScreenRightShortcut);
+    shortcuts->writeString(ConfigDefaults::swapVirtualScreenUpKey(), m_swapVirtualScreenUpShortcut);
+    shortcuts->writeString(ConfigDefaults::swapVirtualScreenDownKey(), m_swapVirtualScreenDownShortcut);
+    shortcuts->writeString(ConfigDefaults::rotateVirtualScreensClockwiseKey(), m_rotateVirtualScreensClockwiseShortcut);
+    shortcuts->writeString(ConfigDefaults::rotateVirtualScreensCounterclockwiseKey(),
+                           m_rotateVirtualScreensCounterclockwiseShortcut);
 }
 
 void Settings::saveAutotilingConfig(IConfigBackend* backend)

@@ -721,11 +721,11 @@ private Q_SLOTS:
         const QRectF r2 = cfg.screens[2].region;
 
         QVERIFY(cfg.rotateRegions(order, /*clockwise=*/true));
-        // Clockwise = each def receives the previous id's old region.
-        // def[0] ← def[last] = r2; def[1] ← def[0] = r0; def[2] ← def[1] = r1.
-        QCOMPARE(cfg.screens[0].region, r2);
-        QCOMPARE(cfg.screens[1].region, r0);
-        QCOMPARE(cfg.screens[2].region, r1);
+        // Clockwise: def[i] takes def[(i+1) mod n]'s old region.
+        // def[0] ← def[1] = r1; def[1] ← def[2] = r2; def[2] ← def[0] = r0.
+        QCOMPARE(cfg.screens[0].region, r1);
+        QCOMPARE(cfg.screens[1].region, r2);
+        QCOMPARE(cfg.screens[2].region, r0);
     }
 
     void rotateRegions_threeSplit_counterClockwise()
@@ -737,10 +737,10 @@ private Q_SLOTS:
         const QRectF r2 = cfg.screens[2].region;
 
         QVERIFY(cfg.rotateRegions(order, /*clockwise=*/false));
-        // Counter-clockwise = each def receives the next id's old region.
-        QCOMPARE(cfg.screens[0].region, r1);
-        QCOMPARE(cfg.screens[1].region, r2);
-        QCOMPARE(cfg.screens[2].region, r0);
+        // Counter-clockwise: def[i] takes def[(i-1) mod n]'s old region.
+        QCOMPARE(cfg.screens[0].region, r2);
+        QCOMPARE(cfg.screens[1].region, r0);
+        QCOMPARE(cfg.screens[2].region, r1);
     }
 
     void rotateRegions_fullCycleReturnsToStart()
@@ -787,6 +787,7 @@ private Q_SLOTS:
     void rotateRegions_subsetOfDefs()
     {
         // Rotate only two of three defs — the third should be untouched.
+        // For a two-element list, CW and swap are equivalent.
         VirtualScreenConfig cfg = makeThreeSplit();
         const QRectF untouched = cfg.screens[2].region;
         const QRectF r0 = cfg.screens[0].region;

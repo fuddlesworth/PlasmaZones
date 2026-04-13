@@ -10,7 +10,9 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreenswapper.h"
 #include "../../dbus/windowtrackingadaptor.h"
+#include "shared/virtualscreenid.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../snap/SnapEngine.h"
@@ -299,6 +301,43 @@ void Daemon::resnapIfManualMode()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->resnapToNewLayout();
     }
+}
+
+void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
+{
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
+        qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
+        return;
+    }
+    if (!VirtualScreenId::isVirtual(screenId)) {
+        qCDebug(lcDaemon) << "SwapVirtualScreen: current screen has no subdivision:" << screenId;
+        return;
+    }
+    const QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "SwapVirtualScreen: unknown direction" << static_cast<int>(direction);
+        return;
+    }
+
+    VirtualScreenSwapper swapper(m_settings.get());
+    const bool ok = swapper.swapInDirection(screenId, dirStr);
+    qCInfo(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << ok;
+}
+
+void Daemon::handleRotateVirtualScreens(bool clockwise)
+{
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
+        qCDebug(lcDaemon) << "RotateVirtualScreens shortcut: no screen info";
+        return;
+    }
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
+    VirtualScreenSwapper swapper(m_settings.get());
+    const bool ok = swapper.rotate(physId, clockwise);
+    qCInfo(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << ok;
 }
 
 } // namespace PlasmaZones

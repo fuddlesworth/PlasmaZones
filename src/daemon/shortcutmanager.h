@@ -184,6 +184,18 @@ Q_SIGNALS:
     void retileRequested();
 
     /**
+     * @brief Emitted when swap virtual screen in direction is requested
+     * @param direction Navigation direction (Left, Right, Up, Down)
+     */
+    void swapVirtualScreenRequested(NavigationDirection direction);
+
+    /**
+     * @brief Emitted when rotate virtual screens is requested
+     * @param clockwise true for clockwise, false for counterclockwise
+     */
+    void rotateVirtualScreensRequested(bool clockwise);
+
+    /**
      * @brief Emitted when deferred shortcut registration completes
      */
     void shortcutsRegistered();
@@ -219,6 +231,16 @@ private Q_SLOTS:
     void onSwapWindowUp();
     void onSwapWindowDown();
 
+    // Swap virtual screen slots
+    void onSwapVirtualScreenLeft();
+    void onSwapVirtualScreenRight();
+    void onSwapVirtualScreenUp();
+    void onSwapVirtualScreenDown();
+
+    // Rotate virtual screens slots
+    void onRotateVirtualScreensClockwise();
+    void onRotateVirtualScreensCounterclockwise();
+
     // Update navigation shortcuts from settings
     void updateMoveWindowLeftShortcut();
     void updateMoveWindowRightShortcut();
@@ -237,6 +259,16 @@ private Q_SLOTS:
     void updateSwapWindowRightShortcut();
     void updateSwapWindowUpShortcut();
     void updateSwapWindowDownShortcut();
+
+    // Update swap virtual screen shortcuts from settings
+    void updateSwapVirtualScreenLeftShortcut();
+    void updateSwapVirtualScreenRightShortcut();
+    void updateSwapVirtualScreenUpShortcut();
+    void updateSwapVirtualScreenDownShortcut();
+
+    // Update rotate virtual screens shortcuts from settings
+    void updateRotateVirtualScreensClockwiseShortcut();
+    void updateRotateVirtualScreensCounterclockwiseShortcut();
 
     // Snap to Zone by Number
     void onSnapToZone(int zoneNumber);
@@ -304,6 +336,8 @@ private:
     void setupSnapAllWindowsShortcut();
     void setupLayoutPickerShortcut();
     void setupToggleLayoutLockShortcut();
+    void setupSwapVirtualScreenShortcuts();
+    void setupRotateVirtualScreensShortcuts();
     void setupAutotileShortcuts();
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -332,6 +366,16 @@ private:
     QAction* m_swapWindowRightAction = nullptr;
     QAction* m_swapWindowUpAction = nullptr;
     QAction* m_swapWindowDownAction = nullptr;
+
+    // Swap virtual screen actions
+    QAction* m_swapVirtualScreenLeftAction = nullptr;
+    QAction* m_swapVirtualScreenRightAction = nullptr;
+    QAction* m_swapVirtualScreenUpAction = nullptr;
+    QAction* m_swapVirtualScreenDownAction = nullptr;
+
+    // Rotate virtual screens actions
+    QAction* m_rotateVirtualScreensClockwiseAction = nullptr;
+    QAction* m_rotateVirtualScreensCounterclockwiseAction = nullptr;
 
     // Snap to Zone by Number actions
     QVector<QAction*> m_snapToZoneActions;

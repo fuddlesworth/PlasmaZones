@@ -295,6 +295,14 @@ Q_SIGNALS:
     // Toggle Layout Lock Shortcut
     void toggleLayoutLockShortcutChanged();
 
+    // Virtual Screen Swap / Rotate Shortcuts
+    void swapVirtualScreenLeftShortcutChanged();
+    void swapVirtualScreenRightShortcutChanged();
+    void swapVirtualScreenUpShortcutChanged();
+    void swapVirtualScreenDownShortcutChanged();
+    void rotateVirtualScreensClockwiseShortcutChanged();
+    void rotateVirtualScreensCounterclockwiseShortcutChanged();
+
     // Autotile settings
     void autotileEnabledChanged();
     void defaultAutotileAlgorithmChanged();

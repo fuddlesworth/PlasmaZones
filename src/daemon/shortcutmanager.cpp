@@ -168,6 +168,22 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::toggleLayoutLockShortcutChanged, this,
             &ShortcutManager::updateToggleLayoutLockShortcut);
 
+    // Virtual Screen Swap shortcuts
+    connect(m_settings, &Settings::swapVirtualScreenLeftShortcutChanged, this,
+            &ShortcutManager::updateSwapVirtualScreenLeftShortcut);
+    connect(m_settings, &Settings::swapVirtualScreenRightShortcutChanged, this,
+            &ShortcutManager::updateSwapVirtualScreenRightShortcut);
+    connect(m_settings, &Settings::swapVirtualScreenUpShortcutChanged, this,
+            &ShortcutManager::updateSwapVirtualScreenUpShortcut);
+    connect(m_settings, &Settings::swapVirtualScreenDownShortcutChanged, this,
+            &ShortcutManager::updateSwapVirtualScreenDownShortcut);
+
+    // Rotate Virtual Screens shortcuts
+    connect(m_settings, &Settings::rotateVirtualScreensClockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateVirtualScreensClockwiseShortcut);
+    connect(m_settings, &Settings::rotateVirtualScreensCounterclockwiseShortcutChanged, this,
+            &ShortcutManager::updateRotateVirtualScreensCounterclockwiseShortcut);
+
     // Autotile shortcut settings connections
     connect(m_settings, &Settings::autotileToggleShortcutChanged, this, &ShortcutManager::updateToggleAutotileShortcut);
     connect(m_settings, &Settings::autotileFocusMasterShortcutChanged, this,
@@ -224,6 +240,8 @@ void ShortcutManager::registerShortcuts()
     setupSnapAllWindowsShortcut();
     setupLayoutPickerShortcut();
     setupToggleLayoutLockShortcut();
+    setupSwapVirtualScreenShortcuts();
+    setupRotateVirtualScreensShortcuts();
     setupAutotileShortcuts();
 
     qCInfo(lcShortcuts) << "Shortcuts registered, flushing backend";
@@ -315,6 +333,16 @@ void ShortcutManager::updateShortcuts()
 
     // Toggle Layout Lock shortcut
     updateToggleLayoutLockShortcut();
+
+    // Virtual Screen Swap shortcuts
+    updateSwapVirtualScreenLeftShortcut();
+    updateSwapVirtualScreenRightShortcut();
+    updateSwapVirtualScreenUpShortcut();
+    updateSwapVirtualScreenDownShortcut();
+
+    // Rotate Virtual Screens shortcuts
+    updateRotateVirtualScreensClockwiseShortcut();
+    updateRotateVirtualScreensCounterclockwiseShortcut();
 
     // Autotile shortcuts
     updateToggleAutotileShortcut();
@@ -538,6 +566,32 @@ void ShortcutManager::setupRotateWindowsShortcuts()
                    &ShortcutManager::onRotateWindowsCounterclockwise);
 
     qCInfo(lcShortcuts) << "Rotate windows shortcuts registered (Meta+Ctrl+[ / Meta+Ctrl+])";
+}
+
+void ShortcutManager::setupSwapVirtualScreenShortcuts()
+{
+    SETUP_SHORTCUT(m_swapVirtualScreenLeftAction, "Swap Virtual Screen Left", "swap_virtual_screen_left",
+                   swapVirtualScreenLeftShortcut, &ShortcutManager::onSwapVirtualScreenLeft);
+    SETUP_SHORTCUT(m_swapVirtualScreenRightAction, "Swap Virtual Screen Right", "swap_virtual_screen_right",
+                   swapVirtualScreenRightShortcut, &ShortcutManager::onSwapVirtualScreenRight);
+    SETUP_SHORTCUT(m_swapVirtualScreenUpAction, "Swap Virtual Screen Up", "swap_virtual_screen_up",
+                   swapVirtualScreenUpShortcut, &ShortcutManager::onSwapVirtualScreenUp);
+    SETUP_SHORTCUT(m_swapVirtualScreenDownAction, "Swap Virtual Screen Down", "swap_virtual_screen_down",
+                   swapVirtualScreenDownShortcut, &ShortcutManager::onSwapVirtualScreenDown);
+
+    qCInfo(lcShortcuts) << "Swap virtual screen shortcuts registered (Meta+Ctrl+Alt+Shift+Arrow)";
+}
+
+void ShortcutManager::setupRotateVirtualScreensShortcuts()
+{
+    SETUP_SHORTCUT(m_rotateVirtualScreensClockwiseAction, "Rotate Virtual Screens Clockwise",
+                   "rotate_virtual_screens_clockwise", rotateVirtualScreensClockwiseShortcut,
+                   &ShortcutManager::onRotateVirtualScreensClockwise);
+    SETUP_SHORTCUT(m_rotateVirtualScreensCounterclockwiseAction, "Rotate Virtual Screens Counterclockwise",
+                   "rotate_virtual_screens_counterclockwise", rotateVirtualScreensCounterclockwiseShortcut,
+                   &ShortcutManager::onRotateVirtualScreensCounterclockwise);
+
+    qCInfo(lcShortcuts) << "Rotate virtual screens shortcuts registered (Meta+Ctrl+Shift+] / Meta+Ctrl+Shift+[)";
 }
 
 void ShortcutManager::setupCycleWindowsShortcuts()

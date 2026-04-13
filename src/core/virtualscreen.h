@@ -260,9 +260,11 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
     }
 
     /// Rotate the @c region fields through the defs identified by @p orderedIds.
-    /// With @p clockwise = true each def receives the previous id's old region
-    /// (def[0] ← def[last], def[i] ← def[i-1]); with @p clockwise = false the
-    /// direction is reversed (def[0] ← def[1], def[i] ← def[i+1]).
+    /// Convention matches WindowTrackingService::calculateRotation — with
+    /// @p clockwise = true, the def at position i takes the region at
+    /// position (i+1) mod n; with @p clockwise = false, it takes (i-1) mod n.
+    /// Read another way: a VS "moves forward" in the ordered ring on a CW
+    /// rotation (def[0] takes def[1]'s old slot, def[1] takes def[2]'s, etc).
     /// IDs and all other def fields are preserved. @p orderedIds may be a
     /// subset of the config's defs so callers can rotate only a subset.
     /// Returns false if @p orderedIds has fewer than two entries or any id
@@ -294,7 +296,7 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
             regions.append(screens[idx].region);
         }
         for (int i = 0; i < n; ++i) {
-            const int src = clockwise ? (i - 1 + n) % n : (i + 1) % n;
+            const int src = clockwise ? (i + 1) % n : (i - 1 + n) % n;
             screens[defIndices[i]].region = regions[src];
         }
         return true;

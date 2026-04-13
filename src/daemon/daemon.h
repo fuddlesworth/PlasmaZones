@@ -153,6 +153,8 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
+    void handleSwapVirtualScreen(NavigationDirection direction);
+    void handleRotateVirtualScreens(bool clockwise);
 
     /** @brief Check if screen is locked for layout change in its current mode */
     bool isScreenLockedForLayoutChange(const QString& screenId);

@@ -426,6 +426,12 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) {
         handleRotate(cw);
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::swapVirtualScreenRequested, this, [this](NavigationDirection d) {
+        handleSwapVirtualScreen(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateVirtualScreensRequested, this, [this](bool cw) {
+        handleRotateVirtualScreens(cw);
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) {
         handleSnap(n);
     });
