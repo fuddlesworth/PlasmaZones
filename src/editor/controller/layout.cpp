@@ -158,94 +158,115 @@ void EditorController::setTargetScreen(const QString& screenName)
     }
 }
 
+namespace {
+
+/// Plan for where/how to show the editor window. Computed from the target
+/// screen + virtual screen rect, then applied via a single code path whether
+/// the window is visible or not, virtual-screen or physical.
+struct EditorWindowPlan
+{
+    QScreen* screen = nullptr; ///< Physical QScreen to map onto.
+    QRect geometry; ///< Absolute geometry to set before showing.
+    bool fullScreen = false; ///< true → showFullScreen(); false → show() (used for VS region).
+    bool frameless = false; ///< true → Qt::FramelessWindowHint (used for VS region).
+
+    bool isValid() const
+    {
+        return screen != nullptr;
+    }
+};
+
+/// Apply the computed plan to a window and present it. Used as the "apply
+/// geometry then show" lambda inside both the deferred (visible → destroy-and-
+/// remap) and direct (hidden → apply immediately) paths.
+void applyEditorWindowPlan(QQuickWindow* win, const EditorWindowPlan& plan)
+{
+    win->setFlag(Qt::FramelessWindowHint, plan.frameless);
+    win->setScreen(plan.screen);
+    win->setGeometry(plan.geometry);
+    if (plan.fullScreen) {
+        win->showFullScreen();
+    } else {
+        win->show();
+    }
+}
+
+} // anonymous namespace
+
 void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
 {
     if (!window) {
         return;
     }
 
+    // No target screen → plain fullscreen on whatever output Qt picks.
     if (m_targetScreen.isEmpty()) {
         window->showFullScreen();
         return;
     }
 
-    // For virtual screens: size the editor to the VS region, not fullscreen.
-    // The VS rect is in absolute screen coordinates (set in setTargetScreen).
+    // Build a single plan covering both the virtual-screen (frameless, sized
+    // to VS region) and physical-screen (full monitor) cases.
+    EditorWindowPlan plan;
     if (m_virtualScreenRect.isValid()) {
-        QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
-        QScreen* physScreen = Utils::findScreenByIdOrName(physId);
-        if (physScreen) {
-            auto applyVsGeometry = [](QQuickWindow* win, QScreen* screen, const QRect& vsRect) {
-                win->setScreen(screen);
-                // Absolute VS coordinates (physical screen origin + VS offset)
-                QRect absRect(screen->geometry().topLeft() + vsRect.topLeft(), vsRect.size());
-                win->setGeometry(absRect);
-                // Show as frameless normal window covering just the VS region.
-                // showFullScreen() would expand to the entire physical monitor.
-                win->setFlag(Qt::FramelessWindowHint, true);
-                win->show();
-            };
-
-            if (window->isVisible()) {
-                QPointer<QQuickWindow> safeWindow(window);
-                QScreen* targetScreen = physScreen;
-                QRect vsRect = m_virtualScreenRect;
-                QTimer::singleShot(0, window, [safeWindow, targetScreen, vsRect, applyVsGeometry]() {
-                    if (!safeWindow || !targetScreen) {
-                        return;
-                    }
-                    safeWindow->destroy();
-                    applyVsGeometry(safeWindow, targetScreen, vsRect);
-                });
-                return;
-            }
-
-            applyVsGeometry(window, physScreen, m_virtualScreenRect);
-            return;
+        const QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
+        if (QScreen* physScreen = Utils::findScreenByIdOrName(physId)) {
+            plan.screen = physScreen;
+            // Absolute VS coordinates = physical screen origin + VS offset.
+            plan.geometry =
+                QRect(physScreen->geometry().topLeft() + m_virtualScreenRect.topLeft(), m_virtualScreenRect.size());
+            plan.fullScreen = false;
+            plan.frameless = true;
         }
     }
-
-    // Physical screen: fullscreen on the matching monitor
-    // Clear frameless hint in case this window was previously shown on a virtual screen.
-    window->setFlag(Qt::FramelessWindowHint, false);
-
-    const auto screens = QGuiApplication::screens();
-    for (auto* screen : screens) {
-        if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
-            if (window->screen() == screen && window->isVisible()) {
-                return;
+    if (!plan.isValid()) {
+        // Physical-screen path: match by identifier, take full geometry.
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+                plan.screen = screen;
+                plan.geometry = screen->geometry();
+                plan.fullScreen = true;
+                plan.frameless = false;
+                break;
             }
-
-            qCDebug(lcEditor) << "Setting editor window to screen:" << screen->name()
-                              << "geometry:" << screen->geometry();
-
-            // On Wayland, the wl_output for an xdg-shell surface is bound at
-            // surface creation time. setScreen()/setGeometry() cannot move an
-            // already-mapped surface to a different output. To switch screens we
-            // must destroy the native window (wl_surface) and let Qt recreate it
-            // so the new surface gets mapped to the correct output.
-            if (window->isVisible()) {
-                QPointer<QQuickWindow> safeWindow(window);
-                QScreen* targetScreen = screen;
-                QTimer::singleShot(0, window, [safeWindow, targetScreen]() {
-                    if (!safeWindow || !targetScreen) {
-                        return;
-                    }
-                    safeWindow->destroy();
-                    safeWindow->setScreen(targetScreen);
-                    safeWindow->setGeometry(targetScreen->geometry());
-                    safeWindow->showFullScreen();
-                });
-                return;
-            }
-
-            window->setScreen(screen);
-            window->setGeometry(screen->geometry());
-            break;
         }
     }
+    if (!plan.isValid()) {
+        // Unknown target — fall back to plain fullscreen.
+        window->setFlag(Qt::FramelessWindowHint, false);
+        window->showFullScreen();
+        return;
+    }
 
-    window->showFullScreen();
+    qCDebug(lcEditor) << "Editor window plan — screen:" << plan.screen->name() << "geometry:" << plan.geometry
+                      << "fullScreen:" << plan.fullScreen << "frameless:" << plan.frameless;
+
+    // Same screen and visible → nothing to do. No Wayland workaround reliably
+    // brings an already-mapped fullscreen xdg_toplevel to the front from a
+    // programmatic caller, so we don't even try.
+    if (window->screen() == plan.screen && window->isVisible() && window->isExposed()) {
+        return;
+    }
+
+    // Visible but needs relayout (screen switch or VS/physical toggle): Wayland
+    // binds wl_output at surface-creation time, so we must destroy the native
+    // window and let Qt recreate it with the new output. Defer to the next
+    // event-loop tick so we don't tear down the platform surface from inside
+    // a paint or D-Bus dispatch.
+    if (window->isVisible()) {
+        QPointer<QQuickWindow> safeWindow(window);
+        QTimer::singleShot(0, window, [safeWindow, plan]() {
+            if (!safeWindow || !plan.screen) {
+                return;
+            }
+            safeWindow->destroy();
+            applyEditorWindowPlan(safeWindow.data(), plan);
+        });
+        return;
+    }
+
+    // Not yet visible — apply directly, no remap needed.
+    applyEditorWindowPlan(window, plan);
 }
 
 void EditorController::setTargetScreenDirect(const QString& screenName)

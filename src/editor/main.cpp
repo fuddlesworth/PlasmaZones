@@ -6,6 +6,7 @@
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
 #include "../core/layersurface.h"
+#include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configdefaults.h"
 #include "version.h"
@@ -31,6 +32,25 @@
 #include <QtQml/qqml.h>
 
 using namespace PlasmaZones;
+
+namespace {
+
+constexpr PlasmaZones::SingleInstanceIds kEditorIds{DBus::EditorApp::ServiceName, DBus::EditorApp::ObjectPath,
+                                                    DBus::EditorApp::Interface};
+
+/// Try to forward a launch request to an already-running editor instance.
+/// Returns true if the running instance accepted the request (caller should exit).
+///
+/// The running instance applies the forwarded args (layout / screen / preview)
+/// but deliberately does not attempt to raise its window — see the comment on
+/// EditorController::handleLaunchRequest for why.
+bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
+{
+    return PlasmaZones::SingleInstanceService::forward(kEditorIds, QStringLiteral("handleLaunchRequest"),
+                                                       {screenId, layoutId, createNew, preview});
+}
+
+} // anonymous namespace
 
 int main(int argc, char* argv[])
 {
@@ -124,11 +144,8 @@ int main(int argc, char* argv[])
     // Register ZoneShaderItem for QML (shader preview in ShaderSettingsDialog)
     qmlRegisterType<PlasmaZones::ZoneShaderItem>("PlasmaZones", 1, 0, "ZoneShaderItem");
 
-    // Create controller
-    EditorController controller;
-
-    // Handle command line arguments
-    // Determine target screen first (but don't trigger layout loading yet)
+    // Resolve target screen and collect launch args up front so we can forward
+    // them to an already-running editor instance before doing any heavy setup.
     QString targetScreen;
     if (parser.isSet(screenOption)) {
         targetScreen = parser.value(screenOption);
@@ -163,31 +180,45 @@ int main(int argc, char* argv[])
         qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
     }
 
-    // Handle layout loading based on mode
-    if (parser.isSet(newLayoutOption)) {
-        // Create new layout - set target screen first (without loading), then create new layout
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreenDirect(targetScreen);
-        }
-        controller.createNewLayout();
-    } else if (parser.isSet(layoutIdOption)) {
-        QString layoutId = parser.value(layoutIdOption);
-        // Auto-detect preview mode for autotile layouts, or explicit --preview flag
-        if (parser.isSet(previewOption) || LayoutId::isAutotile(layoutId)) {
-            controller.setPreviewMode(true);
-        }
-        // Edit/preview specific layout - load it, then set target screen (without reloading)
-        controller.loadLayout(layoutId);
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreenDirect(targetScreen);
-        }
-    } else {
-        // No layout specified - set target screen which will load the assigned layout
-        // or create a new one if none assigned
-        if (!targetScreen.isEmpty()) {
-            controller.setTargetScreen(targetScreen);
-        }
+    const bool createNewLayout = parser.isSet(newLayoutOption);
+    const QString layoutIdArg = parser.isSet(layoutIdOption) ? parser.value(layoutIdOption) : QString();
+    const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
+
+    // Single-instance: if another editor is already running, forward the launch
+    // request and exit. Avoids spawning parallel editor processes when the user
+    // hits the shortcut repeatedly while the first editor is still starting up.
+    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+        return 0;
     }
+
+    // Create controller. This is cheap: it wires up services and loads local
+    // KConfig, but does not make any blocking D-Bus calls to the daemon — those
+    // happen only when applyLaunchArgs() invokes loadLayout/createNewLayout.
+    EditorController controller;
+
+    // Claim the D-Bus well-known name BEFORE applyLaunchArgs(). applyLaunchArgs
+    // triggers blocking daemon calls (queryShadersEnabled, queryAvailableShaders,
+    // loadLayout) — if we registered after those, a second launch racing during
+    // startup would run its own heavy init before discovering the conflict,
+    // redundantly contending on the daemon's event loop. Registering first means
+    // rapid-fire launches forward cleanly the moment they check the bus.
+    //
+    // If registration fails, another instance claimed the name between our
+    // earlier activateRunningInstance() check and now — retry forwarding and
+    // exit. If the other instance is unreachable (hung or crashed mid-shutdown),
+    // surface the error so the user knows the shortcut silently failed.
+    if (!controller.registerDBusService()) {
+        qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
+        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
+            return 0;
+        }
+        qCCritical(lcEditor) << "Editor D-Bus name" << DBus::EditorApp::ServiceName
+                             << "is held by an unreachable instance. The existing editor may be hung —"
+                             << "kill the stale plasmazones-editor process and try again.";
+        return 1;
+    }
+
+    controller.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
 
     // Set up QML engine
     QQmlApplicationEngine engine;

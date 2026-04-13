@@ -16,6 +16,7 @@
 #include "../core/constants.h"
 #include "../core/enums.h"
 #include "../core/modifierutils.h"
+#include "../core/single_instance_service.h"
 
 #include <QHash>
 #include <QObject>
@@ -153,10 +154,14 @@ public:
     {
         return m_activePage;
     }
-    Q_SCRIPTABLE void setActivePage(const QString& page);
 
-    /// Raise the settings window to the foreground.
-    Q_SCRIPTABLE void raise();
+    /// D-Bus entry point used by a forwarding launcher to switch the running
+    /// instance to a specific settings page. Exposed as Q_SCRIPTABLE so
+    /// ExportScriptableSlots picks it up. Does not attempt to raise the
+    /// window — no reliable way to do that from a programmatic caller on
+    /// Wayland, so the user has to bring the existing window to the front
+    /// themselves.
+    Q_SCRIPTABLE void setActivePage(const QString& page);
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
@@ -753,6 +758,11 @@ private:
     static QVariantList convertTriggersForStorage(const QVariantList& triggers);
 
     Settings m_settings;
+
+    // Single-instance D-Bus registration (owns the well-known name while the
+    // controller is alive). Claimed via registerDBusService() from main.cpp.
+    std::unique_ptr<SingleInstanceService> m_singleInstance;
+
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;
     DaemonController m_daemonController;

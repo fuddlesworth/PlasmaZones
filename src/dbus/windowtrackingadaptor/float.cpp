@@ -3,9 +3,10 @@
 
 #include "../windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
-#include "../../snap/SnapEngine.h"
+#include "../../core/interfaces.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include "../../snap/SnapEngine.h"
 
 namespace PlasmaZones {
 

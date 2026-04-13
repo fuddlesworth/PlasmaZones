@@ -26,6 +26,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QWindow>
+
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -83,11 +84,7 @@ VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QStr
 
 SettingsController::~SettingsController()
 {
-    // Unregister D-Bus service so a stale name doesn't linger if the
-    // QDBusConnection outlives this object.
-    auto bus = QDBusConnection::sessionBus();
-    bus.unregisterObject(DBus::SettingsApp::ObjectPath);
-    bus.unregisterService(DBus::SettingsApp::ServiceName);
+    // m_singleInstance destructor releases the D-Bus name + object.
 
     // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
@@ -102,6 +99,10 @@ SettingsController::~SettingsController()
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
+    , m_singleInstance(std::make_unique<SingleInstanceService>(SingleInstanceIds{DBus::SettingsApp::ServiceName,
+                                                                                 DBus::SettingsApp::ObjectPath,
+                                                                                 DBus::SettingsApp::Interface},
+                                                               this))
     , m_screenHelper(&m_settings, this)
 {
     // Translate rendering backend display names once at construction
@@ -381,27 +382,7 @@ void SettingsController::setActivePage(const QString& page)
 
 bool SettingsController::registerDBusService()
 {
-    auto bus = QDBusConnection::sessionBus();
-    if (!bus.registerService(DBus::SettingsApp::ServiceName)) {
-        return false;
-    }
-    // ExportScriptableSlots exposes all Q_SCRIPTABLE methods on this object (raise + setActivePage).
-    // Adding new Q_SCRIPTABLE slots will automatically expose them on D-Bus.
-    bus.registerObject(DBus::SettingsApp::ObjectPath, this, QDBusConnection::ExportScriptableSlots);
-    return true;
-}
-
-void SettingsController::raise()
-{
-    const auto windows = QGuiApplication::allWindows();
-    for (auto* w : windows) {
-        if (w->type() != Qt::Window)
-            continue;
-        w->show();
-        w->raise();
-        w->requestActivate();
-        break; // Only raise the primary application window
-    }
+    return m_singleInstance && m_singleInstance->claim();
 }
 
 void SettingsController::load()

@@ -13,9 +13,11 @@
 #include <QQuickWindow>
 #include <QSize>
 #include <QVector>
+#include <memory>
 #include "../config/iconfigbackend.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/single_instance_service.h"
 #include "undo/UndoController.h"
 
 namespace PlasmaZones {
@@ -450,7 +452,40 @@ public:
      */
     Q_INVOKABLE void stopAudioCapture();
 
+    /**
+     * @brief Register the editor as the single-instance owner on the session bus.
+     *
+     * Claims `org.plasmazones.Editor.App` and exports `raise()` +
+     * `handleLaunchRequest()` at `/EditorApp`. Must be called early — before any
+     * heavy startup work — so parallel launches forward here instead of racing on
+     * the daemon's event loop.
+     *
+     * @return true if the well-known name and object were both registered.
+     */
+    bool registerDBusService();
+
+    /**
+     * @brief Apply command-line launch arguments to this controller.
+     *
+     * Shared entry point for both the initial launch (main.cpp) and forwarded
+     * launches (handleLaunchRequest), so the two paths cannot drift.
+     */
+    void applyLaunchArgs(const QString& screenId, const QString& layoutId, bool createNew, bool preview);
+
+    // ───── D-Bus single-instance interface ────────────────────────────────────
+    // Exported via QDBusConnection::ExportScriptableSlots at /EditorApp, called
+    // by a second launch to forward CLI args to the already-running editor
+    // instead of spawning a parallel process. Applies args but deliberately
+    // does NOT try to raise the window or steal focus — neither the Wayland
+    // destroy-and-remap dance nor XDG activation tokens reliably convince
+    // KWin to bring an already-mapped fullscreen xdg_toplevel to the front
+    // for a programmatic caller. A forwarded launch whose args don't actually
+    // change anything is a no-op from the user's perspective.
 public Q_SLOTS:
+    Q_SCRIPTABLE void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
+                                          bool preview);
+
+    // ───── Internal slots (not exposed on D-Bus) ──────────────────────────────
     // Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
@@ -851,6 +886,13 @@ private:
     SnappingService* m_snappingService = nullptr;
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
+
+    // Single-instance D-Bus registration. Owned here so destruction releases
+    // the well-known name automatically. claim() is invoked by the main.cpp
+    // launcher before heavy startup work runs. Declared last among the
+    // service members so its destructor runs first (releasing the D-Bus name
+    // before the services it would export go away).
+    std::unique_ptr<SingleInstanceService> m_singleInstance;
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

@@ -99,6 +99,8 @@ set(plasmazones_core_SRCS
     core/shaderregistry/params.cpp
     core/layersurface.cpp
     core/layersurface.h
+    core/single_instance_service.cpp
+    core/single_instance_service.h
     core/screenmanager.cpp
     core/screenmanager/panels.cpp
     core/screenmanager/virtualscreens.cpp
