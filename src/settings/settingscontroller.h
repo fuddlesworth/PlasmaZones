@@ -165,8 +165,16 @@ public:
     }
     Q_SCRIPTABLE void setActivePage(const QString& page);
 
-    /// Raise the settings window to the foreground.
+    /// Raise the settings window to the foreground. Preserved for backward
+    /// compatibility with any external caller; the forwarding launcher should
+    /// prefer activateWithToken() so KWin gets a valid XDG activation token.
     Q_SCRIPTABLE void raise();
+
+    /// Raise the settings window using a forwarded XDG activation token.
+    /// Called by a second launcher via D-Bus — the launcher captures its own
+    /// XDG_ACTIVATION_TOKEN env var (handed to it by KGlobalAccel / KRunner)
+    /// and passes it here so KWin grants focus to the running instance.
+    Q_SCRIPTABLE void activateWithToken(const QString& activationToken);
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();

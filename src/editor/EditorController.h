@@ -478,10 +478,16 @@ public:
     // by a second launch to forward args to the already-running editor instead
     // of spawning a parallel process. Declared as Q_SLOTS so the moc-generated
     // metadata exposes them over D-Bus.
+    //
+    // activationToken is the XDG_ACTIVATION_TOKEN the launcher handed to the
+    // forwarding process (via its env var). Consumed via
+    // KWindowSystem::setCurrentXdgActivationToken + activateWindow so KWin
+    // treats the raise as a legitimate focus-steal request. Empty token is
+    // tolerated but likely means KWin will refuse focus on Wayland.
 public Q_SLOTS:
     Q_SCRIPTABLE void raise();
     Q_SCRIPTABLE void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                          bool preview);
+                                          bool preview, const QString& activationToken);
 
     // ───── Internal slots (not exposed on D-Bus) ──────────────────────────────
     // Layout operations

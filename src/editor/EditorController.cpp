@@ -22,6 +22,10 @@
 #include <QQuickWindow>
 #include <QWindow>
 
+#ifdef PZ_HAVE_KWINDOWSYSTEM
+#include <KWindowSystem>
+#endif
+
 namespace PlasmaZones {
 
 EditorController::EditorController(QObject* parent)
@@ -164,16 +168,41 @@ void EditorController::raise()
 }
 
 void EditorController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                           bool preview)
+                                           bool preview, const QString& activationToken)
 {
     applyLaunchArgs(screenId, layoutId, createNew, preview);
-    if (QQuickWindow* win = m_primaryWindow.data()) {
-        // showFullScreenOnTargetScreen handles both cases in one call:
-        //   • same screen + visible → forceBringToFront for focus steal
-        //   • different screen / hidden → destroy-and-remap with new plan
-        // Either path ends with the window raised and activated.
-        showFullScreenOnTargetScreen(win);
+
+    QQuickWindow* win = m_primaryWindow.data();
+    if (!win) {
+        return;
     }
+
+#ifdef PZ_HAVE_KWINDOWSYSTEM
+    // Feed the forwarded XDG activation token to KWindowSystem before we raise.
+    // KWin will honor this as proof that the user just interacted (via global
+    // shortcut) and grant focus to the editor window. Without a token, plain
+    // show/raise/requestActivate is ignored on Wayland for already-mapped
+    // toplevels — the behavior the PR is trying to fix.
+    if (!activationToken.isEmpty()) {
+        KWindowSystem::setCurrentXdgActivationToken(activationToken);
+    } else {
+        qCDebug(lcEditor) << "handleLaunchRequest received empty XDG activation token —"
+                          << "KWin may refuse focus-steal on same-screen repeat-press";
+    }
+#else
+    Q_UNUSED(activationToken);
+#endif
+
+    // Apply layout/geometry changes and show the window. showFullScreenOnTargetScreen
+    // handles the destroy-and-remap for screen switches internally, and hands off
+    // to forceBringToFront() when the window is already on the right screen.
+    showFullScreenOnTargetScreen(win);
+
+#ifdef PZ_HAVE_KWINDOWSYSTEM
+    // Explicit KWindowSystem::activateWindow consumes the token set above.
+    // Safe to call even with no token — falls back to plain Qt activation.
+    KWindowSystem::activateWindow(win);
+#endif
 }
 
 // Preview mode

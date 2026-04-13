@@ -119,6 +119,8 @@ if(USE_KDE_FRAMEWORKS)
     find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS
         KCMUtils
         GlobalAccel   # KGlobalAccel shortcut backend + KCM
+        WindowSystem  # KWindowSystem — XDG activation token handling for
+                      # single-instance focus steal on Wayland
     )
 
     # KActivities/PlasmaActivities is optional (for activity-based layouts)

@@ -28,7 +28,11 @@ constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::Setting
 
 /// Try to forward a --page request to an already-running instance.
 /// Returns true if the running instance handled it (caller should exit).
-bool activateRunningInstance(const QString& page)
+///
+/// The activationToken is this process's inherited XDG_ACTIVATION_TOKEN, used
+/// by the running instance's activateWithToken() slot to convince KWin to
+/// grant focus to the existing settings window on Wayland.
+bool activateRunningInstance(const QString& page, const QString& activationToken)
 {
     // Skip entirely if there's no running instance. Avoids a speculative
     // setActivePage call logging a bogus error when we know no one's home.
@@ -40,13 +44,21 @@ bool activateRunningInstance(const QString& page)
         // still lets us raise the window — the user can navigate manually.
         PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
     }
-    return PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("raise"), {});
+    return PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("activateWithToken"),
+                                                       {activationToken});
 }
 
 } // anonymous namespace
 
 int main(int argc, char* argv[])
 {
+    // Capture XDG_ACTIVATION_TOKEN before QGuiApplication can consume it. The
+    // launcher (KGlobalAccel / KRunner / .desktop launcher) provides this as
+    // proof of a fresh user interaction; if we end up forwarding, we pass it
+    // along so the running instance can use it to focus-steal its window.
+    const QString inheritedActivationToken = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
+    qunsetenv("XDG_ACTIVATION_TOKEN");
+
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
@@ -70,7 +82,7 @@ int main(int argc, char* argv[])
     const QString requestedPage = parser.isSet(pageOption) ? parser.value(pageOption) : QString();
 
     // Single-instance: if another instance is running, forward the page request and exit
-    if (activateRunningInstance(requestedPage)) {
+    if (activateRunningInstance(requestedPage, inheritedActivationToken)) {
         return 0;
     }
 
@@ -94,7 +106,7 @@ int main(int argc, char* argv[])
     // activateRunningInstance() check and now — retry forwarding and exit.
     if (!controller.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(requestedPage)) {
+        if (activateRunningInstance(requestedPage, inheritedActivationToken)) {
             return 0;
         }
         // D-Bus name is taken but we can't reach the owner — bail out
