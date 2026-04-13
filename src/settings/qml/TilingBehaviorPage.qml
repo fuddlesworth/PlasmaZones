@@ -207,6 +207,54 @@ Flickable {
 
                 }
 
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Drag behavior")
+                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot (Krohnkite-style).")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Autotile drag behavior")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Float on drag"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Reorder on drag"),
+                            "value": 1
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileDragBehavior))
+                        onActivated: appSettings.autotileDragBehavior = currentValue
+                    }
+
+                }
+
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Overflow behavior")
+                    description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count (dwm/Krohnkite-style).")
+
+                    WideComboBox {
+                        Accessible.name: i18n("Autotile overflow behavior")
+                        textRole: "text"
+                        valueRole: "value"
+                        model: [{
+                            "text": i18n("Float excess"),
+                            "value": 0
+                        }, {
+                            "text": i18n("Unlimited"),
+                            "value": 1
+                        }]
+                        currentIndex: Math.max(0, indexOfValue(appSettings.autotileOverflowBehavior))
+                        onActivated: appSettings.autotileOverflowBehavior = currentValue
+                    }
+
+                }
+
             }
 
         }
