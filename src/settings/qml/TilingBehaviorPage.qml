@@ -212,7 +212,7 @@ Flickable {
 
                 SettingsRow {
                     title: i18n("Drag behavior")
-                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot (Krohnkite-style).")
+                    description: i18n("Float converts a dragged tile to free-floating. Reorder keeps it tiled and swaps it into the drop slot.")
 
                     WideComboBox {
                         Accessible.name: i18n("Autotile drag behavior")
@@ -237,7 +237,7 @@ Flickable {
 
                 SettingsRow {
                     title: i18n("Overflow behavior")
-                    description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count (dwm/Krohnkite-style).")
+                    description: i18n("Float excess windows beyond the max-windows cap, or Unlimited to tile every window regardless of count.")
 
                     WideComboBox {
                         Accessible.name: i18n("Autotile overflow behavior")
