@@ -18,7 +18,6 @@
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
-#include <QWindow>
 
 namespace {
 
@@ -27,38 +26,27 @@ constexpr PlasmaZones::SingleInstanceIds kSettingsIds{PlasmaZones::DBus::Setting
                                                       PlasmaZones::DBus::SettingsApp::Interface};
 
 /// Try to forward a --page request to an already-running instance.
-/// Returns true if the running instance handled it (caller should exit).
+/// Returns true if a running instance exists (caller should exit).
 ///
-/// The activationToken is this process's inherited XDG_ACTIVATION_TOKEN, used
-/// by the running instance's activateWithToken() slot to convince KWin to
-/// grant focus to the existing settings window on Wayland.
-bool activateRunningInstance(const QString& page, const QString& activationToken)
+/// Forwards only the page switch — does not try to raise the running window.
+/// No Wayland workaround reliably convinces KWin to bring an already-mapped
+/// xdg_toplevel to the front from a programmatic caller, so the user has to
+/// focus the existing window themselves.
+bool activateRunningInstance(const QString& page)
 {
-    // Skip entirely if there's no running instance. Avoids a speculative
-    // setActivePage call logging a bogus error when we know no one's home.
     if (!PlasmaZones::SingleInstanceService::isRunning(kSettingsIds))
         return false;
 
     if (!page.isEmpty()) {
-        // Best-effort: page navigation doesn't gate the raise. A failure here
-        // still lets us raise the window — the user can navigate manually.
         PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("setActivePage"), {page});
     }
-    return PlasmaZones::SingleInstanceService::forward(kSettingsIds, QStringLiteral("activateWithToken"),
-                                                       {activationToken});
+    return true;
 }
 
 } // anonymous namespace
 
 int main(int argc, char* argv[])
 {
-    // Capture XDG_ACTIVATION_TOKEN before QGuiApplication can consume it. The
-    // launcher (KGlobalAccel / KRunner / .desktop launcher) provides this as
-    // proof of a fresh user interaction; if we end up forwarding, we pass it
-    // along so the running instance can use it to focus-steal its window.
-    const QString inheritedActivationToken = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
-    qunsetenv("XDG_ACTIVATION_TOKEN");
-
     QGuiApplication app(argc, argv);
     PlasmaZones::loadTranslations(&app);
 
@@ -82,7 +70,7 @@ int main(int argc, char* argv[])
     const QString requestedPage = parser.isSet(pageOption) ? parser.value(pageOption) : QString();
 
     // Single-instance: if another instance is running, forward the page request and exit
-    if (activateRunningInstance(requestedPage, inheritedActivationToken)) {
+    if (activateRunningInstance(requestedPage)) {
         return 0;
     }
 
@@ -106,7 +94,7 @@ int main(int argc, char* argv[])
     // activateRunningInstance() check and now — retry forwarding and exit.
     if (!controller.registerDBusService()) {
         qCWarning(PlasmaZones::lcCore) << "D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(requestedPage, inheritedActivationToken)) {
+        if (activateRunningInstance(requestedPage)) {
             return 0;
         }
         // D-Bus name is taken but we can't reach the owner — bail out
@@ -132,15 +120,6 @@ int main(int argc, char* argv[])
     if (engine.rootObjects().isEmpty()) {
         qCCritical(PlasmaZones::lcCore) << "Failed to load settings QML";
         return 1;
-    }
-
-    // Hand the QML root window to the controller so raise() can target it
-    // directly instead of scanning QGuiApplication::allWindows().
-    for (QObject* obj : engine.rootObjects()) {
-        if (auto* window = qobject_cast<QWindow*>(obj)) {
-            controller.setPrimaryWindow(window);
-            break;
-        }
     }
 
     return app.exec();

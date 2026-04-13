@@ -20,7 +20,6 @@
 
 #include <QHash>
 #include <QObject>
-#include <QPointer>
 #include <QSet>
 #include <QString>
 #include <QDBusConnection>
@@ -28,8 +27,6 @@
 #include <QTimer>
 #include <memory>
 #include <optional>
-
-class QWindow;
 
 namespace PlasmaZones {
 
@@ -153,28 +150,18 @@ public:
     /// Register on the session bus so a second instance can forward page requests.
     bool registerDBusService();
 
-    /// Cache the primary application window so raise() can target it without
-    /// scanning QGuiApplication::allWindows() (order not guaranteed, may
-    /// surface popup/dialog windows first). Called from main.cpp after the
-    /// QML engine has created its root window.
-    void setPrimaryWindow(QWindow* window);
-
     QString activePage() const
     {
         return m_activePage;
     }
+
+    /// D-Bus entry point used by a forwarding launcher to switch the running
+    /// instance to a specific settings page. Exposed as Q_SCRIPTABLE so
+    /// ExportScriptableSlots picks it up. Does not attempt to raise the
+    /// window — no reliable way to do that from a programmatic caller on
+    /// Wayland, so the user has to bring the existing window to the front
+    /// themselves.
     Q_SCRIPTABLE void setActivePage(const QString& page);
-
-    /// Raise the settings window to the foreground. Preserved for backward
-    /// compatibility with any external caller; the forwarding launcher should
-    /// prefer activateWithToken() so KWin gets a valid XDG activation token.
-    Q_SCRIPTABLE void raise();
-
-    /// Raise the settings window using a forwarded XDG activation token.
-    /// Called by a second launcher via D-Bus — the launcher captures its own
-    /// XDG_ACTIVATION_TOKEN env var (handed to it by KGlobalAccel / KRunner)
-    /// and passes it here so KWin grants focus to the running instance.
-    Q_SCRIPTABLE void activateWithToken(const QString& activationToken);
 
     static const QSet<QString>& validPageNames();
     static const QHash<QString, QString>& parentPageRedirects();
@@ -775,10 +762,6 @@ private:
     // Single-instance D-Bus registration (owns the well-known name while the
     // controller is alive). Claimed via registerDBusService() from main.cpp.
     std::unique_ptr<SingleInstanceService> m_singleInstance;
-
-    // Cached main settings window for raise(). Set from main.cpp after the
-    // QML engine produces its root window.
-    QPointer<QWindow> m_primaryWindow;
 
     QStringList m_renderingBackendDisplayNames;
     QString m_startupRenderingBackend;

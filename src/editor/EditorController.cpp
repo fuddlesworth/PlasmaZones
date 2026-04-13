@@ -14,17 +14,9 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/single_instance_service.h"
-#include "../core/wayland_raise.h"
 
 #include <QClipboard>
 #include <QGuiApplication>
-#include <QPointer>
-#include <QQuickWindow>
-#include <QWindow>
-
-#ifdef PZ_HAVE_KWINDOWSYSTEM
-#include <KWindowSystem>
-#endif
 
 namespace PlasmaZones {
 
@@ -159,50 +151,21 @@ void EditorController::applyLaunchArgs(const QString& screenId, const QString& l
     }
 }
 
-void EditorController::raise()
-{
-    // Bring the cached primary window to the front. On Wayland this needs the
-    // destroy-and-remap dance (forceBringToFront) because plain show/raise on an
-    // already-mapped xdg_toplevel is a no-op without a valid activation token.
-    forceBringToFront(m_primaryWindow.data());
-}
-
 void EditorController::handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                           bool preview, const QString& activationToken)
+                                           bool preview)
 {
+    // Apply the forwarded CLI args to the running editor. Screen and layout
+    // changes propagate through targetScreenChanged / layoutIdChanged signals,
+    // which QML observes and reacts to (EditorWindow.qml calls
+    // showFullScreenOnTargetScreen on screen changes, which handles the
+    // destroy-and-remap dance for cross-monitor moves on Wayland).
+    //
+    // Deliberately does not try to raise/activate the window: neither the
+    // Wayland destroy-and-remap nor XDG activation tokens reliably convince
+    // KWin to bring an already-mapped fullscreen xdg_toplevel to the front
+    // for a programmatic caller. A forwarded launch whose args don't change
+    // anything is a no-op — the user has to focus the window themselves.
     applyLaunchArgs(screenId, layoutId, createNew, preview);
-
-    QQuickWindow* win = m_primaryWindow.data();
-    if (!win) {
-        return;
-    }
-
-#ifdef PZ_HAVE_KWINDOWSYSTEM
-    // Feed the forwarded XDG activation token to KWindowSystem before we raise.
-    // KWin will honor this as proof that the user just interacted (via global
-    // shortcut) and grant focus to the editor window. Without a token, plain
-    // show/raise/requestActivate is ignored on Wayland for already-mapped
-    // toplevels — the behavior the PR is trying to fix.
-    if (!activationToken.isEmpty()) {
-        KWindowSystem::setCurrentXdgActivationToken(activationToken);
-    } else {
-        qCDebug(lcEditor) << "handleLaunchRequest received empty XDG activation token —"
-                          << "KWin may refuse focus-steal on same-screen repeat-press";
-    }
-#else
-    Q_UNUSED(activationToken);
-#endif
-
-    // Apply layout/geometry changes and show the window. showFullScreenOnTargetScreen
-    // handles the destroy-and-remap for screen switches internally, and hands off
-    // to forceBringToFront() when the window is already on the right screen.
-    showFullScreenOnTargetScreen(win);
-
-#ifdef PZ_HAVE_KWINDOWSYSTEM
-    // Explicit KWindowSystem::activateWindow consumes the token set above.
-    // Safe to call even with no token — falls back to plain Qt activation.
-    KWindowSystem::activateWindow(win);
-#endif
 }
 
 // Preview mode

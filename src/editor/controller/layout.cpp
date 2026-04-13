@@ -11,7 +11,6 @@
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/wayland_raise.h"
 #include "../../../shared/virtualscreenid.h"
 
 #include "pz_i18n.h"
@@ -190,11 +189,6 @@ void applyEditorWindowPlan(QQuickWindow* win, const EditorWindowPlan& plan)
     } else {
         win->show();
     }
-    // Focus-steal: KWin grants focus to freshly-mapped xdg_toplevels within
-    // the same session by default. raise()/requestActivate() nudge the
-    // compositor in case it doesn't.
-    win->raise();
-    win->requestActivate();
 }
 
 } // anonymous namespace
@@ -205,19 +199,9 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         return;
     }
 
-    // Cache the primary editor window the first time QML hands it to us. The
-    // D-Bus single-instance slots (raise / handleLaunchRequest) need a reliable
-    // pointer to this window and can't rely on QGuiApplication::allWindows()
-    // ordering, which may surface shader-preview or dialog windows first.
-    if (!m_primaryWindow) {
-        m_primaryWindow = window;
-    }
-
     // No target screen → plain fullscreen on whatever output Qt picks.
     if (m_targetScreen.isEmpty()) {
         window->showFullScreen();
-        window->raise();
-        window->requestActivate();
         return;
     }
 
@@ -248,24 +232,19 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
         }
     }
     if (!plan.isValid()) {
-        // Unknown target — fall back to plain fullscreen and force focus.
+        // Unknown target — fall back to plain fullscreen.
         window->setFlag(Qt::FramelessWindowHint, false);
         window->showFullScreen();
-        window->raise();
-        window->requestActivate();
         return;
     }
 
     qCDebug(lcEditor) << "Editor window plan — screen:" << plan.screen->name() << "geometry:" << plan.geometry
                       << "fullScreen:" << plan.fullScreen << "frameless:" << plan.frameless;
 
-    // Same-screen-and-already-visible fast path: no layout change needed, so
-    // just force the compositor to bring the window to the front. On Wayland
-    // a plain raise() on an already-mapped xdg_toplevel is a no-op without an
-    // activation token — forceBringToFront() does the destroy-and-remap dance
-    // KWin treats as a new window presentation.
+    // Same screen and visible → nothing to do. No Wayland workaround reliably
+    // brings an already-mapped fullscreen xdg_toplevel to the front from a
+    // programmatic caller, so we don't even try.
     if (window->screen() == plan.screen && window->isVisible() && window->isExposed()) {
-        forceBringToFront(window);
         return;
     }
 

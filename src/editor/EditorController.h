@@ -4,7 +4,6 @@
 #pragma once
 
 #include <QObject>
-#include <QPointer>
 #include <QVariantList>
 #include <QFont>
 #include <QImage>
@@ -475,19 +474,16 @@ public:
 
     // ───── D-Bus single-instance interface ────────────────────────────────────
     // Exported via QDBusConnection::ExportScriptableSlots at /EditorApp, called
-    // by a second launch to forward args to the already-running editor instead
-    // of spawning a parallel process. Declared as Q_SLOTS so the moc-generated
-    // metadata exposes them over D-Bus.
-    //
-    // activationToken is the XDG_ACTIVATION_TOKEN the launcher handed to the
-    // forwarding process (via its env var). Consumed via
-    // KWindowSystem::setCurrentXdgActivationToken + activateWindow so KWin
-    // treats the raise as a legitimate focus-steal request. Empty token is
-    // tolerated but likely means KWin will refuse focus on Wayland.
+    // by a second launch to forward CLI args to the already-running editor
+    // instead of spawning a parallel process. Applies args but deliberately
+    // does NOT try to raise the window or steal focus — neither the Wayland
+    // destroy-and-remap dance nor XDG activation tokens reliably convince
+    // KWin to bring an already-mapped fullscreen xdg_toplevel to the front
+    // for a programmatic caller. A forwarded launch whose args don't actually
+    // change anything is a no-op from the user's perspective.
 public Q_SLOTS:
-    Q_SCRIPTABLE void raise();
     Q_SCRIPTABLE void handleLaunchRequest(const QString& screenId, const QString& layoutId, bool createNew,
-                                          bool preview, const QString& activationToken);
+                                          bool preview);
 
     // ───── Internal slots (not exposed on D-Bus) ──────────────────────────────
     // Layout operations
@@ -883,12 +879,6 @@ private:
     bool m_hasUnsavedChanges = false;
     bool m_isNewLayout = false;
     bool m_previewMode = false;
-
-    // Cached main editor window — populated by showFullScreenOnTargetScreen() on
-    // first call from QML, used by raise() / handleLaunchRequest() instead of
-    // iterating QGuiApplication::allWindows() (which has no stable ordering and
-    // may surface popup/dialog windows first).
-    QPointer<QQuickWindow> m_primaryWindow;
 
     // Services (dependency injection)
     ILayoutService* m_layoutService = nullptr;

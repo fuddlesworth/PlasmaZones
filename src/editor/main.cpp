@@ -41,15 +41,13 @@ constexpr PlasmaZones::SingleInstanceIds kEditorIds{DBus::EditorApp::ServiceName
 /// Try to forward a launch request to an already-running editor instance.
 /// Returns true if the running instance accepted the request (caller should exit).
 ///
-/// The activationToken is the XDG_ACTIVATION_TOKEN this process inherited from
-/// its launcher (KGlobalAccel / KRunner / etc.). We must pass it through so the
-/// running instance can give it to KWin when raising its window — otherwise
-/// KWin refuses focus-steal for already-mapped xdg_toplevels.
-bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview,
-                             const QString& activationToken)
+/// The running instance applies the forwarded args (layout / screen / preview)
+/// but deliberately does not attempt to raise its window — see the comment on
+/// EditorController::handleLaunchRequest for why.
+bool activateRunningInstance(const QString& screenId, const QString& layoutId, bool createNew, bool preview)
 {
     return PlasmaZones::SingleInstanceService::forward(kEditorIds, QStringLiteral("handleLaunchRequest"),
-                                                       {screenId, layoutId, createNew, preview, activationToken});
+                                                       {screenId, layoutId, createNew, preview});
 }
 
 } // anonymous namespace
@@ -67,18 +65,6 @@ int main(int argc, char* argv[])
             }
         }
     }
-
-    // Capture XDG_ACTIVATION_TOKEN before anything else can consume it. The
-    // launcher (KGlobalAccel / KRunner / .desktop launcher) hands us this
-    // single-use token as proof the user just interacted; if this process
-    // ends up forwarding to an already-running editor, we pass the token
-    // along via D-Bus so that instance can use it to focus-steal its window.
-    // Unset it from our own env so Qt's Wayland plugin doesn't consume it on
-    // an unrelated requestActivate() call if we end up being the owning
-    // process (in which case QML's initial Component.onCompleted show path
-    // will handle the focus naturally from the fresh xdg_toplevel mapping).
-    const QString inheritedActivationToken = qEnvironmentVariable("XDG_ACTIVATION_TOKEN");
-    qunsetenv("XDG_ACTIVATION_TOKEN");
 
     // Register our layer-shell QPA plugin before QGuiApplication
     PlasmaZones::registerLayerShellPlugin();
@@ -201,9 +187,7 @@ int main(int argc, char* argv[])
     // Single-instance: if another editor is already running, forward the launch
     // request and exit. Avoids spawning parallel editor processes when the user
     // hits the shortcut repeatedly while the first editor is still starting up.
-    // The inherited XDG activation token is passed along so KWin grants focus
-    // to the already-running instance's window.
-    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, inheritedActivationToken)) {
+    if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
         return 0;
     }
 
@@ -225,7 +209,7 @@ int main(int argc, char* argv[])
     // surface the error so the user knows the shortcut silently failed.
     if (!controller.registerDBusService()) {
         qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
-        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg, inheritedActivationToken)) {
+        if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
             return 0;
         }
         qCCritical(lcEditor) << "Editor D-Bus name" << DBus::EditorApp::ServiceName

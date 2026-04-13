@@ -27,12 +27,6 @@
 #include <QScreen>
 #include <QWindow>
 
-#include "../core/wayland_raise.h"
-
-#ifdef PZ_HAVE_KWINDOWSYSTEM
-#include <KWindowSystem>
-#endif
-
 #include <QDBusPendingCallWatcher>
 #include <QDBusPendingReply>
 #include <QDesktopServices>
@@ -389,42 +383,6 @@ void SettingsController::setActivePage(const QString& page)
 bool SettingsController::registerDBusService()
 {
     return m_singleInstance && m_singleInstance->claim();
-}
-
-void SettingsController::setPrimaryWindow(QWindow* window)
-{
-    m_primaryWindow = window;
-}
-
-void SettingsController::raise()
-{
-    // Use the cached primary window populated by main.cpp after QML load.
-    // forceBringToFront() handles the destroy-and-remap dance that Wayland
-    // compositors require for focus steal on an already-mapped xdg_toplevel.
-    PlasmaZones::forceBringToFront(m_primaryWindow.data());
-}
-
-void SettingsController::activateWithToken(const QString& activationToken)
-{
-    QWindow* win = m_primaryWindow.data();
-    if (!win) {
-        return;
-    }
-
-#ifdef PZ_HAVE_KWINDOWSYSTEM
-    // Feed the forwarded token to KWindowSystem before the raise. Without a
-    // token, KWin refuses focus-steal on Wayland for already-mapped toplevels.
-    if (!activationToken.isEmpty()) {
-        KWindowSystem::setCurrentXdgActivationToken(activationToken);
-    }
-    // forceBringToFront() ensures the window is visible + sized, then
-    // activateWindow() consumes the token set above.
-    PlasmaZones::forceBringToFront(win);
-    KWindowSystem::activateWindow(win);
-#else
-    Q_UNUSED(activationToken);
-    PlasmaZones::forceBringToFront(win);
-#endif
 }
 
 void SettingsController::load()

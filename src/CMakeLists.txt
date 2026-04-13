@@ -99,8 +99,6 @@ set(plasmazones_core_SRCS
     core/shaderregistry/params.cpp
     core/layersurface.cpp
     core/layersurface.h
-    core/wayland_raise.cpp
-    core/wayland_raise.h
     core/single_instance_service.cpp
     core/single_instance_service.h
     core/screenmanager.cpp
@@ -276,12 +274,7 @@ target_link_libraries(plasmazones_core
 
 # KDE-specific link dependencies (only when building with KDE Frameworks)
 if(USE_KDE_FRAMEWORKS)
-    target_link_libraries(plasmazones_core
-        PUBLIC
-            KF6::GlobalAccel
-            KF6::WindowSystem
-    )
-    target_compile_definitions(plasmazones_core PUBLIC PZ_HAVE_KWINDOWSYSTEM)
+    target_link_libraries(plasmazones_core PUBLIC KF6::GlobalAccel)
 endif()
 
 # Conditionally link PlasmaActivities/KActivities if available
