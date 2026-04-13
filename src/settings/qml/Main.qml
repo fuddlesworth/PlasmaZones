@@ -1615,13 +1615,6 @@ ApplicationWindow {
                         }
 
                         Button {
-                            text: i18n("Defaults")
-                            icon.name: "document-revert"
-                            flat: true
-                            onClicked: defaultsConfirmDialog.open()
-                        }
-
-                        Button {
                             text: i18n("Discard")
                             icon.name: "edit-undo"
                             flat: true
