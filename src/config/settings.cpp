@@ -9,6 +9,8 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include <QGuiApplication>
+#include <QMetaMethod>
+#include <QMetaProperty>
 #include <QPalette>
 #include <QFile>
 #include <QTextStream>
@@ -138,19 +140,19 @@ void Settings::load()
 {
     m_configBackend->reparseConfiguration();
 
-    // Capture old values for post-load signal emission
-    const QString oldDefaultLayoutId = m_defaultLayoutId;
-    const QString oldRenderingBackend = m_renderingBackend;
-    const bool oldEnableShaders = m_enableShaderEffects;
-    const int oldShaderFrameRate = m_shaderFrameRate;
-    const bool oldEnableAudioViz = m_enableAudioVisualizer;
-    const int oldBarCount = m_audioSpectrumBarCount;
-    const qreal oldSplitRatio = m_autotileSplitRatio;
-    const qreal oldSplitRatioStep = m_autotileSplitRatioStep;
-    const int oldMasterCount = m_autotileMasterCount;
-    const QVariantMap oldPerAlgoSettings = m_autotilePerAlgorithmSettings;
-    const bool oldAutotileEnabled = m_autotileEnabled;
-    const QString oldDefaultAlgorithm = m_defaultAutotileAlgorithm;
+    // Snapshot every Q_PROPERTY that has a NOTIFY signal so we can emit
+    // per-property NOTIFY signals after load() sets members directly. Without
+    // these emits QML bindings bound to, say, `settings.borderWidth` would not
+    // update when the discard path reloads the on-disk values.
+    const QMetaObject* mo = metaObject();
+    const int propCount = mo->propertyCount();
+    QVector<QVariant> snapshot;
+    snapshot.resize(propCount);
+    for (int i = 0; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (prop.hasNotifySignal() && prop.isReadable())
+            snapshot[i] = prop.read(this);
+    }
 
     loadActivationConfig(m_configBackend);
     loadDisplayConfig(m_configBackend);
@@ -222,36 +224,19 @@ void Settings::load()
     qCInfo(lcConfig) << "Settings loaded";
     Q_EMIT settingsChanged();
 
-    // Emit autotile property signals so QML bindings update after load/reset.
-    // load() sets members directly (not via setters) so NOTIFY signals don't
-    // fire automatically. Guard each with a change check to avoid triggering
-    // unnecessary retiles or downstream side-effects on startup.
-    if (!qFuzzyCompare(1.0 + m_autotileSplitRatio, 1.0 + oldSplitRatio))
-        Q_EMIT autotileSplitRatioChanged();
-    if (!qFuzzyCompare(1.0 + m_autotileSplitRatioStep, 1.0 + oldSplitRatioStep))
-        Q_EMIT autotileSplitRatioStepChanged();
-    if (m_autotileMasterCount != oldMasterCount)
-        Q_EMIT autotileMasterCountChanged();
-    if (m_autotilePerAlgorithmSettings != oldPerAlgoSettings)
-        Q_EMIT autotilePerAlgorithmSettingsChanged();
-    if (m_autotileEnabled != oldAutotileEnabled)
-        Q_EMIT autotileEnabledChanged();
-    if (m_defaultAutotileAlgorithm != oldDefaultAlgorithm)
-        Q_EMIT defaultAutotileAlgorithmChanged();
-
-    // Emit specific signals for settings with runtime side-effects
-    if (m_renderingBackend != oldRenderingBackend)
-        Q_EMIT renderingBackendChanged();
-    if (m_enableShaderEffects != oldEnableShaders)
-        Q_EMIT enableShaderEffectsChanged();
-    if (m_shaderFrameRate != oldShaderFrameRate)
-        Q_EMIT shaderFrameRateChanged();
-    if (m_enableAudioVisualizer != oldEnableAudioViz)
-        Q_EMIT enableAudioVisualizerChanged();
-    if (m_audioSpectrumBarCount != oldBarCount)
-        Q_EMIT audioSpectrumBarCountChanged();
-    if (m_defaultLayoutId != oldDefaultLayoutId)
-        Q_EMIT defaultLayoutIdChanged();
+    // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
+    // sets members directly (not via setters), so without this loop QML
+    // bindings would never see reloaded values after discard / reset.
+    for (int i = 0; i < propCount; ++i) {
+        const QMetaProperty prop = mo->property(i);
+        if (!prop.hasNotifySignal() || !prop.isReadable())
+            continue;
+        const QVariant newValue = prop.read(this);
+        if (newValue != snapshot[i]) {
+            const QMetaMethod notify = prop.notifySignal();
+            notify.invoke(this, Qt::DirectConnection);
+        }
+    }
 }
 
 // ── save() dispatcher ────────────────────────────────────────────────────────
