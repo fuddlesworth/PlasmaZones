@@ -485,9 +485,13 @@ void WindowTrackingAdaptor::loadState()
         }
     };
 
-    // Load full windowId format first (preserves multi-instance distinction for
-    // daemon-only restarts where KWin UUIDs are still valid). Each entry stores
-    // both the full windowId key AND the appId key, mirroring storePreTileGeometry().
+    // Load full windowId format (per-runtime-instance data from a daemon-only
+    // restart where KWin UUIDs are still valid). These are instance-scoped —
+    // deliberately NOT mirrored to the appId key on load. The appId slot is
+    // the cross-session inheritance baseline owned exclusively by the legacy
+    // format below, so a ghost per-instance entry (e.g. from a window that
+    // was never cleanly closed) cannot poison the appId fallback used by
+    // validatedPreTileGeometry on window reopen.
     QString fullTileJson = readVal(ConfigKeys::preTileGeometriesFullKey(), QString());
     if (!fullTileJson.isEmpty()) {
         QJsonDocument doc = QJsonDocument::fromJson(fullTileJson.toUtf8());
@@ -505,26 +509,23 @@ void WindowTrackingAdaptor::loadState()
                            entry[QLatin1String("width")].toInt(), entry[QLatin1String("height")].toInt());
                 if (geom.width() > 0 && geom.height() > 0) {
                     QString screen = entry[QLatin1String("screen")].toString();
-                    PreTileGeometry ptg{geom, screen};
-                    preTileGeometries[windowId] = ptg;
-                    // Also store under appId for fallback (mirrors storePreTileGeometry).
-                    // Registry is empty during load so this resolves to string parsing.
-                    QString appId = m_service->currentAppIdFor(windowId);
-                    if (!appId.isEmpty() && appId != windowId) {
-                        preTileGeometries[appId] = ptg;
-                    }
+                    preTileGeometries[windowId] = PreTileGeometry{geom, screen};
                 }
             }
         }
     }
 
-    // Load appId-keyed format (fallback for KWin restarts or entries without full format)
+    // Load appId-keyed format (cross-session baseline — the "what this app
+    // looked like last time a user explicitly floated it" fallback).
     QString tileJson = readVal(ConfigKeys::preTileGeometriesKey(), QString());
     if (!tileJson.isEmpty()) {
-        // Only fill in keys not already loaded from full format
         QHash<QString, PreTileGeometry> appIdGeometries;
         loadGeometries(tileJson, appIdGeometries);
         for (auto it = appIdGeometries.constBegin(); it != appIdGeometries.constEnd(); ++it) {
+            // Do not overwrite a full-windowId entry that happens to collide
+            // (shouldn't happen — appId keys never contain '|'), but the
+            // general rule is: full entries are per-instance, appId entries
+            // are cross-session, they live in separate key namespaces.
             if (!preTileGeometries.contains(it.key())) {
                 preTileGeometries[it.key()] = it.value();
             }

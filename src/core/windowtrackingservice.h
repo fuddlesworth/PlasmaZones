@@ -199,6 +199,27 @@ public:
     std::optional<QRect> validatedPreTileGeometry(const QString& windowId,
                                                   const QString& currentScreenName = QString()) const;
 
+    /**
+     * @brief Strict per-instance lookup: no appId fallback.
+     *
+     * Returns the pre-tile geometry ONLY when an entry was captured for the
+     * EXACT runtime windowId. Cross-session appId-keyed entries (which may
+     * hold stale coordinates from a prior instance or daemon session) are
+     * deliberately ignored.
+     *
+     * Use this for restores that must not teleport a window to ancient
+     * coordinates left behind by a ghost instance — e.g. autotile→snap
+     * mode-toggle restoring windows that were never explicitly floated.
+     *
+     * @param windowId Full window ID (must include the '|uuid' suffix)
+     * @param currentScreenName Screen where the window currently is (for
+     *        cross-screen adjustment; see validatedPreTileGeometry)
+     * @return Adjusted geometry within visible screens, nullopt if no exact
+     *         per-instance entry exists
+     */
+    std::optional<QRect> validatedPreTileGeometryExact(const QString& windowId,
+                                                       const QString& currentScreenName = QString()) const;
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Floating Window State
     // ═══════════════════════════════════════════════════════════════════════════
@@ -858,6 +879,11 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
+
+    /// Shared implementation for validatedPreTileGeometry and validatedPreTileGeometryExact.
+    /// When exactOnly is true, does not fall back to the appId-keyed entry.
+    std::optional<QRect> validatePreTileEntry(const QString& windowId, const QString& currentScreenName,
+                                              bool exactOnly) const;
     QString findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter = 0) const;
 
     /// Resolve a screen ID to an effective screen ID, falling back to the physical

@@ -397,7 +397,14 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
                 continue;
             if (wts->isWindowFloating(windowId))
                 continue;
-            auto geo = wts->validatedPreTileGeometry(windowId, screenId);
+            // Strict per-instance lookup — no appId fallback. A window that was
+            // only ever auto-tiled (never explicitly snapped, never explicitly
+            // floated) has no authoritative pre-float position to restore to.
+            // Falling back to the cross-session appId entry would teleport the
+            // window to stale coordinates left behind by a ghost instance.
+            // Leaving the window at its current tiled position is the least
+            // surprising outcome.
+            auto geo = wts->validatedPreTileGeometryExact(windowId, screenId);
             if (geo) {
                 ZoneAssignmentEntry entry;
                 entry.windowId = windowId;
@@ -406,6 +413,9 @@ QVector<ZoneAssignmentEntry> Daemon::buildAutotileRestoreEntries(const QSet<QStr
                 entries.append(entry);
                 qCInfo(lcDaemon) << "Batched float-restore: windowId=" << windowId << "geo=" << *geo
                                  << "screen=" << screenId;
+            } else {
+                qCInfo(lcDaemon) << "Batched float-restore: skipping" << windowId
+                                 << "— no exact per-instance pre-tile entry";
             }
         }
     }
