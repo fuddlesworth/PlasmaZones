@@ -310,11 +310,16 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
         qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
         return;
     }
+    // VS swap is a monitor-scope action, so the OSD should render on the
+    // physical monitor's full geometry rather than inside one virtual screen.
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
     if (!VirtualScreenId::isVirtual(screenId)) {
         qCDebug(lcDaemon) << "SwapVirtualScreen: current screen has no subdivision:" << screenId;
         if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
             m_overlayService->showNavigationOsd(false, QStringLiteral("swap_vs"), QStringLiteral("no_subdivision"),
-                                                QString(), QString(), screenId);
+                                                QString(), QString(), physId);
         }
         return;
     }
@@ -329,7 +334,7 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     qCInfo(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << ok;
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), dirStr, QString(), QString(), screenId);
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), dirStr, QString(), QString(), physId);
     }
 }
 
@@ -348,8 +353,10 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     qCInfo(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << ok;
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        // VS rotate is a monitor-scope action — show the OSD on the physical
+        // monitor, not inside whichever VS held focus.
         const QString reason = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
-        m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), reason, QString(), QString(), screenId);
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), reason, QString(), QString(), physId);
     }
 }
 
