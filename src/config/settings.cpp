@@ -140,15 +140,23 @@ void Settings::load()
 {
     m_configBackend->reparseConfiguration();
 
-    // Snapshot every Q_PROPERTY that has a NOTIFY signal so we can emit
-    // per-property NOTIFY signals after load() sets members directly. Without
-    // these emits QML bindings bound to, say, `settings.borderWidth` would not
-    // update when the discard path reloads the on-disk values.
+    // Snapshot every Q_PROPERTY declared on Settings (skipping inherited
+    // QObject properties like objectName) that has a NOTIFY signal, so we
+    // can re-emit the matching NOTIFY signal after load() sets members
+    // directly. Without these emits QML bindings bound to, say,
+    // `settings.borderWidth` would not update when the discard path
+    // reloads the on-disk values.
+    //
+    // INVARIANT: every Q_PROPERTY on Settings must hold a type whose
+    // QVariant comparison is meaningful (Qt builtins, POD enums,
+    // QVariantMap, QStringList). Custom Q_GADGETs without a registered
+    // operator== will silently miscompare here.
     const QMetaObject* mo = metaObject();
     const int propCount = mo->propertyCount();
+    const int firstOwnProp = QObject::staticMetaObject.propertyCount();
     QVector<QVariant> snapshot;
     snapshot.resize(propCount);
-    for (int i = 0; i < propCount; ++i) {
+    for (int i = firstOwnProp; i < propCount; ++i) {
         const QMetaProperty prop = mo->property(i);
         if (prop.hasNotifySignal() && prop.isReadable())
             snapshot[i] = prop.read(this);
@@ -227,7 +235,7 @@ void Settings::load()
     // Emit NOTIFY signals for every Q_PROPERTY whose value changed. load()
     // sets members directly (not via setters), so without this loop QML
     // bindings would never see reloaded values after discard / reset.
-    for (int i = 0; i < propCount; ++i) {
+    for (int i = firstOwnProp; i < propCount; ++i) {
         const QMetaProperty prop = mo->property(i);
         if (!prop.hasNotifySignal() || !prop.isReadable())
             continue;

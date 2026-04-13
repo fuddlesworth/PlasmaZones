@@ -34,7 +34,7 @@ class SettingsController : public QObject
     Q_OBJECT
 
     Q_PROPERTY(QString activePage READ activePage WRITE setActivePage NOTIFY activePageChanged)
-    Q_PROPERTY(bool needsSave READ needsSave NOTIFY needsSaveChanged)
+    Q_PROPERTY(bool needsSave READ needsSave NOTIFY dirtyPagesChanged)
     Q_PROPERTY(QStringList dirtyPages READ dirtyPages NOTIFY dirtyPagesChanged)
     Q_PROPERTY(bool daemonRunning READ daemonRunning NOTIFY daemonRunningChanged)
     Q_PROPERTY(Settings* settings READ settings CONSTANT)
@@ -173,6 +173,19 @@ public:
     /// Returns true if the page (or any of its children, for parent categories
     /// like "snapping" / "tiling") currently has unsaved changes.
     Q_INVOKABLE bool isPageDirty(const QString& page) const;
+
+    /// Override the page that the next setNeedsSave(true) calls (and any
+    /// property NOTIFY routed through onSettingsPropertyChanged) will mark
+    /// dirty, instead of the currently active page. Use for changes made
+    /// from sidebar / global widgets that mutate settings owned by a
+    /// different page than the one the user is viewing.
+    ///
+    /// Pair with endExternalEdit() — the sidebar pattern is:
+    ///     beginExternalEdit("snapping");
+    ///     appSettings.snappingEnabled = newValue;
+    ///     endExternalEdit();
+    Q_INVOKABLE void beginExternalEdit(const QString& page);
+    Q_INVOKABLE void endExternalEdit();
     bool daemonRunning() const
     {
         return m_daemonController.isRunning();
@@ -677,7 +690,6 @@ public:
 
 Q_SIGNALS:
     void activePageChanged();
-    void needsSaveChanged();
     void dirtyPagesChanged();
     void daemonRunningChanged();
     void layoutsChanged();
@@ -773,6 +785,7 @@ private:
     ScreenHelper m_screenHelper;
     QString m_activePage = QStringLiteral("overview");
     QSet<QString> m_dirtyPages;
+    QString m_externalEditPage; // Non-empty: setNeedsSave(true) targets this instead of m_activePage
     bool m_saving = false;
     bool m_loading = false;
 

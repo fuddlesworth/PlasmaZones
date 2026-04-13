@@ -752,9 +752,10 @@ ApplicationWindow {
                             }
 
                             // Unsaved changes badge — per-page tracking.
-                            // Read settingsController.dirtyPages directly in the
-                            // binding so QML tracks it as a dependency and
-                            // re-evaluates when the dirty set changes.
+                            // Reference dirtyPages once so QML tracks it as a
+                            // binding dependency, then delegate the actual
+                            // lookup (including parent-category traversal) to
+                            // the controller's isPageDirty().
                             Rectangle {
                                 id: dirtyBadge
 
@@ -766,20 +767,8 @@ ApplicationWindow {
                                     if (navDelegate.isDivider || navDelegate.isBackButton)
                                         return false;
 
-                                    const dirty = settingsController.dirtyPages;
-                                    if (dirty.indexOf(navDelegate.name) >= 0)
-                                        return true;
-
-                                    // Parent category: dirty if any child page is dirty
-                                    const children = window._childItems[navDelegate.name];
-                                    if (children) {
-                                        for (let i = 0; i < children.length; i++) {
-                                            if (dirty.indexOf(children[i].name) >= 0)
-                                                return true;
-
-                                        }
-                                    }
-                                    return false;
+                                    settingsController.dirtyPages; // binding dependency
+                                    return settingsController.isPageDirty(navDelegate.name);
                                 }
                                 Layout.alignment: Qt.AlignVCenter
 
@@ -816,16 +805,21 @@ ApplicationWindow {
 
                             }
 
-                            // Enable/disable toggle for snapping and tiling
+                            // Enable/disable toggle for snapping and tiling.
+                            // Wraps the assignment in begin/endExternalEdit so
+                            // the dirty marker lands on snapping/tiling rather
+                            // than whatever page the user is currently viewing.
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
                                 onToggled: function(newValue) {
+                                    settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
                                     else
                                         appSettings.autotileEnabled = newValue;
+                                    settingsController.endExternalEdit();
                                 }
                             }
 

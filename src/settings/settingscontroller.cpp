@@ -478,9 +478,13 @@ void SettingsController::save()
 void SettingsController::defaults()
 {
     // reset() deletes all config groups, syncs to disk, then calls load()
-    // internally -- no separate load() needed.
-    // reset() deletes the [Editor] group and reloads defaults internally
+    // internally — load()'s reflective NOTIFY emission would otherwise
+    // route through onSettingsPropertyChanged and incrementally mark the
+    // active page dirty before we overwrite m_dirtyPages below. Suppress
+    // it so we get one clean dirtyPagesChanged emit instead of two.
+    m_loading = true;
     m_settings.reset();
+    m_loading = false;
 
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
@@ -496,11 +500,8 @@ void SettingsController::defaults()
 
     // Defaults is a global action — mark every valid page dirty so the
     // unsaved indicator appears next to each of them.
-    const bool wasEmpty = m_dirtyPages.isEmpty();
     m_dirtyPages = validPageNames();
     Q_EMIT dirtyPagesChanged();
-    if (wasEmpty)
-        Q_EMIT needsSaveChanged();
 }
 
 void SettingsController::launchEditor()
@@ -524,33 +525,31 @@ void SettingsController::onExternalSettingsChanged()
 
 void SettingsController::setNeedsSave(bool needs)
 {
-    // Mark the page the user is currently editing as dirty, or clear all
-    // dirty pages if needs == false. Parent categories ("snapping", "tiling")
-    // are never the active page — setActivePage redirects them to their first
-    // child — so m_activePage always resolves to a concrete leaf page.
-    const bool wasEmpty = m_dirtyPages.isEmpty();
-    bool changed = false;
+    // Mark the target page as dirty, or clear all dirty pages if needs ==
+    // false. The target is m_externalEditPage when set (sidebar / global
+    // widgets that mutate settings owned by a different page than the one
+    // the user is viewing), otherwise m_activePage. Parent categories
+    // ("snapping", "tiling") are never the active page — setActivePage
+    // redirects them to their first child — so the target always resolves
+    // to a concrete leaf page.
     if (needs) {
-        if (!m_dirtyPages.contains(m_activePage)) {
-            m_dirtyPages.insert(m_activePage);
-            changed = true;
+        const QString target = m_externalEditPage.isEmpty() ? m_activePage : m_externalEditPage;
+        Q_ASSERT(!parentPageRedirects().contains(target));
+        if (!m_dirtyPages.contains(target)) {
+            m_dirtyPages.insert(target);
+            Q_EMIT dirtyPagesChanged();
         }
-    } else if (!wasEmpty) {
+    } else if (!m_dirtyPages.isEmpty()) {
         m_dirtyPages.clear();
-        changed = true;
-    }
-    if (changed) {
         Q_EMIT dirtyPagesChanged();
-        if (wasEmpty != m_dirtyPages.isEmpty())
-            Q_EMIT needsSaveChanged();
     }
 }
 
 QStringList SettingsController::dirtyPages() const
 {
-    QStringList list(m_dirtyPages.begin(), m_dirtyPages.end());
-    list.sort();
-    return list;
+    // Order is unspecified — QML uses this only as a binding dependency
+    // and calls isPageDirty() for the actual lookup.
+    return QStringList(m_dirtyPages.begin(), m_dirtyPages.end());
 }
 
 bool SettingsController::isPageDirty(const QString& page) const
@@ -567,6 +566,23 @@ bool SettingsController::isPageDirty(const QString& page) const
         }
     }
     return false;
+}
+
+void SettingsController::beginExternalEdit(const QString& page)
+{
+    // Resolve parent categories to their canonical leaf — same rules as
+    // setActivePage — so the sidebar can pass "snapping" or "tiling".
+    const QString resolved = parentPageRedirects().value(page, page);
+    if (!validPageNames().contains(resolved)) {
+        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
+        return;
+    }
+    m_externalEditPage = resolved;
+}
+
+void SettingsController::endExternalEdit()
+{
+    m_externalEditPage.clear();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
