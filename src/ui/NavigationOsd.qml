@@ -61,9 +61,9 @@ Window {
             else if (action === "swap")
                 return i18n("Nothing to swap");
             else if (action === "swap_vs")
-                return reason === "no_subdivision" ? i18n("No VS split") : i18n("No adjacent VS");
+                return reason === "no_subdivision" ? i18n("No virtual screen split on this monitor") : i18n("No adjacent virtual screen");
             else if (action === "rotate_vs")
-                return i18n("No VS to rotate");
+                return i18n("No virtual screens to rotate");
             else if (action === "focus_master")
                 return i18n("No windows to focus");
             else if (action === "swap_master")
@@ -143,10 +143,10 @@ Window {
             return i18n("Autotile: %1", reason || "");
         } else if (action === "swap_vs") {
             var vsSwapArrow = directionArrow(reason);
-            return vsSwapArrow + " " + i18n("Swap VS");
+            return vsSwapArrow + " " + i18n("Virtual screens swapped");
         } else if (action === "rotate_vs") {
             var vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
-            return vsRotateArrow + " " + i18n("Rotate VS");
+            return vsRotateArrow + " " + i18n("Virtual screens rotated");
         } else {
             return i18n("Action completed");
         }
@@ -158,6 +158,14 @@ Window {
     // invisible-but-Qt-visible window would eat clicks at its screen position.
     // Toggling Qt.WindowTransparentForInput via this boolean avoids that.
     property bool _osdDismissed: true
+    // Content-driven desired size, exposed for C++ to read after writing
+    // action/reason/zones. Mirrors the width/height bindings below but stays
+    // live even when C++ later calls setWidth/setHeight (which detaches the
+    // Window width binding but leaves this readonly property intact). Used
+    // by OverlayService::showNavigationOsd to size the layer window based
+    // on the rendered message length rather than a hardcoded constant.
+    readonly property int contentDesiredWidth: container.width + Math.round(Kirigami.Units.gridUnit * 2.5)
+    readonly property int contentDesiredHeight: container.height + Math.round(Kirigami.Units.gridUnit * 2.5)
 
     // Helper function to normalize UUID format for comparison
     // Handles both "{uuid}" and "uuid" formats by stripping braces
