@@ -359,18 +359,13 @@ void SettingsController::setActivePage(const QString& page)
         return;
     }
     if (m_activePage != resolved) {
-        // Capture dirty state BEFORE emitting, because the QML Loader
-        // reacts synchronously to activePageChanged — new page creation
-        // may trigger NOTIFY signals that set needsSave before we return.
-        const bool wasDirty = m_needsSave;
+        // m_loading suppresses onSettingsPropertyChanged — the QML Loader
+        // reacts synchronously to activePageChanged and new page creation
+        // may trigger NOTIFY signals that would otherwise mark pages dirty.
         m_loading = true;
         m_activePage = resolved;
         Q_EMIT activePageChanged();
         m_loading = false;
-        // Restore the dirty state that existed before page navigation.
-        // Any NOTIFY signals that fired during page creation were suppressed
-        // by m_loading and should not mark the settings as dirty.
-        setNeedsSave(wasDirty);
     }
 }
 
@@ -483,9 +478,13 @@ void SettingsController::save()
 void SettingsController::defaults()
 {
     // reset() deletes all config groups, syncs to disk, then calls load()
-    // internally -- no separate load() needed.
-    // reset() deletes the [Editor] group and reloads defaults internally
+    // internally — load()'s reflective NOTIFY emission would otherwise
+    // route through onSettingsPropertyChanged and incrementally mark the
+    // active page dirty before we overwrite m_dirtyPages below. Suppress
+    // it so we get one clean dirtyPagesChanged emit instead of two.
+    m_loading = true;
     m_settings.reset();
+    m_loading = false;
 
     m_stagedAssignments.clear();
     m_stagedQuickSlots.clear();
@@ -499,7 +498,10 @@ void SettingsController::defaults()
     // Notify daemon to reload — reset() wrote defaults to disk
     DaemonDBus::notifyReload();
 
-    setNeedsSave(true);
+    // Defaults is a global action — mark every valid page dirty so the
+    // unsaved indicator appears next to each of them.
+    m_dirtyPages = validPageNames();
+    Q_EMIT dirtyPagesChanged();
 }
 
 void SettingsController::launchEditor()
@@ -523,10 +525,64 @@ void SettingsController::onExternalSettingsChanged()
 
 void SettingsController::setNeedsSave(bool needs)
 {
-    if (m_needsSave != needs) {
-        m_needsSave = needs;
-        Q_EMIT needsSaveChanged();
+    // Mark the target page as dirty, or clear all dirty pages if needs ==
+    // false. The target is m_externalEditPage when set (sidebar / global
+    // widgets that mutate settings owned by a different page than the one
+    // the user is viewing), otherwise m_activePage. Parent categories
+    // ("snapping", "tiling") are never the active page — setActivePage
+    // redirects them to their first child — so the target always resolves
+    // to a concrete leaf page.
+    if (needs) {
+        const QString target = m_externalEditPage.isEmpty() ? m_activePage : m_externalEditPage;
+        Q_ASSERT(!parentPageRedirects().contains(target));
+        if (!m_dirtyPages.contains(target)) {
+            m_dirtyPages.insert(target);
+            Q_EMIT dirtyPagesChanged();
+        }
+    } else if (!m_dirtyPages.isEmpty()) {
+        m_dirtyPages.clear();
+        Q_EMIT dirtyPagesChanged();
     }
+}
+
+QStringList SettingsController::dirtyPages() const
+{
+    // Order is unspecified — QML uses this only as a binding dependency
+    // and calls isPageDirty() for the actual lookup.
+    return QStringList(m_dirtyPages.begin(), m_dirtyPages.end());
+}
+
+bool SettingsController::isPageDirty(const QString& page) const
+{
+    if (m_dirtyPages.contains(page))
+        return true;
+    // Parent category: dirty if any child page is dirty. The redirect map
+    // lists parents → first child, so every key here is a parent category.
+    if (parentPageRedirects().contains(page)) {
+        const QString prefix = page + QStringLiteral("-");
+        for (const QString& dirty : m_dirtyPages) {
+            if (dirty.startsWith(prefix))
+                return true;
+        }
+    }
+    return false;
+}
+
+void SettingsController::beginExternalEdit(const QString& page)
+{
+    // Resolve parent categories to their canonical leaf — same rules as
+    // setActivePage — so the sidebar can pass "snapping" or "tiling".
+    const QString resolved = parentPageRedirects().value(page, page);
+    if (!validPageNames().contains(resolved)) {
+        qCWarning(PlasmaZones::lcCore) << "beginExternalEdit: unknown page" << page;
+        return;
+    }
+    m_externalEditPage = resolved;
+}
+
+void SettingsController::endExternalEdit()
+{
+    m_externalEditPage.clear();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2034,9 +2090,13 @@ bool SettingsController::importAllSettings(const QString& filePath)
     } else {
         // Clean up backup on success
         QFile::remove(backupPath);
+        // Wrap the in-memory reload so property NOTIFY signals don't mark
+        // pages dirty — the imported config is already on disk.
+        m_loading = true;
         m_settings.load();
+        m_loading = false;
         DaemonDBus::notifyReload();
-        Q_EMIT needsSaveChanged();
+        setNeedsSave(false);
     }
     return ok;
 }

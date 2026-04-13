@@ -180,6 +180,21 @@ Flickable {
 
                 }
 
+                SettingsSeparator {
+                }
+
+                SettingsRow {
+                    title: i18n("Reset")
+                    description: i18n("Restore every setting on every page to its default value")
+
+                    Button {
+                        text: i18n("Reset to Defaults")
+                        icon.name: "document-revert"
+                        onClicked: defaultsConfirmDialog.open()
+                    }
+
+                }
+
             }
 
         }
