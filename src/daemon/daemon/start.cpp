@@ -665,9 +665,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which
     // is NOT gated on keepWindowsInZonesOnResolutionChange — VS reconfiguration
     // is user-initiated, not a passive resolution change. The physId filter is
-    // VS-aware via Utils::belongsToPhysicalScreen.
+    // VS-aware via Utils::belongsToPhysicalScreen. The vs_reconfigure-tagged
+    // variant suppresses the kwin-effect snap-assist continuation so users
+    // don't get a thumbnail picker popping up after every VS swap/rotate.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->resnapCurrentAssignments(physicalScreenId);
+        m_windowTrackingAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
 
     // Trigger debounced geometry recalculation for the rest of the system

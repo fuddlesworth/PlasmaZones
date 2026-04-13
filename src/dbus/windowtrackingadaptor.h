@@ -130,6 +130,18 @@ public:
         return m_service;
     }
 
+    /**
+     * @brief Same as resnapCurrentAssignments but tags the batch with a
+     *        non-"resnap" action so the kwin-effect skips its snap-assist
+     *        continuation. Used by the virtual-screen reconfigure path
+     *        where windows silently follow their VS's new geometry — no
+     *        user snap happened, so there's nothing to assist with.
+     *
+     * Not a public Q_SLOT — callable only from C++ (by the daemon), not
+     * exposed over D-Bus.
+     */
+    void resnapForVirtualScreenReconfigure(const QString& physicalScreenId);
+
 public Q_SLOTS:
     /**
      * @brief Register or update metadata for a live window.

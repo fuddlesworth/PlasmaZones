@@ -507,6 +507,22 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     processBatchEntries(this, entries, QStringLiteral("resnap"));
 }
 
+void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScreenId)
+{
+    qCDebug(lcDbusWindow) << "resnapForVirtualScreenReconfigure: physId=" << physicalScreenId;
+
+    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(physicalScreenId);
+
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    // Tagged "vs_reconfigure" so the kwin-effect does NOT fire snap-assist
+    // continuation — no user-initiated snap happened here, windows are just
+    // following their VS's new geometry after a swap/rotate/split edit.
+    processBatchEntries(this, entries, QStringLiteral("vs_reconfigure"));
+}
+
 void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)
 {
     qCDebug(lcDbusWindow) << "resnapFromAutotileOrder: count=" << autotileWindowOrder.size() << "screen=" << screenId;
