@@ -274,6 +274,22 @@ private:
      */
     void onVirtualScreensReconfigured(const QString& physicalScreenId);
 
+    /**
+     * @brief Lightweight handler for regions-only VS config changes.
+     *
+     * Fires on swap/rotate/boundary-resize where the VS ID set is unchanged.
+     * Skips migrate/prune/updateAutotileScreens (all no-ops for regions-only)
+     * and only recalculates zone geometries and triggers a snap-mode resnap
+     * tagged with the vs_reconfigure action so the kwin-effect does not fire
+     * snap-assist.
+     *
+     * The autotile retile is driven by the engine's own handler on
+     * virtualScreenRegionsChanged — the Daemon's path does NOT force-retile
+     * so there is exactly one retile per change (eliminates the "move then
+     * retile" double-pass users observed on VS swap/rotate).
+     */
+    void onVirtualScreenRegionsChanged(const QString& physicalScreenId);
+
     /** @brief Resnap windows to current layout zones (only in manual/snap mode) */
     void resnapIfManualMode();
 

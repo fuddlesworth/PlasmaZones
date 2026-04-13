@@ -74,14 +74,38 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
 
-    if (m_virtualConfigs.value(physicalScreenId) == config) {
+    const VirtualScreenConfig oldConfig = m_virtualConfigs.value(physicalScreenId);
+    if (oldConfig == config) {
         return true;
+    }
+
+    // Detect "regions-only" changes where the VS ID set is unchanged — same
+    // ids, same count, same indices, same display names. This lets downstream
+    // handlers take a lightweight path that only updates geometry without
+    // re-running mode resolution, orphan cleanup, window migration, etc.
+    bool regionsOnly = false;
+    if (oldConfig.screens.size() == config.screens.size() && oldConfig.screens.size() >= 2) {
+        regionsOnly = true;
+        QSet<QString> oldIds;
+        for (const auto& def : oldConfig.screens) {
+            oldIds.insert(def.id);
+        }
+        for (const auto& def : config.screens) {
+            if (!oldIds.contains(def.id)) {
+                regionsOnly = false;
+                break;
+            }
+        }
     }
 
     m_virtualConfigs.insert(physicalScreenId, config);
     m_effectiveScreenIdsDirty = true;
     invalidateVirtualGeometryCache(physicalScreenId);
-    Q_EMIT virtualScreensChanged(physicalScreenId);
+    if (regionsOnly) {
+        Q_EMIT virtualScreenRegionsChanged(physicalScreenId);
+    } else {
+        Q_EMIT virtualScreensChanged(physicalScreenId);
+    }
     return true;
 }
 

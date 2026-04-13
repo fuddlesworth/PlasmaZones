@@ -112,7 +112,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // Without this, runtime add/remove only updates the daemon — the effect keeps
     // stale defs until something else triggers fetchAllVirtualScreenConfigs.
     if (auto* mgr = ScreenManager::instance()) {
-        connect(mgr, &ScreenManager::virtualScreensChanged, this, [this](const QString& physId) {
+        auto refreshAndEmit = [this](const QString& physId) {
             auto* m = ScreenManager::instance();
             if (m && m->hasVirtualScreens(physId)) {
                 m_cachedEffectiveIdsPerScreen[physId] = m->virtualScreenIdsFor(physId);
@@ -120,7 +120,11 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
                 m_cachedEffectiveIdsPerScreen.remove(physId);
             }
             Q_EMIT virtualScreensChanged(physId);
-        });
+        };
+        connect(mgr, &ScreenManager::virtualScreensChanged, this, refreshAndEmit);
+        // Regions-only changes also need the D-Bus broadcast so out-of-process
+        // listeners (KWin effect) refresh their cached VS geometry.
+        connect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, refreshAndEmit);
     }
 }
 

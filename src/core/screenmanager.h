@@ -319,10 +319,31 @@ Q_SIGNALS:
     void delayedPanelRequeryCompleted();
 
     /**
-     * @brief Emitted when virtual screen configuration changes
+     * @brief Emitted when virtual screen configuration changes in a way that
+     *        adds, removes, or renames virtual screens (topology change).
+     *
+     * Handlers that depend on the VS ID set — autotile-state orphan cleanup,
+     * window→VS migration, mode assignment refresh — should listen to this.
+     * For pure geometry changes where the VS IDs are unchanged (swap, rotate,
+     * boundary resize), @ref virtualScreenRegionsChanged is emitted instead.
+     *
      * @param physicalScreenId Physical screen whose subdivisions changed
      */
     void virtualScreensChanged(const QString& physicalScreenId);
+
+    /**
+     * @brief Emitted when virtual screen regions change but the VS ID set is
+     *        unchanged (same ids, same count, different rects).
+     *
+     * This is a focused lightweight signal for swap/rotate/boundary-resize.
+     * Handlers that need to move windows to follow the new VS geometry listen
+     * here; topology-aware handlers (mode recomputation, orphan cleanup) stay
+     * on @ref virtualScreensChanged and are not triggered by geometry-only
+     * changes.
+     *
+     * @param physicalScreenId Physical screen whose VS regions changed
+     */
+    void virtualScreenRegionsChanged(const QString& physicalScreenId);
 
 private Q_SLOTS:
     void onScreenAdded(QScreen* screen);

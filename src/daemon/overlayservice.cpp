@@ -121,7 +121,7 @@ OverlayService::OverlayService(QObject* parent)
 
     // Connect to virtual screen configuration changes
     if (auto* mgr = ScreenManager::instance()) {
-        connect(mgr, &ScreenManager::virtualScreensChanged, this, [this](const QString& physicalScreenId) {
+        auto onVirtualScreensChangedHandler = [this](const QString& physicalScreenId) {
             // Destroy old overlays for this physical screen, recreate with new config
             QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
             if (!physScreen) {
@@ -204,7 +204,13 @@ OverlayService::OverlayService(QObject* parent)
                     }
                 });
             }
-        });
+        };
+        connect(mgr, &ScreenManager::virtualScreensChanged, this, onVirtualScreensChangedHandler);
+        // Regions-only changes (swap/rotate/boundary-resize) also need the
+        // overlay windows destroyed and recreated with the new VS geometry.
+        // The handler is heavy but only runs when overlays are visible
+        // (active drag), so the cost is bounded.
+        connect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, onVirtualScreensChangedHandler);
     }
 
     // Connect to system sleep/resume via logind to restart shader timer after wake
