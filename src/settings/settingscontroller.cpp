@@ -84,8 +84,6 @@ VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QStr
 
 SettingsController::~SettingsController()
 {
-    // m_singleInstance destructor releases the D-Bus name + object.
-
     // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
@@ -99,10 +97,6 @@ SettingsController::~SettingsController()
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
-    , m_singleInstance(std::make_unique<SingleInstanceService>(SingleInstanceIds{DBus::SettingsApp::ServiceName,
-                                                                                 DBus::SettingsApp::ObjectPath,
-                                                                                 DBus::SettingsApp::Interface},
-                                                               this))
     , m_screenHelper(&m_settings, this)
 {
     // Translate rendering backend display names once at construction
@@ -378,11 +372,6 @@ void SettingsController::setActivePage(const QString& page)
         // by m_loading and should not mark the settings as dirty.
         setNeedsSave(wasDirty);
     }
-}
-
-bool SettingsController::registerDBusService()
-{
-    return m_singleInstance && m_singleInstance->claim();
 }
 
 void SettingsController::load()

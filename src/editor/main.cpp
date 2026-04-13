@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "EditorController.h"
+#include "EditorLaunchController.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/qpa/layershellpluginloader.h"
 #include "../core/layersurface.h"
+#include "../core/screen_resolver.h"
 #include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configdefaults.h"
@@ -21,10 +23,6 @@
 #include <QCommandLineParser>
 #include <QQuickStyle>
 #include <QQuickWindow>
-#include <QScreen>
-#include <QCursor>
-#include <QDBusConnection>
-#include <QDBusMessage>
 #include <QObject>
 
 #include "pz_i18n.h"
@@ -146,42 +144,22 @@ int main(int argc, char* argv[])
 
     // Resolve target screen and collect launch args up front so we can forward
     // them to an already-running editor instance before doing any heavy setup.
-    QString targetScreen;
-    if (parser.isSet(screenOption)) {
-        targetScreen = parser.value(screenOption);
-    } else {
-        // Default to the screen under the cursor — more intuitive than primaryScreen()
-        // which can be unreliable on Wayland (Qt may not match KDE's configured primary).
-        // Query the daemon for the effective screen ID (resolves to virtual screen when
-        // configured) so the editor opens with the correct VS context.
-        QPoint cursorPos = QCursor::pos();
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            QString::fromLatin1(PlasmaZones::DBus::ServiceName), QString::fromLatin1(PlasmaZones::DBus::ObjectPath),
-            QString::fromLatin1(PlasmaZones::DBus::Interface::Screen), QStringLiteral("getEffectiveScreenAt"));
-        msg << cursorPos.x() << cursorPos.y();
-        QDBusMessage reply = QDBusConnection::sessionBus().call(msg, QDBus::Block, 2000);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            targetScreen = reply.arguments().at(0).toString();
-        }
-        // Fallback to Qt's physical screen if daemon unavailable
-        if (targetScreen.isEmpty()) {
-            QScreen* cursorScreen = QGuiApplication::screenAt(cursorPos);
-            if (!cursorScreen) {
-                cursorScreen = QGuiApplication::primaryScreen();
-            }
-            if (cursorScreen) {
-                targetScreen = cursorScreen->name();
-            }
-        }
-    }
+    // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
+    // so we don't have to duplicate the virtual-screen-aware lookup here.
+    QString targetScreen = parser.isSet(screenOption) ? parser.value(screenOption)
+                                                      : PlasmaZones::ScreenResolver::effectiveScreenAtCursor();
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
         qWarning() << "--preview and --new are mutually exclusive; ignoring --preview";
     }
+    if (parser.isSet(newLayoutOption) && parser.isSet(layoutIdOption)) {
+        qWarning() << "--new and --layout are mutually exclusive; ignoring --layout";
+    }
 
     const bool createNewLayout = parser.isSet(newLayoutOption);
-    const QString layoutIdArg = parser.isSet(layoutIdOption) ? parser.value(layoutIdOption) : QString();
+    const QString layoutIdArg =
+        (!createNewLayout && parser.isSet(layoutIdOption)) ? parser.value(layoutIdOption) : QString();
     const bool previewArg = parser.isSet(previewOption) && !createNewLayout;
 
     // Single-instance: if another editor is already running, forward the launch
@@ -191,10 +169,17 @@ int main(int argc, char* argv[])
         return 0;
     }
 
-    // Create controller. This is cheap: it wires up services and loads local
-    // KConfig, but does not make any blocking D-Bus calls to the daemon — those
-    // happen only when applyLaunchArgs() invokes loadLayout/createNewLayout.
+    // Create the editor controller. This is cheap: wires up services and
+    // loads local KConfig but does not make any blocking D-Bus calls to
+    // the daemon — those happen only when applyLaunchArgs() invokes
+    // loadLayout/createNewLayout.
     EditorController controller;
+
+    // The launch controller owns the D-Bus single-instance registration and
+    // the CLI-arg translation. It holds a non-owning pointer to `controller`,
+    // which must outlive it (guaranteed by the reverse declaration order:
+    // `controller` is declared first and destroyed last).
+    EditorLaunchController launcher(&controller);
 
     // Claim the D-Bus well-known name BEFORE applyLaunchArgs(). applyLaunchArgs
     // triggers blocking daemon calls (queryShadersEnabled, queryAvailableShaders,
@@ -207,7 +192,7 @@ int main(int argc, char* argv[])
     // earlier activateRunningInstance() check and now — retry forwarding and
     // exit. If the other instance is unreachable (hung or crashed mid-shutdown),
     // surface the error so the user knows the shortcut silently failed.
-    if (!controller.registerDBusService()) {
+    if (!launcher.registerDBusService()) {
         qCWarning(lcEditor) << "Editor D-Bus service already owned; forwarding to running instance";
         if (activateRunningInstance(targetScreen, layoutIdArg, createNewLayout, previewArg)) {
             return 0;
@@ -218,7 +203,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    controller.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
+    launcher.applyLaunchArgs(targetScreen, layoutIdArg, createNewLayout, previewArg);
 
     // Set up QML engine
     QQmlApplicationEngine engine;

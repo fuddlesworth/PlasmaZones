@@ -101,6 +101,8 @@ set(plasmazones_core_SRCS
     core/layersurface.h
     core/single_instance_service.cpp
     core/single_instance_service.h
+    core/screen_resolver.cpp
+    core/screen_resolver.h
     core/screenmanager.cpp
     core/screenmanager/panels.cpp
     core/screenmanager/virtualscreens.cpp
@@ -537,6 +539,10 @@ set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/vulkan_support.cpp
     editor/EditorController.cpp
+    editor/EditorLaunchController.cpp
+    editor/EditorLaunchController.h
+    editor/EditorAppAdaptor.cpp
+    editor/EditorAppAdaptor.h
     editor/controller/gaps.cpp
     editor/controller/shader.cpp
     daemon/cavaservice.cpp

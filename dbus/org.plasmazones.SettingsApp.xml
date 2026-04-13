@@ -1,0 +1,31 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+    "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+    <!--
+        SettingsApp single-instance D-Bus interface.
+
+        Hosted by plasmazones-settings at:
+            service: org.plasmazones.Settings.App
+            path:    /SettingsApp
+
+        A second plasmazones-settings launcher forwards a --page request here
+        so the existing settings window can navigate to the requested page
+        instead of spawning a parallel process. The running instance does NOT
+        attempt to raise its own window — see org.plasmazones.EditorApp.xml
+        for the Wayland focus-steal rationale.
+
+        Mirror interface: EditorApp.
+    -->
+    <interface name="org.plasmazones.SettingsController">
+        <annotation name="org.gtk.GDBus.DocString"
+                    value="Single-instance launch forwarding for plasmazones-settings."/>
+        <method name="setActivePage">
+            <annotation name="org.gtk.GDBus.DocString"
+                        value="Switch the running settings window to the given page identifier."/>
+            <arg name="page" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString"
+                            value="Page ID (e.g. 'overview', 'snapping', 'tiling'). Must be in SettingsController::validPageNames()."/>
+            </arg>
+        </method>
+    </interface>
+</node>
