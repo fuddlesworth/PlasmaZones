@@ -398,7 +398,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     static const QSet<QString> noLayoutActions{QStringLiteral("float"),        QStringLiteral("algorithm"),
                                                QStringLiteral("rotate"),       QStringLiteral("focus_master"),
                                                QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
-                                               QStringLiteral("master_count"), QStringLiteral("retile")};
+                                               QStringLiteral("master_count"), QStringLiteral("retile"),
+                                               QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
     const bool needsLayout = !noLayoutActions.contains(action);
     Layout* screenLayout = resolveScreenLayout(effectiveId);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {

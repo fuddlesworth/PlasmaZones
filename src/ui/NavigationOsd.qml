@@ -22,7 +22,7 @@ Window {
 
     // Navigation feedback data
     property bool success: true
-    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm"
+    property string action: "" // "move", "focus", "push", "restore", "float", "swap", "rotate", "snap", "cycle", "algorithm", "swap_vs", "rotate_vs"
     property string reason: "" // Failure reason if !success, direction for rotation (clockwise/counterclockwise), or float state (floated/unfloated)
     // Zone data
     property var zones: []
@@ -60,6 +60,10 @@ Window {
                 return i18n("Nothing to rotate");
             else if (action === "swap")
                 return i18n("Nothing to swap");
+            else if (action === "swap_vs")
+                return i18n("No virtual screen in that direction");
+            else if (action === "rotate_vs")
+                return i18n("Nothing to rotate");
             else if (action === "focus_master")
                 return i18n("No windows to focus");
             else if (action === "swap_master")
@@ -137,6 +141,12 @@ Window {
             return i18n("Windows rearranged");
         } else if (action === "algorithm") {
             return i18n("Autotile: %1", reason || "");
+        } else if (action === "swap_vs") {
+            var vsSwapArrow = directionArrow(reason);
+            return vsSwapArrow + " " + i18n("Virtual screens swapped");
+        } else if (action === "rotate_vs") {
+            var vsRotateArrow = (reason === "clockwise") ? "↻" : "↺";
+            return vsRotateArrow + " " + i18n("Virtual screens rotated");
         } else {
             return i18n("Action completed");
         }

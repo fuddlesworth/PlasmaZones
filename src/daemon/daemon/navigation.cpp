@@ -312,6 +312,10 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     }
     if (!VirtualScreenId::isVirtual(screenId)) {
         qCDebug(lcDaemon) << "SwapVirtualScreen: current screen has no subdivision:" << screenId;
+        if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+            m_overlayService->showNavigationOsd(false, QStringLiteral("swap_vs"), QStringLiteral("no_subdivision"),
+                                                QString(), QString(), screenId);
+        }
         return;
     }
     const QString dirStr = navigationDirectionToString(direction);
@@ -323,6 +327,10 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     VirtualScreenSwapper swapper(m_settings.get());
     const bool ok = swapper.swapInDirection(screenId, dirStr);
     qCInfo(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << ok;
+
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), dirStr, QString(), QString(), screenId);
+    }
 }
 
 void Daemon::handleRotateVirtualScreens(bool clockwise)
@@ -338,6 +346,11 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     VirtualScreenSwapper swapper(m_settings.get());
     const bool ok = swapper.rotate(physId, clockwise);
     qCInfo(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << ok;
+
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        const QString reason = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), reason, QString(), QString(), screenId);
+    }
 }
 
 } // namespace PlasmaZones
