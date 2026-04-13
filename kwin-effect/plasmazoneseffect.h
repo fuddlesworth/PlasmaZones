@@ -37,11 +37,18 @@ namespace PlasmaZones {
 
 // Mirror of core/enums.h AutotileDragBehavior. The effect can't include daemon
 // headers (KWin plugin ABI constraints), so the values are duplicated here.
-// MUST stay in sync with core/enums.h — bump both in the same commit.
+// MUST stay in sync with core/enums.h — bump both in the same commit. The
+// static_asserts below pin the integer encoding so a drift on either side
+// becomes a compile-time failure rather than a silent runtime mismatch.
 enum class EffectAutotileDragBehavior : int {
     Float = 0, ///< Drag-to-float (PlasmaZones default)
     Reorder = 1, ///< Drag-to-reorder (Krohnkite-style)
 };
+static_assert(static_cast<int>(EffectAutotileDragBehavior::Float) == 0,
+              "EffectAutotileDragBehavior::Float must encode as 0 to match core/enums.h AutotileDragBehavior::Float");
+static_assert(
+    static_cast<int>(EffectAutotileDragBehavior::Reorder) == 1,
+    "EffectAutotileDragBehavior::Reorder must encode as 1 to match core/enums.h AutotileDragBehavior::Reorder");
 
 // Forward declarations for helper classes
 class AutotileHandler;

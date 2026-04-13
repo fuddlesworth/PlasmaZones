@@ -155,6 +155,13 @@ private:
      * and the live-change signal handler in connectToSettings — keeps the
      * transition logic in one place.
      *
+     * Note: AutotileDragBehavior is intentionally NOT bridged here. It is
+     * read on demand by WindowDragAdaptor::computeDragPolicy / beginDrag and
+     * cached in the kwin effect via its loadCachedSettings refresh on
+     * settingsChanged broadcasts. The autotile engine itself never reads it,
+     * so there is no engine-side state to keep in sync. If a future engine
+     * caller needs the value, add the symmetric helper here.
+     *
      * @returns true if the stored value changed (caller may use as configChanged hint)
      */
     bool applyOverflowBehaviorChange(AutotileOverflowBehavior newBehavior);

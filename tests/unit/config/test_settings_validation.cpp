@@ -23,6 +23,7 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configbackend_json.h"
 #include "../../../src/core/constants.h"
+#include "../../../src/core/enums.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -144,6 +145,84 @@ private Q_SLOTS:
 
         QVERIFY2(settings.dragActivationTriggers().size() <= Settings::MaxTriggersPerAction,
                  "Trigger list must be capped at MaxTriggersPerAction");
+    }
+
+    // =========================================================================
+    // Drag/Overflow behavior enum loading: unknown values must clamp to the
+    // safe default (Float) rather than the highest known value. The earlier
+    // qBound-based clamp would silently snap a future config value (e.g.
+    // DragBehavior=2 for a hypothetical ReorderAcrossScreens) to Reorder, the
+    // exact silent-misinterpretation pattern the effect-side cache loader
+    // (plasmazoneseffect.cpp:loadCachedSettings) avoids. Both readers must
+    // agree, and that agreement is pinned here.
+    // =========================================================================
+
+    void testAutotileDragBehavior_unknownValueClampsToFloat()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto tilingBehavior = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            tilingBehavior->writeInt(ConfigDefaults::dragBehaviorKey(), 99); // out of range
+            tilingBehavior.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.autotileDragBehavior(), AutotileDragBehavior::Float);
+    }
+
+    void testAutotileDragBehavior_validReorderValueLoadsCorrectly()
+    {
+        // Sanity baseline: a valid Reorder=1 value must round-trip, so the
+        // unknown-value test above isn't masking a broken setter path.
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto tilingBehavior = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            tilingBehavior->writeInt(ConfigDefaults::dragBehaviorKey(),
+                                     static_cast<int>(AutotileDragBehavior::Reorder));
+            tilingBehavior.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.autotileDragBehavior(), AutotileDragBehavior::Reorder);
+    }
+
+    void testAutotileOverflowBehavior_unknownValueClampsToFloat()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto tilingBehavior = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            tilingBehavior->writeInt(ConfigDefaults::overflowBehaviorKey(), 42); // out of range
+            tilingBehavior.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.autotileOverflowBehavior(), AutotileOverflowBehavior::Float);
+    }
+
+    void testAutotileOverflowBehavior_validUnlimitedValueLoadsCorrectly()
+    {
+        IsolatedConfigGuard guard;
+
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto tilingBehavior = backend->group(ConfigDefaults::tilingBehaviorGroup());
+            tilingBehavior->writeInt(ConfigDefaults::overflowBehaviorKey(),
+                                     static_cast<int>(AutotileOverflowBehavior::Unlimited));
+            tilingBehavior.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        QCOMPARE(settings.autotileOverflowBehavior(), AutotileOverflowBehavior::Unlimited);
     }
 };
 

@@ -3,7 +3,6 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include <limits>
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
@@ -102,9 +101,10 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Unlimited overflow mode returns a huge sentinel so std::min clamps
-    // become idempotent and onWindowAdded's gate is wide open. Sentinel is
-    // INT_MAX/2, not INT_MAX, to leave headroom for any `+1` callers.
+    // Unlimited overflow mode returns the named sentinel so std::min clamps
+    // become idempotent and onWindowAdded's gate is wide open. The constant
+    // lives in AutotileDefaults so any caller (resolver, tests, future
+    // headroom math) shares one definition.
     // ─────────────────────────────────────────────────────────────────────
     void testPerScreen_effectiveMaxWindows_unlimitedReturnsSentinel()
     {
@@ -116,7 +116,7 @@ private Q_SLOTS:
         engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
 
         const int effective = engine.effectiveMaxWindows(screen);
-        QCOMPARE(effective, std::numeric_limits<int>::max() / 2);
+        QCOMPARE(effective, AutotileDefaults::UnlimitedMaxWindowsSentinel);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -141,7 +141,32 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(screenA, overrides);
 
         QCOMPARE(engine.effectiveMaxWindows(screenA), 3);
-        QCOMPARE(engine.effectiveMaxWindows(screenB), std::numeric_limits<int>::max() / 2);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), AutotileDefaults::UnlimitedMaxWindowsSentinel);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Symmetric coverage: Float (default) global with a per-screen override
+    // — the per-screen override path runs ahead of the Unlimited short
+    // circuit, so this exercises the same priority ordering from the
+    // opposite branch and pins it against future refactors that might move
+    // the override below either short circuit.
+    // ─────────────────────────────────────────────────────────────────────
+    void testPerScreen_effectiveMaxWindows_floatRespectsPerScreenOverride()
+    {
+        AutotileEngine engine(nullptr, nullptr, nullptr);
+        const QString screenA = QStringLiteral("eDP-1");
+        const QString screenB = QStringLiteral("HDMI-1");
+        engine.setAutotileScreens({screenA, screenB});
+        engine.setAlgorithm(QLatin1String("master-stack"));
+
+        // Float global, screen A clamps to 2, screen B falls through to global default.
+        engine.config()->overflowBehavior = AutotileOverflowBehavior::Float;
+        QVariantMap overrides;
+        overrides[QStringLiteral("MaxWindows")] = 2;
+        engine.applyPerScreenConfig(screenA, overrides);
+
+        QCOMPARE(engine.effectiveMaxWindows(screenA), 2);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), engine.config()->maxWindows);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

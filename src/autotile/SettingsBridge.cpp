@@ -167,10 +167,15 @@ void SettingsBridge::syncFromSettings(Settings* settings)
 
     // OverflowBehavior: shared helper handles both the value update and the
     // Float→Unlimited backfill, so syncFromSettings and the live-change signal
-    // handler in connectToSettings stay in lockstep.
+    // handler in connectToSettings stay in lockstep. Track whether the helper
+    // ran a backfill so the maxWindows-increase block below doesn't run a
+    // redundant second backfill on the same sync.
+    const AutotileOverflowBehavior preOverflowBehavior = cfg->overflowBehavior;
     if (applyOverflowBehaviorChange(settings->autotileOverflowBehavior())) {
         configChanged = true;
     }
+    const bool overflowBackfilled = preOverflowBehavior == AutotileOverflowBehavior::Float
+        && cfg->overflowBehavior == AutotileOverflowBehavior::Unlimited;
 
 #undef SYNC_FIELD
 
@@ -200,8 +205,10 @@ void SettingsBridge::syncFromSettings(Settings* settings)
 
     // Backfill windows when maxWindows increased: windows rejected by the old
     // gate check in onWindowAdded() stay untiled unless we add them here.
-    // (The Float→Unlimited backfill is handled inside applyOverflowBehaviorChange.)
-    if (cfg->maxWindows > oldMaxWindows) {
+    // Skipped if applyOverflowBehaviorChange already ran a backfill on the
+    // Float→Unlimited transition — backfillWindows is idempotent but a second
+    // pass is wasted work and noisy in logs.
+    if (cfg->maxWindows > oldMaxWindows && !overflowBackfilled) {
         m_engine->backfillWindows();
     }
 

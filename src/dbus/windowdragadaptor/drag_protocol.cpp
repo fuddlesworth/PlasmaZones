@@ -120,14 +120,19 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     const DragPolicy policy =
         computeDragPolicy(m_settings, m_autotileEngine, windowId, startScreenId, curDesktop, curActivity);
 
-    qCInfo(lcDbusWindow) << "beginDrag:" << windowId << "screen=" << startScreenId << "bypass=" << policy.bypassReason
-                         << "stream=" << policy.streamDragMoved << "immediateFloat=" << policy.immediateFloatOnStart;
+    // Reusable mutable copy — the reorder fallback path below may need to
+    // restore immediateFloatOnStart that computeDragPolicy proactively cleared.
+    DragPolicy effectivePolicy = policy;
+
+    qCInfo(lcDbusWindow) << "beginDrag:" << windowId << "screen=" << startScreenId
+                         << "bypass=" << effectivePolicy.bypassReason << "stream=" << effectivePolicy.streamDragMoved
+                         << "immediateFloat=" << effectivePolicy.immediateFloatOnStart;
 
     // Stash bypass reason so the matching endDrag can dispatch to the
     // right branch without re-computing policy.
-    m_currentDragBypassReason = policy.bypassReason;
+    m_currentDragBypassReason = effectivePolicy.bypassReason;
 
-    if (!policy.bypassReason.isEmpty()) {
+    if (!effectivePolicy.bypassReason.isEmpty()) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
         // Trigger cache and stale-preview cleanup both happen above so bypass
@@ -147,22 +152,26 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         // windows are first-class" semantics.
         //
         // If beginDragInsertPreview returns false (target state missing,
-        // window lost between tiled-check and the call, etc.) we deliberately
-        // fall through WITHOUT setting m_dragReorderActive. dragMoved then
-        // won't force autotileInsertHeld, and endDrag will see no active
-        // preview — the bypass path lands on ApplyFloat, which is the safe
-        // legacy behavior for a drag the daemon couldn't latch onto.
-        if (policy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
+        // window lost between tiled-check and the call, etc.) the daemon
+        // can't run the swap pipeline. computeDragPolicy already cleared
+        // immediateFloatOnStart on the assumption that reorder would take
+        // over; without that override the user would see no float-restore
+        // during the drag and a sudden float on drop. Restore the
+        // legacy float-on-start behavior here so the UX matches the Float
+        // mode default for the rest of this drag.
+        if (effectivePolicy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
             && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
             && m_autotileEngine->isWindowTiled(windowId)) {
             if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
                 m_dragReorderActive = true;
             } else {
                 qCWarning(lcDbusWindow) << "beginDrag: reorder mode requested but beginDragInsertPreview failed for"
-                                        << windowId << "screen=" << startScreenId << "— falling back to float-on-drop";
+                                        << windowId << "screen=" << startScreenId
+                                        << "— restoring float-on-start fallback";
+                effectivePolicy.immediateFloatOnStart = m_autotileEngine->isWindowTracked(windowId);
             }
         }
-        return policy;
+        return effectivePolicy;
     }
 
     // Snap path — do NOT run the legacy dragStarted setup yet. We defer
@@ -186,7 +195,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     m_pendingSnapDragMouseButtons = mouseButtons;
     m_pendingSnapDragWasSnapped = m_windowTracking && !m_windowTracking->getZoneForWindow(windowId).isEmpty();
 
-    return policy;
+    return effectivePolicy;
 }
 
 bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons)

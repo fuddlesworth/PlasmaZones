@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QLatin1String>
 #include <QString>
+#include <limits>
 
 // Pull in the canonical effect↔daemon protocol-version constants
 // (PlasmaZones::DBus::ApiVersion / MinPeerApiVersion). Defined in
@@ -200,6 +201,11 @@ constexpr int MinZoneSizePx = 50;
 constexpr int GapEdgeThresholdPx = 5;
 constexpr int MinMaxWindows = 1;
 constexpr int MaxMaxWindows = 12;
+// Sentinel returned by PerScreenConfigResolver::effectiveMaxWindows() when the
+// user has selected AutotileOverflowBehavior::Unlimited. INT_MAX/2 — not
+// INT_MAX — so any caller that does `effectiveMaxWindows(...) + 1` (e.g.
+// growth-headroom calculations) can't overflow.
+constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed

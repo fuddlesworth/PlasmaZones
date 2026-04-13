@@ -10,8 +10,6 @@
 #include "core/constants.h"
 #include "core/logging.h"
 
-#include <limits>
-
 namespace PlasmaZones {
 
 PerScreenConfigResolver::PerScreenConfigResolver(AutotileEngine* engine)
@@ -217,13 +215,12 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
         return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);
 
-    // 2. Global Unlimited: Krohnkite-style "no cap". A huge sentinel
-    //    (INT_MAX/2, not INT_MAX — leaves headroom for any `+1` callers) is
-    //    passed to std::min in recalculateLayout, making the clamp
-    //    idempotent. Also opens onWindowAdded's gate (tiledWindowCount >=
-    //    maxWin never true).
+    // 2. Global Unlimited: Krohnkite-style "no cap". The sentinel
+    //    (AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
+    //    in recalculateLayout, making the clamp idempotent. Also opens
+    //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
     if (m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
-        return std::numeric_limits<int>::max() / 2;
+        return AutotileDefaults::UnlimitedMaxWindowsSentinel;
     }
 
     // 3. When the per-screen algorithm differs from the global algorithm,

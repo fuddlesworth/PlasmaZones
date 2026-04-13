@@ -225,10 +225,19 @@ struct PLASMAZONES_EXPORT AutotileConfig
      *
      * Float (default): auto-float excess windows via OverflowManager.
      * Unlimited: ignore the cap and tile every window — the
-     * `effectiveMaxWindows` path returns INT_MAX/2 so the std::min clamp in
-     * recalculateLayout becomes idempotent and onWindowAdded's gate is
+     * `effectiveMaxWindows` path returns
+     * `AutotileDefaults::UnlimitedMaxWindowsSentinel` so the std::min clamp
+     * in recalculateLayout becomes idempotent and onWindowAdded's gate is
      * always open. A per-screen MaxWindows override (if present) still wins
      * over Unlimited so users can clamp individual screens.
+     *
+     * Serialization note: AutotileConfig (layout-attached) writes this field
+     * as a string token ("float" / "unlimited") in toJson/fromJson so the
+     * layout JSON survives schema rewrites. The user-facing Settings layer
+     * persists the same logical setting as an int under
+     * `Tiling.Behavior/OverflowBehavior` (see settings/loadsave.cpp). Both
+     * paths flow through the AutotileOverflowBehavior C++ enum, so the
+     * asymmetry is internal — but worth knowing before touching either side.
      */
     AutotileOverflowBehavior overflowBehavior = AutotileOverflowBehavior::Float;
 
