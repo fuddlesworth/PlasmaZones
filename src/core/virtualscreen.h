@@ -11,6 +11,9 @@
 #include <QString>
 #include <QVector>
 
+#include <algorithm>
+#include <utility>
+
 #include "shared/virtualscreenid.h"
 
 namespace PlasmaZones {
@@ -227,6 +230,73 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
                             .arg(upper));
         }
 
+        return true;
+    }
+
+    /// Swap the @c region fields of the two defs identified by @p idA and
+    /// @p idB. All other fields (id, physicalScreenId, displayName, index)
+    /// are preserved so downstream state keyed on VS ID — windows, layouts,
+    /// autotile state — remains valid and follows the new geometry.
+    /// Returns false if either id is absent or both ids reference the same def.
+    bool swapRegions(const QString& idA, const QString& idB)
+    {
+        if (idA == idB) {
+            return false;
+        }
+        int indexA = -1;
+        int indexB = -1;
+        for (int i = 0; i < screens.size(); ++i) {
+            if (screens[i].id == idA) {
+                indexA = i;
+            } else if (screens[i].id == idB) {
+                indexB = i;
+            }
+        }
+        if (indexA < 0 || indexB < 0) {
+            return false;
+        }
+        std::swap(screens[indexA].region, screens[indexB].region);
+        return true;
+    }
+
+    /// Rotate the @c region fields through the defs identified by @p orderedIds.
+    /// With @p clockwise = true each def receives the previous id's old region
+    /// (def[0] ← def[last], def[i] ← def[i-1]); with @p clockwise = false the
+    /// direction is reversed (def[0] ← def[1], def[i] ← def[i+1]).
+    /// IDs and all other def fields are preserved. @p orderedIds may be a
+    /// subset of the config's defs so callers can rotate only a subset.
+    /// Returns false if @p orderedIds has fewer than two entries or any id
+    /// is not found in the config.
+    bool rotateRegions(const QVector<QString>& orderedIds, bool clockwise)
+    {
+        if (orderedIds.size() < 2) {
+            return false;
+        }
+        QVector<int> defIndices;
+        defIndices.reserve(orderedIds.size());
+        for (const auto& id : orderedIds) {
+            int found = -1;
+            for (int i = 0; i < screens.size(); ++i) {
+                if (screens[i].id == id) {
+                    found = i;
+                    break;
+                }
+            }
+            if (found < 0) {
+                return false;
+            }
+            defIndices.append(found);
+        }
+        const int n = defIndices.size();
+        QVector<QRectF> regions;
+        regions.reserve(n);
+        for (int idx : defIndices) {
+            regions.append(screens[idx].region);
+        }
+        for (int i = 0; i < n; ++i) {
+            const int src = clockwise ? (i - 1 + n) % n : (i + 1) % n;
+            screens[defIndices[i]].region = regions[src];
+        }
         return true;
     }
 };

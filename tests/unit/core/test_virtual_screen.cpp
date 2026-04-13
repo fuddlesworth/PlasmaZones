@@ -623,6 +623,197 @@ private Q_SLOTS:
             QCOMPARE(daemonResult, effectResult);
         }
     }
+
+    // ─── VirtualScreenConfig::swapRegions ─────────────────────────────────
+
+    // Helper: build a two-VS horizontal-split config on a fake monitor.
+    static VirtualScreenConfig makeTwoSplit(const QString& physicalId = QStringLiteral("DP-1"))
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = physicalId;
+        VirtualScreenDef left;
+        left.id = VirtualScreenId::make(physicalId, 0);
+        left.physicalScreenId = physicalId;
+        left.displayName = QStringLiteral("Left");
+        left.region = QRectF(0.0, 0.0, 0.5, 1.0);
+        left.index = 0;
+        VirtualScreenDef right;
+        right.id = VirtualScreenId::make(physicalId, 1);
+        right.physicalScreenId = physicalId;
+        right.displayName = QStringLiteral("Right");
+        right.region = QRectF(0.5, 0.0, 0.5, 1.0);
+        right.index = 1;
+        cfg.screens = {left, right};
+        return cfg;
+    }
+
+    // Helper: build a three-VS horizontal-split config.
+    static VirtualScreenConfig makeThreeSplit(const QString& physicalId = QStringLiteral("DP-1"))
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = physicalId;
+        for (int i = 0; i < 3; ++i) {
+            VirtualScreenDef def;
+            def.id = VirtualScreenId::make(physicalId, i);
+            def.physicalScreenId = physicalId;
+            def.displayName = QStringLiteral("VS %1").arg(i);
+            def.region = QRectF(i / 3.0, 0.0, 1.0 / 3.0, 1.0);
+            def.index = i;
+            cfg.screens.append(def);
+        }
+        return cfg;
+    }
+
+    void swapRegions_twoSplit_exchangesGeometry()
+    {
+        VirtualScreenConfig cfg = makeTwoSplit();
+        const QString idLeft = cfg.screens[0].id;
+        const QString idRight = cfg.screens[1].id;
+        const QRectF leftRegion = cfg.screens[0].region;
+        const QRectF rightRegion = cfg.screens[1].region;
+
+        QVERIFY(cfg.swapRegions(idLeft, idRight));
+        // Regions exchanged.
+        QCOMPARE(cfg.screens[0].region, rightRegion);
+        QCOMPARE(cfg.screens[1].region, leftRegion);
+        // Everything else preserved — IDs, display names, indices, physical id.
+        QCOMPARE(cfg.screens[0].id, idLeft);
+        QCOMPARE(cfg.screens[1].id, idRight);
+        QCOMPARE(cfg.screens[0].displayName, QStringLiteral("Left"));
+        QCOMPARE(cfg.screens[1].displayName, QStringLiteral("Right"));
+        QCOMPARE(cfg.screens[0].index, 0);
+        QCOMPARE(cfg.screens[1].index, 1);
+    }
+
+    void swapRegions_resultPassesValidation()
+    {
+        VirtualScreenConfig cfg = makeTwoSplit();
+        QVERIFY(cfg.swapRegions(cfg.screens[0].id, cfg.screens[1].id));
+        QString err;
+        QVERIFY2(VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
+    }
+
+    void swapRegions_sameId_returnsFalse()
+    {
+        VirtualScreenConfig cfg = makeTwoSplit();
+        const QString idLeft = cfg.screens[0].id;
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(!cfg.swapRegions(idLeft, idLeft));
+        QCOMPARE(cfg, before); // unchanged
+    }
+
+    void swapRegions_unknownId_returnsFalse()
+    {
+        VirtualScreenConfig cfg = makeTwoSplit();
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(!cfg.swapRegions(cfg.screens[0].id, QStringLiteral("DP-1/vs:9")));
+        QCOMPARE(cfg, before);
+    }
+
+    // ─── VirtualScreenConfig::rotateRegions ──────────────────────────────
+
+    void rotateRegions_threeSplit_clockwise()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
+        const QRectF r0 = cfg.screens[0].region;
+        const QRectF r1 = cfg.screens[1].region;
+        const QRectF r2 = cfg.screens[2].region;
+
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/true));
+        // Clockwise = each def receives the previous id's old region.
+        // def[0] ← def[last] = r2; def[1] ← def[0] = r0; def[2] ← def[1] = r1.
+        QCOMPARE(cfg.screens[0].region, r2);
+        QCOMPARE(cfg.screens[1].region, r0);
+        QCOMPARE(cfg.screens[2].region, r1);
+    }
+
+    void rotateRegions_threeSplit_counterClockwise()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
+        const QRectF r0 = cfg.screens[0].region;
+        const QRectF r1 = cfg.screens[1].region;
+        const QRectF r2 = cfg.screens[2].region;
+
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/false));
+        // Counter-clockwise = each def receives the next id's old region.
+        QCOMPARE(cfg.screens[0].region, r1);
+        QCOMPARE(cfg.screens[1].region, r2);
+        QCOMPARE(cfg.screens[2].region, r0);
+    }
+
+    void rotateRegions_fullCycleReturnsToStart()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const VirtualScreenConfig original = cfg;
+        QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
+
+        for (int i = 0; i < 3; ++i) {
+            QVERIFY(cfg.rotateRegions(order, true));
+        }
+        QCOMPARE(cfg, original);
+    }
+
+    void rotateRegions_clockwiseThenCCW_isNoOp()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const VirtualScreenConfig original = cfg;
+        QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
+
+        QVERIFY(cfg.rotateRegions(order, true));
+        QVERIFY(cfg.rotateRegions(order, false));
+        QCOMPARE(cfg, original);
+    }
+
+    void rotateRegions_twoSplit_equivalentToSwap()
+    {
+        VirtualScreenConfig a = makeTwoSplit();
+        VirtualScreenConfig b = makeTwoSplit();
+        QVERIFY(a.rotateRegions({a.screens[0].id, a.screens[1].id}, true));
+        QVERIFY(b.swapRegions(b.screens[0].id, b.screens[1].id));
+        QCOMPARE(a, b);
+    }
+
+    void rotateRegions_resultPassesValidation()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
+        QVERIFY(cfg.rotateRegions(order, true));
+        QString err;
+        QVERIFY2(VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
+    }
+
+    void rotateRegions_subsetOfDefs()
+    {
+        // Rotate only two of three defs — the third should be untouched.
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const QRectF untouched = cfg.screens[2].region;
+        const QRectF r0 = cfg.screens[0].region;
+        const QRectF r1 = cfg.screens[1].region;
+
+        QVERIFY(cfg.rotateRegions({cfg.screens[0].id, cfg.screens[1].id}, true));
+        QCOMPARE(cfg.screens[0].region, r1);
+        QCOMPARE(cfg.screens[1].region, r0);
+        QCOMPARE(cfg.screens[2].region, untouched);
+    }
+
+    void rotateRegions_tooFewIds_returnsFalse()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(!cfg.rotateRegions({}, true));
+        QVERIFY(!cfg.rotateRegions({cfg.screens[0].id}, true));
+        QCOMPARE(cfg, before);
+    }
+
+    void rotateRegions_unknownId_returnsFalse()
+    {
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, QStringLiteral("DP-1/vs:9")}, true));
+        QCOMPARE(cfg, before);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualScreen)
