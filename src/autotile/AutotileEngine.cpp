@@ -462,7 +462,7 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
             TilingState* ts = stateForScreen(screenId);
             if (ts) {
                 const TilingStateKey key = currentKeyForScreen(screenId);
-                const auto savedIt = m_savedFloatingWindows.constFind(key);
+                auto savedIt = m_savedFloatingWindows.find(key);
                 for (const QString& windowId : order) {
                     if (!ts->containsWindow(windowId)) {
                         ts->addWindow(windowId);
@@ -471,14 +471,18 @@ void AutotileEngine::setAutotileScreens(const QSet<QString>& screens)
                         // from pending orders lose their floating state because
                         // windowOpened's floating restore is skipped when the
                         // window already exists in the TilingState.
-                        if (savedIt != m_savedFloatingWindows.constEnd() && savedIt.value().contains(windowId)) {
+                        if (savedIt != m_savedFloatingWindows.end() && savedIt.value().remove(windowId)) {
                             ts->setFloating(windowId, true);
                         }
                     }
                 }
-                // Remove consumed floating entries so windowOpened doesn't double-apply
-                if (savedIt != m_savedFloatingWindows.constEnd()) {
-                    m_savedFloatingWindows.erase(m_savedFloatingWindows.find(key));
+                // Only erase the saved-floating entry once it's empty. Floating
+                // IDs for windows NOT in this pending order (e.g. session restore
+                // where setInitialWindowOrder narrowed the order to snap-zone
+                // members) must remain so windowOpened/insertWindow can restore
+                // them when KWin notifies the daemon about those windows.
+                if (savedIt != m_savedFloatingWindows.end() && savedIt.value().isEmpty()) {
+                    m_savedFloatingWindows.erase(savedIt);
                 }
             }
         }
