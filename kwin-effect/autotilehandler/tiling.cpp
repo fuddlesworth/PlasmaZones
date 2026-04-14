@@ -185,16 +185,48 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
         // Clean up windows that are no longer tiled: restore title bars and
         // remove from tiledWindows tracking. This subsumes the old borderless-
         // only cleanup since tiledWindows is a superset of borderlessWindows.
+        //
+        // Scope: a window is only considered "untiled" if (a) it's missing
+        // from the current tile request AND (b) it currently lives on a
+        // screen this retile targets AND (c) that screen is NOT an autotile
+        // screen — or if it is, but the retile is for that exact screen.
+        //
+        // The last guard is what prevents a false positive when two VSes on
+        // the same physical monitor retile sequentially after a VS swap /
+        // rotate: once the first VS moves its windows into the physical
+        // rectangle that now belongs to the second VS, the second retile
+        // would see those windows as "untiled" (they're not in its own
+        // request) and strip their titlebars, even though they're still
+        // fully autotile-managed by the first VS.
         const QSet<QString> untiled = m_border.tiledWindows - tiledWindowIds;
+        QSet<QString> genuinelyUntiled;
         for (const QString& wid : untiled) {
             KWin::EffectWindow* win = m_effect->findWindowById(wid);
-            if (win && tileScreenIds.contains(m_effect->getWindowScreenId(win)) && !win->isMinimized()) {
-                if (m_border.borderlessWindows.contains(wid)) {
-                    setWindowBorderless(win, wid, false);
-                }
+            if (!win || win->isMinimized()) {
+                continue;
+            }
+            const QString winScreen = m_effect->getWindowScreenId(win);
+            if (!tileScreenIds.contains(winScreen)) {
+                // Window is on a screen that isn't part of this retile — leave
+                // its tracking alone; its own retile pass will handle it.
+                continue;
+            }
+            // Window's current screen is in this retile's scope but the window
+            // isn't in the new request. If the screen is still autotile-managed,
+            // the window is being handled by another VS's retile (sequential
+            // per-VS retiles after a VS swap/rotate both target the same
+            // physical monitor, and windows moved by the first pass land on
+            // rectangles that belong to the second pass's VS mid-animation).
+            // Only genuinely untile when the screen has left autotile mode.
+            if (isAutotileScreen(winScreen)) {
+                continue;
+            }
+            genuinelyUntiled.insert(wid);
+            if (m_border.borderlessWindows.contains(wid)) {
+                setWindowBorderless(win, wid, false);
             }
         }
-        m_border.tiledWindows -= untiled;
+        m_border.tiledWindows -= genuinelyUntiled;
         auto* ws = KWin::Workspace::self();
         if (ws) {
             // Restore the full global stacking order (all screens, all windows).
