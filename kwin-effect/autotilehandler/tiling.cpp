@@ -164,69 +164,51 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
         bool isMonocle = false;
     };
     QVector<TileSnap> toApply;
-    QSet<QString> tiledWindowIds;
-    QSet<QString> tileScreenIds;
     for (Entry& e : entries) {
         if (!e.window) {
             continue;
         }
-        tiledWindowIds.insert(e.windowId);
         QString screenId = m_effect->getWindowScreenId(e.window);
-        tileScreenIds.insert(screenId);
         toApply.append({QPointer<KWin::EffectWindow>(e.window), e.geometry, e.windowId, screenId, e.isMonocle});
     }
 
     const uint64_t gen = m_autotileStaggerGeneration;
 
-    auto onComplete = [this, toApply, tiledWindowIds, tileScreenIds, savedGlobalStack, gen]() {
+    // Build per-screen "new request" sets so the onComplete cleanup can
+    // compare each screen's previous bucket against its new bucket in
+    // isolation — no cross-screen contamination.
+    QHash<QString, QSet<QString>> newTiledByScreen;
+    for (const TileSnap& s : toApply) {
+        newTiledByScreen[s.screenId].insert(s.windowId);
+    }
+
+    auto onComplete = [this, toApply, newTiledByScreen, savedGlobalStack, gen]() {
         if (m_autotileStaggerGeneration != gen) {
             return;
         }
-        // Clean up windows that are no longer tiled: restore title bars and
-        // remove from tiledWindows tracking. This subsumes the old borderless-
-        // only cleanup since tiledWindows is a superset of borderlessWindows.
-        //
-        // Scope: a window is only considered "untiled" if (a) it's missing
-        // from the current tile request AND (b) it currently lives on a
-        // screen this retile targets AND (c) that screen is NOT an autotile
-        // screen — or if it is, but the retile is for that exact screen.
-        //
-        // The last guard is what prevents a false positive when two VSes on
-        // the same physical monitor retile sequentially after a VS swap /
-        // rotate: once the first VS moves its windows into the physical
-        // rectangle that now belongs to the second VS, the second retile
-        // would see those windows as "untiled" (they're not in its own
-        // request) and strip their titlebars, even though they're still
-        // fully autotile-managed by the first VS.
-        const QSet<QString> untiled = m_border.tiledWindows - tiledWindowIds;
-        QSet<QString> genuinelyUntiled;
-        for (const QString& wid : untiled) {
-            KWin::EffectWindow* win = m_effect->findWindowById(wid);
-            if (!win || win->isMinimized()) {
-                continue;
-            }
-            const QString winScreen = m_effect->getWindowScreenId(win);
-            if (!tileScreenIds.contains(winScreen)) {
-                // Window is on a screen that isn't part of this retile — leave
-                // its tracking alone; its own retile pass will handle it.
-                continue;
-            }
-            // Window's current screen is in this retile's scope but the window
-            // isn't in the new request. If the screen is still autotile-managed,
-            // the window is being handled by another VS's retile (sequential
-            // per-VS retiles after a VS swap/rotate both target the same
-            // physical monitor, and windows moved by the first pass land on
-            // rectangles that belong to the second pass's VS mid-animation).
-            // Only genuinely untile when the screen has left autotile mode.
-            if (isAutotileScreen(winScreen)) {
-                continue;
-            }
-            genuinelyUntiled.insert(wid);
-            if (m_border.borderlessWindows.contains(wid)) {
-                setWindowBorderless(win, wid, false);
+        // Per-screen untile cleanup. For each screen that participated in
+        // this retile, the set of windows previously tracked as tiled on
+        // that screen minus the set in the new request is exactly the
+        // windows that left that screen's tiling state. Titlebars are
+        // restored only when the window isn't tracked as borderless on
+        // any sibling screen — setWindowBorderless already enforces this.
+        for (auto screenIt = newTiledByScreen.constBegin(); screenIt != newTiledByScreen.constEnd(); ++screenIt) {
+            const QString& screenId = screenIt.key();
+            const QSet<QString>& newSet = screenIt.value();
+            const QSet<QString> previous = AutotileStateHelpers::tiledOnScreen(m_border, screenId);
+            const QSet<QString> untiled = previous - newSet;
+            for (const QString& wid : untiled) {
+                KWin::EffectWindow* win = m_effect->findWindowById(wid);
+                if (!win || win->isMinimized()) {
+                    AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
+                    continue;
+                }
+                if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(wid)) {
+                    setWindowBorderless(win, wid, false, screenId);
+                }
+                AutotileStateHelpers::removeTiledOnScreen(m_border, screenId, wid);
             }
         }
-        m_border.tiledWindows -= genuinelyUntiled;
         auto* ws = KWin::Workspace::self();
         if (ws) {
             // Restore the full global stacking order (all screens, all windows).
@@ -245,7 +227,8 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
             // These raises go ON TOP of the global restore, preserving user's
             // z-order choices (e.g. floated window raised to front) across
             // mode toggles.
-            for (const QString& screenId : tileScreenIds) {
+            for (auto it = newTiledByScreen.constBegin(); it != newTiledByScreen.constEnd(); ++it) {
+                const QString& screenId = it.key();
                 const QStringList savedOrder = m_savedAutotileStackingOrder.value(screenId);
                 if (savedOrder.isEmpty()) {
                     continue;
@@ -301,9 +284,24 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
             }
             saveAndRecordPreAutotileGeometry(snap.windowId, snap.screenId, snap.window->frameGeometry());
             qCInfo(lcEffect) << "Autotile tile request:" << snap.windowId << "QRect=" << snap.geometry;
-            m_border.tiledWindows.insert(snap.windowId);
+            // A window can only be tile-managed by one screen at a time.
+            // If this is a cross-screen transfer, strip the stale tracking
+            // from any other screen before recording the new owner. This
+            // keeps the tracking map coherent when e.g. a window drags
+            // from an autotile VS onto a sibling autotile VS.
+            for (auto scrIt = m_border.tiledWindowsByScreen.begin(); scrIt != m_border.tiledWindowsByScreen.end();) {
+                if (scrIt.key() != snap.screenId) {
+                    scrIt.value().remove(snap.windowId);
+                }
+                if (scrIt.value().isEmpty() && scrIt.key() != snap.screenId) {
+                    scrIt = m_border.tiledWindowsByScreen.erase(scrIt);
+                } else {
+                    ++scrIt;
+                }
+            }
+            AutotileStateHelpers::addTiledOnScreen(m_border, snap.screenId, snap.windowId);
             if (m_border.hideTitleBars) {
-                setWindowBorderless(snap.window, snap.windowId, true);
+                setWindowBorderless(snap.window, snap.windowId, true, snap.screenId);
             }
 
             if (snap.isMonocle) {

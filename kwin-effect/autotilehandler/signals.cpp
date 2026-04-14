@@ -148,13 +148,27 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
 
             // Restore title bars and clear tiled tracking for windows on removed screens
             for (const QString& windowId : std::as_const(windowsOnRemovedScreens)) {
-                m_border.tiledWindows.remove(windowId);
-                if (m_border.borderlessWindows.contains(windowId)) {
-                    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-                    if (w) {
-                        setWindowBorderless(w, windowId, false);
+                // Find every screen that currently tracks this window and
+                // remove it from each. We don't know which specific screen
+                // the window "belongs to" in our buckets at this point —
+                // there may be stale entries across multiple screens if the
+                // window ever transferred. Clean them all.
+                QStringList screensHoldingBorderless;
+                for (auto it = m_border.borderlessWindowsByScreen.constBegin();
+                     it != m_border.borderlessWindowsByScreen.constEnd(); ++it) {
+                    if (it.value().contains(windowId)) {
+                        screensHoldingBorderless.append(it.key());
                     }
                 }
+                KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+                for (const QString& sid : std::as_const(screensHoldingBorderless)) {
+                    if (w) {
+                        setWindowBorderless(w, windowId, false, sid);
+                    } else {
+                        AutotileStateHelpers::removeBorderlessOnScreen(m_border, sid, windowId);
+                    }
+                }
+                AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
             }
             m_effect->updateAllBorders();
 
@@ -302,7 +316,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                         if (m_effect->isWindowFloating(windowId)) {
                             continue; // Floating windows don't get borderless
                         }
-                        if (m_border.borderlessWindows.contains(windowId)) {
+                        if (AutotileStateHelpers::borderlessOnScreen(m_border, screenId).contains(windowId)) {
                             // Already tracked — force KWin property in case it was reset
                             KWin::Window* kw = w->window();
                             if (kw && !kw->noBorder()) {
@@ -656,8 +670,9 @@ void AutotileHandler::slotWindowFullScreenChanged(KWin::EffectWindow* w)
     const QString windowId = m_effect->getWindowId(w);
     // Clear border and borderless tracking so borders are not drawn over fullscreen content
     m_border.zoneGeometries.remove(windowId);
-    m_border.tiledWindows.remove(windowId);
-    if (m_border.borderlessWindows.remove(windowId)) {
+    const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
+    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    if (wasBorderlessAnywhere) {
         KWin::Window* kw = w->window();
         if (kw) {
             kw->setNoBorder(false);

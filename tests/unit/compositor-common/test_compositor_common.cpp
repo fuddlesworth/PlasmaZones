@@ -1060,10 +1060,10 @@ private Q_SLOTS:
         const QString windowId = QStringLiteral("testapp|42");
         const QString screenId = QStringLiteral("screen-0");
 
-        // Set up BorderState with the window
+        // Set up BorderState with the window on its owning screen.
         PlasmaZones::BorderState border;
-        border.borderlessWindows.insert(windowId);
-        border.tiledWindows.insert(windowId);
+        PlasmaZones::AutotileStateHelpers::addBorderlessOnScreen(border, screenId, windowId);
+        PlasmaZones::AutotileStateHelpers::addTiledOnScreen(border, screenId, windowId);
         border.zoneGeometries.insert(windowId, QRect(0, 0, 800, 600));
 
         // Set up AutotileWindowState maps
@@ -1096,8 +1096,8 @@ private Q_SLOTS:
         PlasmaZones::AutotileStateHelpers::cleanupClosedWindowState(windowId, screenId, border, state);
 
         // Verify all maps no longer contain the window
-        QVERIFY(!border.borderlessWindows.contains(windowId));
-        QVERIFY(!border.tiledWindows.contains(windowId));
+        QVERIFY(!PlasmaZones::AutotileStateHelpers::isBorderlessWindow(border, windowId));
+        QVERIFY(!PlasmaZones::AutotileStateHelpers::isTiledWindow(border, windowId));
         QVERIFY(!border.zoneGeometries.contains(windowId));
         QVERIFY(!notifiedWindows.contains(windowId));
         QVERIFY(!notifiedWindowScreens.contains(windowId));

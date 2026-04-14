@@ -254,7 +254,13 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
-    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
+    /// Toggle a window's borderless state on a specific screen. screenId is
+    /// REQUIRED for correctness: on per-VS retiles the effect must update
+    /// only that screen's bucket so sibling-VS tracking is untouched. For
+    /// the feature-disable path (where a bulk restore iterates all screens),
+    /// callers pass the screen key from their enumeration; there is no
+    /// "global" variant.
+    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless, const QString& screenId);
     void unmaximizeMonocleWindow(const QString& windowId);
 
     /**
