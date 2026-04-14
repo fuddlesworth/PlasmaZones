@@ -31,7 +31,15 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
     }
 
     ++m_autotileStaggerGeneration;
-    m_autotileTargetZones.clear();
+    // NOTE: m_autotileTargetZones and m_centeredWaylandZones are intentionally
+    // NOT cleared globally here. Each retile fires for a single screen at a
+    // time (per-VS retile after a swap/rotate), so a global clear would wipe
+    // sibling-VS entries mid-animation and strand their windows without a
+    // centering target. The per-window erase-on-consumption below (and inside
+    // the centering handler) keeps the map self-cleaning — entries for
+    // windows in the new request get overwritten, entries for windows not in
+    // any request are consumed the next time their frame geometry changes.
+    // Closed windows are pruned via cleanupClosedWindowState.
 
     // Snapshot the full global stacking order before tiling. After all
     // moveResize calls (which implicitly raise on KWin 6 / Wayland),

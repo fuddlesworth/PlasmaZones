@@ -796,6 +796,14 @@ void AutotileHandler::applyFloatCleanup(const QString& windowId)
     // borderless, but a window can be tiled without borderless if hideTitleBars
     // was off when it was tiled).
     AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    // Drop centering/target tracking too — a floated window isn't being
+    // tiled anymore so a stale entry here would trigger centering on the
+    // next frameGeometryChanged, snapping the floated window back into an
+    // old zone rect. slotWindowsTileRequested no longer clears these
+    // globally (it can't without wiping sibling-VS state), so the float
+    // path has to clean up after itself.
+    m_autotileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
     m_effect->removeWindowBorder(windowId);
     unmaximizeMonocleWindow(windowId);
 }
