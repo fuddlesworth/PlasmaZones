@@ -284,10 +284,20 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                     if (!m_notifiedWindows.contains(windowId)) {
                         // Restore preserved pre-autotile geometry so float-restore
                         // returns to the original position, not the tiled frame from
-                        // the source desktop.
+                        // the source desktop. Only apply when the source screen
+                        // matches the destination — saved rects are in absolute
+                        // coordinates of the source monitor and would land off-
+                        // target on a different screen after a cross-desktop +
+                        // cross-screen move.
                         auto savedIt = m_savedPreAutotileForDesktopMove.find(windowId);
                         if (savedIt != m_savedPreAutotileForDesktopMove.end()) {
-                            m_preAutotileGeometries[screenId][windowId] = savedIt.value();
+                            if (savedIt.value().first == screenId) {
+                                m_preAutotileGeometries[screenId][windowId] = savedIt.value().second;
+                            } else {
+                                qCDebug(lcEffect)
+                                    << "Desktop switch: dropping cross-screen pre-autotile rect for" << windowId
+                                    << "source=" << savedIt.value().first << "dest=" << screenId;
+                            }
                             m_savedPreAutotileForDesktopMove.erase(savedIt);
                         }
                         qCInfo(lcEffect) << "Desktop switch: re-adding moved window to autotile:" << windowId << "on"

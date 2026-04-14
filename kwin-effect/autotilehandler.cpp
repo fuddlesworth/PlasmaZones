@@ -678,13 +678,17 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
     // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
     // When the window is re-added on the target desktop, this geometry is restored
     // so that float-restore returns to the original position, not the tiled frame.
+    //
+    // Stamped with the source screen so the restore path can detect a
+    // cross-screen desktop move and decline to apply a saved rect that
+    // belongs to a different monitor's coordinate space.
     if (m_preAutotileGeometries.contains(screenId)) {
         const auto& screenGeometries = m_preAutotileGeometries[screenId];
         const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
         if (!savedKey.isEmpty()) {
-            m_savedPreAutotileForDesktopMove[windowId] = screenGeometries.value(savedKey);
-            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId
-                              << m_savedPreAutotileForDesktopMove[windowId];
+            m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenGeometries.value(savedKey)};
+            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
+                              << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
         }
     }
 }

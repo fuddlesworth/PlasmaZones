@@ -332,8 +332,13 @@ private:
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
-    QHash<QString, QRectF>
-        m_savedPreAutotileForDesktopMove; ///< pre-autotile geometries for windows moved to another desktop
+    /// Pre-autotile geometry preserved when a window is moved to another
+    /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
+    /// so a cross-desktop + cross-screen move can detect the screen change
+    /// at restore time and skip the saved geometry (the rect is in the
+    /// source screen's coordinate space and would land off-target on a
+    /// different monitor).
+    QHash<QString, QPair<QString, QRectF>> m_savedPreAutotileForDesktopMove;
     QSet<QString> m_pendingCloses;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>
