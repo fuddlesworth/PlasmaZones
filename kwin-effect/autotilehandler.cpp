@@ -291,6 +291,17 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
             kw->setNoBorder(true);
             m_border.borderlessWindows.insert(windowId);
             qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
+            return;
+        }
+        // Already tracked — verify that KWin's noBorder property is still true
+        // and force-reapply if not. KWin can silently reset the noBorder property
+        // on window moves (retile, cross-screen transfer, VS geometry change),
+        // so the tracking map and the compositor state can drift apart. Without
+        // this check, windows regain their title bars after a VS swap/rotate
+        // because the initial tracking insert above is skipped on re-entry.
+        if (!kw->noBorder()) {
+            kw->setNoBorder(true);
+            qCDebug(lcEffect) << "Autotile: re-applied setNoBorder (out of sync) for" << windowId;
         }
     } else {
         if (m_border.borderlessWindows.remove(windowId)) {
