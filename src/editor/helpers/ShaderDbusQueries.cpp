@@ -16,6 +16,18 @@ namespace ShaderDbusQueries {
 
 namespace {
 
+// Hard cap on blocking shader-query calls. Qt's default D-Bus timeout is 25
+// seconds — long enough to visibly hang the editor if the daemon's event
+// loop is busy. 500 ms is generous for the daemon-side shader registry
+// lookups (all in-memory) while still degrading gracefully to an empty
+// shader list when the daemon is unresponsive. Every call site in this file
+// must `setTimeout(ShaderCallTimeoutMs)` on the interface before `.call()`.
+constexpr int ShaderCallTimeoutMs = 500;
+
+// Returns a QDBusInterface as a prvalue so callers can construct-in-place
+// via guaranteed copy elision (QDBusInterface inherits QObject which is
+// non-copyable/non-movable, so anything other than a direct prvalue return
+// would fail to compile).
 QDBusInterface createSettingsInterface()
 {
     return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
@@ -33,6 +45,7 @@ bool queryShadersEnabled()
         return false;
     }
 
+    settingsIface.setTimeout(ShaderCallTimeoutMs);
     QDBusReply<bool> reply = settingsIface.call(QStringLiteral("shadersEnabled"));
     return reply.isValid() && reply.value();
 }
@@ -46,6 +59,7 @@ QVariantList queryAvailableShaders()
         return QVariantList();
     }
 
+    settingsIface.setTimeout(ShaderCallTimeoutMs);
     QDBusReply<QVariantList> reply = settingsIface.call(QStringLiteral("availableShaders"));
     if (!reply.isValid()) {
         qCWarning(lcDbus) << "D-Bus availableShaders call failed:" << reply.error().message();
@@ -87,6 +101,7 @@ QVariantMap queryShaderInfo(const QString& shaderId)
         return QVariantMap();
     }
 
+    settingsIface.setTimeout(ShaderCallTimeoutMs);
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("shaderInfo"), shaderId);
     if (reply.isValid()) {
         // D-Bus may return nested structures as QDBusArgument - convert recursively
@@ -120,6 +135,7 @@ QVariantMap queryTranslateShaderParams(const QString& shaderId, const QVariantMa
         }
     }
 
+    settingsIface.setTimeout(ShaderCallTimeoutMs);
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("translateShaderParams"), shaderId, safeParams);
     if (reply.isValid()) {
         QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));

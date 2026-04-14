@@ -12,6 +12,7 @@
 #include <QJsonDocument>
 #include <QLatin1String>
 #include <array>
+#include <atomic>
 
 namespace PlasmaZones {
 
@@ -84,7 +85,16 @@ bool ConfigMigration::runMigrationChain(const QString& jsonPath)
 
 // ── ensureJsonConfig ────────────────────────────────────────────────────────
 
-bool ConfigMigration::ensureJsonConfig()
+// Process-level "already migrated" flag. Set by ensureJsonConfig() on its
+// first successful return, cleared by resetMigrationGuardForTesting(). See
+// the docstring on ConfigMigration::ensureJsonConfig() for why this exists.
+// File-scope so both ensureJsonConfig() and resetMigrationGuardForTesting()
+// see the same atomic.
+namespace {
+std::atomic<bool> s_migrated{false};
+} // namespace
+
+static bool ensureJsonConfigImpl()
 {
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
@@ -97,7 +107,7 @@ bool ConfigMigration::ensureJsonConfig()
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
                     const int version = doc.object().value(ConfigKeys::versionKey()).toInt(0);
                     if (version < ConfigSchemaVersion) {
-                        return runMigrationChain(jsonPath);
+                        return ConfigMigration::runMigrationChain(jsonPath);
                     }
                     return true; // Already at current version
                 }
@@ -127,7 +137,7 @@ bool ConfigMigration::ensureJsonConfig()
 
     qInfo("ConfigMigration: migrating %s → %s", qPrintable(iniPath), qPrintable(jsonPath));
 
-    if (!migrateIniToJson(iniPath, jsonPath)) {
+    if (!ConfigMigration::migrateIniToJson(iniPath, jsonPath)) {
         qWarning("ConfigMigration: migration failed — old config preserved at %s", qPrintable(iniPath));
         return false;
     }
@@ -142,6 +152,32 @@ bool ConfigMigration::ensureJsonConfig()
 
     qInfo("ConfigMigration: migration complete");
     return true;
+}
+
+bool ConfigMigration::ensureJsonConfig()
+{
+    // Process-level guard: migration is a one-shot operation. Once we've
+    // confirmed the config is at the current schema version (or successfully
+    // migrated it), skip the full file read + JSON parse on subsequent calls.
+    // The editor reaches this function in its ctor path before the QML engine
+    // starts, so shaving the disk read here keeps the startup hot path tight.
+    // Uses acquire/release so a second caller observing `true` also observes
+    // every write the first caller made (the atomic rename in
+    // runMigrationChain / migrateIniToJson).
+    if (s_migrated.load(std::memory_order_acquire)) {
+        return true;
+    }
+
+    const bool ok = ensureJsonConfigImpl();
+    if (ok) {
+        s_migrated.store(true, std::memory_order_release);
+    }
+    return ok;
+}
+
+void ConfigMigration::resetMigrationGuardForTesting()
+{
+    s_migrated.store(false, std::memory_order_release);
 }
 
 // ── INI → JSON ──────────────────────────────────────────────────────────────

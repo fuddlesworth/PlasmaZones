@@ -738,4 +738,83 @@ void EditorController::refreshGlobalOverlayDisplayMode()
     }
 }
 
+void EditorController::refreshGlobalGapOverlaySettings()
+{
+    // Collapses the three individual refreshers above into a single daemon
+    // round-trip. Prior to this the editor ctor path made 8 sequential
+    // blocking getSetting() calls (1 zonePadding + 6 outerGap-related +
+    // 1 overlayDisplayMode) — each constructing a fresh QDBusInterface.
+    // SettingsAdaptor::getSettings reads straight from the in-memory
+    // registry so the daemon-side cost is unchanged, and we avoid N-1
+    // extra IPC round-trips on the editor startup hot path.
+    static const QStringList kKeys = {
+        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+        QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
+        QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+    };
+
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kKeys);
+
+    // Helper: read an int from the batch result, clamping negative values
+    // (which the single-key helpers treat as "invalid, use default") to the
+    // provided fallback. Keys missing from the batch (unknown to the
+    // daemon, or the whole call failed) also fall through to the fallback.
+    auto readInt = [&](const QString& key, int fallback) {
+        auto it = values.constFind(key);
+        if (it == values.constEnd()) {
+            return fallback;
+        }
+        const int v = it.value().toInt();
+        return v < 0 ? fallback : v;
+    };
+    auto readBool = [&](const QString& key, bool fallback) {
+        auto it = values.constFind(key);
+        return it == values.constEnd() ? fallback : it.value().toBool();
+    };
+
+    // zonePadding
+    {
+        const int newValue = readInt(QStringLiteral("zonePadding"), Defaults::ZonePadding);
+        if (m_cachedGlobalZonePadding != newValue) {
+            m_cachedGlobalZonePadding = newValue;
+            Q_EMIT globalZonePaddingChanged();
+        }
+    }
+
+    // outerGap cluster — matches refreshGlobalOuterGap()'s change-detection
+    // semantics (one aggregate signal covers any field changing).
+    {
+        const int newValue = readInt(QStringLiteral("outerGap"), Defaults::OuterGap);
+        const bool newUsePerSide = readBool(QStringLiteral("usePerSideOuterGap"), false);
+        const int newTop = readInt(QStringLiteral("outerGapTop"), Defaults::OuterGap);
+        const int newBottom = readInt(QStringLiteral("outerGapBottom"), Defaults::OuterGap);
+        const int newLeft = readInt(QStringLiteral("outerGapLeft"), Defaults::OuterGap);
+        const int newRight = readInt(QStringLiteral("outerGapRight"), Defaults::OuterGap);
+
+        const bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+            || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
+            || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
+
+        m_cachedGlobalOuterGap = newValue;
+        m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
+        m_cachedGlobalOuterGapTop = newTop;
+        m_cachedGlobalOuterGapBottom = newBottom;
+        m_cachedGlobalOuterGapLeft = newLeft;
+        m_cachedGlobalOuterGapRight = newRight;
+
+        if (changed) {
+            Q_EMIT globalOuterGapChanged();
+        }
+    }
+
+    // overlayDisplayMode
+    {
+        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), 0);
+        if (m_cachedGlobalOverlayDisplayMode != newValue) {
+            m_cachedGlobalOverlayDisplayMode = newValue;
+            Q_EMIT globalOverlayDisplayModeChanged();
+        }
+    }
+}
+
 } // namespace PlasmaZones

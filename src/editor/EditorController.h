@@ -367,6 +367,12 @@ public:
     Q_INVOKABLE void refreshGlobalZonePadding();
     Q_INVOKABLE void refreshGlobalOuterGap();
     Q_INVOKABLE void refreshGlobalOverlayDisplayMode();
+
+    // Batched alternative used on the startup hot path: fetches every gap
+    // and overlay key the three individual refreshers above read, but in a
+    // single daemon round-trip instead of eight sequential ones. Emits the
+    // same change signals when the new values differ from the cache.
+    void refreshGlobalGapOverlaySettings();
     void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);
     void setAspectRatioClass(int cls);

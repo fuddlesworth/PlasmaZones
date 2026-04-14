@@ -12,6 +12,39 @@
 namespace PlasmaZones {
 namespace SettingsDbusQueries {
 
+namespace {
+
+// Hard cap on blocking settings calls. Qt's default D-Bus timeout is 25
+// seconds, which is long enough to freeze the editor if the daemon is
+// unresponsive. The daemon's getSetting handler is an in-memory hash lookup
+// (src/dbus/settingsadaptor.cpp:608), so a healthy response is well under
+// a millisecond — 500 ms is generous while still degrading to defaults
+// quickly when the daemon event loop is blocked.
+constexpr int SettingsCallTimeoutMs = 500;
+
+} // namespace
+
+QVariantMap querySettingsBatch(const QStringList& keys)
+{
+    if (keys.isEmpty()) {
+        return QVariantMap();
+    }
+
+    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
+
+    if (!settingsIface.isValid()) {
+        return QVariantMap();
+    }
+
+    settingsIface.setTimeout(SettingsCallTimeoutMs);
+    QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("getSettings"), keys);
+    if (!reply.isValid()) {
+        return QVariantMap();
+    }
+    return reply.value();
+}
+
 int queryIntSetting(const QString& settingKey, int defaultValue)
 {
     QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
@@ -21,6 +54,7 @@ int queryIntSetting(const QString& settingKey, int defaultValue)
         return defaultValue;
     }
 
+    settingsIface.setTimeout(SettingsCallTimeoutMs);
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {
         return defaultValue;
@@ -53,6 +87,7 @@ bool queryBoolSetting(const QString& settingKey, bool defaultValue)
         return defaultValue;
     }
 
+    settingsIface.setTimeout(SettingsCallTimeoutMs);
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {
         return defaultValue;

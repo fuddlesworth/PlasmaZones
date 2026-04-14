@@ -4,7 +4,9 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
 #include <QVariant>
+#include <QVariantMap>
 
 namespace PlasmaZones {
 
@@ -15,6 +17,22 @@ namespace PlasmaZones {
  * Avoids duplicating the query pattern across EditorController methods.
  */
 namespace SettingsDbusQueries {
+
+/**
+ * @brief Batch-fetch multiple settings from the daemon in one D-Bus call.
+ * @param keys List of setting keys to fetch
+ * @return Map of key → value for keys the daemon recognized; unknown keys
+ *         are omitted and callers must fall back to their own defaults.
+ *
+ * Collapses N individual getSetting() round-trips into one — the primary
+ * reason this helper exists. Used on the editor startup hot path by
+ * refreshGlobalGapOverlaySettings() in gaps.cpp.
+ *
+ * Returns an empty map if the daemon is unreachable or the call times out
+ * (500 ms cap); callers should treat missing keys and empty maps the same
+ * way (use defaults).
+ */
+QVariantMap querySettingsBatch(const QStringList& keys);
 
 /**
  * @brief Query an integer setting from the daemon via D-Bus
