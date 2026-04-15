@@ -535,15 +535,14 @@ public Q_SLOTS:
      */
     void restoreWindowSize();
 
-    /**
-     * @brief Toggle float state for the focused window (daemon-local)
-     *
-     * Reads the active windowId + screen from m_lastActive*, reads fresh
-     * frame geometry from the shadow, stores pre-tile geometry,
-     * and calls toggleFloatForWindow to dispatch to the engine. No kwin-effect
-     * round-trip, no stale local cache reads.
-     */
-    void toggleWindowFloat();
+    // Note: toggleWindowFloat() was moved to SnapEngine::toggleFocusedFloat
+    // in Phase 5D — the shortcut-driven float toggle is dispatched through
+    // ScreenModeRouter::navigatorFor() now, and the snap-side adapter
+    // forwards to SnapEngine which owns the pre-tile capture + engine
+    // dispatch. WTA still holds the frame-geometry shadow
+    // (setFrameGeometry / frameGeometry accessors) because it's the
+    // D-Bus-facing shadow store, but the toggle orchestration itself
+    // has moved.
 
     /**
      * @brief Swap the focused window with the window in an adjacent zone (daemon-driven)

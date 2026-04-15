@@ -65,57 +65,19 @@ void WindowTrackingAdaptor::restoreWindowSize()
     }
 }
 
-void WindowTrackingAdaptor::toggleWindowFloat()
-{
-    // Daemon-local float toggle: no round-trip through the kwin-effect. We
-    // already know the active window (windowActivated pushes), its screen,
-    // and its current frame geometry (setFrameGeometry shadow).
-    //
-    // Previously this emitted toggleWindowFloatRequested, the effect received
-    // it, walked KWin's stacking order to find the active window, did two
-    // fire-and-forget D-Bus calls back into us, and finally we routed to the
-    // engine. That chain stalled under any D-Bus backpressure and produced
-    // the "pressed Meta-F, nothing happens, seconds later it toggles"
-    // symptom from discussion #310.
-    if (m_lastActiveWindowId.isEmpty() || m_lastActiveScreenId.isEmpty()) {
-        qCInfo(lcDbusWindow) << "toggleWindowFloat: no active window in shadow";
-        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_active_window"), QString(),
-                                  QString(), m_lastActiveScreenId);
-        return;
-    }
-
-    const QString windowId = m_lastActiveWindowId;
-    const QString screenId = m_lastActiveScreenId;
-    qCInfo(lcDbusWindow) << "toggleWindowFloat: windowId=" << windowId << "screen=" << screenId;
-
-    // Capture pre-tile geometry from the shadow ONLY when the window is
-    // currently floating. The shadow is refreshed on every
-    // windowFrameGeometryChanged the effect sees (debounced to 50ms).
-    //
-    // wasFloating=true → window is at a free-float position; capturing
-    //   (and overwriting any prior entry) lets the next un-float restore
-    //   to the user's most recent floated location.
-    //
-    // wasFloating=false → window is tiled/snapped; the shadow holds the
-    //   zone rect, NOT a meaningful pre-float position. Storing it would
-    //   poison the pre-tile entry with tile coordinates — a subsequent
-    //   float-restore would "restore" the window right back to the zone
-    //   it was already in. Leave the existing entry (if any) untouched.
-    //
-    // Skipping the store when the shadow has no entry is safe: the engine
-    // will use the window's current frame geometry on the effect side
-    // when it applies the outcome.
-    const bool wasFloating = m_service && m_service->isWindowFloating(windowId);
-    if (wasFloating) {
-        const QRect geo = frameGeometry(windowId);
-        if (geo.isValid()) {
-            storePreTileGeometry(windowId, geo.x(), geo.y(), geo.width(), geo.height(), screenId,
-                                 /*overwrite=*/true);
-        }
-    }
-
-    toggleFloatForWindow(windowId, screenId);
-}
+// Note: WindowTrackingAdaptor::toggleWindowFloat() (zero-arg shortcut
+// handler) used to live here. It was the daemon-local "Meta-F" float-
+// toggle path — read active window from the shadow, capture pre-tile
+// from the frame-geometry shadow when already floating, route to the
+// correct engine via toggleFloatForWindow.
+//
+// That logic now lives in SnapEngine::toggleFocusedFloat (in
+// snapengine/navigation_actions.cpp). The shortcut handler in
+// daemon/navigation.cpp::handleFloat dispatches through
+// ScreenModeRouter::navigatorFor(screenId) → INavigationActions →
+// toggleFocusedFloat(), which routes to either the autotile engine's
+// toggleFocusedWindowFloat() or SnapEngine's toggleFocusedFloat() via
+// the adapters. No circular bounce through WTA any more.
 
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 {

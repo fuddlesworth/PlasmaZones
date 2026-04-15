@@ -397,15 +397,37 @@ void SnapEngine::restoreFocusedWindow()
 void SnapEngine::toggleFocusedFloat()
 {
     qCInfo(lcCore) << "SnapEngine::toggleFocusedFloat";
-    if (!m_wta) {
+    if (!m_wta || !m_windowTracker) {
         return;
     }
-    // Delegates to the WTA-side toggleWindowFloat which owns the frame-
-    // geometry shadow and the pre-tile geometry capture logic for the
-    // "currently floating" branch. Moving that state surgery into SnapEngine
-    // is a follow-up; for now the entry point lives here so the navigator
-    // dispatch stays uniform.
-    m_wta->toggleWindowFloat();
+    const QString windowId = m_wta->lastActiveWindowId();
+    const QString screenId = m_wta->lastActiveScreenName();
+    if (windowId.isEmpty() || screenId.isEmpty()) {
+        qCInfo(lcCore) << "toggleFocusedFloat: no active window in shadow";
+        Q_EMIT navigationFeedback(false, QStringLiteral("float"), QStringLiteral("no_active_window"), QString(),
+                                  QString(), screenId);
+        return;
+    }
+
+    // Pre-tile capture semantics (from the historical WTA::toggleWindowFloat
+    // implementation): when the window is CURRENTLY floating, its live frame
+    // geometry is a valid free-float position and we capture it so the next
+    // un-float restores to the user's most recent floated location. When the
+    // window is snapped/tiled, the live shadow holds the zone rect — storing
+    // it would poison the pre-tile entry with tile coordinates, so we leave
+    // whatever's already stored untouched.
+    if (m_windowTracker->isWindowFloating(windowId)) {
+        const QRect geo = m_wta->frameGeometry(windowId);
+        if (geo.isValid()) {
+            m_windowTracker->storePreTileGeometry(windowId, geo, screenId, /*overwrite=*/true);
+        }
+    }
+
+    // Dispatch to the IEngineLifecycle toggle path (SnapEngine::toggleWindowFloat
+    // lives in snapengine/float.cpp). No need to route through WTA —
+    // the screen has already been selected by the caller (router dispatched
+    // to us because this is a snap-mode screen).
+    toggleWindowFloat(windowId, screenId);
 }
 
 void SnapEngine::cycleFocus(bool forward)
