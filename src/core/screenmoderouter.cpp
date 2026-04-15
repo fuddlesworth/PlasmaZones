@@ -15,6 +15,7 @@ ScreenModeRouter::ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* sna
     , m_snapEngine(snapEngine)
     , m_autotileEngine(autotileEngine)
 {
+    Q_ASSERT(layoutManager);
 }
 
 void ScreenModeRouter::setAutotileEngine(AutotileEngine* autotileEngine)

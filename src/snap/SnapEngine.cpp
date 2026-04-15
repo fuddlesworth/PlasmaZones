@@ -10,6 +10,10 @@
 
 namespace PlasmaZones {
 
+// In production (Daemon::start) all dependencies are non-null. Headless unit
+// tests deliberately pass nullptr to construct an engine with minimal parents
+// for testing peripheral classes (adaptors, bridges) — every method that
+// dereferences a dependency guards it locally. Do not Q_ASSERT here.
 SnapEngine::SnapEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker, IZoneDetector* zoneDetector,
                        ISettings* settings, VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)

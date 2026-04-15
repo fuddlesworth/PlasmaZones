@@ -56,6 +56,12 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
+    // In production (Daemon::start) all three dependencies are non-null.
+    // Headless unit tests deliberately pass nullptr to construct an engine
+    // with minimal parents for testing peripheral classes (adaptors, bridges,
+    // sub-controllers) — every method that dereferences a dependency guards
+    // it locally. Do not Q_ASSERT here.
+
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Fires on the next event loop
     // pass after both m_currentDesktop and m_currentActivity are updated.
