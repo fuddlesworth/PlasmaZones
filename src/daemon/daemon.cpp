@@ -47,9 +47,11 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/autotilenavigationadapter.h"
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
+#include "../snap/snapnavigationadapter.h"
 
 namespace PlasmaZones {
 
@@ -421,6 +423,18 @@ bool Daemon::init()
     m_screenModeRouter =
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+
+    // Navigation-intent dispatch: create thin INavigationActions adapters
+    // and wire them through the router so daemon/navigation.cpp shortcut
+    // handlers can call navigatorFor(screenId)->foo() instead of branching
+    // on mode. The snap adapter forwards to WindowTrackingAdaptor because
+    // that's where the snap navigation logic lives today — a future
+    // refactor should lift the logic into SnapEngine and this adapter's
+    // impl would flip to forwarding to SnapEngine instead, invisible to
+    // the router and callers.
+    m_autotileNavigationAdapter = std::make_unique<AutotileNavigationAdapter>(m_autotileEngine.get());
+    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_windowTrackingAdaptor);
+    m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
 
     // Stateless façade for VS swap/rotate. Held here so navigation handlers
     // and any future consumer share one instance instead of constructing

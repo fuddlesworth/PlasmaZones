@@ -5,6 +5,7 @@
 
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
+#include "inavigationactions.h"
 #include "iwindowengine.h"
 #include "layoutmanager.h"
 
@@ -55,6 +56,24 @@ IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
     // no `default:` case so that adding a new enum value triggers -Wswitch
     // at compile time instead of silently falling through to nullptr at
     // runtime. Q_UNREACHABLE + nullptr is the safe fallback if that happens.
+    Q_UNREACHABLE();
+    return nullptr;
+}
+
+void ScreenModeRouter::setNavigationAdapters(INavigationActions* snapNavigator, INavigationActions* autotileNavigator)
+{
+    m_snapNavigator = snapNavigator;
+    m_autotileNavigator = autotileNavigator;
+}
+
+INavigationActions* ScreenModeRouter::navigatorFor(const QString& screenId) const
+{
+    switch (modeFor(screenId)) {
+    case AssignmentEntry::Autotile:
+        return m_autotileNavigator;
+    case AssignmentEntry::Snapping:
+        return m_snapNavigator;
+    }
     Q_UNREACHABLE();
     return nullptr;
 }
