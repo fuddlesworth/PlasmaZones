@@ -12,80 +12,80 @@ SnapNavigationAdapter::SnapNavigationAdapter(SnapEngine* engine)
 {
 }
 
-void SnapNavigationAdapter::focusInDirection(const QString& direction, const QString& /*screenId*/)
+void SnapNavigationAdapter::focusInDirection(const QString& direction, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->focusInDirection(direction);
+        m_engine->focusInDirection(direction, ctx);
     }
 }
 
-void SnapNavigationAdapter::moveFocusedInDirection(const QString& direction, const QString& /*screenId*/)
+void SnapNavigationAdapter::moveFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->moveFocusedInDirection(direction);
+        m_engine->moveFocusedInDirection(direction, ctx);
     }
 }
 
-void SnapNavigationAdapter::swapFocusedInDirection(const QString& direction, const QString& /*screenId*/)
+void SnapNavigationAdapter::swapFocusedInDirection(const QString& direction, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->swapFocusedInDirection(direction);
+        m_engine->swapFocusedInDirection(direction, ctx);
     }
 }
 
-void SnapNavigationAdapter::moveFocusedToPosition(int position, const QString& screenId)
+void SnapNavigationAdapter::moveFocusedToPosition(int position, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->moveFocusedToPosition(position, screenId);
+        m_engine->moveFocusedToPosition(position, ctx);
     }
 }
 
-void SnapNavigationAdapter::rotateWindows(bool clockwise, const QString& screenId)
+void SnapNavigationAdapter::rotateWindows(bool clockwise, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->rotateWindowsInLayout(clockwise, screenId);
+        m_engine->rotateWindowsInLayout(clockwise, ctx.screenId);
     }
 }
 
-void SnapNavigationAdapter::reapplyLayout(const QString& /*screenId*/)
+void SnapNavigationAdapter::reapplyLayout(const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         m_engine->resnapToNewLayout();
     }
 }
 
-void SnapNavigationAdapter::snapAllWindows(const QString& screenId)
+void SnapNavigationAdapter::snapAllWindows(const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->snapAllWindows(screenId);
+        m_engine->snapAllWindows(ctx.screenId);
     }
 }
 
-void SnapNavigationAdapter::toggleFocusedFloat(const QString& /*screenId*/)
+void SnapNavigationAdapter::toggleFocusedFloat(const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->toggleFocusedFloat();
+        m_engine->toggleFocusedFloat(ctx);
     }
 }
 
-void SnapNavigationAdapter::cycleFocus(bool forward, const QString& /*screenId*/)
+void SnapNavigationAdapter::cycleFocus(bool forward, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->cycleFocus(forward);
+        m_engine->cycleFocus(forward, ctx);
     }
 }
 
-void SnapNavigationAdapter::pushToEmptyZone(const QString& screenId)
+void SnapNavigationAdapter::pushToEmptyZone(const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->pushFocusedToEmptyZone(screenId);
+        m_engine->pushFocusedToEmptyZone(ctx);
     }
 }
 
-void SnapNavigationAdapter::restoreFocusedWindow(const QString& /*screenId*/)
+void SnapNavigationAdapter::restoreFocusedWindow(const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->restoreFocusedWindow();
+        m_engine->restoreFocusedWindow(ctx);
     }
 }
 

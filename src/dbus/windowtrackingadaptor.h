@@ -1040,12 +1040,10 @@ private:
     QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
-    /**
-     * @brief Clear floating state when a window is being snapped
-     * @param windowId Window ID being snapped
-     * @param screenId Screen where the snap is occurring (for windowFloatingChanged signal)
-     */
-    void clearFloatingStateForSnap(const QString& windowId, const QString& screenId);
+    // clearFloatingStateForSnap was removed — WindowTrackingService::commitSnap
+    // now handles floating-state clearing internally (and emits
+    // windowFloatingClearedForSnap which the adaptor relays to its own
+    // windowFloatingChanged D-Bus signal).
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)

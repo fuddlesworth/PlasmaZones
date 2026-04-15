@@ -229,14 +229,23 @@ void WindowTrackingAdaptor::applySnapResult(const SnapResult& result, const QStr
     snapHeight = result.geometry.height();
     shouldSnap = true;
 
+    // Mark auto-snapped first so the flag persists through commitSnap
+    // (AutoRestored leaves it alone). commitSnap runs the full
+    // orchestration — clears any pre-existing floating state (emits
+    // windowFloatingClearedForSnap which this adaptor relays as
+    // windowFloatingChanged), assigns to zone(s), emits state change.
+    // No last-used-zone update (this is an auto-restore, not a user
+    // action) and no pending-consume (the individual snapXxx() paths
+    // already consumed where needed — see restoreToPersistedZone's
+    // explicit consumePendingAssignment after applySnapResult).
     m_service->markAsAutoSnapped(windowId);
-    clearFloatingStateForSnap(windowId, result.screenId);
-
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    if (result.zoneIds.size() > 1) {
-        m_service->assignWindowToZones(windowId, result.zoneIds, result.screenId, currentDesktop);
+    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
+    if (zoneIds.size() > 1) {
+        m_service->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
+                                       WindowTrackingService::SnapIntent::AutoRestored);
     } else {
-        m_service->assignWindowToZone(windowId, result.zoneId, result.screenId, currentDesktop);
+        m_service->commitSnap(windowId, zoneIds.first(), result.screenId,
+                              WindowTrackingService::SnapIntent::AutoRestored);
     }
 }
 

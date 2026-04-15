@@ -143,7 +143,11 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // clearFloatingStateForSnap tests
+    // WindowTrackingService::clearFloatingForSnap tests
+    //
+    // (The former SnapEngine::clearFloatingStateForSnap wrapper was removed —
+    // all snap-commit paths now go through WindowTrackingService::commitSnap
+    // which handles floating-state clearing internally via clearFloatingForSnap.)
     // =========================================================================
 
     void testClearFloatingForSnap_returnsTrue_whenFloating()

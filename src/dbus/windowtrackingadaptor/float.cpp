@@ -192,13 +192,11 @@ bool WindowTrackingAdaptor::applyGeometryForFloat(const QString& windowId, const
     return false;
 }
 
-void WindowTrackingAdaptor::clearFloatingStateForSnap(const QString& windowId, const QString& screenId)
-{
-    if (m_service->clearFloatingForSnap(windowId)) {
-        qCDebug(lcDbusWindow) << "Window" << windowId << "was floating, clearing floating state for snap";
-        Q_EMIT windowFloatingChanged(windowId, false, screenId);
-    }
-}
+// WindowTrackingAdaptor::clearFloatingStateForSnap was removed — all
+// snap-commit paths now route through WindowTrackingService::commitSnap
+// which handles clearing the floating state internally and emits
+// windowFloatingClearedForSnap, which this adaptor relays to its own
+// windowFloatingChanged D-Bus signal in the constructor wiring.
 
 void WindowTrackingAdaptor::setWindowFloatingForScreen(const QString& windowId, const QString& screenId, bool floating)
 {

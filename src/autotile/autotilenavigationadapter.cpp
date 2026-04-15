@@ -12,14 +12,14 @@ AutotileNavigationAdapter::AutotileNavigationAdapter(AutotileEngine* engine)
 {
 }
 
-void AutotileNavigationAdapter::focusInDirection(const QString& direction, const QString& /*screenId*/)
+void AutotileNavigationAdapter::focusInDirection(const QString& direction, const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         m_engine->focusInDirection(direction, QStringLiteral("focus"));
     }
 }
 
-void AutotileNavigationAdapter::moveFocusedInDirection(const QString& direction, const QString& /*screenId*/)
+void AutotileNavigationAdapter::moveFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
 {
     // In autotile, "move in direction" is implemented as swap-with-neighbour
     // in the tiling order — the only way to move is to trade places with
@@ -29,51 +29,51 @@ void AutotileNavigationAdapter::moveFocusedInDirection(const QString& direction,
     }
 }
 
-void AutotileNavigationAdapter::swapFocusedInDirection(const QString& direction, const QString& /*screenId*/)
+void AutotileNavigationAdapter::swapFocusedInDirection(const QString& direction, const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         m_engine->swapFocusedInDirection(direction, QStringLiteral("swap"));
     }
 }
 
-void AutotileNavigationAdapter::moveFocusedToPosition(int position, const QString& /*screenId*/)
+void AutotileNavigationAdapter::moveFocusedToPosition(int position, const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         m_engine->moveFocusedToPosition(position);
     }
 }
 
-void AutotileNavigationAdapter::rotateWindows(bool clockwise, const QString& screenId)
+void AutotileNavigationAdapter::rotateWindows(bool clockwise, const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->rotateWindows(clockwise, screenId);
+        m_engine->rotateWindows(clockwise, ctx.screenId);
     }
 }
 
-void AutotileNavigationAdapter::reapplyLayout(const QString& screenId)
+void AutotileNavigationAdapter::reapplyLayout(const NavigationContext& ctx)
 {
     if (m_engine) {
-        m_engine->retile(screenId);
+        m_engine->retile(ctx.screenId);
     }
 }
 
-void AutotileNavigationAdapter::snapAllWindows(const QString& screenId)
+void AutotileNavigationAdapter::snapAllWindows(const NavigationContext& ctx)
 {
     // Autotile has no distinct "snap all" — retile picks up every window
     // the engine is tracking and inserts any new ones into the layout.
     if (m_engine) {
-        m_engine->retile(screenId);
+        m_engine->retile(ctx.screenId);
     }
 }
 
-void AutotileNavigationAdapter::toggleFocusedFloat(const QString& /*screenId*/)
+void AutotileNavigationAdapter::toggleFocusedFloat(const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         m_engine->toggleFocusedWindowFloat();
     }
 }
 
-void AutotileNavigationAdapter::cycleFocus(bool forward, const QString& /*screenId*/)
+void AutotileNavigationAdapter::cycleFocus(bool forward, const NavigationContext& /*ctx*/)
 {
     if (m_engine) {
         const QString dir = forward ? QStringLiteral("right") : QStringLiteral("left");
@@ -81,7 +81,7 @@ void AutotileNavigationAdapter::cycleFocus(bool forward, const QString& /*screen
     }
 }
 
-void AutotileNavigationAdapter::pushToEmptyZone(const QString& /*screenId*/)
+void AutotileNavigationAdapter::pushToEmptyZone(const NavigationContext& /*ctx*/)
 {
     // Autotile has no concept of empty zones — every tracked window is
     // placed by the layout algorithm. Deliberate no-op so the shortcut
@@ -89,7 +89,7 @@ void AutotileNavigationAdapter::pushToEmptyZone(const QString& /*screenId*/)
     // having to branch on mode at the entry point.
 }
 
-void AutotileNavigationAdapter::restoreFocusedWindow(const QString& /*screenId*/)
+void AutotileNavigationAdapter::restoreFocusedWindow(const NavigationContext& /*ctx*/)
 {
     // "Restore" in autotile means pulling the focused window out of the
     // tiling layout — toggling its float state achieves exactly that.

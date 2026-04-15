@@ -5,6 +5,7 @@
 
 #include "plasmazones_export.h"
 #include <QObject>
+#include <QVector>
 
 namespace PlasmaZones {
 
@@ -55,6 +56,14 @@ public:
 private:
     SnapEngine* m_engine = nullptr;
     WindowTrackingAdaptor* m_adaptor = nullptr;
+
+    // Stored handles for the signal relays wired in the constructor so
+    // clearEngine() can disconnect exactly the connections this class
+    // made. A broad disconnect(m_engine, nullptr, m_adaptor, nullptr)
+    // would also remove any connection another class happens to make
+    // between the same sender/receiver pair — a latent footgun the
+    // targeted approach avoids.
+    QVector<QMetaObject::Connection> m_connections;
 };
 
 } // namespace PlasmaZones

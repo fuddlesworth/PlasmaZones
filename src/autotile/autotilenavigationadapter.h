@@ -5,6 +5,7 @@
 
 #include "core/inavigationactions.h"
 #include "plasmazones_export.h"
+#include <QPointer>
 #include <QString>
 
 namespace PlasmaZones {
@@ -18,31 +19,26 @@ class AutotileEngine;
  * existing concrete methods so ScreenModeRouter can dispatch through a
  * common interface without the daemon branching on mode.
  *
- * Parameter mapping:
- *   - `focusInDirection(dir, screen)` →
- *       engine->focusInDirection(dir, "focus")
- *   - `moveFocusedInDirection(dir, screen)` →
- *       engine->swapFocusedInDirection(dir, "move")
- *       (autotile's "move" IS swap-with-neighbour in the tiling order)
- *   - `swapFocusedInDirection(dir, screen)` →
- *       engine->swapFocusedInDirection(dir, "swap")
- *   - `moveFocusedToPosition(pos, screen)` →
- *       engine->moveFocusedToPosition(pos)
- *   - `rotateWindows(cw, screen)` →
- *       engine->rotateWindows(cw, screen)
- *   - `reapplyLayout(screen)` →
- *       engine->retile(screen)
- *   - `toggleFocusedFloat(screen)` →
- *       engine->toggleFocusedWindowFloat()
- *   - `cycleFocus(forward, screen)` →
- *       engine->focusInDirection(forward ? "right" : "left", "cycle")
+ * Autotile semantics note: most adapter methods ignore the windowId field
+ * of the NavigationContext. Autotile's internal focus tracking is the
+ * authoritative target — by the time the daemon invokes a shortcut, the
+ * engine already knows which window is focused, and the adapter forwards
+ * calls like focusInDirection("left") without naming the window. Methods
+ * that legitimately scope by screen (rotateWindows, retile) use the
+ * screenId field.
  *
- * The `screen` parameter is intentionally ignored for autotile-side calls
- * that rely on the engine's internal focus tracking — by the time the
- * daemon invokes a navigation shortcut, the active screen has already
- * been resolved and the engine's focus state is the authoritative target.
- * Methods that legitimately scope by screen (rotateWindows, retile)
- * forward it through unchanged.
+ * Parameter mapping:
+ *   - focusInDirection        → engine->focusInDirection(dir, "focus")
+ *   - moveFocusedInDirection  → engine->swapFocusedInDirection(dir, "move")
+ *     (autotile's "move" IS swap-with-neighbour in the tiling order)
+ *   - swapFocusedInDirection  → engine->swapFocusedInDirection(dir, "swap")
+ *   - moveFocusedToPosition   → engine->moveFocusedToPosition(pos)
+ *   - rotateWindows           → engine->rotateWindows(cw, ctx.screenId)
+ *   - reapplyLayout           → engine->retile(ctx.screenId)
+ *   - toggleFocusedFloat      → engine->toggleFocusedWindowFloat()
+ *   - cycleFocus              → engine->focusInDirection(dir, "cycle")
+ *   - pushToEmptyZone         → no-op (no empty zones in autotile)
+ *   - restoreFocusedWindow    → engine->toggleFocusedWindowFloat()
  */
 class PLASMAZONES_EXPORT AutotileNavigationAdapter : public INavigationActions
 {
@@ -50,20 +46,25 @@ public:
     explicit AutotileNavigationAdapter(AutotileEngine* engine);
     ~AutotileNavigationAdapter() override = default;
 
-    void focusInDirection(const QString& direction, const QString& screenId) override;
-    void moveFocusedInDirection(const QString& direction, const QString& screenId) override;
-    void swapFocusedInDirection(const QString& direction, const QString& screenId) override;
-    void moveFocusedToPosition(int position, const QString& screenId) override;
-    void rotateWindows(bool clockwise, const QString& screenId) override;
-    void reapplyLayout(const QString& screenId) override;
-    void snapAllWindows(const QString& screenId) override;
-    void toggleFocusedFloat(const QString& screenId) override;
-    void cycleFocus(bool forward, const QString& screenId) override;
-    void pushToEmptyZone(const QString& screenId) override;
-    void restoreFocusedWindow(const QString& screenId) override;
+    void focusInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedToPosition(int position, const NavigationContext& ctx) override;
+    void rotateWindows(bool clockwise, const NavigationContext& ctx) override;
+    void reapplyLayout(const NavigationContext& ctx) override;
+    void snapAllWindows(const NavigationContext& ctx) override;
+    void toggleFocusedFloat(const NavigationContext& ctx) override;
+    void cycleFocus(bool forward, const NavigationContext& ctx) override;
+    void pushToEmptyZone(const NavigationContext& ctx) override;
+    void restoreFocusedWindow(const NavigationContext& ctx) override;
 
 private:
-    AutotileEngine* m_engine; // not owned
+    // QPointer — not owned, but auto-nulls if the engine is destroyed during
+    // daemon shutdown before the adapter is torn down. Every method checks
+    // the pointer before dispatching, so a dangling engine pointer becomes
+    // a silent no-op instead of a use-after-free crash. Mirrors
+    // SnapEngine::m_wta's pattern.
+    QPointer<AutotileEngine> m_engine;
 };
 
 } // namespace PlasmaZones

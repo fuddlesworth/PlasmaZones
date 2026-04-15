@@ -48,7 +48,7 @@ void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
     }
 }
 
-SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver()
+SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& action)
 {
     if (m_targetResolver) {
         return m_targetResolver.get();
@@ -57,6 +57,14 @@ SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver()
         qCWarning(lcCore) << "ensureTargetResolver: missing deps "
                           << "windowTracker=" << static_cast<void*>(m_windowTracker)
                           << "layoutManager=" << static_cast<void*>(m_layoutManager);
+        if (!action.isEmpty()) {
+            // Surface a specific reason so the OSD doesn't silently swallow
+            // the shortcut. engine_unavailable is the canonical tag for
+            // "engine couldn't be built" — distinct from no_window /
+            // invalid_direction / excluded etc.
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("engine_unavailable"), QString(), QString(),
+                                      QString());
+        }
         return nullptr;
     }
     // Feedback callback forwards into SnapEngine's own navigationFeedback
@@ -118,19 +126,12 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 // (calculateResnapEntriesFromAutotileOrder, snapAllWindows etc.) lives
 // in snapengine/navigation.cpp unchanged.
 
-void SnapEngine::assignToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
-{
-    if (zoneIds.isEmpty()) {
-        qCWarning(lcCore) << "assignToZones: empty zoneIds for" << windowId << "- skipping";
-        return;
-    }
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-    if (zoneIds.size() > 1) {
-        m_windowTracker->assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
-    } else {
-        m_windowTracker->assignWindowToZone(windowId, zoneIds.first(), screenId, currentDesktop);
-    }
-}
+// SnapEngine::assignToZones was removed — its two callers (windowOpened
+// in lifecycle.cpp, unfloatToZone in float.cpp) now go through
+// WindowTrackingService::commitSnap / commitMultiZoneSnap which run the
+// full snap orchestration (clear floating, assign zone, emit state
+// change). The raw-assign path was the last thin wrapper that bypassed
+// the orchestration layer.
 
 void SnapEngine::saveState()
 {

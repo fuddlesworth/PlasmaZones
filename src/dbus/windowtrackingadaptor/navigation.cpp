@@ -2,21 +2,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowtrackingadaptor.h"
-#include "../snapnavigationtargets.h"
-#include "internal.h"
-#include "../../snap/SnapEngine.h"
+#include "../../config/settings.h"
+#include "../../core/inavigationactions.h"
 #include "../../core/logging.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/layout.h"
 #include "../../core/screenmanager.h"
+#include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
 #include "../../core/virtualscreen.h"
+#include "../../core/windowtrackingservice.h"
+#include "../../snap/SnapEngine.h"
 
-#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QScreen>
 
 namespace PlasmaZones {
 
@@ -37,31 +36,37 @@ namespace PlasmaZones {
 // reportNavigationFeedback).
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// D-Bus entry points: external callers (typically the KWin effect) invoke
+// these without an explicit NavigationContext. The engine methods take a
+// NavigationContext and fall back to WTA's last-active shadow when both
+// fields are empty — matching the historical behaviour where these slots
+// read the shadow directly.
+
 void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
 {
     if (m_snapEngine) {
-        m_snapEngine->moveFocusedInDirection(direction);
+        m_snapEngine->moveFocusedInDirection(direction, NavigationContext{});
     }
 }
 
 void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
 {
     if (m_snapEngine) {
-        m_snapEngine->focusInDirection(direction);
+        m_snapEngine->focusInDirection(direction, NavigationContext{});
     }
 }
 
 void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenId)
 {
     if (m_snapEngine) {
-        m_snapEngine->pushFocusedToEmptyZone(screenId);
+        m_snapEngine->pushFocusedToEmptyZone(NavigationContext{QString(), screenId});
     }
 }
 
 void WindowTrackingAdaptor::restoreWindowSize()
 {
     if (m_snapEngine) {
-        m_snapEngine->restoreFocusedWindow();
+        m_snapEngine->restoreFocusedWindow(NavigationContext{});
     }
 }
 
@@ -82,14 +87,14 @@ void WindowTrackingAdaptor::restoreWindowSize()
 void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
 {
     if (m_snapEngine) {
-        m_snapEngine->swapFocusedInDirection(direction);
+        m_snapEngine->swapFocusedInDirection(direction, NavigationContext{});
     }
 }
 
 void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& screenId)
 {
     if (m_snapEngine) {
-        m_snapEngine->moveFocusedToPosition(zoneNumber, screenId);
+        m_snapEngine->moveFocusedToPosition(zoneNumber, NavigationContext{QString(), screenId});
     }
 }
 
@@ -103,7 +108,7 @@ void WindowTrackingAdaptor::rotateWindowsInLayout(bool clockwise, const QString&
 void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
 {
     if (m_snapEngine) {
-        m_snapEngine->cycleFocus(forward);
+        m_snapEngine->cycleFocus(forward, NavigationContext{});
     }
 }
 
@@ -115,55 +120,29 @@ void WindowTrackingAdaptor::resnapToNewLayout()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Helper used by the remaining in-adaptor methods (resnapForVirtualScreenReconfigure
-// and handleBatchedResnap) that operate on pre-built ZoneAssignmentEntry vectors
-// and still own their own D-Bus signal emission. SnapEngine's navigation_actions.cpp
-// has an equivalent helper in an anonymous namespace for the engine-owned methods.
-// A future refactor can unify them behind a SnapEngine::applyResnapEntries public
-// method; for now the duplication is bounded to these two call sites.
+// Batch helper used by in-adaptor methods that operate on pre-built
+// ZoneAssignmentEntry vectors (resnapForVirtualScreenReconfigure,
+// handleBatchedResnap). Thin wrapper over
+// WindowTrackingService::applyBatchAssignments — the loop and per-entry
+// screen-resolution logic live there, and SnapEngine's navigation_actions.cpp
+// uses the same WTS method, eliminating the historical two-copy duplication.
 // ═══════════════════════════════════════════════════════════════════════════════
 static bool processBatchEntries(WindowTrackingAdaptor* adaptor, const QVector<ZoneAssignmentEntry>& entries,
                                 const QString& action)
 {
-    if (entries.isEmpty()) {
+    WindowTrackingService* service = adaptor ? adaptor->service() : nullptr;
+    if (!service) {
         return false;
     }
-    for (const auto& entry : entries) {
-        if (entry.targetZoneId == QLatin1String("__restore__")) {
-            adaptor->windowUnsnapped(entry.windowId);
-            adaptor->clearPreTileGeometry(entry.windowId);
-        } else {
-            QString screenId = entry.targetScreenId;
-            QPoint center = entry.targetGeometry.center();
-            auto* mgr = ScreenManager::instance();
-            if (screenId.isEmpty() && mgr) {
-                screenId = mgr->effectiveScreenAt(center);
-            }
-            if (screenId.isEmpty()) {
-                for (QScreen* screen : QGuiApplication::screens()) {
-                    if (screen->geometry().contains(center)) {
-                        screenId = Utils::screenIdentifier(screen);
-                        break;
-                    }
-                }
-            }
-            if (screenId.isEmpty()) {
-                screenId = adaptor->lastCursorScreenName();
-                if (screenId.isEmpty()) {
-                    screenId = adaptor->lastActiveScreenName();
-                }
-            }
-            if (entry.targetZoneIds.size() > 1) {
-                adaptor->windowSnappedMultiZone(entry.windowId, entry.targetZoneIds, screenId);
-            } else {
-                adaptor->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
-            }
-        }
-    }
-    WindowGeometryList geometries;
-    geometries.reserve(entries.size());
-    for (const ZoneAssignmentEntry& entry : entries) {
-        geometries.append(WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry));
+
+    WindowGeometryList geometries = service->applyBatchAssignments(
+        entries, WindowTrackingService::SnapIntent::UserInitiated, [adaptor]() -> QString {
+            const QString cursor = adaptor->lastCursorScreenName();
+            return cursor.isEmpty() ? adaptor->lastActiveScreenName() : cursor;
+        });
+
+    if (geometries.isEmpty()) {
+        return false;
     }
     Q_EMIT adaptor->applyGeometriesBatch(geometries, action);
     return true;

@@ -737,6 +737,18 @@ void Daemon::stop()
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
 
+    // Clear navigation adapters from the router and tear them down BEFORE
+    // destroying the engines they point at. The adapters hold QPointers to
+    // the engines (so a stray call would no-op rather than crash), but we
+    // still prefer to sever the reference chain explicitly to match the
+    // SnapAdaptor/AutotileAdaptor teardown pattern and keep the router from
+    // handing out about-to-be-invalid navigators during the shutdown window.
+    if (m_screenModeRouter) {
+        m_screenModeRouter->setNavigationAdapters(nullptr, nullptr);
+    }
+    m_snapNavigationAdapter.reset();
+    m_autotileNavigationAdapter.reset();
+
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();
     m_autotileEngine.reset();

@@ -67,21 +67,27 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 // vs. snap-specific behaviour lives inside each adapter.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Local helper: resolve the active screen and fetch the navigation adapter
-// for it. Returns nullptr if either step fails. Centralises the "no screen
-// info" early return so individual handlers stay short.
+// Local helper: build the navigation context for a shortcut handler.
+// Resolves the active screen and active window from WTA's compositor-layer
+// shadow, then fetches the navigation adapter for that screen from the
+// router. Returns nullptr if either step fails. Centralises the "no screen
+// info" early return and the context population so individual handlers
+// stay short and all shortcut dispatches use the same resolution logic.
 static INavigationActions* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
-                                                QString& outScreenId, const char* shortcutName)
+                                                NavigationContext& outCtx, const char* shortcutName)
 {
-    outScreenId = resolveShortcutScreenId(wta);
-    if (outScreenId.isEmpty()) {
+    outCtx.screenId = resolveShortcutScreenId(wta);
+    if (outCtx.screenId.isEmpty()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: no screen info";
         return nullptr;
+    }
+    if (wta) {
+        outCtx.windowId = wta->lastActiveWindowId();
     }
     if (!router) {
         return nullptr;
     }
-    return router->navigatorFor(outScreenId);
+    return router->navigatorFor(outCtx.screenId);
 }
 
 void Daemon::handleRotate(bool clockwise)
@@ -91,30 +97,28 @@ void Daemon::handleRotate(bool clockwise)
     }
     m_rotateDebounce.restart();
 
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Rotate")) {
-        nav->rotateWindows(clockwise, screenId);
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Rotate")) {
+        nav->rotateWindows(clockwise, ctx);
     }
 }
 
 void Daemon::handleFloat()
 {
     // Float toggles the active window regardless of which screen it's on.
-    // We could look up the screen and dispatch through the router, but the
-    // active window's screen is whatever the shadow reports — and the
-    // navigator call would resolve the same answer. The router dispatch is
-    // still preferable to a direct WTA call because it routes through the
-    // adapter layer so each engine owns its own "toggle float" semantics.
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Float")) {
-        nav->toggleFocusedFloat(screenId);
+    // The navigatorForShortcut helper pulls both windowId and screenId
+    // from the WTA shadow, so the engine call is fully resolved without
+    // reaching back into WTA state.
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Float")) {
+        nav->toggleFocusedFloat(ctx);
     }
 }
 
 void Daemon::handleMove(NavigationDirection direction)
 {
-    QString screenId;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Move");
+    NavigationContext ctx;
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Move");
     if (!nav) {
         return;
     }
@@ -123,13 +127,13 @@ void Daemon::handleMove(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
         return;
     }
-    nav->moveFocusedInDirection(dirStr, screenId);
+    nav->moveFocusedInDirection(dirStr, ctx);
 }
 
 void Daemon::handleFocus(NavigationDirection direction)
 {
-    QString screenId;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Focus");
+    NavigationContext ctx;
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Focus");
     if (!nav) {
         return;
     }
@@ -138,35 +142,34 @@ void Daemon::handleFocus(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
         return;
     }
-    nav->focusInDirection(dirStr, screenId);
+    nav->focusInDirection(dirStr, ctx);
 }
 
 void Daemon::handlePush()
 {
-    QString screenId;
-    if (auto* nav =
-            navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "PushToEmptyZone")) {
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "PushToEmptyZone")) {
         // Autotile adapter's impl is a deliberate no-op — empty zones don't
         // exist in autotile mode — so this shortcut is harmlessly absorbed
         // on autotile screens instead of the daemon branching at entry.
-        nav->pushToEmptyZone(screenId);
+        nav->pushToEmptyZone(ctx);
     }
 }
 
 void Daemon::handleRestore()
 {
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Restore")) {
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Restore")) {
         // Autotile: toggle float (restore out of layout).
         // Snap: restore to captured pre-snap geometry.
-        nav->restoreFocusedWindow(screenId);
+        nav->restoreFocusedWindow(ctx);
     }
 }
 
 void Daemon::handleSwap(NavigationDirection direction)
 {
-    QString screenId;
-    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Swap");
+    NavigationContext ctx;
+    auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Swap");
     if (!nav) {
         return;
     }
@@ -175,39 +178,38 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
-    nav->swapFocusedInDirection(dirStr, screenId);
+    nav->swapFocusedInDirection(dirStr, ctx);
 }
 
 void Daemon::handleSnap(int zoneNumber)
 {
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "SnapToZone")) {
-        nav->moveFocusedToPosition(zoneNumber, screenId);
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapToZone")) {
+        nav->moveFocusedToPosition(zoneNumber, ctx);
     }
 }
 
 void Daemon::handleCycle(bool forward)
 {
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Cycle")) {
-        nav->cycleFocus(forward, screenId);
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Cycle")) {
+        nav->cycleFocus(forward, ctx);
     }
 }
 
 void Daemon::handleResnap()
 {
-    QString screenId;
-    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "Resnap")) {
-        nav->reapplyLayout(screenId);
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "Resnap")) {
+        nav->reapplyLayout(ctx);
     }
 }
 
 void Daemon::handleSnapAll()
 {
-    QString screenId;
-    if (auto* nav =
-            navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, screenId, "SnapAllWindows")) {
-        nav->snapAllWindows(screenId);
+    NavigationContext ctx;
+    if (auto* nav = navigatorForShortcut(m_screenModeRouter.get(), m_windowTrackingAdaptor, ctx, "SnapAllWindows")) {
+        nav->snapAllWindows(ctx);
     }
 }
 

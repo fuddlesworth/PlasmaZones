@@ -5,6 +5,7 @@
 
 #include "core/inavigationactions.h"
 #include "plasmazones_export.h"
+#include <QPointer>
 #include <QString>
 
 namespace PlasmaZones {
@@ -15,22 +16,22 @@ class SnapEngine;
  * @brief Thin INavigationActions adapter for SnapEngine.
  *
  * Maps INavigationActions user-intent calls to SnapEngine's concrete
- * navigation methods. The screen parameter is forwarded where the engine
- * needs it and dropped where the engine resolves the target from its own
- * last-active-window shadow (via the WindowTrackingAdaptor back-ref).
+ * navigation methods. The NavigationContext is forwarded as-is —
+ * SnapEngine's methods use both windowId and screenId explicitly
+ * rather than reading them from the WTA shadow store.
  *
  * Parameter mapping:
- *   - `focusInDirection(dir, screen)` → engine->focusInDirection(dir)
- *   - `moveFocusedInDirection(dir, screen)` → engine->moveFocusedInDirection(dir)
- *   - `swapFocusedInDirection(dir, screen)` → engine->swapFocusedInDirection(dir)
- *   - `moveFocusedToPosition(pos, screen)` → engine->moveFocusedToPosition(pos, screen)
- *   - `rotateWindows(cw, screen)` → engine->rotateWindowsInLayout(cw, screen)
- *   - `reapplyLayout(screen)` → engine->resnapToNewLayout()
- *   - `snapAllWindows(screen)` → engine->snapAllWindows(screen)
- *   - `toggleFocusedFloat(screen)` → engine->toggleFocusedFloat()
- *   - `cycleFocus(forward, screen)` → engine->cycleFocus(forward)
- *   - `pushToEmptyZone(screen)` → engine->pushFocusedToEmptyZone(screen)
- *   - `restoreFocusedWindow(screen)` → engine->restoreFocusedWindow()
+ *   - focusInDirection        → engine->focusInDirection(dir, ctx)
+ *   - moveFocusedInDirection  → engine->moveFocusedInDirection(dir, ctx)
+ *   - swapFocusedInDirection  → engine->swapFocusedInDirection(dir, ctx)
+ *   - moveFocusedToPosition   → engine->moveFocusedToPosition(pos, ctx)
+ *   - rotateWindows           → engine->rotateWindowsInLayout(cw, ctx.screenId)
+ *   - reapplyLayout           → engine->resnapToNewLayout()
+ *   - snapAllWindows          → engine->snapAllWindows(ctx.screenId)
+ *   - toggleFocusedFloat      → engine->toggleFocusedFloat(ctx)
+ *   - cycleFocus              → engine->cycleFocus(forward, ctx)
+ *   - pushToEmptyZone         → engine->pushFocusedToEmptyZone(ctx)
+ *   - restoreFocusedWindow    → engine->restoreFocusedWindow(ctx)
  */
 class PLASMAZONES_EXPORT SnapNavigationAdapter : public INavigationActions
 {
@@ -38,20 +39,22 @@ public:
     explicit SnapNavigationAdapter(SnapEngine* engine);
     ~SnapNavigationAdapter() override = default;
 
-    void focusInDirection(const QString& direction, const QString& screenId) override;
-    void moveFocusedInDirection(const QString& direction, const QString& screenId) override;
-    void swapFocusedInDirection(const QString& direction, const QString& screenId) override;
-    void moveFocusedToPosition(int position, const QString& screenId) override;
-    void rotateWindows(bool clockwise, const QString& screenId) override;
-    void reapplyLayout(const QString& screenId) override;
-    void snapAllWindows(const QString& screenId) override;
-    void toggleFocusedFloat(const QString& screenId) override;
-    void cycleFocus(bool forward, const QString& screenId) override;
-    void pushToEmptyZone(const QString& screenId) override;
-    void restoreFocusedWindow(const QString& screenId) override;
+    void focusInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) override;
+    void moveFocusedToPosition(int position, const NavigationContext& ctx) override;
+    void rotateWindows(bool clockwise, const NavigationContext& ctx) override;
+    void reapplyLayout(const NavigationContext& ctx) override;
+    void snapAllWindows(const NavigationContext& ctx) override;
+    void toggleFocusedFloat(const NavigationContext& ctx) override;
+    void cycleFocus(bool forward, const NavigationContext& ctx) override;
+    void pushToEmptyZone(const NavigationContext& ctx) override;
+    void restoreFocusedWindow(const NavigationContext& ctx) override;
 
 private:
-    SnapEngine* m_engine; // not owned
+    // QPointer — not owned, but auto-nulls on engine destruction during
+    // shutdown. See AutotileNavigationAdapter::m_engine for rationale.
+    QPointer<SnapEngine> m_engine;
 };
 
 } // namespace PlasmaZones

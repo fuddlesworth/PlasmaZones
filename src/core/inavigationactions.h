@@ -9,15 +9,44 @@
 namespace PlasmaZones {
 
 /**
+ * @brief Navigation target context: the window and screen the user is acting on.
+ *
+ * Populated by the daemon's navigation shortcut handlers from compositor
+ * shadow state (windowActivated / cursorScreenChanged pushes) before
+ * dispatching through ScreenModeRouter::navigatorFor().
+ *
+ * Making the target explicit at the interface level (rather than letting
+ * each engine re-read a global "last active window" shadow) has two
+ * architectural benefits:
+ *
+ *   1. The engines stop reaching into WindowTrackingAdaptor's
+ *      compositor-layer shadows on every navigation call, which is a
+ *      step toward retiring the SnapEngine → WTA back-reference entirely.
+ *   2. Tests can invoke navigation methods with an explicit context
+ *      without needing to stub a compositor shadow.
+ *
+ * @note Both fields may be empty — for example on very-early-startup
+ *       shortcuts or when no window is focused. Each method documents
+ *       its behaviour when the fields are empty; the general pattern
+ *       is "emit navigationFeedback with a 'no_window' / 'no_screen'
+ *       reason and return without acting".
+ */
+struct PLASMAZONES_EXPORT NavigationContext
+{
+    QString windowId; ///< The window the operation should act on (typically the focused window).
+    QString screenId; ///< The screen the operation applies to (already resolved by the daemon).
+};
+
+/**
  * @brief Polymorphic dispatch for window-navigation user intents.
  *
- * Both AutotileEngine and SnapEngine implement this interface so
- * ScreenModeRouter can look up the right engine for a given screen and
- * dispatch user-facing navigation commands without the caller branching
- * on mode. The daemon's navigation shortcut handlers (see
- * src/daemon/daemon/navigation.cpp) collapse from ~20 copies of
+ * Both AutotileEngine and SnapEngine implement this interface (via thin
+ * adapter classes) so ScreenModeRouter can look up the right engine for a
+ * given screen and dispatch user-facing navigation commands without the
+ * caller branching on mode. The daemon's navigation shortcut handlers
+ * (see src/daemon/daemon/navigation.cpp) collapse from ~20 copies of
  * `if (isAutotileScreen) { autotile->foo() } else { wta->bar() }` into
- * single-line calls like `router->navigatorFor(screenId)->foo(...)`.
+ * single-line calls like `router->navigatorFor(ctx.screenId)->foo(ctx)`.
  *
  * Semantic contract: each method represents a USER INTENT, not a
  * mode-specific implementation step. "Move focused window left" has
@@ -50,9 +79,9 @@ public:
      * Snap: queries zone adjacency from the target resolver.
      *
      * @param direction "left" / "right" / "up" / "down"
-     * @param screenId Effective screen ID where the operation applies
+     * @param ctx       Target window + screen
      */
-    virtual void focusInDirection(const QString& direction, const QString& screenId) = 0;
+    virtual void focusInDirection(const QString& direction, const NavigationContext& ctx) = 0;
 
     /**
      * @brief Move the focused window to the adjacent slot in the given direction.
@@ -63,9 +92,9 @@ public:
      *   depending on the target's occupancy.
      *
      * @param direction "left" / "right" / "up" / "down"
-     * @param screenId Effective screen ID
+     * @param ctx       Target window + screen
      */
-    virtual void moveFocusedInDirection(const QString& direction, const QString& screenId) = 0;
+    virtual void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx) = 0;
 
     /**
      * @brief Swap the focused window with the adjacent window in the given direction.
@@ -77,9 +106,9 @@ public:
      *   current occupant — both windows change zones simultaneously.
      *
      * @param direction "left" / "right" / "up" / "down"
-     * @param screenId Effective screen ID
+     * @param ctx       Target window + screen
      */
-    virtual void swapFocusedInDirection(const QString& direction, const QString& screenId) = 0;
+    virtual void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Positional operations
@@ -92,9 +121,9 @@ public:
      * Snap: Nth zone on the screen (by sorted zone number).
      *
      * @param position 1-based position; implementations clamp to valid range
-     * @param screenId Effective screen ID
+     * @param ctx      Target window + screen
      */
-    virtual void moveFocusedToPosition(int position, const QString& screenId) = 0;
+    virtual void moveFocusedToPosition(int position, const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Multi-window operations
@@ -107,9 +136,9 @@ public:
      * Snap: rotates zone assignments through the current layout's zones.
      *
      * @param clockwise Rotation direction
-     * @param screenId Effective screen ID
+     * @param ctx       Target screen (windowId unused)
      */
-    virtual void rotateWindows(bool clockwise, const QString& screenId) = 0;
+    virtual void rotateWindows(bool clockwise, const NavigationContext& ctx) = 0;
 
     /**
      * @brief Re-apply the current layout to all managed windows on the screen.
@@ -121,9 +150,9 @@ public:
      * Idempotent when the layout hasn't changed — safe to call after
      * configuration updates.
      *
-     * @param screenId Effective screen ID
+     * @param ctx Target screen (windowId unused)
      */
-    virtual void reapplyLayout(const QString& screenId) = 0;
+    virtual void reapplyLayout(const NavigationContext& ctx) = 0;
 
     /**
      * @brief Snap every un-managed window on the screen to the current layout.
@@ -137,9 +166,9 @@ public:
      * the grid" user action triggered by an explicit shortcut, whereas
      * reapplyLayout is the post-layout-change refresh.
      *
-     * @param screenId Effective screen ID
+     * @param ctx Target screen (windowId unused)
      */
-    virtual void snapAllWindows(const QString& screenId) = 0;
+    virtual void snapAllWindows(const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float state
@@ -151,9 +180,9 @@ public:
      * Autotile: excludes from / reinserts into the tiling layout.
      * Snap: stores/restores zone assignments via WindowTrackingService.
      *
-     * @param screenId Effective screen ID where the focused window lives
+     * @param ctx Target window + screen
      */
-    virtual void toggleFocusedFloat(const QString& screenId) = 0;
+    virtual void toggleFocusedFloat(const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Cycle operations
@@ -168,9 +197,9 @@ public:
      *   next/previous zone if only one window per zone.
      *
      * @param forward true = next, false = previous
-     * @param screenId Effective screen ID
+     * @param ctx     Target window + screen
      */
-    virtual void cycleFocus(bool forward, const QString& screenId) = 0;
+    virtual void cycleFocus(bool forward, const NavigationContext& ctx) = 0;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Mode-asymmetric operations
@@ -186,9 +215,9 @@ public:
      * Snap: finds the first unoccupied zone in the layout and moves the
      *   focused window into it.
      *
-     * @param screenId Effective screen ID
+     * @param ctx Target window + screen
      */
-    virtual void pushToEmptyZone(const QString& screenId) = 0;
+    virtual void pushToEmptyZone(const NavigationContext& ctx) = 0;
 
     /**
      * @brief "Restore" the focused window out of its managed state.
@@ -201,9 +230,9 @@ public:
      * Same user intent ("un-manage this window"), different mechanics in
      * each mode.
      *
-     * @param screenId Effective screen ID
+     * @param ctx Target window + screen
      */
-    virtual void restoreFocusedWindow(const QString& screenId) = 0;
+    virtual void restoreFocusedWindow(const NavigationContext& ctx) = 0;
 };
 
 } // namespace PlasmaZones

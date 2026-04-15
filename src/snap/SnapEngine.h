@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "core/inavigationactions.h"
 #include "core/iwindowengine.h"
 #include "core/types.h"
 #include <dbus_types.h>
@@ -208,39 +209,45 @@ public:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation (moved out of WindowTrackingAdaptor)
+    //
+    // Every method takes a NavigationContext populated by the daemon's
+    // shortcut handler. The engine uses ctx.windowId directly rather than
+    // re-reading it from the WTA shadow, which is a step toward retiring
+    // the SnapEngine → WTA back-reference entirely. When ctx.windowId is
+    // empty, the engine may consult m_wta->lastActiveWindowId() as a
+    // best-effort fallback — but in the normal path the daemon always
+    // provides a resolved target.
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Walk to the adjacent window in @p direction and transfer keyboard focus.
     /// Empty direction is a no-op with feedback.
-    void focusInDirection(const QString& direction);
+    void focusInDirection(const QString& direction, const NavigationContext& ctx);
 
     /// Move the focused window into the adjacent zone in @p direction
     /// (displacing or filling the target). Empty direction is a no-op.
-    void moveFocusedInDirection(const QString& direction);
+    void moveFocusedInDirection(const QString& direction, const NavigationContext& ctx);
 
     /// Swap the focused window with whatever's in the adjacent zone in
     /// @p direction. Empty direction is a no-op.
-    void swapFocusedInDirection(const QString& direction);
+    void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx);
 
     /// Move the focused window to the layout zone with @p zoneNumber
-    /// (1-based) on @p screenId. Zone numbers outside [1,9] are rejected.
-    void moveFocusedToPosition(int zoneNumber, const QString& screenId);
+    /// (1-based) on ctx.screenId. Zone numbers outside [1,9] are rejected.
+    void moveFocusedToPosition(int zoneNumber, const NavigationContext& ctx);
 
-    /// Move the focused window to the first empty zone on @p screenId.
-    /// Empty screen id resolves from the active window.
-    void pushFocusedToEmptyZone(const QString& screenId);
+    /// Move the focused window to the first empty zone on ctx.screenId.
+    void pushFocusedToEmptyZone(const NavigationContext& ctx);
 
     /// Restore the focused window to its captured pre-snap size and unsnap.
-    void restoreFocusedWindow();
+    void restoreFocusedWindow(const NavigationContext& ctx);
 
     /// Toggle the focused window between snapped and floating.
-    /// Reads the active window from the WTA shadow.
-    void toggleFocusedFloat();
+    void toggleFocusedFloat(const NavigationContext& ctx);
 
     /// Cycle keyboard focus forward/backward through managed windows in
     /// the active zone (or the layout cycle order if single-window per
     /// zone).
-    void cycleFocus(bool forward);
+    void cycleFocus(bool forward, const NavigationContext& ctx);
 
     /// Rotate snapped windows through the layout's zone order on @p screenId.
     void rotateWindowsInLayout(bool clockwise, const QString& screenId);
@@ -338,16 +345,25 @@ private:
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (snapengine/float.cpp)
+    //
+    // The historical clearFloatingStateForSnap / assignToZones pair was
+    // removed — all snap commits now route through
+    // WindowTrackingService::commitSnap / commitMultiZoneSnap.
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool unfloatToZone(const QString& windowId, const QString& screenId);
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
-    void clearFloatingStateForSnap(const QString& windowId, const QString& screenId);
-    void assignToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
 
     /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
-    /// the service or layout manager is missing (tests with stub deps).
-    SnapNavigationTargetResolver* ensureTargetResolver();
+    /// the service or layout manager is missing (unit tests with stub
+    /// deps, or shutdown race where WTS/LayoutManager are already gone).
+    ///
+    /// When @p action is non-empty and the resolver can't be built, emits
+    /// navigationFeedback(false, action, "engine_unavailable", ...) so the
+    /// OSD shows a specific reason instead of a silent no-op. Pass an
+    /// empty @p action to skip the emit (for call sites that want to
+    /// handle the null case themselves).
+    SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
