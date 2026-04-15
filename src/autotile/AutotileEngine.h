@@ -139,11 +139,26 @@ public:
      */
     bool isEnabled() const noexcept;
 
-    /// @brief Read-only access to per-screen tiling states (used by daemon for state persistence)
-    const QHash<TilingStateKey, TilingState*>& screenStates() const
-    {
-        return m_screenStates;
-    }
+    /**
+     * @brief Return the set of virtual-desktop numbers that currently have
+     *        any tiling state.
+     *
+     * Used by the daemon's desktop-count-changed handler to find stale
+     * desktops (states on desktop > newCount) so they can be pruned via
+     * pruneStatesForDesktop(). Replaces an older screenStates() accessor
+     * that returned a const-ref to a QHash<TilingStateKey, TilingState*>
+     * — that accessor leaked mutable TilingState pointers via the
+     * const-reference loophole (const on the hash doesn't propagate to the
+     * pointed-to values), for a single caller that only needed desktop
+     * numbers.
+     *
+     * Callers that need the raw state map should add a purpose-built
+     * query method rather than iterating private state. The intent here
+     * is that external consumers can't iterate or mutate TilingState
+     * objects through any public accessor — that's why screenStates()
+     * is private.
+     */
+    QSet<int> desktopsWithActiveState() const;
 
     /**
      * @brief Check if a specific screen uses autotile

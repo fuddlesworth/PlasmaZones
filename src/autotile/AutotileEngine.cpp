@@ -801,6 +801,16 @@ TilingState* AutotileEngine::stateForKey(const TilingStateKey& key)
     return state;
 }
 
+QSet<int> AutotileEngine::desktopsWithActiveState() const
+{
+    QSet<int> out;
+    out.reserve(m_screenStates.size());
+    for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+        out.insert(it.key().desktop);
+    }
+    return out;
+}
+
 void AutotileEngine::pruneStatesForDesktop(int removedDesktop)
 {
     QMutableHashIterator<TilingStateKey, TilingState*> it(m_screenStates);
