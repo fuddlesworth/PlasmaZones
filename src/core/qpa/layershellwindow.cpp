@@ -6,6 +6,7 @@
 #include "../layersurface.h"
 
 #include <QLoggingCategory>
+#include <qpa/qwindowsysteminterface.h>
 #include <QtWaylandClient/private/qwaylanddisplay_p.h>
 #include <QtWaylandClient/private/qwaylandscreen_p.h>
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
@@ -381,7 +382,13 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
     // and sends the expose event that starts Qt's rendering pipeline.
     // Without this call, the layer surface exists at the Wayland level but Qt
     // never paints it — mExposed stays false and isExposed() returns false.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
     self->m_waylandWindow->updateExposure();
+#else
+    if (qwindow) {
+        QWindowSystemInterface::handleExposeEvent(qwindow, QRegion(QRect(QPoint(0, 0), qwindow->size())));
+    }
+#endif
 
     qCDebug(lcLayerShellWindow) << "Configured:" << width << "x" << height
                                 << (qwindow ? qwindow->objectName() : QStringLiteral("(unknown)"));
