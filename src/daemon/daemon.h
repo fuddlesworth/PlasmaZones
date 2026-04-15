@@ -372,10 +372,10 @@ private:
     /// Thin INavigationActions adapters presented via
     /// ScreenModeRouter::navigatorFor() so daemon/navigation.cpp shortcut
     /// handlers dispatch user intents through a common interface instead
-    /// of branching on mode and calling engine methods ad hoc. The snap
-    /// adapter currently forwards to WindowTrackingAdaptor (where the
-    /// snap navigation logic lives today); the autotile adapter forwards
-    /// to AutotileEngine.
+    /// of branching on mode and calling engine methods ad hoc. Both
+    /// adapters forward to their respective engine — SnapEngine owns the
+    /// snap-mode navigation methods (see src/snap/snapengine/navigation_actions.cpp)
+    /// and AutotileEngine owns the autotile ones.
     std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
     std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
     /// Stateless façade over m_settings for VS swap/rotate. Held as a

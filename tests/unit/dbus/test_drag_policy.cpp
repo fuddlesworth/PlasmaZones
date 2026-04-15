@@ -119,6 +119,10 @@ private Q_SLOTS:
         QVERIFY(p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
         QCOMPARE(p.screenId, QStringLiteral("DP-1"));
+        // Producer/validator guard: computeDragPolicy must never return a
+        // payload the effect-side validator would drop. Every branch below
+        // mirrors this assertion.
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -146,6 +150,8 @@ private Q_SLOTS:
         // "tracked window → true" path is exercised indirectly by
         // integration tests that actually tile windows.
         QVERIFY(!p.immediateFloatOnStart);
+        // AutotileScreen bypass requires non-empty screenId per the validator.
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -168,6 +174,7 @@ private Q_SLOTS:
         QVERIFY(!p.grabKeyboard);
         QVERIFY(!p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -190,6 +197,7 @@ private Q_SLOTS:
 
         QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -211,6 +219,7 @@ private Q_SLOTS:
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     void contextDisabled_overridesSnapDisabled()
@@ -227,6 +236,7 @@ private Q_SLOTS:
         // is stable at ContextDisabled even though either would produce
         // the same flag set.
         QCOMPARE(p.bypassReason, DragBypassReason::ContextDisabled);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -242,6 +252,7 @@ private Q_SLOTS:
 
         QCOMPARE(p.bypassReason, DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -260,6 +271,9 @@ private Q_SLOTS:
 
         // Autotile check is skipped for empty screenId, so snapping_disabled wins.
         QCOMPARE(p.bypassReason, DragBypassReason::SnappingDisabled);
+        // SnappingDisabled with empty screenId is explicitly tolerated by
+        // the validator (see DragPolicy::validationError).
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -286,6 +300,7 @@ private Q_SLOTS:
         // windows, Reorder mode must leave it cleared.
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -310,6 +325,7 @@ private Q_SLOTS:
         // masking a broken computeDragPolicy: the bypass path still
         // returns the same bypassReason in Float mode.
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 };
 

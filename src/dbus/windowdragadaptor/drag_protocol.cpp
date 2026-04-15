@@ -305,8 +305,9 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
             bool snapAssistRequested = false;
             QString releaseScreen;
             EmptyZoneList emptyZones;
+            QString resolvedZoneId;
             dragStopped(windowId, cursorX, cursorY, modifiers, mouseButtons, sx, sy, sw, sh, shouldApply, releaseScreen,
-                        restoreSizeOnly, snapAssistRequested, emptyZones);
+                        restoreSizeOnly, snapAssistRequested, emptyZones, resolvedZoneId);
         } else {
             // Bypass paths — no overlay state to clean up; just drop the id.
             // An active autotile drag-insert preview must be cancelled so
@@ -355,11 +356,14 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     // dispatch matrix (snap-to-zone, drag-out unsnap, cross-screen
     // cleanup, zone selector, snap assist).
     //
-    // Snapshot the active zone id BEFORE dragStopped runs — the cleanup
-    // path inside dragStopped clears m_currentZoneId via
-    // hideOverlayAndClearZoneState, and we want that id exposed on the
-    // outcome so the daemon is authoritative for every DragOutcome field.
-    const QString capturedZoneId = m_currentZoneId;
+    // The primary zone id is returned via a dedicated out-parameter
+    // (resolvedZoneId) populated by each snap-success branch inside
+    // drop.cpp — hover detection, zone selector, and multi-zone modifier
+    // all write it explicitly. This replaces the earlier pattern of
+    // snapshotting m_currentZoneId before the call, which missed the
+    // zone-selector path (that branch never wrote m_currentZoneId and
+    // left an empty zoneId on the outcome — rejected post-Phase-1B by
+    // DragOutcome::validationError).
 
     int sx = 0, sy = 0, sw = 0, sh = 0;
     bool shouldApply = false;
@@ -367,8 +371,9 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     bool snapAssistRequested = false;
     QString releaseScreen;
     EmptyZoneList emptyZones;
+    QString resolvedZoneId;
     dragStopped(windowId, cursorX, cursorY, modifiers, mouseButtons, sx, sy, sw, sh, shouldApply, releaseScreen,
-                restoreSizeOnly, snapAssistRequested, emptyZones);
+                restoreSizeOnly, snapAssistRequested, emptyZones, resolvedZoneId);
 
     outcome.targetScreenId = releaseScreen;
     outcome.x = sx;
@@ -385,10 +390,10 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
 
     if (shouldApply) {
         outcome.action = restoreSizeOnly ? DragOutcome::RestoreSize : DragOutcome::ApplySnap;
-        // Primary zone captured pre-cleanup. Empty on RestoreSize (drag-out
-        // unsnap has no target zone), populated on ApplySnap.
+        // Only ApplySnap carries a target zone. RestoreSize is drag-out
+        // unsnap (no target zone by definition).
         if (!restoreSizeOnly) {
-            outcome.zoneId = capturedZoneId;
+            outcome.zoneId = resolvedZoneId;
         }
     } else {
         outcome.action = DragOutcome::NoOp;

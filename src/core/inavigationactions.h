@@ -30,6 +30,18 @@ namespace PlasmaZones {
  *       its behaviour when the fields are empty; the general pattern
  *       is "emit navigationFeedback with a 'no_window' / 'no_screen'
  *       reason and return without acting".
+ *
+ * @note Adapter asymmetry: SnapNavigationAdapter threads @c ctx through
+ *       to SnapEngine on every call — SnapEngine honours the explicit
+ *       target and only falls back to WTA shadows when both fields are
+ *       empty. AutotileNavigationAdapter passes @c ctx.screenId through
+ *       on the screen-keyed methods (rotate / reapply / snapAllWindows)
+ *       but lets the other methods use AutotileEngine's internal
+ *       focused-screen state. That's intentional: the autotile engine
+ *       already tracks focused window + focused screen per-state, so
+ *       duplicating the target at the call site would only create a
+ *       split-brain risk. The interface contract is therefore "ctx is
+ *       authoritative for snap; advisory for autotile".
  */
 struct PLASMAZONES_EXPORT NavigationContext
 {

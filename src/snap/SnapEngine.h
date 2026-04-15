@@ -365,6 +365,12 @@ private:
     /// handle the null case themselves).
     SnapNavigationTargetResolver* ensureTargetResolver(const QString& action = QString());
 
+    /// Check whether the window is excluded from the given navigation
+    /// action by the user's excluded-apps / excluded-classes rules.
+    /// Emits navigationFeedback(false, action, "excluded", ...) and returns
+    /// true when excluded so callers can early-return. False otherwise.
+    bool isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId);
+
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;
     std::function<void()> m_loadFn;

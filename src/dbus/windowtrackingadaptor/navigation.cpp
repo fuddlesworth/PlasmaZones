@@ -288,45 +288,4 @@ void WindowTrackingAdaptor::reportNavigationFeedback(bool success, const QString
     Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
 }
 
-bool WindowTrackingAdaptor::validateDirection(const QString& direction, const QString& action)
-{
-    if (direction.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Cannot" << action << "- empty direction";
-        Q_EMIT navigationFeedback(false, action, QStringLiteral("invalid_direction"), QString(), QString(), QString());
-        return false;
-    }
-    return true;
-}
-
-bool WindowTrackingAdaptor::isWindowExcluded(const QString& windowId, const QString& action)
-{
-    if (!m_settings) {
-        return false;
-    }
-
-    // Current class, not first-seen — matches rules against the window's
-    // live appId so mid-session mutations don't bypass exclusions on fresh
-    // operations. (Per feedback_class_change_exclusion.md, existing snapped
-    // state is NOT re-evaluated — only new decision points, like this one.)
-    // m_service is constructed in the adaptor ctor and is never null here.
-    const QString appId = m_service->currentAppIdFor(windowId);
-    for (const QString& excluded : m_settings->excludedApplications()) {
-        if (Utils::appIdMatches(appId, excluded)) {
-            qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by app rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
-                                      m_lastActiveScreenId);
-            return true;
-        }
-    }
-    for (const QString& excluded : m_settings->excludedWindowClasses()) {
-        if (Utils::appIdMatches(appId, excluded)) {
-            qCInfo(lcDbusWindow) << action << ":" << windowId << "excluded by class rule:" << excluded;
-            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
-                                      m_lastActiveScreenId);
-            return true;
-        }
-    }
-    return false;
-}
-
 } // namespace PlasmaZones

@@ -225,7 +225,7 @@ private:
     void dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons, int& snapX,
                      int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                      QString& releaseScreenIdOut, bool& restoreSizeOnly, bool& snapAssistRequested,
-                     PlasmaZones::EmptyZoneList& emptyZonesOut);
+                     PlasmaZones::EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut);
 
     // Promote the pending snap-path drag (stashed by beginDrag) to an
     // active drag by running the legacy dragStarted setup. Called from

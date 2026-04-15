@@ -112,33 +112,30 @@ QString effectiveScreenId(const NavigationContext& ctx, const WindowTrackingAdap
     return wta ? wta->lastActiveScreenName() : QString();
 }
 
-bool isWindowExcludedForAction(const ISettings* settings, WindowTrackingService* service, const QString& windowId,
-                               const QString& action, SnapEngine* engine, const QString& lastActiveScreenId)
+} // namespace
+
+bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QString& action, const QString& screenId)
 {
-    if (!settings) {
+    if (!m_settings || !m_windowTracker) {
         return false;
     }
-    const QString appId = service->currentAppIdFor(windowId);
-    for (const QString& excluded : settings->excludedApplications()) {
+    const QString appId = m_windowTracker->currentAppIdFor(windowId);
+    for (const QString& excluded : m_settings->excludedApplications()) {
         if (Utils::appIdMatches(appId, excluded)) {
             qCInfo(lcCore) << action << ":" << windowId << "excluded by app rule:" << excluded;
-            Q_EMIT engine->navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
-                                              lastActiveScreenId);
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
             return true;
         }
     }
-    for (const QString& excluded : settings->excludedWindowClasses()) {
+    for (const QString& excluded : m_settings->excludedWindowClasses()) {
         if (Utils::appIdMatches(appId, excluded)) {
             qCInfo(lcCore) << action << ":" << windowId << "excluded by class rule:" << excluded;
-            Q_EMIT engine->navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(),
-                                              lastActiveScreenId);
+            Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
             return true;
         }
     }
     return false;
 }
-
-} // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Navigation entry points
@@ -200,7 +197,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction, const Navigati
                                   ctx.screenId);
         return;
     }
-    if (isWindowExcludedForAction(m_settings, m_windowTracker, windowId, QStringLiteral("move"), this, ctx.screenId)) {
+    if (isWindowExcludedForAction(windowId, QStringLiteral("move"), ctx.screenId)) {
         return;
     }
     const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
@@ -242,7 +239,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction, const Navigati
                                   ctx.screenId);
         return;
     }
-    if (isWindowExcludedForAction(m_settings, m_windowTracker, windowId, QStringLiteral("swap"), this, ctx.screenId)) {
+    if (isWindowExcludedForAction(windowId, QStringLiteral("swap"), ctx.screenId)) {
         return;
     }
     const QString screenId = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
@@ -291,7 +288,7 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const NavigationContext& 
                                   effectiveScreenId(ctx, m_wta));
         return;
     }
-    if (isWindowExcludedForAction(m_settings, m_windowTracker, windowId, QStringLiteral("snap"), this, ctx.screenId)) {
+    if (isWindowExcludedForAction(windowId, QStringLiteral("snap"), ctx.screenId)) {
         return;
     }
     const QString effectiveScreen = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);
@@ -328,7 +325,7 @@ void SnapEngine::pushFocusedToEmptyZone(const NavigationContext& ctx)
                                   effectiveScreenId(ctx, m_wta));
         return;
     }
-    if (isWindowExcludedForAction(m_settings, m_windowTracker, windowId, QStringLiteral("push"), this, ctx.screenId)) {
+    if (isWindowExcludedForAction(windowId, QStringLiteral("push"), ctx.screenId)) {
         return;
     }
     const QString effectiveScreen = resolveNavScreen(m_wta, windowId, m_windowTracker, ctx.screenId);

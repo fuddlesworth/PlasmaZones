@@ -46,6 +46,17 @@ void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
     if (m_targetResolver) {
         m_targetResolver->setZoneDetector(adaptor);
     }
+    // Sever the resolver's raw pointer when the adaptor is destroyed
+    // out-of-band. Production always destroys the adaptor before the
+    // engine, but tests and shutdown orderings can diverge; without this
+    // the resolver would hold a dangling ZoneDetectionAdaptor*.
+    if (adaptor) {
+        connect(adaptor, &QObject::destroyed, this, [this]() {
+            if (m_targetResolver) {
+                m_targetResolver->setZoneDetector(nullptr);
+            }
+        });
+    }
 }
 
 SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver(const QString& action)
