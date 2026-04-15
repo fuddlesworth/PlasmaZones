@@ -184,6 +184,15 @@ private:
      */
     void scheduleSave();
 
+    /**
+     * @brief Drop all cached ShaderRegistry results.
+     *
+     * Called from refreshShaders() and from ShaderRegistry::shadersChanged
+     * so the editor and KCM never see stale shader metadata after a
+     * hot-reload. Cheap — just clears three hashes.
+     */
+    void invalidateShaderCaches();
+
     ISettings* m_settings; // Interface type (DIP)
 
     // Window picker request/response state
@@ -201,6 +210,19 @@ private:
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;
     static constexpr int SaveDebounceMs = 500; // 500ms debounce
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ShaderRegistry caches
+    //
+    // Memoizes availableShaders() / shaderInfo() / defaultShaderParams() so
+    // repeated editor + KCM queries don't hit ShaderRegistry on every call.
+    // Invalidated on refreshShaders() and on the registry's own shadersChanged
+    // signal. Marked mutable so const-ish read paths can populate them.
+    // ═══════════════════════════════════════════════════════════════════════
+    QVariantList m_cachedAvailableShaders;
+    bool m_cachedAvailableShadersValid = false;
+    QHash<QString, QVariantMap> m_cachedShaderInfo;
+    QHash<QString, QVariantMap> m_cachedShaderDefaults;
 };
 
 } // namespace PlasmaZones

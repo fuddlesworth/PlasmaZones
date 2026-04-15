@@ -32,6 +32,13 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
 
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
+
+    // Drop shader caches whenever the registry reloads from disk. The
+    // registry is a singleton, but may not yet exist in unit tests that
+    // instantiate SettingsAdaptor without a daemon — guard the connect.
+    if (auto* registry = ShaderRegistry::instance()) {
+        connect(registry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
+    }
 }
 
 SettingsAdaptor::~SettingsAdaptor()
@@ -867,20 +874,54 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
 
 QVariantList SettingsAdaptor::availableShaders()
 {
+    if (m_cachedAvailableShadersValid) {
+        return m_cachedAvailableShaders;
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->availableShadersVariant() : QVariantList();
+    if (!registry) {
+        return QVariantList();
+    }
+    m_cachedAvailableShaders = registry->availableShadersVariant();
+    m_cachedAvailableShadersValid = true;
+    return m_cachedAvailableShaders;
 }
 
 QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
 {
+    auto it = m_cachedShaderInfo.constFind(shaderId);
+    if (it != m_cachedShaderInfo.constEnd()) {
+        return it.value();
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->shaderInfo(shaderId) : QVariantMap();
+    if (!registry) {
+        return QVariantMap();
+    }
+    const QVariantMap info = registry->shaderInfo(shaderId);
+    m_cachedShaderInfo.insert(shaderId, info);
+    return info;
 }
 
 QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
 {
+    auto it = m_cachedShaderDefaults.constFind(shaderId);
+    if (it != m_cachedShaderDefaults.constEnd()) {
+        return it.value();
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->defaultParams(shaderId) : QVariantMap();
+    if (!registry) {
+        return QVariantMap();
+    }
+    const QVariantMap defaults = registry->defaultParams(shaderId);
+    m_cachedShaderDefaults.insert(shaderId, defaults);
+    return defaults;
+}
+
+void SettingsAdaptor::invalidateShaderCaches()
+{
+    m_cachedAvailableShaders.clear();
+    m_cachedAvailableShadersValid = false;
+    m_cachedShaderInfo.clear();
+    m_cachedShaderDefaults.clear();
 }
 
 QVariantMap SettingsAdaptor::translateShaderParams(const QString& shaderId, const QVariantMap& params)
@@ -917,6 +958,11 @@ void SettingsAdaptor::openUserShaderDirectory()
 
 void SettingsAdaptor::refreshShaders()
 {
+    // Drop our memoized view before asking the registry to reload — if
+    // the ShaderRegistry::shadersChanged signal isn't connected (e.g. the
+    // singleton was created after this adaptor), we still guarantee the
+    // next D-Bus query hits the fresh registry.
+    invalidateShaderCaches();
     auto* registry = ShaderRegistry::instance();
     if (registry) {
         registry->refresh();
