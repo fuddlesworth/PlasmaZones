@@ -413,21 +413,62 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
 
 void WindowDragAdaptor::hideOverlayAndSelector()
 {
-    // Hide overlay
+    // Drag-end: idle the shader overlay instead of destroying it.
+    //
+    // Destroying the overlay QQuickWindow here used to pay a ~QQuickWindow
+    // teardown that routes through QRhi::~QRhi → vkDestroyDevice. On the
+    // NVIDIA proprietary driver that call can deadlock in the driver's
+    // internal mutex cycle between its Vulkan and GL/EGL backends (NVIDIA
+    // devtalk 319139 / 195793 / 366254, wgpu discussion #9092) — the
+    // symptom is an ~18 s main-thread stall per drop because
+    // vkDestroyDevice blocks in pthread_cond_timedwait until the driver's
+    // internal fence timeout fires. d797b9c3 (phase-a L1) already
+    // eliminated the same stall for mid-drag modifier thrash by routing
+    // trigger-release through setIdleForDragPause(); this extends the
+    // same treatment to real drag-end so the shader overlay's lifetime
+    // is bound to daemon lifetime, not drag lifetime.
+    //
+    // Next-drag resume: dragMoved's first activationActive tick sees
+    // m_overlayIdled == true and calls refreshFromIdle() to re-push
+    // zone data via updateZonesForAllWindows() — cheap because L2's
+    // labels-texture hash cache skips the 23 MB QImage rebuild when
+    // inputs are unchanged. m_overlayShown stays true because the
+    // underlying QQuickWindow + wl_surface are still alive.
+    //
+    // Destructive teardown is still needed for real lifecycle events
+    // (compositor reconnect, dragged-window-closed, context/autotile
+    // disabled mid-drag) — those route through hideOverlayAndClearZoneState
+    // instead, which still calls OverlayService::hide().
+    bool didIdle = false;
     if (m_overlayShown && m_overlayService) {
-        m_overlayService->hide();
-        m_overlayShown = false;
+        m_overlayService->setIdleForDragPause();
+        m_overlayIdled = true;
+        didIdle = true;
     }
-    m_overlayIdled = false;
 
-    // Hide zone selector and clear selection
+    // Zone selector (different QQuickWindow, also Vulkan-backed) is
+    // still destroyed on hide. It only shows when the user hovers a
+    // configured selector trigger, so it's not in the drop-then-activate
+    // hot path that triggers the NVIDIA deadlock. Revisit if selector
+    // usage also hangs.
     if (m_zoneSelectorShown && m_overlayService) {
         m_zoneSelectorShown = false;
         m_overlayService->hideZoneSelector();
     }
     if (m_overlayService) {
         m_overlayService->clearSelectedZone();
-        m_overlayService->clearHighlight();
+        // clearHighlight() is skipped on the idle path because
+        // setIdleForDragPause() already wrote highlightedZoneId /
+        // highlightedZoneIds / highlightedCount on every overlay window
+        // AND set m_zoneDataDirty = false to protect the blank state.
+        // Calling clearHighlight() here would redundantly re-write the
+        // same properties AND flip m_zoneDataDirty back to true — the
+        // next shader-timer tick (shader.cpp:245) would then re-run
+        // updateZonesForAllWindows() and repopulate the zones, leaving
+        // the overlay visibly showing zones after drag-end.
+        if (!didIdle) {
+            m_overlayService->clearHighlight();
+        }
     }
 
     if (m_zoneDetector) {
@@ -461,7 +502,13 @@ void WindowDragAdaptor::resetDragState(bool keepEscapeShortcut)
     m_wasSnapped = false;
     m_lastEmittedZoneGeometry = QRect();
     m_restoreSizeEmittedDuringDrag = false;
-    m_overlayIdled = false;
+    // m_overlayIdled is intentionally NOT cleared here. Each drag-end
+    // hide helper sets it explicitly: hideOverlayAndSelector → true
+    // (shader overlay idled, not destroyed — window alive across the
+    // drag boundary so dragMoved's refreshFromIdle can repopulate it);
+    // hideOverlayAndClearZoneState → false (destructive teardown).
+    // Clearing it here would clobber the idled=true state set by the
+    // drop path and break the next drag's refreshFromIdle trigger.
     // Drop any pending async snapAssistReady payload. Without this, a
     // compositor reconnect between endDrag and the QTimer::singleShot(0)
     // that emits snapAssistReady would deliver the prior session's
