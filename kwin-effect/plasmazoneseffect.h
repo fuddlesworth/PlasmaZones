@@ -150,21 +150,31 @@ private:
 
 public:
     /**
-     * @brief Window identification — returns the opaque instance id.
+     * @brief Compose the window's composite runtime identifier.
      *
-     * This is KWin's internalId() as a UUID string, which the daemon uses
-     * as its runtime primary key. Populates m_appIdByInstance as a
-     * side-effect so appIdForInstance() can answer quickly for subsequent
-     * callers.
+     * Returns the "appId|instanceId" composite that every daemon-side
+     * service uses as its primary key. `appId` is the live app class read
+     * from KWin at first observation; `instanceId` is KWin's internalId()
+     * UUID string and is stable for the window's lifetime.
+     *
+     * The composite is cached per EffectWindow* in m_windowIdCache and
+     * returned unchanged for the rest of the window's lifetime — even if
+     * KWin subsequently emits windowClassChanged for an Electron/CEF app
+     * that swaps its class. The stable key semantic is load-bearing:
+     * daemon maps keyed by windowId must not shift under mid-session class
+     * mutations. Live class lookups happen separately via getWindowAppId()
+     * on the effect side, and via WindowRegistry::appIdFor() on the daemon
+     * side after pushWindowMetadata() updates the registry.
      */
     QString getWindowId(KWin::EffectWindow* w) const;
 
     /**
      * @brief Extract the compositor-supplied stable instance token.
      *
-     * Alias for getWindowId() — kept so callers that want to be explicit
-     * about wanting the instance id can say so. Both return the same bare
-     * UUID string.
+     * Returns only KWin's internalId() UUID string, without the appId
+     * prefix. Use when a caller specifically needs the raw instance token
+     * (e.g. pushWindowMetadata feeds it to the daemon's WindowRegistry as
+     * the primary key), not the composite key used by the daemon services.
      */
     QString getWindowInstanceId(KWin::EffectWindow* w) const;
 
@@ -176,24 +186,6 @@ public:
      * updates (Electron/CEF apps).
      */
     QString getWindowAppId(KWin::EffectWindow* w) const;
-
-    /**
-     * @brief Current app class for a windowId string (instance id).
-     *
-     * Accepts either a bare instance id or a legacy "appId|uuid" composite —
-     * normalized via effectExtractInstanceId.
-     *
-     * Resolution order:
-     *   1. Cached class for this instance id (m_appIdByInstance, populated
-     *      by getWindowId()).
-     *   2. Walk the stacking order to find a live EffectWindow with that
-     *      internalId(), then call getWindowAppId(). Result is cached.
-     *   3. Return empty if the window isn't currently known.
-     *
-     * A mid-session class mutation (Electron/CEF apps) returns the latest
-     * value instead of a frozen first-seen parse.
-     */
-    QString appIdForInstance(const QString& windowId);
 
 private:
     // Window management
@@ -433,16 +425,6 @@ private:
         KWin::BorderRadius savedSurfaceRadius;
     };
     QHash<QString, WindowBorder> m_windowBorders; // windowId → border
-
-    // instance id → last observed appId. Populated lazily by getWindowId()
-    // and pushWindowMetadata() so appIdForInstance() can answer without
-    // walking the stacking order. Entries are removed in slotWindowClosed().
-    //
-    // This mirrors (but is independent of) the daemon's WindowRegistry — the
-    // effect needs its own local view because appIdForInstance() is called
-    // on hot paths (findWindowById, drag/snap decision logic) and shouldn't
-    // round-trip over D-Bus.
-    QHash<QString, QString> m_appIdByInstance;
 
     // Policy returned from the daemon's beginDrag for the currently-active
     // drag. Async-populated a few ms after the

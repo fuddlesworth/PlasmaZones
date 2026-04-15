@@ -197,9 +197,11 @@ inline QString extractAppId(const QString& windowId)
 
 // extractWindowClass() was removed — it was an alias for extractAppId() that
 // only made call sites read "windowClass" instead of "appId". Runtime class
-// lookups now go through WindowTrackingService::currentAppIdFor or
-// PlasmaZonesEffect::appIdForInstance so they hit the live registry instead
-// of parsing a composite string that no longer exists on the wire.
+// lookups go through WindowTrackingService::currentAppIdFor or
+// AutotileEngine::currentAppIdFor on the daemon side, which hit the live
+// WindowRegistry instead of parsing the frozen composite key. On the effect
+// side, the live class is read directly via getWindowAppId() — there is no
+// effect-local app-id cache.
 
 /**
  * @brief Extract the stable KWin instance identifier (UUID) from a full window ID.

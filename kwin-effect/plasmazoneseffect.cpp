@@ -744,10 +744,6 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
 
-    // Drop the effect-local app-id cache entry. closedWindowId is the bare
-    // instance id under the new wire format, which is exactly the cache key.
-    m_appIdByInstance.remove(closedWindowId);
-
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
 
@@ -1475,16 +1471,16 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     // their WM_CLASS after the surface is mapped.
     //
     // App class is looked up separately — via getWindowAppId() here in the
-    // effect, and via WindowRegistry in the daemon. Both read the live
+    // effect, and via WindowRegistry in the daemon after pushWindowMetadata
+    // updates the registry on KWin's class-change signals. Both read the live
     // value rather than trusting a frozen first-seen string.
-    //
-    // Populates m_appIdByInstance as a side-effect so appIdForInstance()
-    // can answer later D-Bus calls without walking the stacking order.
     if (!w) {
         return QString();
     }
 
-    // Cache hit: window IDs never change during a window's lifetime
+    // Cache hit: the composite is frozen at first observation for the
+    // window's lifetime so daemon maps keyed by windowId stay stable even
+    // when an Electron/CEF app mutates its class mid-session.
     auto cacheIt = m_windowIdCache.constFind(w);
     if (cacheIt != m_windowIdCache.constEnd()) {
         return cacheIt.value();
@@ -1496,9 +1492,6 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     }
     const QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
     const QString appId = getWindowAppId(w);
-    if (!appId.isEmpty()) {
-        const_cast<PlasmaZonesEffect*>(this)->m_appIdByInstance.insert(instanceId, appId);
-    }
     const QString result = appId + QLatin1Char('|') + instanceId;
     m_windowIdCache.insert(w, result);
     m_windowIdReverse.insert(result, const_cast<KWin::EffectWindow*>(w));

@@ -3,21 +3,25 @@
 
 /**
  * @file test_window_identity.cpp
- * @brief Unit tests for Utils::extractAppId() — the legacy composite parser.
+ * @brief Unit tests for Utils::extractAppId() — the composite-key parser.
  *
- * IMPORTANT: the runtime wire format is no longer "appId|uuid" composite —
- * the kwin-effect bridge sends opaque instance ids (bare UUIDs).
- * Utils::extractAppId() is preserved as a fallback inside
- * WindowTrackingService::currentAppIdFor() for unit tests and code paths
- * that don't have a WindowRegistry attached — on a bare instance id the
- * helper is a passthrough (no '|' separator to split on).
+ * The effect produces window ids in the form "appId|instanceId" (frozen at
+ * first observation). Every daemon map keys off that composite. Services
+ * that need the first-seen app class parse it with Utils::extractAppId();
+ * services that need the LIVE app class (Electron/CEF apps that mutate
+ * their WM_CLASS mid-session) query WindowTrackingService::currentAppIdFor
+ * or AutotileEngine::currentAppIdFor, both of which hit WindowRegistry.
  *
- * This file validates the parser's behavior on both legacy composites and
- * bare instance ids so that the compat fallback stays well-defined. It does
- * NOT describe how production looks up app class for a window — for that,
- * see WindowTrackingService::currentAppIdFor() and
- * PlasmaZonesEffect::appIdForInstance(), which query the live
- * WindowRegistry.
+ * The two semantics coexist intentionally: the stable composite lets
+ * daemon maps ignore class mutations (so a rule bound to a zone doesn't
+ * get reassigned mid-session), and the live registry lookup lets new
+ * rule decisions see the current class.
+ *
+ * This file pins extractAppId()'s behavior on composites (split before the
+ * first '|') and on bare strings (passthrough) so the fallback stays
+ * well-defined for the WindowTrackingService::currentAppIdFor() and
+ * AutotileEngine::currentAppIdFor() call paths that walk this helper when
+ * no registry is attached.
  */
 
 #include <QTest>

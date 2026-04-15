@@ -88,9 +88,13 @@ struct PLASMAZONES_EXPORT DragInfo
         return !windowId.isEmpty();
     }
 
-    // Note: Use WindowTrackingService::currentAppIdFor(dragInfo.windowId) or
-    // PlasmaZonesEffect::appIdForInstance() to get the live app class.
-    // windowId is the opaque compositor instance id — never parse it.
+    // Note: use WindowTrackingService::currentAppIdFor(dragInfo.windowId) or
+    // AutotileEngine::currentAppIdFor() to get the live app class on the
+    // daemon side (both query WindowRegistry). On the effect side, live
+    // class reads go through PlasmaZonesEffect::getWindowAppId() directly.
+    // The windowId field carries the frozen "appId|instanceId" composite
+    // used as a stable daemon-side key — don't parse the prefix expecting
+    // a current class.
 };
 
 /**
