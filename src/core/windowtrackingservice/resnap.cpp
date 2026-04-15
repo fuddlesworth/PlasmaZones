@@ -575,9 +575,9 @@ QHash<QString, QRect> WindowTrackingService::updatedWindowGeometries() const
     return result;
 }
 
-QHash<QString, QRect> WindowTrackingService::pendingRestoreGeometries() const
+QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingService::pendingRestoreGeometries() const
 {
-    QHash<QString, QRect> result;
+    QHash<QString, PendingRestoreTarget> result;
     int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QString currentActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
 
@@ -593,6 +593,17 @@ QHash<QString, QRect> WindowTrackingService::pendingRestoreGeometries() const
         }
 
         QString screenId = resolveEffectiveScreenId(entry.screenId);
+
+        // Skip entries whose saved screen is currently in autotile mode. The
+        // effect cache is a snap-mode fast path — autotile owns its screens
+        // and will place the window itself when it opens. Populating the
+        // cache for autotile-owned screens would let the effect teleport the
+        // window to a stale snap rect before autotile's tile request lands.
+        if (m_layoutManager
+            && m_layoutManager->modeForScreen(screenId, entry.virtualDesktop, currentActivity)
+                != AssignmentEntry::Mode::Snapping) {
+            continue;
+        }
 
         // Validate layout context — same checks as calculateRestoreFromSession.
         // Without this, the cache could contain geometry for a zone that no longer
@@ -620,7 +631,7 @@ QHash<QString, QRect> WindowTrackingService::pendingRestoreGeometries() const
 
         QRect geo = resolveZoneGeometry(entry.zoneIds, screenId);
         if (geo.isValid()) {
-            result.insert(it.key(), geo);
+            result.insert(it.key(), PendingRestoreTarget{geo, screenId});
         }
     }
 

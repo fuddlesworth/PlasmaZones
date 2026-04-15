@@ -611,10 +611,18 @@ private:
     bool m_daemonServiceRegistered = false;
     bool m_daemonReadyRestoresDone = false; ///< set after slotDaemonReady snap restores dispatched
 
-    /// Pre-computed zone geometries for pending snap restores (appId → pixel rect).
+    /// Pre-computed snap restore target for a pending app (appId → geometry + saved screen).
     /// Fetched once from daemon on ready; consumed in slotWindowAdded for instant
-    /// teleport (no D-Bus round-trip visible flash).
-    QHash<QString, QRect> m_snapRestoreCache;
+    /// teleport (no D-Bus round-trip visible flash). The screenId lets the effect
+    /// tell "cached saved zone is on snap-mode screen X" from "current KWin
+    /// placement is autotile screen Y" — we trust the saved screen, not the
+    /// placement, so cross-VS / cross-monitor restores work.
+    struct CachedSnapRestore
+    {
+        QRect geometry;
+        QString screenId;
+    };
+    QHash<QString, CachedSnapRestore> m_snapRestoreCache;
     bool m_virtualScreensReady = false; ///< set after all fetchVirtualScreenConfig replies arrive
     int m_pendingVsConfigReplies = 0; ///< countdown for fetchAllVirtualScreenConfigs async replies
     uint64_t m_vsConfigGeneration = 0; ///< generation counter for fetchAllVirtualScreenConfigs

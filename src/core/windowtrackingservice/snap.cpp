@@ -329,6 +329,30 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     // Fall back to physical screen ID if the virtual screen was removed.
     savedScreen = resolveEffectiveScreenId(savedScreen);
 
+    // If the saved zone's screen is currently in autotile mode, this path is the
+    // wrong owner — autotile on that screen will claim the window via its own
+    // windowOpened flow. Return noSnap WITHOUT consuming the pending entry:
+    // autotile might push the window back into our queue on next close, and
+    // another snap-mode screen's context could legitimately claim this entry.
+    //
+    // This is the architecturally correct version of the PR #320 / commit
+    // 05519844 guard: it checks the SAVED zone's screen (where the zone
+    // actually lives), not the caller's screen (where KWin happened to drop
+    // the window). The old version broke the cross-screen case where a window
+    // belonged on a snap-mode VS but KWin opened it on an autotile VS.
+    if (m_layoutManager) {
+        int modeDesktop = entry.virtualDesktop;
+        if (modeDesktop <= 0 && m_virtualDesktopManager) {
+            modeDesktop = m_virtualDesktopManager->currentDesktop();
+        }
+        if (m_layoutManager->modeForScreen(savedScreen, modeDesktop, m_layoutManager->currentActivity())
+            != AssignmentEntry::Mode::Snapping) {
+            qCDebug(lcCore) << "sessionRestore:" << appId << "saved screen" << savedScreen
+                            << "is now in autotile mode — deferring to autotile engine";
+            return SnapResult::noSnap();
+        }
+    }
+
     // BUG FIX: Verify layout context matches before restoring
     // Without this check, windows would restore even if the current layout is different
     // from the layout that was active when the window was saved

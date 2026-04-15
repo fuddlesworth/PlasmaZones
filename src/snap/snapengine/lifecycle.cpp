@@ -2,7 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
+#include "core/assignmententry.h"
 #include "core/interfaces.h"
+#include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/utils.h"
 #include "core/virtualdesktopmanager.h"
@@ -64,6 +66,17 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
 // Side effects: consumePendingAssignment (step 2), navigationFeedback emit
 // (floating windows). The caller (windowOpened or WTA D-Bus facade) handles
 // zone assignment and geometry application.
+//
+// Screen mode semantics:
+//   - Levels 1 (app rules) and 2 (persisted session) may cross-screen migrate:
+//     an app rule or a saved PendingRestore can route a window from the
+//     caller's screen to a completely different screen, and
+//     calculateRestoreFromSession refuses to place a window on an
+//     autotile-mode saved screen (autotile on that screen will own it).
+//   - Levels 3 (empty zone) and 4 (last zone) inherently use the caller
+//     screen as the target, so they are ONLY valid when the caller's screen
+//     is in snap mode. On autotile screens they're short-circuited — stale
+//     snap zones on a now-autotile screen must not bleed into placement.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QString& screenId, bool sticky)
@@ -71,12 +84,6 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (windowId.isEmpty() || screenId.isEmpty()) {
         return SnapResult::noSnap();
     }
-
-    // NOTE: the dispatch layer (WindowTrackingAdaptor::resolveWindowRestore)
-    // has already verified this screen is in Snapping mode. The engine
-    // trusts that contract — it does not re-check modeForScreen here.
-    // If you need to call this from a new site, route through the adaptor
-    // or add the mode check at the new call site.
 
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
@@ -121,7 +128,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // 1. App rules (highest priority)
+    // 1. App rules (highest priority). May cross-screen migrate.
     {
         SnapResult result = m_windowTracker->calculateSnapToAppRule(windowId, screenId, sticky);
         if (result.shouldSnap) {
@@ -130,13 +137,32 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         }
     }
 
-    // 2. Persisted zone (session restore)
+    // 2. Persisted zone (session restore). May cross-screen migrate: the
+    // PendingRestore entry records the saved screen, and
+    // calculateRestoreFromSession returns noSnap if that screen is now in
+    // autotile mode (letting the autotile engine own it).
     if (m_settings && m_settings->restoreWindowsToZonesOnLogin()) {
         SnapResult result = m_windowTracker->calculateRestoreFromSession(windowId, screenId, sticky);
         if (result.shouldSnap) {
             m_windowTracker->consumePendingAssignment(windowId);
-            qCInfo(lcCore) << "resolveWindowRestore: persisted matched for" << windowId << "zone=" << result.zoneId;
+            qCInfo(lcCore) << "resolveWindowRestore: persisted matched for" << windowId << "zone=" << result.zoneId
+                           << "screen=" << result.screenId;
             return result;
+        }
+    }
+
+    // Levels 3 and 4 inherently target the caller's screen (the empty-zone /
+    // last-zone lookups are scoped to screenId, not to a saved zone). If the
+    // caller's screen is now in autotile mode, skip them — stale snap zones
+    // on an autotile screen must not be auto-assigned, autotile owns
+    // placement there.
+    if (m_layoutManager) {
+        int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+        if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
+            != AssignmentEntry::Mode::Snapping) {
+            qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "caller screen" << screenId
+                            << "is autotile — skipping empty/last zone fallbacks";
+            return SnapResult::noSnap();
         }
     }
 

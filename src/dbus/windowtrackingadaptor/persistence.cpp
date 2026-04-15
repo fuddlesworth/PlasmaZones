@@ -175,18 +175,20 @@ WindowGeometryList WindowTrackingAdaptor::getUpdatedWindowGeometries()
 
 QString WindowTrackingAdaptor::getPendingRestoreGeometries()
 {
-    QHash<QString, QRect> geometries = m_service->pendingRestoreGeometries();
-    if (geometries.isEmpty()) {
+    auto targets = m_service->pendingRestoreGeometries();
+    if (targets.isEmpty()) {
         return QStringLiteral("{}");
     }
 
     QJsonObject result;
-    for (auto it = geometries.constBegin(); it != geometries.constEnd(); ++it) {
+    for (auto it = targets.constBegin(); it != targets.constEnd(); ++it) {
+        const auto& target = it.value();
         QJsonObject geoObj;
-        geoObj[QLatin1String("x")] = it.value().x();
-        geoObj[QLatin1String("y")] = it.value().y();
-        geoObj[QLatin1String("width")] = it.value().width();
-        geoObj[QLatin1String("height")] = it.value().height();
+        geoObj[QLatin1String("x")] = target.geometry.x();
+        geoObj[QLatin1String("y")] = target.geometry.y();
+        geoObj[QLatin1String("width")] = target.geometry.width();
+        geoObj[QLatin1String("height")] = target.geometry.height();
+        geoObj[QLatin1String("screenId")] = target.screenId;
         result[it.key()] = geoObj;
     }
 

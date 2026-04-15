@@ -640,18 +640,40 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // teleport the window immediately — no D-Bus round-trip, no visible flash.
     // The async callResolveWindowRestore still runs to register the zone assignment
     // in the daemon; this just eliminates the visual lag.
+    //
+    // The cache is authoritative about the target SCREEN, not the window's current
+    // placement. Each entry carries the screenId of the saved zone; the daemon
+    // populates the cache only for pending restores whose saved screen is in snap
+    // mode, so an entry being present means "this app wants to land on a
+    // snap-mode zone". Cross-VS/cross-monitor teleport works because moveResize
+    // takes absolute compositor coordinates, so applySnapGeometry moves the
+    // window to whichever screen the cached rect lives on. After teleport,
+    // re-evaluate onAutotileScreen because KWin updates the window's output
+    // assignment.
+    //
+    // Rare race: the saved screen may have flipped from snap→autotile between
+    // when the cache was populated and when the window opens. Re-check the
+    // entry's screen mode via the autotile handler before applying.
     if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
         QString appId = WindowIdUtils::extractAppId(windowId);
         auto cacheIt = m_snapRestoreCache.find(appId);
         if (cacheIt != m_snapRestoreCache.end()) {
-            QRect cachedGeo = cacheIt.value();
-            if (cachedGeo.isValid()) {
-                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cachedGeo;
-                applySnapGeometry(w, cachedGeo, false, /*skipAnimation=*/true);
+            const CachedSnapRestore& cached = cacheIt.value();
+            const bool savedScreenNowAutotile =
+                !cached.screenId.isEmpty() && m_autotileHandler->isAutotileScreen(cached.screenId);
+            if (cached.geometry.isValid() && !savedScreenNowAutotile) {
+                qCInfo(lcEffect) << "Instant snap restore for" << appId << "to:" << cached.geometry
+                                 << "screen:" << cached.screenId;
+                applySnapGeometry(w, cached.geometry, false, /*skipAnimation=*/true);
                 m_snapRestoreCache.erase(cacheIt);
-                // Re-evaluate screen after teleport — the window may have moved
-                // off the autotile screen, so update for the autotile decision below.
+                // Re-evaluate screen after teleport — cross-VS/cross-monitor
+                // moveResize updates KWin's output assignment, so the window
+                // may no longer be on an autotile screen.
                 onAutotileScreen = m_autotileHandler->isAutotileScreen(getWindowScreenId(w));
+            } else if (savedScreenNowAutotile) {
+                qCDebug(lcEffect) << "Skipping instant snap restore for" << appId
+                                  << "- saved screen now autotile:" << cached.screenId;
+                m_snapRestoreCache.erase(cacheIt);
             }
         }
     }
@@ -1283,8 +1305,9 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 int y = geo[QLatin1String("y")].toInt();
                 int w = geo[QLatin1String("width")].toInt();
                 int h = geo[QLatin1String("height")].toInt();
+                QString savedScreen = geo[QLatin1String("screenId")].toString();
                 if (w > 0 && h > 0) {
-                    m_snapRestoreCache.insert(it.key(), QRect(x, y, w, h));
+                    m_snapRestoreCache.insert(it.key(), CachedSnapRestore{QRect(x, y, w, h), savedScreen});
                 }
             }
             qCDebug(lcEffect) << "Cached" << m_snapRestoreCache.size() << "pending restore geometries";
