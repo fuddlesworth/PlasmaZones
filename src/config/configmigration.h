@@ -42,6 +42,15 @@ public:
     /// config file underneath the process must call
     /// resetMigrationGuardForTesting() between cases — see that method's
     /// docs for the rationale.
+    ///
+    /// Trusts PlasmaZones' single-writer-per-session model: once the guard
+    /// latches, a later out-of-process rewrite of config.json (e.g. a user
+    /// editing the file by hand, or a second daemon downgrading the schema
+    /// mid-session) will NOT be re-detected by this function. Readers still
+    /// re-open the file fresh on every load(), so config values themselves
+    /// remain live — only the schema-version check is skipped. If you
+    /// introduce a workflow that involves external rewrites during a
+    /// session, drop the guard first via resetMigrationGuardForTesting().
     static bool ensureJsonConfig();
 
     /// Reset the process-level "already migrated" flag set by

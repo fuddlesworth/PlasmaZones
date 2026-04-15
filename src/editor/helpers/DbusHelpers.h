@@ -15,14 +15,21 @@ namespace DbusHelpers {
 /**
  * @brief Construct a QDBusInterface bound to the daemon's Settings service.
  *
- * Returns the interface as a prvalue so guaranteed copy elision (C++17)
- * handles the non-copyable/non-movable QDBusInterface correctly. Callers
- * must invoke setTimeout(DBus::SyncCallTimeoutMs) on the returned object
- * before making any synchronous .call() so an unresponsive daemon can't
- * freeze the editor for Qt's 25-second default.
+ * Returns the interface as a prvalue because QDBusInterface inherits
+ * QObject and is therefore non-copyable and non-movable — it cannot be
+ * returned from a named local. C++17 guaranteed copy elision handles the
+ * prvalue return into the caller's storage correctly.
  *
- * This helper is shared by SettingsDbusQueries.cpp and ShaderDbusQueries.cpp
- * — both target the exact same service/object/interface, and duplicating
+ * ⚠ CRITICAL: every caller MUST invoke
+ *     iface.setTimeout(DBus::SyncCallTimeoutMs);
+ * before dispatching a synchronous .call(). Omitting it reintroduces the
+ * editor-startup-freeze failure mode this PR was written to fix (Qt's
+ * default is 25 seconds). The timeout cannot be baked into this helper
+ * because QDBusInterface's non-movability forbids "construct, configure,
+ * return" from a named local — only direct prvalue construction works.
+ *
+ * Shared by SettingsDbusQueries.cpp and ShaderDbusQueries.cpp because
+ * both target the exact same service/object/interface, and duplicating
  * the three fromLatin1() conversions at every call site invites drift.
  */
 inline QDBusInterface createSettingsInterface()

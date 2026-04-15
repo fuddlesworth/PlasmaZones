@@ -3,6 +3,7 @@
 
 #include "SettingsDbusQueries.h"
 #include "../../core/constants.h"
+#include "../../core/dbusvariantutils.h"
 #include "../../core/logging.h"
 #include "DbusHelpers.h"
 
@@ -19,13 +20,16 @@ using DbusHelpers::createSettingsInterface;
 namespace {
 
 // WARNING: Only safe for settings whose values are never legitimately the
-// empty string. getSetting() returns an empty string as the "key not found"
-// sentinel, and this helper treats that as "missing" so callers fall back
-// to their defaults. A string-typed setting that the user has cleared
-// would therefore be indistinguishable from an unknown key and get
-// silently dropped. Only used as a fallback by querySettingsBatch() for
-// the gap/overlay keys (all int/bool), which makes this safe today — do
-// not generalize without addressing the empty-string ambiguity.
+// empty string. getSetting() in settingsadaptor.cpp returns an empty-
+// string QDBusVariant as the "key not found" sentinel (see the default
+// return at the bottom of SettingsAdaptor::getSetting), and this helper
+// treats that as "missing" so callers fall back to their defaults. A
+// string-typed setting that the user has cleared would therefore be
+// indistinguishable from an unknown key and get silently dropped. Only
+// used as a fallback by querySettingsBatch() for the gap/overlay keys
+// (all int/bool), which makes this safe today — do not generalize
+// without first replacing the sentinel with a structured "not found"
+// signal on the daemon side.
 QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
 {
     QVariantMap result;
@@ -73,7 +77,16 @@ QVariantMap querySettingsBatch(const QStringList& keys)
 
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("getSettings"), keys);
     if (reply.isValid()) {
-        return reply.value();
+        // Defensively unwrap any QDBusArgument/QDBusVariant wrappers Qt may
+        // leave in the map. For a flat a{sv} of scalar int/bool Qt normally
+        // demarshals cleanly into plain types, but nested compound values
+        // (or a future extension to this method returning lists/maps) would
+        // arrive as QDBusArgument wrappers that toInt()/toBool() can't
+        // handle — the result would silently fall through to caller-side
+        // defaults. ShaderDbusQueries::queryShaderInfo does the same thing
+        // against the same daemon object for the same reason.
+        QVariant converted = DBusVariantUtils::convertDbusArgument(QVariant::fromValue(reply.value()));
+        return converted.toMap();
     }
 
     // Stale daemon: this build knows about getSettings() but the daemon
