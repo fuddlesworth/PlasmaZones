@@ -35,7 +35,30 @@ public:
     /// - All migrations succeeded
     ///
     /// Returns false if any migration failed (old file preserved, error logged).
+    ///
+    /// Internally short-circuits after the first successful call in a given
+    /// process, so repeated invocations on the editor startup hot path don't
+    /// re-read and re-parse the config file. Tests that swap the backing
+    /// config file underneath the process must call
+    /// resetMigrationGuardForTesting() between cases — see that method's
+    /// docs for the rationale.
+    ///
+    /// Trusts PlasmaZones' single-writer-per-session model: once the guard
+    /// latches, a later out-of-process rewrite of config.json (e.g. a user
+    /// editing the file by hand, or a second daemon downgrading the schema
+    /// mid-session) will NOT be re-detected by this function. Readers still
+    /// re-open the file fresh on every load(), so config values themselves
+    /// remain live — only the schema-version check is skipped. If you
+    /// introduce a workflow that involves external rewrites during a
+    /// session, drop the guard first via resetMigrationGuardForTesting().
     static bool ensureJsonConfig();
+
+    /// Reset the process-level "already migrated" flag set by
+    /// ensureJsonConfig(). Exists so test harnesses can reuse a single
+    /// process to exercise multiple migration scenarios against different
+    /// isolated config directories — in production code the guard is
+    /// strictly one-way and this should never be called.
+    static void resetMigrationGuardForTesting();
 
     /// Convert an INI config file to JSON format. Produces v1 JSON.
     /// Used by ensureJsonConfig() for one-time INI migration,
@@ -60,6 +83,13 @@ public:
 
 private:
     ConfigMigration() = default;
+
+    /// Actual implementation of ensureJsonConfig() — runs the file
+    /// check / INI→JSON / version-upgrade logic unconditionally. The
+    /// public ensureJsonConfig() wraps this in the process-level
+    /// short-circuit guard so repeat calls on the startup hot path are
+    /// free.
+    static bool ensureJsonConfigImpl();
 
     // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);

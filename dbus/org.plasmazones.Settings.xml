@@ -28,6 +28,15 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Setting value (variant)."/>
             </arg>
         </method>
+        <method name="getSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-get multiple settings in one call. Unknown keys are omitted from the result map."/>
+            <arg name="keys" type="as" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="List of setting key names to fetch."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of key → value for every key that was found."/>
+            </arg>
+        </method>
         <method name="setSetting">
             <annotation name="org.gtk.GDBus.DocString" value="Set a single setting by key. Returns true if updated."/>
             <arg name="key" type="s" direction="in">

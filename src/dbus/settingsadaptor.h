@@ -48,6 +48,22 @@ public Q_SLOTS:
     bool setSetting(const QString& key, const QDBusVariant& value);
 
     /**
+     * @brief Batch-get multiple settings in one D-Bus call.
+     *
+     * Reads every requested key via the getter registry and returns a map
+     * containing only the keys that were found. Unknown keys are logged as
+     * warnings and omitted from the result (callers should fall back to
+     * their hardcoded defaults for missing entries).
+     *
+     * Exists to collapse the editor startup's per-key getSetting() chain
+     * (8 round-trips for gap/overlay settings) into a single round-trip.
+     *
+     * @param keys List of setting keys to fetch
+     * @return Map of key -> value for every key that was found
+     */
+    QVariantMap getSettings(const QStringList& keys);
+
+    /**
      * @brief Batch-set multiple settings in one D-Bus call.
      *
      * Applies all values via the setter registry, saves once (synchronously),

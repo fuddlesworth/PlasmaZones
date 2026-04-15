@@ -119,9 +119,9 @@ void EditorController::loadEditorSettings()
 
     // Note: Per-layout zonePadding/outerGap overrides are loaded from the layout JSON
     // in loadLayout(). The global settings are cached here for performance (avoids D-Bus calls).
-    refreshGlobalZonePadding();
-    refreshGlobalOuterGap();
-    refreshGlobalOverlayDisplayMode();
+    // Single batched D-Bus round-trip for all 8 gap/overlay keys, not 8 sequential
+    // getSetting() calls — this is on the ctor hot path before the QML engine starts.
+    refreshGlobalGapOverlaySettings();
 
     // Load label font settings from global Snapping.Appearance.Labels config (read-only in editor)
     {

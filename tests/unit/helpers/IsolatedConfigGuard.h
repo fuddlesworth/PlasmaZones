@@ -8,6 +8,8 @@
 #include <QStandardPaths>
 #include <QUuid>
 
+#include "configmigration.h"
+
 namespace PlasmaZones {
 namespace TestHelpers {
 
@@ -33,6 +35,16 @@ public:
         m_oldDataHome = qEnvironmentVariable("XDG_DATA_HOME");
         qputenv("XDG_CONFIG_HOME", m_tempDir.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_tempDir.path().toUtf8());
+        // ensureJsonConfig() caches its "migration already done" verdict in
+        // a process-level atomic (see configmigration.cpp). That's correct
+        // for production — migration is one-shot — but each test case in
+        // this process points the config dir at a fresh tempdir with
+        // different state, so any cached verdict from a prior guard is
+        // stale. Clear it here so the next ensureJsonConfig() call re-runs
+        // the full logic. Only the ctor reset is load-bearing: each new
+        // guard invalidates the previous one's verdict itself, so the dtor
+        // does not need a matching reset.
+        ConfigMigration::resetMigrationGuardForTesting();
     }
 
     ~IsolatedConfigGuard()
