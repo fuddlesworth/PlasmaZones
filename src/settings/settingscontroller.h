@@ -590,12 +590,8 @@ public:
     // runningWindowsAvailable(list) — no blocking D-Bus round-trip. The
     // controller caches the most recent list in m_cachedRunningWindows so
     // repeat opens of the dialog can show the last-seen values immediately
-    // while the fresh fetch is in flight.
-    //
-    // getRunningWindows() remains as a legacy synchronous helper only so
-    // older QML paths keep working during migration; it will be removed
-    // once every caller is on the async flow.
-    Q_INVOKABLE QVariantList getRunningWindows() const;
+    // while the fresh fetch is in flight. The old synchronous
+    // getRunningWindows() was removed in Phase 6 of refactor/dbus-performance.
     Q_INVOKABLE void requestRunningWindows();
     Q_INVOKABLE QVariantList cachedRunningWindows() const
     {

@@ -1023,39 +1023,6 @@ void SettingsAdaptor::refreshShaders()
 // Window Picker D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString SettingsAdaptor::getRunningWindows()
-{
-    qCWarning(lcDbusSettings) << "getRunningWindows: DEPRECATED blocking path — callers should switch to "
-                                 "requestRunningWindows() + runningWindowsAvailable signal";
-
-    // Guard against reentrant calls (shouldn't happen via D-Bus serialization,
-    // but protects against unexpected provideRunningWindows calls)
-    if (m_windowListLoop) {
-        return QStringLiteral("[]");
-    }
-
-    m_pendingWindowList.clear();
-
-    QEventLoop loop;
-    m_windowListLoop = &loop;
-
-    // Blocking call: waits for KWin effect to respond via provideRunningWindows().
-    // The 2s timeout prevents indefinite blocking if the effect is unloaded or
-    // unresponsive. Retained only for backward compatibility with clients that
-    // have not yet migrated to the async flow.
-    constexpr int WindowListTimeoutMs = 2000;
-    QTimer::singleShot(WindowListTimeoutMs, &loop, &QEventLoop::quit);
-
-    // Signal the KWin effect to enumerate windows
-    Q_EMIT runningWindowsRequested();
-
-    // Block until provideRunningWindows() is called or timeout
-    loop.exec();
-
-    m_windowListLoop = nullptr;
-    return m_pendingWindowList;
-}
-
 void SettingsAdaptor::requestRunningWindows()
 {
     // Fire-and-forget. Callers receive the reply asynchronously via the
@@ -1069,15 +1036,6 @@ void SettingsAdaptor::requestRunningWindows()
 void SettingsAdaptor::provideRunningWindows(const QString& json)
 {
     m_pendingWindowList = json;
-
-    // Legacy path: unblock any blocking getRunningWindows() caller.
-    if (m_windowListLoop && m_windowListLoop->isRunning()) {
-        m_windowListLoop->quit();
-    }
-
-    // Async path: fan out to subscribers of the new signal. Always emit
-    // even when a legacy blocking caller is present — the subscribers are
-    // disjoint and the broadcast is harmless for the blocking waiter.
     Q_EMIT runningWindowsAvailable(json);
 }
 

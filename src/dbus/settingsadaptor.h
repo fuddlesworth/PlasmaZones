@@ -7,7 +7,6 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
-#include <QEventLoop>
 #include <QString>
 #include <QVariant>
 #include <QTimer>
@@ -163,29 +162,15 @@ public Q_SLOTS:
     void refreshShaders();
 
     /**
-     * @brief Get list of currently running windows (for exclusion picker)
-     *
-     * DEPRECATED — blocks up to 2 seconds on a QEventLoop waiting for
-     * provideRunningWindows() to fire. Replaced by the fire-and-forget
-     * requestRunningWindows() + runningWindowsAvailable(json) signal
-     * pair, which keeps the settings UI responsive even when the KWin
-     * effect is unloaded or slow to respond. New callers MUST use the
-     * async pair. This method is kept only so in-flight clients on
-     * older daemon versions still work while they migrate; it will be
-     * removed once every caller is on the async flow.
-     *
-     * @return JSON string: [{"windowClass":"...", "appName":"...", "caption":"..."}]
-     */
-    QString getRunningWindows();
-
-    /**
      * @brief Asynchronous window list request (fire-and-forget).
      *
      * Emits runningWindowsRequested() so the KWin effect enumerates its
      * window list and sends it back via provideRunningWindows(). The
      * resulting JSON is then broadcast via the runningWindowsAvailable
      * signal — subscribers update their view when the signal arrives
-     * rather than blocking on the D-Bus call.
+     * rather than blocking on the D-Bus call. This is the only
+     * supported path; the old blocking getRunningWindows() method was
+     * removed in Phase 6 of refactor/dbus-performance.
      *
      * Returns immediately. Safe to call repeatedly from UI — each call
      * triggers at most one KWin round-trip; duplicate requests while a
@@ -257,9 +242,11 @@ private:
 
     ISettings* m_settings; // Interface type (DIP)
 
-    // Window picker request/response state
+    // Window picker reply cache — last JSON payload received from the
+    // KWin effect via provideRunningWindows(). Re-broadcast on
+    // runningWindowsAvailable; subscribers can also pull it via the
+    // signal with no further D-Bus round-trip.
     QString m_pendingWindowList;
-    QEventLoop* m_windowListLoop = nullptr;
 
     // Registry pattern
     using Getter = std::function<QVariant()>;

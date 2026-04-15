@@ -1992,21 +1992,6 @@ static QVariantList parseRunningWindowsJson(const QString& json)
     return result;
 }
 
-QVariantList SettingsController::getRunningWindows() const
-{
-    // Legacy synchronous path. Retained for QML that has not yet migrated
-    // to the requestRunningWindows + runningWindowsAvailable flow. Issues
-    // a blocking D-Bus call that can freeze the UI for up to 2 seconds
-    // when the KWin effect is unloaded — new callers should use the async
-    // pair instead.
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-    return parseRunningWindowsJson(reply.arguments().at(0).toString());
-}
-
 void SettingsController::requestRunningWindows()
 {
     // Fire-and-forget: the daemon emits runningWindowsRequested to the

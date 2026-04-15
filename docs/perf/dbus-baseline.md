@@ -50,16 +50,37 @@ the ratio between runs on the same machine.
   drops the full JSON serialization + marshal of a 5–20KB string. Expected
   60–90% reduction.
 
-## Post-refactor (branch tip)
+## Post-refactor (branch tip after Phase 6)
 
-Filled in after Phase 6.
+Captured on the same reference workstation immediately after the
+Phase 6 cleanup landed. Same CachyOS / GCC 15.2 / Qt 6.11.0 / Unity
+release build.
 
-| Benchmark                                  | Metric    | Value | Δ vs baseline |
-| ------------------------------------------ | --------- | ----- | ------------- |
-| `benchSetSetting_unchanged`                | ns / call | _TBD_ | _TBD_         |
-| `benchSetSetting_changing`                 | ns / call | _TBD_ | _TBD_         |
-| `benchGetSettings_batch` (8 keys)          | ns / call | _TBD_ | _TBD_         |
-| `benchGetSetting_individual` (8 × 1 key)   | ns / call | _TBD_ | _TBD_         |
-| `benchSetLayoutHidden_toggle`              | ns / call | _TBD_ | _TBD_         |
-| `benchSetLayoutHidden_sameValue`           | ns / call | _TBD_ | _TBD_         |
-| `benchGetLayout_cached`                    | ns / call | _TBD_ | _TBD_         |
+| Benchmark                                  | ms / call | Δ vs baseline | Notes |
+| ------------------------------------------ | --------- | ------------- | ----- |
+| `benchSetSetting_unchanged`                | 0.00041   | **−59 %**     | Value-equality guard short-circuits the setter + scheduleSave() restart. |
+| `benchSetSetting_changing`                 | 0.0012    | +20 %         | Extra equality comparison on the changing path. Within noise at 1 µs absolute. |
+| `benchGetSettings_batch` (8 keys)          | 0.0075    | ≈ flat        | Unchanged — already batched pre-refactor. |
+| `benchGetSetting_individual` (8 × 1 key)   | 0.0018    | ≈ flat        | Unchanged baseline. |
+| `benchSetLayoutHidden_toggle`              | 0.055     | **−42 %**     | Compact `layoutPropertyChanged` replaces full-JSON `layoutChanged`; redundant `layoutListChanged` dropped. |
+| `benchSetLayoutHidden_sameValue`           | 0.0012    | **−97 %**     | Layout's internal setter is a no-op for unchanged values, and the only remaining cost is emitting a 3-field compact signal. |
+| `benchGetLayout_cached`                    | 0.00063   | ≈ flat        | Cache path unchanged — the fix was correctness (invalidation on property mutations), not throughput. |
+
+The bench measures in-process adaptor cost only — no D-Bus marshaling.
+Over the wire the wins are larger because each saved signal emission
+also drops 5–20 KB of marshaled JSON per layout mutation and one full
+round-trip per setting write on the unchanged-value path.
+
+WindowTrackingAdaptor delta persistence (Phase 3) has no dedicated
+bench — the optimization gates disk I/O on a per-field dirty bitfield,
+and the win scales with `(#fields not changed) × JSON size`, which
+only shows up in a realistic long-running session. The correctness
+invariant is covered by `tests/unit/core/test_wts_dirty_mask.cpp`.
+
+## How to reproduce
+
+```bash
+cmake --build build --parallel $(nproc) --target bench_dbus_adaptors
+QT_QPA_PLATFORM=offscreen ./build/bin/bench_dbus_adaptors \
+    | grep -A1 RESULT | grep -v '^--$'
+```

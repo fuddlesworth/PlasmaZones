@@ -163,10 +163,11 @@
             </arg>
         </method>
 
-        <!-- Async window picker flow (preferred). Callers kick off a fetch
-             via requestRunningWindows and bind to runningWindowsAvailable
-             for the reply instead of blocking on the legacy getRunningWindows
-             call path. -->
+        <!-- Async window picker flow. Callers kick off a fetch via
+             requestRunningWindows and bind to runningWindowsAvailable
+             for the reply. No blocking variant exists; the earlier
+             blocking getRunningWindows path was removed in Phase 6 of
+             refactor/dbus-performance. -->
         <method name="requestRunningWindows">
             <annotation name="org.gtk.GDBus.DocString" value="Asynchronously request the running-windows list. The daemon emits runningWindowsRequested to the KWin effect; the reply is delivered via the runningWindowsAvailable signal."/>
         </method>
