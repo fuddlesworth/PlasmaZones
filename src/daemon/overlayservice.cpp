@@ -459,18 +459,14 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
     const QPoint cursorPos(cursorX, cursorY);
 
     if (m_visible) {
-        // Already visible: when single-monitor mode, switch overlay if cursor moved to a different
-        // PHYSICAL monitor (#136). Previously this compared effective screen IDs (virtual-aware),
-        // but Utils::effectiveScreenIdAt can jitter between the physical ID and a virtual variant
-        // ("LG..:115107" ↔ "LG..:115107/vs:0") on successive calls at the same cursor position —
-        // for example when a stale virtual-screen entry is dropped mid-session and subsequent
-        // lookups fall back to the physical ID. Every flicker would fire initializeOverlay →
-        // destroyOverlayWindow(old) → createOverlayWindow(new), paying a full Vulkan RHI
-        // init + wl_surface round-trip each cycle. The destroy/create loop blocked the daemon
-        // main thread long enough to stall endDrag D-Bus delivery by 10+ seconds.
-        //
-        // Comparing extracted physical IDs matches main's QScreen*-pointer comparison in
-        // semantics while staying virtual-screen aware for genuine cross-monitor crossings.
+        // One-overlay-per-VS architecture: every VS already has a live
+        // overlay window from initializeOverlay. Cross-VS switching is
+        // just a matter of flipping per-window _idled state — no
+        // re-init, no rekey, no layer-shell re-anchor. This sidesteps
+        // the earlier "wrong spot" bug where rekey moved the map entry
+        // but left the layer surface anchored to the previous VS's
+        // bounds, and the full NVIDIA vkDestroyDevice deadlock on any
+        // destroy path.
         if (!cursorScreen) {
             cursorScreen = Utils::findScreenAtPosition(cursorPos);
         }
@@ -478,13 +474,11 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
             return;
         }
         const QString cursorEffectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
-        if (!showOnAllMonitors && !cursorEffectiveId.isEmpty()) {
-            const QString currentPhys = VirtualScreenId::extractPhysicalId(m_currentOverlayScreenId);
-            const QString cursorPhys = VirtualScreenId::extractPhysicalId(cursorEffectiveId);
-            if (currentPhys != cursorPhys) {
-                initializeOverlay(cursorScreen, cursorPos);
-            }
+        if (cursorEffectiveId.isEmpty()) {
+            return;
         }
+        m_currentOverlayScreenId = showOnAllMonitors ? QString() : cursorEffectiveId;
+        applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
         return;
     }
 
@@ -592,29 +586,48 @@ void OverlayService::setIdleForDragPause()
 
 void OverlayService::refreshFromIdle()
 {
-    // Restore zone data after a setIdleForDragPause() blank.
+    // Restore zone data after a setIdleForDragPause() blank and flip
+    // the active VS's overlay back to visible.
     //
-    // setIdleForDragPause() unconditionally clears the `zones`, `zoneCount`
-    // and highlight QML properties on every live overlay window (both shader
-    // and non-shader paths), so refreshFromIdle() must also unconditionally
-    // re-push — not gate on anyScreenUsesShader(). The L2 labels-texture
-    // hash cache makes the shader-path re-push cheap on unchanged inputs,
-    // and the non-shader path just writes a QVariantList to a QML property.
+    // setIdleForDragPause() unconditionally idles every overlay (zones
+    // blanked + _idled=true), so refreshFromIdle() re-pushes zone data
+    // to all of them and then applies the cursor-based idle state to
+    // un-idle the one the cursor is currently on. The L2 labels-texture
+    // hash cache keeps the shader-path re-push cheap on unchanged inputs.
     if (!m_visible) {
         return;
     }
     updateZonesForAllWindows();
-    // Clear the QML-side idle flag AFTER re-pushing zone data so the
-    // scene graph has a populated zones list ready the moment content
-    // becomes visible again. Order: push zones → flip _idled=false →
-    // Qt Wayland restores the input region and unhides content on the
-    // next frame with zones already in place. Writing _idled first
-    // would briefly show an empty overlay for one frame before the
-    // zones landed.
+    // Resolve the cursor's current VS — the drag adaptor keeps
+    // m_currentOverlayScreenId updated via showAtPosition, so this
+    // reflects the last VS the cursor was observed on.
+    const bool showOnAllMonitors = !m_settings || m_settings->showZonesOnAllMonitors();
+    applyIdleStateForCursor(m_currentOverlayScreenId, showOnAllMonitors);
+}
+
+void OverlayService::applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors)
+{
+    // One-overlay-per-VS idle state: iterate every live overlay window
+    // and flip its _idled QML property based on whether its VS should
+    // currently be accepting input / rendering content.
+    //
+    // - showOnAllMonitors=true  → all overlays un-idled (all VSes active)
+    // - showOnAllMonitors=false → only activeEffectiveId un-idled
+    // - activeEffectiveId empty → all overlays idled (no active VS —
+    //   used by setIdleForDragPause when drag-end hasn't chosen a next
+    //   cursor position yet, or when the cursor sits on a disabled VS)
+    //
+    // The write is idempotent: QML property binding only re-evaluates
+    // when the value actually changes, so flipping _idled on a window
+    // that's already in the target state is free.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
-        if (QQuickWindow* window = it.value().overlayWindow) {
-            writeQmlProperty(window, QStringLiteral("_idled"), false);
+        QQuickWindow* window = it.value().overlayWindow;
+        if (!window) {
+            continue;
         }
+        const bool shouldBeActive =
+            showOnAllMonitors || (it.key() == activeEffectiveId && !activeEffectiveId.isEmpty());
+        writeQmlProperty(window, QStringLiteral("_idled"), !shouldBeActive);
     }
 }
 
