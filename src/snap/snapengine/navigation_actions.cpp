@@ -86,10 +86,11 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
 }
 
 /// Apply a vector of ZoneAssignmentEntry: do snap bookkeeping per entry,
-/// build a batch geometry list, and emit it via @p emitBatch. Shared by
-/// rotate, resnap, and resnap-current paths.
-bool processBatchEntries(SnapEngine* engine, WindowTrackingAdaptor* wta, const QVector<ZoneAssignmentEntry>& entries,
-                         const QString& action)
+/// build a batch geometry list, and emit it via @p engine's
+/// applyGeometriesBatch signal. Shared by rotate, resnap, and
+/// resnap-current paths.
+bool processBatchEntries(SnapEngine* engine, WindowTrackingService* service, WindowTrackingAdaptor* wta,
+                         const QVector<ZoneAssignmentEntry>& entries, const QString& action)
 {
     if (entries.isEmpty()) {
         return false;
@@ -97,8 +98,8 @@ bool processBatchEntries(SnapEngine* engine, WindowTrackingAdaptor* wta, const Q
 
     for (const auto& entry : entries) {
         if (entry.targetZoneId == QLatin1String("__restore__")) {
-            wta->windowUnsnapped(entry.windowId);
-            wta->clearPreTileGeometry(entry.windowId);
+            service->uncommitSnap(entry.windowId);
+            service->clearPreTileGeometry(entry.windowId);
         } else {
             QString screenId = entry.targetScreenId;
             QPoint center = entry.targetGeometry.center();
@@ -121,9 +122,9 @@ bool processBatchEntries(SnapEngine* engine, WindowTrackingAdaptor* wta, const Q
                 }
             }
             if (entry.targetZoneIds.size() > 1) {
-                wta->windowSnappedMultiZone(entry.windowId, entry.targetZoneIds, screenId);
+                service->commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId);
             } else {
-                wta->windowSnapped(entry.windowId, entry.targetZoneId, screenId);
+                service->commitSnap(entry.windowId, entry.targetZoneId, screenId);
             }
         }
     }
@@ -235,8 +236,8 @@ void SnapEngine::moveFocusedInDirection(const QString& direction)
         qCWarning(lcCore) << "SnapEngine::moveFocusedInDirection: invalid geometry from nav result";
         return;
     }
-    m_wta->windowSnapped(windowId, result.zoneId, result.screenName);
-    m_wta->recordSnapIntent(windowId, true);
+    m_windowTracker->commitSnap(windowId, result.zoneId, result.screenName);
+    m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId,
                                   result.screenName, false);
 }
@@ -271,8 +272,8 @@ void SnapEngine::swapFocusedInDirection(const QString& direction)
     if (!result.success) {
         return;
     }
-    m_wta->windowSnapped(result.windowId1, result.zoneId1, result.screenName);
-    m_wta->recordSnapIntent(result.windowId1, true);
+    m_windowTracker->commitSnap(result.windowId1, result.zoneId1, result.screenName);
+    m_windowTracker->recordSnapIntent(result.windowId1, true);
     Q_EMIT applyGeometryRequested(result.windowId1, result.x1, result.y1, result.w1, result.h1, result.zoneId1,
                                   result.screenName, false);
 
@@ -281,8 +282,8 @@ void SnapEngine::swapFocusedInDirection(const QString& direction)
         if (screen2.isEmpty()) {
             screen2 = result.screenName;
         }
-        m_wta->windowSnapped(result.windowId2, result.zoneId2, screen2);
-        m_wta->recordSnapIntent(result.windowId2, true);
+        m_windowTracker->commitSnap(result.windowId2, result.zoneId2, screen2);
+        m_windowTracker->recordSnapIntent(result.windowId2, true);
         Q_EMIT applyGeometryRequested(result.windowId2, result.x2, result.y2, result.w2, result.h2, result.zoneId2,
                                       screen2, false);
     }
@@ -324,8 +325,8 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const QString& screenId)
         qCWarning(lcCore) << "SnapEngine::moveFocusedToPosition: invalid geometry from nav result";
         return;
     }
-    m_wta->windowSnapped(windowId, result.zoneId, effectiveScreen);
-    m_wta->recordSnapIntent(windowId, true);
+    m_windowTracker->commitSnap(windowId, result.zoneId, effectiveScreen);
+    m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
                                   false);
 }
@@ -360,8 +361,8 @@ void SnapEngine::pushFocusedToEmptyZone(const QString& screenId)
         qCWarning(lcCore) << "SnapEngine::pushFocusedToEmptyZone: invalid geometry from nav result";
         return;
     }
-    m_wta->windowSnapped(windowId, result.zoneId, effectiveScreen);
-    m_wta->recordSnapIntent(windowId, true);
+    m_windowTracker->commitSnap(windowId, result.zoneId, effectiveScreen);
+    m_windowTracker->recordSnapIntent(windowId, true);
     Q_EMIT applyGeometryRequested(windowId, geo.x(), geo.y(), geo.width(), geo.height(), result.zoneId, effectiveScreen,
                                   false);
 }
@@ -387,8 +388,8 @@ void SnapEngine::restoreFocusedWindow()
     if (!result.success) {
         return;
     }
-    m_wta->windowUnsnapped(windowId);
-    m_wta->clearPreTileGeometry(windowId);
+    m_windowTracker->uncommitSnap(windowId);
+    m_windowTracker->clearPreTileGeometry(windowId);
     Q_EMIT applyGeometryRequested(windowId, result.x, result.y, result.width, result.height, QString(), screenId,
                                   false);
 }
@@ -454,7 +455,7 @@ void SnapEngine::rotateWindowsInLayout(bool clockwise, const QString& screenId)
         }
         return;
     }
-    processBatchEntries(this, m_wta, entries, QStringLiteral("rotate"));
+    processBatchEntries(this, m_windowTracker, m_wta, entries, QStringLiteral("rotate"));
     const QString direction = clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise");
     const QString reason = QStringLiteral("%1:%2").arg(direction).arg(entries.size());
     Q_EMIT navigationFeedback(true, QStringLiteral("rotate"), reason, entries.first().sourceZoneId,

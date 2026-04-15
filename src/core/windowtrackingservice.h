@@ -447,6 +447,58 @@ public:
                             int virtualDesktop);
 
     /**
+     * @brief Commit a snap: full orchestration of a "window is now in this zone".
+     *
+     * Encapsulates the sequence that used to live in
+     * WindowTrackingAdaptor::windowSnapped, which was the biggest chunk of
+     * snap-engine business logic masquerading as a D-Bus adaptor method:
+     *
+     *   1. Clear any pre-existing floating state (emits floating-cleared signal)
+     *   2. Clear auto-snapped flag; capture wasAutoSnapped
+     *   3. If !wasAutoSnapped, consume one pending-restore entry
+     *   4. Assign the window to @p zoneId on @p screenId at the current desktop
+     *   5. If this wasn't an auto-snap and @p zoneId isn't a zone-selector
+     *      special ID, update the last-used-zone tracking
+     *   6. Emit windowSnapStateChanged(windowId, WindowStateEntry{...})
+     *
+     * Callers (SnapEngine navigation methods, WTA's D-Bus slot forwarder,
+     * WTA internal paths) pass the resolved screen — WTS does no screen
+     * resolution of its own since cursor/active-window shadows are
+     * compositor-layer state held by WTA.
+     *
+     * @param windowId  Full window id
+     * @param zoneId    Target zone UUID (or "zoneselector-*" sentinel)
+     * @param screenId  Already-resolved effective screen id
+     */
+    void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId);
+
+    /**
+     * @brief Multi-zone variant of commitSnap for zone-spanning windows.
+     *
+     * Same orchestration, but calls assignWindowToZones for the whole
+     * list and updates last-used-zone tracking based on the primary
+     * (first) zone id.
+     *
+     * @param windowId  Full window id
+     * @param zoneIds   Target zone UUIDs — must be non-empty; first is primary
+     * @param screenId  Already-resolved effective screen id
+     */
+    void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
+
+    /**
+     * @brief Uncommit a snap: unsnap the window and clean up pending state.
+     *
+     *   1. Bail if the window isn't currently snapped (no-op)
+     *   2. Consume one pending-restore entry so a stale session entry
+     *      can't drag the window back on next close/reopen
+     *   3. Unassign from its zone
+     *   4. Emit windowSnapStateChanged with an "unsnapped" WindowStateEntry
+     *
+     * Replaces WindowTrackingAdaptor::windowUnsnapped's body.
+     */
+    void uncommitSnap(const QString& windowId);
+
+    /**
      * @brief Mark a window as reported by the effect (confirmed live)
      *
      * Called when the effect reports a window via windowOpened/resolveWindowRestore.
@@ -891,6 +943,29 @@ Q_SIGNALS:
      * @brief Emitted when state needs to be saved
      */
     void stateChanged();
+
+    /**
+     * @brief Emitted by commitSnap / commitMultiZoneSnap / uncommitSnap.
+     *
+     * Carries a WindowStateEntry describing the new snap state. WTA
+     * subscribes to this signal in its constructor and re-emits as its
+     * own windowStateChanged D-Bus signal so external consumers (the
+     * KWin effect) see exactly what they did before the bookkeeping
+     * orchestration moved from WTA into WTS.
+     *
+     * The changeType field is "snapped" for commit methods and
+     * "unsnapped" for uncommit.
+     */
+    void windowSnapStateChanged(const QString& windowId, const WindowStateEntry& entry);
+
+    /**
+     * @brief Emitted by commitSnap when it had to clear a pre-existing
+     * floating state before committing.
+     *
+     * WTA relays this to windowFloatingChanged(windowId, false, screenId)
+     * so the effect drops the floating flag on its side too.
+     */
+    void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
 private:
     // Minimum visible area for geometry validation
