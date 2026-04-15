@@ -282,16 +282,25 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
     ///
     /// IDs and all other def fields are preserved. @p orderedIds may be a
     /// subset of the config's defs so callers can rotate only a subset.
-    /// Returns false if @p orderedIds has fewer than two entries or any id
-    /// is not found in the config.
+    /// Returns false if @p orderedIds has fewer than two entries, any id is
+    /// not found in the config, or any id appears more than once (duplicates
+    /// would cause two ring slots to share a target def index — the rotation
+    /// loop would then overwrite the same def twice with different sources
+    /// and silently corrupt geometry).
     bool rotateRegions(const QVector<QString>& orderedIds, bool clockwise)
     {
         if (orderedIds.size() < 2) {
             return false;
         }
+        QSet<QString> seenIds;
+        seenIds.reserve(orderedIds.size());
         QVector<int> defIndices;
         defIndices.reserve(orderedIds.size());
         for (const auto& id : orderedIds) {
+            if (seenIds.contains(id)) {
+                return false; // duplicate id in orderedIds
+            }
+            seenIds.insert(id);
             int found = -1;
             for (int i = 0; i < screens.size(); ++i) {
                 if (screens[i].id == id) {

@@ -427,6 +427,12 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
+    // Shared debounce for VS swap/rotate. Each fire commits a config change
+    // through Settings and kicks a refresh → resnap cascade — cheap per call
+    // but pile-up-prone under keyboard auto-repeat, same rationale as
+    // m_rotateDebounce above. One timer for both ops: rapid alternation
+    // between swap and rotate is not a user pattern.
+    QElapsedTimer m_virtualScreenDebounce;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

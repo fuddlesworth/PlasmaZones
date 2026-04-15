@@ -326,6 +326,11 @@ void Daemon::resnapIfManualMode()
 
 void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
 {
+    if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_virtualScreenDebounce.restart();
+
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
@@ -350,7 +355,7 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     // no per-call assertion needed.
     const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
     const bool ok = (result == VirtualScreenSwapper::Result::Ok);
-    qCInfo(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
+    qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         // On success, surface the direction (the OSD style needs a string to
@@ -362,6 +367,11 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
 
 void Daemon::handleRotateVirtualScreens(bool clockwise)
 {
+    if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_virtualScreenDebounce.restart();
+
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "RotateVirtualScreens shortcut: no screen info";
@@ -374,7 +384,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     // comment in handleSwapVirtualScreen above.
     const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
     const bool ok = (result == VirtualScreenSwapper::Result::Ok);
-    qCInfo(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
+    qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         // VS rotate is a monitor-scope action — show the OSD on the physical

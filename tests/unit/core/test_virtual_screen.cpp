@@ -1051,6 +1051,20 @@ private Q_SLOTS:
         QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, QStringLiteral("DP-1/vs:9")}, true));
         QCOMPARE(cfg, before);
     }
+
+    void rotateRegions_duplicateId_returnsFalse()
+    {
+        // Passing the same id twice would cause two ring slots to share a
+        // target def index, and the rotation loop would then overwrite that
+        // def twice with different sources — silently corrupting geometry.
+        // The guard must reject this before any mutation happens.
+        VirtualScreenConfig cfg = makeThreeSplit();
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, cfg.screens[0].id, cfg.screens[1].id}, true));
+        QCOMPARE(cfg, before);
+        QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, cfg.screens[1].id, cfg.screens[0].id}, false));
+        QCOMPARE(cfg, before);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestVirtualScreen)
