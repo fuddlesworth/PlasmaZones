@@ -341,6 +341,13 @@ add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
 target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
 add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 
+# LayoutAdaptor signal contract test (Phase 1.2 of refactor/dbus-performance).
+# Pins the rule: property mutations emit layoutChanged only, NEVER
+# layoutListChanged — the list hasn't changed.
+add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
+target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
+
 # Micro-benchmarks for D-Bus adaptor hot paths. Drives the
 # refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
 # LayoutAdaptor signal split, JSON cache reuse). Run with
@@ -405,6 +412,7 @@ set(_all_tests
     test_autotile_adaptor_panel_gate
     test_drag_policy
     test_dbus_validation
+    test_layout_adaptor_signals
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -299,8 +299,11 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
+    // Single property mutation — emit layoutChanged only. layoutListChanged
+    // is reserved for add/delete operations; subscribers (SettingsController)
+    // already connect both signals to the same reload slot, so the extra
+    // emission is pure signal churn.
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
 }
 
 void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -314,8 +317,8 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
+    // See setLayoutHidden for the rationale on not emitting layoutListChanged.
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
 }
 
 void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
@@ -328,8 +331,8 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
     layout->setAspectRatioClassInt(aspectRatioClass);
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
+    // See setLayoutHidden for the rationale on not emitting layoutListChanged.
     Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -155,25 +155,23 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────
     // Layout: setLayoutHidden full emission path.
     //
-    // Before Phase 1.2/4 this emits layoutChanged (full JSON, 5–20KB)
-    // AND layoutListChanged. After Phase 1.2 layoutListChanged is gone;
-    // after Phase 4 the full-JSON signal is replaced by a compact
-    // layoutPropertyChanged. The bench captures the cost of the
+    // Before Phase 1.2 this emitted layoutChanged (full JSON, 5–20KB in
+    // prod) AND layoutListChanged; after Phase 1.2 only layoutChanged
+    // fires. After Phase 4 the full-JSON signal will be replaced by a
+    // compact layoutPropertyChanged. The bench captures the cost of the
     // signal path including JSON serialization.
     // ─────────────────────────────────────────────────────────────────
     void benchSetLayoutHidden_toggle()
     {
         QSignalSpy changedSpy(m_layoutAdaptor, &LayoutAdaptor::layoutChanged);
-        QSignalSpy listSpy(m_layoutAdaptor, &LayoutAdaptor::layoutListChanged);
         bool hidden = false;
 
         QBENCHMARK {
             hidden = !hidden;
             m_layoutAdaptor->setLayoutHidden(m_benchLayoutId, hidden);
         }
-        // Keep the spies alive so Qt compiles in the signal delivery cost.
+        // Keep the spy alive so Qt compiles in the signal delivery cost.
         Q_UNUSED(changedSpy);
-        Q_UNUSED(listSpy);
     }
 
     // Repeated setLayoutHidden with the same value. After Phase 4's
