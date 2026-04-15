@@ -592,10 +592,19 @@ public:
     // repeat opens of the dialog can show the last-seen values immediately
     // while the fresh fetch is in flight. The old synchronous
     // getRunningWindows() was removed in Phase 6 of refactor/dbus-performance.
+    //
+    // A client-side timeout guards against the KWin effect being unloaded:
+    // if no reply arrives within RunningWindowsTimeoutMs, we surface the
+    // last-cached list via runningWindowsTimedOut() so the QML dialog can
+    // show a "no response" state instead of hanging on a spinner forever.
     Q_INVOKABLE void requestRunningWindows();
     Q_INVOKABLE QVariantList cachedRunningWindows() const
     {
         return m_cachedRunningWindows;
+    }
+    Q_INVOKABLE bool runningWindowsPending() const
+    {
+        return m_runningWindowsTimeout.isActive();
     }
 
     // ── Config export/import ────────────────────────────────────────────────
@@ -744,6 +753,18 @@ Q_SIGNALS:
      */
     void runningWindowsAvailable(const QVariantList& windows);
 
+    /**
+     * @brief No reply arrived within RunningWindowsTimeoutMs.
+     *
+     * Emitted by the client-side timeout timer when the KWin effect never
+     * answers a requestRunningWindows() call (effect unloaded, crashed,
+     * or slow). QML dialogs should surface an error state so the user
+     * can distinguish "no windows" from "daemon or effect not responding".
+     * Cached list (possibly stale) is still available via
+     * cachedRunningWindows().
+     */
+    void runningWindowsTimedOut();
+
     // KZones import signals
     void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
@@ -838,6 +859,14 @@ private:
     // cachedRunningWindows() for the initial paint while a fresh
     // request is in flight.
     QVariantList m_cachedRunningWindows;
+
+    // Client-side timeout for the async window picker. Started on
+    // requestRunningWindows(), stopped when the daemon's
+    // runningWindowsAvailable signal arrives. On expiry, we emit
+    // runningWindowsTimedOut() so the UI can give the user feedback
+    // instead of hanging indefinitely on an unloaded KWin effect.
+    QTimer m_runningWindowsTimeout;
+    static constexpr int RunningWindowsTimeoutMs = 3000;
 
     // Staged assignment changes (applied on save, discarded on load/reset)
     struct StagedAssignment

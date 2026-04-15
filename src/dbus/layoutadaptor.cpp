@@ -288,26 +288,36 @@ QString LayoutAdaptor::getLayout(const QString& id)
 // Visibility Filtering
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Drop any cached JSON for @p uuid so the next getLayout call
-// re-serializes from the live Layout. Also clears the active-layout
-// cache slot if the modified layout happens to be the active one,
-// otherwise getActiveLayout would keep serving the stale entry.
-// Private helper — used by all per-layout mutation paths to keep
-// cache invalidation centralized.
-static void invalidateLayoutJsonCache(QHash<QUuid, QString>& cache, QUuid& cachedActiveId, QString& cachedActiveJson,
-                                      const QUuid& uuid)
+void LayoutAdaptor::invalidateLayoutJsonCacheFor(const QUuid& uuid)
 {
-    cache.remove(uuid);
-    if (cachedActiveId == uuid) {
-        cachedActiveId = QUuid();
-        cachedActiveJson.clear();
+    m_cachedLayoutJson.remove(uuid);
+    if (m_cachedActiveLayoutId == uuid) {
+        m_cachedActiveLayoutId = QUuid();
+        m_cachedActiveLayoutJson.clear();
     }
 }
+
+// Property-name constants for the compact layoutPropertyChanged signal.
+// Centralizes the wire format so the three mutators and any future
+// subscriber-side dispatcher cannot drift on spelling.
+namespace {
+constexpr QLatin1String kPropHidden{"hidden"};
+constexpr QLatin1String kPropAutoAssign{"autoAssign"};
+constexpr QLatin1String kPropAspectRatioClass{"aspectRatioClass"};
+} // namespace
 
 void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
 {
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
     if (!layout) {
+        return;
+    }
+
+    // Value-equality guard: skip the mutation + cache invalidation +
+    // signal fan-out when the incoming value already matches the current
+    // one. Mirrors the Phase 1.1 guard in SettingsAdaptor::setSetting so
+    // a settled checkbox cannot spam subscribers with no-op reloads.
+    if (layout->hiddenFromSelector() == hidden) {
         return;
     }
 
@@ -318,14 +328,14 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     // re-serializes with the new value. Subscribers that want the full
     // shape after a property mutation pull via getLayout — the signal is
     // deliberately narrow.
-    invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
+    invalidateLayoutJsonCacheFor(layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
     // Phase 4 of refactor/dbus-performance: emit the compact property
     // signal (3 strings + 1 bool over the wire) instead of layoutChanged
     // with the full 5–20 KB JSON payload. layoutListChanged is likewise
     // not emitted — the list didn't change.
-    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("hidden"), QDBusVariant(hidden));
+    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropHidden), QDBusVariant(hidden));
 }
 
 void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -335,13 +345,17 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
         return;
     }
 
+    if (layout->autoAssign() == enabled) {
+        return;
+    }
+
     layout->setAutoAssign(enabled);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
-    invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
+    invalidateLayoutJsonCacheFor(layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
-    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("autoAssign"), QDBusVariant(enabled));
+    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropAutoAssign), QDBusVariant(enabled));
 }
 
 void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
@@ -351,12 +365,16 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
         return;
     }
 
+    if (static_cast<int>(layout->aspectRatioClass()) == aspectRatioClass) {
+        return;
+    }
+
     layout->setAspectRatioClassInt(aspectRatioClass);
 
-    invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
+    invalidateLayoutJsonCacheFor(layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("aspectRatioClass"), QDBusVariant(aspectRatioClass));
+    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropAspectRatioClass), QDBusVariant(aspectRatioClass));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

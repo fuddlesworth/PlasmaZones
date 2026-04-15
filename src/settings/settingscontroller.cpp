@@ -134,6 +134,18 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::Settings), QStringLiteral("runningWindowsAvailable"),
                                           this, SLOT(onRunningWindowsAvailable(QString)));
 
+    // Client-side timeout for the async window picker. If the daemon
+    // never fans out a runningWindowsAvailable signal (KWin effect
+    // unloaded, crashed, or slow), the timer fires runningWindowsTimedOut()
+    // so the UI can switch from a spinner to an error state.
+    m_runningWindowsTimeout.setSingleShot(true);
+    m_runningWindowsTimeout.setInterval(RunningWindowsTimeoutMs);
+    connect(&m_runningWindowsTimeout, &QTimer::timeout, this, [this]() {
+        qCWarning(PlasmaZones::lcCore) << "requestRunningWindows: no reply within" << RunningWindowsTimeoutMs
+                                       << "ms — KWin effect unresponsive?";
+        Q_EMIT runningWindowsTimedOut();
+    });
+
     // Forward daemon running state changes and refresh data when daemon starts
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
@@ -1998,11 +2010,19 @@ void SettingsController::requestRunningWindows()
     // KWin effect, which answers via provideRunningWindows, which the
     // daemon fans out on runningWindowsAvailable — caught by our
     // onRunningWindowsAvailable slot. The UI thread never blocks.
+    //
+    // Start (or restart) the client-side timeout guard. Repeated calls
+    // coalesce — the most recent deadline wins, matching the fire-and-
+    // forget semantics on the daemon side.
+    m_runningWindowsTimeout.start();
     DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("requestRunningWindows"));
 }
 
 void SettingsController::onRunningWindowsAvailable(const QString& json)
 {
+    // Reply arrived — stop the timeout timer so a stale runningWindowsTimedOut()
+    // doesn't fire after we've already served fresh data.
+    m_runningWindowsTimeout.stop();
     m_cachedRunningWindows = parseRunningWindowsJson(json);
     Q_EMIT runningWindowsAvailable(m_cachedRunningWindows);
 }

@@ -345,6 +345,15 @@ private:
      */
     QJsonObject buildActivityInfoJson(const QString& activityId) const;
 
+    /**
+     * @brief Drop any cached JSON for @p uuid so the next getLayout call
+     * re-serializes from the live Layout. Also clears the active-layout
+     * cache slot when the modified layout happens to be the active one,
+     * otherwise getActiveLayout would keep serving the stale entry.
+     * Centralizes cache invalidation for all per-layout mutation paths.
+     */
+    void invalidateLayoutJsonCacheFor(const QUuid& uuid);
+
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;

@@ -1098,6 +1098,12 @@ private:
     // on any newer mutations.
     QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
 
+    // One-shot warning latch for the test-only synchronous fallback path
+    // in saveState(). Production always uses JsonConfigBackend + the
+    // async worker, so hitting the sync path indicates either a test
+    // harness or an unexpected misconfiguration.
+    bool m_syncFallbackWarned = false;
+
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;
     std::function<void(const QJsonArray&)> m_deserializeTilingStatesFn;

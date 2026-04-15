@@ -90,10 +90,20 @@ private Q_SLOTS:
 
     void testInitialMaskIsAll()
     {
-        // Fresh service (before init's clearDirty call) starts DirtyAll so
-        // the first save after construction writes every field. Build a
-        // second service to verify — m_service has already been cleared.
-        WindowTrackingService fresh(m_layoutManager, m_zoneDetector, m_settings, m_virtualDesktopManager);
+        // Fresh service starts DirtyAll so the first save after construction
+        // writes every field. Build a fully-isolated fixture (independent
+        // parent, layout manager, stubs, etc.) so construction / teardown
+        // cannot interfere with the shared m_* fixture used by other
+        // tests in this class.
+        auto guard = std::make_unique<IsolatedConfigGuard>();
+        QObject freshParent;
+        auto* freshLayoutManager = new LayoutManager(&freshParent);
+        auto* freshVirtualDesktopManager = new VirtualDesktopManager(freshLayoutManager, &freshParent);
+        auto* freshSettings = new StubSettings(&freshParent);
+        auto* freshZoneDetector = new StubZoneDetector(&freshParent);
+
+        WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, freshSettings, freshVirtualDesktopManager,
+                                    &freshParent);
         QCOMPARE(fresh.peekDirty(), static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
     }
 
@@ -220,16 +230,28 @@ private Q_SLOTS:
                  static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
     }
 
-    void testScheduleSaveState_defaultArg_marksAll()
+    void testMarkDirty_All_setsEveryBit()
     {
-        // Backward-compat path: old call sites that pass no argument must
-        // still behave as "everything is dirty". Protects the safety net.
-        // Use assignWindowToZone + clearDirty to ensure we test the default.
-        // Private: can't call directly, so we verify via markDirty with DirtyAll
-        // which scheduleSaveState wraps.
+        // Phase 3 safety net: the DirtyAll constant covers every declared
+        // DirtyField so a legacy mutator that just calls markDirty(DirtyAll)
+        // (via the scheduleSaveState default-arg wrapper it delegates to)
+        // still flushes the full state on the next save. This test pins
+        // that invariant: DirtyAll must be a strict superset of every
+        // individual bit. scheduleSaveState itself is private and
+        // exercised indirectly — the wrapper just delegates to markDirty.
         m_service->markDirty(WindowTrackingService::DirtyAll);
-        QCOMPARE(m_service->peekDirty(),
-                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
+        const auto mask = m_service->peekDirty();
+        QCOMPARE(mask, static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
+        // Every individual field bit must be included in DirtyAll so
+        // adding a new field without extending DirtyAll fails the test.
+        for (const auto bit :
+             {WindowTrackingService::DirtyActiveLayoutId, WindowTrackingService::DirtyZoneAssignments,
+              WindowTrackingService::DirtyPendingRestores, WindowTrackingService::DirtyPreTileGeometries,
+              WindowTrackingService::DirtyLastUsedZone, WindowTrackingService::DirtyPreFloatZones,
+              WindowTrackingService::DirtyPreFloatScreens, WindowTrackingService::DirtyUserSnapped,
+              WindowTrackingService::DirtyAutotileOrders, WindowTrackingService::DirtyAutotilePending}) {
+            QVERIFY2((mask & bit) != 0, "DirtyAll is missing a DirtyField bit — extend DirtyAll in the header");
+        }
     }
 
 private:

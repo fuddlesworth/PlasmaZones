@@ -267,11 +267,26 @@ void WindowTrackingAdaptor::saveState()
         m_pendingWriteMasks.enqueue(dirty);
         m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
     } else {
-        // Fallback synchronous path: the sync() backend signature is void,
-        // so we can't detect a failed write here. This path is only hit
-        // when the backend is not a JsonConfigBackend (i.e. tests), and
-        // the committed mask is NOT enqueued — the worker's writeCompleted
-        // handler never fires for this path.
+        // Fallback synchronous path.
+        //
+        // This branch is only reachable when m_sessionBackend is not a
+        // JsonConfigBackend — i.e. tests that wire a memory-only backend.
+        // The production daemon always uses JsonConfigBackend, so the
+        // async/retry path above is the only one exercised outside of
+        // the test harness.
+        //
+        // sync() returns void, so we have no way to detect a failed
+        // write and re-mark the committed bits for retry. The mask has
+        // already been taken (above), which means a silent failure here
+        // silently loses the committed bits — same behavior as
+        // pre-Phase-3 code, and acceptable only because this path is
+        // test-only. Log a one-time warning on first hit so any future
+        // production regression is obvious in logs.
+        if (!m_syncFallbackWarned) {
+            qCWarning(lcDbusWindow) << "saveState: using synchronous fallback backend; failed writes cannot be retried "
+                                       "(expected only in unit tests)";
+            m_syncFallbackWarned = true;
+        }
         m_sessionBackend->sync();
     }
     qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec << "zones=" << fullAssignments.size()

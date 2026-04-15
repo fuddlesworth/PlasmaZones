@@ -245,12 +245,6 @@ private:
 
     ISettings* m_settings; // Interface type (DIP)
 
-    // Window picker reply cache — last JSON payload received from the
-    // KWin effect via provideRunningWindows(). Re-broadcast on
-    // runningWindowsAvailable; subscribers can also pull it via the
-    // signal with no further D-Bus round-trip.
-    QString m_pendingWindowList;
-
     // Registry pattern
     using Getter = std::function<QVariant()>;
     using Setter = std::function<bool(const QVariant&)>;

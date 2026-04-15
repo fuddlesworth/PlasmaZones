@@ -138,10 +138,10 @@ void SettingsAdaptor::initializeRegistry()
     // The per-screen override API is fully on ISettings — this cast is
     // used only by the REGISTER_CONCRETE_* macros below for dozens of
     // global properties that haven't been hoisted to the segregated
-    // interfaces yet. Test backends that don't supply a concrete Settings
-    // leave `concrete` null; the per-property lambdas capture it by value
-    // and would crash if invoked, but those keys never appear in
-    // stub-driven tests.
+    // interfaces yet. Every REGISTER_CONCRETE_* call site is wrapped in
+    // an `if (concrete)` block, so test backends that don't supply a
+    // concrete Settings simply don't register those keys — setSetting
+    // returns "key not found" instead of dereferencing a null pointer.
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
 // Macros for concrete Settings entries (same pattern as REGISTER_* but captures 'concrete')
@@ -679,7 +679,8 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     const bool scalarType =
         (typeId == QMetaType::Bool || typeId == QMetaType::Int || typeId == QMetaType::UInt
          || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong || typeId == QMetaType::Double
-         || typeId == QMetaType::QString || typeId == QMetaType::QStringList);
+         || typeId == QMetaType::Float || typeId == QMetaType::QString || typeId == QMetaType::QStringList
+         || typeId == QMetaType::QUrl || typeId == QMetaType::QByteArray || typeId == QMetaType::QChar);
     if (scalarType) {
         auto getterIt = m_getters.constFind(key);
         if (getterIt != m_getters.constEnd()) {
@@ -691,6 +692,12 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
                 return true;
             }
         }
+    } else {
+        // Non-scalar fall-through. Debug-log once so a future caller that
+        // tries to optimize same-value writes on a new composite type can
+        // trace back to why their key isn't being short-circuited.
+        qCDebug(lcDbusSettings) << "setSetting: value-equality guard skipped for non-scalar type"
+                                << converted.metaType().name() << "key=" << key;
     }
 
     const bool result = it.value()(converted);
@@ -1059,7 +1066,9 @@ void SettingsAdaptor::requestRunningWindows()
 
 void SettingsAdaptor::provideRunningWindows(const QString& json)
 {
-    m_pendingWindowList = json;
+    // Fan out to every client that subscribed to runningWindowsAvailable —
+    // SettingsController caches the last payload on the client side, so
+    // there is no server-side state to keep here.
     Q_EMIT runningWindowsAvailable(json);
 }
 

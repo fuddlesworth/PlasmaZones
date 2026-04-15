@@ -183,6 +183,43 @@ private Q_SLOTS:
         QVERIFY(afterJson != beforeJson);
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Value-equality guard: calling setLayoutHidden/AutoAssign/AspectRatioClass
+    // with the currently-stored value must short-circuit — no signal
+    // emission, no cache invalidation. Mirrors SettingsAdaptor::setSetting's
+    // Phase 1.1 guard so settled checkboxes don't spam subscribers with
+    // no-op reloads.
+    // ─────────────────────────────────────────────────────────────────
+    void testSetLayoutHidden_sameValue_noSignal()
+    {
+        // Flip to a known state first so the next (same-value) call can
+        // exercise the guard. Both the flip and the guard path must
+        // produce exactly one propertyChanged signal between them.
+        m_adaptor->setLayoutHidden(m_layoutId, true);
+
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
+        m_adaptor->setLayoutHidden(m_layoutId, true);
+        QCOMPARE(propertyChanged.count(), 0);
+    }
+
+    void testSetLayoutAutoAssign_sameValue_noSignal()
+    {
+        m_adaptor->setLayoutAutoAssign(m_layoutId, true);
+
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
+        m_adaptor->setLayoutAutoAssign(m_layoutId, true);
+        QCOMPARE(propertyChanged.count(), 0);
+    }
+
+    void testSetLayoutAspectRatioClass_sameValue_noSignal()
+    {
+        m_adaptor->setLayoutAspectRatioClass(m_layoutId, 2);
+
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
+        m_adaptor->setLayoutAspectRatioClass(m_layoutId, 2);
+        QCOMPARE(propertyChanged.count(), 0);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;

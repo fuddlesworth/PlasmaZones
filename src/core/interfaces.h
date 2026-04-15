@@ -150,6 +150,9 @@ public:
     // interface without implementing these. The concrete Settings class
     // overrides every method; the D-Bus SettingsAdaptor depends only on
     // these virtuals so it doesn't need a qobject_cast<Settings*>.
+    // The has*() query methods are virtual with a "nothing persisted"
+    // default so the SettingsAdaptor can answer existence questions
+    // through the interface too.
     // ═══════════════════════════════════════════════════════════════════════════
     virtual QVariantMap getPerScreenAutotileSettings(const QString& /*screenIdOrName*/) const
     {
@@ -161,6 +164,10 @@ public:
     }
     virtual void clearPerScreenAutotileSettings(const QString& /*screenIdOrName*/)
     {
+    }
+    virtual bool hasPerScreenAutotileSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
     }
 
     virtual QVariantMap getPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
@@ -174,6 +181,10 @@ public:
     virtual void clearPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/)
     {
     }
+    virtual bool hasPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
 
     virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
                                              const QVariant& /*value*/)
@@ -181,6 +192,10 @@ public:
     }
     virtual void clearPerScreenSnappingSettings(const QString& /*screenIdOrName*/)
     {
+    }
+    virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
     }
 
     // Persistence (unique to ISettings)

@@ -363,7 +363,12 @@ add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
 add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
 target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
-set_tests_properties(bench_dbus_adaptors PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+# LABELS=bench lets CI skip the verbose benchmark output via
+# `ctest -LE bench` while still letting `ctest -L bench` select it
+# explicitly for the perf-regression run.
+set_tests_properties(bench_dbus_adaptors PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
