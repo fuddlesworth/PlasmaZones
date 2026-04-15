@@ -112,13 +112,17 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("DP-1"), 1, QString());
 
-        QVERIFY(p.bypassReason.isEmpty());
+        QCOMPARE(p.bypassReason, DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
         QVERIFY(p.showOverlay);
         QVERIFY(p.grabKeyboard);
         QVERIFY(p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
         QCOMPARE(p.screenId, QStringLiteral("DP-1"));
+        // Producer/validator guard: computeDragPolicy must never return a
+        // payload the effect-side validator would drop. Every branch below
+        // mirrors this assertion.
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -136,7 +140,7 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("autotile_screen"));
+        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
@@ -146,6 +150,8 @@ private Q_SLOTS:
         // "tracked window → true" path is exercised indirectly by
         // integration tests that actually tile windows.
         QVERIFY(!p.immediateFloatOnStart);
+        // AutotileScreen bypass requires non-empty screenId per the validator.
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -162,12 +168,13 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("DP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("snapping_disabled"));
+        QCOMPARE(p.bypassReason, DragBypassReason::SnappingDisabled);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.grabKeyboard);
         QVERIFY(!p.captureGeometry);
         QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -188,8 +195,9 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("autotile_screen"));
+        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -207,10 +215,11 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("context_disabled"));
+        QCOMPARE(p.bypassReason, DragBypassReason::ContextDisabled);
         QVERIFY(!p.streamDragMoved);
         QVERIFY(!p.showOverlay);
         QVERIFY(!p.immediateFloatOnStart);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     void contextDisabled_overridesSnapDisabled()
@@ -224,9 +233,10 @@ private Q_SLOTS:
                                                             QStringLiteral("DP-1"), 1, QString());
 
         // Context-disabled is checked before snapping_disabled — the reason
-        // is stable at "context_disabled" even though either would produce
+        // is stable at ContextDisabled even though either would produce
         // the same flag set.
-        QCOMPARE(p.bypassReason, QStringLiteral("context_disabled"));
+        QCOMPARE(p.bypassReason, DragBypassReason::ContextDisabled);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -240,8 +250,9 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(nullptr, nullptr, QStringLiteral("win-1"),
                                                             QStringLiteral("DP-1"), 1, QString());
 
-        QVERIFY(p.bypassReason.isEmpty());
+        QCOMPARE(p.bypassReason, DragBypassReason::None);
         QVERIFY(p.streamDragMoved);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -259,7 +270,10 @@ private Q_SLOTS:
                                                             1, QString());
 
         // Autotile check is skipped for empty screenId, so snapping_disabled wins.
-        QCOMPARE(p.bypassReason, QStringLiteral("snapping_disabled"));
+        QCOMPARE(p.bypassReason, DragBypassReason::SnappingDisabled);
+        // SnappingDisabled with empty screenId is explicitly tolerated by
+        // the validator (see DragPolicy::validationError).
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -281,11 +295,12 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("autotile_screen"));
+        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
         // Even though the engine would normally flip this on for tracked
         // windows, Reorder mode must leave it cleared.
         QVERIFY(!p.immediateFloatOnStart);
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -303,13 +318,14 @@ private Q_SLOTS:
         DragPolicy p = WindowDragAdaptor::computeDragPolicy(&settings, engine.get(), QStringLiteral("win-1"),
                                                             QStringLiteral("HP-1"), 1, QString());
 
-        QCOMPARE(p.bypassReason, QStringLiteral("autotile_screen"));
+        QCOMPARE(p.bypassReason, DragBypassReason::AutotileScreen);
         // No windowOpened flowed through the engine so isWindowTracked
         // returns false — immediateFloatOnStart stays false either way.
         // The useful assertion here is that the reorder test above isn't
         // masking a broken computeDragPolicy: the bypass path still
         // returns the same bypassReason in Float mode.
         QVERIFY(p.captureGeometry);
+        QVERIFY(p.validationError().isEmpty());
     }
 };
 

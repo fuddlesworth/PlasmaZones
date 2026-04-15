@@ -213,7 +213,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                 qCWarning(lcEffect) << "beginDrag reply invalid:" << reply.error().message();
                                 return;
                             }
-                            m_currentDragPolicy = reply.value();
+                            const DragPolicy policy = reply.value();
+                            if (const QString err = policy.validationError(); !err.isEmpty()) {
+                                qCWarning(lcEffect)
+                                    << "beginDrag reply rejected:" << err
+                                    << "— keeping conservative snap-path policy for" << capturedWindowId;
+                                return;
+                            }
+                            m_currentDragPolicy = policy;
                             qCInfo(lcEffect) << "beginDrag reply:" << capturedWindowId
                                              << "bypass=" << m_currentDragPolicy.bypassReason
                                              << "stream=" << m_currentDragPolicy.streamDragMoved
@@ -223,7 +230,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             // fast path below already did this synchronously;
                             // this catches the stale-cache case where the fast
                             // path missed.
-                            if (m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen")) {
+                            if (m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen) {
                                 if (!m_dragBypassedForAutotile) {
                                     m_dragBypassedForAutotile = true;
                                     m_dragBypassScreenId = capturedScreenId;
@@ -316,7 +323,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // the daemon's updateDragCursor still watches for a flip
             // BACK to snap mode.
             const bool bypassed =
-                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+                m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen || m_dragBypassedForAutotile;
             if (!bypassed) {
                 // Gate D-Bus calls on activation trigger state so a drag
                 // without any intent to use zones doesn't flood the bus
@@ -737,10 +744,6 @@ void PlasmaZonesEffect::slotWindowClosed(KWin::EffectWindow* w)
     // but clean up our tracking hash to avoid stale entries).
     removeWindowBorder(closedWindowId);
 
-    // Drop the effect-local app-id cache entry. closedWindowId is the bare
-    // instance id under the new wire format, which is exactly the cache key.
-    m_appIdByInstance.remove(closedWindowId);
-
     // Notify general daemon for cleanup
     notifyWindowClosed(w);
 
@@ -1039,7 +1042,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
             const bool bypassed =
-                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+                m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen || m_dragBypassedForAutotile;
             const bool shouldForward =
                 bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
             if (shouldForward) {
@@ -1126,6 +1129,11 @@ void PlasmaZonesEffect::slotDaemonReady()
             return;
         }
         BridgeRegistrationResult result = reply.value();
+        if (const QString err = result.validationError(); !err.isEmpty()) {
+            qCWarning(lcEffect) << "registerBridge reply rejected:" << err
+                                << "— effect remains idle until the daemon signals ready again.";
+            return;
+        }
         if (result.sessionId == QLatin1String("REJECTED")) {
             qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
                                  << "but this effect speaks" << DBus::ApiVersion
@@ -1463,16 +1471,16 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     // their WM_CLASS after the surface is mapped.
     //
     // App class is looked up separately — via getWindowAppId() here in the
-    // effect, and via WindowRegistry in the daemon. Both read the live
+    // effect, and via WindowRegistry in the daemon after pushWindowMetadata
+    // updates the registry on KWin's class-change signals. Both read the live
     // value rather than trusting a frozen first-seen string.
-    //
-    // Populates m_appIdByInstance as a side-effect so appIdForInstance()
-    // can answer later D-Bus calls without walking the stacking order.
     if (!w) {
         return QString();
     }
 
-    // Cache hit: window IDs never change during a window's lifetime
+    // Cache hit: the composite is frozen at first observation for the
+    // window's lifetime so daemon maps keyed by windowId stay stable even
+    // when an Electron/CEF app mutates its class mid-session.
     auto cacheIt = m_windowIdCache.constFind(w);
     if (cacheIt != m_windowIdCache.constEnd()) {
         return cacheIt.value();
@@ -1484,9 +1492,6 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     }
     const QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
     const QString appId = getWindowAppId(w);
-    if (!appId.isEmpty()) {
-        const_cast<PlasmaZonesEffect*>(this)->m_appIdByInstance.insert(instanceId, appId);
-    }
     const QString result = appId + QLatin1Char('|') + instanceId;
     m_windowIdCache.insert(w, result);
     m_windowIdReverse.insert(result, const_cast<KWin::EffectWindow*>(w));
@@ -3019,6 +3024,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 return;
             }
             const DragOutcome outcome = reply.value();
+            if (const QString err = outcome.validationError(); !err.isEmpty()) {
+                // Garbled outcome — refuse to apply any window transform.
+                // Better to leave the window where it is than to float/snap
+                // based on a corrupted payload.
+                qCWarning(lcEffect) << "endDrag outcome rejected:" << err
+                                    << "— dropping without applying any action for" << windowId;
+                return;
+            }
             qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
                              << "screen=" << outcome.targetScreenId << "geo=" << outcome.toRect()
                              << "snapAssist=" << outcome.requestSnapAssist;
@@ -3378,13 +3391,21 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
         return;
     }
 
-    const QString oldReason = m_currentDragPolicy.bypassReason;
-    const QString newReason = newPolicy.bypassReason;
+    if (const QString err = newPolicy.validationError(); !err.isEmpty()) {
+        // Garbled policy change — keep current state rather than transitioning
+        // to a corrupted one. The daemon will re-emit on the next cursor tick
+        // if this was transient.
+        qCWarning(lcEffect) << "slotDragPolicyChanged rejected:" << err << "for" << windowId;
+        return;
+    }
+
+    const DragBypassReason oldReason = m_currentDragPolicy.bypassReason;
+    const DragBypassReason newReason = newPolicy.bypassReason;
     if (oldReason == newReason) {
         // Same reason but different screenId (autotile→autotile cross-VS):
         // update the captured screen so endDrag's ApplyFloat uses the right one.
         m_currentDragPolicy = newPolicy;
-        if (newReason == QLatin1String("autotile_screen")) {
+        if (newReason == DragBypassReason::AutotileScreen) {
             m_dragBypassScreenId = newPolicy.screenId;
         }
         return;
@@ -3397,7 +3418,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
 
     KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
 
-    if (newReason == QLatin1String("autotile_screen")) {
+    if (newReason == DragBypassReason::AutotileScreen) {
         // Snap → autotile (or context-disabled → autotile). Cancel any
         // active snap overlay, enter bypass mode. Mirrors the old
         // effect-side flip block's "snap→autotile" branch, but driven by
@@ -3418,7 +3439,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
         return;
     }
 
-    if (oldReason == QLatin1String("autotile_screen")) {
+    if (oldReason == DragBypassReason::AutotileScreen) {
         // Autotile → snap (or autotile → context-disabled). Drop the
         // bypass flag and initialize snap-drag state as if the drag just
         // started on this snap screen. Remove the window from autotile

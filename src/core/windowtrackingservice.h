@@ -12,6 +12,7 @@
 #include <QHash>
 #include <QSet>
 #include <QRect>
+#include <functional>
 #include <optional>
 
 namespace PlasmaZones {
@@ -447,16 +448,139 @@ public:
                             int virtualDesktop);
 
     /**
-     * @brief Clear stale pending assignment for a window
+     * @brief Snap-commit intent — distinguishes user-initiated from auto-restored snaps.
      *
-     * When a user explicitly snaps a window, this clears any stale pending
-     * assignment from a previous session. This prevents the window from
-     * restoring to the wrong zone if it's closed and reopened.
+     * commitSnap's side effects depend on WHY the snap is happening. The
+     * two intents select different branches inside the orchestration:
      *
-     * @param windowId Full window ID
-     * @return true if a stale pending assignment was cleared
+     *   UserInitiated (default):
+     *     - Captures and clears any stale auto-snapped flag (so a subsequent
+     *       windowActivated's last-used-zone gate sees "user-initiated")
+     *     - Consumes one pending-restore entry (so the session entry can't
+     *       drag the window back on next close/reopen)
+     *     - Updates last-used-zone tracking
+     *   AutoRestored:
+     *     - Does NOT touch the auto-snapped flag. The caller (lifecycle
+     *       auto-snap path) sets it BEFORE commit, and the flag is
+     *       expected to persist until windowClosed or pruneStale so
+     *       the initial windowActivated can read it and skip the
+     *       last-used-zone update.
+     *     - Does NOT consume pending-restore. The resolve path that
+     *       produced this snap already consumed its entry.
+     *     - Does NOT update last-used-zone. Auto-restores shouldn't
+     *       drag the last-used marker around.
+     *
+     * Floating-state clear (+ windowFloatingClearedForSnap emit) and the
+     * windowSnapStateChanged emit fire for both intents.
+     *
+     * See callers for which intent they pass:
+     *   - SnapEngine navigation methods: UserInitiated (default)
+     *   - WindowTrackingAdaptor::windowSnapped D-Bus slot: UserInitiated
+     *   - SnapEngine::windowOpened auto-snap path: AutoRestored
+     *   - SnapEngine::unfloatToZone: UserInitiated (user toggled float)
      */
-    bool clearStalePendingAssignment(const QString& windowId);
+    enum class SnapIntent {
+        UserInitiated, ///< Explicit user action (shortcut, D-Bus call, float-toggle)
+        AutoRestored, ///< Auto-snap on open, session restore, app-rule match
+    };
+
+    /**
+     * @brief Commit a snap: full orchestration of "window is now in this zone".
+     *
+     * Encapsulates the sequence that used to live in
+     * WindowTrackingAdaptor::windowSnapped (pre-Phase-5C):
+     *
+     *   1. Clear any pre-existing floating state (emits floating-cleared signal)
+     *   2. If UserInitiated: clear auto-snapped flag; capture wasAutoSnapped
+     *   3. If UserInitiated && !wasAutoSnapped: consume pending-restore entry
+     *   4. Assign the window to @p zoneId on @p screenId at the current desktop
+     *   5. If UserInitiated && !wasAutoSnapped && zoneId isn't a zone-selector
+     *      sentinel: update last-used-zone tracking
+     *   6. Emit windowSnapStateChanged(windowId, WindowStateEntry{...})
+     *
+     * Callers pass the resolved screen — WTS does no screen resolution of
+     * its own since cursor/active-window shadows are compositor-layer
+     * state held by WTA.
+     *
+     * @param windowId  Full window id
+     * @param zoneId    Target zone UUID (or "zoneselector-*" sentinel)
+     * @param screenId  Already-resolved effective screen id
+     * @param intent    Whether this snap was user-initiated or auto-restored
+     */
+    void commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
+                    SnapIntent intent = SnapIntent::UserInitiated);
+
+    /**
+     * @brief Multi-zone variant of commitSnap for zone-spanning windows.
+     *
+     * Same orchestration as commitSnap, but calls assignWindowToZones for
+     * the whole list and updates last-used-zone tracking based on the
+     * primary (first) zone id.
+     *
+     * @param windowId  Full window id
+     * @param zoneIds   Target zone UUIDs — must be non-empty; first is primary
+     * @param screenId  Already-resolved effective screen id
+     * @param intent    Whether this snap was user-initiated or auto-restored
+     */
+    void commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds, const QString& screenId,
+                             SnapIntent intent = SnapIntent::UserInitiated);
+
+    /**
+     * @brief Apply a batch of zone-assignment changes.
+     *
+     * Used by rotate / resnap / vs_reconfigure / snap-all pipelines to
+     * process a pre-computed vector of ZoneAssignmentEntry items in one
+     * pass. Replaces two nearly-identical `processBatchEntries` copies
+     * that used to live in WindowTrackingAdaptor/navigation.cpp and
+     * snapengine/navigation_actions.cpp — the bookkeeping loop belongs
+     * on WTS, and each caller now emits its own applyGeometriesBatch
+     * signal on the returned geometry list.
+     *
+     * Per-entry semantics:
+     *   - targetZoneId == "__restore__": uncommitSnap + clearPreTileGeometry
+     *   - multi-zone (targetZoneIds.size() > 1): commitMultiZoneSnap(intent)
+     *   - single-zone: commitSnap(intent)
+     *
+     * Screen resolution per entry (first non-empty wins):
+     *   1. entry.targetScreenId — caller stamped an authoritative target
+     *   2. ScreenManager::effectiveScreenAt(geometry.center()) — VS-aware
+     *      point lookup
+     *   3. QGuiApplication::screens() linear walk — physical fallback for
+     *      early startup when ScreenManager isn't initialised yet
+     *   4. fallbackScreenResolver() — caller-supplied last-resort, typically
+     *      a compositor-layer cursor/active shadow read from
+     *      WindowTrackingAdaptor
+     *
+     * @param entries                 Pre-computed assignments (may be empty)
+     * @param intent                  SnapIntent for commit methods. Defaults
+     *                                to UserInitiated to preserve historical
+     *                                rotate/resnap semantics (each window's
+     *                                snap updates last-used-zone).
+     * @param fallbackScreenResolver  Optional callable for the last-resort
+     *                                screen. Invoked at most once per entry,
+     *                                only when all built-in strategies return
+     *                                empty. May itself return empty — commit
+     *                                proceeds with an empty screen in that
+     *                                case, preserving legacy behaviour.
+     * @return WindowGeometryList sized to @p entries (one rect per entry in
+     *         input order). Empty if @p entries is empty.
+     */
+    WindowGeometryList applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
+                                             SnapIntent intent = SnapIntent::UserInitiated,
+                                             std::function<QString()> fallbackScreenResolver = {});
+
+    /**
+     * @brief Uncommit a snap: unsnap the window and clean up pending state.
+     *
+     *   1. Bail if the window isn't currently snapped (no-op)
+     *   2. Consume one pending-restore entry so a stale session entry
+     *      can't drag the window back on next close/reopen
+     *   3. Unassign from its zone
+     *   4. Emit windowSnapStateChanged with an "unsnapped" WindowStateEntry
+     *
+     * Replaces WindowTrackingAdaptor::windowUnsnapped's body.
+     */
+    void uncommitSnap(const QString& windowId);
 
     /**
      * @brief Mark a window as reported by the effect (confirmed live)
@@ -493,16 +617,35 @@ public:
     bool clearAutoSnapped(const QString& windowId);
 
     /**
-     * @brief Consume pending zone assignment after successful restore
+     * @brief Pop the oldest pending restore entry for this window's appId.
      *
-     * After a window is successfully restored to its persisted zone, the pending
-     * assignment should be removed so that:
-     * 1. The same window won't be restored again if reopened
-     * 2. Other windows of the same class won't incorrectly restore to this zone
+     * The pending-restore queue is keyed by appId (FIFO), mirroring KWin's
+     * takeSessionInfo pattern. Every call to this method consumes at most
+     * one entry — the oldest one — and erases the queue entry entirely once
+     * it's emptied. Call sites:
      *
-     * @param windowId Full window ID
+     *   1. After a successful session restore — so the same window isn't
+     *      restored again if reopened, and so other instances of the same
+     *      app class don't incorrectly restore onto this window's zone.
+     *   2. After a user-initiated snap or unsnap — so a stale entry from a
+     *      previous session doesn't drag the window back to a different zone
+     *      on its next close/reopen cycle.
+     *
+     * There is no "stale" vs "fresh" distinction inside the queue: every
+     * entry is a FIFO head, and this method pops the head regardless of
+     * provenance. Earlier versions split this into two methods
+     * (consumePendingAssignment / clearStalePendingAssignment) that were
+     * implementation-identical but named as if they did different things;
+     * the duplication has been removed.
+     *
+     * @param windowId Full window ID — the appId is resolved via
+     *                 currentAppIdFor() so the queue lookup sees the live
+     *                 class (Electron/CEF apps that mutate their class
+     *                 mid-session still hit the right queue).
+     * @return true if an entry was popped, false if the queue was empty.
+     *         Callers that don't care about the result may ignore it.
      */
-    void consumePendingAssignment(const QString& windowId);
+    bool consumePendingAssignment(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
@@ -884,6 +1027,29 @@ Q_SIGNALS:
      * @brief Emitted when state needs to be saved
      */
     void stateChanged();
+
+    /**
+     * @brief Emitted by commitSnap / commitMultiZoneSnap / uncommitSnap.
+     *
+     * Carries a WindowStateEntry describing the new snap state. WTA
+     * subscribes to this signal in its constructor and re-emits as its
+     * own windowStateChanged D-Bus signal so external consumers (the
+     * KWin effect) see exactly what they did before the bookkeeping
+     * orchestration moved from WTA into WTS.
+     *
+     * The changeType field is "snapped" for commit methods and
+     * "unsnapped" for uncommit.
+     */
+    void windowSnapStateChanged(const QString& windowId, const WindowStateEntry& entry);
+
+    /**
+     * @brief Emitted by commitSnap when it had to clear a pre-existing
+     * floating state before committing.
+     *
+     * WTA relays this to windowFloatingChanged(windowId, false, screenId)
+     * so the effect drops the floating flag on its side too.
+     */
+    void windowFloatingClearedForSnap(const QString& windowId, const QString& screenId);
 
 private:
     // Minimum visible area for geometry validation

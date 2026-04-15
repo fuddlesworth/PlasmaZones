@@ -116,6 +116,11 @@ target_compile_definitions(test_autotile_engine_order_cycling PRIVATE "PZ_SOURCE
 pz_add_test(test_autotile_engine_class_mutation autotile/test_autotile_engine_class_mutation.cpp)
 pz_add_test(test_autotile_drag_insert autotile/test_autotile_drag_insert.cpp)
 target_compile_definitions(test_autotile_drag_insert PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
+# Producer-side validator guard — ensures the JSON emitted by
+# AutotileEngine::applyTiling round-trips through TileRequestEntry
+# parsing and passes validationError(). Would have caught PR #326 C1.
+pz_add_test(test_autotile_tile_request_validation autotile/test_autotile_tile_request_validation.cpp)
+target_link_libraries(test_autotile_tile_request_validation PRIVATE plasmazones_compositor_common)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Autotile + Virtual Screen Integration Tests
@@ -328,6 +333,14 @@ add_executable(test_drag_policy dbus/test_drag_policy.cpp)
 target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
+# Validation methods on D-Bus struct types — pins the accept/reject table
+# for validationError() so cross-field invariants (DragOutcome action range,
+# ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
+# don't drift as producer code evolves.
+add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
+target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
+add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -357,6 +370,7 @@ set(_all_tests
     test_autotile_engine_retry
     test_autotile_engine_order_cycling
     test_autotile_drag_insert
+    test_autotile_tile_request_validation
     test_autotile_ext_startup_float test_autotile_ext_algoswitch
     test_autotile_ext_overflow
     test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
@@ -378,6 +392,7 @@ set(_all_tests
     test_dbus_adaptor_routing
     test_autotile_adaptor_panel_gate
     test_drag_policy
+    test_dbus_validation
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -22,12 +22,16 @@ namespace PlasmaZones {
 void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cursorY, int modifiers, int mouseButtons,
                                     int& snapX, int& snapY, int& snapWidth, int& snapHeight, bool& shouldApplyGeometry,
                                     QString& releaseScreenIdOut, bool& restoreSizeOnlyOut, bool& snapAssistRequestedOut,
-                                    EmptyZoneList& emptyZonesOut)
+                                    EmptyZoneList& emptyZonesOut, QString& resolvedZoneIdOut)
 {
     // Initialize output parameters
     // shouldApplyGeometry: true = KWin should set window to (snapX, snapY, snapWidth, snapHeight)
     // restoreSizeOnly: when true with shouldApplyGeometry, effect uses current position + returned size
     // (drag-to-unsnap)
+    // resolvedZoneIdOut: the primary zone ID the window snapped to, across every snap
+    //   path (hover-detect, zone selector, modifier multi-zone). Empty when no snap
+    //   happened. The caller uses this for DragOutcome.zoneId, which the post-Phase-1B
+    //   validator requires on ApplySnap — see drag_protocol.cpp.
     snapX = 0;
     snapY = 0;
     snapWidth = 0;
@@ -37,6 +41,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     restoreSizeOnlyOut = false;
     snapAssistRequestedOut = false;
     emptyZonesOut.clear();
+    resolvedZoneIdOut.clear();
 
     if (windowId != m_draggedWindowId) {
         return;
@@ -165,6 +170,12 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                         // Fallback to synthetic format (navigation won't work, but tracking still happens)
                         zoneUuid = QStringLiteral("zoneselector-%1-%2").arg(selectedLayoutId).arg(selectedZoneIndex);
                     }
+                    // Publish the resolved id so drag_protocol.cpp can populate
+                    // DragOutcome.zoneId. Without this, the zone-selector path
+                    // would still surface m_currentZoneId (which is never written
+                    // by this branch) and the post-Phase-1B validator would drop
+                    // the ApplySnap outcome for an empty zoneId.
+                    resolvedZoneIdOut = zoneUuid;
                     m_windowTracking->windowSnapped(windowId, zoneUuid, releaseScreenId);
                     // Record user-initiated snap (not auto-snap)
                     // This prevents auto-snapping windows that were never manually snapped by user
@@ -216,6 +227,10 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             snapWidth = capturedMultiZoneGeometry.width();
             snapHeight = capturedMultiZoneGeometry.height();
             shouldApplyGeometry = true;
+            // Publish primary zone id — identical reason to the zone-selector
+            // branch above. capturedZoneId is the primary zone of the
+            // multi-zone snap as resolved by dragMoved.
+            resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
                 // Pass ALL zone IDs for multi-zone snap (not just primary)
@@ -236,6 +251,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
             snapWidth = capturedZoneGeometry.width();
             snapHeight = capturedZoneGeometry.height();
             shouldApplyGeometry = true;
+            resolvedZoneIdOut = capturedZoneId;
             tryStorePreSnapGeometry(windowId, capturedWasSnapped, capturedOriginalGeometry);
             if (m_windowTracking) {
                 m_windowTracking->windowSnapped(windowId, capturedZoneId, releaseScreenId);
@@ -264,7 +280,11 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
         // captured on another screen may fail isGeometryOnScreen and not restore).
         if (m_settings && m_settings->restoreOriginalSizeOnUnsnap() && m_windowTracking) {
             auto geo = m_windowTracking->service()->validatedPreTileGeometry(windowId, releaseScreenId);
-            if (geo) {
+            // Require strictly-positive dimensions: a degenerate stored
+            // rect would produce a RestoreSize outcome that validates to
+            // "requires non-zero size" and gets dropped effect-side, so
+            // the window would never actually restore.
+            if (geo && geo->width() > 0 && geo->height() > 0) {
                 snapWidth = geo->width();
                 snapHeight = geo->height();
                 shouldApplyGeometry = true;
@@ -275,7 +295,7 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                 m_windowTracking->clearPreTileGeometry(windowId);
                 qCInfo(lcDbusWindow) << "Drag-out unsnap: restoring size" << geo->width() << "x" << geo->height();
             } else {
-                qCInfo(lcDbusWindow) << "Drag-out unsnap: no pre-tile geometry found for" << windowId;
+                qCInfo(lcDbusWindow) << "Drag-out unsnap: no valid pre-tile geometry for" << windowId;
             }
         }
     }

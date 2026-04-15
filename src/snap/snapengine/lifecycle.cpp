@@ -46,10 +46,23 @@ void SnapEngine::windowOpened(const QString& windowId, const QString& screenId, 
         return;
     }
 
-    // Apply: mark auto-snapped, clear floating state, assign to zone(s)
+    // Apply: mark as auto-snapped first so the flag persists through
+    // commitSnap (AutoRestored intent leaves it alone). Then commit via
+    // the unified orchestration — clear floating, assign to zone(s),
+    // emit windowSnapStateChanged / windowFloatingClearedForSnap as
+    // appropriate. consumePendingAssignment is NOT called here because
+    // resolveWindowRestore already consumed its entry (see
+    // calculateRestoreFromSession + the explicit consume on line 147
+    // above). Last-used-zone update is skipped by AutoRestored intent.
     m_windowTracker->markAsAutoSnapped(windowId);
-    clearFloatingStateForSnap(windowId, result.screenId);
-    assignToZones(windowId, result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds, result.screenId);
+    const QStringList zoneIds = result.zoneIds.isEmpty() ? QStringList{result.zoneId} : result.zoneIds;
+    if (zoneIds.size() > 1) {
+        m_windowTracker->commitMultiZoneSnap(windowId, zoneIds, result.screenId,
+                                             WindowTrackingService::SnapIntent::AutoRestored);
+    } else {
+        m_windowTracker->commitSnap(windowId, zoneIds.first(), result.screenId,
+                                    WindowTrackingService::SnapIntent::AutoRestored);
+    }
 
     // Emit geometry for KWin effect to apply
     Q_EMIT applyGeometryRequested(windowId, result.geometry.x(), result.geometry.y(), result.geometry.width(),

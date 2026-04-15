@@ -47,9 +47,11 @@
 #include "../dbus/screenadaptor.h"
 #include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
+#include "../autotile/autotilenavigationadapter.h"
 #include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../snap/SnapEngine.h"
+#include "../snap/snapnavigationadapter.h"
 
 namespace PlasmaZones {
 
@@ -411,8 +413,18 @@ bool Daemon::init()
                 wta->loadState();
         });
 
-    // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
+    // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection).
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+
+    // Wire SnapEngine's back-reference to the window tracking adaptor.
+    // SnapEngine's navigation methods (focusInDirection, moveFocusedInDirection, …)
+    // were moved out of WindowTrackingAdaptor and need to reach back into the
+    // adaptor for shared state that hasn't been migrated yet: the target
+    // resolver, the last-active window/screen shadow, and the snap-
+    // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
+    // clearPreTileGeometry). A future refactor should move that state onto
+    // SnapEngine or WindowTrackingService and retire the back-reference.
+    m_snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Central routing table: single source of truth for "which engine owns
     // screen X". Every window-lifecycle / resnap / restore entry point in the
@@ -421,6 +433,16 @@ bool Daemon::init()
     m_screenModeRouter =
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+
+    // Navigation-intent dispatch: thin INavigationActions adapters wired
+    // through the router so daemon/navigation.cpp shortcut handlers dispatch
+    // via router->navigatorFor(screenId)->foo() instead of branching on mode.
+    // Both adapters forward to their respective engine — SnapEngine now
+    // owns the snap-mode navigation methods that used to live on
+    // WindowTrackingAdaptor (see src/snap/snapengine/navigation_actions.cpp).
+    m_autotileNavigationAdapter = std::make_unique<AutotileNavigationAdapter>(m_autotileEngine.get());
+    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
+    m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
 
     // Stateless façade for VS swap/rotate. Held here so navigation handlers
     // and any future consumer share one instance instead of constructing
@@ -714,6 +736,18 @@ void Daemon::stop()
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->setEngines(nullptr, nullptr);
     }
+
+    // Clear navigation adapters from the router and tear them down BEFORE
+    // destroying the engines they point at. The adapters hold QPointers to
+    // the engines (so a stray call would no-op rather than crash), but we
+    // still prefer to sever the reference chain explicitly to match the
+    // SnapAdaptor/AutotileAdaptor teardown pattern and keep the router from
+    // handing out about-to-be-invalid navigators during the shutdown window.
+    if (m_screenModeRouter) {
+        m_screenModeRouter->setNavigationAdapters(nullptr, nullptr);
+    }
+    m_snapNavigationAdapter.reset();
+    m_autotileNavigationAdapter.reset();
 
     // Destroy engines now (during stop(), before Qt child destruction order).
     m_snapEngine.reset();

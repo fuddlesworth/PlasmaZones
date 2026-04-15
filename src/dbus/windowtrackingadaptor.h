@@ -49,9 +49,6 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
-    /// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy
-    /// the resolver in the .cpp where its type is complete — avoids
-    /// dragging snapnavigationtargets.h into every adaptor include site.
     ~WindowTrackingAdaptor() override;
 
     /**
@@ -144,6 +141,12 @@ public:
     {
         return m_service;
     }
+
+    // Note: targetResolver() accessor was deleted in Phase 5E. The
+    // SnapNavigationTargetResolver instance now lives on SnapEngine,
+    // lazy-constructed via SnapEngine::ensureTargetResolver(). Consumers
+    // previously using m_wta->targetResolver() go through SnapEngine
+    // directly.
 
     /**
      * @brief Same as resnapCurrentAssignments but tags the batch with a
@@ -519,15 +522,14 @@ public Q_SLOTS:
      */
     void restoreWindowSize();
 
-    /**
-     * @brief Toggle float state for the focused window (daemon-local)
-     *
-     * Reads the active windowId + screen from m_lastActive*, reads fresh
-     * frame geometry from the shadow, stores pre-tile geometry,
-     * and calls toggleFloatForWindow to dispatch to the engine. No kwin-effect
-     * round-trip, no stale local cache reads.
-     */
-    void toggleWindowFloat();
+    // Note: toggleWindowFloat() was moved to SnapEngine::toggleFocusedFloat
+    // in Phase 5D — the shortcut-driven float toggle is dispatched through
+    // ScreenModeRouter::navigatorFor() now, and the snap-side adapter
+    // forwards to SnapEngine which owns the pre-tile capture + engine
+    // dispatch. WTA still holds the frame-geometry shadow
+    // (setFrameGeometry / frameGeometry accessors) because it's the
+    // D-Bus-facing shadow store, but the toggle orchestration itself
+    // has moved.
 
     /**
      * @brief Swap the focused window with the window in an adjacent zone (daemon-driven)
@@ -600,15 +602,13 @@ public Q_SLOTS:
      */
     PlasmaZones::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
-    // Snap-mode navigation target computation lives in
-    // src/dbus/snapnavigationtargets.{h,cpp} — see SnapNavigationTargetResolver.
-    // The resolver is a pure-compute helper owned by this adaptor via
-    // m_targetResolver; the D-Bus navigation slots (moveWindowToAdjacentZone,
+    // Note: the snap-mode navigation D-Bus slots (moveWindowToAdjacentZone,
     // focusAdjacentZone, swapWindowWithAdjacentZone, pushToEmptyZone,
-    // snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize) delegate to
-    // it and then emit applyGeometryRequested based on the returned result.
-    // None of those helpers are D-Bus-exposed anymore — there are no external
-    // callers and keeping them in public Q_SLOTS was accidental surface.
+    // snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize) still
+    // exist below as thin forwarders to SnapEngine. Their bodies moved to
+    // src/snap/snapengine/navigation_actions.cpp in Phase 5B and the
+    // SnapNavigationTargetResolver they consulted moved to SnapEngine in
+    // Phase 5E (SnapEngine::ensureTargetResolver).
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -954,6 +954,14 @@ private Q_SLOTS:
      */
     void onPanelGeometryReady();
 
+public:
+    /// Resolve a resnap filter (empty / physical / virtual screen id) into
+    /// the concrete list of snap-mode screens the resnap should touch.
+    /// Consults the shared ScreenModeRouter to drop autotile screens from
+    /// the candidate set — the router lives on WTA so this helper is
+    /// exposed publicly so SnapEngine's navigation methods can reuse it.
+    QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Constants
@@ -968,12 +976,6 @@ private:
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
 
-    /// Resolve a resnap filter (empty / physical / virtual screen id) into
-    /// the concrete list of snap-mode screens this resnap should touch.
-    /// Used by resnapCurrentAssignments and resnapForVirtualScreenReconfigure
-    /// so the service-level resnap helper can stay pure and per-screen.
-    QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
-
     /**
      * @brief Validate window ID and log warning if empty
      * @param windowId Window ID to validate
@@ -981,22 +983,6 @@ private:
      * @return true if windowId is valid, false if empty
      */
     bool validateWindowId(const QString& windowId, const QString& operation) const;
-
-    /**
-     * @brief Validate direction parameter and emit feedback if invalid
-     * @param direction Direction string to validate
-     * @param action Action name for feedback signal
-     * @return true if direction is valid, false if empty
-     */
-    bool validateDirection(const QString& direction, const QString& action);
-
-    /**
-     * @brief Check if a window is excluded from keyboard shortcut operations
-     * @param windowId Full window ID to check
-     * @param action Action name for feedback signal (e.g. "move", "swap")
-     * @return true if window is excluded (caller should abort), false to proceed
-     */
-    bool isWindowExcluded(const QString& windowId, const QString& action);
 
     /**
      * @brief Detect which screen a zone is on by finding where its center falls
@@ -1038,12 +1024,10 @@ private:
     QJsonObject buildStateObject(const QString& windowId, const QString& zoneId, const QJsonArray& zoneIds,
                                  const QString& screenId, bool isFloating, const QString& changeType) const;
 
-    /**
-     * @brief Clear floating state when a window is being snapped
-     * @param windowId Window ID being snapped
-     * @param screenId Screen where the snap is occurring (for windowFloatingChanged signal)
-     */
-    void clearFloatingStateForSnap(const QString& windowId, const QString& screenId);
+    // clearFloatingStateForSnap was removed — WindowTrackingService::commitSnap
+    // now handles floating-state clearing internally (and emits
+    // windowFloatingClearedForSnap which the adaptor relays to its own
+    // windowFloatingChanged D-Bus signal).
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Screen tracking (from KWin effect's D-Bus calls)
@@ -1083,7 +1067,8 @@ private:
     // into the adaptor's navigationFeedback signal. The zone detector is
     // wired late via setZoneDetectionAdaptor which also pushes it into
     // the resolver. Engine pure: never emits Qt signals directly.
-    std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
+    // Note: SnapNavigationTargetResolver ownership moved to SnapEngine in
+    // Phase 5E — see SnapEngine::ensureTargetResolver.
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service

@@ -54,6 +54,7 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
+    core/inavigationactions.h
     core/iwindowengine.h
     core/settings_interfaces.h
     core/types.h
@@ -202,6 +203,8 @@ set(plasmazones_core_SRCS
     autotile/AutotileConfig.h
     autotile/AutotileEngine.cpp
     autotile/AutotileEngine.h
+    autotile/autotilenavigationadapter.cpp
+    autotile/autotilenavigationadapter.h
     autotile/PerScreenConfigResolver.cpp
     autotile/PerScreenConfigResolver.h
     autotile/NavigationController.cpp
@@ -224,9 +227,12 @@ set(plasmazones_core_SRCS
     autotile/algorithms/ScriptedAlgorithmSandbox.h
     snap/SnapEngine.cpp
     snap/SnapEngine.h
+    snap/snapnavigationadapter.cpp
+    snap/snapnavigationadapter.h
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
+    snap/snapengine/navigation_actions.cpp
 )
 
 # Create core library

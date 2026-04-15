@@ -43,18 +43,26 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     // Create business logic service
     m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
 
-    // Snap-mode navigation target resolver — pure compute, owned here, fed
-    // via a lambda that forwards into this adaptor's navigationFeedback
-    // signal. The ZoneDetectionAdaptor is wired later via setZoneDetectionAdaptor.
-    m_targetResolver = std::make_unique<SnapNavigationTargetResolver>(
-        m_service, m_layoutManager, /*zoneDetector=*/nullptr,
-        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-               const QString& targetZoneId, const QString& screenId) {
-            Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
-        });
+    // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
+    // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
+    // first navigation call; setZoneDetectionAdaptor is forwarded to
+    // SnapEngine alongside WTA's own copy, so the late-wired zone detector
+    // still reaches the resolver.
 
     // Forward service signals to D-Bus
     connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
+
+    // Relay WTS snap-commit signals (emitted by commitSnap / commitMultiZoneSnap
+    // / uncommitSnap orchestration methods) to WTA's D-Bus surface. These
+    // signals replaced the D-Bus emissions that used to happen inline inside
+    // WTA::windowSnapped — the business logic moved to WTS, but the D-Bus
+    // contract is unchanged.
+    connect(m_service, &WindowTrackingService::windowSnapStateChanged, this,
+            &WindowTrackingAdaptor::windowStateChanged);
+    connect(m_service, &WindowTrackingService::windowFloatingClearedForSnap, this,
+            [this](const QString& windowId, const QString& screenId) {
+                Q_EMIT windowFloatingChanged(windowId, false, screenId);
+            });
 
     // Connect service state changes to persistence
     connect(m_service, &WindowTrackingService::stateChanged, this, &WindowTrackingAdaptor::scheduleSaveState);
@@ -119,10 +127,10 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     }
 }
 
-// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the
-// resolver here where snapnavigationtargets.h is included and the type is
-// complete. Declaring `= default` in the header would require the full type
-// at every include site.
+// Out-of-line destructor. The unique_ptr<SnapNavigationTargetResolver>
+// that originally required this has moved to SnapEngine (Phase 5E), but
+// the destructor is kept out-of-line to avoid churning every translation
+// unit that includes this header.
 WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -184,9 +192,10 @@ void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
 void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
 {
     m_zoneDetectionAdaptor = adaptor;
-    if (m_targetResolver) {
-        m_targetResolver->setZoneDetector(adaptor);
-    }
+    // Target resolver ownership moved to SnapEngine (Phase 5E). SnapEngine's
+    // own setZoneDetectionAdaptor wiring pushes the adaptor into its
+    // resolver when late-wired; this setter no longer has anything to do
+    // except record the pointer for any WTA-side consumers.
 }
 
 void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,
@@ -207,51 +216,38 @@ void WindowTrackingAdaptor::setTilingPendingRestoreDelegates(std::function<QJson
 // Window Snapping - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Snap-commit D-Bus slots — thin forwarders over WindowTrackingService.
+//
+// The full orchestration (clear floating, clear auto-snapped flag, consume
+// pending restore, assign to zone, update last-used tracking, emit state-
+// change signal) moved to WindowTrackingService::commitSnap /
+// commitMultiZoneSnap / uncommitSnap in Phase 5C. These D-Bus entry points
+// survive as the external contract, but their bodies do only two things:
+//
+//   1. Validate and resolve the screen id (cursor/active shadows live on WTA)
+//   2. Forward to the service
+//
+// The WTS signals (windowSnapStateChanged, windowFloatingClearedForSnap) are
+// wired to WTA's D-Bus signals (windowStateChanged, windowFloatingChanged)
+// in the constructor — external consumers see the same wire format as
+// before, just sourced from the service instead of inline-emitted here.
+// ═══════════════════════════════════════════════════════════════════════════════
+
 void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString& zoneId, const QString& screenId)
 {
     if (!validateWindowId(windowId, QStringLiteral("track window snap"))) {
         return;
     }
-
     if (zoneId.isEmpty()) {
         qCWarning(lcDbusWindow) << "Window snap: cannot track, empty zone ID";
         return;
     }
-
-    clearFloatingStateForSnap(windowId, screenId);
-
-    // Check if this was an auto-snap (restore from session or snap to last zone)
-    // and clear the flag. Auto-snapped windows don't update last-used zone tracking.
-    bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
-
-    // If NOT auto-snapped (user explicitly snapped), clear any stale pending
-    // assignment from a previous session. This prevents the window from restoring
-    // to the wrong zone if it's closed and reopened.
-    if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
-    }
-
-    // Use caller-provided screen name if available, otherwise auto-detect,
-    // then fall back to cursor/active screen as tertiary fallback
-    QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
-
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-
-    // Delegate to service
-    m_service->assignWindowToZone(windowId, zoneId, resolvedScreen, currentDesktop);
-
-    // Update last used zone (skip zone selector special IDs and auto-snapped windows)
-    if (!zoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(zoneId, resolvedScreen, windowClass, currentDesktop);
-    }
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to zone" << zoneId << "on screen" << resolvedScreen;
-
-    // Emit unified state change
-    Q_EMIT windowStateChanged(
-        windowId,
-        WindowStateEntry{windowId, zoneId, resolvedScreen, false, QStringLiteral("snapped"), QStringList{}, false});
+    // Resolve the effective screen using WTA's cursor/active-window shadows
+    // before handing off to WTS — the service has no compositor-layer
+    // cursor tracking and takes an already-resolved screen.
+    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneId);
+    m_service->commitSnap(windowId, zoneId, resolvedScreen);
 }
 
 void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, const QStringList& zoneIds,
@@ -260,42 +256,12 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     if (!validateWindowId(windowId, QStringLiteral("track multi-zone window snap"))) {
         return;
     }
-
     if (zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
         qCWarning(lcDbusWindow) << "Multi-zone window snap: cannot track, empty zone IDs";
         return;
     }
-
-    clearFloatingStateForSnap(windowId, screenId);
-
-    bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
-
-    if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
-    }
-
-    // Use caller-provided screen name if available, otherwise auto-detect,
-    // then fall back to cursor/active screen as tertiary fallback
-    QString primaryZoneId = zoneIds.first();
-    QString resolvedScreen = resolveScreenForSnap(screenId, primaryZoneId);
-
-    int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
-
-    // Delegate to service with all zone IDs
-    m_service->assignWindowToZones(windowId, zoneIds, resolvedScreen, currentDesktop);
-
-    // Update last used zone with primary (skip zone selector special IDs and auto-snapped)
-    if (!primaryZoneId.startsWith(QStringLiteral("zoneselector-")) && !wasAutoSnapped) {
-        QString windowClass = m_service->currentAppIdFor(windowId);
-        m_service->updateLastUsedZone(primaryZoneId, resolvedScreen, windowClass, currentDesktop);
-    }
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "snapped to multi-zone:" << zoneIds << "on screen"
-                         << resolvedScreen;
-
-    Q_EMIT windowStateChanged(
-        windowId,
-        WindowStateEntry{windowId, primaryZoneId, resolvedScreen, false, QStringLiteral("snapped"), zoneIds, false});
+    const QString resolvedScreen = resolveScreenForSnap(screenId, zoneIds.first());
+    m_service->commitMultiZoneSnap(windowId, zoneIds, resolvedScreen);
 }
 
 void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
@@ -303,25 +269,7 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
     if (!validateWindowId(windowId, QStringLiteral("untrack window"))) {
         return;
     }
-
-    QString previousZoneId = m_service->zoneForWindow(windowId);
-    if (previousZoneId.isEmpty()) {
-        qCWarning(lcDbusWindow) << "Window not found for unsnap:" << windowId;
-        return;
-    }
-
-    // Clear pending assignment so window won't be auto-restored on next focus/reopen
-    m_service->clearStalePendingAssignment(windowId);
-
-    // Delegate to service
-    m_service->unassignWindow(windowId);
-
-    qCInfo(lcDbusWindow) << "Window" << windowId << "unsnapped from zone" << previousZoneId;
-
-    // Emit unified state change
-    Q_EMIT windowStateChanged(
-        windowId,
-        WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped"), QStringList{}, false});
+    m_service->uncommitSnap(windowId);
 }
 
 void WindowTrackingAdaptor::windowsSnappedBatch(const SnapConfirmationList& entries)
@@ -404,7 +352,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
-    m_service->clearStalePendingAssignment(windowId);
+    m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap

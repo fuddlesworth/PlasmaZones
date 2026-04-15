@@ -43,7 +43,9 @@ class AutotileAdaptor;
 class AutotileEngine;
 class IEngineLifecycle;
 class IConfigBackend;
+class AutotileNavigationAdapter;
 class ScreenModeRouter;
+class SnapNavigationAdapter;
 class VirtualScreenSwapper;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
@@ -367,6 +369,15 @@ private:
     /// dispatch paths. Owns no state of its own — just delegates to the
     /// layout manager and engine pointers it was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// Thin INavigationActions adapters presented via
+    /// ScreenModeRouter::navigatorFor() so daemon/navigation.cpp shortcut
+    /// handlers dispatch user intents through a common interface instead
+    /// of branching on mode and calling engine methods ad hoc. Both
+    /// adapters forward to their respective engine — SnapEngine owns the
+    /// snap-mode navigation methods (see src/snap/snapengine/navigation_actions.cpp)
+    /// and AutotileEngine owns the autotile ones.
+    std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
+    std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
     /// Stateless façade over m_settings for VS swap/rotate. Held as a
     /// member rather than reconstructed per-call so navigation handlers
     /// don't need to know about its dependencies.

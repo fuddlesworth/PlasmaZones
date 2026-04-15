@@ -79,14 +79,25 @@ bool SnapEngine::unfloatToZone(const QString& windowId, const QString& screenId)
         return false;
     }
 
-    m_windowTracker->setWindowFloating(windowId, false);
-    m_windowTracker->clearPreFloatZone(windowId);
-    // Consume any saved snap-float entry — the window is being explicitly zone-snapped,
-    // so it should not be restored as floating during a future mode transition.
+    // Consume any saved snap-float entry — the window is being explicitly
+    // zone-snapped, so it should not be restored as floating during a
+    // future mode transition. This is a float-specific side effect that
+    // doesn't belong in commitSnap's generic orchestration.
     m_windowTracker->restoreSnapFloating(windowId); // consumes and discards
-    assignToZones(windowId, unfloat.zoneIds, unfloat.screenId);
 
-    Q_EMIT windowFloatingChanged(windowId, false, unfloat.screenId);
+    // Commit the snap via the unified orchestration. User-initiated because
+    // the user just toggled float off — they want this snap to update the
+    // last-used-zone tracking. commitSnap handles clearing floating state
+    // (and emits windowFloatingClearedForSnap which WTA relays as
+    // windowFloatingChanged), plus the zone assignment.
+    if (unfloat.zoneIds.size() > 1) {
+        m_windowTracker->commitMultiZoneSnap(windowId, unfloat.zoneIds, unfloat.screenId,
+                                             WindowTrackingService::SnapIntent::UserInitiated);
+    } else {
+        m_windowTracker->commitSnap(windowId, unfloat.zoneIds.first(), unfloat.screenId,
+                                    WindowTrackingService::SnapIntent::UserInitiated);
+    }
+
     Q_EMIT applyGeometryRequested(windowId, unfloat.geometry.x(), unfloat.geometry.y(), unfloat.geometry.width(),
                                   unfloat.geometry.height(), QString(), unfloat.screenId, false);
     return true;
@@ -105,11 +116,11 @@ bool SnapEngine::applyGeometryForFloat(const QString& windowId, const QString& s
     return false;
 }
 
-void SnapEngine::clearFloatingStateForSnap(const QString& windowId, const QString& screenId)
-{
-    if (m_windowTracker->clearFloatingForSnap(windowId)) {
-        Q_EMIT windowFloatingChanged(windowId, false, screenId);
-    }
-}
+// SnapEngine::clearFloatingStateForSnap was removed — its two callers
+// (windowOpened in lifecycle.cpp, unfloatToZone above) now go through
+// WindowTrackingService::commitSnap which handles clearing floating
+// state as step 1 of its orchestration. The D-Bus-visible behaviour is
+// identical: commitSnap emits windowFloatingClearedForSnap, WTA relays
+// it as windowFloatingChanged on the same D-Bus interface.
 
 } // namespace PlasmaZones

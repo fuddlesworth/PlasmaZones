@@ -219,18 +219,16 @@ void Daemon::connectDesktopActivity()
         }
 
         if (m_autotileEngine) {
-            // Desktop numbers are 1-based. Any state with desktop > newCount is stale.
-            // Iterate the engine's own state map to find stale desktops (avoids
-            // the arbitrary upper bound of the old newCount+20 sweep).
-            QSet<int> staleDesktops;
-            for (auto it = m_autotileEngine->screenStates().constBegin();
-                 it != m_autotileEngine->screenStates().constEnd(); ++it) {
-                if (it.key().desktop > newCount) {
-                    staleDesktops.insert(it.key().desktop);
+            // Desktop numbers are 1-based. Any state with desktop > newCount
+            // is stale. desktopsWithActiveState() returns the set of desktops
+            // currently holding tiling state — we filter that for anything
+            // past the new count and prune, avoiding the arbitrary upper
+            // bound of the old newCount+20 sweep.
+            const QSet<int> active = m_autotileEngine->desktopsWithActiveState();
+            for (int d : active) {
+                if (d > newCount) {
+                    m_autotileEngine->pruneStatesForDesktop(d);
                 }
-            }
-            for (int d : staleDesktops) {
-                m_autotileEngine->pruneStatesForDesktop(d);
             }
         }
         // Prune fallback assignment maps

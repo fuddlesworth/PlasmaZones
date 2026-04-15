@@ -14,6 +14,7 @@
 #include "../utils.h"
 #include "../screenmanager.h"
 #include "../logging.h"
+#include <QGuiApplication>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
@@ -467,24 +468,202 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
     scheduleSaveState();
 }
 
-bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Snap commit orchestration — moved out of WindowTrackingAdaptor.
+//
+// These methods used to live in WindowTrackingAdaptor::windowSnapped /
+// windowSnappedMultiZone / windowUnsnapped, where they orchestrated a
+// sequence of WTS primitive calls plus a D-Bus signal emit. That made
+// WTA a partial snap engine rather than a thin facade. The orchestration
+// is pure state-management work that belongs on WTS; WTA retains its
+// D-Bus slot entry points but forwards to these methods and relays the
+// WTS signals to its own D-Bus signals at connection wiring time.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void WindowTrackingService::commitSnap(const QString& windowId, const QString& zoneId, const QString& screenId,
+                                       SnapIntent intent)
 {
-    // When a user explicitly snaps a window, clear ONE stale pending assignment
-    // from a previous session (FIFO, mirroring consumePendingAssignment). Only the
-    // first entry is removed so multi-instance apps retain entries for other windows.
-    QString appId = currentAppIdFor(windowId);
-    auto it = m_pendingRestoreQueues.find(appId);
-    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
-        return false;
+    if (windowId.isEmpty() || zoneId.isEmpty()) {
+        qCWarning(lcCore) << "commitSnap: empty windowId or zoneId";
+        return;
     }
-    it->removeFirst();
-    if (it->isEmpty()) {
-        m_pendingRestoreQueues.erase(it);
+
+    // 1. Clear pre-existing floating state so the snap is authoritative.
+    //    Runs for both intents — an auto-snap still needs to take a
+    //    previously-floating window out of the floating set.
+    if (clearFloatingForSnap(windowId)) {
+        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
     }
-    qCDebug(lcCore) << "Cleared one stale pending assignment for" << appId
-                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
-    scheduleSaveState();
-    return true;
+
+    // 2. Auto-snap flag handling. For UserInitiated commits, we capture and
+    //    clear any leftover flag so windowActivated's last-used-zone gate
+    //    sees "user-initiated" on the next focus event. For AutoRestored,
+    //    we leave the flag untouched — the caller (lifecycle auto-snap
+    //    path) already set it and expects it to persist until the window
+    //    is explicitly acted on.
+    bool wasAutoSnapped = false;
+    if (intent == SnapIntent::UserInitiated) {
+        wasAutoSnapped = clearAutoSnapped(windowId);
+
+        // 3. Consume one pending-restore entry (FIFO) so a stale session
+        //    entry can't drag the window back on next close/reopen.
+        //    Skipped for the auto-snap path because resolveWindowRestore
+        //    already consumed its entry when it produced the result.
+        //    Also skipped when we just cleared a prior auto-snap marker
+        //    (preserves the historical WTA::windowSnapped behaviour).
+        if (!wasAutoSnapped) {
+            consumePendingAssignment(windowId);
+        }
+    }
+
+    // 4. Actually assign the window to the zone on the resolved screen.
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    assignWindowToZone(windowId, zoneId, screenId, currentDesktop);
+
+    // 5. Update last-used-zone tracking. Only when the user initiated this,
+    //    the zone isn't a zone-selector sentinel, and the window wasn't
+    //    carrying a stale auto-snap marker from an earlier restore.
+    if (intent == SnapIntent::UserInitiated && !wasAutoSnapped && !zoneId.startsWith(QStringLiteral("zoneselector-"))) {
+        const QString windowClass = currentAppIdFor(windowId);
+        updateLastUsedZone(zoneId, screenId, windowClass, currentDesktop);
+    }
+
+    qCInfo(lcCore) << "commitSnap:" << windowId << "zone=" << zoneId << "screen=" << screenId
+                   << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
+
+    // 6. Notify subscribers (WTA re-emits as the D-Bus windowStateChanged).
+    Q_EMIT windowSnapStateChanged(
+        windowId, WindowStateEntry{windowId, zoneId, screenId, false, QStringLiteral("snapped"), QStringList{}, false});
+}
+
+void WindowTrackingService::commitMultiZoneSnap(const QString& windowId, const QStringList& zoneIds,
+                                                const QString& screenId, SnapIntent intent)
+{
+    if (windowId.isEmpty() || zoneIds.isEmpty() || zoneIds.first().isEmpty()) {
+        qCWarning(lcCore) << "commitMultiZoneSnap: empty windowId or zoneIds";
+        return;
+    }
+
+    if (clearFloatingForSnap(windowId)) {
+        Q_EMIT windowFloatingClearedForSnap(windowId, screenId);
+    }
+
+    bool wasAutoSnapped = false;
+    if (intent == SnapIntent::UserInitiated) {
+        wasAutoSnapped = clearAutoSnapped(windowId);
+        if (!wasAutoSnapped) {
+            consumePendingAssignment(windowId);
+        }
+    }
+
+    const int currentDesktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    assignWindowToZones(windowId, zoneIds, screenId, currentDesktop);
+
+    // Last-used tracking keys off the primary (first) zone.
+    const QString& primaryZoneId = zoneIds.first();
+    if (intent == SnapIntent::UserInitiated && !wasAutoSnapped
+        && !primaryZoneId.startsWith(QStringLiteral("zoneselector-"))) {
+        const QString windowClass = currentAppIdFor(windowId);
+        updateLastUsedZone(primaryZoneId, screenId, windowClass, currentDesktop);
+    }
+
+    qCInfo(lcCore) << "commitMultiZoneSnap:" << windowId << "zones=" << zoneIds << "screen=" << screenId
+                   << "intent=" << (intent == SnapIntent::UserInitiated ? "user" : "auto");
+
+    Q_EMIT windowSnapStateChanged(
+        windowId,
+        WindowStateEntry{windowId, primaryZoneId, screenId, false, QStringLiteral("snapped"), zoneIds, false});
+}
+
+WindowGeometryList WindowTrackingService::applyBatchAssignments(const QVector<ZoneAssignmentEntry>& entries,
+                                                                SnapIntent intent,
+                                                                std::function<QString()> fallbackScreenResolver)
+{
+    WindowGeometryList geometries;
+    if (entries.isEmpty()) {
+        return geometries;
+    }
+
+    auto* mgr = ScreenManager::instance();
+
+    for (const auto& entry : entries) {
+        if (entry.targetZoneId == QLatin1String("__restore__")) {
+            // "__restore__" sentinel: the window's previous zone no
+            // longer exists in the new layout. Unsnap it cleanly and
+            // drop any captured pre-tile geometry.
+            uncommitSnap(entry.windowId);
+            clearPreTileGeometry(entry.windowId);
+            continue;
+        }
+
+        // Resolve the effective screen with the full fallback chain.
+        QString screenId = entry.targetScreenId;
+        const QPoint center = entry.targetGeometry.center();
+        if (screenId.isEmpty() && mgr) {
+            screenId = mgr->effectiveScreenAt(center);
+        }
+        if (screenId.isEmpty()) {
+            // Physical fallback for early startup when ScreenManager
+            // isn't initialised yet. effectiveScreenAt above handles
+            // VS-aware resolution, so this pass only needs to cover
+            // the "ScreenManager::instance() == nullptr" edge case.
+            for (QScreen* screen : QGuiApplication::screens()) {
+                if (screen->geometry().contains(center)) {
+                    screenId = Utils::screenIdentifier(screen);
+                    break;
+                }
+            }
+        }
+        if (screenId.isEmpty() && fallbackScreenResolver) {
+            // Compositor-layer shadow as last resort (cursor/active
+            // window from WindowTrackingAdaptor). May still return
+            // empty; commit proceeds regardless to preserve legacy
+            // behaviour.
+            screenId = fallbackScreenResolver();
+        }
+
+        if (entry.targetZoneIds.size() > 1) {
+            commitMultiZoneSnap(entry.windowId, entry.targetZoneIds, screenId, intent);
+        } else {
+            commitSnap(entry.windowId, entry.targetZoneId, screenId, intent);
+        }
+    }
+
+    // Build the geometry list in input order. Callers emit this on
+    // their own applyGeometriesBatch signal with an action label.
+    geometries.reserve(entries.size());
+    for (const auto& entry : entries) {
+        geometries.append(WindowGeometryEntry::fromRect(entry.windowId, entry.targetGeometry));
+    }
+    return geometries;
+}
+
+void WindowTrackingService::uncommitSnap(const QString& windowId)
+{
+    if (windowId.isEmpty()) {
+        return;
+    }
+
+    // Only act if the window is actually snapped — callers may blind-call
+    // this on any window, and uncommitting a never-snapped window is both
+    // pointless and noisy.
+    const QString previousZoneId = zoneForWindow(windowId);
+    if (previousZoneId.isEmpty()) {
+        qCDebug(lcCore) << "uncommitSnap: window not in any zone:" << windowId;
+        return;
+    }
+
+    // Clear any queued pending-restore entry so an explicit unsnap stays
+    // sticky across the window's next close/reopen cycle.
+    consumePendingAssignment(windowId);
+
+    unassignWindow(windowId);
+
+    qCInfo(lcCore) << "uncommitSnap:" << windowId << "from zone" << previousZoneId;
+
+    Q_EMIT windowSnapStateChanged(
+        windowId,
+        WindowStateEntry{windowId, QString(), QString(), false, QStringLiteral("unsnapped"), QStringList{}, false});
 }
 
 void WindowTrackingService::markWindowReported(const QString& windowId)
@@ -511,19 +690,25 @@ bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
     return m_autoSnappedWindows.remove(windowId);
 }
 
-void WindowTrackingService::consumePendingAssignment(const QString& windowId)
+bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
 {
-    QString appId = currentAppIdFor(windowId);
+    // Pop the oldest pending-restore entry for this window's live appId.
+    // Single authoritative implementation — see header for why earlier
+    // consumePendingAssignment / clearStalePendingAssignment twins were
+    // merged. Callers that don't care about the result ignore the bool.
+    const QString appId = currentAppIdFor(windowId);
     auto it = m_pendingRestoreQueues.find(appId);
-    if (it != m_pendingRestoreQueues.end() && !it->isEmpty()) {
-        it->removeFirst();
-        if (it->isEmpty()) {
-            m_pendingRestoreQueues.erase(it);
-        }
-        qCDebug(lcCore) << "Consumed pending assignment for" << appId
-                        << "remaining:" << m_pendingRestoreQueues.value(appId).size();
-        scheduleSaveState();
+    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
+        return false;
     }
+    it->removeFirst();
+    if (it->isEmpty()) {
+        m_pendingRestoreQueues.erase(it);
+    }
+    qCDebug(lcCore) << "Consumed pending assignment for" << appId
+                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    scheduleSaveState();
+    return true;
 }
 
 } // namespace PlasmaZones

@@ -231,8 +231,8 @@ private Q_SLOTS:
         queues[appId] = {entry};
         m_service->setPendingRestoreQueues(queues);
 
-        bool cleared = m_service->clearStalePendingAssignment(windowId);
-        QVERIFY(cleared);
+        bool popped = m_service->consumePendingAssignment(windowId);
+        QVERIFY(popped);
         QVERIFY(!m_service->pendingRestoreQueues().contains(appId));
     }
 
