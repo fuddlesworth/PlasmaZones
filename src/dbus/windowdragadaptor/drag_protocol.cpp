@@ -35,7 +35,7 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     // 1) Disabled context (activity / desktop / monitor excluded in settings).
     //    Dead drag: no overlay, no cursor stream, no float transition.
     if (settings && !screenId.isEmpty() && isContextDisabled(settings, screenId, curDesktop, curActivity)) {
-        policy.bypassReason = QStringLiteral("context_disabled");
+        policy.bypassReason = DragBypassReason::ContextDisabled;
         return policy;
     }
 
@@ -51,7 +51,7 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     //    so both the effect fast path and its async reply handler skip the
     //    handleDragToFloat call.
     if (autotileEngine && !screenId.isEmpty() && autotileEngine->isAutotileScreen(screenId)) {
-        policy.bypassReason = QStringLiteral("autotile_screen");
+        policy.bypassReason = DragBypassReason::AutotileScreen;
         policy.captureGeometry = true; // preserve pre-autotile size for unfloat restore
         const bool reorderMode = settings && settings->autotileDragBehavior() == AutotileDragBehavior::Reorder;
         if (!windowId.isEmpty() && !reorderMode) {
@@ -64,7 +64,7 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     //    the user configured the tool with snap mode off. beginDrag still
     //    returns a policy so endDrag can clean up consistently.
     if (settings && !settings->snappingEnabled()) {
-        policy.bypassReason = QStringLiteral("snapping_disabled");
+        policy.bypassReason = DragBypassReason::SnappingDisabled;
         return policy;
     }
 
@@ -76,7 +76,7 @@ DragPolicy WindowDragAdaptor::computeDragPolicy(const ISettings* settings, const
     policy.showOverlay = true;
     policy.grabKeyboard = true;
     policy.captureGeometry = true;
-    policy.bypassReason.clear();
+    policy.bypassReason = DragBypassReason::None;
     return policy;
 }
 
@@ -132,7 +132,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     // right branch without re-computing policy.
     m_currentDragBypassReason = effectivePolicy.bypassReason;
 
-    if (!effectivePolicy.bypassReason.isEmpty()) {
+    if (effectivePolicy.bypassReason != DragBypassReason::None) {
         // Bypass path — record the id so the matching endDrag can find us,
         // but skip the full snap-path setup (overlay, zone state, etc.).
         // Trigger cache and stale-preview cleanup both happen above so bypass
@@ -159,7 +159,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
         // during the drag and a sudden float on drop. Restore the
         // legacy float-on-start behavior here so the UX matches the Float
         // mode default for the rest of this drag.
-        if (effectivePolicy.bypassReason == QLatin1String("autotile_screen") && m_autotileEngine && m_settings
+        if (effectivePolicy.bypassReason == DragBypassReason::AutotileScreen && m_autotileEngine && m_settings
             && m_settings->autotileDragBehavior() == AutotileDragBehavior::Reorder
             && m_autotileEngine->isWindowTiled(windowId)) {
             if (m_autotileEngine->beginDragInsertPreview(windowId, startScreenId)) {
@@ -267,7 +267,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
         qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
                              << "cancelled=" << cancelled;
         clearPendingSnapDragState();
-        m_currentDragBypassReason.clear();
+        m_currentDragBypassReason = DragBypassReason::None;
         if (!cancelled && wasSnapped && m_windowTracking) {
             m_windowTracking->notifyDragOutUnsnap(windowId);
         }
@@ -281,8 +281,8 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
         return outcome;
     }
 
-    const QString bypassReason = m_currentDragBypassReason;
-    m_currentDragBypassReason.clear(); // next drag starts fresh
+    const DragBypassReason bypassReason = m_currentDragBypassReason;
+    m_currentDragBypassReason = DragBypassReason::None; // next drag starts fresh
     // m_dragReorderActive lives for one drag only. Reset here (before the
     // various early-return branches below) so no branch has to remember.
     m_dragReorderActive = false;
@@ -295,7 +295,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     // we still delegate to legacy dragStopped so it can reset its own
     // internal state machine, then emit CancelSnap back.
     if (cancelled) {
-        if (bypassReason.isEmpty()) {
+        if (bypassReason == DragBypassReason::None) {
             // Snap path cancelled — run dragStopped through the legacy
             // adaptor so overlay/zone-state cleanup happens, but discard
             // the geometry outputs.
@@ -322,7 +322,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     // Daemon has no placement decision to make; the outcome just carries
     // the release screen so the plugin can pass it to
     // setWindowFloatingForScreen.
-    if (bypassReason == QLatin1String("autotile_screen")) {
+    if (bypassReason == DragBypassReason::AutotileScreen) {
         // Autotile drag-insert: if a preview is live, commit it so the
         // window takes its picked slot in the stack on the next retile.
         // The autotile engine owns final geometry; no float outcome needed.
@@ -344,7 +344,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
     }
 
     // Snapping disabled / context disabled — dead drag. No action.
-    if (bypassReason == QLatin1String("snapping_disabled") || bypassReason == QLatin1String("context_disabled")) {
+    if (bypassReason == DragBypassReason::SnappingDisabled || bypassReason == DragBypassReason::ContextDisabled) {
         outcome.action = DragOutcome::NoOp;
         m_draggedWindowId.clear();
         return outcome;
@@ -441,7 +441,7 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
         const DragPolicy candidate =
             computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, curDesktop, curActivity);
         if (candidate.bypassReason != m_currentDragBypassReason
-            || (candidate.bypassReason == QLatin1String("autotile_screen") && candidate.screenId != cursorScreenId)) {
+            || (candidate.bypassReason == DragBypassReason::AutotileScreen && candidate.screenId != cursorScreenId)) {
             qCInfo(lcDbusWindow) << "updateDragCursor: policy flip" << m_currentDragBypassReason << "->"
                                  << candidate.bypassReason << "on" << cursorScreenId;
             m_currentDragBypassReason = candidate.bypassReason;

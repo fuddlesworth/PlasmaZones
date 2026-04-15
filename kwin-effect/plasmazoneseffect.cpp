@@ -223,7 +223,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                             // fast path below already did this synchronously;
                             // this catches the stale-cache case where the fast
                             // path missed.
-                            if (m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen")) {
+                            if (m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen) {
                                 if (!m_dragBypassedForAutotile) {
                                     m_dragBypassedForAutotile = true;
                                     m_dragBypassScreenId = capturedScreenId;
@@ -316,7 +316,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
             // the daemon's updateDragCursor still watches for a flip
             // BACK to snap mode.
             const bool bypassed =
-                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+                m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen || m_dragBypassedForAutotile;
             if (!bypassed) {
                 // Gate D-Bus calls on activation trigger state so a drag
                 // without any intent to use zones doesn't flood the bus
@@ -1039,7 +1039,7 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
             // overlay destroy/create churn that prompted discussion #310's
             // sibling regression.
             const bool bypassed =
-                m_currentDragPolicy.bypassReason == QLatin1String("autotile_screen") || m_dragBypassedForAutotile;
+                m_currentDragPolicy.bypassReason == DragBypassReason::AutotileScreen || m_dragBypassedForAutotile;
             const bool shouldForward =
                 bypassed || detectActivationAndGrab() || m_cachedZoneSelectorEnabled || !m_triggersLoaded;
             if (shouldForward) {
@@ -3378,13 +3378,13 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
         return;
     }
 
-    const QString oldReason = m_currentDragPolicy.bypassReason;
-    const QString newReason = newPolicy.bypassReason;
+    const DragBypassReason oldReason = m_currentDragPolicy.bypassReason;
+    const DragBypassReason newReason = newPolicy.bypassReason;
     if (oldReason == newReason) {
         // Same reason but different screenId (autotile→autotile cross-VS):
         // update the captured screen so endDrag's ApplyFloat uses the right one.
         m_currentDragPolicy = newPolicy;
-        if (newReason == QLatin1String("autotile_screen")) {
+        if (newReason == DragBypassReason::AutotileScreen) {
             m_dragBypassScreenId = newPolicy.screenId;
         }
         return;
@@ -3397,7 +3397,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
 
     KWin::EffectWindow* dragW = m_dragTracker->draggedWindow();
 
-    if (newReason == QLatin1String("autotile_screen")) {
+    if (newReason == DragBypassReason::AutotileScreen) {
         // Snap → autotile (or context-disabled → autotile). Cancel any
         // active snap overlay, enter bypass mode. Mirrors the old
         // effect-side flip block's "snap→autotile" branch, but driven by
@@ -3418,7 +3418,7 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
         return;
     }
 
-    if (oldReason == QLatin1String("autotile_screen")) {
+    if (oldReason == DragBypassReason::AutotileScreen) {
         // Autotile → snap (or autotile → context-disabled). Drop the
         // bypass flag and initialize snap-drag state as if the drag just
         // started on this snap screen. Remove the window from autotile

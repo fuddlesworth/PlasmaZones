@@ -316,8 +316,8 @@ private:
     // Bypass reason returned from the last beginDrag call.
     // Read in endDrag to decide which branch to take — autotile bypass
     // gets a synthesized ApplyFloat outcome, context/snap disabled gets NoOp,
-    // and snap path delegates to the legacy dragStopped. Cleared by endDrag.
-    QString m_currentDragBypassReason;
+    // and snap path delegates to the legacy dragStopped. Reset to None by endDrag.
+    DragBypassReason m_currentDragBypassReason = DragBypassReason::None;
     QRect m_originalGeometry;
 
     // Pending snap-path drag awaiting first activation. Populated by

@@ -3,7 +3,72 @@
 
 #include "dbus_types.h"
 
+#include <QDebug>
+#include <QLatin1String>
+
 namespace PlasmaZones {
+
+namespace {
+// Wire-format strings for DragBypassReason. Kept as a single source of truth
+// so toWireString() and bypassReasonFromWireString() can never drift.
+constexpr QLatin1String kBypassAutotileScreen("autotile_screen");
+constexpr QLatin1String kBypassSnappingDisabled("snapping_disabled");
+constexpr QLatin1String kBypassContextDisabled("context_disabled");
+} // namespace
+
+QString toWireString(DragBypassReason r)
+{
+    switch (r) {
+    case DragBypassReason::None:
+        return {};
+    case DragBypassReason::AutotileScreen:
+        return kBypassAutotileScreen;
+    case DragBypassReason::SnappingDisabled:
+        return kBypassSnappingDisabled;
+    case DragBypassReason::ContextDisabled:
+        return kBypassContextDisabled;
+    }
+    return {};
+}
+
+DragBypassReason bypassReasonFromWireString(const QString& s)
+{
+    if (s.isEmpty()) {
+        return DragBypassReason::None;
+    }
+    if (s == kBypassAutotileScreen) {
+        return DragBypassReason::AutotileScreen;
+    }
+    if (s == kBypassSnappingDisabled) {
+        return DragBypassReason::SnappingDisabled;
+    }
+    if (s == kBypassContextDisabled) {
+        return DragBypassReason::ContextDisabled;
+    }
+    qWarning() << "bypassReasonFromWireString: unknown wire value" << s << "— mapping to None";
+    return DragBypassReason::None;
+}
+
+QDebug operator<<(QDebug debug, DragBypassReason r)
+{
+    QDebugStateSaver saver(debug);
+    debug.nospace();
+    switch (r) {
+    case DragBypassReason::None:
+        debug << "DragBypassReason::None";
+        break;
+    case DragBypassReason::AutotileScreen:
+        debug << "DragBypassReason::AutotileScreen";
+        break;
+    case DragBypassReason::SnappingDisabled:
+        debug << "DragBypassReason::SnappingDisabled";
+        break;
+    case DragBypassReason::ContextDisabled:
+        debug << "DragBypassReason::ContextDisabled";
+        break;
+    }
+    return debug;
+}
 
 QDBusArgument& operator<<(QDBusArgument& arg, const WindowGeometryEntry& e)
 {
@@ -319,9 +384,12 @@ const QDBusArgument& operator>>(const QDBusArgument& arg, PreTileGeometryEntry& 
 
 QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p)
 {
+    // Wire format kept as `(bbbbbss)` — bypassReason is serialized as its
+    // legacy string representation so effects/daemons built at different
+    // revisions still interoperate within the same ApiVersion.
     arg.beginStructure();
     arg << p.streamDragMoved << p.showOverlay << p.grabKeyboard << p.captureGeometry << p.immediateFloatOnStart
-        << p.screenId << p.bypassReason;
+        << p.screenId << toWireString(p.bypassReason);
     arg.endStructure();
     return arg;
 }
@@ -329,8 +397,10 @@ QDBusArgument& operator<<(QDBusArgument& arg, const DragPolicy& p)
 const QDBusArgument& operator>>(const QDBusArgument& arg, DragPolicy& p)
 {
     arg.beginStructure();
+    QString bypassWire;
     arg >> p.streamDragMoved >> p.showOverlay >> p.grabKeyboard >> p.captureGeometry >> p.immediateFloatOnStart
-        >> p.screenId >> p.bypassReason;
+        >> p.screenId >> bypassWire;
+    p.bypassReason = bypassReasonFromWireString(bypassWire);
     arg.endStructure();
     return arg;
 }

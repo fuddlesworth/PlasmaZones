@@ -10,7 +10,37 @@
 #include <QString>
 #include <QStringList>
 
+class QDebug;
+
 namespace PlasmaZones {
+
+/// Why a drag was bypassed from the canonical snap pipeline.
+///
+/// The daemon's computeDragPolicy picks exactly one of these based on the
+/// drag's context, and both sides route behavior off the value. Replaces
+/// the free-form `QString bypassReason` that carried `""` / `"autotile_screen"`
+/// / `"snapping_disabled"` / `"context_disabled"` as magic strings.
+///
+/// Wire format: unchanged — serialized as the same legacy string via
+/// toWireString()/fromWireString() inside the DragPolicy marshaller, so no
+/// ApiVersion bump is required. Unknown wire values parse to None (matches
+/// the old behavior where unrecognized strings didn't match the autotile
+/// branch and fell through to the canonical snap path).
+enum class DragBypassReason : int {
+    None = 0, ///< canonical snap path — drag flows through the snap pipeline
+    AutotileScreen = 1, ///< drag started/ended on an autotile screen — engine owns placement
+    SnappingDisabled = 2, ///< snap mode off globally — dead drag
+    ContextDisabled = 3, ///< monitor/desktop/activity excluded in settings — dead drag
+};
+
+/// Convert to the legacy wire-format string. Returns an empty QString for None.
+QString toWireString(DragBypassReason r);
+
+/// Parse from the legacy wire-format string. Unknown values map to None.
+DragBypassReason bypassReasonFromWireString(const QString& s);
+
+/// QDebug streaming for logging. Prints the enum name (e.g. "AutotileScreen").
+QDebug operator<<(QDebug debug, DragBypassReason r);
 
 /**
  * @brief Compile-time check that a type has QDBusArgument streaming operators.
@@ -341,7 +371,7 @@ struct DragPolicy
     bool captureGeometry = false; ///< effect should capture pre-drag geometry
     bool immediateFloatOnStart = false; ///< effect should call handleDragToFloat(immediate) at drag start
     QString screenId; ///< screen the drag started/currently is on (virtual-screen-aware)
-    QString bypassReason; ///< empty if snap path; "autotile_screen" / "snapping_disabled" / "context_disabled"
+    DragBypassReason bypassReason = DragBypassReason::None; ///< drag routing (None = canonical snap path)
 };
 
 /// Drag outcome — daemon-authoritative decision about what to apply at drag
