@@ -86,14 +86,18 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────
     // Settings: setSetting with a value that is already current.
     // Before Phase 1.1 this call still reaches the setter lambda and
-    // schedules a debounced save; after Phase 1.1 it returns early.
+    // schedules a debounced save; after Phase 1.1 it returns early
+    // because the getter returns the same value.
+    //
+    // Must use a value that StubSettings actually returns from its
+    // getter — the stub ignores setters, so priming has no effect and
+    // the guard only engages if we supply the stub's default.
+    // See StubSettings::zonePadding() which returns 8.
     // ─────────────────────────────────────────────────────────────────
     void benchSetSetting_unchanged()
     {
         const QString key = QStringLiteral("zonePadding");
-        // Prime the value so subsequent writes are no-ops.
-        m_settingsAdaptor->setSetting(key, QDBusVariant(QVariant(5)));
-        const QDBusVariant value(QVariant(5));
+        const QDBusVariant value(QVariant(8));
 
         QBENCHMARK {
             m_settingsAdaptor->setSetting(key, value);

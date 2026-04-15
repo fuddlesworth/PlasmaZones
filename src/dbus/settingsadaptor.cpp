@@ -639,22 +639,51 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     }
 
     auto it = m_setters.find(key);
-    if (it != m_setters.end()) {
-        QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
-        bool result = it.value()(converted);
-        if (result) {
-            // Use debounced save instead of immediate save (performance optimization)
-            // This batches multiple rapid setting changes into a single disk write
-            scheduleSave();
-            qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
-        } else {
-            qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
-        }
-        return result;
+    if (it == m_setters.end()) {
+        qCWarning(lcDbusSettings) << "Setting key not found:" << key;
+        return false;
     }
 
-    qCWarning(lcDbusSettings) << "Setting key not found:" << key;
-    return false;
+    const QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
+
+    // Value-equality guard: if the incoming value already matches the
+    // currently stored value, skip the setter invocation and the debounced
+    // save-timer restart. Gated on scalar variant types where operator==
+    // is reliable — composite types (QVariantList of QVariantMaps used by
+    // dragActivationTriggers, for example) compare on internal layout
+    // rather than semantic equality and would produce false negatives.
+    // The schema map's type string is NOT used as the gate because at
+    // least one key (dragActivationTriggers) advertises "stringlist" while
+    // actually storing a list-of-maps — the actual QVariant type is the
+    // authoritative source.
+    const int typeId = converted.metaType().id();
+    const bool scalarType =
+        (typeId == QMetaType::Bool || typeId == QMetaType::Int || typeId == QMetaType::UInt
+         || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong || typeId == QMetaType::Double
+         || typeId == QMetaType::QString || typeId == QMetaType::QStringList);
+    if (scalarType) {
+        auto getterIt = m_getters.constFind(key);
+        if (getterIt != m_getters.constEnd()) {
+            const QVariant current = getterIt.value()();
+            if (current.isValid() && current == converted) {
+                // Already current — nothing to do. Return true because the
+                // post-condition ("the setting now equals the supplied value")
+                // holds, which is what D-Bus callers rely on.
+                return true;
+            }
+        }
+    }
+
+    const bool result = it.value()(converted);
+    if (result) {
+        // Use debounced save instead of immediate save (performance optimization)
+        // This batches multiple rapid setting changes into a single disk write
+        scheduleSave();
+        qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
+    } else {
+        qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
+    }
+    return result;
 }
 
 QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)

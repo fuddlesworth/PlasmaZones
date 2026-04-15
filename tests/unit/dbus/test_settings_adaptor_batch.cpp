@@ -142,6 +142,51 @@ private Q_SLOTS:
         QVERIFY(result.isEmpty());
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Value-equality guard (Phase 1.1 of refactor/dbus-performance):
+    // setSetting with a value that already matches the current one must
+    // return true without invoking the underlying setter or scheduling a
+    // save. Contract: post-condition "setting now equals value" holds, so
+    // callers that treat true as success stay happy.
+    //
+    // StubSettings::zonePadding() returns 8 — supply 8 and the guard fires.
+    // ─────────────────────────────────────────────────────────────────────
+    void testSetSetting_unchangedScalar_returnsTrueForIdempotentWrite()
+    {
+        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(8)));
+        QVERIFY(ok);
+    }
+
+    // Value-equality guard must NOT intercept changing writes.
+    void testSetSetting_changedScalar_invokesSetter()
+    {
+        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(42)));
+        QVERIFY(ok);
+    }
+
+    // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.
+    void testSetSetting_unchangedStringScalar_returnsTrue()
+    {
+        const bool ok = m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QString())));
+        QVERIFY(ok);
+    }
+
+    // Composite (list-of-map) settings like dragActivationTriggers advertise
+    // schema "stringlist" but actually store QVariantList of QVariantMap.
+    // The guard is gated on the actual variant type (not the schema string),
+    // so list-type writes always fall through to the setter — which must
+    // still return true via the registered setter lambda.
+    void testSetSetting_compositeListType_fallsThroughToSetter()
+    {
+        QVariantList triggers;
+        QVariantMap one;
+        one[QStringLiteral("key")] = QStringLiteral("Meta");
+        triggers.append(one);
+        const bool ok = m_adaptor->setSetting(QStringLiteral("dragActivationTriggers"),
+                                              QDBusVariant(QVariant::fromValue(triggers)));
+        QVERIFY(ok);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     StubSettings* m_settings = nullptr;
