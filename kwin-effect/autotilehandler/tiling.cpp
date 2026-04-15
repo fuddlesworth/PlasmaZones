@@ -30,6 +30,24 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
         return;
     }
 
+    // Validate every request up-front. A single malformed entry is logged and
+    // dropped from the batch; the remaining requests still apply. This avoids
+    // one corrupt payload (e.g. zero-size tiled request from a protocol glitch)
+    // from either resizing a window to 0×0 or poisoning the whole retile pass.
+    TileRequestList validatedRequests;
+    validatedRequests.reserve(tileRequests.size());
+    for (const auto& req : tileRequests) {
+        if (const QString err = req.validationError(); !err.isEmpty()) {
+            qCWarning(lcEffect) << "slotWindowsTileRequested: dropping invalid entry:" << err;
+            continue;
+        }
+        validatedRequests.append(req);
+    }
+    if (validatedRequests.isEmpty()) {
+        qCWarning(lcEffect) << "slotWindowsTileRequested: all" << tileRequests.size() << "entries invalid — aborting";
+        return;
+    }
+
     ++m_autotileStaggerGeneration;
     // NOTE: m_autotileTargetZones and m_centeredWaylandZones are intentionally
     // NOT cleared globally here. Each retile fires for a single screen at a
@@ -61,7 +79,7 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
     };
     QVector<Entry> entries;
 
-    for (const auto& req : tileRequests) {
+    for (const auto& req : validatedRequests) {
         const QString& windowId = req.windowId;
 
         // Float entries: overflow windows that should be restored to pre-autotile geometry.

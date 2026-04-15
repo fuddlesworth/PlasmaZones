@@ -328,6 +328,14 @@ add_executable(test_drag_policy dbus/test_drag_policy.cpp)
 target_link_libraries(test_drag_policy PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_drag_policy COMMAND test_drag_policy)
 
+# Validation methods on D-Bus struct types — pins the accept/reject table
+# for validationError() so cross-field invariants (DragOutcome action range,
+# ApplySnap zoneId, TileRequestEntry tiled/floating size semantics, etc.)
+# don't drift as producer code evolves.
+add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
+target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
+add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -378,6 +386,7 @@ set(_all_tests
     test_dbus_adaptor_routing
     test_autotile_adaptor_panel_gate
     test_drag_policy
+    test_dbus_validation
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

@@ -213,7 +213,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
                                 qCWarning(lcEffect) << "beginDrag reply invalid:" << reply.error().message();
                                 return;
                             }
-                            m_currentDragPolicy = reply.value();
+                            const DragPolicy policy = reply.value();
+                            if (const QString err = policy.validationError(); !err.isEmpty()) {
+                                qCWarning(lcEffect)
+                                    << "beginDrag reply rejected:" << err
+                                    << "— keeping conservative snap-path policy for" << capturedWindowId;
+                                return;
+                            }
+                            m_currentDragPolicy = policy;
                             qCInfo(lcEffect) << "beginDrag reply:" << capturedWindowId
                                              << "bypass=" << m_currentDragPolicy.bypassReason
                                              << "stream=" << m_currentDragPolicy.streamDragMoved
@@ -1126,6 +1133,11 @@ void PlasmaZonesEffect::slotDaemonReady()
             return;
         }
         BridgeRegistrationResult result = reply.value();
+        if (const QString err = result.validationError(); !err.isEmpty()) {
+            qCWarning(lcEffect) << "registerBridge reply rejected:" << err
+                                << "— effect remains idle until the daemon signals ready again.";
+            return;
+        }
         if (result.sessionId == QLatin1String("REJECTED")) {
             qCCritical(lcEffect) << "Daemon REJECTED this effect: daemon apiVersion=" << result.apiVersion
                                  << "but this effect speaks" << DBus::ApiVersion
@@ -3019,6 +3031,14 @@ void PlasmaZonesEffect::callEndDrag(KWin::EffectWindow* window, const QString& w
                 return;
             }
             const DragOutcome outcome = reply.value();
+            if (const QString err = outcome.validationError(); !err.isEmpty()) {
+                // Garbled outcome — refuse to apply any window transform.
+                // Better to leave the window where it is than to float/snap
+                // based on a corrupted payload.
+                qCWarning(lcEffect) << "endDrag outcome rejected:" << err
+                                    << "— dropping without applying any action for" << windowId;
+                return;
+            }
             qCInfo(lcEffect) << "endDrag outcome:" << windowId << "action=" << outcome.action
                              << "screen=" << outcome.targetScreenId << "geo=" << outcome.toRect()
                              << "snapAssist=" << outcome.requestSnapAssist;
@@ -3375,6 +3395,14 @@ void PlasmaZonesEffect::slotDragPolicyChanged(const QString& windowId, const Dra
     // are ignored.
     if (!m_dragTracker->isDragging() || m_dragTracker->draggedWindowId() != windowId) {
         qCDebug(lcEffect) << "slotDragPolicyChanged: drag no longer active for" << windowId;
+        return;
+    }
+
+    if (const QString err = newPolicy.validationError(); !err.isEmpty()) {
+        // Garbled policy change — keep current state rather than transitioning
+        // to a corrupted one. The daemon will re-emit on the next cursor tick
+        // if this was transient.
+        qCWarning(lcEffect) << "slotDragPolicyChanged rejected:" << err << "for" << windowId;
         return;
     }
 

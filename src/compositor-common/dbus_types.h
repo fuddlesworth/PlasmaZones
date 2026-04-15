@@ -104,6 +104,11 @@ struct TileRequestEntry
     {
         return QRect(x, y, width, height);
     }
+
+    /// Returns empty QString if valid, or a human-readable description of
+    /// the invariant violation. Call at every unmarshal site to detect a
+    /// garbled payload before acting on it.
+    QString validationError() const;
 };
 
 using TileRequestList = QList<TileRequestEntry>;
@@ -287,6 +292,12 @@ struct BridgeRegistrationResult
     QString apiVersion;
     QString bridgeName;
     QString sessionId;
+
+    /// Returns empty QString if valid, or a human-readable description of
+    /// the invariant violation. "REJECTED" sessionId is a valid sentinel
+    /// signaling version mismatch and is NOT flagged as invalid — callers
+    /// must check for it separately before using the result.
+    QString validationError() const;
 };
 
 /// D-Bus struct for move/push/zone-number navigation result: (bssiiiiss)
@@ -372,6 +383,11 @@ struct DragPolicy
     bool immediateFloatOnStart = false; ///< effect should call handleDragToFloat(immediate) at drag start
     QString screenId; ///< screen the drag started/currently is on (virtual-screen-aware)
     DragBypassReason bypassReason = DragBypassReason::None; ///< drag routing (None = canonical snap path)
+
+    /// Returns empty QString if valid, or a human-readable description of
+    /// the invariant violation. Call at every unmarshal site on the effect
+    /// side to catch garbled policies before they perturb drag state.
+    QString validationError() const;
 };
 
 /// Drag outcome — daemon-authoritative decision about what to apply at drag
@@ -405,6 +421,13 @@ struct DragOutcome
     {
         return QRect(x, y, width, height);
     }
+
+    /// Returns empty QString if valid, or a human-readable description of
+    /// the invariant violation. Enforces action enum range and per-action
+    /// cross-field invariants (ApplySnap requires non-empty zoneId + non-
+    /// zero size, ApplyFloat/RestoreSize/NotifyDragOutUnsnap require
+    /// windowId, etc).
+    QString validationError() const;
 };
 
 /// D-Bus struct for restore navigation result: (bbiiii)
