@@ -751,30 +751,40 @@ ApplicationWindow {
 
                             }
 
-                            // Unsaved changes badge
+                            // Unsaved changes badge — per-page tracking.
+                            // Reference dirtyPages once so QML tracks it as a
+                            // binding dependency, then delegate the actual
+                            // lookup (including parent-category traversal) to
+                            // the controller's isPageDirty().
                             Rectangle {
+                                id: dirtyBadge
+
                                 width: Kirigami.Units.smallSpacing * 1.5
                                 height: Kirigami.Units.smallSpacing * 1.5
                                 radius: width / 2
                                 color: Kirigami.Theme.neutralTextColor
-                                visible: navDelegate.isActive && settingsController.needsSave && !navDelegate.isDivider && !navDelegate.isBackButton
+                                visible: {
+                                    if (navDelegate.isDivider || navDelegate.isBackButton)
+                                        return false;
+
+                                    settingsController.dirtyPages; // binding dependency
+                                    return settingsController.isPageDirty(navDelegate.name);
+                                }
                                 Layout.alignment: Qt.AlignVCenter
 
                                 SequentialAnimation {
                                     id: dirtyBadgePulse
 
-                                    property Item target: parent
-
                                     loops: Animation.Infinite
-                                    running: navDelegate.isActive && settingsController.needsSave
+                                    running: dirtyBadge.visible
                                     onRunningChanged: {
                                         if (!running)
-                                            target.opacity = 1;
+                                            dirtyBadge.opacity = 1;
 
                                     }
 
                                     NumberAnimation {
-                                        target: dirtyBadgePulse.target
+                                        target: dirtyBadge
                                         property: "opacity"
                                         from: 1
                                         to: 0.4
@@ -783,7 +793,7 @@ ApplicationWindow {
                                     }
 
                                     NumberAnimation {
-                                        target: dirtyBadgePulse.target
+                                        target: dirtyBadge
                                         property: "opacity"
                                         from: 0.4
                                         to: 1
@@ -795,16 +805,21 @@ ApplicationWindow {
 
                             }
 
-                            // Enable/disable toggle for snapping and tiling
+                            // Enable/disable toggle for snapping and tiling.
+                            // Wraps the assignment in begin/endExternalEdit so
+                            // the dirty marker lands on snapping/tiling rather
+                            // than whatever page the user is currently viewing.
                             SettingsSwitch {
                                 visible: (navDelegate.name === "snapping" || navDelegate.name === "tiling") && !window.sidebarCompact
                                 checked: navDelegate.name === "snapping" ? appSettings.snappingEnabled : appSettings.autotileEnabled
                                 accessibleName: navDelegate.label
                                 onToggled: function(newValue) {
+                                    settingsController.beginExternalEdit(navDelegate.name);
                                     if (navDelegate.name === "snapping")
                                         appSettings.snappingEnabled = newValue;
                                     else
                                         appSettings.autotileEnabled = newValue;
+                                    settingsController.endExternalEdit();
                                 }
                             }
 
@@ -1591,13 +1606,6 @@ ApplicationWindow {
                             text: i18n("Unsaved changes")
                             color: Kirigami.Theme.neutralTextColor
                             Layout.fillWidth: true
-                        }
-
-                        Button {
-                            text: i18n("Defaults")
-                            icon.name: "document-revert"
-                            flat: true
-                            onClicked: defaultsConfirmDialog.open()
                         }
 
                         Button {

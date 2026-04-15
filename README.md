@@ -32,6 +32,7 @@ Define zones on your screen. Drag windows into them. Done.
   - [Zone Selector](#zone-selector)
   - [Layout Picker](#layout-picker)
   - [Multi-Monitor & Virtual Desktops](#multi-monitor--virtual-desktops)
+  - [Virtual Screens](#virtual-screens)
   - [Settings App](#settings-app)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
@@ -109,9 +110,11 @@ Hold **Alt** (or your configured modifier) while dragging a window. Zones light 
 - Configurable master ratio and master count (separate settings for Centered Master vs Master+Stack)
 - Inner and outer gaps with per-side control (top/bottom/left/right)
 - Smart gaps — no gaps when only one window is tiled
-- Max windows cap — overflow windows float automatically
+- Overflow behavior: float extras past the max windows cap, or **Unlimited** stacking for Krohnkite-style layouts
 - Hide title bars on tiled windows, with colored borders
 - Window insertion position: end, after focused, or as master
+- **Reorder drag** — drag a tile over another to swap positions in place, without leaving the tiling tree
+- **Drag-insert preview** — modifier-held or always-active drag shows a live insertion preview so you can drop a window between existing tiles
 - Focus follows mouse and focus new windows
 - Minimized windows float, unminimized windows rejoin tiling
 - Per-window floating toggle
@@ -184,19 +187,34 @@ Move, focus, swap, rotate, and push actions show a brief overlay with the affect
 - Per-screen shader selection
 - Screen-targeted app-to-zone rules
 
+### Virtual Screens
+
+Subdivide any physical monitor into independent **virtual screens** — perfect for ultrawides where you want two or three logical workspaces side-by-side with their own layouts, autotile algorithms, and shortcuts.
+
+- Split a physical monitor into 2+ virtual screens with drag-to-resize boundaries
+- Each virtual screen gets its own layout, autotile algorithm, and per-screen settings
+- Window snapping, drag-insert, zone selector, OSDs, and snap assist are all virtual-screen-aware
+- Windows crossing a virtual-screen boundary mid-drag switch layouts automatically
+- Snap assist and layout picker stay confined to the active virtual screen
+- All shortcuts (swap, focus, rotate, push to empty zone) operate within the current virtual screen
+- Configure in **Settings → Virtual Screens** — select a physical monitor, split, resize, name
+
 ### Settings App
 
 Standalone settings app (`plasmazones-settings`) with sidebar navigation:
 
 - **Overview** — Per-screen mode (snapping/tiling) with live context display
 - **Layouts** — Create, duplicate, import/export zone layouts with 26 templates
-- **Snapping** — Activation, zone appearance (colors, opacity, borders, blur, shaders), animations, zone selector, per-monitor/desktop/activity assignments
-- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior, per-monitor/desktop/activity assignments
+- **Virtual Screens** — Split physical monitors into independent virtual screens with drag-to-resize boundaries
+- **Snapping** — Activation, zone appearance (colors, opacity, borders, blur, shaders), animations, drag-insert trigger mode, zone selector, per-monitor/desktop/activity assignments
+- **Tiling** — Per-screen algorithm selection, master ratio/count, gaps, title bar hiding, insertion order, focus behavior, drag reorder and overflow behavior, per-monitor/desktop/activity assignments
 - **App Rules** — Per-app zone assignment rules with interactive window picker
 - **Exclusions** — Window class exclusion lists with interactive picker, minimum size thresholds
 - **Editor** — Layout editor preferences and shortcut configuration
-- **General** — OSD style, layout switch notifications, global behavior
+- **General** — OSD style, layout switch notifications, global behavior, reset to defaults
 - **About** — Version info, update checker, daemon status
+
+Each settings page shows a per-page **unsaved changes** indicator in the sidebar so you can see at a glance which sections have pending edits across a multi-page session.
 
 On KDE Plasma, a System Settings entry provides version info and a launcher to the settings app.
 
@@ -530,6 +548,15 @@ journalctl --user -u plasmazones.service -f
 
 # Restart
 systemctl --user restart plasmazones.service
+```
+
+### Capturing verbose logs
+
+Run the daemon with `--debug` for verbose logging across all `plasmazones.*` categories, and `--log-file` to redirect output to a file instead of `journalctl`:
+
+```bash
+systemctl --user stop plasmazones.service
+plasmazonesd --debug --log-file /tmp/pz.log
 ```
 
 ### Zones not appearing when dragging
