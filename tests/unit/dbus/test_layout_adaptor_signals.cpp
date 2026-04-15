@@ -60,39 +60,63 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // setLayoutHidden: property change, not a list change.
+    // Phase 4: property mutations emit the compact layoutPropertyChanged
+    // signal, NOT the heavyweight layoutChanged(json) or layoutListChanged.
+    // Payload on the wire is (layoutId, property, value) instead of a
+    // 5–20 KB full-layout JSON blob.
     // ─────────────────────────────────────────────────────────────────
-    void testSetLayoutHidden_emitsLayoutChangedOnly()
+    void testSetLayoutHidden_emitsCompactPropertySignalOnly()
     {
         QSignalSpy changed(m_adaptor, &LayoutAdaptor::layoutChanged);
         QSignalSpy listChanged(m_adaptor, &LayoutAdaptor::layoutListChanged);
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
 
         m_adaptor->setLayoutHidden(m_layoutId, true);
 
-        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.count(), 0);
         QCOMPARE(listChanged.count(), 0);
+        QCOMPARE(propertyChanged.count(), 1);
+
+        const QList<QVariant> args = propertyChanged.takeFirst();
+        QCOMPARE(args.at(0).toString(), m_layoutId);
+        QCOMPARE(args.at(1).toString(), QStringLiteral("hidden"));
+        // QDBusVariant unwraps via .variant(); in-process connections keep
+        // the variant identity, so args.at(2) is a QVariant holding a
+        // QDBusVariant holding a bool.
+        const QDBusVariant wrapped = args.at(2).value<QDBusVariant>();
+        QCOMPARE(wrapped.variant().toBool(), true);
     }
 
-    void testSetLayoutAutoAssign_emitsLayoutChangedOnly()
+    void testSetLayoutAutoAssign_emitsCompactPropertySignalOnly()
     {
         QSignalSpy changed(m_adaptor, &LayoutAdaptor::layoutChanged);
         QSignalSpy listChanged(m_adaptor, &LayoutAdaptor::layoutListChanged);
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
 
         m_adaptor->setLayoutAutoAssign(m_layoutId, true);
 
-        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.count(), 0);
         QCOMPARE(listChanged.count(), 0);
+        QCOMPARE(propertyChanged.count(), 1);
+        const QList<QVariant> args = propertyChanged.takeFirst();
+        QCOMPARE(args.at(1).toString(), QStringLiteral("autoAssign"));
+        QCOMPARE(args.at(2).value<QDBusVariant>().variant().toBool(), true);
     }
 
-    void testSetLayoutAspectRatioClass_emitsLayoutChangedOnly()
+    void testSetLayoutAspectRatioClass_emitsCompactPropertySignalOnly()
     {
         QSignalSpy changed(m_adaptor, &LayoutAdaptor::layoutChanged);
         QSignalSpy listChanged(m_adaptor, &LayoutAdaptor::layoutListChanged);
+        QSignalSpy propertyChanged(m_adaptor, &LayoutAdaptor::layoutPropertyChanged);
 
-        m_adaptor->setLayoutAspectRatioClass(m_layoutId, 1);
+        m_adaptor->setLayoutAspectRatioClass(m_layoutId, 2);
 
-        QCOMPARE(changed.count(), 1);
+        QCOMPARE(changed.count(), 0);
         QCOMPARE(listChanged.count(), 0);
+        QCOMPARE(propertyChanged.count(), 1);
+        const QList<QVariant> args = propertyChanged.takeFirst();
+        QCOMPARE(args.at(1).toString(), QStringLiteral("aspectRatioClass"));
+        QCOMPARE(args.at(2).value<QDBusVariant>().variant().toInt(), 2);
     }
 
     // ─────────────────────────────────────────────────────────────────

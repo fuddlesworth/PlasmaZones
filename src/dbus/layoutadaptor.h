@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QDBusVariant>
 #include <QString>
 #include <QStringList>
 #include <QUuid>
@@ -196,7 +197,37 @@ Q_SIGNALS:
      */
     void daemonReady();
 
+    /**
+     * @brief Full-layout change notification.
+     *
+     * Emitted by structural mutations — editor save, createLayoutFromJson,
+     * updateLayout — where the client genuinely needs the whole serialized
+     * layout. Carries the complete JSON payload (5–20 KB in prod).
+     *
+     * Compact property-level mutations (setLayoutHidden / setLayoutAutoAssign /
+     * setLayoutAspectRatioClass) do NOT emit this signal any more — they
+     * emit layoutPropertyChanged instead to avoid the full re-serialization.
+     */
     void layoutChanged(const QString& layoutJson);
+
+    /**
+     * @brief Compact property-level change notification.
+     *
+     * Emitted when a single scalar property on a layout is mutated without
+     * touching zone structure. Subscribers that only need to refresh a flag
+     * (hidden, auto-assign, aspect ratio class) can react to this signal
+     * directly instead of re-parsing the full layout JSON. Clients that
+     * still want the full shape can pull it via getLayout(layoutId) — the
+     * adaptor's cache is invalidated before this signal fires, so that
+     * read reflects the mutation.
+     *
+     * @param layoutId The layout whose property changed
+     * @param property Property name: "hidden", "autoAssign", or "aspectRatioClass"
+     * @param value    New value as a QDBusVariant (bool for hidden/autoAssign,
+     *                 int for aspectRatioClass)
+     */
+    void layoutPropertyChanged(const QString& layoutId, const QString& property, const QDBusVariant& value);
+
     void layoutListChanged();
     void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
     void virtualDesktopCountChanged(int count);

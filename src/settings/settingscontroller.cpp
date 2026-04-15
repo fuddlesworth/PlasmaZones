@@ -201,6 +201,13 @@ SettingsController::SettingsController(QObject* parent)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
                                           this, SLOT(loadLayoutsAsync()));
+    // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
+    // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
+    // triggers a full reload so the layout list view refreshes, but the daemon side
+    // saved a full JSON serialization per mutation by not emitting layoutChanged.
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager),
+                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(loadLayoutsAsync()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),

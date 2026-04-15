@@ -314,17 +314,18 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     layout->setHiddenFromSelector(hidden);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
-    // Invalidate the cached JSON for this layout so getLayout() re-serializes
-    // with the new hidden flag. Without this, subsequent reads would serve a
-    // stale cache entry populated before the mutation.
+    // Invalidate the cached JSON for this layout so a later getLayout()
+    // re-serializes with the new value. Subscribers that want the full
+    // shape after a property mutation pull via getLayout — the signal is
+    // deliberately narrow.
     invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
-    // Single property mutation — emit layoutChanged only. layoutListChanged
-    // is reserved for add/delete operations; subscribers (SettingsController)
-    // already connect both signals to the same reload slot, so the extra
-    // emission is pure signal churn.
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    // Phase 4 of refactor/dbus-performance: emit the compact property
+    // signal (3 strings + 1 bool over the wire) instead of layoutChanged
+    // with the full 5–20 KB JSON payload. layoutListChanged is likewise
+    // not emitted — the list didn't change.
+    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("hidden"), QDBusVariant(hidden));
 }
 
 void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -340,8 +341,7 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
-    // See setLayoutHidden for the rationale on not emitting layoutListChanged.
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("autoAssign"), QDBusVariant(enabled));
 }
 
 void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
@@ -356,8 +356,7 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
     invalidateLayoutJsonCache(m_cachedLayoutJson, m_cachedActiveLayoutId, m_cachedActiveLayoutJson, layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    // See setLayoutHidden for the rationale on not emitting layoutListChanged.
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+    Q_EMIT layoutPropertyChanged(layoutId, QStringLiteral("aspectRatioClass"), QDBusVariant(aspectRatioClass));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

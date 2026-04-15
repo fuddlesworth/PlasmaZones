@@ -424,9 +424,21 @@
             </arg>
         </signal>
         <signal name="layoutChanged">
-            <annotation name="org.gtk.GDBus.DocString" value="Emitted when the active layout is modified (full layout JSON)."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted on structural layout mutations (editor save, updateLayout, createLayoutFromJson). Carries the full layout JSON payload. Scalar property mutations (hidden, autoAssign, aspectRatioClass) emit layoutPropertyChanged instead to avoid the full serialization."/>
             <arg name="layoutJson" type="s">
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
+            </arg>
+        </signal>
+        <signal name="layoutPropertyChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Compact per-property change notification. Replaces layoutChanged(json) for setLayoutHidden, setLayoutAutoAssign, and setLayoutAspectRatioClass. Subscribers that want the full shape should pull it via getLayout(layoutId) — the adaptor's cache is invalidated before the signal fires."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Layout UUID whose property changed."/>
+            </arg>
+            <arg name="property" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="Property name: 'hidden', 'autoAssign', or 'aspectRatioClass'."/>
+            </arg>
+            <arg name="value" type="v">
+                <annotation name="org.gtk.GDBus.DocString" value="New value as a variant (bool or int)."/>
             </arg>
         </signal>
         <signal name="layoutListChanged">
