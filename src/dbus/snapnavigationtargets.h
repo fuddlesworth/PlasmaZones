@@ -90,6 +90,18 @@ public:
     MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber, const QString& screenId);
 
 private:
+    /// Single emission point so call sites don't have to null-check the
+    /// optional callback at every feedback opportunity. Inline + private
+    /// keeps the cost identical to the previous EMIT_FEEDBACK macro
+    /// without losing type checking.
+    void emitFeedback(bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
+                      const QString& targetZoneId, const QString& screenId) const
+    {
+        if (m_feedback) {
+            m_feedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
+        }
+    }
+
     WindowTrackingService* m_service = nullptr;
     LayoutManager* m_layoutManager = nullptr;
     ZoneDetectionAdaptor* m_zoneDetector = nullptr;

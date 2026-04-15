@@ -182,6 +182,56 @@ private Q_SLOTS:
         QCOMPARE(spy.first().first().toString(), physId);
     }
 
+    /// A pure region edit (same ids, same display names, different rects)
+    /// is the regions-only path: virtualScreenRegionsChanged fires and
+    /// virtualScreensChanged does NOT — so handlers attached to topology
+    /// changes don't run for what is just a geometry update.
+    void testSignal_regionEdit_firesRegionsChangedOnly()
+    {
+        ScreenManager mgr;
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
+
+        QSignalSpy topologySpy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
+
+        // Same ids and display names, just a different split point.
+        VirtualScreenConfig edited;
+        edited.physicalScreenId = physId;
+        edited.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 0.7, 1.0)));
+        edited.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.7, 0.0, 0.3, 1.0)));
+        QVERIFY(mgr.setVirtualScreenConfig(physId, edited));
+
+        QCOMPARE(regionsSpy.count(), 1);
+        QCOMPARE(regionsSpy.first().first().toString(), physId);
+        QCOMPARE(topologySpy.count(), 0);
+    }
+
+    /// A pure rename (same ids, same regions, different displayName) is
+    /// topology-adjacent — the OSD label changes and downstream listeners
+    /// that hash on display name need to be told. It must fire the full
+    /// virtualScreensChanged signal, not the lightweight regions-only one.
+    void testSignal_displayNameOnly_firesVirtualScreensChanged()
+    {
+        ScreenManager mgr;
+        const QString physId = QStringLiteral("Dell:U2722D:115107");
+        mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
+
+        QSignalSpy topologySpy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
+
+        // Same ids, same regions, just renamed display names.
+        VirtualScreenConfig renamed;
+        renamed.physicalScreenId = physId;
+        renamed.screens.append(makeDef(physId, 0, QStringLiteral("Primary"), QRectF(0.0, 0.0, 0.5, 1.0)));
+        renamed.screens.append(makeDef(physId, 1, QStringLiteral("Secondary"), QRectF(0.5, 0.0, 0.5, 1.0)));
+        QVERIFY(mgr.setVirtualScreenConfig(physId, renamed));
+
+        QCOMPARE(topologySpy.count(), 1);
+        QCOMPARE(topologySpy.first().first().toString(), physId);
+        QCOMPARE(regionsSpy.count(), 0);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Config replacement
     // ═══════════════════════════════════════════════════════════════════════════

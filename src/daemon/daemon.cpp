@@ -29,6 +29,7 @@
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include "../core/virtualscreenswapper.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
@@ -420,6 +421,11 @@ bool Daemon::init()
     m_screenModeRouter =
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+
+    // Stateless façade for VS swap/rotate. Held here so navigation handlers
+    // and any future consumer share one instance instead of constructing
+    // throwaway swappers per call.
+    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_settings.get());
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking

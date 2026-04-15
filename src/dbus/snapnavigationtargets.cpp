@@ -114,13 +114,9 @@ void SnapNavigationTargetResolver::setZoneDetector(ZoneDetectionAdaptor* zoneDet
     m_zoneDetector = zoneDetector;
 }
 
-// Helper for the callback invocation pattern
-#define EMIT_FEEDBACK(success, action, reason, srcZone, tgtZone, screen)                                               \
-    do {                                                                                                               \
-        if (m_feedback) {                                                                                              \
-            m_feedback((success), (action), (reason), (srcZone), (tgtZone), (screen));                                 \
-        }                                                                                                              \
-    } while (0)
+// Feedback callback emission goes through SnapNavigationTargetResolver::emitFeedback
+// (defined inline in the header) so call sites don't need to null-check the
+// optional std::function at every call.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Navigation Target Computation
@@ -135,8 +131,8 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot move - empty direction";
-        EMIT_FEEDBACK(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(), QString(),
-                      QString());
+        emitFeedback(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(), QString(),
+                     QString());
         return moveResult(false, QStringLiteral("invalid_direction"), QString(), QRect(), QString(), screenId);
     }
     if (!m_zoneDetector) {
@@ -170,15 +166,15 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
     if (currentZoneId.isEmpty()) {
         targetZoneId = m_zoneDetector->getFirstZoneInDirection(direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
-            EMIT_FEEDBACK(false, QStringLiteral("move"), QStringLiteral("no_zones"), QString(), QString(),
-                          effectiveScreenId);
+            emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_zones"), QString(), QString(),
+                         effectiveScreenId);
             return moveResult(false, QStringLiteral("no_zones"), QString(), QRect(), QString(), effectiveScreenId);
         }
     } else {
         targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
         if (targetZoneId.isEmpty()) {
-            EMIT_FEEDBACK(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                          effectiveScreenId);
+            emitFeedback(false, QStringLiteral("move"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
+                         effectiveScreenId);
             return moveResult(false, QStringLiteral("no_adjacent_zone"), QString(), QRect(), currentZoneId,
                               effectiveScreenId);
         }
@@ -186,13 +182,13 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
 
     QRect geo = m_service->zoneGeometry(targetZoneId, effectiveScreenId);
     if (!geo.isValid()) {
-        EMIT_FEEDBACK(false, QStringLiteral("move"), QStringLiteral("geometry_error"), currentZoneId, targetZoneId,
-                      effectiveScreenId);
+        emitFeedback(false, QStringLiteral("move"), QStringLiteral("geometry_error"), currentZoneId, targetZoneId,
+                     effectiveScreenId);
         return moveResult(false, QStringLiteral("geometry_error"), targetZoneId, QRect(), currentZoneId,
                           effectiveScreenId);
     }
 
-    EMIT_FEEDBACK(true, QStringLiteral("move"), direction, currentZoneId, targetZoneId, effectiveScreenId);
+    emitFeedback(true, QStringLiteral("move"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return moveResult(true, QString(), targetZoneId, geo, currentZoneId, effectiveScreenId);
 }
 
@@ -206,8 +202,8 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot focus - empty direction";
-        EMIT_FEEDBACK(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(), QString(),
-                      QString());
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(), QString(),
+                     QString());
         return focusResult(false, QStringLiteral("invalid_direction"), QString(), QString(), QString(), screenId);
     }
     if (!m_zoneDetector) {
@@ -216,7 +212,7 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("focus"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
         return focusResult(false, QStringLiteral("not_snapped"), QString(), QString(), QString(), screenId);
     }
 
@@ -231,21 +227,21 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
 
     QString targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                      effectiveScreenId);
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
+                     effectiveScreenId);
         return focusResult(false, QStringLiteral("no_adjacent_zone"), QString(), currentZoneId, QString(),
                            effectiveScreenId);
     }
 
     QStringList windowsInZone = m_service->windowsInZone(targetZoneId);
     if (windowsInZone.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"), currentZoneId, targetZoneId,
-                      effectiveScreenId);
+        emitFeedback(false, QStringLiteral("focus"), QStringLiteral("no_window_in_zone"), currentZoneId, targetZoneId,
+                     effectiveScreenId);
         return focusResult(false, QStringLiteral("no_window_in_zone"), QString(), currentZoneId, targetZoneId,
                            effectiveScreenId);
     }
 
-    EMIT_FEEDBACK(true, QStringLiteral("focus"), direction, currentZoneId, targetZoneId, effectiveScreenId);
+    emitFeedback(true, QStringLiteral("focus"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return focusResult(true, QString(), windowsInZone.first(), currentZoneId, targetZoneId, effectiveScreenId);
 }
 
@@ -267,9 +263,9 @@ RestoreTargetResult SnapNavigationTargetResolver::getRestoreForWindow(const QStr
     }
     bool success = found && w > 0 && h > 0;
     if (!success) {
-        EMIT_FEEDBACK(false, QStringLiteral("restore"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("restore"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
     } else {
-        EMIT_FEEDBACK(true, QStringLiteral("restore"), QString(), QString(), QString(), screenId);
+        emitFeedback(true, QStringLiteral("restore"), QString(), QString(), QString(), screenId);
     }
     return {success, success, x, y, w, h};
 }
@@ -284,14 +280,14 @@ CycleTargetResult SnapNavigationTargetResolver::getCycleTargetForWindow(const QS
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("cycle"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("cycle"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
         return cycleResult(false, QStringLiteral("not_snapped"), QString(), QString(), screenId);
     }
 
     QStringList windowsInZone = m_service->windowsInZone(currentZoneId);
     if (windowsInZone.size() < 2) {
-        EMIT_FEEDBACK(false, QStringLiteral("cycle"), QStringLiteral("single_window"), currentZoneId, currentZoneId,
-                      screenId);
+        emitFeedback(false, QStringLiteral("cycle"), QStringLiteral("single_window"), currentZoneId, currentZoneId,
+                     screenId);
         return cycleResult(false, QStringLiteral("single_window"), QString(), currentZoneId, screenId);
     }
 
@@ -314,7 +310,7 @@ CycleTargetResult SnapNavigationTargetResolver::getCycleTargetForWindow(const QS
                             : (currentIndex - 1 + windowsInZone.size()) % windowsInZone.size();
     QString targetWindowId = windowsInZone.at(nextIndex);
 
-    EMIT_FEEDBACK(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, screenId);
+    emitFeedback(true, QStringLiteral("cycle"), QString(), currentZoneId, currentZoneId, screenId);
     return cycleResult(true, QString(), targetWindowId, currentZoneId, screenId);
 }
 
@@ -330,8 +326,8 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot swap - empty direction";
-        EMIT_FEEDBACK(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(), QString(),
-                      QString());
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(), QString(),
+                     QString());
         return swapResult(false, QStringLiteral("invalid_direction"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }
@@ -342,7 +338,7 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
 
     QString currentZoneId = m_service->zoneForWindow(windowId);
     if (currentZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("swap"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("not_snapped"), QString(), QString(), screenId);
         return swapResult(false, QStringLiteral("not_snapped"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0, 0,
                           QString(), screenId, QString(), QString());
     }
@@ -358,8 +354,8 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
 
     QString targetZoneId = m_zoneDetector->getAdjacentZone(currentZoneId, direction, effectiveScreenId);
     if (targetZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
-                      effectiveScreenId);
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("no_adjacent_zone"), currentZoneId, QString(),
+                     effectiveScreenId);
         return swapResult(false, QStringLiteral("no_adjacent_zone"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), effectiveScreenId, currentZoneId, QString());
     }
@@ -367,22 +363,22 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
     QRect targetGeom = m_service->zoneGeometry(targetZoneId, effectiveScreenId);
     QRect currentGeom = m_service->zoneGeometry(currentZoneId, effectiveScreenId);
     if (!targetGeom.isValid() || !currentGeom.isValid()) {
-        EMIT_FEEDBACK(false, QStringLiteral("swap"), QStringLiteral("geometry_error"), currentZoneId, targetZoneId,
-                      effectiveScreenId);
+        emitFeedback(false, QStringLiteral("swap"), QStringLiteral("geometry_error"), currentZoneId, targetZoneId,
+                     effectiveScreenId);
         return swapResult(false, QStringLiteral("geometry_error"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0, 0,
                           0, QString(), effectiveScreenId, currentZoneId, targetZoneId);
     }
 
     QStringList windowsInTargetZone = m_service->windowsInZone(targetZoneId);
     if (windowsInTargetZone.isEmpty()) {
-        EMIT_FEEDBACK(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
+        emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
         return swapResult(true, QStringLiteral("moved_to_empty"), windowId, targetGeom.x(), targetGeom.y(),
                           targetGeom.width(), targetGeom.height(), targetZoneId, QString(), 0, 0, 0, 0, QString(),
                           effectiveScreenId, currentZoneId, targetZoneId);
     }
 
     QString targetWindowId = windowsInTargetZone.first();
-    EMIT_FEEDBACK(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
+    emitFeedback(true, QStringLiteral("swap"), direction, currentZoneId, targetZoneId, effectiveScreenId);
     return swapResult(true, QString(), windowId, targetGeom.x(), targetGeom.y(), targetGeom.width(),
                       targetGeom.height(), targetZoneId, targetWindowId, currentGeom.x(), currentGeom.y(),
                       currentGeom.width(), currentGeom.height(), currentZoneId, effectiveScreenId, currentZoneId,
@@ -398,18 +394,17 @@ MoveTargetResult SnapNavigationTargetResolver::getPushTargetForWindow(const QStr
 
     QString emptyZoneId = m_service->findEmptyZone(screenId);
     if (emptyZoneId.isEmpty()) {
-        EMIT_FEEDBACK(false, QStringLiteral("push"), QStringLiteral("no_empty_zone"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("push"), QStringLiteral("no_empty_zone"), QString(), QString(), screenId);
         return moveResult(false, QStringLiteral("no_empty_zone"), QString(), QRect(), QString(), screenId);
     }
 
     QRect geo = m_service->zoneGeometry(emptyZoneId, screenId);
     if (!geo.isValid()) {
-        EMIT_FEEDBACK(false, QStringLiteral("push"), QStringLiteral("geometry_error"), QString(), emptyZoneId,
-                      screenId);
+        emitFeedback(false, QStringLiteral("push"), QStringLiteral("geometry_error"), QString(), emptyZoneId, screenId);
         return moveResult(false, QStringLiteral("geometry_error"), emptyZoneId, QRect(), QString(), screenId);
     }
 
-    EMIT_FEEDBACK(true, QStringLiteral("push"), QString(), QString(), emptyZoneId, screenId);
+    emitFeedback(true, QStringLiteral("push"), QString(), QString(), emptyZoneId, screenId);
     return moveResult(true, QString(), emptyZoneId, geo, QString(), screenId);
 }
 
@@ -422,8 +417,8 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
     }
 
     if (zoneNumber < 1 || zoneNumber > 9) {
-        EMIT_FEEDBACK(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"), QString(), QString(),
-                      screenId);
+        emitFeedback(false, QStringLiteral("snap"), QStringLiteral("invalid_zone_number"), QString(), QString(),
+                     screenId);
         return moveResult(false, QStringLiteral("invalid_zone_number"), QString(), QRect(), QString(), screenId);
     }
 
@@ -431,8 +426,7 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
     // screenIdForName is idempotent (returns input if already a screen ID).
     auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
-        EMIT_FEEDBACK(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"), QString(), QString(),
-                      screenId);
+        emitFeedback(false, QStringLiteral("snap"), QStringLiteral("no_active_layout"), QString(), QString(), screenId);
         return moveResult(false, QStringLiteral("no_active_layout"), QString(), QRect(), QString(), screenId);
     }
 
@@ -445,21 +439,19 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
     }
 
     if (!targetZone) {
-        EMIT_FEEDBACK(false, QStringLiteral("snap"), QStringLiteral("zone_not_found"), QString(), QString(), screenId);
+        emitFeedback(false, QStringLiteral("snap"), QStringLiteral("zone_not_found"), QString(), QString(), screenId);
         return moveResult(false, QStringLiteral("zone_not_found"), QString(), QRect(), QString(), screenId);
     }
 
     QString zoneId = targetZone->id().toString();
     QRect geo = m_service->zoneGeometry(zoneId, screenId);
     if (!geo.isValid()) {
-        EMIT_FEEDBACK(false, QStringLiteral("snap"), QStringLiteral("geometry_error"), QString(), zoneId, screenId);
+        emitFeedback(false, QStringLiteral("snap"), QStringLiteral("geometry_error"), QString(), zoneId, screenId);
         return moveResult(false, QStringLiteral("geometry_error"), zoneId, QRect(), QString(), screenId);
     }
 
-    EMIT_FEEDBACK(true, QStringLiteral("snap"), QString(), QString(), zoneId, screenId);
+    emitFeedback(true, QStringLiteral("snap"), QString(), QString(), zoneId, screenId);
     return moveResult(true, QString(), zoneId, geo, QString(), screenId);
 }
-
-#undef EMIT_FEEDBACK
 
 } // namespace PlasmaZones

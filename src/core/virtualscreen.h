@@ -261,10 +261,18 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
 
     /// Rotate the @c region fields through the defs identified by @p orderedIds.
     /// Convention matches WindowTrackingService::calculateRotation — with
-    /// @p clockwise = true, the def at position i takes the region at
-    /// position (i+1) mod n; with @p clockwise = false, it takes (i-1) mod n.
-    /// Read another way: a VS "moves forward" in the ordered ring on a CW
-    /// rotation (def[0] takes def[1]'s old slot, def[1] takes def[2]'s, etc).
+    /// @p clockwise = true, the def at position i in the ring inherits the
+    /// region of its successor (position (i+1) mod n); with @p clockwise =
+    /// false, it inherits the region of its predecessor (position (i-1) mod n).
+    ///
+    /// Read another way: on a CW rotation, each region's *content* moves
+    /// **backward** one slot in the ordered ring (the region that was at
+    /// def[1] now sits at def[0], so callers walking the ring in order see
+    /// content shifting toward index 0 with the index-0 region wrapping to
+    /// position n-1). When @p orderedIds is constructed from a spatial CW
+    /// angle sort of a 2D grid, this matches the visual expectation that
+    /// "CW rotate" cycles content clockwise around the ring.
+    ///
     /// IDs and all other def fields are preserved. @p orderedIds may be a
     /// subset of the config's defs so callers can rotate only a subset.
     /// Returns false if @p orderedIds has fewer than two entries or any id

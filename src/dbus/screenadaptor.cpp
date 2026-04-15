@@ -401,8 +401,13 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
 
     VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
-    QSet<int> seenIndices;
 
+    // Translate the JSON payload into a VirtualScreenDef list. Do not
+    // pre-validate region bounds, indices, or duplicates here — Settings is
+    // the single point of admission control and runs the canonical
+    // VirtualScreenConfig::isValid check which covers all those cases. A
+    // local pre-filter would add a second validation layer with subtly
+    // different log messages and rules to keep in sync.
     for (const auto& entry : screensArr) {
         QJsonObject screenObj = entry.toObject();
         QJsonObject regionObj = screenObj[JsonKeys::Region].toObject();
@@ -414,43 +419,18 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         def.displayName = screenObj[JsonKeys::DisplayName].toString();
         def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
                             regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
-
-        constexpr qreal tolerance = 1e-6;
-        const qreal rx = def.region.x();
-        const qreal ry = def.region.y();
-        const qreal rw = def.region.width();
-        const qreal rh = def.region.height();
-        constexpr qreal minSize = 0.01;
-        if (rx < -tolerance || ry < -tolerance || rw < minSize || rh < minSize || rx + rw > 1.0 + tolerance
-            || ry + rh > 1.0 + tolerance) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: dropping virtual screen" << def.index << "for"
-                              << physicalScreenId << "- invalid region: x=" << rx << "y=" << ry << "w=" << rw
-                              << "h=" << rh << "(all coordinates must be within [0.0, 1.0])";
-            continue;
-        }
-
-        if (seenIndices.contains(def.index)) {
-            qCWarning(lcDbus) << "setVirtualScreenConfig: skipping duplicate virtual screen index" << def.index << "for"
-                              << physicalScreenId;
-            continue;
-        }
-        seenIndices.insert(def.index);
-
         config.screens.append(def);
     }
 
     // Persist to Settings (the source of truth). Settings::setVirtualScreenConfig
-    // runs the canonical VirtualScreenConfig::isValid validation — including
-    // the "at least 2 screens" floor and the maxVirtualScreensPerPhysical
-    // ceiling — and emits virtualScreenConfigsChanged on success. The
-    // daemon's bridge then calls ScreenManager::refreshVirtualConfigs which
-    // re-validates and fires virtualScreensChanged(physId) for each changed
-    // physical screen. Downstream consumers (autotile engine, overlay
-    // service, daemon migration handler) react to that. We deliberately do
-    // NOT pre-validate the screens count here to avoid two layers of
-    // bounds-checking with subtly different log messages — Settings is the
-    // single point of admission control.
-    m_settings->setVirtualScreenConfig(physicalScreenId, config);
+    // runs VirtualScreenConfig::isValid (region bounds, overlap, coverage,
+    // duplicate ids/indices, max-per-physical) and emits
+    // virtualScreenConfigsChanged on success. Rejected configs return false
+    // and log the specific reason; we surface the failure to the caller's
+    // D-Bus log so a misbehaving client can see why its write didn't stick.
+    if (!m_settings->setVirtualScreenConfig(physicalScreenId, config)) {
+        qCWarning(lcDbus) << "setVirtualScreenConfig: Settings rejected config for" << physicalScreenId;
+    }
 }
 
 void ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction)
@@ -470,8 +450,9 @@ void ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtualSc
     }
 
     VirtualScreenSwapper swapper(m_settings);
-    const bool ok = swapper.swapInDirection(currentVirtualScreenId, direction);
-    qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->" << ok;
+    const auto result = swapper.swapInDirection(currentVirtualScreenId, direction);
+    qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->"
+                    << VirtualScreenSwapper::reasonString(result);
 }
 
 void ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, bool clockwise)
@@ -490,8 +471,9 @@ void ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, bool c
     }
 
     VirtualScreenSwapper swapper(m_settings);
-    const bool ok = swapper.rotate(physicalScreenId, clockwise);
-    qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->" << ok;
+    const auto result = swapper.rotate(physicalScreenId, clockwise);
+    qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->"
+                    << VirtualScreenSwapper::reasonString(result);
 }
 
 QStringList ScreenAdaptor::getPhysicalScreens()

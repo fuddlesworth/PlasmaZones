@@ -50,6 +50,9 @@ private:
         return cfg;
     }
 
+private:
+    using Result = VirtualScreenSwapper::Result;
+
 private Q_SLOTS:
 
     // ─── swapInDirection ───────────────────────────────────────────────────
@@ -65,7 +68,7 @@ private Q_SLOTS:
         const QString rightId = VirtualScreenId::make(physId, 1);
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.swapInDirection(leftId, Utils::Direction::Right));
+        QCOMPARE(swapper.swapInDirection(leftId, Utils::Direction::Right), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after.screens.size(), 2);
@@ -81,7 +84,7 @@ private Q_SLOTS:
         QCOMPARE(after.screens[1].index, 1);
     }
 
-    void swap_noSiblingInDirection_returnsFalse()
+    void swap_noSiblingInDirection_returnsStructuredReason()
     {
         IsolatedConfigGuard guard;
         const QString physId = QStringLiteral("DP-1");
@@ -91,15 +94,17 @@ private Q_SLOTS:
 
         VirtualScreenSwapper swapper(&settings);
         // Left VS — "left" has no sibling in that direction.
-        QVERIFY(!swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Left));
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Left),
+                 Result::NoSiblingInDirection);
         // Vertical direction on a horizontal split has no sibling either.
-        QVERIFY(!swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Up));
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Up),
+                 Result::NoSiblingInDirection);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after, before); // unchanged
     }
 
-    void swap_nonVirtualId_returnsFalse()
+    void swap_nonVirtualId_returnsNotVirtual()
     {
         IsolatedConfigGuard guard;
         const QString physId = QStringLiteral("DP-1");
@@ -107,16 +112,29 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(!swapper.swapInDirection(physId, Utils::Direction::Right));
+        QCOMPARE(swapper.swapInDirection(physId, Utils::Direction::Right), Result::NotVirtual);
     }
 
-    void swap_unknownPhysical_returnsFalse()
+    void swap_unknownPhysical_returnsNoSubdivision()
     {
         IsolatedConfigGuard guard;
         Settings settings; // no VS configured
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(!swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Utils::Direction::Right));
+        // Looks like a virtual id, but its physical screen has no entry in
+        // Settings — the helper falls through to the size-check failure.
+        QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Utils::Direction::Right), Result::NoSubdivision);
+    }
+
+    void swap_emptyDirection_returnsInvalidDirection()
+    {
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("DP-1");
+        Settings settings;
+        settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
+
+        VirtualScreenSwapper swapper(&settings);
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), QString()), Result::InvalidDirection);
     }
 
     void swap_resultPassesValidation()
@@ -127,7 +145,7 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Right));
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Right), Result::Ok);
 
         QString err;
         QVERIFY2(VirtualScreenConfig::isValid(settings.virtualScreenConfig(physId), physId, 8, &err), qPrintable(err));
@@ -146,15 +164,33 @@ private Q_SLOTS:
         const VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.swapInDirection(VirtualScreenId::make(physA, 0), Utils::Direction::Right));
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physA, 0), Utils::Direction::Right), Result::Ok);
 
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
+    }
+
+    void reasonString_emptyForOk()
+    {
+        QVERIFY(VirtualScreenSwapper::reasonString(Result::Ok).isEmpty());
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::NoSubdivision), QStringLiteral("no_subdivision"));
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::NoSiblingInDirection), QStringLiteral("no_sibling"));
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::NotVirtual), QStringLiteral("not_virtual"));
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::InvalidDirection), QStringLiteral("invalid_direction"));
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::SettingsRejected), QStringLiteral("settings_rejected"));
     }
 
     // ─── rotate ───────────────────────────────────────────────────────────
 
     void rotate_threeSplit_clockwise()
     {
+        // 3-VS horizontal strip — the 1D fallback in computeCwRingOrder
+        // sorts left→right (ascending x), so the ring is [Left, Centre,
+        // Right]. CW rotate in that ring means each VS inherits the region
+        // of its successor, i.e. content shifts one slot leftward and the
+        // leftmost wraps around to the rightmost slot. This matches the
+        // visual expectation that "clockwise on a horizontal strip" cycles
+        // content from right to left along the strip's natural reading
+        // order.
         IsolatedConfigGuard guard;
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
@@ -165,23 +201,60 @@ private Q_SLOTS:
         const QRectF r2 = before.screens[2].region; // Right
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.rotate(physId, /*clockwise=*/true));
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
-        // Three horizontal VSs all at the same y as the centroid. The
-        // centroid-based CW angle order (atan2(dx, -dy) with -dy = -0) wraps
-        // the centre VS to angle π, giving the ring [Right, Centre, Left]
-        // starting from the smallest angle. A CW rotate in that ring:
-        //   Right  takes Centre's old region
-        //   Centre takes Left's   old region
-        //   Left   takes Right's  old region
-        // i.e. every VS shifts one slot leftward with the leftmost wrapping
-        // around to the right. On a 1D strip this is self-consistent and
-        // cycles back to the original after N rotations; the visual direction
-        // is less meaningful without a true 2D grid.
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
-        QCOMPARE(after.screens[0].region, r2); // Left slot gets old Right
-        QCOMPARE(after.screens[1].region, r0); // Centre slot gets old Left
-        QCOMPARE(after.screens[2].region, r1); // Right slot gets old Centre
+        // Ring order [Left, Centre, Right]; CW rotate (each inherits
+        // successor's region): Left ← Centre, Centre ← Right, Right ← Left.
+        QCOMPARE(after.screens[0].region, r1); // Left slot gets old Centre
+        QCOMPARE(after.screens[1].region, r2); // Centre slot gets old Right
+        QCOMPARE(after.screens[2].region, r0); // Right slot gets old Left
+    }
+
+    void rotate_twoSplitHorizontal_equivalentToSwap()
+    {
+        // 2-VS horizontal strip — rotate must produce the same outcome as
+        // swap (a 2-element ring rotation IS a swap). Pinning this so the
+        // 1D fallback can't accidentally diverge from the swap path on the
+        // simplest possible subdivision.
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("DP-1");
+        Settings settings;
+        settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
+        const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+
+        VirtualScreenSwapper swapper(&settings);
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
+
+        const VirtualScreenConfig afterRotate = settings.virtualScreenConfig(physId);
+        QCOMPARE(afterRotate.screens[0].region, before.screens[1].region);
+        QCOMPARE(afterRotate.screens[1].region, before.screens[0].region);
+
+        // CCW must round-trip back to the original.
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/false), Result::Ok);
+        QCOMPARE(settings.virtualScreenConfig(physId), before);
+    }
+
+    void rotate_twoSplitVertical_topToBottom()
+    {
+        // 2-VS vertical strip — the 1D fallback sorts top→bottom, so the
+        // ring is [Top, Bottom]. CW rotate exchanges them.
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("DP-1");
+        Settings settings;
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = physId;
+        cfg.screens.append(makeDef(physId, 0, QStringLiteral("Top"), QRectF(0.0, 0.0, 1.0, 0.5)));
+        cfg.screens.append(makeDef(physId, 1, QStringLiteral("Bottom"), QRectF(0.0, 0.5, 1.0, 0.5)));
+        settings.setVirtualScreenConfig(physId, cfg);
+        const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+
+        VirtualScreenSwapper swapper(&settings);
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
+
+        const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        QCOMPARE(after.screens[0].region, before.screens[1].region);
+        QCOMPARE(after.screens[1].region, before.screens[0].region);
     }
 
     void rotate_threeSplit_cycleReturnsToStart()
@@ -194,7 +267,7 @@ private Q_SLOTS:
 
         VirtualScreenSwapper swapper(&settings);
         for (int i = 0; i < 3; ++i) {
-            QVERIFY(swapper.rotate(physId, true));
+            QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
         QCOMPARE(settings.virtualScreenConfig(physId), before);
     }
@@ -208,8 +281,8 @@ private Q_SLOTS:
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.rotate(physId, true));
-        QVERIFY(swapper.rotate(physId, false));
+        QCOMPARE(swapper.rotate(physId, true), Result::Ok);
+        QCOMPARE(swapper.rotate(physId, false), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physId), before);
     }
 
@@ -218,8 +291,9 @@ private Q_SLOTS:
         // Centroid-based CW angle-from-centroid ring order on a 2×2 grid
         // starts from the top-right (smallest positive angle when measured
         // CW from "up") and walks TR → BR → BL → TL.
-        // CW rotate then moves each VS forward in that ring: the slot that
-        // was TR now holds BR's old region, BR → BL's, BL → TL's, TL → TR's.
+        // CW rotate then has each slot inherit its successor's region: the
+        // slot that was TR now holds BR's old region, BR → BL's, BL → TL's,
+        // TL → TR's.
         IsolatedConfigGuard guard;
         const QString physId = QStringLiteral("DP-1");
         Settings settings;
@@ -231,7 +305,7 @@ private Q_SLOTS:
         const QRectF br = before.screens[3].region; // BR
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.rotate(physId, /*clockwise=*/true));
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         // def[0] = TL slot; def[1] = TR slot; def[2] = BL slot; def[3] = BR slot.
@@ -254,18 +328,18 @@ private Q_SLOTS:
 
         VirtualScreenSwapper swapper(&settings);
         for (int i = 0; i < 4; ++i) {
-            QVERIFY(swapper.rotate(physId, true));
+            QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
         QCOMPARE(settings.virtualScreenConfig(physId), before);
     }
 
-    void rotate_unconfiguredMonitor_returnsFalse()
+    void rotate_unconfiguredMonitor_returnsNoSubdivision()
     {
         IsolatedConfigGuard guard;
         Settings settings; // no VS configured
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(!swapper.rotate(QStringLiteral("DP-1"), true));
+        QCOMPARE(swapper.rotate(QStringLiteral("DP-1"), true), Result::NoSubdivision);
     }
 
     void rotate_rejectsVirtualId()
@@ -276,7 +350,7 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(!swapper.rotate(VirtualScreenId::make(physId, 0), true));
+        QCOMPARE(swapper.rotate(VirtualScreenId::make(physId, 0), true), Result::NotVirtual);
     }
 
     void rotate_scopedToPhysicalMonitor()
@@ -291,7 +365,7 @@ private Q_SLOTS:
         const VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
         VirtualScreenSwapper swapper(&settings);
-        QVERIFY(swapper.rotate(physA, true));
+        QCOMPARE(swapper.rotate(physA, true), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
     }
 };

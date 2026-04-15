@@ -890,16 +890,16 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
     }
 }
 
-void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
+bool Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
     if (physicalScreenId.isEmpty()) {
         qCWarning(lcConfig) << "setVirtualScreenConfig: empty physicalScreenId";
-        return;
+        return false;
     }
 
     if (config.screens.isEmpty() || !config.hasSubdivisions()) {
         if (!m_virtualScreenConfigs.contains(physicalScreenId))
-            return;
+            return true; // already-empty removal is a successful no-op
         m_virtualScreenConfigs.remove(physicalScreenId);
     } else {
         // Validate before storing — Settings is the source of truth for VS
@@ -911,14 +911,15 @@ void Settings::setVirtualScreenConfig(const QString& physicalScreenId, const Vir
                                           &error)) {
             qCWarning(lcConfig) << "setVirtualScreenConfig: rejected invalid config for" << physicalScreenId << "—"
                                 << error;
-            return;
+            return false;
         }
         if (m_virtualScreenConfigs.value(physicalScreenId) == config)
-            return;
+            return true; // unchanged is a successful no-op
         m_virtualScreenConfigs.insert(physicalScreenId, config);
     }
     Q_EMIT virtualScreenConfigsChanged();
     Q_EMIT settingsChanged();
+    return true;
 }
 
 VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const

@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QHash>
 #include <QRect>
 #include <QStringList>
 #include <functional>

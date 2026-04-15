@@ -23,6 +23,7 @@ private Q_SLOTS:
     void skipsCurrentByCentre();
     void noMatchInDirection();
     void threeColumnChain();
+    void asymmetricGridFirstSeenWins();
 };
 
 void TestSpatialAdjacency::emptyCandidates()
@@ -119,6 +120,30 @@ void TestSpatialAdjacency::threeColumnChain()
     QCOMPARE(SpatialAdjacency::findAdjacentRect(col1, rects, Utils::Direction::Right), 2);
     QCOMPARE(SpatialAdjacency::findAdjacentRect(col0, rects, Utils::Direction::Right), 1);
     QCOMPARE(SpatialAdjacency::findAdjacentRect(col2, rects, Utils::Direction::Left), 1);
+}
+
+void TestSpatialAdjacency::asymmetricGridFirstSeenWins()
+{
+    // Asymmetric layout: a tall left column and two stacked right cells.
+    // From Left, going Right, both right cells are equidistant on the
+    // weighted distance metric (same dx, perpendicular offsets symmetric
+    // around the left's center). The helper does not promise a specific
+    // winner — it walks the candidate list in order and keeps strictly-
+    // smaller results, so first-seen wins on ties. Pin that behavior so
+    // the implementation can't drift to a non-deterministic sort.
+    const QRectF left(0.0, 0.0, 0.5, 1.0); // center (0.25, 0.5)
+    const QRectF topRight(0.5, 0.0, 0.5, 0.5); // center (0.75, 0.25)
+    const QRectF bottomRight(0.5, 0.5, 0.5, 0.5); // center (0.75, 0.75)
+    const QList<QRectF> rects{left, topRight, bottomRight};
+
+    // dy from left to topRight = |0.25 - 0.5| = 0.25, weighted 2x = 0.5
+    // dy from left to bottomRight = |0.75 - 0.5| = 0.25, weighted 2x = 0.5
+    // Both have dx = 0.5, so weighted distance is equal — first-seen (topRight, idx 1) wins.
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Utils::Direction::Right), 1);
+
+    // Reverse order in the input — now bottomRight is seen first.
+    const QList<QRectF> reversed{left, bottomRight, topRight};
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, reversed, Utils::Direction::Right), 1);
 }
 
 QTEST_MAIN(TestSpatialAdjacency)

@@ -40,21 +40,12 @@ class SnapEngine;
 class PLASMAZONES_EXPORT ScreenModeRouter
 {
 public:
-    /// Construct with references to the engines and layout manager.
-    /// None of the pointers are owned; they must outlive the router.
-    /// Any may be null during early startup — the router handles that
-    /// by returning Snapping mode / null engine and letting the caller
-    /// decide whether to proceed.
+    /// Construct with references to the engines and layout manager. None of
+    /// the pointers are owned; they must outlive the router. All three are
+    /// required at construction time — the daemon's init order guarantees
+    /// the engines exist before the router. There is no late-wiring path:
+    /// passing nullptr for any dependency is a programming error.
     ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* snapEngine, AutotileEngine* autotileEngine);
-
-    /// Late wiring for the autotile engine pointer. The daemon constructs
-    /// the router before the autotile engine exists in some init paths;
-    /// this lets the daemon finish wiring without reordering.
-    void setAutotileEngine(AutotileEngine* autotileEngine);
-
-    /// Late wiring for the snap engine pointer. Symmetric with the
-    /// autotile setter above for the same reason.
-    void setSnapEngine(SnapEngine* snapEngine);
 
     /// Current mode for @p screenId. Consults the autotile engine's
     /// live set first (mode is derived from assignment + context) and
@@ -64,10 +55,10 @@ public:
     /// against missing state.
     AssignmentEntry::Mode modeFor(const QString& screenId) const;
 
-    /// The engine that owns placement on @p screenId, or nullptr if
-    /// neither engine is wired or the screen has no tracked mode yet.
-    /// Callers should treat nullptr as "do nothing" — they must not
-    /// reach into a specific engine directly.
+    /// The engine that owns placement on @p screenId. Callers should treat
+    /// the returned pointer as the only legitimate route into per-window
+    /// behaviour for that screen — they must not reach into a specific
+    /// engine directly.
     IEngineLifecycle* engineFor(const QString& screenId) const;
 
     /// Convenience predicates. @see modeFor for the fallback semantics.
@@ -86,9 +77,9 @@ public:
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
 private:
-    LayoutManager* m_layoutManager = nullptr;
-    SnapEngine* m_snapEngine = nullptr;
-    AutotileEngine* m_autotileEngine = nullptr;
+    LayoutManager* m_layoutManager;
+    SnapEngine* m_snapEngine;
+    AutotileEngine* m_autotileEngine;
 };
 
 } // namespace PlasmaZones

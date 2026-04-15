@@ -83,15 +83,32 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
     // ids, same count, same indices, same display names. This lets downstream
     // handlers take a lightweight path that only updates geometry without
     // re-running mode resolution, orphan cleanup, window migration, etc.
+    //
+    // The check is structured as "every non-region field on every def is
+    // identical (matched by id) — only the rect differs". We hash old defs
+    // by id so the match is order-independent, since callers may reorder
+    // the screens vector when committing region edits.
     bool regionsOnly = false;
     if (oldConfig.screens.size() == config.screens.size() && oldConfig.screens.size() >= 2) {
         regionsOnly = true;
-        QSet<QString> oldIds;
+        QHash<QString, const VirtualScreenDef*> oldById;
+        oldById.reserve(oldConfig.screens.size());
         for (const auto& def : oldConfig.screens) {
-            oldIds.insert(def.id);
+            oldById.insert(def.id, &def);
         }
-        for (const auto& def : config.screens) {
-            if (!oldIds.contains(def.id)) {
+        for (const auto& newDef : config.screens) {
+            auto it = oldById.constFind(newDef.id);
+            if (it == oldById.constEnd()) {
+                regionsOnly = false; // VS ID set changed.
+                break;
+            }
+            const VirtualScreenDef* oldDef = it.value();
+            // displayName / index / physicalScreenId changes are topology-
+            // adjacent: the OSD label changes, mode resolution may need to
+            // re-run on rename, and downstream listeners that hash on these
+            // fields must be told. Treat them as full changes.
+            if (oldDef->displayName != newDef.displayName || oldDef->index != newDef.index
+                || oldDef->physicalScreenId != newDef.physicalScreenId) {
                 regionsOnly = false;
                 break;
             }

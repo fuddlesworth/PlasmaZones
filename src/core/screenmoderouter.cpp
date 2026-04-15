@@ -16,16 +16,8 @@ ScreenModeRouter::ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* sna
     , m_autotileEngine(autotileEngine)
 {
     Q_ASSERT(layoutManager);
-}
-
-void ScreenModeRouter::setAutotileEngine(AutotileEngine* autotileEngine)
-{
-    m_autotileEngine = autotileEngine;
-}
-
-void ScreenModeRouter::setSnapEngine(SnapEngine* snapEngine)
-{
-    m_snapEngine = snapEngine;
+    Q_ASSERT(snapEngine);
+    Q_ASSERT(autotileEngine);
 }
 
 AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
@@ -33,25 +25,21 @@ AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
     // Prefer the autotile engine's live set: it reflects the actual
     // runtime state including per-screen overrides that the layout
     // manager's cascade doesn't know about. Fall back to the layout
-    // manager for screens the engine hasn't seen yet (early startup,
-    // screens with assignments but no live autotile state).
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    // manager for screens the engine hasn't seen yet.
+    if (m_autotileEngine->isAutotileScreen(screenId)) {
         return AssignmentEntry::Autotile;
     }
-    if (m_layoutManager) {
-        const int desktop = m_layoutManager->currentVirtualDesktop();
-        const QString activity = m_layoutManager->currentActivity();
-        const auto mode = m_layoutManager->modeForScreen(screenId, desktop, activity);
-        // Guard against stale layout-manager state: if the layout cascade
-        // says Autotile but the engine doesn't have a live state for this
-        // screen, trust the engine — the cascade may still reflect a stale
-        // assignment during mode transitions.
-        if (mode == AssignmentEntry::Autotile && m_autotileEngine && !m_autotileEngine->isAutotileScreen(screenId)) {
-            return AssignmentEntry::Snapping;
-        }
-        return mode;
+    const int desktop = m_layoutManager->currentVirtualDesktop();
+    const QString activity = m_layoutManager->currentActivity();
+    const auto mode = m_layoutManager->modeForScreen(screenId, desktop, activity);
+    // Guard against stale layout-manager state: if the layout cascade
+    // says Autotile but the engine doesn't have a live state for this
+    // screen, trust the engine — the cascade may still reflect a stale
+    // assignment during mode transitions.
+    if (mode == AssignmentEntry::Autotile && !m_autotileEngine->isAutotileScreen(screenId)) {
+        return AssignmentEntry::Snapping;
     }
-    return AssignmentEntry::Snapping;
+    return mode;
 }
 
 IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
@@ -62,6 +50,7 @@ IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
     case AssignmentEntry::Snapping:
         return m_snapEngine;
     }
+    Q_UNREACHABLE();
     return nullptr;
 }
 

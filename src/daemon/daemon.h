@@ -44,6 +44,7 @@ class AutotileEngine;
 class IEngineLifecycle;
 class IConfigBackend;
 class ScreenModeRouter;
+class VirtualScreenSwapper;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
@@ -366,6 +367,10 @@ private:
     /// dispatch paths. Owns no state of its own — just delegates to the
     /// layout manager and engine pointers it was constructed with.
     std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// Stateless façade over m_settings for VS swap/rotate. Held as a
+    /// member rather than reconstructed per-call so navigation handlers
+    /// don't need to know about its dependencies.
+    std::unique_ptr<VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
