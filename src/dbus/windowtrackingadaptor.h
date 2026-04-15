@@ -23,6 +23,7 @@ namespace PlasmaZones {
 
 class AutotileEngine;
 class ScreenModeRouter;
+class SnapNavigationTargetResolver;
 class LayoutManager; // Concrete type needed for signal connections
 class PersistenceWorker;
 class Layout;
@@ -48,7 +49,10 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
-    ~WindowTrackingAdaptor() override = default;
+    /// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy
+    /// the resolver in the .cpp where its type is complete — avoids
+    /// dragging snapnavigationtargets.h into every adaptor include site.
+    ~WindowTrackingAdaptor() override;
 
     /**
      * @brief Last screen reported by the KWin effect's windowActivated call
@@ -85,10 +89,7 @@ public:
      * @brief Set ZoneDetectionAdaptor for daemon-driven navigation (getAdjacentZone, getFirstZoneInDirection)
      * @param adaptor ZoneDetectionAdaptor instance (must outlive this adaptor)
      */
-    void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
-    {
-        m_zoneDetectionAdaptor = adaptor;
-    }
+    void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor);
 
     /**
      * @brief Wire up the compositor-facing WindowRegistry.
@@ -599,73 +600,15 @@ public Q_SLOTS:
      */
     PlasmaZones::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
-    // Daemon-driven navigation: KWin calls with windowId, daemon returns result JSON
-    /**
-     * @brief Get move target for a window (zone + geometry)
-     * @param windowId Window to move
-     * @param direction Direction ("left", "right", "up", "down")
-     * @param screenId Screen for geometry
-     * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
-     */
-    PlasmaZones::MoveTargetResult getMoveTargetForWindow(const QString& windowId, const QString& direction,
-                                                         const QString& screenId);
-
-    /**
-     * @brief Get focus target (window to activate) in adjacent zone
-     * @param windowId Current focused window
-     * @param direction Direction to look
-     * @param screenId Screen for zone resolution
-     * @return FocusTargetResult with success, reason, windowIdToActivate, sourceZoneId, targetZoneId, screenName
-     */
-    PlasmaZones::FocusTargetResult getFocusTargetForWindow(const QString& windowId, const QString& direction,
-                                                           const QString& screenId);
-
-    /**
-     * @brief Get restore geometry for a snapped window
-     * @param windowId Window to restore
-     * @param screenId Screen for validation
-     * @return RestoreTargetResult with success, found, x, y, width, height
-     */
-    PlasmaZones::RestoreTargetResult getRestoreForWindow(const QString& windowId, const QString& screenId);
-
-    /**
-     * @brief Get cycle target (next/prev window in same zone)
-     * @param windowId Current focused window
-     * @param forward true for next, false for previous
-     * @param screenId Screen for zone resolution
-     * @return CycleTargetResult with success, reason, windowIdToActivate, zoneId, screenName
-     */
-    PlasmaZones::CycleTargetResult getCycleTargetForWindow(const QString& windowId, bool forward,
-                                                           const QString& screenId);
-
-    /**
-     * @brief Get swap target data (both windows' geometries and zone IDs)
-     * @param windowId Window to swap
-     * @param direction Direction to swap
-     * @param screenId Screen for geometry
-     * @return SwapTargetResult with success, reason, windowId1, x1, y1, w1, h1, zoneId1, windowId2, x2, y2, w2, h2,
-     * zoneId2, screenName, sourceZoneId, targetZoneId
-     */
-    PlasmaZones::SwapTargetResult getSwapTargetForWindow(const QString& windowId, const QString& direction,
-                                                         const QString& screenId);
-
-    /**
-     * @brief Get push-to-empty-zone target (zone + geometry)
-     * @param windowId Window to push
-     * @param screenId Screen for layout/geometry
-     * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
-     */
-    PlasmaZones::MoveTargetResult getPushTargetForWindow(const QString& windowId, const QString& screenId);
-
-    /**
-     * @brief Get snap-to-zone-by-number target (zone + geometry)
-     * @param windowId Window to snap
-     * @param zoneNumber Zone number (1-9)
-     * @param screenId Screen for layout/geometry
-     * @return MoveTargetResult with success, reason, zoneId, x, y, width, height, sourceZoneId, screenName
-     */
-    PlasmaZones::MoveTargetResult getSnapToZoneByNumberTarget(const QString& windowId, int zoneNumber,
-                                                              const QString& screenId);
+    // Snap-mode navigation target computation lives in
+    // src/dbus/snapnavigationtargets.{h,cpp} — see SnapNavigationTargetResolver.
+    // The resolver is a pure-compute helper owned by this adaptor via
+    // m_targetResolver; the D-Bus navigation slots (moveWindowToAdjacentZone,
+    // focusAdjacentZone, swapWindowWithAdjacentZone, pushToEmptyZone,
+    // snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize) delegate to
+    // it and then emit applyGeometryRequested based on the returned result.
+    // None of those helpers are D-Bus-exposed anymore — there are no external
+    // callers and keeping them in public Q_SLOTS was accidental surface.
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -1133,6 +1076,14 @@ private:
     // restore calls through this instead of direct engine pointer checks.
     // Null until setScreenModeRouter is called (Daemon wires during init).
     ScreenModeRouter* m_screenModeRouter = nullptr;
+
+    // Pure-compute helper that owns snap-mode navigation target
+    // computation. Constructed eagerly in the adaptor constructor with
+    // m_service + m_layoutManager and a feedback callback that forwards
+    // into the adaptor's navigationFeedback signal. The zone detector is
+    // wired late via setZoneDetectionAdaptor which also pushes it into
+    // the resolver. Engine pure: never emits Qt signals directly.
+    std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service

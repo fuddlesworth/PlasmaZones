@@ -160,9 +160,10 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
+    dbus/snapnavigationtargets.cpp
+    dbus/snapnavigationtargets.h
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/navigation.cpp
-    dbus/windowtrackingadaptor/targets.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp
     dbus/windowtrackingadaptor/saveload.cpp
