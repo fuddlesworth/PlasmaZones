@@ -11,6 +11,8 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
+#include <functional>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -36,6 +38,9 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
     // Drop shader caches whenever the registry reloads from disk. The
     // registry is a singleton, but may not yet exist in unit tests that
     // instantiate SettingsAdaptor without a daemon — guard the connect.
+    // ShaderRegistry::refresh() is always invoked from the main thread
+    // (D-Bus refreshShaders slot) so a direct connection is safe; if
+    // that invariant ever changes, switch to Qt::QueuedConnection here.
     if (auto* registry = ShaderRegistry::instance()) {
         connect(registry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
     }
@@ -129,7 +134,14 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("stringlist");
 
-    // Concrete Settings pointer for properties not on ISettings interface
+    // Concrete Settings pointer for properties not on ISettings interface.
+    // The per-screen override API is fully on ISettings — this cast is
+    // used only by the REGISTER_CONCRETE_* macros below for dozens of
+    // global properties that haven't been hoisted to the segregated
+    // interfaces yet. Test backends that don't supply a concrete Settings
+    // leave `concrete` null; the per-property lambdas capture it by value
+    // and would crash if invoked, but those keys never appear in
+    // stub-driven tests.
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
 // Macros for concrete Settings entries (same pattern as REGISTER_* but captures 'concrete')
@@ -809,63 +821,96 @@ QString SettingsAdaptor::getAllSettingSchemas()
 // Per-Screen Settings D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Category → {get, set, clear} dispatch table. Closing over @p settings
+// lets every per-screen D-Bus entry point share one dispatch definition
+// instead of re-deriving the if/else ladder per call. Every method is
+// on ISettings with a default no-op body, so backends that don't
+// support per-screen state (test stubs) simply inherit the no-op —
+// no qobject_cast required.
+namespace {
+struct PerScreenDispatch
+{
+    std::function<QVariantMap(const QString&)> get;
+    std::function<void(const QString&, const QString&, const QVariant&)> set;
+    std::function<void(const QString&)> clear;
+};
+
+std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString& category)
+{
+    if (category == QLatin1String("autotile")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenAutotileSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenAutotileSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenAutotileSettings(id);
+            },
+        };
+    }
+    if (category == QLatin1String("snapping")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenSnappingSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenSnappingSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenSnappingSettings(id);
+            },
+        };
+    }
+    if (category == QLatin1String("zoneSelector")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenZoneSelectorSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenZoneSelectorSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenZoneSelectorSettings(id);
+            },
+        };
+    }
+    return std::nullopt;
+}
+} // namespace
+
 void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "setPerScreenSetting: concrete Settings not available";
-        return;
-    }
-    if (category == QLatin1String("autotile")) {
-        concrete->setPerScreenAutotileSetting(screenId, key, value.variant());
-    } else if (category == QLatin1String("snapping")) {
-        concrete->setPerScreenSnappingSetting(screenId, key, value.variant());
-    } else if (category == QLatin1String("zoneSelector")) {
-        concrete->setPerScreenZoneSelectorSetting(screenId, key, value.variant());
-    } else {
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
+    dispatch->set(screenId, key, value.variant());
     scheduleSave();
 }
 
 void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "clearPerScreenSettings: concrete Settings not available";
-        return;
-    }
-    if (category == QLatin1String("autotile")) {
-        concrete->clearPerScreenAutotileSettings(screenId);
-    } else if (category == QLatin1String("snapping")) {
-        concrete->clearPerScreenSnappingSettings(screenId);
-    } else if (category == QLatin1String("zoneSelector")) {
-        concrete->clearPerScreenZoneSelectorSettings(screenId);
-    } else {
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
         return;
     }
+    dispatch->clear(screenId);
     scheduleSave();
 }
 
 QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const QString& category)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "getPerScreenSettings: concrete Settings not available";
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
+        qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
         return {};
     }
-    if (category == QLatin1String("autotile")) {
-        return concrete->getPerScreenAutotileSettings(screenId);
-    } else if (category == QLatin1String("snapping")) {
-        return concrete->getPerScreenSnappingSettings(screenId);
-    } else if (category == QLatin1String("zoneSelector")) {
-        return concrete->getPerScreenZoneSelectorSettings(screenId);
-    }
-    qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
-    return {};
+    return dispatch->get(screenId);
 }
 
 bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values)
@@ -875,29 +920,8 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
         // return true so callers don't need to guard for it.
         return true;
     }
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "setPerScreenSettings: concrete Settings not available";
-        return false;
-    }
-
-    // Single category dispatch outside the loop — each underlying Settings
-    // method is O(1) per call, so the hot path is one hash lookup per key.
-    using PerScreenSetter = std::function<void(const QString&, const QString&, const QVariant&)>;
-    PerScreenSetter setter;
-    if (category == QLatin1String("autotile")) {
-        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
-            concrete->setPerScreenAutotileSetting(id, k, v);
-        };
-    } else if (category == QLatin1String("snapping")) {
-        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
-            concrete->setPerScreenSnappingSetting(id, k, v);
-        };
-    } else if (category == QLatin1String("zoneSelector")) {
-        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
-            concrete->setPerScreenZoneSelectorSetting(id, k, v);
-        };
-    } else {
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
         return false;
     }
@@ -907,7 +931,7 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
         // they contain lists or maps; normalize to plain Qt types first —
         // matches the single-key setPerScreenSetting path exactly.
         const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
-        setter(screenId, it.key(), converted);
+        dispatch->set(screenId, it.key(), converted);
     }
 
     // One debounced save for the whole batch. The per-screen save path

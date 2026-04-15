@@ -159,7 +159,7 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key -> value."/>
             </arg>
             <arg name="success" type="b" direction="out">
-                <annotation name="org.gtk.GDBus.DocString" value="True if the category was recognized and every setter call returned without erroring."/>
+                <annotation name="org.gtk.GDBus.DocString" value="True if the category was recognized and the batch ran against a concrete Settings backend; false if the category was unknown or no concrete backend was available. Individual per-key failures are logged by the underlying Settings implementation but cannot be surfaced here since the setter methods return void."/>
             </arg>
         </method>
 

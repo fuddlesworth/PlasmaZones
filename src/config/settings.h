@@ -861,25 +861,25 @@ public:
 
     // Per-screen zone selector config (override > global fallback)
     ZoneSelectorConfig resolvedZoneSelectorConfig(const QString& screenIdOrName) const override;
-    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE QVariantMap getPerScreenZoneSelectorSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenZoneSelectorSetting(const QString& screenIdOrName, const QString& key,
-                                                     const QVariant& value);
-    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName);
+                                                     const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenZoneSelectorSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenZoneSelectorSettings(const QString& screenIdOrName) const;
     Q_INVOKABLE QStringList screensWithZoneSelectorOverrides() const;
 
     // Per-screen autotile config (override > global fallback)
-    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const;
+    Q_INVOKABLE QVariantMap getPerScreenAutotileSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenAutotileSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value);
-    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName);
+                                                 const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenAutotileSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenAutotileSettings(const QString& screenIdOrName) const;
 
     // Per-screen snapping config (override > global fallback)
     Q_INVOKABLE QVariantMap getPerScreenSnappingSettings(const QString& screenIdOrName) const override;
     Q_INVOKABLE void setPerScreenSnappingSetting(const QString& screenIdOrName, const QString& key,
-                                                 const QVariant& value);
-    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName);
+                                                 const QVariant& value) override;
+    Q_INVOKABLE void clearPerScreenSnappingSettings(const QString& screenIdOrName) override;
     Q_INVOKABLE bool hasPerScreenSnappingSettings(const QString& screenIdOrName) const;
 
     // ═══════════════════════════════════════════════════════════════════════════

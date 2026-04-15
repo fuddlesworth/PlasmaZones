@@ -74,26 +74,34 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     connect(m_saveTimer, &QTimer::timeout, this, &WindowTrackingAdaptor::saveState);
 
     // Persistence I/O worker — disk writes happen off the main thread.
-    // On a verified-successful write, clear the backend's dirty flag AND
-    // reset the committed-dirty snapshot. On failure, OR the committed
-    // bits back into the service's dirty mask so the next save tick
-    // re-serializes the fields that the failed attempt was supposed to
-    // cover — without touching any bits set by mutations that landed
-    // between takeDirty() and the failure callback (those survive via
-    // the service's own mask).
+    // PersistenceIO::processWrite runs on the worker thread via a queued
+    // requestWrite signal, so writes are handled strictly FIFO. The
+    // writeCompleted handler dequeues the head of m_pendingWriteMasks in
+    // the same order: on success we discard the mask (bits made it to
+    // disk); on failure we OR the mask back into the service's dirty
+    // state so the retry picks up exactly the fields the failed write
+    // was supposed to cover, without disturbing any bits set by
+    // mutations that landed after takeDirty() was called for that write.
     m_persistenceWorker = std::make_unique<PersistenceWorker>(nullptr);
     connect(m_persistenceWorker.get(), &PersistenceWorker::writeCompleted, this,
             [this](const QString& filePath, bool success) {
+                // The queue tracks writes we enqueued ourselves. If it's
+                // empty here, the signal came from a write we didn't
+                // originate (shouldn't happen) or from the fallback
+                // synchronous path; either way, there's nothing to retry.
+                const WindowTrackingService::DirtyMask committed =
+                    m_pendingWriteMasks.isEmpty() ? WindowTrackingService::DirtyNone : m_pendingWriteMasks.dequeue();
                 if (!success) {
                     qCWarning(lcDbusWindow) << "session state write failed for" << filePath
                                             << "— restoring dirty mask and retrying on next tick";
-                    if (m_service) {
-                        m_service->addDirty(m_lastCommittedDirty);
-                        scheduleSaveState();
+                    if (m_service && committed != WindowTrackingService::DirtyNone) {
+                        // markDirty emits stateChanged, which is wired to
+                        // scheduleSaveState() above — the retry lands on
+                        // the next debounce tick automatically.
+                        m_service->markDirty(committed);
                     }
                     return;
                 }
-                m_lastCommittedDirty = WindowTrackingService::DirtyNone;
                 if (auto* json = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get())) {
                     if (json->filePath() == filePath) {
                         json->clearDirty();
@@ -101,17 +109,15 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
                 }
             });
 
-    // Connect to layout changes for pending restores notification
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
-
-    // The persisted state includes the active layout ID — mark it dirty
-    // whenever the layout manager switches layouts so the next save
-    // captures the new value. Without this, the active layout ID field
-    // would only get rewritten on unrelated DirtyAll paths.
+    // Active-layout changes: single handler. onLayoutChanged() covers the
+    // pending-restores notification side; we prepend a dirty-mark for the
+    // DirtyActiveLayoutId field so the next save captures the new value
+    // without needing an unrelated DirtyAll path to drag it along.
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this]() {
         if (m_service) {
             m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
         }
+        onLayoutChanged();
     });
 
     // Deferred: ScreenManager may not be initialized yet during adaptor construction.

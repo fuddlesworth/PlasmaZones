@@ -783,11 +783,6 @@ WindowTrackingService::DirtyMask WindowTrackingService::takeDirty()
     return current;
 }
 
-void WindowTrackingService::addDirty(DirtyMask fields)
-{
-    m_dirtyMask |= fields;
-}
-
 void WindowTrackingService::clearDirty()
 {
     m_dirtyMask = DirtyNone;

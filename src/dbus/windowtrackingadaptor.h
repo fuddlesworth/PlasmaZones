@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QJsonArray>
+#include <QQueue>
 #include <QRect>
 #include <QTimer>
 #include <QPointer>
@@ -1086,14 +1087,16 @@ private:
     QTimer* m_saveTimer = nullptr;
     std::unique_ptr<PersistenceWorker> m_persistenceWorker;
 
-    // Last-committed dirty mask snapshot. saveState() reads the service's
-    // dirty bits via takeDirty() and stores them here before handing the
-    // JSON snapshot to the persistence worker. When writeCompleted arrives
-    // with success=false, the handler ORs these bits back into the
-    // service's mask so the failed save is retried on the next tick.
-    // On success the field is reset so the next successful save starts
-    // with a clean slate.
-    WindowTrackingService::DirtyMask m_lastCommittedDirty = WindowTrackingService::DirtyNone;
+    // FIFO queue of dirty masks for writes currently in flight on the
+    // persistence worker thread. saveState() enqueues the committed mask
+    // when it hands a write off to the worker; the writeCompleted handler
+    // dequeues the head in the same FIFO order the worker processes
+    // requestWrite signals, so a mask survives even when saveState() is
+    // called again before the previous write lands. On success the head
+    // is dropped; on failure the head bits are OR'd back into the
+    // service's dirty mask so the retry picks them up without stomping
+    // on any newer mutations.
+    QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
 
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;

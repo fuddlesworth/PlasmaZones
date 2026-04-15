@@ -1017,7 +1017,6 @@ public:
         m_preFloatScreenAssignments = assignments;
     }
 
-public:
     // ═══════════════════════════════════════════════════════════════════════
     // Dirty field tracking (Phase 3 of refactor/dbus-performance)
     //
@@ -1052,9 +1051,12 @@ public:
     using DirtyMask = uint32_t;
 
     /// OR the given fields into the dirty mask AND emit stateChanged.
-    /// Primary entry point for mutators — replaces direct scheduleSaveState().
-    /// Public because the adaptor also needs to mark dirty from outside,
-    /// e.g. when the active-layout change is observed via LayoutManager.
+    /// Primary (and only) entry point for mutators — replaces direct
+    /// scheduleSaveState(). Public because the adaptor also needs to
+    /// mark dirty from outside, e.g. when the active-layout change is
+    /// observed via LayoutManager or when a failed async write needs
+    /// its bits re-marked for retry. Multiple calls are idempotent
+    /// (OR semantics) and cheap (bit OR + one signal emission).
     void markDirty(DirtyMask fields);
 
     /// Return the current dirty mask, clearing it atomically. Used by the
@@ -1067,12 +1069,6 @@ public:
     {
         return m_dirtyMask;
     }
-
-    /// OR fields back into the dirty mask. Called by the adaptor when a
-    /// write fails (persistence worker signals writeCompleted(success=false))
-    /// so the next save picks up the bits the failed attempt was supposed
-    /// to cover.
-    void addDirty(DirtyMask fields);
 
     /// Clear every dirty bit. Called from loadState's end after in-memory
     /// state mirrors the disk file — nothing is dirty until the next

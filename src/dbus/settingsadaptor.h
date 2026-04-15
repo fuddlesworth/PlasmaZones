@@ -100,8 +100,11 @@ public Q_SLOTS:
      * @param values   Map of key -> value. QDBusArgument-wrapped values
      *                 from the wire are unwrapped via DBusVariantUtils
      *                 before reaching the setter.
-     * @return true if the category was recognized and every setter call
-     *         returned without erroring
+     * @return true if the category was recognized and the batch ran
+     *         against a concrete Settings backend; false if the category
+     *         was unknown or no concrete Settings was available.
+     *         Per-key failures are logged by the underlying Settings but
+     *         cannot be surfaced here since the setters return void.
      */
     bool setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values);
 
@@ -203,9 +206,9 @@ Q_SIGNALS:
     /**
      * @brief Daemon → KWin effect: please enumerate running windows.
      *
-     * Emitted by requestRunningWindows() (async path) and by the legacy
-     * blocking getRunningWindows() (migration path). The effect answers
-     * by calling provideRunningWindows().
+     * Emitted by requestRunningWindows(). The effect answers by calling
+     * provideRunningWindows(), which then broadcasts runningWindowsAvailable
+     * to all subscribers.
      */
     void runningWindowsRequested();
 

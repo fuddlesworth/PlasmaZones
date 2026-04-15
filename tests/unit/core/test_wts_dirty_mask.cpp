@@ -16,7 +16,8 @@
  *  4. recordSnapIntent(true) sets DirtyUserSnapped only.
  *  5. consumePendingAssignment sets DirtyPendingRestores only.
  *  6. takeDirty() returns the current mask and resets to DirtyNone.
- *  7. addDirty() ORs bits back in (used by the retry-on-failure path).
+ *  7. markDirty() OR-merges bits and emits stateChanged (used by both
+ *     mutators and the retry-on-write-failure path).
  *  8. Initial mask is DirtyAll so first save after construction writes
  *     every field.
  *
@@ -27,6 +28,7 @@
  */
 
 #include <QTest>
+#include <QSignalSpy>
 #include <QRect>
 
 #include "core/layout.h"
@@ -116,20 +118,34 @@ private Q_SLOTS:
                  static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
     }
 
-    void testAddDirty_orsWithoutEmittingSignal()
+    void testMarkDirty_emitsStateChanged()
     {
-        // addDirty() is for retry-on-failure: restore the bits a failed
-        // save attempt was supposed to cover. It must NOT emit stateChanged
-        // (the retry is scheduled manually by the adaptor) — pin that.
+        // markDirty() is the single entry point for OR'ing bits — it MUST
+        // emit stateChanged so the adaptor's save timer is woken. The
+        // retry-on-write-failure path relies on this: the failure handler
+        // calls markDirty() and expects the stateChanged → scheduleSaveState
+        // chain to schedule the next tick without an explicit call.
         m_service->clearDirty();
-        int signalCount = 0;
-        connect(m_service, &WindowTrackingService::stateChanged, this, [&]() {
-            ++signalCount;
-        });
-        m_service->addDirty(WindowTrackingService::DirtyPendingRestores);
+        QSignalSpy spy(m_service, &WindowTrackingService::stateChanged);
+        m_service->markDirty(WindowTrackingService::DirtyPendingRestores);
         QCOMPARE(m_service->peekDirty(),
                  static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyPendingRestores));
-        QCOMPARE(signalCount, 0);
+        QCOMPARE(spy.count(), 1);
+    }
+
+    void testMarkDirty_retryRestoresCommittedBits()
+    {
+        // Simulates the writeCompleted(success=false) path: a previous
+        // save called takeDirty() (mask == None after) and the worker
+        // came back with failure — the adaptor re-marks the committed
+        // bits, which must OR-merge with any newer mutations without
+        // losing either side.
+        m_service->clearDirty();
+        m_service->markDirty(WindowTrackingService::DirtyZoneAssignments); // new mutation during in-flight write
+        m_service->markDirty(WindowTrackingService::DirtyPendingRestores); // committed-snapshot retry
+        QCOMPARE(m_service->peekDirty(),
+                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyZoneAssignments
+                                                               | WindowTrackingService::DirtyPendingRestores));
     }
 
     void testAssignWindowToZone_marksZoneAssignmentsOnly()

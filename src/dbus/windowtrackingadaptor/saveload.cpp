@@ -54,10 +54,21 @@ void WindowTrackingAdaptor::saveState()
     using D = WindowTrackingService;
     // Snapshot the dirty mask — after this call the service is clean
     // from our perspective. If the write fails, the persistence worker's
-    // writeCompleted(success=false) handler addDirty()s the same bits
-    // back so the next tick retries.
+    // writeCompleted(success=false) handler re-marks the same bits on
+    // the service so the next tick retries. The committed mask is
+    // pushed onto m_pendingWriteMasks only at the actual hand-off point,
+    // so a no-op wake (dirty == DirtyNone) never clobbers an in-flight
+    // write's committed snapshot.
     const D::DirtyMask dirty = m_service->takeDirty();
-    m_lastCommittedDirty = dirty;
+
+    // Fast path: no bits dirty means no disk work to do. Returning here
+    // skips both the (unnecessary) group walk and the per-field writes.
+    // Nothing has been pushed onto m_pendingWriteMasks for this call,
+    // so in-flight writes are unaffected.
+    if (dirty == D::DirtyNone) {
+        qCDebug(lcDbusWindow) << "Saved state: no dirty fields, skipping write";
+        return;
+    }
 
     auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
 
@@ -125,11 +136,11 @@ void WindowTrackingAdaptor::saveState()
                               QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
     }
 
-    // Clean up obsolete keys from old formats. These are cheap no-ops when
-    // the keys don't exist, and we need them to run at least once per
-    // daemon start regardless of the dirty mask — so they sit outside any
-    // gate. On subsequent saves they're already deleted so the calls are
-    // idempotent.
+    // Clean up obsolete keys from old formats. Reached only when at
+    // least one dirty bit is set (the DirtyNone early-return above
+    // skips this path), so we always flush the deletions along with
+    // the rest of the write. On subsequent saves the keys are already
+    // gone so deleteKey is a cheap no-op.
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowScreenAssignmentsKey());
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowDesktopAssignmentsKey());
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowLayoutAssignmentsKey());
@@ -240,27 +251,28 @@ void WindowTrackingAdaptor::saveState()
 
     tracking.reset(); // release group before write
 
-    // If nothing was dirty, skip the write entirely. This can happen when
-    // the scheduler fires against an all-ephemeral-state wake (float
-    // toggles, etc.) — no bytes on disk changed, so there's nothing to
-    // persist. Without this gate we'd rewrite the whole file with the
-    // same content on every debounce tick.
-    if (dirty == D::DirtyNone) {
-        qCDebug(lcDbusWindow) << "Saved state: no dirty fields, skipping write";
-        return;
-    }
-
     // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
     // to the persistence worker thread. The main thread returns immediately.
     // The dirty flag is cleared asynchronously when the worker's
     // writeCompleted(success=true) signal lands (see ctor wiring) — so a
     // failed write is retried on the next timer tick instead of silently
     // losing state.
+    //
+    // Push the committed mask onto the pending-writes FIFO at the exact
+    // hand-off point: the worker processes requestWrite signals in queued
+    // order, so dequeueing from the head in writeCompleted correctly
+    // matches masks to completions even with multiple writes in flight.
     auto* jsonBackend = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get());
     if (jsonBackend && m_persistenceWorker) {
+        m_pendingWriteMasks.enqueue(dirty);
         m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
     } else {
-        m_sessionBackend->sync(); // fallback: synchronous write
+        // Fallback synchronous path: the sync() backend signature is void,
+        // so we can't detect a failed write here. This path is only hit
+        // when the backend is not a JsonConfigBackend (i.e. tests), and
+        // the committed mask is NOT enqueued — the worker's writeCompleted
+        // handler never fires for this path.
+        m_sessionBackend->sync();
     }
     qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec << "zones=" << fullAssignments.size()
                          << "pending=" << pendingQueuesObj.size() << "preTile=" << m_service->preTileGeometries().size()
