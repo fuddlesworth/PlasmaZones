@@ -249,6 +249,14 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeSetIfNotAlive(m_autoSnappedWindows);
     removeSetIfNotAlive(m_effectReportedWindows);
 
+    // Persist the prune. Without this, delta-persistence short-circuits in
+    // saveState() (takeDirty() == DirtyNone) and stale entries come back as
+    // ghost windows on the next daemon restart — exactly the bug that the
+    // initial pruneStaleWindows fix was written to prevent.
+    if (pruned > 0) {
+        markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
+    }
+
     return pruned;
 }
 
@@ -542,6 +550,15 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
             m_preFloatScreenAssignments[windowId] = screenId;
         }
         qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+
+        // Mark the pre-float mutations dirty in their own right. Historically
+        // every caller immediately follows up with setWindowFloating(true),
+        // which uses DirtyAll and masks the hole — but that's an implicit
+        // contract between unrelated methods. Marking here makes
+        // unsnapForFloat self-sufficient so a future refactor that separates
+        // the two calls cannot silently lose pre-float restore state.
+        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+
         unassignWindow(windowId);
 
         // Pop one pending-restore entry (FIFO) so this window doesn't get

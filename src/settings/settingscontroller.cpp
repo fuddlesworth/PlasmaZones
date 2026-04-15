@@ -1973,9 +1973,10 @@ void SettingsController::loadColorsFromFile(const QString& filePath)
     setNeedsSave(true);
 }
 
-// Shared parser used by both the async reply path and the legacy
-// synchronous getRunningWindows() helper. Keeps the JSON wire format
-// documented in exactly one place.
+// Parses the daemon's running-windows JSON payload into a QVariantList of
+// {windowClass, appName, caption} maps ready for QML consumption. The
+// synchronous getRunningWindows() predecessor was removed in Phase 6 of
+// refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
 static QVariantList parseRunningWindowsJson(const QString& json)
 {
     if (json.isEmpty()) {

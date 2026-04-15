@@ -85,12 +85,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     m_persistenceWorker = std::make_unique<PersistenceWorker>(nullptr);
     connect(m_persistenceWorker.get(), &PersistenceWorker::writeCompleted, this,
             [this](const QString& filePath, bool success) {
-                // The queue tracks writes we enqueued ourselves. If it's
-                // empty here, the signal came from a write we didn't
-                // originate (shouldn't happen) or from the fallback
-                // synchronous path; either way, there's nothing to retry.
-                const WindowTrackingService::DirtyMask committed =
-                    m_pendingWriteMasks.isEmpty() ? WindowTrackingService::DirtyNone : m_pendingWriteMasks.dequeue();
+                // writeCompleted only fires from writes WE enqueued (the
+                // sync-fallback path calls m_sessionBackend->sync() directly
+                // without routing through the worker), so the queue head
+                // must exist. Assert instead of hedging — a disappearing
+                // head would indicate a bug in enqueue/dequeue pairing.
+                Q_ASSERT(!m_pendingWriteMasks.isEmpty());
+                if (m_pendingWriteMasks.isEmpty()) {
+                    return;
+                }
+                const WindowTrackingService::DirtyMask committed = m_pendingWriteMasks.dequeue();
                 if (!success) {
                     qCWarning(lcDbusWindow) << "session state write failed for" << filePath
                                             << "— restoring dirty mask and retrying on next tick";
@@ -102,11 +106,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
                     }
                     return;
                 }
-                if (auto* json = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get())) {
-                    if (json->filePath() == filePath) {
-                        json->clearDirty();
-                    }
-                }
+                // Success: intentionally NOT calling JsonConfigBackend::clearDirty()
+                // here. The backend's own m_dirty flag tracks in-memory mutations
+                // since the last inline sync(); a successful async write of an
+                // earlier snapshot does not mean the current in-memory state
+                // matches disk, because the main thread may have mutated m_root
+                // between snapshot and completion. Clearing m_dirty in that
+                // window would cause the shutdown inline sync() to skip a real
+                // pending write. The WTS dirty mask is the authoritative
+                // gate for async writes anyway.
+                Q_UNUSED(filePath);
             });
 
     // Active-layout changes: single handler. onLayoutChanged() covers the

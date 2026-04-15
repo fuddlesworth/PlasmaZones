@@ -258,12 +258,9 @@ public:
     virtual void setMinimumZoneSizePx(int size) = 0;
     virtual int minimumZoneDisplaySizePx() const = 0;
     virtual void setMinimumZoneDisplaySizePx(int size) = 0;
-
-    // Per-screen snapping config resolution (override > global fallback)
-    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
-    {
-        return {};
-    }
+    // Per-screen snapping overrides are declared on ISettings alongside the
+    // autotile / zone-selector per-screen APIs so all three share one home.
+    // See PlasmaZones::ISettings in core/interfaces.h.
 };
 
 /**

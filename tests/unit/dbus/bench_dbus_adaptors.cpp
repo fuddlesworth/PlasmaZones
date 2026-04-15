@@ -107,11 +107,16 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────
     // Settings: setSetting with a value that actually changes.
     // Baseline for "unchanged path must not be slower than changed path".
+    //
+    // Seed v outside the StubSettings::zonePadding() default (8) so no
+    // iteration accidentally short-circuits through the Phase 1.1
+    // equality guard. Without this seed, one in every N iterations
+    // collides with the stub default and skews the bench.
     // ─────────────────────────────────────────────────────────────────
     void benchSetSetting_changing()
     {
         const QString key = QStringLiteral("zonePadding");
-        int v = 0;
+        int v = 100;
 
         QBENCHMARK {
             ++v;

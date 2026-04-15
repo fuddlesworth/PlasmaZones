@@ -230,6 +230,62 @@ private Q_SLOTS:
                  static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
     }
 
+    void testPruneStaleAssignments_marksPersistedFieldsDirty()
+    {
+        // Regression pin: pruneStaleAssignments used to mutate maps without
+        // touching the dirty mask. Combined with WTA::pruneStaleWindows
+        // calling WTA::scheduleSaveState (which only kicks the timer, not
+        // the mask), the prune was silently dropped at saveState's DirtyNone
+        // early-return — ghost windows came back on the next daemon restart.
+        m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
+        m_service->storePreTileGeometry(QStringLiteral("app|abc"), QRect(0, 0, 400, 300), QStringLiteral("DP-1"),
+                                        /*overwrite=*/false);
+        m_service->clearDirty();
+
+        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{}); // empty alive set — prune everything
+        QCOMPARE(pruned, 1);
+
+        const auto mask = m_service->peekDirty();
+        // Prune touched zone maps and pre-tile geometries; both must appear
+        // in the dirty mask so saveState rewrites their JSON fields.
+        QVERIFY((mask & WindowTrackingService::DirtyZoneAssignments) != 0);
+        QVERIFY((mask & WindowTrackingService::DirtyPreTileGeometries) != 0);
+    }
+
+    void testPruneStaleAssignments_noop_leavesDirtyMaskClean()
+    {
+        // When nothing actually gets pruned (alive set contains all
+        // tracked windows), the mask must stay clean — we don't want to
+        // trigger a disk write for a no-op.
+        m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
+        m_service->clearDirty();
+
+        const int pruned = m_service->pruneStaleAssignments(QSet<QString>{QStringLiteral("app|abc")});
+        QCOMPARE(pruned, 0);
+        QCOMPARE(m_service->peekDirty(),
+                 static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyNone));
+    }
+
+    void testUnsnapForFloat_marksPreFloatDirty()
+    {
+        // Regression pin: unsnapForFloat writes new pre-float zone/screen
+        // entries but previously relied on the caller's immediate
+        // setWindowFloating(true) follow-up (DirtyAll) to persist them.
+        // That implicit contract is fragile — marking here makes the method
+        // self-sufficient.
+        m_service->assignWindowToZone(QStringLiteral("app|abc"), m_zone1Id, QStringLiteral("DP-1"), 1);
+        m_service->clearDirty();
+
+        m_service->unsnapForFloat(QStringLiteral("app|abc"));
+
+        const auto mask = m_service->peekDirty();
+        QVERIFY((mask & WindowTrackingService::DirtyPreFloatZones) != 0);
+        QVERIFY((mask & WindowTrackingService::DirtyPreFloatScreens) != 0);
+        // unassignWindow inside unsnapForFloat also touches DirtyZoneAssignments;
+        // last-used may or may not clear. The critical thing is both pre-float
+        // bits are set — the zone bit is best-effort.
+    }
+
     void testMarkDirty_All_setsEveryBit()
     {
         // Phase 3 safety net: the DirtyAll constant covers every declared

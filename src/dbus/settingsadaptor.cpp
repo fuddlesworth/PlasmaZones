@@ -667,21 +667,27 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
 
     // Value-equality guard: if the incoming value already matches the
     // currently stored value, skip the setter invocation and the debounced
-    // save-timer restart. Gated on scalar variant types where operator==
-    // is reliable — composite types (QVariantList of QVariantMaps used by
-    // dragActivationTriggers, for example) compare on internal layout
-    // rather than semantic equality and would produce false negatives.
+    // save-timer restart. Covers scalar variant types plus the two Qt
+    // composite types that the settings surface actually uses
+    // (QVariantList and QVariantMap) — both compare structurally via
+    // element-wise recursion in Qt's operator==, so the guard is reliable
+    // for keys like dragActivationTriggers (list-of-maps) that would
+    // otherwise always take the full setter path on every idle UI tick.
+    //
     // The schema map's type string is NOT used as the gate because at
     // least one key (dragActivationTriggers) advertises "stringlist" while
     // actually storing a list-of-maps — the actual QVariant type is the
-    // authoritative source.
+    // authoritative source. Types outside this allow-list (custom QObject
+    // pointers, exotic Q_DECLARE_METATYPE payloads) fall through to the
+    // full setter to avoid false negatives from a non-structural operator==.
     const int typeId = converted.metaType().id();
-    const bool scalarType =
+    const bool comparableType =
         (typeId == QMetaType::Bool || typeId == QMetaType::Int || typeId == QMetaType::UInt
          || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong || typeId == QMetaType::Double
          || typeId == QMetaType::Float || typeId == QMetaType::QString || typeId == QMetaType::QStringList
-         || typeId == QMetaType::QUrl || typeId == QMetaType::QByteArray || typeId == QMetaType::QChar);
-    if (scalarType) {
+         || typeId == QMetaType::QUrl || typeId == QMetaType::QByteArray || typeId == QMetaType::QChar
+         || typeId == QMetaType::QVariantList || typeId == QMetaType::QVariantMap);
+    if (comparableType) {
         auto getterIt = m_getters.constFind(key);
         if (getterIt != m_getters.constEnd()) {
             const QVariant current = getterIt.value()();
@@ -693,10 +699,10 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
             }
         }
     } else {
-        // Non-scalar fall-through. Debug-log once so a future caller that
-        // tries to optimize same-value writes on a new composite type can
+        // Exotic-type fall-through. Debug-log once so a future caller that
+        // tries to optimize same-value writes on a new custom type can
         // trace back to why their key isn't being short-circuited.
-        qCDebug(lcDbusSettings) << "setSetting: value-equality guard skipped for non-scalar type"
+        qCDebug(lcDbusSettings) << "setSetting: value-equality guard skipped for non-comparable type"
                                 << converted.metaType().name() << "key=" << key;
     }
 

@@ -186,6 +186,10 @@ public:
         return false;
     }
 
+    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
     virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
                                              const QVariant& /*value*/)
     {
