@@ -905,6 +905,23 @@ void AutotileHandler::connectSignals()
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
 
+    // Disconnect first so daemon restarts don't accumulate duplicate match
+    // rules. Qt's QDBusConnection::connect can register the same handler
+    // twice if called twice with identical args, which would cause each
+    // signal to invoke the slot N times after N daemon restarts.
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("windowsTileRequested"), this,
+                   SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("focusWindowRequested"), this, SLOT(slotFocusWindowRequested(QString)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"),
+                   this, SLOT(slotEnabledChanged(bool)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList, bool)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("windowFloatingChanged"), this,
+                   SLOT(slotWindowFloatingChanged(QString, bool, QString)));
+
     bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowsTileRequested"),
                 this, SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));
 
