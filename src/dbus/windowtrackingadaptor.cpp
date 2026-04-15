@@ -43,15 +43,11 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     // Create business logic service
     m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
 
-    // Snap-mode navigation target resolver — pure compute, owned here, fed
-    // via a lambda that forwards into this adaptor's navigationFeedback
-    // signal. The ZoneDetectionAdaptor is wired later via setZoneDetectionAdaptor.
-    m_targetResolver = std::make_unique<SnapNavigationTargetResolver>(
-        m_service, m_layoutManager, /*zoneDetector=*/nullptr,
-        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
-               const QString& targetZoneId, const QString& screenId) {
-            Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
-        });
+    // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
+    // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
+    // first navigation call; setZoneDetectionAdaptor is forwarded to
+    // SnapEngine alongside WTA's own copy, so the late-wired zone detector
+    // still reaches the resolver.
 
     // Forward service signals to D-Bus
     connect(m_service, &WindowTrackingService::windowZoneChanged, this, &WindowTrackingAdaptor::windowZoneChanged);
@@ -131,10 +127,10 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     }
 }
 
-// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the
-// resolver here where snapnavigationtargets.h is included and the type is
-// complete. Declaring `= default` in the header would require the full type
-// at every include site.
+// Out-of-line destructor. The unique_ptr<SnapNavigationTargetResolver>
+// that originally required this has moved to SnapEngine (Phase 5E), but
+// the destructor is kept out-of-line to avoid churning every translation
+// unit that includes this header.
 WindowTrackingAdaptor::~WindowTrackingAdaptor() = default;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -196,9 +192,10 @@ void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
 void WindowTrackingAdaptor::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
 {
     m_zoneDetectionAdaptor = adaptor;
-    if (m_targetResolver) {
-        m_targetResolver->setZoneDetector(adaptor);
-    }
+    // Target resolver ownership moved to SnapEngine (Phase 5E). SnapEngine's
+    // own setZoneDetectionAdaptor wiring pushes the adaptor into its
+    // resolver when late-wired; this setter no longer has anything to do
+    // except record the pointer for any WTA-side consumers.
 }
 
 void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,

@@ -13,6 +13,7 @@
 #include <QString>
 #include <QStringList>
 #include <functional>
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -20,6 +21,7 @@ class AutotileEngine;
 class ISettings;
 class IZoneDetector;
 class LayoutManager;
+class SnapNavigationTargetResolver;
 class VirtualDesktopManager;
 class WindowTrackingAdaptor;
 class WindowTrackingService;
@@ -320,10 +322,19 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<AutotileEngine> m_autotileEngine;
     QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;
-    // Back-reference to WindowTrackingAdaptor for shared-state access
-    // (target resolver, last-active shadow, bookkeeping helpers). Not
-    // owned. See setWindowTrackingAdaptor docstring for rationale.
+    // Back-reference to WindowTrackingAdaptor for state SnapEngine reads
+    // but doesn't own yet: the last-active-window / last-active-screen /
+    // last-cursor-screen shadows populated via D-Bus windowActivated and
+    // cursorScreenChanged slots, plus the frame-geometry shadow populated
+    // via setFrameGeometry. Not owned. Remaining uses are all read-only
+    // accessors — SnapEngine no longer routes BEHAVIOUR through WTA.
     QPointer<WindowTrackingAdaptor> m_wta;
+    // Snap-mode navigation target resolver. Owned by SnapEngine — moved
+    // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
+    // first navigation call (so the construction order isn't constrained
+    // by the fact that SnapEngine has to exist before a resolver that
+    // takes WTS + LayoutManager can be built).
+    std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (snapengine/float.cpp)
@@ -333,6 +344,10 @@ private:
     bool applyGeometryForFloat(const QString& windowId, const QString& screenId);
     void clearFloatingStateForSnap(const QString& windowId, const QString& screenId);
     void assignToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId);
+
+    /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
+    /// the service or layout manager is missing (tests with stub deps).
+    SnapNavigationTargetResolver* ensureTargetResolver();
 
     // Persistence delegates (KConfig stays in adaptor layer)
     std::function<void()> m_saveFn;

@@ -176,7 +176,7 @@ void SnapEngine::focusInDirection(const QString& direction)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -207,7 +207,7 @@ void SnapEngine::moveFocusedInDirection(const QString& direction)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -248,7 +248,7 @@ void SnapEngine::swapFocusedInDirection(const QString& direction)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -295,7 +295,7 @@ void SnapEngine::moveFocusedToPosition(int zoneNumber, const QString& screenId)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -337,7 +337,7 @@ void SnapEngine::pushFocusedToEmptyZone(const QString& screenId)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -373,7 +373,7 @@ void SnapEngine::restoreFocusedWindow()
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }
@@ -436,7 +436,7 @@ void SnapEngine::cycleFocus(bool forward)
     if (!m_wta || !m_windowTracker) {
         return;
     }
-    auto* resolver = m_wta->targetResolver();
+    auto* resolver = ensureTargetResolver();
     if (!resolver) {
         return;
     }

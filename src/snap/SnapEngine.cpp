@@ -3,6 +3,7 @@
 
 #include "SnapEngine.h"
 #include "autotile/AutotileEngine.h"
+#include "dbus/snapnavigationtargets.h"
 #include "dbus/zonedetectionadaptor.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
@@ -25,6 +26,9 @@ SnapEngine::SnapEngine(LayoutManager* layoutManager, WindowTrackingService* wind
 {
 }
 
+// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy the
+// pimpl-style owned resolver without its full type being visible in the
+// header (forward-declared in SnapEngine.h).
 SnapEngine::~SnapEngine() = default;
 
 void SnapEngine::setAutotileEngine(AutotileEngine* engine)
@@ -35,6 +39,37 @@ void SnapEngine::setAutotileEngine(AutotileEngine* engine)
 void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
 {
     m_zoneDetectionAdaptor = adaptor;
+    // Push the zone detector into the target resolver if it exists yet.
+    // The resolver constructs lazily on first navigation call; if that
+    // hasn't happened yet, ensureTargetResolver() will pick up the adaptor
+    // from m_zoneDetectionAdaptor when it first runs.
+    if (m_targetResolver) {
+        m_targetResolver->setZoneDetector(adaptor);
+    }
+}
+
+SnapNavigationTargetResolver* SnapEngine::ensureTargetResolver()
+{
+    if (m_targetResolver) {
+        return m_targetResolver.get();
+    }
+    if (!m_windowTracker || !m_layoutManager) {
+        qCWarning(lcCore) << "ensureTargetResolver: missing deps "
+                          << "windowTracker=" << static_cast<void*>(m_windowTracker)
+                          << "layoutManager=" << static_cast<void*>(m_layoutManager);
+        return nullptr;
+    }
+    // Feedback callback forwards into SnapEngine's own navigationFeedback
+    // signal — SnapAdaptor relays that to WindowTrackingAdaptor's D-Bus
+    // navigationFeedback signal, so external consumers see the same
+    // wire format as when the resolver lived on WTA.
+    m_targetResolver = std::make_unique<SnapNavigationTargetResolver>(
+        m_windowTracker, m_layoutManager, m_zoneDetectionAdaptor.data(),
+        [this](bool success, const QString& action, const QString& reason, const QString& sourceZoneId,
+               const QString& targetZoneId, const QString& screenId) {
+            Q_EMIT navigationFeedback(success, action, reason, sourceZoneId, targetZoneId, screenId);
+        });
+    return m_targetResolver.get();
 }
 
 void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)

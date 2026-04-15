@@ -49,9 +49,6 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
-    /// Out-of-line so unique_ptr<SnapNavigationTargetResolver> can destroy
-    /// the resolver in the .cpp where its type is complete — avoids
-    /// dragging snapnavigationtargets.h into every adaptor include site.
     ~WindowTrackingAdaptor() override;
 
     /**
@@ -145,21 +142,11 @@ public:
         return m_service;
     }
 
-    /**
-     * @brief Access the shared snap-navigation target resolver.
-     *
-     * Used by SnapEngine's navigation methods (focusInDirection,
-     * moveFocusedInDirection, etc.) which were moved out of this adaptor
-     * but still need to consult the resolver that the adaptor constructs
-     * and owns. Returns nullptr if the adaptor hasn't finished constructing
-     * yet — callers must null-check.
-     *
-     * @see SnapEngine::setWindowTrackingAdaptor for the coupling rationale.
-     */
-    SnapNavigationTargetResolver* targetResolver() const
-    {
-        return m_targetResolver.get();
-    }
+    // Note: targetResolver() accessor was deleted in Phase 5E. The
+    // SnapNavigationTargetResolver instance now lives on SnapEngine,
+    // lazy-constructed via SnapEngine::ensureTargetResolver(). Consumers
+    // previously using m_wta->targetResolver() go through SnapEngine
+    // directly.
 
     /**
      * @brief Same as resnapCurrentAssignments but tags the batch with a
@@ -615,15 +602,13 @@ public Q_SLOTS:
      */
     PlasmaZones::SnapAllResultList calculateSnapAllWindows(const QStringList& windowIds, const QString& screenId);
 
-    // Snap-mode navigation target computation lives in
-    // src/dbus/snapnavigationtargets.{h,cpp} — see SnapNavigationTargetResolver.
-    // The resolver is a pure-compute helper owned by this adaptor via
-    // m_targetResolver; the D-Bus navigation slots (moveWindowToAdjacentZone,
+    // Note: the snap-mode navigation D-Bus slots (moveWindowToAdjacentZone,
     // focusAdjacentZone, swapWindowWithAdjacentZone, pushToEmptyZone,
-    // snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize) delegate to
-    // it and then emit applyGeometryRequested based on the returned result.
-    // None of those helpers are D-Bus-exposed anymore — there are no external
-    // callers and keeping them in public Q_SLOTS was accidental surface.
+    // snapToZoneByNumber, cycleWindowsInZone, restoreWindowSize) still
+    // exist below as thin forwarders to SnapEngine. Their bodies moved to
+    // src/snap/snapengine/navigation_actions.cpp in Phase 5B and the
+    // SnapNavigationTargetResolver they consulted moved to SnapEngine in
+    // Phase 5E (SnapEngine::ensureTargetResolver).
 
     /**
      * @brief Trigger snap-all-windows from daemon shortcut
@@ -1100,7 +1085,8 @@ private:
     // into the adaptor's navigationFeedback signal. The zone detector is
     // wired late via setZoneDetectionAdaptor which also pushes it into
     // the resolver. Engine pure: never emits Qt signals directly.
-    std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
+    // Note: SnapNavigationTargetResolver ownership moved to SnapEngine in
+    // Phase 5E — see SnapEngine::ensureTargetResolver.
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service
