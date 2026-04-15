@@ -62,13 +62,18 @@ public Q_SLOTS:
     /// physical monitor. No-op if the current id is not virtual or no sibling
     /// lies in that direction. All per-VS state (windows, layout, autotile)
     /// follows the new geometry automatically.
-    void swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction);
+    /// @return Empty string on success, otherwise a stable rejection token
+    ///         from VirtualScreenSwapper::reasonString() so callers can
+    ///         distinguish failure modes without parsing logs.
+    QString swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction);
 
     /// Rotate every VS region on @p physicalScreenId through a spatial
     /// clockwise ring order. Rotation direction matches the window rotate
     /// convention: with @p clockwise=true each VS moves forward in the ring.
     /// No-op if the physical monitor has fewer than two VSs.
-    void rotateVirtualScreens(const QString& physicalScreenId, bool clockwise);
+    /// @return Empty string on success, otherwise a stable rejection token
+    ///         from VirtualScreenSwapper::reasonString().
+    QString rotateVirtualScreens(const QString& physicalScreenId, bool clockwise);
 
 Q_SIGNALS:
     void screenAdded(const QString& screenId);

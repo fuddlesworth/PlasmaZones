@@ -126,6 +126,22 @@ private Q_SLOTS:
         QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Utils::Direction::Right), Result::NoSubdivision);
     }
 
+    void swap_unknownVirtualInExistingConfig_returnsUnknownVirtualScreen()
+    {
+        // Physical monitor has a valid 2-VS split, but the caller passes a
+        // virtual id whose physical prefix points at that monitor yet whose
+        // index is not present in the config (stale id after reconfiguration).
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("DP-1");
+        Settings settings;
+        settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
+
+        VirtualScreenSwapper swapper(&settings);
+        // Index 7 is out-of-range; id format still parses as virtual.
+        QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 7), Utils::Direction::Right),
+                 Result::UnknownVirtualScreen);
+    }
+
     void swap_emptyDirection_returnsInvalidDirection()
     {
         IsolatedConfigGuard guard;
@@ -173,6 +189,7 @@ private Q_SLOTS:
     {
         QVERIFY(VirtualScreenSwapper::reasonString(Result::Ok).isEmpty());
         QCOMPARE(VirtualScreenSwapper::reasonString(Result::NoSubdivision), QStringLiteral("no_subdivision"));
+        QCOMPARE(VirtualScreenSwapper::reasonString(Result::UnknownVirtualScreen), QStringLiteral("unknown_vs"));
         QCOMPARE(VirtualScreenSwapper::reasonString(Result::NoSiblingInDirection), QStringLiteral("no_sibling"));
         QCOMPARE(VirtualScreenSwapper::reasonString(Result::NotVirtual), QStringLiteral("not_virtual"));
         QCOMPARE(VirtualScreenSwapper::reasonString(Result::InvalidDirection), QStringLiteral("invalid_direction"));

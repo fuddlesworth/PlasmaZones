@@ -22,7 +22,9 @@ namespace PlasmaZones {
 
 namespace {
 
-constexpr qreal kCollinearEpsilon = 1e-6;
+// Match VirtualScreenDef::Tolerance so collinearity detection stays
+// consistent with the rest of the codebase's float comparison policy.
+constexpr qreal kCollinearEpsilon = VirtualScreenDef::Tolerance;
 
 /// Build a clockwise ring order for the given virtual screen defs.
 ///
@@ -134,11 +136,13 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
     }
     if (currentIndex < 0) {
         qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: current VS not in config:" << currentVirtualScreenId;
-        return Result::NoSubdivision;
+        return Result::UnknownVirtualScreen;
     }
 
+    // findAdjacentRect already skips same-centre candidates, so a returned
+    // index can never equal currentIndex — only < 0 means "no sibling".
     const int targetIndex = SpatialAdjacency::findAdjacentRect(regions[currentIndex], regions, direction);
-    if (targetIndex < 0 || targetIndex == currentIndex) {
+    if (targetIndex < 0) {
         qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: no adjacent VS in direction" << direction;
         return Result::NoSiblingInDirection;
     }
@@ -193,6 +197,8 @@ QString VirtualScreenSwapper::reasonString(Result result)
         return QStringLiteral("not_virtual");
     case Result::NoSubdivision:
         return QStringLiteral("no_subdivision");
+    case Result::UnknownVirtualScreen:
+        return QStringLiteral("unknown_vs");
     case Result::NoSiblingInDirection:
         return QStringLiteral("no_sibling");
     case Result::InvalidDirection:

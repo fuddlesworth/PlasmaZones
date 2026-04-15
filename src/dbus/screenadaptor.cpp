@@ -433,47 +433,49 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 }
 
-void ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction)
+QString ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction)
 {
     if (!m_settings) {
         qCWarning(lcDbus) << "swapVirtualScreenInDirection: no Settings instance — adaptor was not wired";
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
     }
     if (currentVirtualScreenId.isEmpty()) {
         qCDebug(lcDbus) << "swapVirtualScreenInDirection: empty currentVirtualScreenId";
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
     }
     if (direction != Utils::Direction::Left && direction != Utils::Direction::Right && direction != Utils::Direction::Up
         && direction != Utils::Direction::Down) {
         qCWarning(lcDbus) << "swapVirtualScreenInDirection: invalid direction" << direction;
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::InvalidDirection);
     }
 
     VirtualScreenSwapper swapper(m_settings);
     const auto result = swapper.swapInDirection(currentVirtualScreenId, direction);
-    qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->"
-                    << VirtualScreenSwapper::reasonString(result);
+    const QString reason = VirtualScreenSwapper::reasonString(result);
+    qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->" << reason;
+    return reason;
 }
 
-void ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, bool clockwise)
+QString ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, bool clockwise)
 {
     if (!m_settings) {
         qCWarning(lcDbus) << "rotateVirtualScreens: no Settings instance — adaptor was not wired";
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
     }
     if (physicalScreenId.isEmpty()) {
         qCDebug(lcDbus) << "rotateVirtualScreens: empty physicalScreenId";
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
     }
     if (VirtualScreenId::isVirtual(physicalScreenId)) {
         qCWarning(lcDbus) << "rotateVirtualScreens: expected physical screen ID, got virtual:" << physicalScreenId;
-        return;
+        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
     }
 
     VirtualScreenSwapper swapper(m_settings);
     const auto result = swapper.rotate(physicalScreenId, clockwise);
-    qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->"
-                    << VirtualScreenSwapper::reasonString(result);
+    const QString reason = VirtualScreenSwapper::reasonString(result);
+    qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->" << reason;
+    return reason;
 }
 
 QStringList ScreenAdaptor::getPhysicalScreens()

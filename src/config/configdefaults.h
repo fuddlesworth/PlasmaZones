@@ -1267,13 +1267,14 @@ public:
     }
     static QString rotateVirtualScreensClockwiseShortcut()
     {
-        // +Alt over the window rotate (Meta+Ctrl+]) escalates from zone
-        // scope to VS scope, matching the swap-window → swap-VS convention.
-        return QStringLiteral("Meta+Ctrl+Alt+]");
+        // +Shift over the window rotate (Meta+Ctrl+]) escalates from zone
+        // scope to VS scope, mirroring how swap-window → swap-VS adds one
+        // extra Shift modifier.
+        return QStringLiteral("Meta+Ctrl+Shift+]");
     }
     static QString rotateVirtualScreensCounterclockwiseShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Alt+[");
+        return QStringLiteral("Meta+Ctrl+Shift+[");
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

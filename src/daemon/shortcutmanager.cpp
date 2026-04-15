@@ -394,6 +394,16 @@ void ShortcutManager::unregisterShortcuts()
     DELETE_SHORTCUT(m_swapWindowUpAction);
     DELETE_SHORTCUT(m_swapWindowDownAction);
 
+    // Swap virtual screen actions
+    DELETE_SHORTCUT(m_swapVirtualScreenLeftAction);
+    DELETE_SHORTCUT(m_swapVirtualScreenRightAction);
+    DELETE_SHORTCUT(m_swapVirtualScreenUpAction);
+    DELETE_SHORTCUT(m_swapVirtualScreenDownAction);
+
+    // Rotate virtual screens actions
+    DELETE_SHORTCUT(m_rotateVirtualScreensClockwiseAction);
+    DELETE_SHORTCUT(m_rotateVirtualScreensCounterclockwiseAction);
+
     // Snap to Zone actions
     qDeleteAll(m_snapToZoneActions);
     m_snapToZoneActions.clear();
@@ -591,7 +601,7 @@ void ShortcutManager::setupRotateVirtualScreensShortcuts()
                    "rotate_virtual_screens_counterclockwise", rotateVirtualScreensCounterclockwiseShortcut,
                    &ShortcutManager::onRotateVirtualScreensCounterclockwise);
 
-    qCInfo(lcShortcuts) << "Rotate virtual screens shortcuts registered (Meta+Ctrl+Alt+] / Meta+Ctrl+Alt+[)";
+    qCInfo(lcShortcuts) << "Rotate virtual screens shortcuts registered (Meta+Ctrl+Shift+] / Meta+Ctrl+Shift+[)";
 }
 
 void ShortcutManager::setupCycleWindowsShortcuts()

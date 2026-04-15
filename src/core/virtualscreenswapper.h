@@ -34,6 +34,7 @@ public:
         Ok, ///< Mutation applied and committed to Settings.
         NotVirtual, ///< Caller passed a physical id where a VS id was required (or vice versa).
         NoSubdivision, ///< The physical monitor has fewer than two virtual screens.
+        UnknownVirtualScreen, ///< The VS id is well-formed but not present in the current config.
         NoSiblingInDirection, ///< Swap: no sibling VS lies in the requested direction.
         InvalidDirection, ///< Swap: direction string was empty or unrecognised.
         SettingsRejected, ///< Settings::setVirtualScreenConfig rejected the mutated config.

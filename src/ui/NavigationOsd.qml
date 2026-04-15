@@ -52,19 +52,28 @@ Window {
     readonly property string messageText: {
         if (!success) {
             // Failure messages
-            if (action === "move" || action === "focus")
+            if (action === "move" || action === "focus") {
                 return i18n("No zone in that direction");
-            else if (action === "push")
+            } else if (action === "push") {
                 return i18n("No empty zone available");
-            else if (action === "rotate")
+            } else if (action === "rotate") {
                 return i18n("Nothing to rotate");
-            else if (action === "swap")
+            } else if (action === "swap") {
                 return i18n("Nothing to swap");
-            else if (action === "swap_vs")
-                return reason === "no_subdivision" ? i18n("No virtual screen split on this monitor") : i18n("No adjacent virtual screen");
-            else if (action === "rotate_vs")
+            } else if (action === "swap_vs") {
+                if (reason === "no_subdivision" || reason === "not_virtual")
+                    return i18n("No virtual screen split on this monitor");
+
+                if (reason === "unknown_vs")
+                    return i18n("Virtual screen no longer exists");
+
+                return i18n("No adjacent virtual screen");
+            } else if (action === "rotate_vs") {
+                if (reason === "not_virtual")
+                    return i18n("No virtual screen split on this monitor");
+
                 return i18n("No virtual screens to rotate");
-            else if (action === "focus_master")
+            } else if (action === "focus_master")
                 return i18n("No windows to focus");
             else if (action === "swap_master")
                 return reason === "already_master" ? i18n("Already in main position") : i18n("Nothing to swap");
