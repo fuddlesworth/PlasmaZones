@@ -491,12 +491,44 @@ void WindowTrackingAdaptor::resnapToNewLayout()
                               m_lastActiveScreenId);
 }
 
+// Build the effective list of snap-mode screens this resnap should target.
+// Empty filter → all currently-known effective screens. Virtual screen
+// filter → exactly that VS. Physical screen filter → every VS child of
+// that physical monitor. The router is consulted once per screen to drop
+// autotile-mode screens (engines own placement there, not snap).
+QStringList WindowTrackingAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
+{
+    QStringList candidates;
+    if (!screenFilter.isEmpty()) {
+        if (VirtualScreenId::isVirtual(screenFilter)) {
+            candidates.append(screenFilter);
+        } else if (auto* mgr = ScreenManager::instance()) {
+            candidates = mgr->virtualScreenIdsFor(screenFilter);
+        } else {
+            candidates.append(screenFilter);
+        }
+    } else if (auto* mgr = ScreenManager::instance()) {
+        candidates = mgr->effectiveScreenIds();
+    }
+
+    if (!m_screenModeRouter) {
+        // No router wired yet — return the candidates unfiltered. Early
+        // startup only; operational paths always have a router.
+        return candidates;
+    }
+    return m_screenModeRouter->partitionByMode(candidates).snap;
+}
+
 void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter)
 {
     qCDebug(lcDbusWindow) << "resnapCurrentAssignments: screen="
                           << (screenFilter.isEmpty() ? QStringLiteral("all") : screenFilter);
 
-    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
+    const QStringList snapScreens = resolveSnapModeScreensForResnap(screenFilter);
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& sid : snapScreens) {
+        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+    }
 
     if (entries.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
@@ -511,7 +543,11 @@ void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& phy
 {
     qCDebug(lcDbusWindow) << "resnapForVirtualScreenReconfigure: physId=" << physicalScreenId;
 
-    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(physicalScreenId);
+    const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& sid : snapScreens) {
+        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+    }
 
     if (entries.isEmpty()) {
         return;

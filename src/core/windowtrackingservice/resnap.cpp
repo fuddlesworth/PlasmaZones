@@ -245,19 +245,12 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             }
         }
 
-        // Skip windows whose current screen is in autotile mode. Their
-        // snap-mode zone assignments are stale (left over from before the
-        // mode switch) and the autotile engine is the authority for window
-        // placement on that screen. Resnapping them here would fight the
-        // engine's retile, producing windows that jump between the stored
-        // snap zone and the live tile rect on every VS swap / rotate.
-        if (m_layoutManager) {
-            const int desktop = m_layoutManager->currentVirtualDesktop();
-            const QString activity = m_layoutManager->currentActivity();
-            if (m_layoutManager->modeForScreen(screenId, desktop, activity) == AssignmentEntry::Autotile) {
-                continue;
-            }
-        }
+        // NOTE: no in-loop mode filter here. Callers are responsible for
+        // passing a screenFilter that targets only snap-mode screens, and
+        // for iterating per-screen when multiple screens need resnapping.
+        // The dispatch layer (ScreenModeRouter via WindowTrackingAdaptor)
+        // enforces that contract at the entry point so the engine and its
+        // service helpers can stay pure and free of defensive checks.
 
         QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (!geo.isValid()) {

@@ -27,6 +27,7 @@
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
+#include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
@@ -411,6 +412,14 @@ bool Daemon::init()
 
     // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+
+    // Central routing table: single source of truth for "which engine owns
+    // screen X". Every window-lifecycle / resnap / restore entry point in the
+    // daemon and its adaptors consults this instead of scattering
+    // isAutotileScreen() checks at each call site.
+    m_screenModeRouter =
+        std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
+    m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking

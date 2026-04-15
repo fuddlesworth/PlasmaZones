@@ -78,6 +78,8 @@ set(plasmazones_core_SRCS
     core/spatialadjacency.h
     core/virtualscreenswapper.cpp
     core/virtualscreenswapper.h
+    core/screenmoderouter.cpp
+    core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     core/zone.cpp

@@ -14,6 +14,7 @@
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
+#include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "../core/types.h"
@@ -156,6 +157,11 @@ void WindowTrackingAdaptor::setEngines(SnapEngine* snapEngine, AutotileEngine* a
         connect(m_autotileEngine, &AutotileEngine::navigationFeedbackRequested, this,
                 &WindowTrackingAdaptor::navigationFeedback);
     }
+}
+
+void WindowTrackingAdaptor::setScreenModeRouter(ScreenModeRouter* router)
+{
+    m_screenModeRouter = router;
 }
 
 void WindowTrackingAdaptor::setTilingStateDelegates(std::function<QJsonArray()> serializeFn,

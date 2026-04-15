@@ -159,22 +159,20 @@ void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const 
         return;
     }
 
-    // Dispatch by screen mode. If the screen is in Autotile mode, the
-    // autotile engine owns window placement there — we return noSnap and
-    // let the autotile windowOpened path (fired by the kwin-effect's
-    // autotile handler via a separate D-Bus call) insert the window into
-    // the tile tree. This is the dispatch boundary for window-open lifecycle
-    // events: every new engine entry point should consult the screen's
-    // active IWindowEngine here, not reimplement a mode filter per call.
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
-        qCDebug(lcDbusWindow) << "resolveWindowRestore:" << windowId << "on autotile screen" << screenId
-                              << "— deferring to autotile engine";
+    // Dispatch boundary. The router is the single source of truth for
+    // "which engine owns screen X". If the screen isn't in Snapping mode,
+    // return noSnap — the engine that does own it (autotile) is already
+    // handling window placement via its own windowOpened path.
+    if (!m_screenModeRouter || !m_screenModeRouter->isSnapMode(screenId)) {
+        qCDebug(lcDbusWindow) << "resolveWindowRestore:" << windowId << "on non-snap screen" << screenId
+                              << "— deferring to owning engine";
         return;
     }
 
     // Delegate to SnapEngine which owns the 4-level fallback chain.
     // SnapEngine::resolveWindowRestore() is pure decision logic — it returns
     // a SnapResult without side effects, so we apply it here for D-Bus compat.
+    // The engine trusts the router's contract and does not re-check mode.
     if (!m_snapEngine) {
         qCWarning(lcDbusWindow) << "resolveWindowRestore: no SnapEngine available";
         return;

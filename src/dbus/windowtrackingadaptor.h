@@ -22,6 +22,7 @@
 namespace PlasmaZones {
 
 class AutotileEngine;
+class ScreenModeRouter;
 class LayoutManager; // Concrete type needed for signal connections
 class PersistenceWorker;
 class Layout;
@@ -118,6 +119,19 @@ public:
      * @param autotileEngine AutotileEngine instance (not owned, must outlive adaptor)
      */
     void setEngines(SnapEngine* snapEngine, AutotileEngine* autotileEngine);
+
+    /**
+     * @brief Wire the daemon's central ScreenModeRouter.
+     *
+     * REQUIRED for correct dispatch on window-lifecycle entry points
+     * (resolveWindowRestore, resnapCurrentAssignments, etc.) — those
+     * methods route through the router instead of direct engine pointer
+     * checks so engines can stay pure and the mode lookup has exactly
+     * one source of truth.
+     *
+     * @param router ScreenModeRouter instance (not owned, must outlive adaptor)
+     */
+    void setScreenModeRouter(ScreenModeRouter* router);
 
     /**
      * @brief Access the underlying WindowTrackingService
@@ -1011,6 +1025,12 @@ private:
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
 
+    /// Resolve a resnap filter (empty / physical / virtual screen id) into
+    /// the concrete list of snap-mode screens this resnap should touch.
+    /// Used by resnapCurrentAssignments and resnapForVirtualScreenReconfigure
+    /// so the service-level resnap helper can stay pure and per-screen.
+    QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
+
     /**
      * @brief Validate window ID and log warning if empty
      * @param windowId Window ID to validate
@@ -1108,6 +1128,11 @@ private:
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
     QPointer<SnapEngine> m_snapEngine;
     QPointer<AutotileEngine> m_autotileEngine;
+
+    // Central dispatcher: adaptor methods route lifecycle / resnap /
+    // restore calls through this instead of direct engine pointer checks.
+    // Null until setScreenModeRouter is called (Daemon wires during init).
+    ScreenModeRouter* m_screenModeRouter = nullptr;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Business logic service

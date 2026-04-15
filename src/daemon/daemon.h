@@ -43,6 +43,7 @@ class AutotileAdaptor;
 class AutotileEngine;
 class IWindowEngine;
 class IConfigBackend;
+class ScreenModeRouter;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
@@ -349,6 +350,11 @@ private:
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
     std::unique_ptr<SnapEngine> m_snapEngine;
+    /// Single source of truth for "which engine owns screen X". Used by
+    /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
+    /// dispatch paths. Owns no state of its own — just delegates to the
+    /// layout manager and engine pointers it was constructed with.
+    std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
