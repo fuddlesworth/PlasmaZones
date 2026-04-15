@@ -136,6 +136,17 @@ private:
     /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
     IWindowEngine* engineForScreen(const QString& screenId) const;
 
+    /**
+     * @brief Convenience mode check: routed through m_screenModeRouter.
+     *
+     * All daemon navigation/signal paths that need to branch on "is this
+     * screen in autotile mode?" use this method instead of checking the
+     * engine pointer directly. Centralising the lookup behind one call
+     * is how the single-source-of-truth invariant is enforced inside the
+     * daemon.
+     */
+    bool isAutotileScreen(const QString& screenId) const;
+
     void handleRotate(bool clockwise);
     void handleFloat();
     void handleMove(NavigationDirection direction);

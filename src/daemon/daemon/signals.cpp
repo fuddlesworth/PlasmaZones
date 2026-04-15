@@ -554,7 +554,7 @@ void Daemon::connectOverlaySignals()
                 }
             }
             // Snap assist is a manual-mode concept; ignore if the TARGET screen uses autotile.
-            if (m_autotileEngine && m_autotileEngine->isAutotileScreen(effectiveScreenId)) {
+            if (isAutotileScreen(effectiveScreenId)) {
                 return;
             }
             // If the window is being pulled from a sibling virtual screen that uses
@@ -562,8 +562,7 @@ void Daemon::connectOverlaySignals()
             // screen's tiling tree and retiles the remaining windows.
             if (m_autotileEngine && m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
                 const QString sourceScreen = m_windowTrackingAdaptor->service()->screenAssignments().value(windowId);
-                if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId
-                    && m_autotileEngine->isAutotileScreen(sourceScreen)) {
+                if (!sourceScreen.isEmpty() && sourceScreen != effectiveScreenId && isAutotileScreen(sourceScreen)) {
                     m_autotileEngine->windowClosed(windowId);
                     // Clear autotile-floated marker immediately — windowClosed removes
                     // the window from the engine but doesn't clear the WTS flag.
