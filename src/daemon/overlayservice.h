@@ -275,6 +275,16 @@ private:
     // Catches orphan accumulation from effective-id jitter. No-op in release.
     void validateScreenStateInvariant(const QStringList& targetIds) const;
 
+    // Write _idled=true/false on every live overlay window based on which
+    // VS the cursor is currently on. One-overlay-per-VS architecture: all
+    // overlay windows stay alive for their lifetime, and per-window idle
+    // state controls content.visible + Qt.WindowTransparentForInput via
+    // the QML _idled property. Only the cursor's VS is un-idled in
+    // single-monitor mode; every overlay is un-idled when showOnAllMonitors.
+    // An empty activeEffectiveId idles every overlay (used by
+    // setIdleForDragPause when no VS should be active).
+    void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
+
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
                                       Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;

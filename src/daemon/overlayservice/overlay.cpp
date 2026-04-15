@@ -76,6 +76,16 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
     const bool haveEffective = mgr && !effectiveIds.isEmpty();
 
+    // One overlay window per effective screen (all virtual screens across
+    // all physical monitors). Keeping every VS's overlay alive means
+    // cross-VS switching during or between drags is just a matter of
+    // flipping per-window _idled state in applyIdleStateForCursor() —
+    // no layer-shell surface re-anchoring, no Vulkan swap chain churn,
+    // no ~QQuickWindow stall. The single-monitor filter that used to
+    // drop non-cursor VSes was the root cause of "wrong spot" after
+    // cross-VS drag: the existing overlay stayed anchored to the
+    // original VS's bounds because the rekey path didn't replay
+    // configureLayerSurface + updateWindowScreenPosition.
     QStringList targetIds;
     QHash<QString, QScreen*> targetPhysScreens;
     QHash<QString, QRect> targetGeometries;
@@ -83,9 +93,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         for (const QString& screenId : effectiveIds) {
             QScreen* physScreen = mgr->physicalQScreenFor(screenId);
             if (!physScreen) {
-                continue;
-            }
-            if (!showOnAllMonitors && screenId != cursorEffectiveId) {
                 continue;
             }
             if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
@@ -100,9 +107,6 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         }
     } else {
         for (auto* screen : Utils::allScreens()) {
-            if (!showOnAllMonitors && screen != cursorScreen) {
-                continue;
-            }
             const QString screenId = Utils::screenIdentifier(screen);
             if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
@@ -210,6 +214,13 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         updateZonesForAllWindows(); // Push initial zone data
         startShaderAnimation();
     }
+
+    // With one overlay per VS, every overlay was just show()n above.
+    // Apply per-window idle state: in single-monitor mode, only the
+    // cursor's VS is un-idled; all others stay idle (content.visible=false,
+    // Qt.WindowTransparentForInput set). In showOnAllMonitors mode, all
+    // overlays are un-idled simultaneously.
+    applyIdleStateForCursor(cursorEffectiveId, showOnAllMonitors);
 
     Q_EMIT visibilityChanged(true);
 }
@@ -598,32 +609,23 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
 void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) const
 {
 #ifndef QT_NO_DEBUG
-    // Invariant: at most one live overlay entry per physical monitor, and
-    // every live entry must either have its key in targetIds or share a
-    // physical monitor with NO target id (meaning it's awaiting dismissal
-    // on the next init). Any violation indicates orphan accumulation from
-    // effective-id jitter and points at a missed rekey/dismiss site.
-    QSet<QString> seenPhys;
+    // Invariant (one-overlay-per-VS): every live overlay's key must be in
+    // targetIds. Phase 2 dismisses any stale entries and Phase 3 creates
+    // missing targets, so by the end of initializeOverlay every live
+    // m_screenStates entry should correspond to an enabled effective
+    // screen id. Multiple live entries per physical monitor are NOT a
+    // violation in this model — two virtual screens sharing one physical
+    // monitor each own their own overlay window, and that's the whole
+    // point of the one-per-VS refactor.
     const QSet<QString> targetSet(targetIds.cbegin(), targetIds.cend());
-    QSet<QString> targetPhys;
-    for (const QString& id : targetIds) {
-        targetPhys.insert(VirtualScreenId::extractPhysicalId(id));
-    }
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
         if (!it.value().overlayWindow) {
             continue;
         }
-        const QString physId = VirtualScreenId::extractPhysicalId(it.key());
-        if (seenPhys.contains(physId)) {
-            qCWarning(lcOverlay) << "validateScreenStateInvariant: duplicate live overlay for physical monitor"
-                                 << physId << "key=" << it.key() << "— orphan accumulation detected";
-            Q_ASSERT_X(false, "OverlayService", "duplicate live overlay for one physical monitor");
-        }
-        seenPhys.insert(physId);
-        if (!targetSet.contains(it.key()) && targetPhys.contains(physId)) {
+        if (!targetSet.contains(it.key())) {
             qCWarning(lcOverlay) << "validateScreenStateInvariant: live overlay" << it.key()
-                                 << "shares physical monitor with a target id but was not rekeyed";
-            Q_ASSERT_X(false, "OverlayService", "un-rekeyed overlay on a target's physical monitor");
+                                 << "is not in the current target set — orphan";
+            Q_ASSERT_X(false, "OverlayService", "orphaned overlay entry");
         }
     }
 #else
