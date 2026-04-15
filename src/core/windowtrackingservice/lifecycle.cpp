@@ -756,11 +756,36 @@ void WindowTrackingService::onLayoutChanged()
 // State Management (persistence handled by adaptor via KConfig)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::scheduleSaveState()
+void WindowTrackingService::scheduleSaveState(DirtyMask fields)
 {
-    // Signal to adaptor that state changed and needs saving
-    // Adaptor handles actual KConfig persistence
+    // Mark the supplied fields dirty and wake the adaptor's save timer.
+    // Default DirtyAll preserves pre-Phase-3 semantics for call sites that
+    // haven't been updated to declare which fields they mutate.
+    markDirty(fields);
+}
+
+void WindowTrackingService::markDirty(DirtyMask fields)
+{
+    // OR into the persistent mask so the next saveState() knows which
+    // JSON maps it needs to rewrite. Always emit stateChanged so the
+    // adaptor's debounced save timer is kicked — even if the caller
+    // passed DirtyNone (e.g. ephemeral state that wants to wake the timer
+    // for indirect reasons), the adaptor does the right thing when the
+    // eventual saveState() sees an empty mask.
+    m_dirtyMask |= fields;
     Q_EMIT stateChanged();
+}
+
+WindowTrackingService::DirtyMask WindowTrackingService::takeDirty()
+{
+    const DirtyMask current = m_dirtyMask;
+    m_dirtyMask = DirtyNone;
+    return current;
+}
+
+void WindowTrackingService::clearDirty()
+{
+    m_dirtyMask = DirtyNone;
 }
 
 void WindowTrackingService::setLastUsedZone(const QString& zoneId, const QString& screenId, const QString& zoneClass,

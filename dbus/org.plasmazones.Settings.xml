@@ -142,5 +142,40 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Map of uniform names to values (e.g. customParams1_x: 0.5)."/>
             </arg>
         </method>
+
+        <!-- Batch-set multiple per-screen keys in one round-trip (Phase 5
+             of refactor/dbus-performance). Mirrors the global setSettings
+             pattern so the KCM per-monitor page can flush a category in
+             a single D-Bus call. -->
+        <method name="setPerScreenSettings">
+            <annotation name="org.gtk.GDBus.DocString" value="Batch-set multiple per-screen keys in one D-Bus call. Applies every entry to the named category and schedules a single debounced save."/>
+            <arg name="screenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Virtual or physical screen identifier."/>
+            </arg>
+            <arg name="category" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="'autotile' | 'snapping' | 'zoneSelector'."/>
+            </arg>
+            <arg name="values" type="a{sv}" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Map of per-screen setting key -> value."/>
+            </arg>
+            <arg name="success" type="b" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="True if the category was recognized and the batch ran against a concrete Settings backend; false if the category was unknown or no concrete backend was available. Individual per-key failures are logged by the underlying Settings implementation but cannot be surfaced here since the setter methods return void."/>
+            </arg>
+        </method>
+
+        <!-- Async window picker flow. Callers kick off a fetch via
+             requestRunningWindows and bind to runningWindowsAvailable
+             for the reply. No blocking variant exists; the earlier
+             blocking getRunningWindows path was removed in Phase 6 of
+             refactor/dbus-performance. -->
+        <method name="requestRunningWindows">
+            <annotation name="org.gtk.GDBus.DocString" value="Asynchronously request the running-windows list. The daemon emits runningWindowsRequested to the KWin effect; the reply is delivered via the runningWindowsAvailable signal."/>
+        </method>
+        <signal name="runningWindowsAvailable">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a fresh running-windows list has arrived from the KWin effect."/>
+            <arg name="json" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array: [{windowClass, appName, caption}, ...]."/>
+            </arg>
+        </signal>
     </interface>
 </node>

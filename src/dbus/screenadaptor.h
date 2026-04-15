@@ -97,6 +97,11 @@ private:
     /// Returns true if virtual screen IDs were emitted, false if physical.
     bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
 
+    /// Drop every cached getScreenInfo JSON entry. Called from every
+    /// invalidation edge: geometry change, virtual-screen add/remove,
+    /// region reconfigure, screen add/remove. Cheap — just clears a QHash.
+    void invalidateScreenInfoCache();
+
     QString m_primaryScreenOverride;
     Settings* m_settings = nullptr;
 
@@ -107,6 +112,13 @@ private:
     /// Per-physical-screen cached effective IDs for screenRemoved emission.
     /// Updated when virtualScreensChanged fires so removal signals stay current.
     QHash<QString, QStringList> m_cachedEffectiveIdsPerScreen;
+
+    /// Cache of getScreenInfo(screenId) JSON responses. Populated lazily on
+    /// first request; invalidated globally on any screen topology change
+    /// (geometry, add, remove, virtual screen reconfigure). KCM re-reads
+    /// this info on every monitor page refresh, so memoizing saves a full
+    /// QScreen walk + JSON serialization per query.
+    QHash<QString, QString> m_cachedScreenInfoJson;
 };
 
 } // namespace PlasmaZones

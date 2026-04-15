@@ -128,8 +128,11 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
             overrides[JsonKeys::OverlayDisplayMode] = obj[JsonKeys::OverlayDisplayMode];
         m_layoutManager->saveAutotileOverrides(algoId, overrides);
         qCInfo(lcDbusLayout) << "Saved autotile overrides for algorithm:" << algoId;
+        // Autotile override save mutates a single autotile preview entry, not
+        // the layout list itself. Emit layoutChanged only; layoutListChanged
+        // stays reserved for add/delete operations. SettingsController wires
+        // both signals to the same reload slot so no visible behavior changes.
         Q_EMIT layoutChanged(layoutJson);
-        Q_EMIT layoutListChanged();
         return true;
     }
 

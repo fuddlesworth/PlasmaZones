@@ -128,7 +128,9 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
-    scheduleSaveState();
+    // Only the zone/screen/desktop maps changed. Narrower than DirtyAll so
+    // the next save rewrites exactly one JSON field instead of all ten.
+    markDirty(DirtyZoneAssignments);
 }
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
@@ -142,20 +144,22 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
 
-    // Clear last-used zone if we're unsnapping from it
-    // This preserves last-used zone when unsnapping a different window
+    // Clear last-used zone if we're unsnapping from it. Track whether this
+    // branch ran so the dirty mask accurately reflects what changed.
+    bool lastUsedCleared = false;
     if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
         m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
+        lastUsedCleared = true;
     }
 
     // Don't remove from pending - keep for session restore
     // (pending is keyed by app ID anyway)
 
     Q_EMIT windowZoneChanged(windowId, QString());
-    scheduleSaveState();
+    markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
 }
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
@@ -245,6 +249,14 @@ int WindowTrackingService::pruneStaleAssignments(const QSet<QString>& aliveWindo
     removeSetIfNotAlive(m_autoSnappedWindows);
     removeSetIfNotAlive(m_effectReportedWindows);
 
+    // Persist the prune. Without this, delta-persistence short-circuits in
+    // saveState() (takeDirty() == DirtyNone) and stale entries come back as
+    // ghost windows on the next daemon restart — exactly the bug that the
+    // initial pruneStaleWindows fix was written to prevent.
+    if (pruned > 0) {
+        markDirty(DirtyZoneAssignments | DirtyPreTileGeometries | DirtyPreFloatZones | DirtyPreFloatScreens);
+    }
+
     return pruned;
 }
 
@@ -316,7 +328,7 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         }
     }
 
-    scheduleSaveState();
+    markDirty(DirtyPreTileGeometries);
 }
 
 std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windowId) const
@@ -365,7 +377,7 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
     }
     if (removed) {
         qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
-        scheduleSaveState();
+        markDirty(DirtyPreTileGeometries);
     }
 }
 
@@ -538,6 +550,15 @@ void WindowTrackingService::unsnapForFloat(const QString& windowId)
             m_preFloatScreenAssignments[windowId] = screenId;
         }
         qCInfo(lcCore) << "Saved pre-float zones for" << windowId << "->" << zoneIds << "screen:" << screenId;
+
+        // Mark the pre-float mutations dirty in their own right. Historically
+        // every caller immediately follows up with setWindowFloating(true),
+        // which uses DirtyAll and masks the hole — but that's an implicit
+        // contract between unrelated methods. Marking here makes
+        // unsnapForFloat self-sufficient so a future refactor that separates
+        // the two calls cannot silently lose pre-float restore state.
+        markDirty(DirtyPreFloatZones | DirtyPreFloatScreens);
+
         unassignWindow(windowId);
 
         // Pop one pending-restore entry (FIFO) so this window doesn't get

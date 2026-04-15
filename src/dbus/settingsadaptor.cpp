@@ -11,6 +11,8 @@
 #include <QJsonObject>
 #include <QColor>
 #include <QDBusVariant>
+#include <functional>
+#include <optional>
 
 namespace PlasmaZones {
 
@@ -32,6 +34,16 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
 
     // Connect to interface signals (DIP)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
+
+    // Drop shader caches whenever the registry reloads from disk. The
+    // registry is a singleton, but may not yet exist in unit tests that
+    // instantiate SettingsAdaptor without a daemon — guard the connect.
+    // ShaderRegistry::refresh() is always invoked from the main thread
+    // (D-Bus refreshShaders slot) so a direct connection is safe; if
+    // that invariant ever changes, switch to Qt::QueuedConnection here.
+    if (auto* registry = ShaderRegistry::instance()) {
+        connect(registry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
+    }
 }
 
 SettingsAdaptor::~SettingsAdaptor()
@@ -122,7 +134,14 @@ void SettingsAdaptor::initializeRegistry()
     };                                                                                                                 \
     m_schemas[QStringLiteral(name)] = QStringLiteral("stringlist");
 
-    // Concrete Settings pointer for properties not on ISettings interface
+    // Concrete Settings pointer for properties not on ISettings interface.
+    // The per-screen override API is fully on ISettings — this cast is
+    // used only by the REGISTER_CONCRETE_* macros below for dozens of
+    // global properties that haven't been hoisted to the segregated
+    // interfaces yet. Every REGISTER_CONCRETE_* call site is wrapped in
+    // an `if (concrete)` block, so test backends that don't supply a
+    // concrete Settings simply don't register those keys — setSetting
+    // returns "key not found" instead of dereferencing a null pointer.
     auto* concrete = qobject_cast<Settings*>(m_settings);
 
 // Macros for concrete Settings entries (same pattern as REGISTER_* but captures 'concrete')
@@ -639,22 +658,64 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     }
 
     auto it = m_setters.find(key);
-    if (it != m_setters.end()) {
-        QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
-        bool result = it.value()(converted);
-        if (result) {
-            // Use debounced save instead of immediate save (performance optimization)
-            // This batches multiple rapid setting changes into a single disk write
-            scheduleSave();
-            qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
-        } else {
-            qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
-        }
-        return result;
+    if (it == m_setters.end()) {
+        qCWarning(lcDbusSettings) << "Setting key not found:" << key;
+        return false;
     }
 
-    qCWarning(lcDbusSettings) << "Setting key not found:" << key;
-    return false;
+    const QVariant converted = DBusVariantUtils::convertDbusArgument(value.variant());
+
+    // Value-equality guard: if the incoming value already matches the
+    // currently stored value, skip the setter invocation and the debounced
+    // save-timer restart. Covers scalar variant types plus the two Qt
+    // composite types that the settings surface actually uses
+    // (QVariantList and QVariantMap) — both compare structurally via
+    // element-wise recursion in Qt's operator==, so the guard is reliable
+    // for keys like dragActivationTriggers (list-of-maps) that would
+    // otherwise always take the full setter path on every idle UI tick.
+    //
+    // The schema map's type string is NOT used as the gate because at
+    // least one key (dragActivationTriggers) advertises "stringlist" while
+    // actually storing a list-of-maps — the actual QVariant type is the
+    // authoritative source. Types outside this allow-list (custom QObject
+    // pointers, exotic Q_DECLARE_METATYPE payloads) fall through to the
+    // full setter to avoid false negatives from a non-structural operator==.
+    const int typeId = converted.metaType().id();
+    const bool comparableType =
+        (typeId == QMetaType::Bool || typeId == QMetaType::Int || typeId == QMetaType::UInt
+         || typeId == QMetaType::LongLong || typeId == QMetaType::ULongLong || typeId == QMetaType::Double
+         || typeId == QMetaType::Float || typeId == QMetaType::QString || typeId == QMetaType::QStringList
+         || typeId == QMetaType::QUrl || typeId == QMetaType::QByteArray || typeId == QMetaType::QChar
+         || typeId == QMetaType::QVariantList || typeId == QMetaType::QVariantMap);
+    if (comparableType) {
+        auto getterIt = m_getters.constFind(key);
+        if (getterIt != m_getters.constEnd()) {
+            const QVariant current = getterIt.value()();
+            if (current.isValid() && current == converted) {
+                // Already current — nothing to do. Return true because the
+                // post-condition ("the setting now equals the supplied value")
+                // holds, which is what D-Bus callers rely on.
+                return true;
+            }
+        }
+    } else {
+        // Exotic-type fall-through. Debug-log once so a future caller that
+        // tries to optimize same-value writes on a new custom type can
+        // trace back to why their key isn't being short-circuited.
+        qCDebug(lcDbusSettings) << "setSetting: value-equality guard skipped for non-comparable type"
+                                << converted.metaType().name() << "key=" << key;
+    }
+
+    const bool result = it.value()(converted);
+    if (result) {
+        // Use debounced save instead of immediate save (performance optimization)
+        // This batches multiple rapid setting changes into a single disk write
+        scheduleSave();
+        qCInfo(lcDbusSettings) << "Setting" << key << "updated, save scheduled";
+    } else {
+        qCWarning(lcDbusSettings) << "Failed to set setting:" << key;
+    }
+    return result;
 }
 
 QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)
@@ -773,63 +834,125 @@ QString SettingsAdaptor::getAllSettingSchemas()
 // Per-Screen Settings D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Category → {get, set, clear} dispatch table. Closing over @p settings
+// lets every per-screen D-Bus entry point share one dispatch definition
+// instead of re-deriving the if/else ladder per call. Every method is
+// on ISettings with a default no-op body, so backends that don't
+// support per-screen state (test stubs) simply inherit the no-op —
+// no qobject_cast required.
+namespace {
+struct PerScreenDispatch
+{
+    std::function<QVariantMap(const QString&)> get;
+    std::function<void(const QString&, const QString&, const QVariant&)> set;
+    std::function<void(const QString&)> clear;
+};
+
+std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString& category)
+{
+    if (category == QLatin1String("autotile")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenAutotileSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenAutotileSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenAutotileSettings(id);
+            },
+        };
+    }
+    if (category == QLatin1String("snapping")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenSnappingSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenSnappingSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenSnappingSettings(id);
+            },
+        };
+    }
+    if (category == QLatin1String("zoneSelector")) {
+        return PerScreenDispatch{
+            [settings](const QString& id) {
+                return settings->getPerScreenZoneSelectorSettings(id);
+            },
+            [settings](const QString& id, const QString& k, const QVariant& v) {
+                settings->setPerScreenZoneSelectorSetting(id, k, v);
+            },
+            [settings](const QString& id) {
+                settings->clearPerScreenZoneSelectorSettings(id);
+            },
+        };
+    }
+    return std::nullopt;
+}
+} // namespace
+
 void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "setPerScreenSetting: concrete Settings not available";
-        return;
-    }
-    if (category == QLatin1String("autotile")) {
-        concrete->setPerScreenAutotileSetting(screenId, key, value.variant());
-    } else if (category == QLatin1String("snapping")) {
-        concrete->setPerScreenSnappingSetting(screenId, key, value.variant());
-    } else if (category == QLatin1String("zoneSelector")) {
-        concrete->setPerScreenZoneSelectorSetting(screenId, key, value.variant());
-    } else {
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
         return;
     }
+    dispatch->set(screenId, key, value.variant());
     scheduleSave();
 }
 
 void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "clearPerScreenSettings: concrete Settings not available";
-        return;
-    }
-    if (category == QLatin1String("autotile")) {
-        concrete->clearPerScreenAutotileSettings(screenId);
-    } else if (category == QLatin1String("snapping")) {
-        concrete->clearPerScreenSnappingSettings(screenId);
-    } else if (category == QLatin1String("zoneSelector")) {
-        concrete->clearPerScreenZoneSelectorSettings(screenId);
-    } else {
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
         return;
     }
+    dispatch->clear(screenId);
     scheduleSave();
 }
 
 QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const QString& category)
 {
-    auto* concrete = qobject_cast<Settings*>(m_settings);
-    if (!concrete) {
-        qCWarning(lcDbusSettings) << "getPerScreenSettings: concrete Settings not available";
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
+        qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
         return {};
     }
-    if (category == QLatin1String("autotile")) {
-        return concrete->getPerScreenAutotileSettings(screenId);
-    } else if (category == QLatin1String("snapping")) {
-        return concrete->getPerScreenSnappingSettings(screenId);
-    } else if (category == QLatin1String("zoneSelector")) {
-        return concrete->getPerScreenZoneSelectorSettings(screenId);
+    return dispatch->get(screenId);
+}
+
+bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values)
+{
+    if (values.isEmpty()) {
+        // Empty map is a valid no-op — treat like setSettings batch and
+        // return true so callers don't need to guard for it.
+        return true;
     }
-    qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
-    return {};
+    auto dispatch = dispatchFor(m_settings, category);
+    if (!dispatch) {
+        qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        return false;
+    }
+
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        // Values arriving over the wire can be QDBusArgument-wrapped when
+        // they contain lists or maps; normalize to plain Qt types first —
+        // matches the single-key setPerScreenSetting path exactly.
+        const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
+        dispatch->set(screenId, it.key(), converted);
+    }
+
+    // One debounced save for the whole batch. The per-screen save path
+    // coalesces multiple category updates into a single disk write.
+    scheduleSave();
+    qCInfo(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
+                           << "category" << category;
+    return true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -838,20 +961,54 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
 
 QVariantList SettingsAdaptor::availableShaders()
 {
+    if (m_cachedAvailableShadersValid) {
+        return m_cachedAvailableShaders;
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->availableShadersVariant() : QVariantList();
+    if (!registry) {
+        return QVariantList();
+    }
+    m_cachedAvailableShaders = registry->availableShadersVariant();
+    m_cachedAvailableShadersValid = true;
+    return m_cachedAvailableShaders;
 }
 
 QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
 {
+    auto it = m_cachedShaderInfo.constFind(shaderId);
+    if (it != m_cachedShaderInfo.constEnd()) {
+        return it.value();
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->shaderInfo(shaderId) : QVariantMap();
+    if (!registry) {
+        return QVariantMap();
+    }
+    const QVariantMap info = registry->shaderInfo(shaderId);
+    m_cachedShaderInfo.insert(shaderId, info);
+    return info;
 }
 
 QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
 {
+    auto it = m_cachedShaderDefaults.constFind(shaderId);
+    if (it != m_cachedShaderDefaults.constEnd()) {
+        return it.value();
+    }
     auto* registry = ShaderRegistry::instance();
-    return registry ? registry->defaultParams(shaderId) : QVariantMap();
+    if (!registry) {
+        return QVariantMap();
+    }
+    const QVariantMap defaults = registry->defaultParams(shaderId);
+    m_cachedShaderDefaults.insert(shaderId, defaults);
+    return defaults;
+}
+
+void SettingsAdaptor::invalidateShaderCaches()
+{
+    m_cachedAvailableShaders.clear();
+    m_cachedAvailableShadersValid = false;
+    m_cachedShaderInfo.clear();
+    m_cachedShaderDefaults.clear();
 }
 
 QVariantMap SettingsAdaptor::translateShaderParams(const QString& shaderId, const QVariantMap& params)
@@ -888,6 +1045,11 @@ void SettingsAdaptor::openUserShaderDirectory()
 
 void SettingsAdaptor::refreshShaders()
 {
+    // Drop our memoized view before asking the registry to reload — if
+    // the ShaderRegistry::shadersChanged signal isn't connected (e.g. the
+    // singleton was created after this adaptor), we still guarantee the
+    // next D-Bus query hits the fresh registry.
+    invalidateShaderCaches();
     auto* registry = ShaderRegistry::instance();
     if (registry) {
         registry->refresh();
@@ -898,42 +1060,22 @@ void SettingsAdaptor::refreshShaders()
 // Window Picker D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QString SettingsAdaptor::getRunningWindows()
+void SettingsAdaptor::requestRunningWindows()
 {
-    // Guard against reentrant calls (shouldn't happen via D-Bus serialization,
-    // but protects against unexpected provideRunningWindows calls)
-    if (m_windowListLoop) {
-        return QStringLiteral("[]");
-    }
-
-    m_pendingWindowList.clear();
-
-    QEventLoop loop;
-    m_windowListLoop = &loop;
-
-    // Blocking call: waits for KWin effect to respond via provideRunningWindows().
-    // The 2s timeout prevents indefinite blocking if the effect is unloaded or
-    // unresponsive. This is called from the KCM settings UI (not the daemon hot
-    // path), so briefly blocking the caller thread is acceptable.
-    constexpr int WindowListTimeoutMs = 2000;
-    QTimer::singleShot(WindowListTimeoutMs, &loop, &QEventLoop::quit);
-
-    // Signal the KWin effect to enumerate windows
+    // Fire-and-forget. Callers receive the reply asynchronously via the
+    // runningWindowsAvailable signal (emitted from provideRunningWindows).
+    // Safe to call while a previous request is still in flight — the
+    // effect side is idempotent, and the last-arriving payload is the
+    // one subscribers see.
     Q_EMIT runningWindowsRequested();
-
-    // Block until provideRunningWindows() is called or timeout
-    loop.exec();
-
-    m_windowListLoop = nullptr;
-    return m_pendingWindowList;
 }
 
 void SettingsAdaptor::provideRunningWindows(const QString& json)
 {
-    m_pendingWindowList = json;
-    if (m_windowListLoop && m_windowListLoop->isRunning()) {
-        m_windowListLoop->quit();
-    }
+    // Fan out to every client that subscribed to runningWindowsAvailable —
+    // SettingsController caches the last payload on the client side, so
+    // there is no server-side state to keep here.
+    Q_EMIT runningWindowsAvailable(json);
 }
 
 } // namespace PlasmaZones

@@ -126,6 +126,26 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,
                                           SLOT(onExternalSettingsChanged()));
 
+    // Async window picker reply channel. Emitted by SettingsAdaptor whenever
+    // the KWin effect answers a runningWindowsRequested call via
+    // provideRunningWindows(). The signal carries the JSON payload directly
+    // so clients don't need a follow-up blocking fetch.
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::Settings), QStringLiteral("runningWindowsAvailable"),
+                                          this, SLOT(onRunningWindowsAvailable(QString)));
+
+    // Client-side timeout for the async window picker. If the daemon
+    // never fans out a runningWindowsAvailable signal (KWin effect
+    // unloaded, crashed, or slow), the timer fires runningWindowsTimedOut()
+    // so the UI can switch from a spinner to an error state.
+    m_runningWindowsTimeout.setSingleShot(true);
+    m_runningWindowsTimeout.setInterval(RunningWindowsTimeoutMs);
+    connect(&m_runningWindowsTimeout, &QTimer::timeout, this, [this]() {
+        qCWarning(PlasmaZones::lcCore) << "requestRunningWindows: no reply within" << RunningWindowsTimeoutMs
+                                       << "ms — KWin effect unresponsive?";
+        Q_EMIT runningWindowsTimedOut();
+    });
+
     // Forward daemon running state changes and refresh data when daemon starts
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
@@ -193,6 +213,13 @@ SettingsController::SettingsController(QObject* parent)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
                                           this, SLOT(loadLayoutsAsync()));
+    // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
+    // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
+    // triggers a full reload so the layout list view refreshes, but the daemon side
+    // saved a full JSON serialization per mutation by not emitting layoutChanged.
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::LayoutManager),
+                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(loadLayoutsAsync()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
@@ -1946,40 +1973,59 @@ void SettingsController::loadColorsFromFile(const QString& filePath)
     setNeedsSave(true);
 }
 
-QVariantList SettingsController::getRunningWindows() const
+// Parses the daemon's running-windows JSON payload into a QVariantList of
+// {windowClass, appName, caption} maps ready for QML consumption. The
+// synchronous getRunningWindows() predecessor was removed in Phase 6 of
+// refactor/dbus-performance; only onRunningWindowsAvailable calls this now.
+static QVariantList parseRunningWindowsJson(const QString& json)
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-
-    QString json = reply.arguments().at(0).toString();
     if (json.isEmpty()) {
         return {};
     }
-
     QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
         return {};
     }
 
     QVariantList result;
     const QJsonArray array = doc.array();
+    result.reserve(array.size());
     for (const QJsonValue& value : array) {
         if (!value.isObject()) {
             continue;
         }
-        QJsonObject obj = value.toObject();
+        const QJsonObject obj = value.toObject();
         QVariantMap item;
         item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
         item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
         item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
         result.append(item);
     }
-
     return result;
+}
+
+void SettingsController::requestRunningWindows()
+{
+    // Fire-and-forget: the daemon emits runningWindowsRequested to the
+    // KWin effect, which answers via provideRunningWindows, which the
+    // daemon fans out on runningWindowsAvailable — caught by our
+    // onRunningWindowsAvailable slot. The UI thread never blocks.
+    //
+    // Start (or restart) the client-side timeout guard. Repeated calls
+    // coalesce — the most recent deadline wins, matching the fire-and-
+    // forget semantics on the daemon side.
+    m_runningWindowsTimeout.start();
+    DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("requestRunningWindows"));
+}
+
+void SettingsController::onRunningWindowsAvailable(const QString& json)
+{
+    // Reply arrived — stop the timeout timer so a stale runningWindowsTimedOut()
+    // doesn't fire after we've already served fresh data.
+    m_runningWindowsTimeout.stop();
+    m_cachedRunningWindows = parseRunningWindowsJson(json);
+    Q_EMIT runningWindowsAvailable(m_cachedRunningWindows);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

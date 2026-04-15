@@ -1017,6 +1017,64 @@ public:
         m_preFloatScreenAssignments = assignments;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Dirty field tracking (Phase 3 of refactor/dbus-performance)
+    //
+    // Replaces "any mutation forces a full re-serialization" with a bitfield
+    // mask of which persisted state has changed since the last successful
+    // save. WindowTrackingAdaptor::saveState() reads this mask to decide
+    // which JSON maps to re-write, and the persistence worker's write-
+    // completed signal clears the committed bits — surviving bits either
+    // represent new mutations that landed during the in-flight write, or
+    // the write itself failed (same treatment in both cases: retry on the
+    // next tick).
+    //
+    // The mask is initialized to All so the first save after a daemon
+    // startup always writes every field. loadState() should clear the mask
+    // immediately after populating in-memory state so the first real save
+    // doesn't redundantly write back what we just loaded.
+    // ═══════════════════════════════════════════════════════════════════════
+    enum DirtyField : uint32_t {
+        DirtyNone = 0,
+        DirtyActiveLayoutId = 1u << 0,
+        DirtyZoneAssignments = 1u << 1, // zones + screens + desktops (always written together)
+        DirtyPendingRestores = 1u << 2,
+        DirtyPreTileGeometries = 1u << 3,
+        DirtyLastUsedZone = 1u << 4,
+        DirtyPreFloatZones = 1u << 5,
+        DirtyPreFloatScreens = 1u << 6,
+        DirtyUserSnapped = 1u << 7,
+        DirtyAutotileOrders = 1u << 8,
+        DirtyAutotilePending = 1u << 9,
+        DirtyAll = 0x3FFu,
+    };
+    using DirtyMask = uint32_t;
+
+    /// OR the given fields into the dirty mask AND emit stateChanged.
+    /// Primary (and only) entry point for mutators — replaces direct
+    /// scheduleSaveState(). Public because the adaptor also needs to
+    /// mark dirty from outside, e.g. when the active-layout change is
+    /// observed via LayoutManager or when a failed async write needs
+    /// its bits re-marked for retry. Multiple calls are idempotent
+    /// (OR semantics) and cheap (bit OR + one signal emission).
+    void markDirty(DirtyMask fields);
+
+    /// Return the current dirty mask, clearing it atomically. Used by the
+    /// adaptor's saveState() to snapshot "what needs writing" in one step.
+    DirtyMask takeDirty();
+
+    /// Return the current dirty mask without clearing. Read-only accessor
+    /// for tests and instrumentation.
+    DirtyMask peekDirty() const
+    {
+        return m_dirtyMask;
+    }
+
+    /// Clear every dirty bit. Called from loadState's end after in-memory
+    /// state mirrors the disk file — nothing is dirty until the next
+    /// mutation lands.
+    void clearDirty();
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a window's zone assignment changes
@@ -1057,7 +1115,15 @@ private:
     static constexpr int MinVisibleHeight = 100;
 
     // Helpers
-    void scheduleSaveState();
+    //
+    // scheduleSaveState() wraps markDirty(DirtyAll). Retained as the
+    // default entry point for mutators that haven't been updated to
+    // declare which specific fields they touch — marking everything dirty
+    // is behaviorally equivalent to the pre-refactor code. Hot-path
+    // mutators (assign/unassign zone, storePreTileGeometry, etc.) should
+    // call markDirty() directly with a narrow mask so the next save
+    // only re-serializes the fields that actually changed.
+    void scheduleSaveState(DirtyMask fields = DirtyAll);
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
@@ -1210,6 +1276,11 @@ private:
         int virtualDesktop = 0;
     };
     QVector<ResnapEntry> m_resnapBuffer;
+
+    // Delta-persistence dirty mask. Initial value DirtyAll forces the first
+    // save after daemon startup to serialize every field. Cleared by
+    // loadState() once in-memory state mirrors the disk file.
+    DirtyMask m_dirtyMask = DirtyAll;
 
     // Note: No save timer - persistence handled by WindowTrackingAdaptor via KConfig
     // Service emits stateChanged() signal when state needs saving

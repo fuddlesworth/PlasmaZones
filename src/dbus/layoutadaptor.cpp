@@ -288,6 +288,26 @@ QString LayoutAdaptor::getLayout(const QString& id)
 // Visibility Filtering
 // ═══════════════════════════════════════════════════════════════════════════════
 
+void LayoutAdaptor::invalidateLayoutJsonCacheFor(const QUuid& uuid)
+{
+    m_cachedLayoutJson.remove(uuid);
+    if (m_cachedActiveLayoutId == uuid) {
+        m_cachedActiveLayoutId = QUuid();
+        m_cachedActiveLayoutJson.clear();
+    }
+}
+
+// Property-name constants for the compact layoutPropertyChanged signal.
+// Centralizes the wire format so the three mutators and any future
+// subscriber-side dispatcher cannot drift on spelling. Stored as
+// `const QString` (via QStringLiteral's static UTF-16 storage) so the
+// emit sites don't allocate a temporary QString on every property change.
+namespace {
+const QString kPropHidden = QStringLiteral("hidden");
+const QString kPropAutoAssign = QStringLiteral("autoAssign");
+const QString kPropAspectRatioClass = QStringLiteral("aspectRatioClass");
+} // namespace
+
 void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
 {
     auto* layout = getValidatedLayout(layoutId, QStringLiteral("set layout hidden"));
@@ -295,12 +315,29 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
         return;
     }
 
+    // Value-equality guard: skip the mutation + cache invalidation +
+    // signal fan-out when the incoming value already matches the current
+    // one. Mirrors the Phase 1.1 guard in SettingsAdaptor::setSetting so
+    // a settled checkbox cannot spam subscribers with no-op reloads.
+    if (layout->hiddenFromSelector() == hidden) {
+        return;
+    }
+
     layout->setHiddenFromSelector(hidden);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
+    // Invalidate the cached JSON for this layout so a later getLayout()
+    // re-serializes with the new value. Subscribers that want the full
+    // shape after a property mutation pull via getLayout — the signal is
+    // deliberately narrow.
+    invalidateLayoutJsonCacheFor(layout->id());
+
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "hidden:" << hidden;
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
+    // Phase 4 of refactor/dbus-performance: emit the compact property
+    // signal (3 strings + 1 bool over the wire) instead of layoutChanged
+    // with the full 5–20 KB JSON payload. layoutListChanged is likewise
+    // not emitted — the list didn't change.
+    Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
 }
 
 void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -310,12 +347,17 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
         return;
     }
 
+    if (layout->autoAssign() == enabled) {
+        return;
+    }
+
     layout->setAutoAssign(enabled);
     // Note: saveLayouts() is triggered automatically via layoutModified signal
 
+    invalidateLayoutJsonCacheFor(layout->id());
+
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAutoAssign, QDBusVariant(enabled));
 }
 
 void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
@@ -325,11 +367,16 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
         return;
     }
 
+    if (static_cast<int>(layout->aspectRatioClass()) == aspectRatioClass) {
+        return;
+    }
+
     layout->setAspectRatioClassInt(aspectRatioClass);
 
+    invalidateLayoutJsonCacheFor(layout->id());
+
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
-    Q_EMIT layoutListChanged();
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(aspectRatioClass));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

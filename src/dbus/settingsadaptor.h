@@ -7,7 +7,6 @@
 #include <QObject>
 #include <QDBusAbstractAdaptor>
 #include <QDBusVariant>
-#include <QEventLoop>
 #include <QString>
 #include <QVariant>
 #include <QTimer>
@@ -84,6 +83,32 @@ public Q_SLOTS:
     QVariantMap getPerScreenSettings(const QString& screenId, const QString& category);
 
     /**
+     * @brief Batch-set multiple per-screen keys in one D-Bus call.
+     *
+     * Applies every (key, value) pair in @p values via the same category
+     * dispatch as setPerScreenSetting, then schedules a single debounced
+     * save. Mirrors the global getSettings/setSettings batch pattern so
+     * the KCM per-monitor page can flush a category in one round-trip
+     * instead of N sequential calls.
+     *
+     * Unknown keys inside @p values are passed through to the underlying
+     * Settings method, which logs a warning and no-ops — consistent with
+     * single-key behavior.
+     *
+     * @param screenId Virtual or physical screen identifier
+     * @param category "autotile" | "snapping" | "zoneSelector"
+     * @param values   Map of key -> value. QDBusArgument-wrapped values
+     *                 from the wire are unwrapped via DBusVariantUtils
+     *                 before reaching the setter.
+     * @return true if the category was recognized and the batch ran
+     *         against a concrete Settings backend; false if the category
+     *         was unknown or no concrete Settings was available.
+     *         Per-key failures are logged by the underlying Settings but
+     *         cannot be surfaced here since the setters return void.
+     */
+    bool setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values);
+
+    /**
      * @brief Get list of available shader effects
      * @return List of shader metadata (id, name, description, etc.)
      */
@@ -140,15 +165,21 @@ public Q_SLOTS:
     void refreshShaders();
 
     /**
-     * @brief Get list of currently running windows (for exclusion picker)
+     * @brief Asynchronous window list request (fire-and-forget).
      *
-     * Requests the KWin effect to enumerate all windows. Returns JSON array
-     * of objects with windowClass and caption fields.
-     * Blocks up to 2 seconds waiting for the KWin effect to respond.
+     * Emits runningWindowsRequested() so the KWin effect enumerates its
+     * window list and sends it back via provideRunningWindows(). The
+     * resulting JSON is then broadcast via the runningWindowsAvailable
+     * signal — subscribers update their view when the signal arrives
+     * rather than blocking on the D-Bus call. This is the only
+     * supported path; the old blocking getRunningWindows() method was
+     * removed in Phase 6 of refactor/dbus-performance.
      *
-     * @return JSON string: [{"windowClass":"...", "appName":"...", "caption":"..."}]
+     * Returns immediately. Safe to call repeatedly from UI — each call
+     * triggers at most one KWin round-trip; duplicate requests while a
+     * previous response is in flight are coalesced by the effect side.
      */
-    QString getRunningWindows();
+    void requestRunningWindows();
 
     /**
      * @brief Receive window list from KWin effect (callback)
@@ -171,7 +202,26 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void settingsChanged();
+
+    /**
+     * @brief Daemon → KWin effect: please enumerate running windows.
+     *
+     * Emitted by requestRunningWindows(). The effect answers by calling
+     * provideRunningWindows(), which then broadcasts runningWindowsAvailable
+     * to all subscribers.
+     */
     void runningWindowsRequested();
+
+    /**
+     * @brief Daemon → clients: fresh running-windows JSON is available.
+     *
+     * Emitted every time provideRunningWindows() receives a payload from
+     * the KWin effect. Subscribers (SettingsController) cache the value
+     * and present it to the UI without a blocking round-trip.
+     *
+     * @param json JSON array: [{windowClass, appName, caption}, ...]
+     */
+    void runningWindowsAvailable(const QString& json);
 
 private:
     void initializeRegistry();
@@ -184,11 +234,16 @@ private:
      */
     void scheduleSave();
 
-    ISettings* m_settings; // Interface type (DIP)
+    /**
+     * @brief Drop all cached ShaderRegistry results.
+     *
+     * Called from refreshShaders() and from ShaderRegistry::shadersChanged
+     * so the editor and KCM never see stale shader metadata after a
+     * hot-reload. Cheap — just clears three hashes.
+     */
+    void invalidateShaderCaches();
 
-    // Window picker request/response state
-    QString m_pendingWindowList;
-    QEventLoop* m_windowListLoop = nullptr;
+    ISettings* m_settings; // Interface type (DIP)
 
     // Registry pattern
     using Getter = std::function<QVariant()>;
@@ -201,6 +256,19 @@ private:
     // Debounced save timer (performance optimization)
     QTimer* m_saveTimer = nullptr;
     static constexpr int SaveDebounceMs = 500; // 500ms debounce
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ShaderRegistry caches
+    //
+    // Memoizes availableShaders() / shaderInfo() / defaultShaderParams() so
+    // repeated editor + KCM queries don't hit ShaderRegistry on every call.
+    // Invalidated on refreshShaders() and on the registry's own shadersChanged
+    // signal. Marked mutable so const-ish read paths can populate them.
+    // ═══════════════════════════════════════════════════════════════════════
+    QVariantList m_cachedAvailableShaders;
+    bool m_cachedAvailableShadersValid = false;
+    QHash<QString, QVariantMap> m_cachedShaderInfo;
+    QHash<QString, QVariantMap> m_cachedShaderDefaults;
 };
 
 } // namespace PlasmaZones

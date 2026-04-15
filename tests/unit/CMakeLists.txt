@@ -59,6 +59,11 @@ add_executable(test_wts_registry_integration core/test_wts_registry_integration.
 target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
+# DirtyMask invariants for delta-persistence (Phase 3 of refactor/dbus-performance).
+add_executable(test_wts_dirty_mask core/test_wts_dirty_mask.cpp)
+target_link_libraries(test_wts_dirty_mask PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_dirty_mask COMMAND test_wts_dirty_mask)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -341,6 +346,30 @@ add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
 target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
 add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 
+# LayoutAdaptor signal contract test (Phase 1.2 of refactor/dbus-performance).
+# Pins the rule: property mutations emit layoutChanged only, NEVER
+# layoutListChanged — the list hasn't changed.
+add_executable(test_layout_adaptor_signals dbus/test_layout_adaptor_signals.cpp)
+target_link_libraries(test_layout_adaptor_signals PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_layout_adaptor_signals COMMAND test_layout_adaptor_signals)
+
+# Micro-benchmarks for D-Bus adaptor hot paths. Drives the
+# refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
+# LayoutAdaptor signal split, JSON cache reuse). Run with
+# `ctest -R bench_dbus_adaptors` to capture numbers against
+# docs/perf/dbus-baseline.md. Not in _all_tests by default because
+# benchmark output is verbose; it is still added via add_test() so
+# `ctest -R bench` can select it.
+add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
+target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
+# LABELS=bench lets CI skip the verbose benchmark output via
+# `ctest -LE bench` while still letting `ctest -L bench` select it
+# explicitly for the perf-regression run.
+set_tests_properties(bench_dbus_adaptors PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    LABELS "bench")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
@@ -357,7 +386,7 @@ set(_all_tests
     test_window_identity
     test_window_tracking_snap test_window_tracking_float
     test_session_persistence test_session_persistence_layout
-    test_wts_lifecycle test_wts_session test_wts_queries
+    test_wts_lifecycle test_wts_session test_wts_queries test_wts_dirty_mask
     test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
     test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
     test_tiling_algo_cascade_stair_spread
@@ -393,6 +422,7 @@ set(_all_tests
     test_autotile_adaptor_panel_gate
     test_drag_policy
     test_dbus_validation
+    test_layout_adaptor_signals
     test_compositor_common
 )
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

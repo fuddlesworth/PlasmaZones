@@ -13,6 +13,7 @@
 #include <QStringList>
 #include <QHash>
 #include <QJsonArray>
+#include <QQueue>
 #include <QRect>
 #include <QTimer>
 #include <QPointer>
@@ -1085,6 +1086,23 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     QTimer* m_saveTimer = nullptr;
     std::unique_ptr<PersistenceWorker> m_persistenceWorker;
+
+    // FIFO queue of dirty masks for writes currently in flight on the
+    // persistence worker thread. saveState() enqueues the committed mask
+    // when it hands a write off to the worker; the writeCompleted handler
+    // dequeues the head in the same FIFO order the worker processes
+    // requestWrite signals, so a mask survives even when saveState() is
+    // called again before the previous write lands. On success the head
+    // is dropped; on failure the head bits are OR'd back into the
+    // service's dirty mask so the retry picks them up without stomping
+    // on any newer mutations.
+    QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
+
+    // One-shot warning latch for the test-only synchronous fallback path
+    // in saveState(). Production always uses JsonConfigBackend + the
+    // async worker, so hitting the sync path indicates either a test
+    // harness or an unexpected misconfiguration.
+    bool m_syncFallbackWarned = false;
 
     // Tiling state serialization delegates (autotile engine → WTA persistence)
     std::function<QJsonArray()> m_serializeTilingStatesFn;

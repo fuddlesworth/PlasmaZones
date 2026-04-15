@@ -26,6 +26,24 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
+// Counting-stub: overrides one setter so the guard-fires test can
+// distinguish "setter not invoked" (guard hit) from "setter invoked,
+// returned true" (guard missed). StubSettings' getters are hard-coded
+// (setters are no-ops), so this subclass keeps the getter unchanged
+// and only adds a hit counter for setZonePadding.
+class CountingStubSettings : public StubSettings
+{
+public:
+    using StubSettings::StubSettings;
+    void setZonePadding(int v) override
+    {
+        ++setZonePaddingCalls;
+        lastZonePadding = v;
+    }
+    int setZonePaddingCalls = 0;
+    int lastZonePadding = -1;
+};
+
 class TestSettingsAdaptorBatch : public QObject
 {
     Q_OBJECT
@@ -34,7 +52,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_settings = new StubSettings(nullptr);
+        m_settings = new CountingStubSettings(nullptr);
         m_parent = new QObject(nullptr);
         m_adaptor = new SettingsAdaptor(m_settings, m_parent);
     }
@@ -142,9 +160,97 @@ private Q_SLOTS:
         QVERIFY(result.isEmpty());
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Value-equality guard (Phase 1.1 of refactor/dbus-performance):
+    // setSetting with a value that already matches the current one must
+    // return true WITHOUT invoking the underlying setter. The counter on
+    // CountingStubSettings is what actually pins the short-circuit —
+    // return-value-only assertions can't distinguish guard-fires from
+    // setter-runs-and-returns-true.
+    //
+    // StubSettings::zonePadding() returns 8 — supply 8 and the guard fires.
+    // ─────────────────────────────────────────────────────────────────────
+    void testSetSetting_unchangedScalar_guardShortCircuits()
+    {
+        m_settings->setZonePaddingCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(8)));
+        QVERIFY(ok);
+        QCOMPARE(m_settings->setZonePaddingCalls, 0);
+    }
+
+    // Value-equality guard must NOT intercept changing writes — setter
+    // must actually run. Counter proves the call path, not just the
+    // return code.
+    void testSetSetting_changedScalar_invokesSetter()
+    {
+        m_settings->setZonePaddingCalls = 0;
+        const bool ok = m_adaptor->setSetting(QStringLiteral("zonePadding"), QDBusVariant(QVariant(42)));
+        QVERIFY(ok);
+        QCOMPARE(m_settings->setZonePaddingCalls, 1);
+        QCOMPARE(m_settings->lastZonePadding, 42);
+    }
+
+    // Empty-string matches StubSettings::defaultLayoutId() default — guard fires.
+    void testSetSetting_unchangedStringScalar_returnsTrue()
+    {
+        const bool ok = m_adaptor->setSetting(QStringLiteral("defaultLayoutId"), QDBusVariant(QVariant(QString())));
+        QVERIFY(ok);
+    }
+
+    // Composite (list-of-map) settings like dragActivationTriggers advertise
+    // schema "stringlist" but actually store QVariantList of QVariantMap.
+    // The guard is gated on the actual variant type (not the schema string),
+    // so list-type writes always fall through to the setter — which must
+    // still return true via the registered setter lambda.
+    void testSetSetting_compositeListType_fallsThroughToSetter()
+    {
+        QVariantList triggers;
+        QVariantMap one;
+        one[QStringLiteral("key")] = QStringLiteral("Meta");
+        triggers.append(one);
+        const bool ok = m_adaptor->setSetting(QStringLiteral("dragActivationTriggers"),
+                                              QDBusVariant(QVariant::fromValue(triggers)));
+        QVERIFY(ok);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase 5: setPerScreenSettings batch surface.
+    //
+    // The contract mirrors setSettings (global batch): empty map returns
+    // true as a no-op, unknown category returns false, recognized category
+    // returns true regardless of backend. The per-screen setters are on
+    // ISettings with default no-op bodies, so stub backends pass through
+    // cleanly — deep correctness belongs to test_settings_perscreen which
+    // exercises the concrete Settings type.
+    // ─────────────────────────────────────────────────────────────────────
+    void testSetPerScreenSettings_emptyMap_returnsTrue()
+    {
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), {});
+        QVERIFY(ok);
+    }
+
+    void testSetPerScreenSettings_unknownCategory_returnsFalse()
+    {
+        QVariantMap values;
+        values[QStringLiteral("anyKey")] = 1;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), values);
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_recognizedCategory_returnsTrue()
+    {
+        // Post-DIP fix: the per-screen batch dispatches through ISettings
+        // no-op defaults when the backend is a stub, so recognized
+        // categories succeed even without a concrete Settings.
+        QVariantMap values;
+        values[QStringLiteral("masterCount")] = 2;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values);
+        QVERIFY(ok);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    StubSettings* m_settings = nullptr;
+    CountingStubSettings* m_settings = nullptr;
     QObject* m_parent = nullptr;
     SettingsAdaptor* m_adaptor = nullptr;
 };

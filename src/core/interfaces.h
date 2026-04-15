@@ -143,6 +143,65 @@ public:
     virtual QString renderingBackend() const = 0;
     virtual void setRenderingBackend(const QString& backend) = 0;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Per-screen overrides — category-keyed maps of setting key → value that
+    // live alongside the global setting. Defaults are no-op bodies so backends
+    // that don't persist per-screen state (test stubs) can inherit the
+    // interface without implementing these. The concrete Settings class
+    // overrides every method; the D-Bus SettingsAdaptor depends only on
+    // these virtuals so it doesn't need a qobject_cast<Settings*>.
+    // The has*() query methods are virtual with a "nothing persisted"
+    // default so the SettingsAdaptor can answer existence questions
+    // through the interface too.
+    // ═══════════════════════════════════════════════════════════════════════════
+    virtual QVariantMap getPerScreenAutotileSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenAutotileSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                             const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenAutotileSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenAutotileSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
+    virtual QVariantMap getPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenZoneSelectorSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                                 const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenZoneSelectorSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
+    virtual QVariantMap getPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return {};
+    }
+    virtual void setPerScreenSnappingSetting(const QString& /*screenIdOrName*/, const QString& /*key*/,
+                                             const QVariant& /*value*/)
+    {
+    }
+    virtual void clearPerScreenSnappingSettings(const QString& /*screenIdOrName*/)
+    {
+    }
+    virtual bool hasPerScreenSnappingSettings(const QString& /*screenIdOrName*/) const
+    {
+        return false;
+    }
+
     // Persistence (unique to ISettings)
     virtual void load() = 0;
     virtual void save() = 0;

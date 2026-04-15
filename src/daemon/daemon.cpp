@@ -491,9 +491,22 @@ bool Daemon::init()
                 engine->deserializePendingRestores(obj);
         });
 
-    // Trigger WTA save on autotile state changes (window order, split ratio, master count)
-    connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor,
-            &WindowTrackingAdaptor::scheduleSaveState);
+    // Trigger WTA save on autotile state changes (window order, split ratio, master count).
+    // Narrower dirty mask than the default DirtyAll — only the two autotile-owned
+    // fields can change as a result of a tilingChanged signal, so the next save
+    // rewrites just those keys rather than the whole window-tracking blob.
+    //
+    // markDirty() emits WindowTrackingService::stateChanged, which is wired to
+    // WindowTrackingAdaptor::scheduleSaveState in the adaptor's constructor —
+    // that connection is what actually kicks the debounced save timer. If the
+    // stateChanged hookup ever gets severed, autotile state will silently
+    // stop persisting; add an explicit scheduleSaveState() call here if so.
+    connect(m_autotileEngine.get(), &AutotileEngine::tilingChanged, m_windowTrackingAdaptor, [this]() {
+        if (m_windowTrackingAdaptor && m_windowTrackingAdaptor->service()) {
+            m_windowTrackingAdaptor->service()->markDirty(WindowTrackingService::DirtyAutotileOrders
+                                                          | WindowTrackingService::DirtyAutotilePending);
+        }
+    });
 
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
