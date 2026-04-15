@@ -110,6 +110,55 @@ private Q_SLOTS:
         QCOMPARE(listChanged.count(), 1);
     }
 
+    // ─────────────────────────────────────────────────────────────────
+    // Phase 1.3: getLayout must never serve stale JSON after a property
+    // mutation. Before the fix, m_cachedLayoutJson was populated on the
+    // first getLayout() call but never invalidated by setLayoutHidden,
+    // setLayoutAutoAssign, or setLayoutAspectRatioClass — so a second
+    // getLayout() call would return the pre-mutation JSON.
+    // ─────────────────────────────────────────────────────────────────
+    void testGetLayout_cacheInvalidated_afterSetLayoutHidden()
+    {
+        // Prime the cache.
+        const QString beforeJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(!beforeJson.isEmpty());
+        // Layout::toJson() only serializes the hiddenFromSelector key when
+        // the flag is true, so beforeJson (default false) must not contain it.
+        QVERIFY(!beforeJson.contains(QLatin1String("hiddenFromSelector")));
+
+        m_adaptor->setLayoutHidden(m_layoutId, true);
+
+        // The next read must reflect the new value — no stale cache.
+        const QString afterJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(!afterJson.isEmpty());
+        QVERIFY(afterJson.contains(QLatin1String("hiddenFromSelector")));
+        QVERIFY(afterJson != beforeJson);
+    }
+
+    void testGetLayout_cacheInvalidated_afterSetLayoutAutoAssign()
+    {
+        const QString beforeJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(!beforeJson.isEmpty());
+        QVERIFY(!beforeJson.contains(QLatin1String("autoAssign")));
+
+        m_adaptor->setLayoutAutoAssign(m_layoutId, true);
+
+        const QString afterJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(afterJson.contains(QLatin1String("autoAssign")));
+        QVERIFY(afterJson != beforeJson);
+    }
+
+    void testGetLayout_cacheInvalidated_afterSetLayoutAspectRatioClass()
+    {
+        const QString beforeJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(!beforeJson.isEmpty());
+
+        m_adaptor->setLayoutAspectRatioClass(m_layoutId, 2);
+
+        const QString afterJson = m_adaptor->getLayout(m_layoutId);
+        QVERIFY(afterJson != beforeJson);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
