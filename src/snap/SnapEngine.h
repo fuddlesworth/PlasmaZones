@@ -21,6 +21,7 @@ class ISettings;
 class IZoneDetector;
 class LayoutManager;
 class VirtualDesktopManager;
+class WindowTrackingAdaptor;
 class WindowTrackingService;
 class ZoneDetectionAdaptor;
 
@@ -178,6 +179,78 @@ public:
     void setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor);
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // WindowTrackingAdaptor back-reference
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @brief Wire the shared WindowTrackingAdaptor back-reference.
+     *
+     * SnapEngine owns the snap-mode navigation logic (focusInDirection,
+     * moveFocusedInDirection, etc.) but some of the state those methods
+     * consult — the SnapNavigationTargetResolver, the last-active-window
+     * shadow, the frame-geometry shadow, and the snap-bookkeeping helpers
+     * (windowSnapped / windowUnsnapped / storePreTileGeometry / ...) —
+     * is still held on WindowTrackingAdaptor.
+     *
+     * This back-reference lets SnapEngine call into that state without
+     * duplicating it. A future refactor should either move the state to
+     * WindowTrackingService (for cross-cutting pieces like the bookkeeping
+     * helpers) or onto SnapEngine itself (for snap-only pieces like the
+     * target resolver) and retire this back-reference entirely. Until
+     * then it's the honest expression of the coupling.
+     *
+     * Must be set after construction and before any navigation method is
+     * called. Not owned; must outlive SnapEngine.
+     */
+    void setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor);
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Navigation (moved out of WindowTrackingAdaptor)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Walk to the adjacent window in @p direction and transfer keyboard focus.
+    /// Empty direction is a no-op with feedback.
+    void focusInDirection(const QString& direction);
+
+    /// Move the focused window into the adjacent zone in @p direction
+    /// (displacing or filling the target). Empty direction is a no-op.
+    void moveFocusedInDirection(const QString& direction);
+
+    /// Swap the focused window with whatever's in the adjacent zone in
+    /// @p direction. Empty direction is a no-op.
+    void swapFocusedInDirection(const QString& direction);
+
+    /// Move the focused window to the layout zone with @p zoneNumber
+    /// (1-based) on @p screenId. Zone numbers outside [1,9] are rejected.
+    void moveFocusedToPosition(int zoneNumber, const QString& screenId);
+
+    /// Move the focused window to the first empty zone on @p screenId.
+    /// Empty screen id resolves from the active window.
+    void pushFocusedToEmptyZone(const QString& screenId);
+
+    /// Restore the focused window to its captured pre-snap size and unsnap.
+    void restoreFocusedWindow();
+
+    /// Toggle the focused window between snapped and floating.
+    /// Reads the active window from the WTA shadow.
+    void toggleFocusedFloat();
+
+    /// Cycle keyboard focus forward/backward through managed windows in
+    /// the active zone (or the layout cycle order if single-window per
+    /// zone).
+    void cycleFocus(bool forward);
+
+    /// Rotate snapped windows through the layout's zone order on @p screenId.
+    void rotateWindowsInLayout(bool clockwise, const QString& screenId);
+
+    // Note: resnapToNewLayout() and resnapCurrentAssignments(const QString&)
+    // already exist above — they live in snapengine/navigation.cpp and go
+    // through the emitBatchedResnap → resnapToNewLayoutRequested signal
+    // relay, which WTA's handleBatchedResnap consumes. The navigation-from-
+    // shortcuts entry points in daemon/navigation.cpp forward to those
+    // existing methods via SnapNavigationAdapter::reapplyLayout().
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Persistence delegate
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -228,6 +301,17 @@ Q_SIGNALS:
     /// Request KWin effect to collect unsnapped windows and snap them all
     void snapAllWindowsRequested(const QString& screenId);
 
+    /// Batch of window-geometry updates, applied by the KWin effect in a
+    /// single operation (rotate, resnap, snap-all paths). The @p action
+    /// label disambiguates the cause downstream ("rotate", "resnap",
+    /// "snap_all", "vs_reconfigure"). Relayed to D-Bus via WTA.
+    void applyGeometriesBatch(const PlasmaZones::WindowGeometryList& geometries, const QString& action);
+
+    /// Request KWin effect to activate (raise + focus) @p windowId.
+    /// Used by focus-in-direction and cycle operations. Relayed to D-Bus
+    /// via WTA.
+    void activateWindowRequested(const QString& windowId);
+
 private:
     LayoutManager* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
@@ -236,6 +320,10 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<AutotileEngine> m_autotileEngine;
     QPointer<ZoneDetectionAdaptor> m_zoneDetectionAdaptor;
+    // Back-reference to WindowTrackingAdaptor for shared-state access
+    // (target resolver, last-active shadow, bookkeeping helpers). Not
+    // owned. See setWindowTrackingAdaptor docstring for rationale.
+    QPointer<WindowTrackingAdaptor> m_wta;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Float helpers (snapengine/float.cpp)

@@ -9,39 +9,33 @@
 
 namespace PlasmaZones {
 
-class WindowTrackingAdaptor;
+class SnapEngine;
 
 /**
- * @brief Thin INavigationActions adapter for snap-mode navigation.
+ * @brief Thin INavigationActions adapter for SnapEngine.
  *
- * Snap-mode navigation logic historically lives in WindowTrackingAdaptor
- * (focusAdjacentZone, moveWindowToAdjacentZone, etc.). This adapter
- * presents that logic under the INavigationActions interface so the
- * daemon's shortcut handlers can dispatch through ScreenModeRouter
- * without branching on mode.
- *
- * In a future refactor, the navigation logic should move out of
- * WindowTrackingAdaptor into SnapEngine (where it belongs — the D-Bus
- * adaptor should be a thin facade, not a partial engine). When that
- * happens, this adapter's implementation flips from forwarding to WTA
- * to forwarding to SnapEngine, without the daemon or the interface
- * needing to change.
+ * Maps INavigationActions user-intent calls to SnapEngine's concrete
+ * navigation methods. The screen parameter is forwarded where the engine
+ * needs it and dropped where the engine resolves the target from its own
+ * last-active-window shadow (via the WindowTrackingAdaptor back-ref).
  *
  * Parameter mapping:
- *   - `focusInDirection` → WTA::focusAdjacentZone
- *   - `moveFocusedInDirection` → WTA::moveWindowToAdjacentZone
- *   - `swapFocusedInDirection` → WTA::swapWindowWithAdjacentZone
- *   - `moveFocusedToPosition(pos, screen)` → WTA::snapToZoneByNumber(pos, screen)
- *   - `rotateWindows(cw, screen)` → WTA::rotateWindowsInLayout(cw, screen)
- *   - `reapplyLayout(screen)` → WTA::resnapToNewLayout()
- *                             (WTA's implementation is screen-agnostic)
- *   - `toggleFocusedFloat(screen)` → WTA::toggleWindowFloat()
- *   - `cycleFocus(forward, screen)` → WTA::cycleWindowsInZone(forward)
+ *   - `focusInDirection(dir, screen)` → engine->focusInDirection(dir)
+ *   - `moveFocusedInDirection(dir, screen)` → engine->moveFocusedInDirection(dir)
+ *   - `swapFocusedInDirection(dir, screen)` → engine->swapFocusedInDirection(dir)
+ *   - `moveFocusedToPosition(pos, screen)` → engine->moveFocusedToPosition(pos, screen)
+ *   - `rotateWindows(cw, screen)` → engine->rotateWindowsInLayout(cw, screen)
+ *   - `reapplyLayout(screen)` → engine->resnapToNewLayout()
+ *   - `snapAllWindows(screen)` → engine->snapAllWindows(screen)
+ *   - `toggleFocusedFloat(screen)` → engine->toggleFocusedFloat()
+ *   - `cycleFocus(forward, screen)` → engine->cycleFocus(forward)
+ *   - `pushToEmptyZone(screen)` → engine->pushFocusedToEmptyZone(screen)
+ *   - `restoreFocusedWindow(screen)` → engine->restoreFocusedWindow()
  */
 class PLASMAZONES_EXPORT SnapNavigationAdapter : public INavigationActions
 {
 public:
-    explicit SnapNavigationAdapter(WindowTrackingAdaptor* adaptor);
+    explicit SnapNavigationAdapter(SnapEngine* engine);
     ~SnapNavigationAdapter() override = default;
 
     void focusInDirection(const QString& direction, const QString& screenId) override;
@@ -57,7 +51,7 @@ public:
     void restoreFocusedWindow(const QString& screenId) override;
 
 private:
-    WindowTrackingAdaptor* m_adaptor; // not owned
+    SnapEngine* m_engine; // not owned
 };
 
 } // namespace PlasmaZones

@@ -37,6 +37,11 @@ void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
     m_zoneDetectionAdaptor = adaptor;
 }
 
+void SnapEngine::setWindowTrackingAdaptor(WindowTrackingAdaptor* adaptor)
+{
+    m_wta = adaptor;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // IEngineLifecycle implementation
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -68,7 +73,15 @@ void SnapEngine::windowFocused(const QString& windowId, const QString& screenId)
 }
 
 // toggleWindowFloat and setWindowFloat are implemented in snapengine/float.cpp
-// focusInDirection, swapInDirection, rotateWindows, moveToPosition are in snapengine/navigation.cpp
+// Navigation entry points (focusInDirection, moveFocusedInDirection,
+// swapFocusedInDirection, moveFocusedToPosition, pushFocusedToEmptyZone,
+// restoreFocusedWindow, toggleFocusedFloat, cycleFocus,
+// rotateWindowsInLayout, resnapCurrentAssignments, resnapToNewLayout)
+// live in snapengine/navigation_actions.cpp and call back into
+// WindowTrackingAdaptor via m_wta for target resolution and shared
+// bookkeeping helpers. The resnap-by-layout-switch pipeline
+// (calculateResnapEntriesFromAutotileOrder, snapAllWindows etc.) lives
+// in snapengine/navigation.cpp unchanged.
 
 void SnapEngine::assignToZones(const QString& windowId, const QStringList& zoneIds, const QString& screenId)
 {

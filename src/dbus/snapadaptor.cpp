@@ -43,7 +43,16 @@ SnapAdaptor::SnapAdaptor(SnapEngine* engine, WindowTrackingAdaptor* adaptor, QOb
     // for proper bookkeeping (windowSnapped per entry) + applyGeometriesBatch emission.
     connect(m_engine, &SnapEngine::resnapToNewLayoutRequested, adaptor, &WindowTrackingAdaptor::handleBatchedResnap);
 
-    qCDebug(lcDbusWindow) << "SnapAdaptor initialized with 5 signal connections";
+    // Batched geometry application: rotate / resnap / snap-all paths build
+    // a WindowGeometryList and emit it here. WTA's applyGeometriesBatch
+    // signal is the D-Bus surface.
+    connect(m_engine, &SnapEngine::applyGeometriesBatch, adaptor, &WindowTrackingAdaptor::applyGeometriesBatch);
+
+    // Window activation: focus-in-direction and cycle operations resolve a
+    // target window and ask the KWin effect to raise/focus it.
+    connect(m_engine, &SnapEngine::activateWindowRequested, adaptor, &WindowTrackingAdaptor::activateWindowRequested);
+
+    qCDebug(lcDbusWindow) << "SnapAdaptor initialized with 7 signal connections";
 }
 
 void SnapAdaptor::clearEngine()

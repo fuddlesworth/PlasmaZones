@@ -232,6 +232,7 @@ set(plasmazones_core_SRCS
     snap/snapengine/float.cpp
     snap/snapengine/lifecycle.cpp
     snap/snapengine/navigation.cpp
+    snap/snapengine/navigation_actions.cpp
 )
 
 # Create core library

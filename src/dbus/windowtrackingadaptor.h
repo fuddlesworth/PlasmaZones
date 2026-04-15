@@ -146,6 +146,22 @@ public:
     }
 
     /**
+     * @brief Access the shared snap-navigation target resolver.
+     *
+     * Used by SnapEngine's navigation methods (focusInDirection,
+     * moveFocusedInDirection, etc.) which were moved out of this adaptor
+     * but still need to consult the resolver that the adaptor constructs
+     * and owns. Returns nullptr if the adaptor hasn't finished constructing
+     * yet — callers must null-check.
+     *
+     * @see SnapEngine::setWindowTrackingAdaptor for the coupling rationale.
+     */
+    SnapNavigationTargetResolver* targetResolver() const
+    {
+        return m_targetResolver.get();
+    }
+
+    /**
      * @brief Same as resnapCurrentAssignments but tags the batch with a
      *        non-"resnap" action so the kwin-effect skips its snap-assist
      *        continuation. Used by the virtual-screen reconfigure path
@@ -954,6 +970,14 @@ private Q_SLOTS:
      */
     void onPanelGeometryReady();
 
+public:
+    /// Resolve a resnap filter (empty / physical / virtual screen id) into
+    /// the concrete list of snap-mode screens the resnap should touch.
+    /// Consults the shared ScreenModeRouter to drop autotile screens from
+    /// the candidate set — the router lives on WTA so this helper is
+    /// exposed publicly so SnapEngine's navigation methods can reuse it.
+    QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
+
 private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Constants
@@ -967,12 +991,6 @@ private:
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods - Private
     // ═══════════════════════════════════════════════════════════════════════════════
-
-    /// Resolve a resnap filter (empty / physical / virtual screen id) into
-    /// the concrete list of snap-mode screens this resnap should touch.
-    /// Used by resnapCurrentAssignments and resnapForVirtualScreenReconfigure
-    /// so the service-level resnap helper can stay pure and per-screen.
-    QStringList resolveSnapModeScreensForResnap(const QString& screenFilter) const;
 
     /**
      * @brief Validate window ID and log warning if empty

@@ -413,8 +413,18 @@ bool Daemon::init()
                 wta->loadState();
         });
 
-    // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
+    // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection).
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
+
+    // Wire SnapEngine's back-reference to the window tracking adaptor.
+    // SnapEngine's navigation methods (focusInDirection, moveFocusedInDirection, …)
+    // were moved out of WindowTrackingAdaptor and need to reach back into the
+    // adaptor for shared state that hasn't been migrated yet: the target
+    // resolver, the last-active window/screen shadow, and the snap-
+    // bookkeeping helpers (windowSnapped, windowUnsnapped, recordSnapIntent,
+    // clearPreTileGeometry). A future refactor should move that state onto
+    // SnapEngine or WindowTrackingService and retire the back-reference.
+    m_snapEngine->setWindowTrackingAdaptor(m_windowTrackingAdaptor);
 
     // Central routing table: single source of truth for "which engine owns
     // screen X". Every window-lifecycle / resnap / restore entry point in the
@@ -424,16 +434,14 @@ bool Daemon::init()
         std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
     m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
 
-    // Navigation-intent dispatch: create thin INavigationActions adapters
-    // and wire them through the router so daemon/navigation.cpp shortcut
-    // handlers can call navigatorFor(screenId)->foo() instead of branching
-    // on mode. The snap adapter forwards to WindowTrackingAdaptor because
-    // that's where the snap navigation logic lives today — a future
-    // refactor should lift the logic into SnapEngine and this adapter's
-    // impl would flip to forwarding to SnapEngine instead, invisible to
-    // the router and callers.
+    // Navigation-intent dispatch: thin INavigationActions adapters wired
+    // through the router so daemon/navigation.cpp shortcut handlers dispatch
+    // via router->navigatorFor(screenId)->foo() instead of branching on mode.
+    // Both adapters forward to their respective engine — SnapEngine now
+    // owns the snap-mode navigation methods that used to live on
+    // WindowTrackingAdaptor (see src/snap/snapengine/navigation_actions.cpp).
     m_autotileNavigationAdapter = std::make_unique<AutotileNavigationAdapter>(m_autotileEngine.get());
-    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_windowTrackingAdaptor);
+    m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
     m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
 
     // Stateless façade for VS swap/rotate. Held here so navigation handlers
