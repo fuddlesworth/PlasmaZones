@@ -6,7 +6,7 @@ Tracks before/after numbers for the refactor on branch `refactor/dbus-performanc
 
 ```bash
 cmake --build build --parallel $(nproc) --target bench_dbus_adaptors
-./build/tests/unit/bench_dbus_adaptors -tickcounter
+./build/bin/bench_dbus_adaptors -tickcounter
 # or
 ctest --test-dir build -R bench_dbus_adaptors --output-on-failure
 ```

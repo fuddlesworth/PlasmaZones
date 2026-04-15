@@ -299,11 +299,13 @@ void LayoutAdaptor::invalidateLayoutJsonCacheFor(const QUuid& uuid)
 
 // Property-name constants for the compact layoutPropertyChanged signal.
 // Centralizes the wire format so the three mutators and any future
-// subscriber-side dispatcher cannot drift on spelling.
+// subscriber-side dispatcher cannot drift on spelling. Stored as
+// `const QString` (via QStringLiteral's static UTF-16 storage) so the
+// emit sites don't allocate a temporary QString on every property change.
 namespace {
-constexpr QLatin1String kPropHidden{"hidden"};
-constexpr QLatin1String kPropAutoAssign{"autoAssign"};
-constexpr QLatin1String kPropAspectRatioClass{"aspectRatioClass"};
+const QString kPropHidden = QStringLiteral("hidden");
+const QString kPropAutoAssign = QStringLiteral("autoAssign");
+const QString kPropAspectRatioClass = QStringLiteral("aspectRatioClass");
 } // namespace
 
 void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
@@ -335,7 +337,7 @@ void LayoutAdaptor::setLayoutHidden(const QString& layoutId, bool hidden)
     // signal (3 strings + 1 bool over the wire) instead of layoutChanged
     // with the full 5–20 KB JSON payload. layoutListChanged is likewise
     // not emitted — the list didn't change.
-    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropHidden), QDBusVariant(hidden));
+    Q_EMIT layoutPropertyChanged(layoutId, kPropHidden, QDBusVariant(hidden));
 }
 
 void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
@@ -355,7 +357,7 @@ void LayoutAdaptor::setLayoutAutoAssign(const QString& layoutId, bool enabled)
     invalidateLayoutJsonCacheFor(layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "autoAssign:" << enabled;
-    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropAutoAssign), QDBusVariant(enabled));
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAutoAssign, QDBusVariant(enabled));
 }
 
 void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspectRatioClass)
@@ -374,7 +376,7 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
     invalidateLayoutJsonCacheFor(layout->id());
 
     qCInfo(lcDbusLayout) << "Set layout" << layoutId << "aspectRatioClass:" << aspectRatioClass;
-    Q_EMIT layoutPropertyChanged(layoutId, QString(kPropAspectRatioClass), QDBusVariant(aspectRatioClass));
+    Q_EMIT layoutPropertyChanged(layoutId, kPropAspectRatioClass, QDBusVariant(aspectRatioClass));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
