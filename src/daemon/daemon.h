@@ -41,7 +41,7 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
-class IWindowEngine;
+class IEngineLifecycle;
 class IConfigBackend;
 class ScreenModeRouter;
 class ScriptedAlgorithmLoader;
@@ -133,8 +133,8 @@ private:
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
-    IWindowEngine* engineForScreen(const QString& screenId) const;
+    /** @brief Return the active IEngineLifecycle for a screen (autotile or snap) */
+    IEngineLifecycle* engineForScreen(const QString& screenId) const;
 
     /**
      * @brief Convenience mode check: routed through m_screenModeRouter.

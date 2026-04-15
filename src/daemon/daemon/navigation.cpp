@@ -27,7 +27,7 @@ namespace PlasmaZones {
 // Engine routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-IWindowEngine* Daemon::engineForScreen(const QString& screenId) const
+IEngineLifecycle* Daemon::engineForScreen(const QString& screenId) const
 {
     // Single source of truth. Delegates to the central router so daemon
     // navigation handlers, adaptor D-Bus entry points, and resnap paths

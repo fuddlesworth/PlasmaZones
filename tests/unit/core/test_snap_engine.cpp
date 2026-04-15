@@ -123,13 +123,11 @@ private Q_SLOTS:
     {
         SnapEngine engine(nullptr, m_wts, nullptr, nullptr, nullptr);
 
+        QCOMPARE(engine.lastActiveScreenId(), QString());
+
         engine.windowFocused(QStringLiteral("app|uuid1"), QStringLiteral("DP-2"));
 
-        // Verify indirectly: moveInDirection("") triggers feedback with m_lastActiveScreenName
-        QSignalSpy feedbackSpy(&engine, &SnapEngine::navigationFeedback);
-        engine.moveInDirection(QString()); // empty direction triggers feedback
-        QCOMPARE(feedbackSpy.count(), 1);
-        QCOMPARE(feedbackSpy.at(0).at(5).toString(), QStringLiteral("DP-2"));
+        QCOMPARE(engine.lastActiveScreenId(), QStringLiteral("DP-2"));
     }
 
     // =========================================================================

@@ -12,7 +12,7 @@
 namespace PlasmaZones {
 
 class AutotileEngine;
-class IWindowEngine;
+class IEngineLifecycle;
 class LayoutManager;
 class SnapEngine;
 
@@ -68,7 +68,7 @@ public:
     /// neither engine is wired or the screen has no tracked mode yet.
     /// Callers should treat nullptr as "do nothing" — they must not
     /// reach into a specific engine directly.
-    IWindowEngine* engineFor(const QString& screenId) const;
+    IEngineLifecycle* engineFor(const QString& screenId) const;
 
     /// Convenience predicates. @see modeFor for the fallback semantics.
     bool isSnapMode(const QString& screenId) const;

@@ -425,7 +425,7 @@ bool Daemon::init()
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
     // state, not just autotile). This is heavier than a targeted save but ensures consistency
     // — the autotile window orders are embedded in WTA's save cycle via the serialization
-    // delegates below. The engine-level delegates exist to satisfy the IWindowEngine interface.
+    // delegates below. The engine-level delegates exist to satisfy the IEngineLifecycle interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {

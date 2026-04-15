@@ -34,7 +34,7 @@ void SnapEngine::setZoneDetectionAdaptor(ZoneDetectionAdaptor* adaptor)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IWindowEngine implementation
+// IEngineLifecycle implementation
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool SnapEngine::isActiveOnScreen(const QString& screenId) const

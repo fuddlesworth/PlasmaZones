@@ -109,7 +109,7 @@ public:
     /**
      * @brief Set engine references for routing operations per-screen
      *
-     * The adaptor routes IWindowEngine operations to the correct engine:
+     * The adaptor routes IEngineLifecycle operations to the correct engine:
      * AutotileEngine for autotile screens, SnapEngine for manual-zone screens.
      * Both must be set before navigation/float D-Bus calls work.
      *

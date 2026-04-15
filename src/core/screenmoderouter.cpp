@@ -53,7 +53,7 @@ AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
     return AssignmentEntry::Snapping;
 }
 
-IWindowEngine* ScreenModeRouter::engineFor(const QString& screenId) const
+IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
 {
     switch (modeFor(screenId)) {
     case AssignmentEntry::Autotile:

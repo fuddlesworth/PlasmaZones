@@ -27,7 +27,7 @@ class ZoneDetectionAdaptor;
 /**
  * @brief Engine for manual zone-based window snapping
  *
- * Implements IWindowEngine for screens using manual zone layouts (non-autotile).
+ * Implements IEngineLifecycle for screens using manual zone layouts (non-autotile).
  * Handles auto-snap on window open, zone-based navigation, floating state,
  * rotation, and resnap operations.
  *
@@ -36,9 +36,9 @@ class ZoneDetectionAdaptor;
  * on top: auto-snap fallback chains, directional navigation via zone
  * adjacency, and layout-change resnapping.
  *
- * @see IWindowEngine, AutotileEngine, WindowTrackingService
+ * @see IEngineLifecycle, AutotileEngine, WindowTrackingService
  */
-class PLASMAZONES_EXPORT SnapEngine : public QObject, public IWindowEngine
+class PLASMAZONES_EXPORT SnapEngine : public QObject, public IEngineLifecycle
 {
     Q_OBJECT
 
@@ -48,40 +48,25 @@ public:
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // IWindowEngine implementation
+    // IEngineLifecycle implementation
     // ═══════════════════════════════════════════════════════════════════════════
 
     bool isActiveOnScreen(const QString& screenId) const override;
-    using IWindowEngine::windowOpened; // Expose 2-arg convenience overload
+    using IEngineLifecycle::windowOpened; // Expose 2-arg convenience overload
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
     void windowClosed(const QString& windowId) override;
     void windowFocused(const QString& windowId, const QString& screenId) override;
     void toggleWindowFloat(const QString& windowId, const QString& screenId) override;
     void setWindowFloat(const QString& windowId, bool shouldFloat) override;
-    void focusInDirection(const QString& direction, const QString& action) override;
-    void swapInDirection(const QString& direction, const QString& action) override;
-    void rotateWindows(bool clockwise, const QString& screenId) override;
-    void moveToPosition(const QString& windowId, int position, const QString& screenId) override;
     void saveState() override;
     void loadState() override;
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Snap-specific navigation methods
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Move the focused window to the adjacent zone in a direction
-     * @param direction Direction string ("left", "right", "up", "down")
-     * @note Effect-first: emits moveWindowToZoneRequested for KWin effect to resolve and apply
-     */
-    void moveInDirection(const QString& direction);
-
-    /**
-     * @brief Push the focused window to the first empty zone
-     * @param screenId Screen to find empty zone on
-     * @note Effect-first: emits moveWindowToZoneRequested for KWin effect to resolve and apply
-     */
-    void pushToEmptyZone(const QString& screenId);
+    // Navigation is daemon-driven for snap mode — handled by
+    // WindowTrackingAdaptor's moveWindowToAdjacentZone / focusAdjacentZone
+    // / swapWindowWithAdjacentZone / rotateWindowsInLayout / snapToZoneByNumber
+    // pipeline. SnapEngine does NOT implement IEngineLifecycle navigation
+    // methods because IEngineLifecycle no longer has any — see
+    // src/core/iwindowengine.h for the rationale.
 
     /**
      * @brief Resnap windows from previous layout to current layout after layout switch
@@ -144,12 +129,6 @@ public:
      */
     void snapAllWindows(const QString& screenId);
 
-    /**
-     * @brief Cycle focus between windows stacked in the same zone
-     * @param forward true to cycle to next window, false to cycle to previous
-     */
-    void cycleWindowsInZone(bool forward);
-
     // ═══════════════════════════════════════════════════════════════════════════
     // Window restore (auto-snap on window open)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -206,7 +185,7 @@ public:
      * @brief Set persistence callbacks for save/load
      *
      * KConfig persistence is owned by WindowTrackingAdaptor (WTS is KConfig-free).
-     * These callbacks allow SnapEngine to fulfill the IWindowEngine persistence
+     * These callbacks allow SnapEngine to fulfill the IEngineLifecycle persistence
      * contract without introducing KConfig as a dependency.
      *
      * @param saveFn Called by saveState() to persist WTS state
@@ -216,6 +195,15 @@ public:
     {
         m_saveFn = std::move(saveFn);
         m_loadFn = std::move(loadFn);
+    }
+
+    /// Last screen the engine saw via windowFocused. Used for OSD fallback
+    /// when a navigation failure needs to cite a screen and the live cursor
+    /// hasn't landed on one yet. Exposed as a const getter so tests can
+    /// verify the focus-tracking contract without dummy signal stubs.
+    QString lastActiveScreenId() const
+    {
+        return m_lastActiveScreenId;
     }
 
 Q_SIGNALS:
