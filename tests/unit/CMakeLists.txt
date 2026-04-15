@@ -341,6 +341,18 @@ add_executable(test_dbus_validation dbus/test_dbus_validation.cpp)
 target_link_libraries(test_dbus_validation PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_compositor_common)
 add_test(NAME test_dbus_validation COMMAND test_dbus_validation)
 
+# Micro-benchmarks for D-Bus adaptor hot paths. Drives the
+# refactor/dbus-performance branch (SettingsAdaptor value-equality guard,
+# LayoutAdaptor signal split, JSON cache reuse). Run with
+# `ctest -R bench_dbus_adaptors` to capture numbers against
+# docs/perf/dbus-baseline.md. Not in _all_tests by default because
+# benchmark output is verbose; it is still added via add_test() so
+# `ctest -R bench` can select it.
+add_executable(bench_dbus_adaptors dbus/bench_dbus_adaptors.cpp)
+target_link_libraries(bench_dbus_adaptors PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
+set_tests_properties(bench_dbus_adaptors PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
 #                      TriggerParser, WindowIdUtils)
