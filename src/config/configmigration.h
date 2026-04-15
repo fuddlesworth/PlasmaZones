@@ -75,6 +75,13 @@ public:
 private:
     ConfigMigration() = default;
 
+    /// Actual implementation of ensureJsonConfig() — runs the file
+    /// check / INI→JSON / version-upgrade logic unconditionally. The
+    /// public ensureJsonConfig() wraps this in the process-level
+    /// short-circuit guard so repeat calls on the startup hot path are
+    /// free.
+    static bool ensureJsonConfigImpl();
+
     // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
     static QJsonValue convertValue(const QVariant& value);

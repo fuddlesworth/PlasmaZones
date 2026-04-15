@@ -22,6 +22,7 @@
 #include <QDBusReply>
 
 #include "pz_i18n.h"
+#include <QGlobalStatic>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -693,67 +694,28 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     m_zoneManager->setZoneData(zoneId, zone);
 }
 
-void EditorController::refreshGlobalZonePadding()
-{
-    int newValue = SettingsDbusQueries::queryGlobalZonePadding();
-
-    if (m_cachedGlobalZonePadding != newValue) {
-        m_cachedGlobalZonePadding = newValue;
-        Q_EMIT globalZonePaddingChanged();
-    }
-}
-
-void EditorController::refreshGlobalOuterGap()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOuterGap();
-    bool newUsePerSide = SettingsDbusQueries::queryGlobalUsePerSideOuterGap();
-    int newTop = SettingsDbusQueries::queryGlobalOuterGapTop();
-    int newBottom = SettingsDbusQueries::queryGlobalOuterGapBottom();
-    int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
-    int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
-
-    bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
-        || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
-        || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
-
-    m_cachedGlobalOuterGap = newValue;
-    m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
-    m_cachedGlobalOuterGapTop = newTop;
-    m_cachedGlobalOuterGapBottom = newBottom;
-    m_cachedGlobalOuterGapLeft = newLeft;
-    m_cachedGlobalOuterGapRight = newRight;
-
-    if (changed) {
-        Q_EMIT globalOuterGapChanged();
-    }
-}
-
-void EditorController::refreshGlobalOverlayDisplayMode()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOverlayDisplayMode();
-
-    if (m_cachedGlobalOverlayDisplayMode != newValue) {
-        m_cachedGlobalOverlayDisplayMode = newValue;
-        Q_EMIT globalOverlayDisplayModeChanged();
-    }
-}
+Q_GLOBAL_STATIC_WITH_ARGS(QStringList, gapOverlayKeys,
+                          (QStringList{
+                              QStringLiteral("zonePadding"),
+                              QStringLiteral("outerGap"),
+                              QStringLiteral("usePerSideOuterGap"),
+                              QStringLiteral("outerGapTop"),
+                              QStringLiteral("outerGapBottom"),
+                              QStringLiteral("outerGapLeft"),
+                              QStringLiteral("outerGapRight"),
+                              QStringLiteral("overlayDisplayMode"),
+                          }))
 
 void EditorController::refreshGlobalGapOverlaySettings()
 {
-    // Collapses the three individual refreshers above into a single daemon
-    // round-trip. Prior to this the editor ctor path made 8 sequential
+    // Fetches every gap and overlay key the editor cares about in a single
+    // daemon round-trip. Prior to this the editor ctor path made 8 sequential
     // blocking getSetting() calls (1 zonePadding + 6 outerGap-related +
     // 1 overlayDisplayMode) — each constructing a fresh QDBusInterface.
     // SettingsAdaptor::getSettings reads straight from the in-memory
     // registry so the daemon-side cost is unchanged, and we avoid N-1
     // extra IPC round-trips on the editor startup hot path.
-    static const QStringList kKeys = {
-        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
-        QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
-        QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
-    };
-
-    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kKeys);
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(*gapOverlayKeys);
 
     // Helper: read an int from the batch result, clamping negative values
     // (which the single-key helpers treat as "invalid, use default") to the

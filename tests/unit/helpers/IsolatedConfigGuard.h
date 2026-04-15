@@ -56,6 +56,11 @@ public:
         } else {
             qputenv("XDG_DATA_HOME", m_oldDataHome.toUtf8());
         }
+        // Clear the migration short-circuit too, so any code path between
+        // this guard's dtor and the next guard's ctor doesn't see a
+        // "migration already done" verdict that was computed against the
+        // now-restored real XDG directories.
+        ConfigMigration::resetMigrationGuardForTesting();
     }
 
     /// Path to the temporary XDG_CONFIG_HOME directory.

@@ -670,7 +670,10 @@ QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)
         }
         auto it = m_getters.find(key);
         if (it == m_getters.end()) {
-            qCWarning(lcDbusSettings) << "getSettings: unknown key" << key;
+            // Unknown keys are expected when callers probe for optional
+            // keys; the batch contract is "omit missing, caller uses its
+            // own default". Log at debug so production logs stay quiet.
+            qCDebug(lcDbusSettings) << "getSettings: unknown key" << key;
             continue;
         }
         QVariant value = it.value()();

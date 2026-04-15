@@ -364,14 +364,13 @@ public:
     Q_INVOKABLE void clearZonePaddingOverride();
     Q_INVOKABLE void clearOuterGapOverride();
     Q_INVOKABLE void clearOverlayDisplayModeOverride();
-    Q_INVOKABLE void refreshGlobalZonePadding();
-    Q_INVOKABLE void refreshGlobalOuterGap();
-    Q_INVOKABLE void refreshGlobalOverlayDisplayMode();
 
-    // Batched alternative used on the startup hot path: fetches every gap
-    // and overlay key the three individual refreshers above read, but in a
-    // single daemon round-trip instead of eight sequential ones. Emits the
-    // same change signals when the new values differ from the cache.
+    // Fetches every gap and overlay key (zonePadding + outerGap cluster +
+    // overlayDisplayMode) in a single daemon round-trip. Emits
+    // globalZonePaddingChanged / globalOuterGapChanged /
+    // globalOverlayDisplayModeChanged only when the new values differ
+    // from the cached copies. Called from loadEditorSettings() on the
+    // startup hot path.
     void refreshGlobalGapOverlaySettings();
     void setOverlayDisplayMode(int mode);
     void setUseFullScreenGeometry(bool enabled);

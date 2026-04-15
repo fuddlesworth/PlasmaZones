@@ -3,8 +3,10 @@
 
 #include "SettingsDbusQueries.h"
 #include "../../core/constants.h"
+#include "../../core/logging.h"
 
 #include <QDBusConnection>
+#include <QDBusError>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusVariant>
@@ -14,13 +16,52 @@ namespace SettingsDbusQueries {
 
 namespace {
 
-// Hard cap on blocking settings calls. Qt's default D-Bus timeout is 25
-// seconds, which is long enough to freeze the editor if the daemon is
-// unresponsive. The daemon's getSetting handler is an in-memory hash lookup
-// (src/dbus/settingsadaptor.cpp:608), so a healthy response is well under
-// a millisecond — 500 ms is generous while still degrading to defaults
-// quickly when the daemon event loop is blocked.
-constexpr int SettingsCallTimeoutMs = 500;
+// Returns a QDBusInterface as a prvalue so callers can construct-in-place
+// via guaranteed copy elision. QDBusInterface inherits QObject which is
+// non-copyable/non-movable, so anything other than a direct prvalue return
+// would fail to compile. Callers must call setTimeout() themselves after
+// construction if they want a non-default timeout.
+QDBusInterface createSettingsInterface()
+{
+    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
+                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
+}
+
+// Fetch requested keys individually via getSetting(). Used as a fallback
+// when the batched getSettings() call isn't available on the remote side
+// (e.g. the editor is a newer build than the running daemon), so users
+// don't silently see defaults for their configured gap/overlay values
+// during a post-upgrade / pre-daemon-restart window.
+QVariantMap querySettingsPerKey(const QStringList& keys)
+{
+    QVariantMap result;
+    QDBusInterface iface = createSettingsInterface();
+    if (!iface.isValid()) {
+        return result;
+    }
+    iface.setTimeout(DBus::SyncCallTimeoutMs);
+    for (const QString& key : keys) {
+        if (key.isEmpty()) {
+            continue;
+        }
+        QDBusReply<QDBusVariant> reply = iface.call(QStringLiteral("getSetting"), key);
+        if (!reply.isValid()) {
+            continue;
+        }
+        QVariant value = reply.value().variant();
+        if (!value.isValid()) {
+            continue;
+        }
+        // getSetting() returns an empty string sentinel for unknown keys
+        // (see settingsadaptor.cpp). Treat that as "not found" so the
+        // caller falls back to its default rather than coercing "" to 0.
+        if (value.typeId() == QMetaType::QString && value.toString().isEmpty()) {
+            continue;
+        }
+        result.insert(key, value);
+    }
+    return result;
+}
 
 } // namespace
 
@@ -30,31 +71,42 @@ QVariantMap querySettingsBatch(const QStringList& keys)
         return QVariantMap();
     }
 
-    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
-
+    QDBusInterface settingsIface = createSettingsInterface();
     if (!settingsIface.isValid()) {
         return QVariantMap();
     }
+    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
 
-    settingsIface.setTimeout(SettingsCallTimeoutMs);
     QDBusReply<QVariantMap> reply = settingsIface.call(QStringLiteral("getSettings"), keys);
-    if (!reply.isValid()) {
-        return QVariantMap();
+    if (reply.isValid()) {
+        return reply.value();
     }
-    return reply.value();
+
+    // Stale daemon: this build knows about getSettings() but the daemon
+    // doesn't. Fall back to individual getSetting() calls so the editor
+    // still sees the user's real configured values instead of defaults.
+    // Other error types (timeout, service unreachable) would also fail
+    // per-key, so there's no point retrying those — return empty and let
+    // callers fall back to hardcoded defaults.
+    const QDBusError::ErrorType errType = reply.error().type();
+    if (errType == QDBusError::UnknownMethod) {
+        qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
+                          << "Restart plasmazones-daemon to pick up the batched path.";
+        return querySettingsPerKey(keys);
+    }
+
+    qCWarning(lcDbus) << "getSettings() failed:" << reply.error().message() << "(type" << errType << ")";
+    return QVariantMap();
 }
 
 int queryIntSetting(const QString& settingKey, int defaultValue)
 {
-    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
-
+    QDBusInterface settingsIface = createSettingsInterface();
     if (!settingsIface.isValid()) {
         return defaultValue;
     }
+    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
 
-    settingsIface.setTimeout(SettingsCallTimeoutMs);
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {
         return defaultValue;
@@ -68,62 +120,20 @@ int queryIntSetting(const QString& settingKey, int defaultValue)
     return value;
 }
 
-int queryGlobalZonePadding()
-{
-    return queryIntSetting(QStringLiteral("zonePadding"), Defaults::ZonePadding);
-}
-
-int queryGlobalOuterGap()
-{
-    return queryIntSetting(QStringLiteral("outerGap"), Defaults::OuterGap);
-}
-
 bool queryBoolSetting(const QString& settingKey, bool defaultValue)
 {
-    QDBusInterface settingsIface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
-
+    QDBusInterface settingsIface = createSettingsInterface();
     if (!settingsIface.isValid()) {
         return defaultValue;
     }
+    settingsIface.setTimeout(DBus::SyncCallTimeoutMs);
 
-    settingsIface.setTimeout(SettingsCallTimeoutMs);
     QDBusReply<QDBusVariant> reply = settingsIface.call(QStringLiteral("getSetting"), settingKey);
     if (!reply.isValid()) {
         return defaultValue;
     }
 
     return reply.value().variant().toBool();
-}
-
-bool queryGlobalUsePerSideOuterGap()
-{
-    return queryBoolSetting(QStringLiteral("usePerSideOuterGap"), false);
-}
-
-int queryGlobalOuterGapTop()
-{
-    return queryIntSetting(QStringLiteral("outerGapTop"), Defaults::OuterGap);
-}
-
-int queryGlobalOuterGapBottom()
-{
-    return queryIntSetting(QStringLiteral("outerGapBottom"), Defaults::OuterGap);
-}
-
-int queryGlobalOuterGapLeft()
-{
-    return queryIntSetting(QStringLiteral("outerGapLeft"), Defaults::OuterGap);
-}
-
-int queryGlobalOuterGapRight()
-{
-    return queryIntSetting(QStringLiteral("outerGapRight"), Defaults::OuterGap);
-}
-
-int queryGlobalOverlayDisplayMode()
-{
-    return queryIntSetting(QStringLiteral("overlayDisplayMode"), 0);
 }
 
 } // namespace SettingsDbusQueries
