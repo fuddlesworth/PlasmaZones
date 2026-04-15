@@ -118,5 +118,29 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Physical screen whose virtual screen configuration changed."/>
             </arg>
         </signal>
+        <method name="swapVirtualScreenInDirection">
+            <annotation name="org.gtk.GDBus.DocString" value="Swap the region of the given virtual screen with its adjacent sibling VS in the requested direction within the same physical monitor. VS IDs, display names, and indices are preserved — only the region fields are exchanged — so all per-VS state (windows, layouts, autotile) follows the new geometry via Settings::virtualScreenConfigsChanged propagation. Returns an empty string on success, otherwise a stable token: not_virtual, no_subdivision, unknown_vs, no_sibling, invalid_direction, settings_rejected."/>
+            <arg name="currentVirtualScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Full virtual screen ID (e.g. Dell:U2722D:115107/vs:0)."/>
+            </arg>
+            <arg name="direction" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="One of left, right, up, down."/>
+            </arg>
+            <arg name="reason" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Empty on success, otherwise a stable rejection token."/>
+            </arg>
+        </method>
+        <method name="rotateVirtualScreens">
+            <annotation name="org.gtk.GDBus.DocString" value="Rotate every virtual screen region on a physical monitor through a spatial clockwise ring order. VS IDs are preserved — only the region fields are cycled. Returns an empty string on success, otherwise a stable token: not_virtual, no_subdivision, settings_rejected."/>
+            <arg name="physicalScreenId" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Stable EDID-based physical screen identifier."/>
+            </arg>
+            <arg name="clockwise" type="b" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="True to rotate clockwise (each VS inherits its ring successor's region), false for counter-clockwise."/>
+            </arg>
+            <arg name="reason" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Empty on success, otherwise a stable rejection token."/>
+            </arg>
+        </method>
     </interface>
 </node>

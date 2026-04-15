@@ -74,14 +74,55 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         return false;
     }
 
-    if (m_virtualConfigs.value(physicalScreenId) == config) {
+    const VirtualScreenConfig oldConfig = m_virtualConfigs.value(physicalScreenId);
+    if (oldConfig == config) {
         return true;
+    }
+
+    // Detect "regions-only" changes where the VS ID set is unchanged — same
+    // ids, same count, same indices, same display names. This lets downstream
+    // handlers take a lightweight path that only updates geometry without
+    // re-running mode resolution, orphan cleanup, window migration, etc.
+    //
+    // The check is structured as "every non-region field on every def is
+    // identical (matched by id) — only the rect differs". We hash old defs
+    // by id so the match is order-independent, since callers may reorder
+    // the screens vector when committing region edits.
+    bool regionsOnly = false;
+    if (oldConfig.screens.size() == config.screens.size() && oldConfig.screens.size() >= 2) {
+        regionsOnly = true;
+        QHash<QString, const VirtualScreenDef*> oldById;
+        oldById.reserve(oldConfig.screens.size());
+        for (const auto& def : oldConfig.screens) {
+            oldById.insert(def.id, &def);
+        }
+        for (const auto& newDef : config.screens) {
+            auto it = oldById.constFind(newDef.id);
+            if (it == oldById.constEnd()) {
+                regionsOnly = false; // VS ID set changed.
+                break;
+            }
+            const VirtualScreenDef* oldDef = it.value();
+            // displayName / index / physicalScreenId changes are topology-
+            // adjacent: the OSD label changes, mode resolution may need to
+            // re-run on rename, and downstream listeners that hash on these
+            // fields must be told. Treat them as full changes.
+            if (oldDef->displayName != newDef.displayName || oldDef->index != newDef.index
+                || oldDef->physicalScreenId != newDef.physicalScreenId) {
+                regionsOnly = false;
+                break;
+            }
+        }
     }
 
     m_virtualConfigs.insert(physicalScreenId, config);
     m_effectiveScreenIdsDirty = true;
     invalidateVirtualGeometryCache(physicalScreenId);
-    Q_EMIT virtualScreensChanged(physicalScreenId);
+    if (regionsOnly) {
+        Q_EMIT virtualScreenRegionsChanged(physicalScreenId);
+    } else {
+        Q_EMIT virtualScreensChanged(physicalScreenId);
+    }
     return true;
 }
 

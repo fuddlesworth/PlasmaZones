@@ -8,9 +8,12 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../../config/settings.h"
 #include "../../core/logging.h"
+#include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
+#include "../../core/virtualscreenswapper.h"
 #include "../../dbus/windowtrackingadaptor.h"
+#include "shared/virtualscreenid.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AlgorithmRegistry.h"
 #include "../../snap/SnapEngine.h"
@@ -24,15 +27,35 @@ namespace PlasmaZones {
 // Engine routing
 // ═══════════════════════════════════════════════════════════════════════════════
 
-IWindowEngine* Daemon::engineForScreen(const QString& screenId) const
+IEngineLifecycle* Daemon::engineForScreen(const QString& screenId) const
 {
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    // Single source of truth. Delegates to the central router so daemon
+    // navigation handlers, adaptor D-Bus entry points, and resnap paths
+    // all agree on the same mode-ownership decision.
+    if (m_screenModeRouter) {
+        return m_screenModeRouter->engineFor(screenId);
+    }
+    // Fallback for very-early-startup paths where the router isn't wired
+    // yet. Mirrors the legacy logic.
+    if (isAutotileScreen(screenId)) {
         return m_autotileEngine.get();
     }
     if (m_snapEngine) {
         return m_snapEngine.get();
     }
     return nullptr;
+}
+
+// Local helper: mode check with nullptr-safe fallback. Every daemon
+// navigation handler routes through this so the autotile-vs-snap branch
+// is expressed as "does the router say autotile?" rather than inspecting
+// the engine pointer directly.
+bool Daemon::isAutotileScreen(const QString& screenId) const
+{
+    if (m_screenModeRouter) {
+        return m_screenModeRouter->isAutotileMode(screenId);
+    }
+    return m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -52,7 +75,7 @@ void Daemon::handleRotate(bool clockwise)
         qCDebug(lcDaemon) << "Rotate shortcut: no screen info";
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->rotateWindows(clockwise, screenId);
     } else if (m_windowTrackingAdaptor) {
         // Route through WTA for daemon-driven geometry computation + applyGeometriesBatch
@@ -85,7 +108,7 @@ void Daemon::handleMove(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown move navigation direction:" << static_cast<int>(direction);
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->swapFocusedInDirection(dirStr);
     } else if (m_windowTrackingAdaptor) {
         // Route through WTA for daemon-driven geometry computation + applyGeometryRequested
@@ -104,7 +127,7 @@ void Daemon::handleFocus(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown focus navigation direction:" << static_cast<int>(direction);
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("focus"));
     } else if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->focusAdjacentZone(dirStr);
@@ -118,7 +141,7 @@ void Daemon::handlePush()
         qCDebug(lcDaemon) << "PushToEmptyZone shortcut: no screen info";
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         return;
     }
     if (m_windowTrackingAdaptor) {
@@ -132,7 +155,7 @@ void Daemon::handleRestore()
     if (screenId.isEmpty()) {
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         // In autotile mode, "restore" floats the window (equivalent to unsnapping)
         m_autotileEngine->toggleFocusedWindowFloat();
         return;
@@ -153,7 +176,7 @@ void Daemon::handleSwap(NavigationDirection direction)
         qCWarning(lcDaemon) << "Unknown swap navigation direction:" << static_cast<int>(direction);
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->swapInDirection(dirStr, QStringLiteral("swap"));
     } else if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->swapWindowWithAdjacentZone(dirStr);
@@ -167,7 +190,7 @@ void Daemon::handleSnap(int zoneNumber)
         qCDebug(lcDaemon) << "SnapToZone shortcut: no screen info";
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->moveToPosition(QString(), zoneNumber, screenId);
     } else if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->snapToZoneByNumber(zoneNumber, screenId);
@@ -180,7 +203,7 @@ void Daemon::handleCycle(bool forward)
     if (screenId.isEmpty()) {
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         QString dirStr = forward ? QStringLiteral("right") : QStringLiteral("left");
         m_autotileEngine->focusInDirection(dirStr, QStringLiteral("cycle"));
     } else if (m_windowTrackingAdaptor) {
@@ -194,7 +217,7 @@ void Daemon::handleResnap()
     if (screenId.isEmpty()) {
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
     } else if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->resnapToNewLayout();
@@ -208,7 +231,7 @@ void Daemon::handleSnapAll()
         qCDebug(lcDaemon) << "SnapAllWindows shortcut: no screen info";
         return;
     }
-    if (m_autotileEngine && m_autotileEngine->isAutotileScreen(screenId)) {
+    if (isAutotileScreen(screenId)) {
         m_autotileEngine->retile(screenId);
     } else if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->snapAllWindows(screenId);
@@ -223,7 +246,7 @@ void Daemon::handleIncreaseMasterRatio()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
-    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+    if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
         return;
@@ -236,7 +259,7 @@ void Daemon::handleDecreaseMasterRatio()
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
     const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
-    if (screenId.isEmpty() || !m_autotileEngine->isAutotileScreen(screenId))
+    if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
         return;
@@ -298,6 +321,79 @@ void Daemon::resnapIfManualMode()
     m_suppressResnapOsd = 1;
     if (m_windowTrackingAdaptor) {
         m_windowTrackingAdaptor->resnapToNewLayout();
+    }
+}
+
+void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
+{
+    if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_virtualScreenDebounce.restart();
+
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
+        qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
+        return;
+    }
+    // VS swap is a monitor-scope action, so the OSD should render on the
+    // physical monitor's full geometry rather than inside one virtual screen.
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
+    const QString dirStr = navigationDirectionToString(direction);
+    if (dirStr.isEmpty()) {
+        qCWarning(lcDaemon) << "SwapVirtualScreen: unknown direction" << static_cast<int>(direction);
+        return;
+    }
+
+    // Run the swap through the daemon-held swapper. The Result enum carries
+    // the rejection reason directly, so the OSD can show a specific failure
+    // (no_subdivision, no_sibling, …) instead of echoing the raw direction.
+    // m_virtualScreenSwapper is constructed in Daemon::init() before any
+    // shortcut signals are wired, so it's always non-null on this path —
+    // no per-call assertion needed.
+    const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
+    const bool ok = (result == VirtualScreenSwapper::Result::Ok);
+    qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
+
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        // On success, surface the direction (the OSD style needs a string to
+        // render the arrow). On failure, surface the structured reason.
+        const QString osdReason = ok ? dirStr : VirtualScreenSwapper::reasonString(result);
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), osdReason, QString(), QString(), physId);
+    }
+}
+
+void Daemon::handleRotateVirtualScreens(bool clockwise)
+{
+    if (m_virtualScreenDebounce.isValid() && m_virtualScreenDebounce.elapsed() < kShortcutDebounceMs) {
+        return;
+    }
+    m_virtualScreenDebounce.restart();
+
+    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    if (screenId.isEmpty()) {
+        qCDebug(lcDaemon) << "RotateVirtualScreens shortcut: no screen info";
+        return;
+    }
+    const QString physId =
+        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+
+    // Swapper is always non-null on the shortcut path — see matching
+    // comment in handleSwapVirtualScreen above.
+    const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
+    const bool ok = (result == VirtualScreenSwapper::Result::Ok);
+    qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
+
+    if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
+        // VS rotate is a monitor-scope action — show the OSD on the physical
+        // monitor, not inside whichever VS held focus. On success surface the
+        // rotation direction; on failure surface the structured reason so the
+        // user sees "no_subdivision" instead of an ambiguous "clockwise" fail.
+        const QString osdReason = ok ? (clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
+                                     : VirtualScreenSwapper::reasonString(result);
+        m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), osdReason, QString(), QString(), physId);
     }
 }
 

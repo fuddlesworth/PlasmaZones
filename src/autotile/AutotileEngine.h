@@ -96,7 +96,7 @@ class WindowTrackingService;
  *
  * @see TilingAlgorithm, TilingState, AlgorithmRegistry
  */
-class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IWindowEngine
+class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IEngineLifecycle
 {
     Q_OBJECT
     Q_PROPERTY(bool enabled READ isEnabled NOTIFY enabledChanged)
@@ -173,7 +173,7 @@ public:
      */
     bool isWindowTiled(const QString& windowId) const;
 
-    // IWindowEngine
+    // IEngineLifecycle
     bool isActiveOnScreen(const QString& screenId) const override;
 
     /**
@@ -325,20 +325,20 @@ public:
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * @brief Save tiling state via persistence delegate (IWindowEngine contract)
+     * @brief Save tiling state via persistence delegate (IEngineLifecycle contract)
      *
      * Delegates to the save function set by setPersistenceDelegate().
      * Wired by the daemon to WTA's saveState(), which triggers a full WTA save
      * including both snap and autotile state. Autotile window orders are embedded
      * in WTA's save cycle via setTilingStateDelegates — this method exists to
-     * satisfy the IWindowEngine interface. For autotile-only persistence,
+     * satisfy the IEngineLifecycle interface. For autotile-only persistence,
      * the tilingChanged signal → WTA::scheduleSaveState() connection is the
      * primary path.
      */
     void saveState() override;
 
     /**
-     * @brief Load tiling state via persistence delegate (IWindowEngine contract)
+     * @brief Load tiling state via persistence delegate (IEngineLifecycle contract)
      *
      * Delegates to the load function set by setPersistenceDelegate().
      * Wired by the daemon to WTA's loadState(), which triggers a full WTA load
@@ -350,7 +350,7 @@ public:
      * @brief Set persistence callbacks for save/load
      *
      * KConfig persistence is owned by WindowTrackingAdaptor (engine is KConfig-free).
-     * These callbacks allow AutotileEngine to fulfill the IWindowEngine persistence
+     * These callbacks allow AutotileEngine to fulfill the IEngineLifecycle persistence
      * contract without introducing KConfig as a dependency.
      *
      * @param saveFn Called by saveState() to persist tiling state
@@ -671,8 +671,7 @@ public:
      * @param direction Direction string ("left", "right", "up", "down")
      * @param action OSD action label — "focus" or "cycle" (defaults to "focus")
      */
-    Q_INVOKABLE void focusInDirection(const QString& direction,
-                                      const QString& action = QStringLiteral("focus")) override;
+    Q_INVOKABLE void focusInDirection(const QString& direction, const QString& action = QStringLiteral("focus"));
 
     /**
      * @brief Move the focused window to a specific position in the tiling order
@@ -683,10 +682,14 @@ public:
      */
     Q_INVOKABLE void moveFocusedToPosition(int position);
 
-    // IWindowEngine wrappers (delegate to existing methods)
-    void swapInDirection(const QString& direction, const QString& action) override;
-    void rotateWindows(bool clockwise, const QString& screenId) override;
-    void moveToPosition(const QString& windowId, int position, const QString& screenId) override;
+    // Autotile-specific navigation. These are NOT part of IEngineLifecycle —
+    // they're callable directly on the concrete AutotileEngine pointer when
+    // the dispatcher (ScreenModeRouter) has already confirmed the target
+    // screen is autotile-mode. Snap-mode navigation is daemon-driven via
+    // WindowTrackingAdaptor's target helpers, not through this class.
+    void swapInDirection(const QString& direction, const QString& action);
+    void rotateWindows(bool clockwise, const QString& screenId);
+    void moveToPosition(const QString& windowId, int position, const QString& screenId);
 
     /**
      * @brief Set the floating state of a specific window
@@ -773,7 +776,7 @@ public:
      * @param minWidth Window minimum width in pixels (0 if unconstrained)
      * @param minHeight Window minimum height in pixels (0 if unconstrained)
      */
-    using IWindowEngine::windowOpened; // Expose 2-arg convenience overload
+    using IEngineLifecycle::windowOpened; // Expose 2-arg convenience overload
     void windowOpened(const QString& windowId, const QString& screenId, int minWidth, int minHeight) override;
 
     /**

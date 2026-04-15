@@ -254,7 +254,13 @@ private:
     // Utility methods
     // ═══════════════════════════════════════════════════════════════════
 
-    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless);
+    /// Toggle a window's borderless state on a specific screen. screenId is
+    /// REQUIRED for correctness: on per-VS retiles the effect must update
+    /// only that screen's bucket so sibling-VS tracking is untouched. For
+    /// the feature-disable path (where a bulk restore iterates all screens),
+    /// callers pass the screen key from their enumeration; there is no
+    /// "global" variant.
+    void setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless, const QString& screenId);
     void unmaximizeMonocleWindow(const QString& windowId);
 
     /**
@@ -320,14 +326,32 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_autotileScreens;
+    /// Pre-autotile frame geometry, keyed [screenId][windowId].
+    ///
+    /// Ownership: this is a local cache. The daemon's
+    /// `WindowTrackingService::m_preTileGeometries` is the authoritative
+    /// store and survives daemon restart. The effect populates this map on
+    /// the first autotile transition for a window so it can restore the
+    /// frame instantly when the window leaves autotile mode (untile, mode
+    /// switch, screen change) without waiting on a D-Bus round-trip.
+    ///
+    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
+    /// cross-screen moves can transplant or drop a window's record by
+    /// looking only at the source screen's bucket — see
+    /// `transferPreAutotileGeometry()` in autotilehandler.cpp.
     QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
     QHash<QString, QStringList> m_savedSnapStackingOrder; ///< snap-mode stacking order, restored on autotile→snap
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
     QSet<QString> m_notifiedWindows;
     QHash<QString, QString> m_notifiedWindowScreens; ///< windowId → screen ID at time of notification
     QSet<QString> m_savedNotifiedForDesktopReturn; ///< windows removed from m_notifiedWindows on desktop switch
-    QHash<QString, QRectF>
-        m_savedPreAutotileForDesktopMove; ///< pre-autotile geometries for windows moved to another desktop
+    /// Pre-autotile geometry preserved when a window is moved to another
+    /// desktop. Keyed by windowId; value holds (sourceScreenId, frameRect)
+    /// so a cross-desktop + cross-screen move can detect the screen change
+    /// at restore time and skip the saved geometry (the rect is in the
+    /// source screen's coordinate space and would land off-target on a
+    /// different monitor).
+    QHash<QString, QPair<QString, QRectF>> m_savedPreAutotileForDesktopMove;
     QSet<QString> m_pendingCloses;
     bool m_inOutputChanged = false; ///< re-entrancy guard for handleWindowOutputChanged
     QHash<QString, QMetaObject::Connection>

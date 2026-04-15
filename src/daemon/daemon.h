@@ -41,8 +41,10 @@ class ZoneSelectorController;
 class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
-class IWindowEngine;
+class IEngineLifecycle;
 class IConfigBackend;
+class ScreenModeRouter;
+class VirtualScreenSwapper;
 class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
@@ -132,8 +134,19 @@ private:
     // Resolve screen → check mode (autotile vs zones) → delegate → OSD from backend
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /** @brief Return the active IWindowEngine for a screen (autotile or snap) */
-    IWindowEngine* engineForScreen(const QString& screenId) const;
+    /** @brief Return the active IEngineLifecycle for a screen (autotile or snap) */
+    IEngineLifecycle* engineForScreen(const QString& screenId) const;
+
+    /**
+     * @brief Convenience mode check: routed through m_screenModeRouter.
+     *
+     * All daemon navigation/signal paths that need to branch on "is this
+     * screen in autotile mode?" use this method instead of checking the
+     * engine pointer directly. Centralising the lookup behind one call
+     * is how the single-source-of-truth invariant is enforced inside the
+     * daemon.
+     */
+    bool isAutotileScreen(const QString& screenId) const;
 
     void handleRotate(bool clockwise);
     void handleFloat();
@@ -153,6 +166,8 @@ private:
     void handleIncreaseMasterCount();
     void handleDecreaseMasterCount();
     void handleRetile();
+    void handleSwapVirtualScreen(NavigationDirection direction);
+    void handleRotateVirtualScreens(bool clockwise);
 
     /** @brief Check if screen is locked for layout change in its current mode */
     bool isScreenLockedForLayoutChange(const QString& screenId);
@@ -272,6 +287,22 @@ private:
      */
     void onVirtualScreensReconfigured(const QString& physicalScreenId);
 
+    /**
+     * @brief Lightweight handler for regions-only VS config changes.
+     *
+     * Fires on swap/rotate/boundary-resize where the VS ID set is unchanged.
+     * Skips migrate/prune/updateAutotileScreens (all no-ops for regions-only)
+     * and only recalculates zone geometries and triggers a snap-mode resnap
+     * tagged with the vs_reconfigure action so the kwin-effect does not fire
+     * snap-assist.
+     *
+     * The autotile retile is driven by the engine's own handler on
+     * virtualScreenRegionsChanged — the Daemon's path does NOT force-retile
+     * so there is exactly one retile per change (eliminates the "move then
+     * retile" double-pass users observed on VS swap/rotate).
+     */
+    void onVirtualScreenRegionsChanged(const QString& physicalScreenId);
+
     /** @brief Resnap windows to current layout zones (only in manual/snap mode) */
     void resnapIfManualMode();
 
@@ -331,6 +362,15 @@ private:
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;
     std::unique_ptr<SnapEngine> m_snapEngine;
+    /// Single source of truth for "which engine owns screen X". Used by
+    /// WindowTrackingAdaptor and (via @ref engineForScreen) daemon-internal
+    /// dispatch paths. Owns no state of its own — just delegates to the
+    /// layout manager and engine pointers it was constructed with.
+    std::unique_ptr<ScreenModeRouter> m_screenModeRouter;
+    /// Stateless façade over m_settings for VS swap/rotate. Held as a
+    /// member rather than reconstructed per-call so navigation handlers
+    /// don't need to know about its dependencies.
+    std::unique_ptr<VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 
@@ -387,6 +427,12 @@ private:
     QElapsedTimer m_rotateDebounce;
     QElapsedTimer m_floatDebounce;
     QElapsedTimer m_cycleLayoutDebounce;
+    // Shared debounce for VS swap/rotate. Each fire commits a config change
+    // through Settings and kicks a refresh → resnap cascade — cheap per call
+    // but pile-up-prone under keyboard auto-repeat, same rationale as
+    // m_rotateDebounce above. One timer for both ops: rapid alternation
+    // between swap and rotate is not a user pattern.
+    QElapsedTimer m_virtualScreenDebounce;
 
     // Last autotile window order per (screen, desktop, activity), captured when
     // leaving autotile. Used to re-seed the autotile engine with the same order

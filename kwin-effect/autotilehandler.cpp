@@ -100,18 +100,17 @@ void AutotileHandler::restoreAllMonocleMaximized()
 
 void AutotileHandler::restoreAllBorderless()
 {
-    if (!m_border.borderlessWindows.isEmpty()) {
-        const QSet<QString> toRestore = m_border.borderlessWindows;
-        for (const QString& windowId : toRestore) {
-            KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-            if (w) {
-                setWindowBorderless(w, windowId, false);
-            }
+    // Snapshot first (setWindowBorderless mutates the buckets under us).
+    const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
+    for (const auto& p : pairs) {
+        KWin::EffectWindow* w = m_effect->findWindowById(p.first);
+        if (w) {
+            setWindowBorderless(w, p.first, false, p.second);
         }
     }
     // Clear all border tracking (orphans included)
-    m_border.borderlessWindows.clear();
-    m_border.tiledWindows.clear();
+    m_border.borderlessWindowsByScreen.clear();
+    m_border.tiledWindowsByScreen.clear();
     m_border.zoneGeometries.clear();
 }
 
@@ -122,20 +121,20 @@ void AutotileHandler::updateHideTitleBarsSetting(bool enabled)
     if (wasEnabled && !enabled) {
         // Turning OFF — restore title bars for all borderless windows
         m_border.zoneGeometries.clear();
-        const QSet<QString> toRestore = m_border.borderlessWindows;
-        for (const QString& windowId : toRestore) {
-            KWin::EffectWindow* win = m_effect->findWindowById(windowId);
+        const auto pairs = AutotileStateHelpers::allBorderlessPairs(m_border);
+        for (const auto& p : pairs) {
+            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
             if (win) {
-                setWindowBorderless(win, windowId, false);
+                setWindowBorderless(win, p.first, false, p.second);
             }
         }
     } else if (!wasEnabled && enabled) {
         // Turning ON — hide title bars for all currently tiled windows
-        const QSet<QString> tiled = m_border.tiledWindows;
-        for (const QString& windowId : tiled) {
-            KWin::EffectWindow* win = m_effect->findWindowById(windowId);
+        const auto pairs = AutotileStateHelpers::allTiledPairs(m_border);
+        for (const auto& p : pairs) {
+            KWin::EffectWindow* win = m_effect->findWindowById(p.first);
             if (win) {
-                setWindowBorderless(win, windowId, true);
+                setWindowBorderless(win, p.first, true, p.second);
             }
         }
     }
@@ -273,10 +272,15 @@ bool AutotileHandler::saveAndRecordPreAutotileGeometry(const QString& windowId, 
 // Borderless / title bar management
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless)
+void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& windowId, bool borderless,
+                                          const QString& screenId)
 {
     if (!w) {
         return;
+    }
+    if (screenId.isEmpty()) {
+        qCWarning(lcEffect) << "setWindowBorderless: empty screenId for" << windowId << "(borderless=" << borderless
+                            << ") — bucket tracking will drift";
     }
     KWin::Window* kw = w->window();
     if (!kw) {
@@ -287,16 +291,27 @@ void AutotileHandler::setWindowBorderless(KWin::EffectWindow* w, const QString& 
         if (!w->hasDecoration()) {
             return;
         }
-        if (!m_border.borderlessWindows.contains(windowId)) {
+        // Add to the screen-scoped bucket. "Was it already borderless
+        // anywhere?" is what determines whether we call setNoBorder(true)
+        // on the compositor — once the flag is set we don't re-set it.
+        const bool wasBorderlessAnywhere = AutotileStateHelpers::isBorderlessWindow(m_border, windowId);
+        AutotileStateHelpers::addBorderlessOnScreen(m_border, screenId, windowId);
+        if (!wasBorderlessAnywhere) {
             kw->setNoBorder(true);
-            m_border.borderlessWindows.insert(windowId);
-            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId;
+            qCDebug(lcEffect) << "Autotile: hid title bar for" << windowId << "(screen:" << screenId << ")";
         }
     } else {
-        if (m_border.borderlessWindows.remove(windowId)) {
+        // Remove from the specific screen's bucket. Only actually restore
+        // the title bar if the window is no longer tracked as borderless
+        // on ANY screen — otherwise a sibling VS's retile still owns it.
+        const bool removedHere = AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
+        if (!removedHere) {
+            return;
+        }
+        if (!AutotileStateHelpers::isBorderlessWindow(m_border, windowId)) {
             m_border.zoneGeometries.remove(windowId);
             kw->setNoBorder(false);
-            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId;
+            qCDebug(lcEffect) << "Autotile: restored title bar for" << windowId << "(was on screen:" << screenId << ")";
             m_effect->removeWindowBorder(windowId);
         }
     }
@@ -663,13 +678,17 @@ void AutotileHandler::savePreAutotileForDesktopMove(const QString& windowId, con
     // Preserve the window's pre-autotile geometry before onWindowClosed clears it.
     // When the window is re-added on the target desktop, this geometry is restored
     // so that float-restore returns to the original position, not the tiled frame.
+    //
+    // Stamped with the source screen so the restore path can detect a
+    // cross-screen desktop move and decline to apply a saved rect that
+    // belongs to a different monitor's coordinate space.
     if (m_preAutotileGeometries.contains(screenId)) {
         const auto& screenGeometries = m_preAutotileGeometries[screenId];
         const QString savedKey = AutotileStateHelpers::findSavedGeometryKey(screenGeometries, windowId);
         if (!savedKey.isEmpty()) {
-            m_savedPreAutotileForDesktopMove[windowId] = screenGeometries.value(savedKey);
-            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId
-                              << m_savedPreAutotileForDesktopMove[windowId];
+            m_savedPreAutotileForDesktopMove[windowId] = {screenId, screenGeometries.value(savedKey)};
+            qCDebug(lcEffect) << "Preserved pre-autotile geometry for desktop move:" << windowId << "on" << screenId
+                              << "rect=" << m_savedPreAutotileForDesktopMove[windowId].second;
         }
     }
 }
@@ -758,13 +777,37 @@ bool AutotileHandler::isEligibleForAutotileNotify(KWin::EffectWindow* w) const
 void AutotileHandler::applyFloatCleanup(const QString& windowId)
 {
     m_effect->m_navigationHandler->setWindowFloating(windowId, true);
-    m_border.tiledWindows.remove(windowId);
-    if (m_border.borderlessWindows.contains(windowId)) {
-        KWin::EffectWindow* w = m_effect->findWindowById(windowId);
-        if (w) {
-            setWindowBorderless(w, windowId, false);
+    // A floating window is no longer tile-managed on any screen — remove
+    // its tracking from every screen bucket. If it was borderless anywhere,
+    // strip the compositor-side noBorder too by calling setWindowBorderless
+    // for each screen that held it.
+    KWin::EffectWindow* w = m_effect->findWindowById(windowId);
+    QStringList screensOwningBorderless;
+    for (auto it = m_border.borderlessWindowsByScreen.constBegin(); it != m_border.borderlessWindowsByScreen.constEnd();
+         ++it) {
+        if (it.value().contains(windowId)) {
+            screensOwningBorderless.append(it.key());
         }
     }
+    for (const QString& screenId : std::as_const(screensOwningBorderless)) {
+        if (w) {
+            setWindowBorderless(w, windowId, false, screenId);
+        } else {
+            AutotileStateHelpers::removeBorderlessOnScreen(m_border, screenId, windowId);
+        }
+    }
+    // Clear tiled tracking on every screen regardless (tiled is a superset of
+    // borderless, but a window can be tiled without borderless if hideTitleBars
+    // was off when it was tiled).
+    AutotileStateHelpers::removeFromAllScreens(m_border, windowId);
+    // Drop centering/target tracking too — a floated window isn't being
+    // tiled anymore so a stale entry here would trigger centering on the
+    // next frameGeometryChanged, snapping the floated window back into an
+    // old zone rect. slotWindowsTileRequested no longer clears these
+    // globally (it can't without wiping sibling-VS state), so the float
+    // path has to clean up after itself.
+    m_autotileTargetZones.remove(windowId);
+    m_centeredWaylandZones.remove(windowId);
     m_effect->removeWindowBorder(windowId);
     unmaximizeMonocleWindow(windowId);
 }
@@ -861,6 +904,23 @@ void AutotileHandler::onDaemonReady()
 void AutotileHandler::connectSignals()
 {
     QDBusConnection bus = QDBusConnection::sessionBus();
+
+    // Disconnect first so daemon restarts don't accumulate duplicate match
+    // rules. Qt's QDBusConnection::connect can register the same handler
+    // twice if called twice with identical args, which would cause each
+    // signal to invoke the slot N times after N daemon restarts.
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("windowsTileRequested"), this,
+                   SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("focusWindowRequested"), this, SLOT(slotFocusWindowRequested(QString)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("enabledChanged"),
+                   this, SLOT(slotEnabledChanged(bool)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("autotileScreensChanged"), this, SLOT(slotScreensChanged(QStringList, bool)));
+    bus.disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile,
+                   QStringLiteral("windowFloatingChanged"), this,
+                   SLOT(slotWindowFloatingChanged(QString, bool, QString)));
 
     bus.connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::Autotile, QStringLiteral("windowsTileRequested"),
                 this, SLOT(slotWindowsTileRequested(PlasmaZones::TileRequestList)));

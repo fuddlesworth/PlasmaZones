@@ -41,7 +41,7 @@ void SnapEngine::toggleWindowFloat(const QString& windowId, const QString& scree
 
 void SnapEngine::setWindowFloat(const QString& windowId, bool shouldFloat)
 {
-    // IWindowEngine::setWindowFloat has no screenId param, so resolve it:
+    // IEngineLifecycle::setWindowFloat has no screenId param, so resolve it:
     // 1. Try the window's tracked screen from WTS (most accurate)
     // 2. Fall back to m_lastActiveScreenId (from last windowFocused)
     // 3. Fall back to empty (unfloatToZone/applyGeometryForFloat handle gracefully)

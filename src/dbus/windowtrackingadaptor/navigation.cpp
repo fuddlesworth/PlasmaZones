@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../windowtrackingadaptor.h"
+#include "../snapnavigationtargets.h"
 #include "internal.h"
 #include "../../snap/SnapEngine.h"
 #include "../../core/logging.h"
@@ -85,7 +86,7 @@ void WindowTrackingAdaptor::moveWindowToAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    MoveTargetResult result = getMoveTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    MoveTargetResult result = m_targetResolver->getMoveTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
     // getMoveTargetForWindow already emits navigationFeedback on failure
     if (!result.success) {
@@ -123,7 +124,7 @@ void WindowTrackingAdaptor::focusAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    FocusTargetResult result = getFocusTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    FocusTargetResult result = m_targetResolver->getFocusTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
     if (!result.success) {
         return; // getFocusTargetForWindow already emitted feedback
@@ -149,7 +150,7 @@ void WindowTrackingAdaptor::pushToEmptyZone(const QString& screenId)
     }
 
     QString effectiveScreen = screenId.isEmpty() ? resolveNavScreen(this, m_lastActiveWindowId, m_service) : screenId;
-    MoveTargetResult result = getPushTargetForWindow(m_lastActiveWindowId, effectiveScreen);
+    MoveTargetResult result = m_targetResolver->getPushTargetForWindow(m_lastActiveWindowId, effectiveScreen);
 
     if (!result.success) {
         return; // getPushTargetForWindow already emitted feedback
@@ -179,7 +180,7 @@ void WindowTrackingAdaptor::restoreWindowSize()
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    RestoreTargetResult result = getRestoreForWindow(m_lastActiveWindowId, screenId);
+    RestoreTargetResult result = m_targetResolver->getRestoreForWindow(m_lastActiveWindowId, screenId);
 
     if (!result.success) {
         return; // getRestoreForWindow already emitted feedback
@@ -265,7 +266,7 @@ void WindowTrackingAdaptor::swapWindowWithAdjacentZone(const QString& direction)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    SwapTargetResult result = getSwapTargetForWindow(m_lastActiveWindowId, direction, screenId);
+    SwapTargetResult result = m_targetResolver->getSwapTargetForWindow(m_lastActiveWindowId, direction, screenId);
 
     if (!result.success) {
         return; // getSwapTargetForWindow already emitted feedback
@@ -315,7 +316,8 @@ void WindowTrackingAdaptor::snapToZoneByNumber(int zoneNumber, const QString& sc
     }
 
     QString effectiveScreen = screenId.isEmpty() ? resolveNavScreen(this, m_lastActiveWindowId, m_service) : screenId;
-    MoveTargetResult result = getSnapToZoneByNumberTarget(m_lastActiveWindowId, zoneNumber, effectiveScreen);
+    MoveTargetResult result =
+        m_targetResolver->getSnapToZoneByNumberTarget(m_lastActiveWindowId, zoneNumber, effectiveScreen);
 
     if (!result.success) {
         return; // getSnapToZoneByNumberTarget already emitted feedback
@@ -455,7 +457,7 @@ void WindowTrackingAdaptor::cycleWindowsInZone(bool forward)
     }
 
     QString screenId = resolveNavScreen(this, m_lastActiveWindowId, m_service);
-    CycleTargetResult result = getCycleTargetForWindow(m_lastActiveWindowId, forward, screenId);
+    CycleTargetResult result = m_targetResolver->getCycleTargetForWindow(m_lastActiveWindowId, forward, screenId);
 
     if (!result.success) {
         return; // getCycleTargetForWindow already emitted feedback
@@ -491,12 +493,44 @@ void WindowTrackingAdaptor::resnapToNewLayout()
                               m_lastActiveScreenId);
 }
 
+// Build the effective list of snap-mode screens this resnap should target.
+// Empty filter → all currently-known effective screens. Virtual screen
+// filter → exactly that VS. Physical screen filter → every VS child of
+// that physical monitor. The router is consulted once per screen to drop
+// autotile-mode screens (engines own placement there, not snap).
+QStringList WindowTrackingAdaptor::resolveSnapModeScreensForResnap(const QString& screenFilter) const
+{
+    QStringList candidates;
+    if (!screenFilter.isEmpty()) {
+        if (VirtualScreenId::isVirtual(screenFilter)) {
+            candidates.append(screenFilter);
+        } else if (auto* mgr = ScreenManager::instance()) {
+            candidates = mgr->virtualScreenIdsFor(screenFilter);
+        } else {
+            candidates.append(screenFilter);
+        }
+    } else if (auto* mgr = ScreenManager::instance()) {
+        candidates = mgr->effectiveScreenIds();
+    }
+
+    if (!m_screenModeRouter) {
+        // No router wired yet — return the candidates unfiltered. Early
+        // startup only; operational paths always have a router.
+        return candidates;
+    }
+    return m_screenModeRouter->partitionByMode(candidates).snap;
+}
+
 void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter)
 {
     qCDebug(lcDbusWindow) << "resnapCurrentAssignments: screen="
                           << (screenFilter.isEmpty() ? QStringLiteral("all") : screenFilter);
 
-    QVector<ZoneAssignmentEntry> entries = m_service->calculateResnapFromCurrentAssignments(screenFilter);
+    const QStringList snapScreens = resolveSnapModeScreensForResnap(screenFilter);
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& sid : snapScreens) {
+        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+    }
 
     if (entries.isEmpty()) {
         Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_windows_to_resnap"), QString(),
@@ -505,6 +539,26 @@ void WindowTrackingAdaptor::resnapCurrentAssignments(const QString& screenFilter
     }
 
     processBatchEntries(this, entries, QStringLiteral("resnap"));
+}
+
+void WindowTrackingAdaptor::resnapForVirtualScreenReconfigure(const QString& physicalScreenId)
+{
+    qCDebug(lcDbusWindow) << "resnapForVirtualScreenReconfigure: physId=" << physicalScreenId;
+
+    const QStringList snapScreens = resolveSnapModeScreensForResnap(physicalScreenId);
+    QVector<ZoneAssignmentEntry> entries;
+    for (const QString& sid : snapScreens) {
+        entries.append(m_service->calculateResnapFromCurrentAssignments(sid));
+    }
+
+    if (entries.isEmpty()) {
+        return;
+    }
+
+    // Tagged "vs_reconfigure" so the kwin-effect does NOT fire snap-assist
+    // continuation — no user-initiated snap happened here, windows are just
+    // following their VS's new geometry after a swap/rotate/split edit.
+    processBatchEntries(this, entries, QStringLiteral("vs_reconfigure"));
 }
 
 void WindowTrackingAdaptor::resnapFromAutotileOrder(const QStringList& autotileWindowOrder, const QString& screenId)

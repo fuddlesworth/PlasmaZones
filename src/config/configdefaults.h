@@ -1246,6 +1246,38 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // Virtual Screen Shortcuts
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    static QString swapVirtualScreenLeftShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Left");
+    }
+    static QString swapVirtualScreenRightShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Right");
+    }
+    static QString swapVirtualScreenUpShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Up");
+    }
+    static QString swapVirtualScreenDownShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Alt+Shift+Down");
+    }
+    static QString rotateVirtualScreensClockwiseShortcut()
+    {
+        // +Shift over the window rotate (Meta+Ctrl+]) escalates from zone
+        // scope to VS scope, mirroring how swap-window → swap-VS adds one
+        // extra Shift modifier.
+        return QStringLiteral("Meta+Ctrl+Shift+]");
+    }
+    static QString rotateVirtualScreensCounterclockwiseShortcut()
+    {
+        return QStringLiteral("Meta+Ctrl+Shift+[");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // Autotile Shortcuts
     // ═══════════════════════════════════════════════════════════════════════════
 

@@ -6,6 +6,7 @@
 #include "plasmazones_export.h"
 #include <QObject>
 #include <QDBusAbstractAdaptor>
+#include <QHash>
 #include <QRect>
 #include <QStringList>
 #include <functional>
@@ -35,9 +36,14 @@ public:
     ~ScreenAdaptor() override = default;
 
     /// Wire the authoritative Settings instance for VS config writes.
-    /// Must be called once after construction; D-Bus VS mutations are
-    /// persisted to Settings, which then drives ScreenManager via the
-    /// daemon's virtualScreenConfigsChanged → refreshVirtualConfigs bridge.
+    /// Late-wired after construction because the adaptor is instantiated
+    /// before Settings in the daemon init sequence. Methods that need
+    /// m_settings null-check it and log a warning if invoked unwired,
+    /// so this is a soft contract — the daemon calls it exactly once
+    /// during init, external callers generally don't need to. D-Bus VS
+    /// mutations are persisted to Settings, which then drives ScreenManager
+    /// via the daemon's virtualScreenConfigsChanged → refreshVirtualConfigs
+    /// bridge.
     void setSettings(Settings* settings);
 
 public Q_SLOTS:
@@ -55,6 +61,24 @@ public Q_SLOTS:
     void setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
     QStringList getPhysicalScreens();
     QString getEffectiveScreenAt(int x, int y);
+
+    /// Swap the region of @p currentVirtualScreenId with the adjacent sibling
+    /// VS in the given @p direction (left/right/up/down) within the same
+    /// physical monitor. No-op if the current id is not virtual or no sibling
+    /// lies in that direction. All per-VS state (windows, layout, autotile)
+    /// follows the new geometry automatically.
+    /// @return Empty string on success, otherwise a stable rejection token
+    ///         from VirtualScreenSwapper::reasonString() so callers can
+    ///         distinguish failure modes without parsing logs.
+    QString swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction);
+
+    /// Rotate every VS region on @p physicalScreenId through a spatial
+    /// clockwise ring order. Rotation direction matches the window rotate
+    /// convention: with @p clockwise=true each VS moves forward in the ring.
+    /// No-op if the physical monitor has fewer than two VSs.
+    /// @return Empty string on success, otherwise a stable rejection token
+    ///         from VirtualScreenSwapper::reasonString().
+    QString rotateVirtualScreens(const QString& physicalScreenId, bool clockwise);
 
 Q_SIGNALS:
     void screenAdded(const QString& screenId);

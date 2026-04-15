@@ -2,75 +2,36 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include "core/windowtrackingservice.h"
 #include "core/geometryutils.h"
-#include "core/layoutmanager.h"
 #include "core/layout.h"
-#include "core/zone.h"
-#include "core/types.h"
+#include "core/layoutmanager.h"
 #include "core/logging.h"
+#include "core/types.h"
 #include "core/utils.h"
+#include "core/windowtrackingservice.h"
+#include "core/zone.h"
 
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// IWindowEngine navigation stubs
+// Snap-mode resnap coordination
 //
-// These methods are part of the IWindowEngine interface (shared with AutotileEngine)
-// but are no longer called for snap-mode screens. The Daemon routes snap-mode
-// navigation through the WTA's daemon-driven methods instead. These stubs exist
-// only to satisfy the pure virtual interface.
-// ═══════════════════════════════════════════════════════════════════════════════
-
-void SnapEngine::moveInDirection(const QString& direction)
-{
-    // Snap navigation is daemon-driven (WTA computes geometry, emits applyGeometryRequested).
-    // This stub only validates the direction for tests that check navigationFeedback emission.
-    if (direction.isEmpty()) {
-        Q_EMIT navigationFeedback(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(),
-                                  QString(), m_lastActiveScreenId);
-        return;
-    }
-    qCWarning(lcCore) << "SnapEngine::moveInDirection called but snap navigation is daemon-driven; use WTA";
-}
-
-void SnapEngine::pushToEmptyZone(const QString& screenId)
-{
-    Q_UNUSED(screenId)
-    qCWarning(lcCore) << "SnapEngine::pushToEmptyZone called but snap navigation is daemon-driven; use WTA";
-}
-
-void SnapEngine::focusInDirection(const QString& direction, const QString& action)
-{
-    Q_UNUSED(direction)
-    Q_UNUSED(action)
-    qCWarning(lcCore) << "SnapEngine::focusInDirection called but snap navigation is daemon-driven; use WTA";
-}
-
-void SnapEngine::swapInDirection(const QString& direction, const QString& action)
-{
-    Q_UNUSED(direction)
-    Q_UNUSED(action)
-    qCWarning(lcCore) << "SnapEngine::swapInDirection called but snap navigation is daemon-driven; use WTA";
-}
-
-void SnapEngine::rotateWindows(bool clockwise, const QString& screenId)
-{
-    Q_UNUSED(clockwise)
-    Q_UNUSED(screenId)
-    qCWarning(lcCore) << "SnapEngine::rotateWindows called but snap navigation is daemon-driven; use WTA";
-}
-
-void SnapEngine::moveToPosition(const QString& windowId, int position, const QString& screenId)
-{
-    Q_UNUSED(windowId)
-    Q_UNUSED(position)
-    Q_UNUSED(screenId)
-    qCWarning(lcCore) << "SnapEngine::moveToPosition called but snap navigation is daemon-driven; use WTA";
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Snap-specific methods (still active)
+// SnapEngine does NOT implement per-window navigation (focus/swap/rotate/move).
+// Snap navigation is driven entirely by WindowTrackingAdaptor on the daemon
+// side: it computes zone geometry via the target helpers in
+// src/dbus/windowtrackingadaptor/targets.cpp and emits applyGeometryRequested.
+//
+// The IEngineLifecycle interface (iwindowengine.h) is deliberately narrowed
+// to lifecycle events only — lifecycle is the only set of operations where
+// both engines have meaningful implementations. Navigation is autotile-
+// specific and the daemon dispatches it on the concrete AutotileEngine
+// pointer, not polymorphically.
+//
+// What remains here is snap-mode batch operations (layout switch resnap,
+// current-assignment resnap, autotile → snap transition resnap) that don't
+// fit into navigation or lifecycle categories — they're coordination calls
+// the daemon triggers explicitly on SnapEngine in response to layout or
+// mode changes.
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SnapEngine::resnapToNewLayout()
@@ -178,12 +139,6 @@ void SnapEngine::snapAllWindows(const QString& screenId)
 {
     qCDebug(lcCore) << "snapAllWindows called for screen=" << screenId;
     Q_EMIT snapAllWindowsRequested(screenId);
-}
-
-void SnapEngine::cycleWindowsInZone(bool forward)
-{
-    Q_UNUSED(forward)
-    qCWarning(lcCore) << "SnapEngine::cycleWindowsInZone called but snap navigation is daemon-driven; use WTA";
 }
 
 } // namespace PlasmaZones

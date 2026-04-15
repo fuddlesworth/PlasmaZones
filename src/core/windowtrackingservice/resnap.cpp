@@ -245,6 +245,13 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             }
         }
 
+        // NOTE: no in-loop mode filter here. Callers are responsible for
+        // passing a screenFilter that targets only snap-mode screens, and
+        // for iterating per-screen when multiple screens need resnapping.
+        // The dispatch layer (ScreenModeRouter via WindowTrackingAdaptor)
+        // enforces that contract at the entry point so the engine and its
+        // service helpers can stay pure and free of defensive checks.
+
         QRect geo = resolveZoneGeometry(zoneIds, screenId);
         if (!geo.isValid()) {
             continue;

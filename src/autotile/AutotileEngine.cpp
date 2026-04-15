@@ -56,6 +56,12 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_settingsBridge(std::make_unique<SettingsBridge>(this))
     , m_algorithmId(AlgorithmRegistry::defaultAlgorithmId())
 {
+    // In production (Daemon::start) all three dependencies are non-null.
+    // Headless unit tests deliberately pass nullptr to construct an engine
+    // with minimal parents for testing peripheral classes (adaptors, bridges,
+    // sub-controllers) — every method that dereferences a dependency guards
+    // it locally. Do not Q_ASSERT here.
+
     // Zero-delay timer to coalesce promoteSavedWindowOrders() calls during
     // simultaneous desktop+activity switches. Fires on the next event loop
     // pass after both m_currentDesktop and m_currentActivity are updated.
@@ -214,6 +220,19 @@ void AutotileEngine::connectSignals()
                 onScreenGeometryChanged(vsId);
             }
         });
+
+        // Regions-only changes (VS swap/rotate/boundary resize) — skip the
+        // orphan cleanup (no VSs removed/added) and just retile each VS with
+        // its new geometry. This is the single authoritative retile for the
+        // change; the Daemon's regions-only handler deliberately does NOT
+        // call updateAutotileScreens so there is no second retile pass.
+        connect(m_screenManager, &ScreenManager::virtualScreenRegionsChanged, this,
+                [this](const QString& physicalScreenId) {
+                    const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+                    for (const QString& vsId : vsIds) {
+                        onScreenGeometryChanged(vsId);
+                    }
+                });
     }
 
     // Layout changes — intentionally NOT connected.

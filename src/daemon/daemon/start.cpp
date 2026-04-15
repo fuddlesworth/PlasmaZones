@@ -77,6 +77,8 @@ void Daemon::connectScreenSignals()
     // handler no longer writes back to Settings — Settings is now the
     // source, not the sink.
     connect(m_screenManager.get(), &ScreenManager::virtualScreensChanged, this, &Daemon::onVirtualScreensReconfigured);
+    connect(m_screenManager.get(), &ScreenManager::virtualScreenRegionsChanged, this,
+            &Daemon::onVirtualScreenRegionsChanged);
 
     // Connect screen manager signals
     connect(m_screenManager.get(), &ScreenManager::screenAdded, this, [this](QScreen* screen) {
@@ -426,6 +428,12 @@ void Daemon::connectShortcutSignals()
     connect(m_shortcutManager.get(), &ShortcutManager::rotateWindowsRequested, this, [this](bool cw) {
         handleRotate(cw);
     });
+    connect(m_shortcutManager.get(), &ShortcutManager::swapVirtualScreenRequested, this, [this](NavigationDirection d) {
+        handleSwapVirtualScreen(d);
+    });
+    connect(m_shortcutManager.get(), &ShortcutManager::rotateVirtualScreensRequested, this, [this](bool cw) {
+        handleRotateVirtualScreens(cw);
+    });
     connect(m_shortcutManager.get(), &ShortcutManager::snapToZoneRequested, this, [this](int n) {
         handleSnap(n);
     });
@@ -659,9 +667,11 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // to their stored zones. Uses calculateResnapFromCurrentAssignments which
     // is NOT gated on keepWindowsInZonesOnResolutionChange — VS reconfiguration
     // is user-initiated, not a passive resolution change. The physId filter is
-    // VS-aware via Utils::belongsToPhysicalScreen.
+    // VS-aware via Utils::belongsToPhysicalScreen. The vs_reconfigure-tagged
+    // variant suppresses the kwin-effect snap-assist continuation so users
+    // don't get a thumbnail picker popping up after every VS swap/rotate.
     if (m_windowTrackingAdaptor) {
-        m_windowTrackingAdaptor->resnapCurrentAssignments(physicalScreenId);
+        m_windowTrackingAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
 
     // Trigger debounced geometry recalculation for the rest of the system
@@ -670,6 +680,37 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     if (ScreenManager::resolvePhysicalScreen(physicalScreenId)) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
+    }
+}
+
+void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
+{
+    // VS ID set is unchanged (swap/rotate/boundary resize). The heavy topology
+    // work in onVirtualScreensReconfigured is all no-ops for this case, so we
+    // short-circuit to just the steps that actually matter:
+    //   1. Recompute zone geometries for each affected VS layout.
+    //   2. Kick the snap-mode resnap (tagged vs_reconfigure → no snap-assist).
+    // The autotile retile is handled by AutotileEngine's own
+    // virtualScreenRegionsChanged handler — we deliberately do NOT call
+    // updateAutotileScreens() here, because that would force a second retile
+    // pass on top of the engine's own, producing the visible "move then
+    // retile" double-movement reported on VS swap/rotate.
+
+    const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const QString activity =
+        m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
+    const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+    for (const QString& sid : affectedScreenIds) {
+        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        if (screenLayout) {
+            LayoutComputeService::recalculateSync(screenLayout,
+                                                  GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+        }
+    }
+
+    if (m_windowTrackingAdaptor) {
+        m_windowTrackingAdaptor->service()->clearResnapBuffer();
+        m_windowTrackingAdaptor->resnapForVirtualScreenReconfigure(physicalScreenId);
     }
 }
 

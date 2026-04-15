@@ -27,7 +27,9 @@
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
 #include "../core/logging.h"
+#include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include "../core/virtualscreenswapper.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
@@ -412,11 +414,27 @@ bool Daemon::init()
     // Wire engine cross-references (SnapEngine ↔ AutotileEngine, zone detection)
     m_windowTrackingAdaptor->setEngines(m_snapEngine.get(), m_autotileEngine.get());
 
+    // Central routing table: single source of truth for "which engine owns
+    // screen X". Every window-lifecycle / resnap / restore entry point in the
+    // daemon and its adaptors consults this instead of scattering
+    // isAutotileScreen() checks at each call site.
+    m_screenModeRouter =
+        std::make_unique<ScreenModeRouter>(m_layoutManager.get(), m_snapEngine.get(), m_autotileEngine.get());
+    m_windowTrackingAdaptor->setScreenModeRouter(m_screenModeRouter.get());
+
+    // Stateless façade for VS swap/rotate. Held here so navigation handlers
+    // and any future consumer share one instance instead of constructing
+    // throwaway swappers per call. Constructed unconditionally during init
+    // so downstream handlers (handleSwapVirtualScreen / handleRotateVirtualScreens)
+    // can assume the pointer is non-null for the remainder of the daemon's lifetime.
+    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_settings.get());
+    Q_ASSERT(m_virtualScreenSwapper);
+
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking
     // state, not just autotile). This is heavier than a targeted save but ensures consistency
     // — the autotile window orders are embedded in WTA's save cycle via the serialization
-    // delegates below. The engine-level delegates exist to satisfy the IWindowEngine interface.
+    // delegates below. The engine-level delegates exist to satisfy the IEngineLifecycle interface.
     // QPointer guards against late calls during shutdown if WTA is destroyed first.
     m_autotileEngine->setPersistenceDelegate(
         [wta = QPointer(m_windowTrackingAdaptor)]() {

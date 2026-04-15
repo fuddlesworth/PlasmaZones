@@ -130,6 +130,31 @@ DIRECTION_HANDLER(SwapWindow, swapWindowRequested, Up, Up)
 DIRECTION_HANDLER(SwapWindow, swapWindowRequested, Down, Down)
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Swap Virtual Screen Slot Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+DIRECTION_HANDLER(SwapVirtualScreen, swapVirtualScreenRequested, Left, Left)
+DIRECTION_HANDLER(SwapVirtualScreen, swapVirtualScreenRequested, Right, Right)
+DIRECTION_HANDLER(SwapVirtualScreen, swapVirtualScreenRequested, Up, Up)
+DIRECTION_HANDLER(SwapVirtualScreen, swapVirtualScreenRequested, Down, Down)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Rotate Virtual Screens Slot Handlers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+void ShortcutManager::onRotateVirtualScreensClockwise()
+{
+    qCInfo(lcShortcuts) << "Rotate virtual screens clockwise triggered";
+    Q_EMIT rotateVirtualScreensRequested(true);
+}
+
+void ShortcutManager::onRotateVirtualScreensCounterclockwise()
+{
+    qCInfo(lcShortcuts) << "Rotate virtual screens counterclockwise triggered";
+    Q_EMIT rotateVirtualScreensRequested(false);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Snap to Zone Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -265,6 +290,12 @@ DIRECTION_UPDATE(SwapWindow, Right, m_swapWindowRightAction, swapWindowRightShor
 DIRECTION_UPDATE(SwapWindow, Up, m_swapWindowUpAction, swapWindowUpShortcut)
 DIRECTION_UPDATE(SwapWindow, Down, m_swapWindowDownAction, swapWindowDownShortcut)
 
+// Swap Virtual Screen directional updates
+DIRECTION_UPDATE(SwapVirtualScreen, Left, m_swapVirtualScreenLeftAction, swapVirtualScreenLeftShortcut)
+DIRECTION_UPDATE(SwapVirtualScreen, Right, m_swapVirtualScreenRightAction, swapVirtualScreenRightShortcut)
+DIRECTION_UPDATE(SwapVirtualScreen, Up, m_swapVirtualScreenUpAction, swapVirtualScreenUpShortcut)
+DIRECTION_UPDATE(SwapVirtualScreen, Down, m_swapVirtualScreenDownAction, swapVirtualScreenDownShortcut)
+
 // Snap to Zone update
 void ShortcutManager::updateSnapToZoneShortcut(int index)
 {
@@ -287,6 +318,17 @@ void ShortcutManager::updateRotateWindowsClockwiseShortcut()
 void ShortcutManager::updateRotateWindowsCounterclockwiseShortcut()
 {
     UPDATE_SHORTCUT(m_rotateWindowsCounterclockwiseAction, rotateWindowsCounterclockwiseShortcut);
+}
+
+// Rotate Virtual Screens updates
+void ShortcutManager::updateRotateVirtualScreensClockwiseShortcut()
+{
+    UPDATE_SHORTCUT(m_rotateVirtualScreensClockwiseAction, rotateVirtualScreensClockwiseShortcut);
+}
+
+void ShortcutManager::updateRotateVirtualScreensCounterclockwiseShortcut()
+{
+    UPDATE_SHORTCUT(m_rotateVirtualScreensCounterclockwiseAction, rotateVirtualScreensCounterclockwiseShortcut);
 }
 
 // Cycle Windows updates

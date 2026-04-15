@@ -11,6 +11,9 @@
 #include <QString>
 #include <QVector>
 
+#include <algorithm>
+#include <utility>
+
 #include "shared/virtualscreenid.h"
 
 namespace PlasmaZones {
@@ -59,6 +62,13 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     /// Tolerance-aware equality for change detection (skip-if-unchanged guards).
     /// Uses Tolerance for region comparison to avoid spurious change signals
     /// when a config round-trips through JSON serialization.
+    ///
+    /// NOTE: the fuzzy region compare is deliberately non-transitive
+    /// (a==b ∧ b==c does NOT imply a==c when region deltas chain across
+    /// the tolerance window). Safe for change detection, but do NOT use
+    /// VirtualScreenDef as a QHash/std::set key — hashed containers rely
+    /// on transitivity. Equal-to-hash keys should be computed off the
+    /// `id` field, which is exact.
     bool operator==(const VirtualScreenDef& other) const
     {
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
@@ -227,6 +237,92 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
                             .arg(upper));
         }
 
+        return true;
+    }
+
+    /// Swap the @c region fields of the two defs identified by @p idA and
+    /// @p idB. All other fields (id, physicalScreenId, displayName, index)
+    /// are preserved so downstream state keyed on VS ID — windows, layouts,
+    /// autotile state — remains valid and follows the new geometry.
+    /// Returns false if either id is absent or both ids reference the same def.
+    bool swapRegions(const QString& idA, const QString& idB)
+    {
+        if (idA == idB) {
+            return false;
+        }
+        int indexA = -1;
+        int indexB = -1;
+        for (int i = 0; i < screens.size(); ++i) {
+            if (screens[i].id == idA) {
+                indexA = i;
+            } else if (screens[i].id == idB) {
+                indexB = i;
+            }
+        }
+        if (indexA < 0 || indexB < 0) {
+            return false;
+        }
+        std::swap(screens[indexA].region, screens[indexB].region);
+        return true;
+    }
+
+    /// Rotate the @c region fields through the defs identified by @p orderedIds.
+    /// Convention matches WindowTrackingService::calculateRotation — with
+    /// @p clockwise = true, the def at position i in the ring inherits the
+    /// region of its successor (position (i+1) mod n); with @p clockwise =
+    /// false, it inherits the region of its predecessor (position (i-1) mod n).
+    ///
+    /// Read another way: on a CW rotation, each region's *content* moves
+    /// **backward** one slot in the ordered ring (the region that was at
+    /// def[1] now sits at def[0], so callers walking the ring in order see
+    /// content shifting toward index 0 with the index-0 region wrapping to
+    /// position n-1). When @p orderedIds is constructed from a spatial CW
+    /// angle sort of a 2D grid, this matches the visual expectation that
+    /// "CW rotate" cycles content clockwise around the ring.
+    ///
+    /// IDs and all other def fields are preserved. @p orderedIds may be a
+    /// subset of the config's defs so callers can rotate only a subset.
+    /// Returns false if @p orderedIds has fewer than two entries, any id is
+    /// not found in the config, or any id appears more than once (duplicates
+    /// would cause two ring slots to share a target def index — the rotation
+    /// loop would then overwrite the same def twice with different sources
+    /// and silently corrupt geometry).
+    bool rotateRegions(const QVector<QString>& orderedIds, bool clockwise)
+    {
+        if (orderedIds.size() < 2) {
+            return false;
+        }
+        QSet<QString> seenIds;
+        seenIds.reserve(orderedIds.size());
+        QVector<int> defIndices;
+        defIndices.reserve(orderedIds.size());
+        for (const auto& id : orderedIds) {
+            if (seenIds.contains(id)) {
+                return false; // duplicate id in orderedIds
+            }
+            seenIds.insert(id);
+            int found = -1;
+            for (int i = 0; i < screens.size(); ++i) {
+                if (screens[i].id == id) {
+                    found = i;
+                    break;
+                }
+            }
+            if (found < 0) {
+                return false;
+            }
+            defIndices.append(found);
+        }
+        const int n = defIndices.size();
+        QVector<QRectF> regions;
+        regions.reserve(n);
+        for (int idx : defIndices) {
+            regions.append(screens[idx].region);
+        }
+        for (int i = 0; i < n; ++i) {
+            const int src = clockwise ? (i + 1) % n : (i - 1 + n) % n;
+            screens[defIndices[i]].region = regions[src];
+        }
         return true;
     }
 };

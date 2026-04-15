@@ -398,7 +398,8 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     static const QSet<QString> noLayoutActions{QStringLiteral("float"),        QStringLiteral("algorithm"),
                                                QStringLiteral("rotate"),       QStringLiteral("focus_master"),
                                                QStringLiteral("swap_master"),  QStringLiteral("master_ratio"),
-                                               QStringLiteral("master_count"), QStringLiteral("retile")};
+                                               QStringLiteral("master_count"), QStringLiteral("retile"),
+                                               QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
     const bool needsLayout = !noLayoutActions.contains(action);
     Layout* screenLayout = resolveScreenLayout(effectiveId);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
@@ -477,15 +478,26 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     // assertWindowOnScreen calls setGeometry(screen) which would override setWidth/setHeight)
     assertWindowOnScreen(window, physScreen, navScreenGeom);
 
+    // Read the QML-computed desired size. The NavigationOsd.qml root Window
+    // exposes contentDesiredWidth/Height which cascade from messageLabel's
+    // implicitWidth (QQuickText measures text synchronously when its text
+    // property changes, so by the time writeQmlProperty("reason", ...) above
+    // returns the binding has settled). Falls back to 240x70 if the property
+    // can't be read — same as the previous hardcoded value.
+    constexpr int kFallbackWidth = 240;
+    constexpr int kFallbackHeight = 70;
+    const QVariant widthVar = window->property("contentDesiredWidth");
+    const QVariant heightVar = window->property("contentDesiredHeight");
+    const int desiredWidth = widthVar.isValid() && widthVar.toInt() > 0 ? widthVar.toInt() : kFallbackWidth;
+    const int desiredHeight = heightVar.isValid() && heightVar.toInt() > 0 ? heightVar.toInt() : kFallbackHeight;
+
     // Size and center: setWidth/setHeight AFTER assertWindowOnScreen so the final
     // QWindow geometry matches the OSD size (same pattern as sizeAndCenterOsd for LayoutOsd)
     const QRect screenGeom = navScreenGeom;
-    const int osdWidth = 240; // Compact width for text
-    const int osdHeight = 70; // Text message + margins
-    window->setWidth(osdWidth);
-    window->setHeight(osdHeight);
+    window->setWidth(desiredWidth);
+    window->setHeight(desiredHeight);
     const QRect physGeom = physScreen ? physScreen->geometry() : screenGeom;
-    centerLayerWindowOnScreen(window, physGeom, screenGeom, osdWidth, osdHeight);
+    centerLayerWindowOnScreen(window, physGeom, screenGeom, desiredWidth, desiredHeight);
 
     // Show with animation
     QMetaObject::invokeMethod(window, "show");

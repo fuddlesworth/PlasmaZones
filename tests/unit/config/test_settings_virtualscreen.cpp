@@ -578,6 +578,39 @@ private Q_SLOTS:
         VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "Overlapping regions must be rejected by the loader");
     }
+
+    /**
+     * @brief setVirtualScreenConfig returns false for invalid input.
+     *
+     * Settings is the single point of admission control for VS configs —
+     * the D-Bus adaptor (ScreenAdaptor::setVirtualScreenConfig) defers
+     * region/index validation entirely to Settings rather than running its
+     * own pre-filter. Pin the contract that:
+     *   1. invalid regions return false (so the adaptor can log rejection),
+     *   2. valid configs return true,
+     *   3. an unchanged config returns true (no-op success).
+     */
+    void testSetVirtualScreenConfig_returnsFalseOnInvalid()
+    {
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("test:reject");
+        Settings settings;
+
+        // Out-of-bounds region (width > 1.0).
+        VirtualScreenConfig bad;
+        bad.physicalScreenId = physId;
+        bad.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 1.5, 1.0)));
+        bad.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0)));
+        QVERIFY2(!settings.setVirtualScreenConfig(physId, bad),
+                 "out-of-bounds region must be rejected by Settings::setVirtualScreenConfig");
+        QVERIFY(settings.virtualScreenConfig(physId).isEmpty());
+
+        // Valid config returns true.
+        QVERIFY(settings.setVirtualScreenConfig(physId, makeSplitConfig(physId)));
+
+        // No-op: writing the same config again is a successful no-op.
+        QVERIFY(settings.setVirtualScreenConfig(physId, makeSplitConfig(physId)));
+    }
 };
 
 QTEST_MAIN(TestSettingsVirtualScreen)

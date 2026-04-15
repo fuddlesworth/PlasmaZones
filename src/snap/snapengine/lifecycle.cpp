@@ -72,6 +72,12 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
+    // NOTE: the dispatch layer (WindowTrackingAdaptor::resolveWindowRestore)
+    // has already verified this screen is in Snapping mode. The engine
+    // trusts that contract — it does not re-check modeForScreen here.
+    // If you need to call this from a new site, route through the adaptor
+    // or add the mode check at the new call site.
+
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
     // Consume the appId-based pending entry to prevent other instances of the same

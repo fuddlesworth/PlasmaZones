@@ -421,6 +421,12 @@ public:
     PZ_CONFIG_KEY(snapAllWindowsKey, "SnapAllWindows")
     PZ_CONFIG_KEY(layoutPickerKey, "LayoutPicker")
     PZ_CONFIG_KEY(toggleLayoutLockKey, "ToggleLayoutLock")
+    PZ_CONFIG_KEY(swapVirtualScreenLeftKey, "SwapVirtualScreenLeft")
+    PZ_CONFIG_KEY(swapVirtualScreenRightKey, "SwapVirtualScreenRight")
+    PZ_CONFIG_KEY(swapVirtualScreenUpKey, "SwapVirtualScreenUp")
+    PZ_CONFIG_KEY(swapVirtualScreenDownKey, "SwapVirtualScreenDown")
+    PZ_CONFIG_KEY(rotateVirtualScreensClockwiseKey, "RotateVirtualScreensClockwise")
+    PZ_CONFIG_KEY(rotateVirtualScreensCounterclockwiseKey, "RotateVirtualScreensCounterclockwise")
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Config Keys — Shortcuts.Tiling

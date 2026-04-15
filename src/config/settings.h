@@ -393,6 +393,21 @@ public:
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
 
+    // Virtual Screen Swap / Rotate (Meta+Ctrl+Alt+Shift+Arrow, Meta+Ctrl+Shift+[/])
+    Q_PROPERTY(QString swapVirtualScreenLeftShortcut READ swapVirtualScreenLeftShortcut WRITE
+                   setSwapVirtualScreenLeftShortcut NOTIFY swapVirtualScreenLeftShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenRightShortcut READ swapVirtualScreenRightShortcut WRITE
+                   setSwapVirtualScreenRightShortcut NOTIFY swapVirtualScreenRightShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenUpShortcut READ swapVirtualScreenUpShortcut WRITE setSwapVirtualScreenUpShortcut
+                   NOTIFY swapVirtualScreenUpShortcutChanged)
+    Q_PROPERTY(QString swapVirtualScreenDownShortcut READ swapVirtualScreenDownShortcut WRITE
+                   setSwapVirtualScreenDownShortcut NOTIFY swapVirtualScreenDownShortcutChanged)
+    Q_PROPERTY(QString rotateVirtualScreensClockwiseShortcut READ rotateVirtualScreensClockwiseShortcut WRITE
+                   setRotateVirtualScreensClockwiseShortcut NOTIFY rotateVirtualScreensClockwiseShortcutChanged)
+    Q_PROPERTY(
+        QString rotateVirtualScreensCounterclockwiseShortcut READ rotateVirtualScreensCounterclockwiseShortcut WRITE
+            setRotateVirtualScreensCounterclockwiseShortcut NOTIFY rotateVirtualScreensCounterclockwiseShortcutChanged)
+
 public:
     explicit Settings(QObject* parent = nullptr);
     ~Settings() override = default;
@@ -1182,7 +1197,10 @@ public:
     // Virtual screen configuration
     QHash<QString, VirtualScreenConfig> virtualScreenConfigs() const;
     void setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs);
-    void setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
+    /// Returns true on success, false if the config was rejected by
+    /// VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// already-current value is treated as a successful no-op.
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
     VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     // Rendering (ISettings)
@@ -1461,6 +1479,38 @@ public:
         return m_toggleLayoutLockShortcut;
     }
     void setToggleLayoutLockShortcut(const QString& shortcut);
+
+    // Virtual Screen Swap / Rotate Shortcuts
+    QString swapVirtualScreenLeftShortcut() const
+    {
+        return m_swapVirtualScreenLeftShortcut;
+    }
+    void setSwapVirtualScreenLeftShortcut(const QString& shortcut);
+    QString swapVirtualScreenRightShortcut() const
+    {
+        return m_swapVirtualScreenRightShortcut;
+    }
+    void setSwapVirtualScreenRightShortcut(const QString& shortcut);
+    QString swapVirtualScreenUpShortcut() const
+    {
+        return m_swapVirtualScreenUpShortcut;
+    }
+    void setSwapVirtualScreenUpShortcut(const QString& shortcut);
+    QString swapVirtualScreenDownShortcut() const
+    {
+        return m_swapVirtualScreenDownShortcut;
+    }
+    void setSwapVirtualScreenDownShortcut(const QString& shortcut);
+    QString rotateVirtualScreensClockwiseShortcut() const
+    {
+        return m_rotateVirtualScreensClockwiseShortcut;
+    }
+    void setRotateVirtualScreensClockwiseShortcut(const QString& shortcut);
+    QString rotateVirtualScreensCounterclockwiseShortcut() const
+    {
+        return m_rotateVirtualScreensCounterclockwiseShortcut;
+    }
+    void setRotateVirtualScreensCounterclockwiseShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings (shared [Editor] group in config.json)
@@ -1881,6 +1931,15 @@ private:
 
     // Toggle Layout Lock (Meta+Ctrl+L)
     QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
+
+    // Virtual Screen Swap / Rotate Shortcuts
+    QString m_swapVirtualScreenLeftShortcut = ConfigDefaults::swapVirtualScreenLeftShortcut();
+    QString m_swapVirtualScreenRightShortcut = ConfigDefaults::swapVirtualScreenRightShortcut();
+    QString m_swapVirtualScreenUpShortcut = ConfigDefaults::swapVirtualScreenUpShortcut();
+    QString m_swapVirtualScreenDownShortcut = ConfigDefaults::swapVirtualScreenDownShortcut();
+    QString m_rotateVirtualScreensClockwiseShortcut = ConfigDefaults::rotateVirtualScreensClockwiseShortcut();
+    QString m_rotateVirtualScreensCounterclockwiseShortcut =
+        ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut();
 
     // Editor Settings ([Editor] group in config.json)
     QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();

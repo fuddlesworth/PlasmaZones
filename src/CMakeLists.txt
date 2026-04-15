@@ -75,6 +75,11 @@ set(plasmazones_core_SRCS
     core/geometryutils/constraints.cpp
     core/geometryutils/overlaps.cpp
     core/geometryutils.h
+    core/spatialadjacency.h
+    core/virtualscreenswapper.cpp
+    core/virtualscreenswapper.h
+    core/screenmoderouter.cpp
+    core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
     core/zone.cpp
@@ -155,9 +160,10 @@ set(plasmazones_core_SRCS
     dbus/overlayadaptor.h
     dbus/zonedetectionadaptor.cpp
     dbus/zonedetectionadaptor.h
+    dbus/snapnavigationtargets.cpp
+    dbus/snapnavigationtargets.h
     dbus/windowtrackingadaptor.cpp
     dbus/windowtrackingadaptor/navigation.cpp
-    dbus/windowtrackingadaptor/targets.cpp
     dbus/windowtrackingadaptor/float.cpp
     dbus/windowtrackingadaptor/persistence.cpp
     dbus/windowtrackingadaptor/saveload.cpp
