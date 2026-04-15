@@ -74,16 +74,26 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
     connect(m_saveTimer, &QTimer::timeout, this, &WindowTrackingAdaptor::saveState);
 
     // Persistence I/O worker — disk writes happen off the main thread.
-    // On a verified-successful write, clear the backend's dirty flag so
-    // the next saveState() can be a no-op. On failure we leave the dirty
-    // flag alone so the next timer tick retries the write.
+    // On a verified-successful write, clear the backend's dirty flag AND
+    // reset the committed-dirty snapshot. On failure, OR the committed
+    // bits back into the service's dirty mask so the next save tick
+    // re-serializes the fields that the failed attempt was supposed to
+    // cover — without touching any bits set by mutations that landed
+    // between takeDirty() and the failure callback (those survive via
+    // the service's own mask).
     m_persistenceWorker = std::make_unique<PersistenceWorker>(nullptr);
     connect(m_persistenceWorker.get(), &PersistenceWorker::writeCompleted, this,
             [this](const QString& filePath, bool success) {
                 if (!success) {
-                    qCWarning(lcDbusWindow) << "session state write failed for" << filePath << "— will retry";
+                    qCWarning(lcDbusWindow) << "session state write failed for" << filePath
+                                            << "— restoring dirty mask and retrying on next tick";
+                    if (m_service) {
+                        m_service->addDirty(m_lastCommittedDirty);
+                        scheduleSaveState();
+                    }
                     return;
                 }
+                m_lastCommittedDirty = WindowTrackingService::DirtyNone;
                 if (auto* json = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get())) {
                     if (json->filePath() == filePath) {
                         json->clearDirty();
@@ -93,6 +103,16 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
 
     // Connect to layout changes for pending restores notification
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowTrackingAdaptor::onLayoutChanged);
+
+    // The persisted state includes the active layout ID — mark it dirty
+    // whenever the layout manager switches layouts so the next save
+    // captures the new value. Without this, the active layout ID field
+    // would only get rewritten on unrelated DirtyAll paths.
+    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this]() {
+        if (m_service) {
+            m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
+        }
+    });
 
     // Deferred: ScreenManager may not be initialized yet during adaptor construction.
     // If ScreenManager is still unavailable after the first event loop iteration,

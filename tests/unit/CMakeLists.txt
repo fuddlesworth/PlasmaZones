@@ -59,6 +59,11 @@ add_executable(test_wts_registry_integration core/test_wts_registry_integration.
 target_link_libraries(test_wts_registry_integration PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_wts_registry_integration COMMAND test_wts_registry_integration)
 
+# DirtyMask invariants for delta-persistence (Phase 3 of refactor/dbus-performance).
+add_executable(test_wts_dirty_mask core/test_wts_dirty_mask.cpp)
+target_link_libraries(test_wts_dirty_mask PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_wts_dirty_mask COMMAND test_wts_dirty_mask)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # core/ — SnapEngine Tests
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -376,7 +381,7 @@ set(_all_tests
     test_window_identity
     test_window_tracking_snap test_window_tracking_float
     test_session_persistence test_session_persistence_layout
-    test_wts_lifecycle test_wts_session test_wts_queries
+    test_wts_lifecycle test_wts_session test_wts_queries test_wts_dirty_mask
     test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
     test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
     test_tiling_algo_cascade_stair_spread

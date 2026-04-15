@@ -453,7 +453,7 @@ void WindowTrackingService::recordSnapIntent(const QString& windowId, bool wasUs
         QString windowClass = currentAppIdFor(windowId);
         if (!windowClass.isEmpty()) {
             m_userSnappedClasses.insert(windowClass);
-            scheduleSaveState();
+            markDirty(DirtyUserSnapped);
         }
     }
 }
@@ -465,7 +465,7 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
     m_lastUsedScreenId = screenId;
     m_lastUsedZoneClass = windowClass;
     m_lastUsedDesktop = virtualDesktop;
-    scheduleSaveState();
+    markDirty(DirtyLastUsedZone);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -707,7 +707,7 @@ bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
     }
     qCDebug(lcCore) << "Consumed pending assignment for" << appId
                     << "remaining:" << m_pendingRestoreQueues.value(appId).size();
-    scheduleSaveState();
+    markDirty(DirtyPendingRestores);
     return true;
 }
 

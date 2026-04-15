@@ -51,10 +51,20 @@ static QHash<QString, QStringList> parseZoneListMap(const QString& json)
 
 void WindowTrackingAdaptor::saveState()
 {
+    using D = WindowTrackingService;
+    // Snapshot the dirty mask — after this call the service is clean
+    // from our perspective. If the write fails, the persistence worker's
+    // writeCompleted(success=false) handler addDirty()s the same bits
+    // back so the next tick retries.
+    const D::DirtyMask dirty = m_service->takeDirty();
+    m_lastCommittedDirty = dirty;
+
     auto tracking = m_sessionBackend->group(ConfigKeys::windowTrackingGroup());
 
     // Save active layout ID so we can restore it after daemon restart.
-    if (m_layoutManager && m_layoutManager->activeLayout()) {
+    // Gated on DirtyActiveLayoutId — only rewrites when the layout manager
+    // signal fired since the last save.
+    if ((dirty & D::DirtyActiveLayoutId) && m_layoutManager && m_layoutManager->activeLayout()) {
         tracking->writeString(ConfigKeys::activeLayoutIdKey(), m_layoutManager->activeLayout()->id().toString());
     }
 
@@ -62,56 +72,64 @@ void WindowTrackingAdaptor::saveState()
     // distinction. On daemon-only restart (KWin still running), UUIDs are stable so
     // exact matching prevents restoring the wrong instance of a multi-instance app.
     QJsonArray fullAssignments;
-    for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
-        QJsonObject entry;
-        entry[QLatin1String("windowId")] = it.key();
-        entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
-        const QString assignedScreen = m_service->screenAssignments().value(it.key());
-        entry[QLatin1String("screen")] =
-            VirtualScreenId::isVirtual(assignedScreen) ? assignedScreen : Utils::screenIdForName(assignedScreen);
-        entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
-        fullAssignments.append(entry);
+    if (dirty & D::DirtyZoneAssignments) {
+        for (auto it = m_service->zoneAssignments().constBegin(); it != m_service->zoneAssignments().constEnd(); ++it) {
+            QJsonObject entry;
+            entry[QLatin1String("windowId")] = it.key();
+            entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
+            const QString assignedScreen = m_service->screenAssignments().value(it.key());
+            entry[QLatin1String("screen")] =
+                VirtualScreenId::isVirtual(assignedScreen) ? assignedScreen : Utils::screenIdForName(assignedScreen);
+            entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
+            fullAssignments.append(entry);
+        }
+        tracking->writeString(ConfigKeys::windowZoneAssignmentsFullKey(),
+                              QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
     }
-    tracking->writeString(ConfigKeys::windowZoneAssignmentsFullKey(),
-                          QString::fromUtf8(QJsonDocument(fullAssignments).toJson(QJsonDocument::Compact)));
 
     // Save pending restore queues as JSON: appId -> array of entry objects
     // Each entry: {zoneIds: [...], screen: "...", desktop: N, layout: "...", zoneNumbers: [...]}
     QJsonObject pendingQueuesObj;
-    for (auto it = m_service->pendingRestoreQueues().constBegin(); it != m_service->pendingRestoreQueues().constEnd();
-         ++it) {
-        QJsonArray entryArray;
-        for (const auto& entry : it.value()) {
-            QJsonObject entryObj;
-            entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
-            if (!entry.screenId.isEmpty()) {
-                entryObj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.screenId)
-                    ? entry.screenId
-                    : Utils::screenIdForName(entry.screenId);
-            }
-            if (entry.virtualDesktop > 0) {
-                entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
-            }
-            if (!entry.layoutId.isEmpty()) {
-                entryObj[QLatin1String("layout")] = entry.layoutId;
-            }
-            if (!entry.zoneNumbers.isEmpty()) {
-                QJsonArray numArray;
-                for (int num : entry.zoneNumbers) {
-                    numArray.append(num);
+    if (dirty & D::DirtyPendingRestores) {
+        for (auto it = m_service->pendingRestoreQueues().constBegin();
+             it != m_service->pendingRestoreQueues().constEnd(); ++it) {
+            QJsonArray entryArray;
+            for (const auto& entry : it.value()) {
+                QJsonObject entryObj;
+                entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
+                if (!entry.screenId.isEmpty()) {
+                    entryObj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.screenId)
+                        ? entry.screenId
+                        : Utils::screenIdForName(entry.screenId);
                 }
-                entryObj[QLatin1String("zoneNumbers")] = numArray;
+                if (entry.virtualDesktop > 0) {
+                    entryObj[QLatin1String("desktop")] = entry.virtualDesktop;
+                }
+                if (!entry.layoutId.isEmpty()) {
+                    entryObj[QLatin1String("layout")] = entry.layoutId;
+                }
+                if (!entry.zoneNumbers.isEmpty()) {
+                    QJsonArray numArray;
+                    for (int num : entry.zoneNumbers) {
+                        numArray.append(num);
+                    }
+                    entryObj[QLatin1String("zoneNumbers")] = numArray;
+                }
+                entryArray.append(entryObj);
             }
-            entryArray.append(entryObj);
+            if (!entryArray.isEmpty()) {
+                pendingQueuesObj[it.key()] = entryArray;
+            }
         }
-        if (!entryArray.isEmpty()) {
-            pendingQueuesObj[it.key()] = entryArray;
-        }
+        tracking->writeString(ConfigKeys::pendingRestoreQueuesKey(),
+                              QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
     }
-    tracking->writeString(ConfigKeys::pendingRestoreQueuesKey(),
-                          QString::fromUtf8(QJsonDocument(pendingQueuesObj).toJson(QJsonDocument::Compact)));
 
-    // Clean up obsolete keys from old formats
+    // Clean up obsolete keys from old formats. These are cheap no-ops when
+    // the keys don't exist, and we need them to run at least once per
+    // daemon start regardless of the dirty mask — so they sit outside any
+    // gate. On subsequent saves they're already deleted so the calls are
+    // idempotent.
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowScreenAssignmentsKey());
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowDesktopAssignmentsKey());
     tracking->deleteKey(ConfigKeys::obsoletePendingWindowLayoutAssignmentsKey());
@@ -124,14 +142,18 @@ void WindowTrackingAdaptor::saveState()
     // even after daemon restart (windows stay at their zone positions across restarts).
     // Save full windowId format for daemon-only restarts (UUIDs stable, multi-instance distinction).
     // Save appId format as fallback for KWin restarts (UUIDs change).
-    tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
-                          serializeGeometryMapFull(m_service->preTileGeometries()));
-    tracking->writeString(ConfigKeys::preTileGeometriesKey(),
-                          serializeGeometryMap(m_service->preTileGeometries(), m_service));
+    if (dirty & D::DirtyPreTileGeometries) {
+        tracking->writeString(ConfigKeys::preTileGeometriesFullKey(),
+                              serializeGeometryMapFull(m_service->preTileGeometries()));
+        tracking->writeString(ConfigKeys::preTileGeometriesKey(),
+                              serializeGeometryMap(m_service->preTileGeometries(), m_service));
+    }
 
     // Save last used zone info (from service)
-    tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
-    // Note: Other last-used fields would need accessors in service
+    if (dirty & D::DirtyLastUsedZone) {
+        tracking->writeString(ConfigKeys::lastUsedZoneIdKey(), m_service->lastUsedZoneId());
+        // Note: Other last-used fields would need accessors in service
+    }
 
     // Float state is ephemeral (session-only) — do NOT persist across restarts.
     // Clear any stale entry from older versions so restored sessions start clean.
@@ -141,72 +163,92 @@ void WindowTrackingAdaptor::saveState()
     // Runtime keys are full window IDs; convert to the CURRENT app class so
     // that a window which renamed mid-session persists under the live class.
     QJsonObject preFloatZonesObj;
-    for (auto it = m_service->preFloatZoneAssignments().constBegin();
-         it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
-        QString key = m_service->currentAppIdFor(it.key());
-        if (key.isEmpty()) {
-            continue;
+    if (dirty & D::DirtyPreFloatZones) {
+        for (auto it = m_service->preFloatZoneAssignments().constBegin();
+             it != m_service->preFloatZoneAssignments().constEnd(); ++it) {
+            QString key = m_service->currentAppIdFor(it.key());
+            if (key.isEmpty()) {
+                continue;
+            }
+            preFloatZonesObj[key] = toJsonArray(it.value());
         }
-        preFloatZonesObj[key] = toJsonArray(it.value());
+        tracking->writeString(ConfigKeys::preFloatZoneAssignmentsKey(),
+                              QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
     }
-    tracking->writeString(ConfigKeys::preFloatZoneAssignmentsKey(),
-                          QString::fromUtf8(QJsonDocument(preFloatZonesObj).toJson(QJsonDocument::Compact)));
 
     // Save pre-float screen assignments (for unfloating to correct monitor).
     // Same current-class conversion as above, plus translate to screen IDs.
-    QJsonObject preFloatScreensObj;
-    for (auto it = m_service->preFloatScreenAssignments().constBegin();
-         it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
-        QString key = m_service->currentAppIdFor(it.key());
-        if (key.isEmpty()) {
-            continue;
+    if (dirty & D::DirtyPreFloatScreens) {
+        QJsonObject preFloatScreensObj;
+        for (auto it = m_service->preFloatScreenAssignments().constBegin();
+             it != m_service->preFloatScreenAssignments().constEnd(); ++it) {
+            QString key = m_service->currentAppIdFor(it.key());
+            if (key.isEmpty()) {
+                continue;
+            }
+            preFloatScreensObj[key] =
+                VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
         }
-        preFloatScreensObj[key] =
-            VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
+        tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
+                              QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
     }
-    tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
-                          QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
 
     // Save user-snapped classes
     QJsonArray userSnappedArray;
-    for (const QString& windowClass : m_service->userSnappedClasses()) {
-        userSnappedArray.append(windowClass);
+    if (dirty & D::DirtyUserSnapped) {
+        for (const QString& windowClass : m_service->userSnappedClasses()) {
+            userSnappedArray.append(windowClass);
+        }
+        tracking->writeString(ConfigKeys::userSnappedClassesKey(),
+                              QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
     }
-    tracking->writeString(ConfigKeys::userSnappedClassesKey(),
-                          QString::fromUtf8(QJsonDocument(userSnappedArray).toJson(QJsonDocument::Compact)));
 
     // Save autotile per-context window orders (analogous to WindowZoneAssignmentsFull
     // for snap mode). masterCount/splitRatio are NOT saved here — Settings owns those
     // via AutotileScreen:<id> per-screen overrides.
-    if (m_serializeTilingStatesFn) {
-        const QJsonArray autotileOrders = m_serializeTilingStatesFn();
-        if (!autotileOrders.isEmpty()) {
-            tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
-                                  QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
+    if (dirty & D::DirtyAutotileOrders) {
+        if (m_serializeTilingStatesFn) {
+            const QJsonArray autotileOrders = m_serializeTilingStatesFn();
+            if (!autotileOrders.isEmpty()) {
+                tracking->writeString(ConfigKeys::autotileWindowOrdersKey(),
+                                      QString::fromUtf8(QJsonDocument(autotileOrders).toJson(QJsonDocument::Compact)));
+            } else {
+                tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
+            }
         } else {
+            // No serialize delegate — clean up any stale key from a prior session
+            // where autotile was enabled. Prevents restoring orphaned window orders.
             tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
         }
-    } else {
-        // No serialize delegate — clean up any stale key from a prior session
-        // where autotile was enabled. Prevents restoring orphaned window orders.
-        tracking->deleteKey(ConfigKeys::autotileWindowOrdersKey());
     }
 
     // Save autotile pending restore queues (close/reopen window preservation).
     // Separate key from window orders to keep the orders array homogeneous.
-    if (m_serializePendingRestoresFn) {
-        const QJsonObject pendingRestores = m_serializePendingRestoresFn();
-        if (!pendingRestores.isEmpty()) {
-            tracking->writeString(ConfigKeys::autotilePendingRestoresKey(),
-                                  QString::fromUtf8(QJsonDocument(pendingRestores).toJson(QJsonDocument::Compact)));
+    if (dirty & D::DirtyAutotilePending) {
+        if (m_serializePendingRestoresFn) {
+            const QJsonObject pendingRestores = m_serializePendingRestoresFn();
+            if (!pendingRestores.isEmpty()) {
+                tracking->writeString(ConfigKeys::autotilePendingRestoresKey(),
+                                      QString::fromUtf8(QJsonDocument(pendingRestores).toJson(QJsonDocument::Compact)));
+            } else {
+                tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
+            }
         } else {
             tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
         }
-    } else {
-        tracking->deleteKey(ConfigKeys::autotilePendingRestoresKey());
     }
 
     tracking.reset(); // release group before write
+
+    // If nothing was dirty, skip the write entirely. This can happen when
+    // the scheduler fires against an all-ephemeral-state wake (float
+    // toggles, etc.) — no bytes on disk changed, so there's nothing to
+    // persist. Without this gate we'd rewrite the whole file with the
+    // same content on every debounce tick.
+    if (dirty == D::DirtyNone) {
+        qCDebug(lcDbusWindow) << "Saved state: no dirty fields, skipping write";
+        return;
+    }
 
     // Async I/O: snapshot the in-memory JSON root (COW copy) and hand off
     // to the persistence worker thread. The main thread returns immediately.
@@ -220,9 +262,8 @@ void WindowTrackingAdaptor::saveState()
     } else {
         m_sessionBackend->sync(); // fallback: synchronous write
     }
-    qCInfo(lcDbusWindow) << "Saved state:"
-                         << "zones=" << fullAssignments.size() << "pending=" << pendingQueuesObj.size()
-                         << "preTile=" << m_service->preTileGeometries().size()
+    qCInfo(lcDbusWindow) << "Saved state: dirty=" << Qt::hex << dirty << Qt::dec << "zones=" << fullAssignments.size()
+                         << "pending=" << pendingQueuesObj.size() << "preTile=" << m_service->preTileGeometries().size()
                          << "preFloat=" << preFloatZonesObj.size() << "userSnapped=" << userSnappedArray.size();
 }
 
@@ -659,6 +700,13 @@ void WindowTrackingAdaptor::loadState()
     if (!pendingQueues.isEmpty()) {
         m_hasPendingRestores = true;
         tryEmitPendingRestoresAvailable();
+    }
+
+    // In-memory state now mirrors the disk file — nothing is dirty until
+    // the next mutation lands. Without this clear, the first saveState()
+    // after startup would re-serialize every field we just loaded.
+    if (m_service) {
+        m_service->clearDirty();
     }
 }
 

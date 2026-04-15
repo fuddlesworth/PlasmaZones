@@ -128,7 +128,9 @@ void WindowTrackingService::assignWindowToZones(const QString& windowId, const Q
     if (zoneChanged) {
         Q_EMIT windowZoneChanged(windowId, validZoneIds.first());
     }
-    scheduleSaveState();
+    // Only the zone/screen/desktop maps changed. Narrower than DirtyAll so
+    // the next save rewrites exactly one JSON field instead of all ten.
+    markDirty(DirtyZoneAssignments);
 }
 
 void WindowTrackingService::unassignWindow(const QString& windowId)
@@ -142,20 +144,22 @@ void WindowTrackingService::unassignWindow(const QString& windowId)
     m_windowScreenAssignments.remove(windowId);
     m_windowDesktopAssignments.remove(windowId);
 
-    // Clear last-used zone if we're unsnapping from it
-    // This preserves last-used zone when unsnapping a different window
+    // Clear last-used zone if we're unsnapping from it. Track whether this
+    // branch ran so the dirty mask accurately reflects what changed.
+    bool lastUsedCleared = false;
     if (!m_lastUsedZoneId.isEmpty() && previousZoneIds.contains(m_lastUsedZoneId)) {
         m_lastUsedZoneId.clear();
         m_lastUsedScreenId.clear();
         m_lastUsedZoneClass.clear();
         m_lastUsedDesktop = 0;
+        lastUsedCleared = true;
     }
 
     // Don't remove from pending - keep for session restore
     // (pending is keyed by app ID anyway)
 
     Q_EMIT windowZoneChanged(windowId, QString());
-    scheduleSaveState();
+    markDirty(DirtyZoneAssignments | (lastUsedCleared ? DirtyLastUsedZone : DirtyNone));
 }
 
 QString WindowTrackingService::zoneForWindow(const QString& windowId) const
@@ -316,7 +320,7 @@ void WindowTrackingService::storePreTileGeometry(const QString& windowId, const 
         }
     }
 
-    scheduleSaveState();
+    markDirty(DirtyPreTileGeometries);
 }
 
 std::optional<QRect> WindowTrackingService::preTileGeometry(const QString& windowId) const
@@ -365,7 +369,7 @@ void WindowTrackingService::clearPreTileGeometry(const QString& windowId)
     }
     if (removed) {
         qCDebug(lcCore) << "clearPreTileGeometry:" << windowId;
-        scheduleSaveState();
+        markDirty(DirtyPreTileGeometries);
     }
 }
 
