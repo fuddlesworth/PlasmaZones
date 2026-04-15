@@ -467,26 +467,6 @@ void WindowTrackingService::updateLastUsedZone(const QString& zoneId, const QStr
     scheduleSaveState();
 }
 
-bool WindowTrackingService::clearStalePendingAssignment(const QString& windowId)
-{
-    // When a user explicitly snaps a window, clear ONE stale pending assignment
-    // from a previous session (FIFO, mirroring consumePendingAssignment). Only the
-    // first entry is removed so multi-instance apps retain entries for other windows.
-    QString appId = currentAppIdFor(windowId);
-    auto it = m_pendingRestoreQueues.find(appId);
-    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
-        return false;
-    }
-    it->removeFirst();
-    if (it->isEmpty()) {
-        m_pendingRestoreQueues.erase(it);
-    }
-    qCDebug(lcCore) << "Cleared one stale pending assignment for" << appId
-                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
-    scheduleSaveState();
-    return true;
-}
-
 void WindowTrackingService::markWindowReported(const QString& windowId)
 {
     if (!windowId.isEmpty()) {
@@ -511,19 +491,25 @@ bool WindowTrackingService::clearAutoSnapped(const QString& windowId)
     return m_autoSnappedWindows.remove(windowId);
 }
 
-void WindowTrackingService::consumePendingAssignment(const QString& windowId)
+bool WindowTrackingService::consumePendingAssignment(const QString& windowId)
 {
-    QString appId = currentAppIdFor(windowId);
+    // Pop the oldest pending-restore entry for this window's live appId.
+    // Single authoritative implementation — see header for why earlier
+    // consumePendingAssignment / clearStalePendingAssignment twins were
+    // merged. Callers that don't care about the result ignore the bool.
+    const QString appId = currentAppIdFor(windowId);
     auto it = m_pendingRestoreQueues.find(appId);
-    if (it != m_pendingRestoreQueues.end() && !it->isEmpty()) {
-        it->removeFirst();
-        if (it->isEmpty()) {
-            m_pendingRestoreQueues.erase(it);
-        }
-        qCDebug(lcCore) << "Consumed pending assignment for" << appId
-                        << "remaining:" << m_pendingRestoreQueues.value(appId).size();
-        scheduleSaveState();
+    if (it == m_pendingRestoreQueues.end() || it->isEmpty()) {
+        return false;
     }
+    it->removeFirst();
+    if (it->isEmpty()) {
+        m_pendingRestoreQueues.erase(it);
+    }
+    qCDebug(lcCore) << "Consumed pending assignment for" << appId
+                    << "remaining:" << m_pendingRestoreQueues.value(appId).size();
+    scheduleSaveState();
+    return true;
 }
 
 } // namespace PlasmaZones

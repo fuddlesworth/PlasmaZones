@@ -224,11 +224,11 @@ void WindowTrackingAdaptor::windowSnapped(const QString& windowId, const QString
     // and clear the flag. Auto-snapped windows don't update last-used zone tracking.
     bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
 
-    // If NOT auto-snapped (user explicitly snapped), clear any stale pending
-    // assignment from a previous session. This prevents the window from restoring
-    // to the wrong zone if it's closed and reopened.
+    // If NOT auto-snapped (user explicitly snapped), consume one pending-restore
+    // entry so a stale entry from a previous session can't drag the window back
+    // to a different zone on its next close/reopen cycle.
     if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
+        m_service->consumePendingAssignment(windowId);
     }
 
     // Use caller-provided screen name if available, otherwise auto-detect,
@@ -271,7 +271,7 @@ void WindowTrackingAdaptor::windowSnappedMultiZone(const QString& windowId, cons
     bool wasAutoSnapped = m_service->clearAutoSnapped(windowId);
 
     if (!wasAutoSnapped) {
-        m_service->clearStalePendingAssignment(windowId);
+        m_service->consumePendingAssignment(windowId);
     }
 
     // Use caller-provided screen name if available, otherwise auto-detect,
@@ -310,8 +310,10 @@ void WindowTrackingAdaptor::windowUnsnapped(const QString& windowId)
         return;
     }
 
-    // Clear pending assignment so window won't be auto-restored on next focus/reopen
-    m_service->clearStalePendingAssignment(windowId);
+    // Consume any queued pending-restore entry for this appId so the window
+    // isn't auto-restored to the old zone on its next focus/reopen after the
+    // explicit unsnap.
+    m_service->consumePendingAssignment(windowId);
 
     // Delegate to service
     m_service->unassignWindow(windowId);
@@ -404,7 +406,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
 
     qCInfo(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved from" << storedScreen << "to"
                          << resolvedNewScreen << "- unsnapping";
-    m_service->clearStalePendingAssignment(windowId);
+    m_service->consumePendingAssignment(windowId);
     m_service->unassignWindow(windowId);
 
     // Emit unified state change for screen-change-triggered unsnap

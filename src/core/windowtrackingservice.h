@@ -447,18 +447,6 @@ public:
                             int virtualDesktop);
 
     /**
-     * @brief Clear stale pending assignment for a window
-     *
-     * When a user explicitly snaps a window, this clears any stale pending
-     * assignment from a previous session. This prevents the window from
-     * restoring to the wrong zone if it's closed and reopened.
-     *
-     * @param windowId Full window ID
-     * @return true if a stale pending assignment was cleared
-     */
-    bool clearStalePendingAssignment(const QString& windowId);
-
-    /**
      * @brief Mark a window as reported by the effect (confirmed live)
      *
      * Called when the effect reports a window via windowOpened/resolveWindowRestore.
@@ -493,16 +481,35 @@ public:
     bool clearAutoSnapped(const QString& windowId);
 
     /**
-     * @brief Consume pending zone assignment after successful restore
+     * @brief Pop the oldest pending restore entry for this window's appId.
      *
-     * After a window is successfully restored to its persisted zone, the pending
-     * assignment should be removed so that:
-     * 1. The same window won't be restored again if reopened
-     * 2. Other windows of the same class won't incorrectly restore to this zone
+     * The pending-restore queue is keyed by appId (FIFO), mirroring KWin's
+     * takeSessionInfo pattern. Every call to this method consumes at most
+     * one entry — the oldest one — and erases the queue entry entirely once
+     * it's emptied. Call sites:
      *
-     * @param windowId Full window ID
+     *   1. After a successful session restore — so the same window isn't
+     *      restored again if reopened, and so other instances of the same
+     *      app class don't incorrectly restore onto this window's zone.
+     *   2. After a user-initiated snap or unsnap — so a stale entry from a
+     *      previous session doesn't drag the window back to a different zone
+     *      on its next close/reopen cycle.
+     *
+     * There is no "stale" vs "fresh" distinction inside the queue: every
+     * entry is a FIFO head, and this method pops the head regardless of
+     * provenance. Earlier versions split this into two methods
+     * (consumePendingAssignment / clearStalePendingAssignment) that were
+     * implementation-identical but named as if they did different things;
+     * the duplication has been removed.
+     *
+     * @param windowId Full window ID — the appId is resolved via
+     *                 currentAppIdFor() so the queue lookup sees the live
+     *                 class (Electron/CEF apps that mutate their class
+     *                 mid-session still hit the right queue).
+     * @return true if an entry was popped, false if the queue was empty.
+     *         Callers that don't care about the result may ignore it.
      */
-    void consumePendingAssignment(const QString& windowId);
+    bool consumePendingAssignment(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation Helpers
