@@ -975,6 +975,9 @@ void SettingsAdaptor::refreshShaders()
 
 QString SettingsAdaptor::getRunningWindows()
 {
+    qCWarning(lcDbusSettings) << "getRunningWindows: DEPRECATED blocking path — callers should switch to "
+                                 "requestRunningWindows() + runningWindowsAvailable signal";
+
     // Guard against reentrant calls (shouldn't happen via D-Bus serialization,
     // but protects against unexpected provideRunningWindows calls)
     if (m_windowListLoop) {
@@ -988,8 +991,8 @@ QString SettingsAdaptor::getRunningWindows()
 
     // Blocking call: waits for KWin effect to respond via provideRunningWindows().
     // The 2s timeout prevents indefinite blocking if the effect is unloaded or
-    // unresponsive. This is called from the KCM settings UI (not the daemon hot
-    // path), so briefly blocking the caller thread is acceptable.
+    // unresponsive. Retained only for backward compatibility with clients that
+    // have not yet migrated to the async flow.
     constexpr int WindowListTimeoutMs = 2000;
     QTimer::singleShot(WindowListTimeoutMs, &loop, &QEventLoop::quit);
 
@@ -1003,12 +1006,29 @@ QString SettingsAdaptor::getRunningWindows()
     return m_pendingWindowList;
 }
 
+void SettingsAdaptor::requestRunningWindows()
+{
+    // Fire-and-forget. Callers receive the reply asynchronously via the
+    // runningWindowsAvailable signal (emitted from provideRunningWindows).
+    // Safe to call while a previous request is still in flight — the
+    // effect side is idempotent, and the last-arriving payload is the
+    // one subscribers see.
+    Q_EMIT runningWindowsRequested();
+}
+
 void SettingsAdaptor::provideRunningWindows(const QString& json)
 {
     m_pendingWindowList = json;
+
+    // Legacy path: unblock any blocking getRunningWindows() caller.
     if (m_windowListLoop && m_windowListLoop->isRunning()) {
         m_windowListLoop->quit();
     }
+
+    // Async path: fan out to subscribers of the new signal. Always emit
+    // even when a legacy blocking caller is present — the subscribers are
+    // disjoint and the broadcast is harmless for the blocking waiter.
+    Q_EMIT runningWindowsAvailable(json);
 }
 
 } // namespace PlasmaZones

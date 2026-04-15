@@ -142,13 +142,33 @@ public Q_SLOTS:
     /**
      * @brief Get list of currently running windows (for exclusion picker)
      *
-     * Requests the KWin effect to enumerate all windows. Returns JSON array
-     * of objects with windowClass and caption fields.
-     * Blocks up to 2 seconds waiting for the KWin effect to respond.
+     * DEPRECATED — blocks up to 2 seconds on a QEventLoop waiting for
+     * provideRunningWindows() to fire. Replaced by the fire-and-forget
+     * requestRunningWindows() + runningWindowsAvailable(json) signal
+     * pair, which keeps the settings UI responsive even when the KWin
+     * effect is unloaded or slow to respond. New callers MUST use the
+     * async pair. This method is kept only so in-flight clients on
+     * older daemon versions still work while they migrate; it will be
+     * removed once every caller is on the async flow.
      *
      * @return JSON string: [{"windowClass":"...", "appName":"...", "caption":"..."}]
      */
     QString getRunningWindows();
+
+    /**
+     * @brief Asynchronous window list request (fire-and-forget).
+     *
+     * Emits runningWindowsRequested() so the KWin effect enumerates its
+     * window list and sends it back via provideRunningWindows(). The
+     * resulting JSON is then broadcast via the runningWindowsAvailable
+     * signal — subscribers update their view when the signal arrives
+     * rather than blocking on the D-Bus call.
+     *
+     * Returns immediately. Safe to call repeatedly from UI — each call
+     * triggers at most one KWin round-trip; duplicate requests while a
+     * previous response is in flight are coalesced by the effect side.
+     */
+    void requestRunningWindows();
 
     /**
      * @brief Receive window list from KWin effect (callback)
@@ -171,7 +191,26 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     void settingsChanged();
+
+    /**
+     * @brief Daemon → KWin effect: please enumerate running windows.
+     *
+     * Emitted by requestRunningWindows() (async path) and by the legacy
+     * blocking getRunningWindows() (migration path). The effect answers
+     * by calling provideRunningWindows().
+     */
     void runningWindowsRequested();
+
+    /**
+     * @brief Daemon → clients: fresh running-windows JSON is available.
+     *
+     * Emitted every time provideRunningWindows() receives a payload from
+     * the KWin effect. Subscribers (SettingsController) cache the value
+     * and present it to the UI without a blocking round-trip.
+     *
+     * @param json JSON array: [{windowClass, appName, caption}, ...]
+     */
+    void runningWindowsAvailable(const QString& json);
 
 private:
     void initializeRegistry();

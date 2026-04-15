@@ -126,6 +126,14 @@ SettingsController::SettingsController(QObject* parent)
                                           QString(DBus::Interface::Settings), QStringLiteral("settingsChanged"), this,
                                           SLOT(onExternalSettingsChanged()));
 
+    // Async window picker reply channel. Emitted by SettingsAdaptor whenever
+    // the KWin effect answers a runningWindowsRequested call via
+    // provideRunningWindows(). The signal carries the JSON payload directly
+    // so clients don't need a follow-up blocking fetch.
+    QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
+                                          QString(DBus::Interface::Settings), QStringLiteral("runningWindowsAvailable"),
+                                          this, SLOT(onRunningWindowsAvailable(QString)));
+
     // Forward daemon running state changes and refresh data when daemon starts
     connect(&m_daemonController, &DaemonController::runningChanged, this, [this]() {
         Q_EMIT daemonRunningChanged();
@@ -1946,40 +1954,65 @@ void SettingsController::loadColorsFromFile(const QString& filePath)
     setNeedsSave(true);
 }
 
-QVariantList SettingsController::getRunningWindows() const
+// Shared parser used by both the async reply path and the legacy
+// synchronous getRunningWindows() helper. Keeps the JSON wire format
+// documented in exactly one place.
+static QVariantList parseRunningWindowsJson(const QString& json)
 {
-    QDBusMessage reply =
-        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
-    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
-        return {};
-    }
-
-    QString json = reply.arguments().at(0).toString();
     if (json.isEmpty()) {
         return {};
     }
-
     QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
         return {};
     }
 
     QVariantList result;
     const QJsonArray array = doc.array();
+    result.reserve(array.size());
     for (const QJsonValue& value : array) {
         if (!value.isObject()) {
             continue;
         }
-        QJsonObject obj = value.toObject();
+        const QJsonObject obj = value.toObject();
         QVariantMap item;
         item[QStringLiteral("windowClass")] = obj[QLatin1String("windowClass")].toString();
         item[QStringLiteral("appName")] = obj[QLatin1String("appName")].toString();
         item[QStringLiteral("caption")] = obj[QLatin1String("caption")].toString();
         result.append(item);
     }
-
     return result;
+}
+
+QVariantList SettingsController::getRunningWindows() const
+{
+    // Legacy synchronous path. Retained for QML that has not yet migrated
+    // to the requestRunningWindows + runningWindowsAvailable flow. Issues
+    // a blocking D-Bus call that can freeze the UI for up to 2 seconds
+    // when the KWin effect is unloaded — new callers should use the async
+    // pair instead.
+    QDBusMessage reply =
+        DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("getRunningWindows"));
+    if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) {
+        return {};
+    }
+    return parseRunningWindowsJson(reply.arguments().at(0).toString());
+}
+
+void SettingsController::requestRunningWindows()
+{
+    // Fire-and-forget: the daemon emits runningWindowsRequested to the
+    // KWin effect, which answers via provideRunningWindows, which the
+    // daemon fans out on runningWindowsAvailable — caught by our
+    // onRunningWindowsAvailable slot. The UI thread never blocks.
+    DaemonDBus::callDaemon(QString(DBus::Interface::Settings), QStringLiteral("requestRunningWindows"));
+}
+
+void SettingsController::onRunningWindowsAvailable(const QString& json)
+{
+    m_cachedRunningWindows = parseRunningWindowsJson(json);
+    Q_EMIT runningWindowsAvailable(m_cachedRunningWindows);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

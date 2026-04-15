@@ -55,9 +55,15 @@ Kirigami.Dialog {
         searchField.forceActiveFocus();
     }
 
+    // Async refresh: show whatever we already have cached from a previous
+    // fetch so the list paints instantly, then kick off a fresh request.
+    // The `Connections` block below replaces `windowList` when the
+    // daemon signals runningWindowsAvailable — the dialog never blocks
+    // on the D-Bus call even if the KWin effect is unloaded or slow.
     function refresh() {
         searchField.text = "";
-        windowList = appSettings.getRunningWindows();
+        windowList = appSettings.cachedRunningWindows();
+        appSettings.requestRunningWindows();
     }
 
     title: forApps ? i18n("Pick Application from Running Windows") : i18n("Pick Window Class from Running Windows")
@@ -70,6 +76,14 @@ Kirigami.Dialog {
             onTriggered: dialog.refresh()
         }
     ]
+
+    Connections {
+        function onRunningWindowsAvailable(windows) {
+            dialog.windowList = windows;
+        }
+
+        target: settingsController
+    }
 
     ColumnLayout {
         spacing: Kirigami.Units.smallSpacing

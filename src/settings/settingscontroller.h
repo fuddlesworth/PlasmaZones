@@ -583,7 +583,24 @@ public:
     // ── Color import ─────────────────────────────────────────────────────────
     Q_INVOKABLE void loadColorsFromPywal();
     Q_INVOKABLE void loadColorsFromFile(const QString& filePath);
+
+    // ── Running window picker (async flow) ──────────────────────────────────
+    //
+    // The QML picker dialog calls requestRunningWindows() and binds to
+    // runningWindowsAvailable(list) — no blocking D-Bus round-trip. The
+    // controller caches the most recent list in m_cachedRunningWindows so
+    // repeat opens of the dialog can show the last-seen values immediately
+    // while the fresh fetch is in flight.
+    //
+    // getRunningWindows() remains as a legacy synchronous helper only so
+    // older QML paths keep working during migration; it will be removed
+    // once every caller is on the async flow.
     Q_INVOKABLE QVariantList getRunningWindows() const;
+    Q_INVOKABLE void requestRunningWindows();
+    Q_INVOKABLE QVariantList cachedRunningWindows() const
+    {
+        return m_cachedRunningWindows;
+    }
 
     // ── Config export/import ────────────────────────────────────────────────
     Q_INVOKABLE bool exportAllSettings(const QString& filePath);
@@ -721,6 +738,16 @@ Q_SIGNALS:
     void colorImportError(const QString& error);
     void colorImportSuccess();
 
+    /**
+     * @brief Fresh running-windows list has arrived from the daemon.
+     *
+     * Emitted in response to requestRunningWindows(). The @p windows list
+     * is a QVariantList of {windowClass, appName, caption} maps ready for
+     * QML consumption. Also updates cachedRunningWindows() so later
+     * queries can read the last-seen value synchronously.
+     */
+    void runningWindowsAvailable(const QVariantList& windows);
+
     // KZones import signals
     void kzonesImportFinished(int count, const QString& message);
     void lockedScreensChanged();
@@ -751,6 +778,15 @@ private Q_SLOTS:
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
+
+    /**
+     * @brief Handle SettingsAdaptor::runningWindowsAvailable D-Bus signal.
+     *
+     * Parses the JSON payload into a QVariantList of window maps, stores
+     * it in m_cachedRunningWindows, and emits the QML-facing
+     * runningWindowsAvailable(list) signal.
+     */
+    void onRunningWindowsAvailable(const QString& json);
 
 private:
     /// Resolve saved custom params for the given algorithm from per-algorithm settings
@@ -800,6 +836,12 @@ private:
     bool m_activitiesAvailable = false;
     QVariantList m_activities;
     QString m_currentActivity;
+
+    // Last-received running-windows list (async window picker).
+    // Populated by onRunningWindowsAvailable. QML reads this via
+    // cachedRunningWindows() for the initial paint while a fresh
+    // request is in flight.
+    QVariantList m_cachedRunningWindows;
 
     // Staged assignment changes (applied on save, discarded on load/reset)
     struct StagedAssignment
