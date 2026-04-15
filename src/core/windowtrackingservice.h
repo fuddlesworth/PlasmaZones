@@ -964,6 +964,13 @@ private:
     // appId only for session-restored entries. Converted on window close for persistence.
     // Each entry includes the screen name where the geometry was captured, enabling
     // cross-screen restore to detect coordinate mismatch and center on the target screen.
+    //
+    // Authoritative store. The kwin-effect keeps a per-screen cache
+    // (`AutotileHandler::m_preAutotileGeometries`) populated on the first
+    // autotile transition so it can restore frames without a D-Bus round-trip,
+    // but this map is the source of truth: it persists across daemon restarts
+    // via session save/load, drives session-restore geometry resolution, and
+    // is the only copy keyed by appId for windows that haven't reopened yet.
     QHash<QString, PreTileGeometry> m_preTileGeometries;
 
     // Last used zone tracking

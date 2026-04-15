@@ -326,6 +326,19 @@ private:
     PlasmaZonesEffect* m_effect;
 
     QSet<QString> m_autotileScreens;
+    /// Pre-autotile frame geometry, keyed [screenId][windowId].
+    ///
+    /// Ownership: this is a local cache. The daemon's
+    /// `WindowTrackingService::m_preTileGeometries` is the authoritative
+    /// store and survives daemon restart. The effect populates this map on
+    /// the first autotile transition for a window so it can restore the
+    /// frame instantly when the window leaves autotile mode (untile, mode
+    /// switch, screen change) without waiting on a D-Bus round-trip.
+    ///
+    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
+    /// cross-screen moves can transplant or drop a window's record by
+    /// looking only at the source screen's bucket — see
+    /// `transferPreAutotileGeometry()` in autotilehandler.cpp.
     QHash<QString, QHash<QString, QRectF>> m_preAutotileGeometries;
     QHash<QString, QStringList> m_savedSnapStackingOrder; ///< snap-mode stacking order, restored on autotile→snap
     QHash<QString, QStringList> m_savedAutotileStackingOrder; ///< autotile stacking order, restored on snap→autotile
