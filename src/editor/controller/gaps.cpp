@@ -9,6 +9,7 @@
 #include "../undo/commands/ToggleGeometryModeCommand.h"
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
+#include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -693,48 +694,89 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     m_zoneManager->setZoneData(zoneId, zone);
 }
 
-void EditorController::refreshGlobalZonePadding()
+void EditorController::refreshGlobalGapOverlaySettings()
 {
-    int newValue = SettingsDbusQueries::queryGlobalZonePadding();
+    // Fetches every gap and overlay key the editor cares about in a single
+    // daemon round-trip. Prior to this the editor ctor path made 8 sequential
+    // blocking getSetting() calls (1 zonePadding + 6 outerGap-related +
+    // 1 overlayDisplayMode) — each constructing a fresh QDBusInterface.
+    // SettingsAdaptor::getSettings reads straight from the in-memory
+    // registry so the daemon-side cost is unchanged, and we avoid N-1
+    // extra IPC round-trips on the editor startup hot path.
+    static const QStringList kGapOverlayKeys = {
+        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+        QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
+        QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+    };
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kGapOverlayKeys);
 
-    if (m_cachedGlobalZonePadding != newValue) {
-        m_cachedGlobalZonePadding = newValue;
-        Q_EMIT globalZonePaddingChanged();
+    // Helper: read an int from the batch result. Uses toInt(&ok) so a
+    // malformed daemon reply (wrong type, not convertible) falls back to
+    // the default rather than silently coercing to 0. Negative values are
+    // also treated as invalid — these keys are all non-negative pixel
+    // counts / enum indices, matching the old single-key helpers'
+    // semantics. Keys missing from the batch (unknown to the daemon, or
+    // the whole call failed) also fall through to the fallback.
+    auto readInt = [&](const QString& key, int fallback) {
+        auto it = values.constFind(key);
+        if (it == values.constEnd()) {
+            return fallback;
+        }
+        bool ok = false;
+        const int v = it.value().toInt(&ok);
+        if (!ok || v < 0) {
+            return fallback;
+        }
+        return v;
+    };
+    auto readBool = [&](const QString& key, bool fallback) {
+        auto it = values.constFind(key);
+        return it == values.constEnd() ? fallback : it.value().toBool();
+    };
+
+    // zonePadding
+    {
+        const int newValue = readInt(QStringLiteral("zonePadding"), Defaults::ZonePadding);
+        if (m_cachedGlobalZonePadding != newValue) {
+            m_cachedGlobalZonePadding = newValue;
+            Q_EMIT globalZonePaddingChanged();
+        }
     }
-}
 
-void EditorController::refreshGlobalOuterGap()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOuterGap();
-    bool newUsePerSide = SettingsDbusQueries::queryGlobalUsePerSideOuterGap();
-    int newTop = SettingsDbusQueries::queryGlobalOuterGapTop();
-    int newBottom = SettingsDbusQueries::queryGlobalOuterGapBottom();
-    int newLeft = SettingsDbusQueries::queryGlobalOuterGapLeft();
-    int newRight = SettingsDbusQueries::queryGlobalOuterGapRight();
+    // outerGap cluster — matches the old refreshGlobalOuterGap()
+    // change-detection semantics (one aggregate signal covers any field
+    // changing).
+    {
+        const int newValue = readInt(QStringLiteral("outerGap"), Defaults::OuterGap);
+        const bool newUsePerSide = readBool(QStringLiteral("usePerSideOuterGap"), false);
+        const int newTop = readInt(QStringLiteral("outerGapTop"), Defaults::OuterGap);
+        const int newBottom = readInt(QStringLiteral("outerGapBottom"), Defaults::OuterGap);
+        const int newLeft = readInt(QStringLiteral("outerGapLeft"), Defaults::OuterGap);
+        const int newRight = readInt(QStringLiteral("outerGapRight"), Defaults::OuterGap);
 
-    bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
-        || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
-        || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
+        const bool changed = (m_cachedGlobalOuterGap != newValue) || (m_cachedGlobalUsePerSideOuterGap != newUsePerSide)
+            || (m_cachedGlobalOuterGapTop != newTop) || (m_cachedGlobalOuterGapBottom != newBottom)
+            || (m_cachedGlobalOuterGapLeft != newLeft) || (m_cachedGlobalOuterGapRight != newRight);
 
-    m_cachedGlobalOuterGap = newValue;
-    m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
-    m_cachedGlobalOuterGapTop = newTop;
-    m_cachedGlobalOuterGapBottom = newBottom;
-    m_cachedGlobalOuterGapLeft = newLeft;
-    m_cachedGlobalOuterGapRight = newRight;
+        m_cachedGlobalOuterGap = newValue;
+        m_cachedGlobalUsePerSideOuterGap = newUsePerSide;
+        m_cachedGlobalOuterGapTop = newTop;
+        m_cachedGlobalOuterGapBottom = newBottom;
+        m_cachedGlobalOuterGapLeft = newLeft;
+        m_cachedGlobalOuterGapRight = newRight;
 
-    if (changed) {
-        Q_EMIT globalOuterGapChanged();
+        if (changed) {
+            Q_EMIT globalOuterGapChanged();
+        }
     }
-}
 
-void EditorController::refreshGlobalOverlayDisplayMode()
-{
-    int newValue = SettingsDbusQueries::queryGlobalOverlayDisplayMode();
-
-    if (m_cachedGlobalOverlayDisplayMode != newValue) {
-        m_cachedGlobalOverlayDisplayMode = newValue;
-        Q_EMIT globalOverlayDisplayModeChanged();
+    // overlayDisplayMode
+    {
+        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), ConfigDefaults::overlayDisplayMode());
+        if (m_cachedGlobalOverlayDisplayMode != newValue) {
+            m_cachedGlobalOverlayDisplayMode = newValue;
+            Q_EMIT globalOverlayDisplayModeChanged();
+        }
     }
 }
 

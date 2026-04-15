@@ -657,6 +657,35 @@ bool SettingsAdaptor::setSetting(const QString& key, const QDBusVariant& value)
     return false;
 }
 
+QVariantMap SettingsAdaptor::getSettings(const QStringList& keys)
+{
+    QVariantMap result;
+    if (keys.isEmpty()) {
+        return result;
+    }
+
+    for (const QString& key : keys) {
+        if (key.isEmpty()) {
+            continue;
+        }
+        auto it = m_getters.find(key);
+        if (it == m_getters.end()) {
+            // Unknown keys are expected when callers probe for optional
+            // keys; the batch contract is "omit missing, caller uses its
+            // own default". Log at debug so production logs stay quiet.
+            qCDebug(lcDbusSettings) << "getSettings: unknown key" << key;
+            continue;
+        }
+        QVariant value = it.value()();
+        if (!value.isValid()) {
+            qCWarning(lcDbusSettings) << "getSettings: setting" << key << "returned invalid variant, omitting";
+            continue;
+        }
+        result.insert(key, value);
+    }
+    return result;
+}
+
 bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 {
     if (settings.isEmpty()) {

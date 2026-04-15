@@ -40,6 +40,14 @@ inline constexpr QLatin1String CompositorBridge("org.plasmazones.CompositorBridg
 //
 inline constexpr int ApiVersion = 2;
 inline constexpr int MinPeerApiVersion = 2;
+
+// Hard cap on blocking synchronous D-Bus calls from the editor/settings
+// apps to the daemon. Qt's default is 25 seconds, long enough to freeze
+// the UI for tens of seconds if the daemon event loop is busy. Daemon-side
+// settings/shader handlers are all in-memory hash lookups (sub-millisecond
+// in the healthy case), so 500 ms is generous while still degrading
+// gracefully to caller-side defaults when the daemon is unresponsive.
+inline constexpr int SyncCallTimeoutMs = 500;
 }
 
 } // namespace PlasmaZones
