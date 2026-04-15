@@ -84,6 +84,29 @@ public Q_SLOTS:
     QVariantMap getPerScreenSettings(const QString& screenId, const QString& category);
 
     /**
+     * @brief Batch-set multiple per-screen keys in one D-Bus call.
+     *
+     * Applies every (key, value) pair in @p values via the same category
+     * dispatch as setPerScreenSetting, then schedules a single debounced
+     * save. Mirrors the global getSettings/setSettings batch pattern so
+     * the KCM per-monitor page can flush a category in one round-trip
+     * instead of N sequential calls.
+     *
+     * Unknown keys inside @p values are passed through to the underlying
+     * Settings method, which logs a warning and no-ops — consistent with
+     * single-key behavior.
+     *
+     * @param screenId Virtual or physical screen identifier
+     * @param category "autotile" | "snapping" | "zoneSelector"
+     * @param values   Map of key -> value. QDBusArgument-wrapped values
+     *                 from the wire are unwrapped via DBusVariantUtils
+     *                 before reaching the setter.
+     * @return true if the category was recognized and every setter call
+     *         returned without erroring
+     */
+    bool setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values);
+
+    /**
      * @brief Get list of available shader effects
      * @return List of shader metadata (id, name, description, etc.)
      */

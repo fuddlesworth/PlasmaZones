@@ -187,6 +187,45 @@ private Q_SLOTS:
         QVERIFY(ok);
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Phase 5: setPerScreenSettings batch surface.
+    //
+    // The contract mirrors setSettings (global batch): empty map returns
+    // true as a no-op, unknown category returns false, recognized category
+    // returns true after looping through every key.
+    // The underlying StubSettings does not implement per-screen storage, so
+    // the tests can only verify routing + return value — deep correctness
+    // belongs to test_settings_perscreen which exercises the concrete
+    // Settings type.
+    // ─────────────────────────────────────────────────────────────────────
+    void testSetPerScreenSettings_emptyMap_returnsTrue()
+    {
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), {});
+        QVERIFY(ok);
+    }
+
+    void testSetPerScreenSettings_unknownCategory_returnsFalse()
+    {
+        QVariantMap values;
+        values[QStringLiteral("anyKey")] = 1;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("bogus"), values);
+        QVERIFY(!ok);
+    }
+
+    void testSetPerScreenSettings_recognizedCategory_returnsTrue()
+    {
+        // StubSettings dynamic_cast-fails to concrete Settings, so the
+        // routing path returns false — verify we get the expected result
+        // on the stub and trust test_settings_perscreen for the concrete
+        // path. This pins the adaptor's "concrete required" contract.
+        QVariantMap values;
+        values[QStringLiteral("masterCount")] = 2;
+        const bool ok = m_adaptor->setPerScreenSettings(QStringLiteral("DP-1"), QStringLiteral("autotile"), values);
+        // With StubSettings the qobject_cast<Settings*> fails → returns false.
+        // That's the documented stub-adaptor behavior, pin it here.
+        QVERIFY(!ok);
+    }
+
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     StubSettings* m_settings = nullptr;

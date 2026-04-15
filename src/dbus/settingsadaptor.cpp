@@ -868,6 +868,56 @@ QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const
     return {};
 }
 
+bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QString& category, const QVariantMap& values)
+{
+    if (values.isEmpty()) {
+        // Empty map is a valid no-op — treat like setSettings batch and
+        // return true so callers don't need to guard for it.
+        return true;
+    }
+    auto* concrete = qobject_cast<Settings*>(m_settings);
+    if (!concrete) {
+        qCWarning(lcDbusSettings) << "setPerScreenSettings: concrete Settings not available";
+        return false;
+    }
+
+    // Single category dispatch outside the loop — each underlying Settings
+    // method is O(1) per call, so the hot path is one hash lookup per key.
+    using PerScreenSetter = std::function<void(const QString&, const QString&, const QVariant&)>;
+    PerScreenSetter setter;
+    if (category == QLatin1String("autotile")) {
+        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
+            concrete->setPerScreenAutotileSetting(id, k, v);
+        };
+    } else if (category == QLatin1String("snapping")) {
+        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
+            concrete->setPerScreenSnappingSetting(id, k, v);
+        };
+    } else if (category == QLatin1String("zoneSelector")) {
+        setter = [concrete](const QString& id, const QString& k, const QVariant& v) {
+            concrete->setPerScreenZoneSelectorSetting(id, k, v);
+        };
+    } else {
+        qCWarning(lcDbusSettings) << "setPerScreenSettings: unknown category" << category;
+        return false;
+    }
+
+    for (auto it = values.constBegin(); it != values.constEnd(); ++it) {
+        // Values arriving over the wire can be QDBusArgument-wrapped when
+        // they contain lists or maps; normalize to plain Qt types first —
+        // matches the single-key setPerScreenSetting path exactly.
+        const QVariant converted = DBusVariantUtils::convertDbusArgument(it.value());
+        setter(screenId, it.key(), converted);
+    }
+
+    // One debounced save for the whole batch. The per-screen save path
+    // coalesces multiple category updates into a single disk write.
+    scheduleSave();
+    qCInfo(lcDbusSettings) << "setPerScreenSettings: batch applied" << values.size() << "keys on screen" << screenId
+                           << "category" << category;
+    return true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shader Registry D-Bus Methods
 // ═══════════════════════════════════════════════════════════════════════════════
