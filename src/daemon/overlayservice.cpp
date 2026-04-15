@@ -554,6 +554,14 @@ void OverlayService::setIdleForDragPause()
         if (!window) {
             continue;
         }
+        // _idled gates content.visible and toggles Qt.WindowTransparentForInput
+        // in the overlay QML (RenderNodeOverlay.qml / ZoneOverlay.qml). That
+        // makes the wl_surface effectively invisible and non-input-absorbing
+        // in place, without destroying the QQuickWindow. Blanking only the
+        // zones properties below is not sufficient — on some shaders the
+        // base pass still renders visible output when zoneCount==0, and the
+        // input region stays active until the flag change lands.
+        writeQmlProperty(window, QStringLiteral("_idled"), true);
         writeQmlProperty(window, QStringLiteral("zones"), QVariantList());
         writeQmlProperty(window, QStringLiteral("zoneCount"), 0);
         writeQmlProperty(window, QStringLiteral("highlightedCount"), 0);
@@ -596,6 +604,18 @@ void OverlayService::refreshFromIdle()
         return;
     }
     updateZonesForAllWindows();
+    // Clear the QML-side idle flag AFTER re-pushing zone data so the
+    // scene graph has a populated zones list ready the moment content
+    // becomes visible again. Order: push zones → flip _idled=false →
+    // Qt Wayland restores the input region and unhides content on the
+    // next frame with zones already in place. Writing _idled first
+    // would briefly show an empty overlay for one frame before the
+    // zones landed.
+    for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
+        if (QQuickWindow* window = it.value().overlayWindow) {
+            writeQmlProperty(window, QStringLiteral("_idled"), false);
+        }
+    }
 }
 
 void OverlayService::updateSettings(ISettings* settings)

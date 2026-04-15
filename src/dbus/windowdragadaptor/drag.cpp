@@ -81,12 +81,14 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // must perform a real release→press cycle to toggle.
     m_prevTriggerHeld = true;
     m_overlayShown = false;
-    // m_overlayIdled is NOT reset here — endDrag / dragStopped / compositor
-    // reconnect all route through resetDragState() (windowdragadaptor.cpp)
-    // which clears it, so any new drag landing here from the normal lifecycle
-    // starts with m_overlayIdled already false. Leaving it alone here avoids
-    // a redundant assignment and documents that the reset belongs to the
-    // END of the previous drag, not the START of this one.
+    // m_overlayIdled is NOT reset here. The previous drag's end sets it:
+    // a normal drop (hideOverlayAndSelector) leaves it true because the
+    // shader overlay was idled rather than destroyed — dragMoved's first
+    // activationActive tick will see idled=true and call refreshFromIdle()
+    // to repopulate zones. A destructive cleanup (hideOverlayAndClearZoneState
+    // on compositor reconnect / window-closed / context-disabled) leaves
+    // it false because the overlay window is gone and showAtPosition on
+    // the next tick will recreate it fresh.
     m_zoneSelectorShown = false;
     m_lastCursorX = 0;
     m_lastCursorY = 0;
