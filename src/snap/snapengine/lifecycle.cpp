@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include "core/assignmententry.h"
 #include "core/interfaces.h"
-#include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/utils.h"
 #include "core/virtualdesktopmanager.h"
@@ -74,22 +72,11 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
         return SnapResult::noSnap();
     }
 
-    // If the target screen is in autotile mode, the snap engine has no say in
-    // where the window lands — the autotile engine owns placement on this
-    // screen. Returning noSnap here leaves the window untouched by the snap
-    // path so autotile's own windowOpened handler can insert it into the tile
-    // tree. Without this guard, a stale persisted-zone assignment (from before
-    // the screen was switched to autotile mode) snaps the window to the wrong
-    // geometry and fights the autotile retile that fires moments later.
-    if (m_layoutManager) {
-        const int desktop = m_layoutManager->currentVirtualDesktop();
-        const QString activity = m_layoutManager->currentActivity();
-        if (m_layoutManager->modeForScreen(screenId, desktop, activity) == AssignmentEntry::Autotile) {
-            qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "on autotile screen" << screenId
-                           << "— deferring to autotile engine";
-            return SnapResult::noSnap();
-        }
-    }
+    // NOTE: the dispatch layer (WindowTrackingAdaptor::resolveWindowRestore)
+    // has already verified this screen is in Snapping mode. The engine
+    // trusts that contract — it does not re-check modeForScreen here.
+    // If you need to call this from a new site, route through the adaptor
+    // or add the mode check at the new call site.
 
     // Pre-check: if this window already has an exact zone assignment (loaded from
     // KConfig with full windowId after daemon-only restart), skip the restore chain.
