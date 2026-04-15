@@ -27,6 +27,11 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
         const QString physId = Utils::screenIdentifier(screen);
 
+        // Any new screen invalidates the cache — a new entry for physId
+        // may need serializing and previously-missing siblings gain an
+        // "isVirtualScreen" field once ScreenManager catches up.
+        invalidateScreenInfoCache();
+
         // When virtual screens exist for this physical screen, emit only the
         // virtual screen IDs — not the physical ID — to avoid phantom entries.
         bool hadVirtual = emitForEffectiveScreens(physId, [this](const QString& id) {
@@ -113,6 +118,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // stale defs until something else triggers fetchAllVirtualScreenConfigs.
     if (auto* mgr = ScreenManager::instance()) {
         auto refreshAndEmit = [this](const QString& physId) {
+            invalidateScreenInfoCache();
             auto* m = ScreenManager::instance();
             if (m && m->hasVirtualScreens(physId)) {
                 m_cachedEffectiveIdsPerScreen[physId] = m->virtualScreenIdsFor(physId);
@@ -131,6 +137,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
 void ScreenAdaptor::handleScreenGeometryChanged(QScreen* screen, const QString& physId)
 {
     Q_UNUSED(screen)
+    invalidateScreenInfoCache();
     emitForEffectiveScreens(physId, [this](const QString& id) {
         Q_EMIT screenGeometryChanged(id);
     });
@@ -141,6 +148,7 @@ void ScreenAdaptor::handleScreenRemoved(QScreen* removedScreen, QScreen* targetS
     if (removedScreen != targetScreen) {
         return;
     }
+    invalidateScreenInfoCache();
     const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
     if (!effectiveIds.isEmpty()) {
         for (const QString& id : effectiveIds) {
@@ -149,6 +157,11 @@ void ScreenAdaptor::handleScreenRemoved(QScreen* removedScreen, QScreen* targetS
     } else {
         Q_EMIT screenRemoved(cachedId);
     }
+}
+
+void ScreenAdaptor::invalidateScreenInfoCache()
+{
+    m_cachedScreenInfoJson.clear();
 }
 
 bool ScreenAdaptor::emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn)
@@ -179,6 +192,17 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
     if (screenId.isEmpty()) {
         qCWarning(lcDbus) << "getScreenInfo: empty screen name";
         return QString();
+    }
+
+    // Serve memoized JSON when we have it — KCM and settings-app refreshes
+    // poll getScreenInfo for every monitor on every page render, and the
+    // underlying data only changes on screen topology signals (hot-plug,
+    // geometry change, virtual screen reconfigure), each of which calls
+    // invalidateScreenInfoCache(). The cached string is the fully-formed
+    // D-Bus reply so we skip both the QScreen walk and JSON serialization.
+    auto cachedIt = m_cachedScreenInfoJson.constFind(screenId);
+    if (cachedIt != m_cachedScreenInfoJson.constEnd()) {
+        return cachedIt.value();
     }
 
     // For virtual screens, resolve the backing physical screen for metadata
@@ -232,7 +256,9 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
             }
         }
 
-        return QString::fromUtf8(QJsonDocument(info).toJson());
+        const QString json = QString::fromUtf8(QJsonDocument(info).toJson());
+        m_cachedScreenInfoJson.insert(screenId, json);
+        return json;
     }
 
     qCWarning(lcDbus) << "Screen not found:" << screenId;
