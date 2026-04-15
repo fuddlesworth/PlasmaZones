@@ -35,12 +35,15 @@ public:
         m_oldDataHome = qEnvironmentVariable("XDG_DATA_HOME");
         qputenv("XDG_CONFIG_HOME", m_tempDir.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_tempDir.path().toUtf8());
-        // ensureJsonConfig() caches its "migration already done" verdict in a
-        // process-level atomic (see configmigration.cpp). That's correct for
-        // production — migration is one-shot — but each test case in this
-        // process points the config dir at a fresh tempdir with different
-        // state, so the cached verdict is stale. Clear it here so the
-        // next ensureJsonConfig() call re-runs the full logic.
+        // ensureJsonConfig() caches its "migration already done" verdict in
+        // a process-level atomic (see configmigration.cpp). That's correct
+        // for production — migration is one-shot — but each test case in
+        // this process points the config dir at a fresh tempdir with
+        // different state, so any cached verdict from a prior guard is
+        // stale. Clear it here so the next ensureJsonConfig() call re-runs
+        // the full logic. Only the ctor reset is load-bearing: each new
+        // guard invalidates the previous one's verdict itself, so the dtor
+        // does not need a matching reset.
         ConfigMigration::resetMigrationGuardForTesting();
     }
 
@@ -56,11 +59,6 @@ public:
         } else {
             qputenv("XDG_DATA_HOME", m_oldDataHome.toUtf8());
         }
-        // Clear the migration short-circuit too, so any code path between
-        // this guard's dtor and the next guard's ctor doesn't see a
-        // "migration already done" verdict that was computed against the
-        // now-restored real XDG directories.
-        ConfigMigration::resetMigrationGuardForTesting();
     }
 
     /// Path to the temporary XDG_CONFIG_HOME directory.

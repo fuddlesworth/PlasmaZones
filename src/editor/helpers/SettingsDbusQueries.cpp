@@ -4,8 +4,8 @@
 #include "SettingsDbusQueries.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
+#include "DbusHelpers.h"
 
-#include <QDBusConnection>
 #include <QDBusError>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -14,25 +14,19 @@
 namespace PlasmaZones {
 namespace SettingsDbusQueries {
 
+using DbusHelpers::createSettingsInterface;
+
 namespace {
 
-// Returns a QDBusInterface as a prvalue so callers can construct-in-place
-// via guaranteed copy elision. QDBusInterface inherits QObject which is
-// non-copyable/non-movable, so anything other than a direct prvalue return
-// would fail to compile. Callers must call setTimeout() themselves after
-// construction if they want a non-default timeout.
-QDBusInterface createSettingsInterface()
-{
-    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
-}
-
-// Fetch requested keys individually via getSetting(). Used as a fallback
-// when the batched getSettings() call isn't available on the remote side
-// (e.g. the editor is a newer build than the running daemon), so users
-// don't silently see defaults for their configured gap/overlay values
-// during a post-upgrade / pre-daemon-restart window.
-QVariantMap querySettingsPerKey(const QStringList& keys)
+// WARNING: Only safe for settings whose values are never legitimately the
+// empty string. getSetting() returns an empty string as the "key not found"
+// sentinel, and this helper treats that as "missing" so callers fall back
+// to their defaults. A string-typed setting that the user has cleared
+// would therefore be indistinguishable from an unknown key and get
+// silently dropped. Only used as a fallback by querySettingsBatch() for
+// the gap/overlay keys (all int/bool), which makes this safe today — do
+// not generalize without addressing the empty-string ambiguity.
+QVariantMap querySettingsPerKey_NonStringOnly(const QStringList& keys)
 {
     QVariantMap result;
     QDBusInterface iface = createSettingsInterface();
@@ -52,9 +46,9 @@ QVariantMap querySettingsPerKey(const QStringList& keys)
         if (!value.isValid()) {
             continue;
         }
-        // getSetting() returns an empty string sentinel for unknown keys
-        // (see settingsadaptor.cpp). Treat that as "not found" so the
-        // caller falls back to its default rather than coercing "" to 0.
+        // Empty-string sentinel for unknown keys — see the warning on this
+        // function's comment above. Safe for the int/bool gap/overlay keys
+        // this helper is restricted to.
         if (value.typeId() == QMetaType::QString && value.toString().isEmpty()) {
             continue;
         }
@@ -92,7 +86,7 @@ QVariantMap querySettingsBatch(const QStringList& keys)
     if (errType == QDBusError::UnknownMethod) {
         qCWarning(lcDbus) << "getSettings() unavailable on daemon — falling back to per-key getSetting()."
                           << "Restart plasmazones-daemon to pick up the batched path.";
-        return querySettingsPerKey(keys);
+        return querySettingsPerKey_NonStringOnly(keys);
     }
 
     qCWarning(lcDbus) << "getSettings() failed:" << reply.error().message() << "(type" << errType << ")";
@@ -112,8 +106,9 @@ int queryIntSetting(const QString& settingKey, int defaultValue)
         return defaultValue;
     }
 
-    int value = reply.value().variant().toInt();
-    if (value < 0) {
+    bool ok = false;
+    const int value = reply.value().variant().toInt(&ok);
+    if (!ok || value < 0) {
         return defaultValue;
     }
 

@@ -9,6 +9,7 @@
 #include "../undo/commands/ToggleGeometryModeCommand.h"
 #include "../undo/commands/UpdateFixedGeometryCommand.h"
 #include "../helpers/SettingsDbusQueries.h"
+#include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -22,7 +23,6 @@
 #include <QDBusReply>
 
 #include "pz_i18n.h"
-#include <QGlobalStatic>
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
@@ -694,18 +694,6 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     m_zoneManager->setZoneData(zoneId, zone);
 }
 
-Q_GLOBAL_STATIC_WITH_ARGS(QStringList, gapOverlayKeys,
-                          (QStringList{
-                              QStringLiteral("zonePadding"),
-                              QStringLiteral("outerGap"),
-                              QStringLiteral("usePerSideOuterGap"),
-                              QStringLiteral("outerGapTop"),
-                              QStringLiteral("outerGapBottom"),
-                              QStringLiteral("outerGapLeft"),
-                              QStringLiteral("outerGapRight"),
-                              QStringLiteral("overlayDisplayMode"),
-                          }))
-
 void EditorController::refreshGlobalGapOverlaySettings()
 {
     // Fetches every gap and overlay key the editor cares about in a single
@@ -715,19 +703,31 @@ void EditorController::refreshGlobalGapOverlaySettings()
     // SettingsAdaptor::getSettings reads straight from the in-memory
     // registry so the daemon-side cost is unchanged, and we avoid N-1
     // extra IPC round-trips on the editor startup hot path.
-    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(*gapOverlayKeys);
+    static const QStringList kGapOverlayKeys = {
+        QStringLiteral("zonePadding"),   QStringLiteral("outerGap"),           QStringLiteral("usePerSideOuterGap"),
+        QStringLiteral("outerGapTop"),   QStringLiteral("outerGapBottom"),     QStringLiteral("outerGapLeft"),
+        QStringLiteral("outerGapRight"), QStringLiteral("overlayDisplayMode"),
+    };
+    const QVariantMap values = SettingsDbusQueries::querySettingsBatch(kGapOverlayKeys);
 
-    // Helper: read an int from the batch result, clamping negative values
-    // (which the single-key helpers treat as "invalid, use default") to the
-    // provided fallback. Keys missing from the batch (unknown to the
-    // daemon, or the whole call failed) also fall through to the fallback.
+    // Helper: read an int from the batch result. Uses toInt(&ok) so a
+    // malformed daemon reply (wrong type, not convertible) falls back to
+    // the default rather than silently coercing to 0. Negative values are
+    // also treated as invalid — these keys are all non-negative pixel
+    // counts / enum indices, matching the old single-key helpers'
+    // semantics. Keys missing from the batch (unknown to the daemon, or
+    // the whole call failed) also fall through to the fallback.
     auto readInt = [&](const QString& key, int fallback) {
         auto it = values.constFind(key);
         if (it == values.constEnd()) {
             return fallback;
         }
-        const int v = it.value().toInt();
-        return v < 0 ? fallback : v;
+        bool ok = false;
+        const int v = it.value().toInt(&ok);
+        if (!ok || v < 0) {
+            return fallback;
+        }
+        return v;
     };
     auto readBool = [&](const QString& key, bool fallback) {
         auto it = values.constFind(key);
@@ -743,8 +743,9 @@ void EditorController::refreshGlobalGapOverlaySettings()
         }
     }
 
-    // outerGap cluster — matches refreshGlobalOuterGap()'s change-detection
-    // semantics (one aggregate signal covers any field changing).
+    // outerGap cluster — matches the old refreshGlobalOuterGap()
+    // change-detection semantics (one aggregate signal covers any field
+    // changing).
     {
         const int newValue = readInt(QStringLiteral("outerGap"), Defaults::OuterGap);
         const bool newUsePerSide = readBool(QStringLiteral("usePerSideOuterGap"), false);
@@ -771,7 +772,7 @@ void EditorController::refreshGlobalGapOverlaySettings()
 
     // overlayDisplayMode
     {
-        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), 0);
+        const int newValue = readInt(QStringLiteral("overlayDisplayMode"), ConfigDefaults::overlayDisplayMode());
         if (m_cachedGlobalOverlayDisplayMode != newValue) {
             m_cachedGlobalOverlayDisplayMode = newValue;
             Q_EMIT globalOverlayDisplayModeChanged();

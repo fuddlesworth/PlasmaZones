@@ -289,6 +289,14 @@ add_executable(test_settings_schema dbus/test_settings_schema.cpp)
 target_link_libraries(test_settings_schema PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_settings_schema COMMAND test_settings_schema)
 
+# Regression guard for PR #324: the editor startup batches 8 gap/overlay
+# keys into one SettingsAdaptor::getSettings call. If the daemon-side
+# batch drops known keys or propagates unknown keys, the editor silently
+# falls back to defaults.
+add_executable(test_settings_adaptor_batch dbus/test_settings_adaptor_batch.cpp)
+target_link_libraries(test_settings_adaptor_batch PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
+add_test(NAME test_settings_adaptor_batch COMMAND test_settings_adaptor_batch)
+
 add_executable(test_compositor_bridge dbus/test_compositor_bridge.cpp)
 target_link_libraries(test_compositor_bridge PRIVATE Qt6::Test Qt6::Core Qt6::DBus plasmazones_core)
 add_test(NAME test_compositor_bridge COMMAND test_compositor_bridge)
@@ -363,7 +371,7 @@ set(_all_tests
     test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
     test_per_screen_config test_navigation_controller test_settings_bridge
     test_zone_shader_item test_overlay_helpers
-    test_wta_convenience test_settings_schema test_compositor_bridge
+    test_wta_convenience test_settings_schema test_settings_adaptor_batch test_compositor_bridge
     test_dbus_adaptor_routing
     test_autotile_adaptor_panel_gate
     test_drag_policy

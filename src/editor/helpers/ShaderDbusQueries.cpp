@@ -6,29 +6,15 @@
 #include "../../core/dbusvariantutils.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
+#include "DbusHelpers.h"
 
-#include <QDBusConnection>
 #include <QDBusInterface>
 #include <QDBusReply>
 
 namespace PlasmaZones {
 namespace ShaderDbusQueries {
 
-namespace {
-
-// Returns a QDBusInterface as a prvalue so callers can construct-in-place
-// via guaranteed copy elision (QDBusInterface inherits QObject which is
-// non-copyable/non-movable, so anything other than a direct prvalue return
-// would fail to compile). Call sites must setTimeout(DBus::SyncCallTimeoutMs)
-// on the interface before .call() so an unresponsive daemon can't freeze
-// the editor for Qt's 25-second default.
-QDBusInterface createSettingsInterface()
-{
-    return QDBusInterface(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                          QString::fromLatin1(DBus::Interface::Settings), QDBusConnection::sessionBus());
-}
-
-} // anonymous namespace
+using DbusHelpers::createSettingsInterface;
 
 bool queryShadersEnabled()
 {
