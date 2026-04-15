@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.7] - 2026-04-14
+
+### Added
+- **`BUILD_KWIN_EFFECT` CMake option** ([#321](https://github.com/fuddlesworth/PlasmaZones/pull/321)): The `kwin-effect` subdirectory hard-requires `find_package(KWin 6.6 REQUIRED)`, which aborted the entire configure step on distros shipping older KWin (Debian 13 / KWin 6.3.6, Ubuntu 24.04, Fedora 40) even though the daemon, editor, KCM, settings app, and QPA plugin build cleanly there. The new `BUILD_KWIN_EFFECT` option (default `ON`) lets packagers pass `-DBUILD_KWIN_EFFECT=OFF` to build everything except the C++ effect plugin. Thanks @iubayb.
+
+### Fixed
+- **Qt 6.9 `QWaylandWindow::updateExposure()` compile error on Qt 6.8** ([#321](https://github.com/fuddlesworth/PlasmaZones/pull/321)): `layershellwindow.cpp` called a private method added in Qt 6.9, breaking the build on Qt 6.8.x. Guarded the call with `QT_VERSION_CHECK(6, 9, 0)` and fell back to the underlying public QPA mechanism (`QWindowSystemInterface::handleExposeEvent`) on older Qt — same visible effect, same expose-event delivery. Thanks @iubayb.
+
 ## [2.8.6] - 2026-04-11
 
 ### Fixed
