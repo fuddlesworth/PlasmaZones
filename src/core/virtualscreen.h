@@ -62,6 +62,13 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     /// Tolerance-aware equality for change detection (skip-if-unchanged guards).
     /// Uses Tolerance for region comparison to avoid spurious change signals
     /// when a config round-trips through JSON serialization.
+    ///
+    /// NOTE: the fuzzy region compare is deliberately non-transitive
+    /// (a==b ∧ b==c does NOT imply a==c when region deltas chain across
+    /// the tolerance window). Safe for change detection, but do NOT use
+    /// VirtualScreenDef as a QHash/std::set key — hashed containers rely
+    /// on transitivity. Equal-to-hash keys should be computed off the
+    /// `id` field, which is exact.
     bool operator==(const VirtualScreenDef& other) const
     {
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName

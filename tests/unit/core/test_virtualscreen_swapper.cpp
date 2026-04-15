@@ -385,6 +385,56 @@ private Q_SLOTS:
         QCOMPARE(swapper.rotate(physA, true), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
     }
+
+    // Regression: a 2×2 grid whose row heights differ by slightly more than
+    // VirtualScreenDef::Tolerance (1e-3) must take the centroid-angle path,
+    // not fall through the 1D collinear fallback. Pins the boundary so a
+    // future tweak to kCollinearEpsilon can't silently collapse 2D grids
+    // into left→right strips.
+    void rotate_nearCollinear2DGrid_takesCentroidPath()
+    {
+        IsolatedConfigGuard guard;
+        const QString physId = QStringLiteral("DP-1");
+        Settings settings;
+
+        // Row heights 0.4990 + 0.5010 → row centres at y=0.2495 and y=0.7505,
+        // Δy = 0.501, far outside the 1e-3 collinearity epsilon.
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = physId;
+        cfg.screens.append(makeDef(physId, 0, QStringLiteral("TL"), QRectF(0.0, 0.0, 0.5, 0.4990)));
+        cfg.screens.append(makeDef(physId, 1, QStringLiteral("TR"), QRectF(0.5, 0.0, 0.5, 0.4990)));
+        cfg.screens.append(makeDef(physId, 2, QStringLiteral("BL"), QRectF(0.0, 0.4990, 0.5, 0.5010)));
+        cfg.screens.append(makeDef(physId, 3, QStringLiteral("BR"), QRectF(0.5, 0.4990, 0.5, 0.5010)));
+        settings.setVirtualScreenConfig(physId, cfg);
+
+        const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
+        const QRectF tl = before.screens[0].region;
+        const QRectF tr = before.screens[1].region;
+        const QRectF bl = before.screens[2].region;
+        const QRectF br = before.screens[3].region;
+
+        VirtualScreenSwapper swapper(&settings);
+        QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
+
+        // If the 2D centroid path was taken, the ring order is
+        // [TR, BR, BL, TL] and the post-rotate mapping is:
+        //   TR ← BR, BR ← BL, BL ← TL, TL ← TR   (per test rotate_twoByTwoGrid_clockwiseOrder)
+        // If the 1D fallback had fired instead, the order would be
+        // left→right (or top→bottom) and the result would NOT match these.
+        const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
+        QCOMPARE(after.screens[0].region, tr); // TL slot gets old TR
+        QCOMPARE(after.screens[1].region, br); // TR slot gets old BR
+        QCOMPARE(after.screens[2].region, tl); // BL slot gets old TL
+        QCOMPARE(after.screens[3].region, bl); // BR slot gets old BL
+
+        // And a full 4-rotation cycle returns to the start — pins the ring
+        // length at 4, which fails loudly if the collinear fallback ever
+        // sorts this config as a 1D strip.
+        for (int i = 0; i < 3; ++i) {
+            QCOMPARE(swapper.rotate(physId, true), Result::Ok);
+        }
+        QCOMPARE(settings.virtualScreenConfig(physId), before);
+    }
 };
 
 QTEST_MAIN(TestVirtualScreenSwapper)

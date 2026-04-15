@@ -69,7 +69,12 @@ Window {
 
                 return i18n("No adjacent virtual screen");
             } else if (action === "rotate_vs") {
-                if (reason === "not_virtual")
+                // Mirror swap_vs: both "not_virtual" (caller passed a
+                // non-physical id) and "no_subdivision" (monitor has <2 VSs,
+                // or physId unknown to Settings) surface the same user-
+                // facing reason. Divergence here produced confusing copy
+                // when rotating on an unsplit monitor vs swapping on one.
+                if (reason === "not_virtual" || reason === "no_subdivision")
                     return i18n("No virtual screen split on this monitor");
 
                 return i18n("No virtual screens to rotate");

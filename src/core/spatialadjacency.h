@@ -25,6 +25,13 @@ namespace PlasmaZones::SpatialAdjacency {
  * weighted distance is returned, where the perpendicular-axis offset is
  * weighted 2x to prefer same-row / same-column neighbours on grid layouts.
  *
+ * @note This function is coordinate-system agnostic — it only compares
+ *       candidates against @p current using their shared space. Callers
+ *       may pass absolute-pixel rects (ZoneDetectionAdaptor on normalized
+ *       zone geometries) or unit-square rects (VirtualScreenSwapper on
+ *       [0,1] region coordinates). What matters is that @p current and
+ *       all entries of @p candidates live in the same space.
+ *
  * @return index into @p candidates, or -1 if no rect qualifies. Rects that
  *         compare equal to @p current (same centre) are skipped.
  */

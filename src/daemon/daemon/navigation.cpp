@@ -345,7 +345,9 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     // Run the swap through the daemon-held swapper. The Result enum carries
     // the rejection reason directly, so the OSD can show a specific failure
     // (no_subdivision, no_sibling, …) instead of echoing the raw direction.
-    Q_ASSERT(m_virtualScreenSwapper);
+    // m_virtualScreenSwapper is constructed in Daemon::init() before any
+    // shortcut signals are wired, so it's always non-null on this path —
+    // no per-call assertion needed.
     const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
     const bool ok = (result == VirtualScreenSwapper::Result::Ok);
     qCInfo(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
@@ -368,7 +370,8 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     const QString physId =
         VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
 
-    Q_ASSERT(m_virtualScreenSwapper);
+    // Swapper is always non-null on the shortcut path — see matching
+    // comment in handleSwapVirtualScreen above.
     const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
     const bool ok = (result == VirtualScreenSwapper::Result::Ok);
     qCInfo(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);

@@ -36,9 +36,14 @@ public:
     ~ScreenAdaptor() override = default;
 
     /// Wire the authoritative Settings instance for VS config writes.
-    /// Must be called once after construction; D-Bus VS mutations are
-    /// persisted to Settings, which then drives ScreenManager via the
-    /// daemon's virtualScreenConfigsChanged → refreshVirtualConfigs bridge.
+    /// Late-wired after construction because the adaptor is instantiated
+    /// before Settings in the daemon init sequence. Methods that need
+    /// m_settings null-check it and log a warning if invoked unwired,
+    /// so this is a soft contract — the daemon calls it exactly once
+    /// during init, external callers generally don't need to. D-Bus VS
+    /// mutations are persisted to Settings, which then drives ScreenManager
+    /// via the daemon's virtualScreenConfigsChanged → refreshVirtualConfigs
+    /// bridge.
     void setSettings(Settings* settings);
 
 public Q_SLOTS:

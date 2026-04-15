@@ -32,11 +32,12 @@ AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
     const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
     const auto mode = m_layoutManager->modeForScreen(screenId, desktop, activity);
-    // Guard against stale layout-manager state: if the layout cascade
-    // says Autotile but the engine doesn't have a live state for this
-    // screen, trust the engine — the cascade may still reflect a stale
-    // assignment during mode transitions.
-    if (mode == AssignmentEntry::Autotile && !m_autotileEngine->isAutotileScreen(screenId)) {
+    // Engine already confirmed "not autotile" at the top of this function,
+    // so if the layout cascade still reports Autotile we're looking at
+    // stale assignment state during a mode transition — trust the engine
+    // and downgrade to Snapping. (A second isAutotileScreen check here
+    // would be dead code given the early return above.)
+    if (mode == AssignmentEntry::Autotile) {
         return AssignmentEntry::Snapping;
     }
     return mode;
@@ -50,6 +51,10 @@ IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
     case AssignmentEntry::Snapping:
         return m_snapEngine;
     }
+    // Switch above is exhaustive over AssignmentEntry::Mode. Deliberately
+    // no `default:` case so that adding a new enum value triggers -Wswitch
+    // at compile time instead of silently falling through to nullptr at
+    // runtime. Q_UNREACHABLE + nullptr is the safe fallback if that happens.
     Q_UNREACHABLE();
     return nullptr;
 }

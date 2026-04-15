@@ -7,6 +7,7 @@
 #include "logging.h"
 #include "shared/virtualscreenid.h"
 #include "spatialadjacency.h"
+#include "utils.h"
 #include "virtualscreen.h"
 
 #include <QList>
@@ -41,6 +42,11 @@ constexpr qreal kCollinearEpsilon = VirtualScreenDef::Tolerance;
 /// rotation users actually expect.
 QVector<int> computeCwRingOrder(const QVector<VirtualScreenDef>& screens)
 {
+    // Precondition: callers must pass at least one def. `rotate()` gates
+    // on `screens.size() >= 2`; this assert pins the contract so a future
+    // caller can't silently UB on `screens.first()` below.
+    Q_ASSERT(!screens.isEmpty());
+
     QVector<int> order;
     order.reserve(screens.size());
     for (int i = 0; i < screens.size(); ++i) {
@@ -115,7 +121,15 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
                         << currentVirtualScreenId;
         return Result::NotVirtual;
     }
-    if (direction.isEmpty()) {
+    // Direction must be one of the four Utils::Direction tokens. Pre-validate
+    // here rather than defer to findAdjacentRect (which silently returns -1
+    // on unknown strings → would otherwise map to NoSiblingInDirection and
+    // hide the caller bug). The D-Bus adaptor already filters on this, but
+    // the core helper owns its own contract so internal callers get the
+    // right Result without going through the adaptor.
+    if (direction != Utils::Direction::Left && direction != Utils::Direction::Right && direction != Utils::Direction::Up
+        && direction != Utils::Direction::Down) {
+        qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: invalid direction:" << direction;
         return Result::InvalidDirection;
     }
 

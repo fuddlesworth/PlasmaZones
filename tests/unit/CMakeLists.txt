@@ -152,6 +152,7 @@ pz_add_test(test_geometry_utils_bsp core/test_geometry_utils_bsp.cpp)
 pz_add_test(test_geometry_utils_serialization core/test_geometry_utils_serialization.cpp)
 pz_add_test(test_spatial_adjacency core/test_spatial_adjacency.cpp)
 pz_add_test(test_virtualscreen_swapper core/test_virtualscreen_swapper.cpp)
+pz_add_test(test_screen_mode_router core/test_screen_mode_router.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # config/ — Settings Tests (core, validation, per-screen)

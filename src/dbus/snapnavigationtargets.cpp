@@ -131,8 +131,11 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot move - empty direction";
+        // Feedback and result carry the caller's screenId: a half-supplied
+        // feedback (empty here, populated on the result) confuses OSD/telemetry
+        // consumers that correlate the two.
         emitFeedback(false, QStringLiteral("move"), QStringLiteral("invalid_direction"), QString(), QString(),
-                     QString());
+                     screenId);
         return moveResult(false, QStringLiteral("invalid_direction"), QString(), QRect(), QString(), screenId);
     }
     if (!m_zoneDetector) {
@@ -202,8 +205,9 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot focus - empty direction";
+        // Same feedback/result screenId consistency rule as getMoveTargetForWindow.
         emitFeedback(false, QStringLiteral("focus"), QStringLiteral("invalid_direction"), QString(), QString(),
-                     QString());
+                     screenId);
         return focusResult(false, QStringLiteral("invalid_direction"), QString(), QString(), QString(), screenId);
     }
     if (!m_zoneDetector) {
@@ -326,8 +330,9 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
     }
     if (!checkDirection(direction)) {
         qCWarning(lcDbusWindow) << "Cannot swap - empty direction";
+        // Same feedback/result screenId consistency rule as getMoveTargetForWindow.
         emitFeedback(false, QStringLiteral("swap"), QStringLiteral("invalid_direction"), QString(), QString(),
-                     QString());
+                     screenId);
         return swapResult(false, QStringLiteral("invalid_direction"), QString(), 0, 0, 0, 0, QString(), QString(), 0, 0,
                           0, 0, QString(), screenId, QString(), QString());
     }

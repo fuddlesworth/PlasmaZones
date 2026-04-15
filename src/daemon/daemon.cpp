@@ -424,8 +424,11 @@ bool Daemon::init()
 
     // Stateless façade for VS swap/rotate. Held here so navigation handlers
     // and any future consumer share one instance instead of constructing
-    // throwaway swappers per call.
+    // throwaway swappers per call. Constructed unconditionally during init
+    // so downstream handlers (handleSwapVirtualScreen / handleRotateVirtualScreens)
+    // can assume the pointer is non-null for the remainder of the daemon's lifetime.
     m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_settings.get());
+    Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
     // Note: engine->saveState() intentionally triggers a full WTA save (all window tracking

@@ -397,6 +397,242 @@ private Q_SLOTS:
         }
     }
 
+    // --- VirtualScreenConfig::swapRegions (direct struct-level tests) ---
+    //
+    // The swapper test suite (test_virtualscreen_swapper.cpp) exercises
+    // this through Settings::setVirtualScreenConfig. These tests pin the
+    // struct-level contract directly — no Settings, no IsolatedConfigGuard,
+    // no D-Bus — so a failure localizes to the helper rather than the
+    // whole pipeline.
+
+    void testSwapRegions_exchangesRegionsAndPreservesFields()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+
+        QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
+
+        // Regions swapped.
+        QCOMPARE(cfg.screens[0].region, QRectF(0.5, 0.0, 0.5, 1.0));
+        QCOMPARE(cfg.screens[1].region, QRectF(0.0, 0.0, 0.5, 1.0));
+        // Every other field preserved on both defs.
+        QCOMPARE(cfg.screens[0].id, QStringLiteral("phys/vs:0"));
+        QCOMPARE(cfg.screens[1].id, QStringLiteral("phys/vs:1"));
+        QCOMPARE(cfg.screens[0].displayName, QStringLiteral("Left"));
+        QCOMPARE(cfg.screens[1].displayName, QStringLiteral("Right"));
+        QCOMPARE(cfg.screens[0].index, 0);
+        QCOMPARE(cfg.screens[1].index, 1);
+        QCOMPARE(cfg.screens[0].physicalScreenId, QStringLiteral("phys"));
+        QCOMPARE(cfg.screens[1].physicalScreenId, QStringLiteral("phys"));
+    }
+
+    void testSwapRegions_selfSwap_returnsFalse()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+
+        QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:0")));
+        // Regions unchanged.
+        QCOMPARE(cfg.screens[0].region, QRectF(0.0, 0.0, 0.5, 1.0));
+        QCOMPARE(cfg.screens[1].region, QRectF(0.5, 0.0, 0.5, 1.0));
+    }
+
+    void testSwapRegions_unknownId_returnsFalse()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+
+        // idA unknown
+        QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:99"), QStringLiteral("phys/vs:1")));
+        // idB unknown
+        QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:99")));
+        // Both unknown
+        QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:7"), QStringLiteral("phys/vs:8")));
+        // Regions unchanged.
+        QCOMPARE(cfg.screens[0].region, QRectF(0.0, 0.0, 0.5, 1.0));
+        QCOMPARE(cfg.screens[1].region, QRectF(0.5, 0.0, 0.5, 1.0));
+    }
+
+    void testSwapRegions_isInvolutive()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+
+        const VirtualScreenConfig before = cfg;
+        QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
+        QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
+        QCOMPARE(cfg, before);
+    }
+
+    // --- VirtualScreenConfig::rotateRegions (direct struct-level tests) ---
+
+    void testRotateRegions_threeElement_clockwise()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
+                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
+
+        const QRectF a = cfg.screens[0].region;
+        const QRectF b = cfg.screens[1].region;
+        const QRectF c = cfg.screens[2].region;
+
+        const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
+                                     QStringLiteral("phys/vs:2")};
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/true));
+
+        // Per docs: CW rotate means def[i] takes def[(i+1) mod n]'s old region.
+        QCOMPARE(cfg.screens[0].region, b);
+        QCOMPARE(cfg.screens[1].region, c);
+        QCOMPARE(cfg.screens[2].region, a);
+    }
+
+    void testRotateRegions_threeElement_counterclockwise()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
+                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
+
+        const QRectF a = cfg.screens[0].region;
+        const QRectF b = cfg.screens[1].region;
+        const QRectF c = cfg.screens[2].region;
+
+        const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
+                                     QStringLiteral("phys/vs:2")};
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/false));
+
+        // CCW: def[i] takes def[(i-1+n) mod n]'s old region.
+        QCOMPARE(cfg.screens[0].region, c);
+        QCOMPARE(cfg.screens[1].region, a);
+        QCOMPARE(cfg.screens[2].region, b);
+    }
+
+    void testRotateRegions_acceptsSubset()
+    {
+        // rotateRegions must accept an orderedIds list that names only a
+        // subset of the config's defs — the docstring explicitly says so.
+        // Here we rotate only VSs 0 and 2, leaving VS 1 completely alone.
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.25, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.25, 0.0, 0.25, 1.0), 1});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
+                                            QRectF(0.5, 0.0, 0.5, 1.0), 2});
+
+        const QRectF r0 = cfg.screens[0].region;
+        const QRectF r1 = cfg.screens[1].region;
+        const QRectF r2 = cfg.screens[2].region;
+
+        const QVector<QString> partial{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:2")};
+        QVERIFY(cfg.rotateRegions(partial, /*clockwise=*/true));
+
+        // 2-element rotation = swap, so def[0] takes def[1]'s region and vice versa.
+        QCOMPARE(cfg.screens[0].region, r2);
+        QCOMPARE(cfg.screens[2].region, r0);
+        // Untouched VS keeps its original region.
+        QCOMPARE(cfg.screens[1].region, r1);
+    }
+
+    void testRotateRegions_fewerThanTwoIds_returnsFalse()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        const VirtualScreenConfig before = cfg;
+
+        QVERIFY(!cfg.rotateRegions({}, /*clockwise=*/true));
+        QVERIFY(!cfg.rotateRegions({QStringLiteral("phys/vs:0")}, /*clockwise=*/true));
+        // Config unchanged.
+        QCOMPARE(cfg, before);
+    }
+
+    void testRotateRegions_unknownId_returnsFalse()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        const VirtualScreenConfig before = cfg;
+
+        const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:999")};
+        QVERIFY(!cfg.rotateRegions(order, /*clockwise=*/true));
+        // Config unchanged even though one id resolved — failure is atomic.
+        QCOMPARE(cfg, before);
+    }
+
+    void testRotateRegions_fullCycle_returnsToStart()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.25, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.25, 0.0, 0.25, 1.0), 1});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
+                                            QRectF(0.5, 0.0, 0.25, 1.0), 2});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:3"), QStringLiteral("phys"), QStringLiteral("D"),
+                                            QRectF(0.75, 0.0, 0.25, 1.0), 3});
+        const VirtualScreenConfig before = cfg;
+
+        const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
+                                     QStringLiteral("phys/vs:2"), QStringLiteral("phys/vs:3")};
+        for (int i = 0; i < 4; ++i) {
+            QVERIFY(cfg.rotateRegions(order, /*clockwise=*/true));
+        }
+        QCOMPARE(cfg, before);
+    }
+
+    void testRotateRegions_cwThenCcw_isNoOp()
+    {
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = QStringLiteral("phys");
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
+                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
+                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
+                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
+        const VirtualScreenConfig before = cfg;
+
+        const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
+                                     QStringLiteral("phys/vs:2")};
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/true));
+        QVERIFY(cfg.rotateRegions(order, /*clockwise=*/false));
+        QCOMPARE(cfg, before);
+    }
+
     // --- Rounding edge case: vertical split — no gaps or overlaps ---
 
     void testAbsoluteGeometry_verticalSplit_noGapsOrOverlaps()

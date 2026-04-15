@@ -33,7 +33,12 @@ public:
     enum class Result {
         Ok, ///< Mutation applied and committed to Settings.
         NotVirtual, ///< Caller passed a physical id where a VS id was required (or vice versa).
-        NoSubdivision, ///< The physical monitor has fewer than two virtual screens.
+        /// The physical monitor has fewer than two virtual screens.
+        /// NOTE: deliberately conflated with "physical id not in Settings" — an
+        /// unknown physId returns an empty config from Settings which fails the
+        /// same size-check and lands here. Callers that need to distinguish the
+        /// two cases should cross-check existence against ScreenManager first.
+        NoSubdivision,
         UnknownVirtualScreen, ///< The VS id is well-formed but not present in the current config.
         NoSiblingInDirection, ///< Swap: no sibling VS lies in the requested direction.
         InvalidDirection, ///< Swap: direction string was empty or unrecognised.
