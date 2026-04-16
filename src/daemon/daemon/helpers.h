@@ -76,8 +76,11 @@ inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTra
 /**
  * @brief Resolve the screen ID for a keyboard shortcut action (virtual-screen-aware).
  *
- * Returns the virtual screen ID (e.g., "Dell:U2722D:115107/vs:0") if the cursor
- * is on a subdivided screen, otherwise the physical screen ID.
+ * Every navigation shortcut (float, move, focus, restore, swap, ...) targets
+ * the focused window, so the focused window's screen is authoritative — the
+ * cursor is only consulted when there is no active window (e.g. empty-desktop
+ * shortcuts). Using cursor-first silently misroutes actions when the user
+ * lets the mouse rest on a different virtual screen than the focused window.
  */
 inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdaptor)
 {
@@ -86,21 +89,22 @@ inline QString resolveShortcutScreenId(const WindowTrackingAdaptor* trackingAdap
         return primary ? Utils::screenIdentifier(primary) : QString();
     }
 
-    // Primary: cursor screen (may be virtual ID from effect)
+    // Primary: focused window's screen (may already be a virtual ID from the effect)
+    const QString activeScreen = trackingAdaptor->lastActiveScreenName();
+    if (!activeScreen.isEmpty()) {
+        if (!VirtualScreenId::isVirtual(activeScreen)) {
+            return resolveVirtualScreenId(activeScreen, trackingAdaptor);
+        }
+        return activeScreen;
+    }
+
+    // Fallback: cursor screen, for shortcuts fired with no focused window
     const QString cursorScreen = trackingAdaptor->lastCursorScreenName();
     if (!cursorScreen.isEmpty()) {
-        // If the effect sent a physical ID but the screen has virtual subdivisions,
-        // resolve to the correct virtual screen.
         if (!VirtualScreenId::isVirtual(cursorScreen)) {
             return resolveVirtualScreenId(cursorScreen, trackingAdaptor);
         }
         return cursorScreen;
-    }
-
-    // Fallback: focused window's screen (also may be virtual)
-    const QString activeScreen = trackingAdaptor->lastActiveScreenName();
-    if (!activeScreen.isEmpty()) {
-        return activeScreen;
     }
 
     // Last resort: primary screen physical ID
