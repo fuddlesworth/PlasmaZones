@@ -14,6 +14,9 @@
 #include <QQmlEngine>
 #include <QGuiApplication>
 #include <PhosphorShell/LayerSurface.h>
+
+#include <PhosphorLayer/Surface.h>
+#include "pz_roles.h"
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
@@ -312,48 +315,42 @@ void OverlayService::warmUpNavigationOsd()
 
 void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)
 {
-    if ((m_screenStates.contains(screenId) && m_screenStates[screenId].layoutOsdWindow)) {
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].layoutOsdSurface) {
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, "layout OSD");
-    if (!window) {
+    const auto role = PzRoles::LayoutOsd.withScopePrefix(
+        QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutOsd.qml")), physScreen, role, "layout OSD");
+    if (!surface) {
         return;
     }
 
-    // Configure layer surface for Wayland overlay (prevents window from appearing in taskbar)
-    // Anchors will be set dynamically in showLayoutOsd() based on window size
-    // Use screenId in scope to make it unique per virtual screen
-    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-layout-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for layout OSD on" << screenId;
-        window->deleteLater();
-        return;
-    }
-
-    // No dismissed()-signal connection: L3 v2 handles dismiss entirely in QML
-    // (see LayoutOsd.qml hideAnimation → ScriptAction → _osdDismissed = true).
-    // The C++ side no longer needs to react per-dismiss; the window is reused.
-    window->setVisible(false);
-    m_screenStates[screenId].layoutOsdWindow = window;
-    m_screenStates[screenId].layoutOsdPhysScreen = physScreen;
+    // L3 v2 handles dismiss entirely in QML (see LayoutOsd.qml hideAnimation →
+    // ScriptAction → _osdDismissed = true). The surface stays warmed for the
+    // daemon's lifetime and is reused on every layout switch.
+    auto& state = m_screenStates[screenId];
+    state.layoutOsdSurface = surface;
+    state.layoutOsdWindow = surface->window();
+    state.layoutOsdPhysScreen = physScreen;
 }
 
 void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
-    if (it != m_screenStates.end()) {
-        if (auto* window = it->layoutOsdWindow) {
-            if (it->layoutOsdPhysScreen) {
-                QObject::disconnect(it->layoutOsdPhysScreen, nullptr, window, nullptr);
-            }
-            window->close();
-            window->destroy();
-            window->deleteLater();
-            it->layoutOsdWindow = nullptr;
-        }
-        it->layoutOsdPhysScreen = nullptr;
+    if (it == m_screenStates.end()) {
+        return;
     }
+    if (it->layoutOsdSurface) {
+        if (it->layoutOsdPhysScreen && it->layoutOsdWindow) {
+            QObject::disconnect(it->layoutOsdPhysScreen, nullptr, it->layoutOsdWindow, nullptr);
+        }
+        it->layoutOsdSurface->deleteLater();
+        it->layoutOsdSurface = nullptr;
+        it->layoutOsdWindow = nullptr;
+    }
+    it->layoutOsdPhysScreen = nullptr;
 }
 
 void OverlayService::showNavigationOsd(bool success, const QString& action, const QString& reason,
@@ -517,49 +514,40 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
 
 void OverlayService::createNavigationOsdWindow(const QString& screenId, QScreen* physScreen)
 {
-    if ((m_screenStates.contains(screenId) && m_screenStates[screenId].navigationOsdWindow)) {
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].navigationOsdSurface) {
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, "navigation OSD");
-    if (!window) {
+    const auto role = PzRoles::NavigationOsd.withScopePrefix(
+        QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+
+    auto* surface =
+        createLayerSurface(QUrl(QStringLiteral("qrc:/ui/NavigationOsd.qml")), physScreen, role, "navigation OSD");
+    if (!surface) {
         m_navigationOsdCreationFailed.insert(screenId, true);
         return;
     }
 
-    // Configure layer surface for Wayland overlay
-    if (!configureLayerSurface(
-            window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-            QStringLiteral("plasmazones-navigation-osd-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for navigation OSD on" << screenId;
-        m_navigationOsdCreationFailed.insert(screenId, true);
-        window->deleteLater();
-        return;
-    }
-
-    // No dismissed()-signal connection: L3 v2 handles dismiss in QML.
-    window->setVisible(false);
-    m_screenStates[screenId].navigationOsdWindow = window;
-    m_screenStates[screenId].navigationOsdPhysScreen = physScreen;
+    auto& state = m_screenStates[screenId];
+    state.navigationOsdSurface = surface;
+    state.navigationOsdWindow = surface->window();
+    state.navigationOsdPhysScreen = physScreen;
     m_navigationOsdCreationFailed.remove(screenId);
 }
 
 void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
 {
-    {
-        auto it2 = m_screenStates.find(screenId);
-        if (it2 != m_screenStates.end()) {
-            if (auto* window = it2->navigationOsdWindow) {
-                if (it2->navigationOsdPhysScreen) {
-                    QObject::disconnect(it2->navigationOsdPhysScreen, nullptr, window, nullptr);
-                }
-                window->close();
-                window->destroy();
-                window->deleteLater();
-                it2->navigationOsdWindow = nullptr;
+    auto it = m_screenStates.find(screenId);
+    if (it != m_screenStates.end()) {
+        if (it->navigationOsdSurface) {
+            if (it->navigationOsdPhysScreen && it->navigationOsdWindow) {
+                QObject::disconnect(it->navigationOsdPhysScreen, nullptr, it->navigationOsdWindow, nullptr);
             }
-            it2->navigationOsdPhysScreen = nullptr;
+            it->navigationOsdSurface->deleteLater();
+            it->navigationOsdSurface = nullptr;
+            it->navigationOsdWindow = nullptr;
         }
+        it->navigationOsdPhysScreen = nullptr;
     }
     m_navigationOsdCreationFailed.remove(screenId);
 }

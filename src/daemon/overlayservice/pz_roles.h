@@ -32,9 +32,12 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
 /// Layout OSD (transient visual preview on layout switch). Overlay layer,
-/// centred via margins, no keyboard. Pre-warmed per screen at daemon start.
+/// AnchorAll so the compositor ignores x/y hints and honours the margins
+/// we write dynamically via the transport handle (see
+/// centerLayerWindowOnScreen in osd.cpp) to centre the OSD on-screen.
+/// No keyboard. Pre-warmed per screen at daemon start.
 inline const PhosphorLayer::Role LayoutOsd = PhosphorLayer::Role{PhosphorLayer::Layer::Overlay,
-                                                                 PhosphorLayer::AnchorNone,
+                                                                 PhosphorLayer::AnchorAll,
                                                                  -1,
                                                                  PhosphorLayer::KeyboardInteractivity::None,
                                                                  QMargins(),
@@ -43,7 +46,7 @@ inline const PhosphorLayer::Role LayoutOsd = PhosphorLayer::Role{PhosphorLayer::
 /// Navigation OSD (keyboard-nav feedback). Same shape as LayoutOsd —
 /// different content + lifecycle.
 inline const PhosphorLayer::Role NavigationOsd = PhosphorLayer::Role{PhosphorLayer::Layer::Overlay,
-                                                                     PhosphorLayer::AnchorNone,
+                                                                     PhosphorLayer::AnchorAll,
                                                                      -1,
                                                                      PhosphorLayer::KeyboardInteractivity::None,
                                                                      QMargins(),
