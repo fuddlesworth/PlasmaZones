@@ -36,11 +36,13 @@
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
+#include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorLayer/defaults/DefaultScreenProvider.h>
 #include <PhosphorLayer/defaults/PhosphorShellTransport.h>
+#include <QQuickItem>
 #include "overlayservice/pz_roles.h"
 
 namespace PlasmaZones {
@@ -254,24 +256,38 @@ OverlayService::OverlayService(QObject* parent)
         if (!screen) {
             return;
         }
-        m_keepAliveWindow = new QQuickWindow();
-        QQmlEngine::setObjectOwnership(m_keepAliveWindow, QQmlEngine::CppOwnership);
-#if QT_CONFIG(vulkan)
-        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-        if (vulkanInstance) {
-            m_keepAliveWindow->setVulkanInstance(vulkanInstance);
+        // Keep-alive goes through PhosphorLayer like every other overlay now —
+        // a tiny 1×1 background-layer surface with no anchors, no input, no
+        // content beyond a bare QQuickItem. Its only job is keeping Qt's
+        // Vulkan globals resident across overlay destroy-cycles.
+        PhosphorLayer::SurfaceConfig cfg;
+        cfg.role = PhosphorLayer::Roles::Background.withScopePrefix(QStringLiteral("plasmazones-keepalive"));
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = screen;
+        cfg.anchorsOverride = PhosphorLayer::AnchorNone;
+        cfg.exclusiveZoneOverride = 0;
+        cfg.debugName = QStringLiteral("keepalive");
+        auto* keepAlive = m_surfaceFactory->create(std::move(cfg), this);
+        if (!keepAlive) {
+            return;
         }
+        keepAlive->warmUp();
+        if (keepAlive->state() == PhosphorLayer::Surface::State::Failed) {
+            keepAlive->deleteLater();
+            return;
+        }
+        m_keepAliveWindow = keepAlive->window();
+        if (m_keepAliveWindow) {
+#if QT_CONFIG(vulkan)
+            auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+            if (vulkanInstance) {
+                m_keepAliveWindow->setVulkanInstance(vulkanInstance);
+            }
 #endif
-        m_keepAliveWindow->setScreen(screen);
-        m_keepAliveWindow->setWidth(1);
-        m_keepAliveWindow->setHeight(1);
-        // Configure as background layer — invisible, no input, minimal compositor cost.
-        // Best-effort: if layer-shell is unavailable the window still keeps Qt's
-        // Vulkan globals alive (just renders as a tiny xdg_toplevel).
-        (void)configureLayerSurface(m_keepAliveWindow, screen, LayerSurface::LayerBackground,
-                                    LayerSurface::KeyboardInteractivityNone, QStringLiteral("plasmazones-keepalive"),
-                                    LayerSurface::AnchorNone, 0);
-        m_keepAliveWindow->show();
+            m_keepAliveWindow->setWidth(1);
+            m_keepAliveWindow->setHeight(1);
+        }
+        keepAlive->show();
     });
 }
 
@@ -320,103 +336,6 @@ OverlayService::~OverlayService()
 
     // Now m_engine (unique_ptr) will be destroyed safely
     // since all QML objects have been properly cleaned up
-}
-
-QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
-                                              const QVariantMap& initialProperties)
-{
-    if (!screen) {
-        qCWarning(lcOverlay) << "Screen is null for" << windowType;
-        return nullptr;
-    }
-
-    QQmlComponent component(m_engine.get(), qmlUrl);
-
-    if (component.isError()) {
-        qCWarning(lcOverlay) << "Failed to load" << windowType << "QML:" << component.errors();
-        return nullptr;
-    }
-
-    if (component.status() != QQmlComponent::Ready) {
-        qCWarning(lcOverlay) << windowType << "QML component not ready, status=" << component.status();
-        return nullptr;
-    }
-
-    QObject* obj =
-        initialProperties.isEmpty() ? component.create() : component.createWithInitialProperties(initialProperties);
-    if (!obj) {
-        qCWarning(lcOverlay) << "Failed to create" << windowType << "window:" << component.errors();
-        return nullptr;
-    }
-
-    auto* window = qobject_cast<QQuickWindow*>(obj);
-    if (!window) {
-        qCWarning(lcOverlay) << "Created object is not a QQuickWindow for" << windowType;
-        obj->deleteLater();
-        return nullptr;
-    }
-
-    // Take C++ ownership so QML's GC doesn't delete the window
-    QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-
-    // Enable persistent RHI pipeline cache — compiled GPU programs survive across sessions.
-    // This eliminates shader recompilation on subsequent daemon starts.
-    // Must be called before the window is shown (before scene graph initialization).
-    // All windows share the same cache file — the RHI pipeline cache format is window-agnostic
-    // and Qt serializes writes, so a single shared file is both correct and efficient.
-    // The pipeline cache configuration is applied to EVERY window (not just the first) because
-    // each QQuickWindow independently manages its own scene graph and needs the cache path.
-    {
-        const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-        if (!cacheDir.isEmpty()) {
-            // Only create the directory once across all windows.
-            static bool s_cacheDirCreated = false;
-            if (!s_cacheDirCreated) {
-                QDir().mkpath(cacheDir);
-                s_cacheDirCreated = true;
-            }
-            QQuickGraphicsConfiguration config = window->graphicsConfiguration();
-            config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
-            window->setGraphicsConfiguration(config);
-        }
-    }
-
-    // When the Vulkan backend is active, each QQuickWindow needs a QVulkanInstance
-    // set before it can create a Vulkan surface. The instance is stored as a dynamic
-    // property on QGuiApplication by main.cpp.
-    // IMPORTANT: setVulkanInstance() must be called before the window is shown or
-    // the scene graph is initialized. This is safe here because the window starts
-    // with visible: false and show() is called separately after createQmlWindow().
-#if QT_CONFIG(vulkan)
-    auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
-    if (vulkanInstance) {
-        window->setVulkanInstance(vulkanInstance);
-    } else if (QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
-        // This can happen when backend is 'auto' and Qt chose Vulkan at runtime.
-        // Create a QVulkanInstance on-the-fly so overlays still work.
-        if (!m_fallbackVulkanInstance) {
-            m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
-            m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
-            if (m_fallbackVulkanInstance->create()) {
-                qCInfo(lcOverlay) << "Created fallback QVulkanInstance for 'auto' backend (Qt chose Vulkan).";
-                qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
-                                  QVariant::fromValue(m_fallbackVulkanInstance.get()));
-            } else {
-                qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance."
-                                      << "Overlay windows will not render correctly.";
-                m_fallbackVulkanInstance.reset();
-                window->deleteLater();
-                return nullptr;
-            }
-        }
-        window->setVulkanInstance(m_fallbackVulkanInstance.get());
-    }
-#endif
-
-    // Set the screen before the QPA plugin creates the LayerSurface
-    window->setScreen(screen);
-
-    return window;
 }
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,

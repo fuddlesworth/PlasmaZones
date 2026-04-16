@@ -21,6 +21,7 @@
 #include <QPointer>
 #include <PhosphorShell/LayerSurface.h>
 
+#include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
 using PhosphorShell::LayerSurface;
@@ -466,10 +467,17 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
                                auto& st = stateIt.value();
                                if (auto* w = st.overlayWindow) {
                                    if (lambdaIsVS) {
-                                       // Virtual screen: recalculate geometry from ScreenManager since
-                                       // virtual screen proportions are relative to the physical screen.
-                                       const QRect vsGeom = updateWindowScreenPosition(w, sid);
-                                       if (vsGeom.isValid()) {
+                                       // Virtual screen: recompute sub-region geometry from ScreenManager
+                                       // (virtual proportions are relative to the physical screen) and
+                                       // push new margins via the PhosphorLayer transport handle.
+                                       // Anchors (Top|Left) are fixed at attach and can't change.
+                                       const QRect vsGeom = resolveScreenGeometry(sid);
+                                       if (vsGeom.isValid() && st.overlaySurface) {
+                                           if (auto* handle = st.overlaySurface->transport()) {
+                                               const QRect clamped = vsGeom.intersected(newGeom);
+                                               handle->setMargins(QMargins(clamped.x() - newGeom.x(),
+                                                                           clamped.y() - newGeom.y(), 0, 0));
+                                           }
                                            w->setWidth(vsGeom.width());
                                            w->setHeight(vsGeom.height());
                                            st.overlayGeometry = vsGeom;
@@ -477,9 +485,8 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
                                            return;
                                        }
                                    } else {
-                                       // Physical screen: size directly from the new geometry.
-                                       // Position is controlled by layer-surface anchors (AnchorAll),
-                                       // setX/setY are no-ops on layer surfaces.
+                                       // Physical screen: AnchorAll auto-sizes to the screen; just
+                                       // mirror the resize to our cached state.
                                        w->setWidth(newGeom.width());
                                        w->setHeight(newGeom.height());
                                        st.overlayGeometry = newGeom;

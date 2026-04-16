@@ -462,25 +462,13 @@ private:
                                 const QString& screenId = QString());
 
     /**
-     * @brief Create a QML window from a resource URL
-     * @param qmlUrl QML resource URL (e.g., "qrc:/ui/ZoneOverlay.qml")
-     * @param screen Screen to assign the window to
-     * @param windowType Description for logging (e.g., "overlay", "zone selector")
-     * @return Created window with C++ ownership, or nullptr on failure
-     *
-     * Handles common QML window creation: component loading, error checking,
-     * QQuickWindow casting, ownership, and screen assignment.
-     */
-    QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
-                                  const QVariantMap& initialProperties = QVariantMap());
-
-    /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
      *
-     * Replaces the createQmlWindow + configureLayerSurface pair that was used before
-     * PhosphorLayer was wired in. Returns a surface that has been warmed up (window
-     * created, QML loaded, transport attached) but is hidden — callers decide when
-     * to call @c surface->show() or keep it warm for pre-warmed OSDs.
+     * Every overlay, OSD, zone selector, snap assist, layout picker, and shader
+     * preview in OverlayService goes through this single helper. Returns a surface
+     * that has been warmed up (window created, QML loaded, transport attached) but
+     * is hidden — callers decide when to call @c surface->show() or keep it warm
+     * for pre-warmed OSDs.
      *
      * @param qmlUrl            QML file (Window-rooted — PZ's overlay QML convention)
      * @param screen            target screen (physical; virtual-screen positioning is the caller's job)
