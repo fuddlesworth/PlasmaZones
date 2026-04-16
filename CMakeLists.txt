@@ -5,7 +5,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-project(PlasmaZones VERSION 2.8.6 LANGUAGES C CXX)
+project(PlasmaZones VERSION 2.8.7 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -305,8 +305,11 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 
 # Source directories
 add_subdirectory(src)
+option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)
 if(USE_KDE_FRAMEWORKS)
-    add_subdirectory(kwin-effect)  # KWin C++ Effect (KDE-only)
+    if(BUILD_KWIN_EFFECT)
+        add_subdirectory(kwin-effect)  # KWin C++ Effect (KDE-only)
+    endif()
     add_subdirectory(kcm)          # KDE System Settings modules (KDE-only)
 endif()
 

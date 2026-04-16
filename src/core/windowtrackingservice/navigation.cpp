@@ -45,8 +45,14 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         }
         // When desktop filter is set, only count zones from windows on that desktop.
         // Desktop 0 means "all desktops" (pinned window) — always include those.
-        // With virtual screens, windows on different virtual desktops sharing the same
-        // layout should not mark zones as occupied on the target desktop.
+        // Without this, a window parked on another virtual desktop keeps its zone
+        // "occupied" on the current desktop, blocking snap assist from offering the
+        // zone to fill — even though SnapAssistHandler::buildCandidates() already
+        // excludes other-desktop windows from the candidate list. This asymmetry
+        // produces discussion #323: snap-to-top never shows snap assist for the
+        // bottom zone when other-desktop windows are parked there. With virtual
+        // screens this matters even more, since different virtual desktops can
+        // share the same layout (and thus the same zone IDs).
         if (desktopFilter > 0) {
             int windowDesktop = m_windowDesktopAssignments.value(it.key(), 0);
             if (windowDesktop != 0 && windowDesktop != desktopFilter) {
@@ -89,7 +95,7 @@ QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QStri
 QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 {
     Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
-    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
@@ -106,9 +112,12 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
         return {};
     }
 
-    // Use screen-filtered and desktop-filtered occupancy check — without this, zones
-    // occupied on screen A (or other desktops) appear occupied on screen B / current desktop.
-    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    // Screen-filtered + desktop-filtered occupancy — without the screen filter,
+    // zones occupied on screen A appear occupied on screen B when both use the
+    // same layout (same zone IDs). Without the desktop filter, windows parked on
+    // other virtual desktops keep their zone occupied on the current desktop,
+    // blocking snap assist (discussion #323).
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
     return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings, [&occupied](const Zone* z) {
         return !occupied.contains(z->id());

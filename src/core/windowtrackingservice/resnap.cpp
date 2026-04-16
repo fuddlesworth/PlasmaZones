@@ -501,7 +501,9 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
     QVector<Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
-    int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
+    // Filter occupancy by the current virtual desktop so windows parked on other
+    // desktops don't make zones appear occupied on the current-desktop batch snap.
+    const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Resolve physical screen for zone geometry calculation

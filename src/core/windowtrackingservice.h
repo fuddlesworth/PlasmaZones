@@ -1167,9 +1167,15 @@ private:
 
 public:
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
+    ///
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.
-    /// When @p desktopFilter is positive, only windows on that desktop (or desktop 0 = all)
-    /// are included. Pass 0 or omit to disable desktop filtering.
+    ///
+    /// @param desktopFilter When > 0, only counts assignments whose window desktop
+    ///   matches (or is 0 = pinned/all-desktops). Pass the current virtual desktop
+    ///   for snap-assist / empty-zone queries so windows parked on other desktops
+    ///   do not make zones appear occupied — this mirrors the filtering done by
+    ///   SnapAssistHandler::buildCandidates() in the KWin effect, keeping the
+    ///   "occupied" and "candidate" definitions symmetric.
     QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
 public:
