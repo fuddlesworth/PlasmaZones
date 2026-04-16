@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Qt6 COMPONENTS Core Gui Qml Quick)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorLayerTargets.cmake")
+
+check_required_components(PhosphorLayer)
