@@ -4,6 +4,7 @@
 #include "zoneshaderitem.h"
 #include "zoneshadernoderhi.h"
 
+#include "../../config/configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 
@@ -29,6 +30,12 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     const QStringList allShaderDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
     setShaderIncludePaths(allShaderDirs);
+
+    // Set PlasmaZones-specific default colors from ConfigDefaults
+    // (the library defaults are all-transparent).
+    setCustomColor1(ConfigDefaults::highlightColor());
+    setCustomColor2(ConfigDefaults::inactiveColor());
+    setCustomColor3(ConfigDefaults::borderColor());
 }
 
 ZoneShaderItem::~ZoneShaderItem()
@@ -246,8 +253,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // ── Sync shader source ───────────────────────────────────────────
     // PlasmaZones derives vertex shader path from zone.vert in the same directory.
-    const bool needLoad =
-        !node->isShaderReady() || (shaderSource().isValid() && !shaderSource().isEmpty() && !node->isShaderReady());
+    const bool needLoad = !node->isShaderReady();
     // Check if parent's shader dirty flag was set (parent uses atomic m_shaderDirty)
     // Since we inherit ShaderEffect, we can check status changes
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();

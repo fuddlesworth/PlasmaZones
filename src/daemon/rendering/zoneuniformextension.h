@@ -51,7 +51,9 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
-    /// Update zone data from a vector of ZoneData. Called on render thread from updatePaintNode sync.
+    /// Update zone data from a vector of ZoneData. Called on the GUI thread during the
+    /// scene graph sync phase (updatePaintNode). Safe because the render thread is blocked
+    /// during the sync phase.
     void updateFromZones(const QVector<ZoneData>& zones)
     {
         for (int i = 0; i < MaxZones; ++i) {

@@ -36,6 +36,16 @@ ZoneShaderNodeRhi::~ZoneShaderNodeRhi() = default;
 // Zone Data Setters
 // ============================================================================
 
+void ZoneShaderNodeRhi::updateHighlightedCount()
+{
+    int count = 0;
+    for (const auto& zone : m_zones) {
+        if (zone.isHighlighted)
+            ++count;
+    }
+    setAppField1(count);
+}
+
 void ZoneShaderNodeRhi::setZones(const QVector<ZoneData>& zones)
 {
     const int count = qMin(zones.size(), MaxZones);
@@ -46,12 +56,7 @@ void ZoneShaderNodeRhi::setZones(const QVector<ZoneData>& zones)
 
     // Update appField0 (zoneCount) and appField1 (highlightedCount)
     setAppField0(m_zones.size());
-    int highlightedCount = 0;
-    for (const auto& zone : m_zones) {
-        if (zone.isHighlighted)
-            ++highlightedCount;
-    }
-    setAppField1(highlightedCount);
+    updateHighlightedCount();
 
     invalidateUniforms();
 }
@@ -66,12 +71,7 @@ void ZoneShaderNodeRhi::setZone(int index, const ZoneData& data)
         m_zoneExtension->updateFromZones(m_zones);
 
         setAppField0(m_zones.size());
-        int highlightedCount = 0;
-        for (const auto& zone : m_zones) {
-            if (zone.isHighlighted)
-                ++highlightedCount;
-        }
-        setAppField1(highlightedCount);
+        updateHighlightedCount();
 
         invalidateUniforms();
     }
@@ -95,12 +95,7 @@ void ZoneShaderNodeRhi::setHighlightedZones(const QVector<int>& indices)
     }
     m_zoneExtension->updateFromZones(m_zones);
 
-    int highlightedCount = 0;
-    for (const auto& zone : m_zones) {
-        if (zone.isHighlighted)
-            ++highlightedCount;
-    }
-    setAppField1(highlightedCount);
+    updateHighlightedCount();
 
     invalidateUniforms();
 }

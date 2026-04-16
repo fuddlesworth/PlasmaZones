@@ -136,6 +136,15 @@ void ShaderNodeRhi::setAppField1(int value)
 
 void ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
+    // Binding 0 is the UBO, 2-5 are buffer channels, 6 is audio, 7-10 are user
+    // textures, 11 is wallpaper, 12 is depth. Binding 1 is reserved-but-unmanaged
+    // (consumers like PlasmaZones use it for labels). Reject conflicts with
+    // managed built-in bindings.
+    if (binding == 0 || (binding >= 2 && binding <= 12)) {
+        qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding
+                                << "conflicts with a built-in binding (0, 2-12) — ignored";
+        return;
+    }
     m_extraBindings[binding] = ExtraBinding{texture, sampler};
     m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
@@ -163,6 +172,7 @@ void ShaderNodeRhi::setAudioSpectrum(const QVector<float>& spectrum)
     m_audioSpectrum = spectrum;
     m_audioSpectrumDirty = true;
     m_uniformsDirty = true;
+    m_sceneDataDirty = true; // iAudioSpectrumSize lives in scene-header region
 }
 
 void ShaderNodeRhi::setUserTexture(int slot, const QImage& image)

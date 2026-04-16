@@ -67,7 +67,7 @@ class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
 
     // ── Shader source ────────────────────────────────────────────────
     Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
-    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
+    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged)
 
     // ── Multipass ────────────────────────────────────────────────────
     Q_PROPERTY(
@@ -498,9 +498,9 @@ private:
 
     // ── Custom colors (16 colors) ────────────────────────────────────
     std::array<QColor, 16> m_customColors = {{
-        QColor::fromRgbF(1.0f, 0.5f, 0.0f, 1.0f), // Default orange highlight
-        QColor::fromRgbF(0.2f, 0.2f, 0.2f, 0.8f), // Default gray inactive
-        QColor::fromRgbF(1.0f, 1.0f, 1.0f, 0.0f), // Default white, alpha 0 = not set
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
+        QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),
         QColor::fromRgbF(0.0f, 0.0f, 0.0f, 0.0f),

@@ -33,12 +33,16 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
     m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
-    const QDateTime now = QDateTime::currentDateTime();
-    m_baseUniforms.iDate[0] = static_cast<float>(now.date().year());
-    m_baseUniforms.iDate[1] = static_cast<float>(now.date().month());
-    m_baseUniforms.iDate[2] = static_cast<float>(now.date().day());
-    m_baseUniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
-                                                 + now.time().second() + now.time().msec() / 1000.0);
+    // Only recompute iDate when scene data is being uploaded (avoids stale GPU
+    // values — iDate lives in the scene-header region, not the time region)
+    if (m_sceneDataDirty || !m_didFullUploadOnce) {
+        const QDateTime now = QDateTime::currentDateTime();
+        m_baseUniforms.iDate[0] = static_cast<float>(now.date().year());
+        m_baseUniforms.iDate[1] = static_cast<float>(now.date().month());
+        m_baseUniforms.iDate[2] = static_cast<float>(now.date().day());
+        m_baseUniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
+                                                     + now.time().second() + now.time().msec() / 1000.0);
+    }
 
     // appField0/appField1: left as-is (set by setAppField0/1 or extension)
 

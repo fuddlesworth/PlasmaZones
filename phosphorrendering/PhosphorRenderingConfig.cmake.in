@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(Qt6 COMPONENTS Core Gui Quick)
+find_dependency(PhosphorShell)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PhosphorRenderingTargets.cmake")
+
+check_required_components(PhosphorRendering)

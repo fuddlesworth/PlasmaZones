@@ -46,6 +46,15 @@ static constexpr int kMaxCustomColors = 16;
  *
  * Uses QRhi and QShaderBaker (runtime SPIR-V + GLSL 330 bake). Requires Qt 6.6+
  * (commandBuffer(), renderTarget()).
+ *
+ * @par Threading contract
+ * All setter methods (setTime, setResolution, setCustomParams, setExtraBinding, etc.)
+ * must be called from QQuickItem::updatePaintNode() during the scene graph sync phase
+ * — the GUI thread is blocked and the render thread is idle at that point. Calling
+ * setters outside updatePaintNode() is a data race with prepare()/render() on the
+ * render thread. The consumer-owned QRhiTexture/QRhiSampler pointers passed to
+ * setExtraBinding() must remain valid until removeExtraBinding() is called or the
+ * node is destroyed.
  */
 class PHOSPHORRENDERING_EXPORT ShaderNodeRhi : public QSGRenderNode
 {

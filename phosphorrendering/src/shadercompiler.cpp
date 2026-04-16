@@ -88,6 +88,14 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
     if (result.shader.isValid()) {
         result.success = true;
         QMutexLocker lock(&cache.mutex);
+        // Double-check: another thread may have inserted while we were baking
+        auto existing = cache.entries.constFind(key);
+        if (existing != cache.entries.constEnd()) {
+            result.shader = *existing;
+            return result;
+        }
+        // Eviction is arbitrary (QHash iteration order) — acceptable for a
+        // shader cache where all entries are equally likely to be reused.
         if (cache.entries.size() >= BakeCache::kMaxSize) {
             cache.entries.erase(cache.entries.begin());
         }

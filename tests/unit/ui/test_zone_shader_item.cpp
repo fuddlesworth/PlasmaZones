@@ -12,6 +12,7 @@
 
 #include "daemon/rendering/zoneshaderitem.h"
 #include "daemon/rendering/zoneshadercommon.h"
+#include "config/configdefaults.h"
 #include "core/constants.h"
 #include "../helpers/TestHelpers.h"
 
@@ -196,14 +197,16 @@ private Q_SLOTS:
     {
         ZoneShaderItem item;
 
-        // Verify default color 1 is orange (1.0, 0.5, 0.0, 1.0)
-        // Use tolerance for QColor 16-bit internal precision in Qt6
+        // Verify default color 1 matches ConfigDefaults::highlightColor()
         constexpr float kEpsilon = 0.002f;
         QColor defaultColor = item.customColor1();
-        QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - 1.0f) < kEpsilon);
-        QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - 0.5f) < kEpsilon);
-        QVERIFY(qAbs(static_cast<float>(defaultColor.blueF())) < kEpsilon); // orange has no blue
-        QVERIFY(qAbs(static_cast<float>(defaultColor.alphaF()) - 1.0f) < kEpsilon); // fully opaque
+        QColor expectedColor = PlasmaZones::ConfigDefaults::highlightColor();
+        QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - static_cast<float>(expectedColor.redF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - static_cast<float>(expectedColor.greenF()))
+                < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.blueF()) - static_cast<float>(expectedColor.blueF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.alphaF()) - static_cast<float>(expectedColor.alphaF()))
+                < kEpsilon);
 
         // Apply custom color via shaderParams
         QVariantMap params;

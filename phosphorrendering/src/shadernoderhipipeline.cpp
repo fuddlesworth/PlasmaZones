@@ -188,6 +188,7 @@ bool ShaderNodeRhi::ensureBufferTarget()
         m_bufferSrbB.reset();
         m_srb.reset();
         m_srbB.reset();
+        m_bufferFeedbackCleared = false; // New textures need clearing
     } else if (m_bufferFeedback && !m_bufferTextureB) {
         if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
             qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";

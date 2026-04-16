@@ -57,6 +57,9 @@ public:
     void releaseResources() override;
 
 private:
+    /** Recompute highlighted count from m_zones and set appField1. */
+    void updateHighlightedCount();
+
     /** Thread-safe QRhi accessor for labels texture management. */
     QRhi* safeRhiForLabels() const;
 

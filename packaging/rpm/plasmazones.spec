@@ -177,8 +177,9 @@ echo ""
 # PhosphorShell development headers and data
 %{_includedir}/PhosphorShell/
 
-# PhosphorRendering development headers
+# PhosphorRendering development headers and CMake config
 %{_includedir}/PhosphorRendering/
+%{_libdir}/cmake/PhosphorRendering/
 %{_datadir}/phosphorshell/
 
 # KCM sub-modules (System Settings)

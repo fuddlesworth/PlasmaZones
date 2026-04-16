@@ -199,8 +199,8 @@ void ShaderEffect::setBufferShaderPath(const QString& path)
         Q_EMIT bufferShaderPathsChanged();
     }
     m_shaderDirty = true;
-    update();
     Q_EMIT bufferShaderPathChanged();
+    update();
 }
 
 void ShaderEffect::setBufferShaderPaths(const QStringList& paths)
@@ -365,7 +365,13 @@ void ShaderEffect::setAudioSpectrum(const QVector<float>& spectrum)
     if (m_audioSpectrum == spectrum) {
         return;
     }
-    m_audioSpectrum = spectrum;
+    // Clamp values to [0,1] to match QML path behavior
+    QVector<float> clamped;
+    clamped.reserve(spectrum.size());
+    for (const float v : spectrum) {
+        clamped.append(qBound(0.0f, v, 1.0f));
+    }
+    m_audioSpectrum = std::move(clamped);
     Q_EMIT audioSpectrumChanged();
     update();
 }

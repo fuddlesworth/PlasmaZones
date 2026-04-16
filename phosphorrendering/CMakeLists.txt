@@ -106,9 +106,55 @@ install(TARGETS PhosphorRendering
 
 install(DIRECTORY include/PhosphorRendering/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorRendering
-    FILES_MATCHING PATTERN "*.h"
+    FILES_MATCHING
+    PATTERN "*.h"
+    PATTERN "ShaderCompiler"
+    PATTERN "ShaderNodeRhi"
+    PATTERN "ShaderEffect"
 )
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorrendering_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorRendering
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CMake Package Config (for find_package(PhosphorRendering))
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Only generate export/config when PhosphorShell also has an export set.
+# When built as a subdirectory of PlasmaZones (the default), the ALIAS target
+# PhosphorRendering::PhosphorRendering is sufficient. The export set is for
+# standalone installs where consumers use find_package().
+
+include(CMakePackageConfigHelpers)
+
+if(TARGET PhosphorShell AND NOT TARGET PhosphorShell::PhosphorShellExported)
+    # PhosphorShell doesn't have an export set yet — skip export to avoid CMake error.
+    # The install(TARGETS ... EXPORT) above still records the intent; it just won't
+    # be written to disk until PhosphorShell gets matching export support.
+    message(STATUS "PhosphorRendering: skipping CMake export (PhosphorShell has no export set)")
+else()
+    install(EXPORT PhosphorRenderingTargets
+        FILE PhosphorRenderingTargets.cmake
+        NAMESPACE PhosphorRendering::
+        DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorRendering
+    )
+
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/PhosphorRenderingConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/PhosphorRenderingConfig.cmake"
+        INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorRendering
+    )
+
+    write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/PhosphorRenderingConfigVersion.cmake"
+        VERSION ${PHOSPHORRENDERING_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/PhosphorRenderingConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/PhosphorRenderingConfigVersion.cmake"
+        DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorRendering
+    )
+endif()
