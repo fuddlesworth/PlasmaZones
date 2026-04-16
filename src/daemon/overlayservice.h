@@ -19,6 +19,14 @@
 
 class QQmlEngine;
 
+namespace PhosphorLayer {
+class ILayerShellTransport;
+class IScreenProvider;
+class Surface;
+class SurfaceFactory;
+struct Role;
+} // namespace PhosphorLayer
+
 namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
@@ -51,6 +59,16 @@ public:
      */
     struct PerScreenOverlayState
     {
+        // PhosphorLayer-backed lifecycle handles. Own the QQuickWindow via their
+        // internal transport. The parallel QQuickWindow* fields below are convenience
+        // accessors cached from surface->window() at create time and preserved so the
+        // hundreds of `window->setProperty(...)` call sites in overlayservice/*.cpp
+        // don't each need to reach through a surface pointer.
+        PhosphorLayer::Surface* overlaySurface = nullptr;
+        PhosphorLayer::Surface* zoneSelectorSurface = nullptr;
+        PhosphorLayer::Surface* layoutOsdSurface = nullptr;
+        PhosphorLayer::Surface* navigationOsdSurface = nullptr;
+
         QQuickWindow* overlayWindow = nullptr;
         QScreen* overlayPhysScreen = nullptr;
         QRect overlayGeometry;
@@ -314,6 +332,15 @@ private:
     Layout* resolveScreenLayout(const QString& screenId) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
+
+    // PhosphorLayer infrastructure — owns the wlr-layer-shell binding, screen
+    // enumeration, and Surface factory for all overlay-style windows. Members
+    // ordered so factory is destroyed before provider/transport (factory keeps
+    // raw pointers to the other two).
+    std::unique_ptr<PhosphorLayer::IScreenProvider> m_screenProvider;
+    std::unique_ptr<PhosphorLayer::ILayerShellTransport> m_transport;
+    std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
+
     QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
@@ -347,12 +374,14 @@ private:
     // Layout OSD and Navigation OSD windows are stored in m_screenStates
 
     // Shader preview overlay (editor dialog)
+    PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
     QQuickWindow* m_shaderPreviewWindow = nullptr;
     QPointer<QScreen> m_shaderPreviewScreen;
     QString m_shaderPreviewShaderId; // Shader ID for param translation in updateShaderPreview
     QString m_shaderPreviewScreenId; // Virtual screen ID from showShaderPreview (avoids re-resolving from QScreen*)
 
     // Snap Assist overlay (window picker after snapping)
+    PhosphorLayer::Surface* m_snapAssistSurface = nullptr;
     QQuickWindow* m_snapAssistWindow = nullptr;
     QPointer<QScreen> m_snapAssistScreen;
     QString m_snapAssistScreenId;
@@ -361,6 +390,7 @@ private:
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
     QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
     // Layout Picker overlay (interactive layout browser)
+    PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
     QPointer<QScreen> m_layoutPickerScreen;
     QString m_layoutPickerScreenId;
@@ -437,6 +467,27 @@ private:
      */
     QQuickWindow* createQmlWindow(const QUrl& qmlUrl, QScreen* screen, const char* windowType,
                                   const QVariantMap& initialProperties = QVariantMap());
+
+    /**
+     * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
+     *
+     * Replaces the createQmlWindow + configureLayerSurface pair that was used before
+     * PhosphorLayer was wired in. Returns a surface that has been warmed up (window
+     * created, QML loaded, transport attached) but is hidden — callers decide when
+     * to call @c surface->show() or keep it warm for pre-warmed OSDs.
+     *
+     * @param qmlUrl            QML file (Window-rooted — PZ's overlay QML convention)
+     * @param screen            target screen (physical; virtual-screen positioning is the caller's job)
+     * @param role              protocol-level preset (see pz_roles.h)
+     * @param windowType        debug/telemetry label
+     * @param windowProperties  QVariantMap applied as dynamic properties on the
+     *                          QQuickWindow before QML loads
+     *
+     * @return the surface on success; nullptr on failure (warnings logged internally).
+     */
+    PhosphorLayer::Surface* createLayerSurface(const QUrl& qmlUrl, QScreen* screen, const PhosphorLayer::Role& role,
+                                               const char* windowType,
+                                               const QVariantMap& windowProperties = QVariantMap());
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);

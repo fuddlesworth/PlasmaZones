@@ -36,6 +36,13 @@
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
+#include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/SurfaceConfig.h>
+#include <PhosphorLayer/SurfaceFactory.h>
+#include <PhosphorLayer/defaults/DefaultScreenProvider.h>
+#include <PhosphorLayer/defaults/PhosphorShellTransport.h>
+#include "overlayservice/pz_roles.h"
+
 namespace PlasmaZones {
 
 namespace {
@@ -108,10 +115,19 @@ void cleanupScreenStatesByPrefix(QHash<QString, OverlayService::PerScreenOverlay
 OverlayService::OverlayService(QObject* parent)
     : IOverlayService(parent)
     , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
+    , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
+    , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
 {
     // Set up i18n for QML (makes i18n() available in QML)
     auto* localizedContext = new PzLocalizedContext(m_engine.get());
     m_engine->rootContext()->setContextObject(localizedContext);
+
+    // PhosphorLayer factory. engineProvider is left null so Surfaces get their
+    // own QQmlEngine by default — except when we pass cfg.sharedEngine pointing
+    // at m_engine (which createLayerSurface does below) so all overlays share
+    // the OverlayService's engine + context properties + i18n setup.
+    m_surfaceFactory = std::make_unique<PhosphorLayer::SurfaceFactory>(PhosphorLayer::SurfaceFactory::Deps{
+        m_transport.get(), m_screenProvider.get(), nullptr, QStringLiteral("plasmazones.overlay")});
 
     // Connect to screen changes (with safety check for early initialization)
     if (qGuiApp) {
@@ -401,6 +417,81 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
     window->setScreen(screen);
 
     return window;
+}
+
+PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
+                                                           const PhosphorLayer::Role& role, const char* windowType,
+                                                           const QVariantMap& windowProperties)
+{
+    if (!screen) {
+        qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
+        return nullptr;
+    }
+    if (!m_surfaceFactory) {
+        qCWarning(lcOverlay) << "createLayerSurface: SurfaceFactory not initialised";
+        return nullptr;
+    }
+
+    PhosphorLayer::SurfaceConfig cfg;
+    cfg.role = role;
+    cfg.contentUrl = qmlUrl;
+    cfg.screen = screen;
+    cfg.sharedEngine = m_engine.get(); // keep i18n + context properties unified
+    cfg.windowProperties = windowProperties;
+    cfg.debugName = QString::fromUtf8(windowType);
+
+    auto* surface = m_surfaceFactory->create(std::move(cfg), this);
+    if (!surface) {
+        qCWarning(lcOverlay) << "createLayerSurface: factory returned nullptr for" << windowType;
+        return nullptr;
+    }
+    // Warm immediately so the QQuickWindow exists before the caller starts
+    // setting properties on it. Mirrors the old createQmlWindow+configureLayerSurface
+    // sequence where the window was live before return.
+    surface->warmUp();
+    if (surface->state() == PhosphorLayer::Surface::State::Failed) {
+        qCWarning(lcOverlay) << "createLayerSurface: warmUp failed for" << windowType;
+        surface->deleteLater();
+        return nullptr;
+    }
+
+    // Pipeline cache: mirror createQmlWindow's behaviour so shader compilation
+    // persists across daemon restarts.
+    if (auto* w = surface->window()) {
+        const QString cacheDir = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        if (!cacheDir.isEmpty()) {
+            static bool s_cacheDirCreated = false;
+            if (!s_cacheDirCreated) {
+                QDir().mkpath(cacheDir);
+                s_cacheDirCreated = true;
+            }
+            QQuickGraphicsConfiguration config = w->graphicsConfiguration();
+            config.setPipelineCacheSaveFile(cacheDir + QStringLiteral("/plasmazones-pipeline.cache"));
+            w->setGraphicsConfiguration(config);
+        }
+#if QT_CONFIG(vulkan)
+        auto* vulkanInstance = qApp->property(PlasmaZones::PzVulkanInstanceProperty).value<QVulkanInstance*>();
+        if (!vulkanInstance && QQuickWindow::graphicsApi() == QSGRendererInterface::Vulkan) {
+            if (!m_fallbackVulkanInstance) {
+                m_fallbackVulkanInstance = std::make_unique<QVulkanInstance>();
+                m_fallbackVulkanInstance->setApiVersion(PlasmaZones::PzVulkanApiVersion);
+                if (m_fallbackVulkanInstance->create()) {
+                    qApp->setProperty(PlasmaZones::PzVulkanInstanceProperty,
+                                      QVariant::fromValue(m_fallbackVulkanInstance.get()));
+                    vulkanInstance = m_fallbackVulkanInstance.get();
+                } else {
+                    qCCritical(lcOverlay) << "Failed to create fallback QVulkanInstance for" << windowType;
+                    m_fallbackVulkanInstance.reset();
+                }
+            }
+        }
+        if (vulkanInstance) {
+            w->setVulkanInstance(vulkanInstance);
+        }
+#endif
+    }
+
+    return surface;
 }
 
 void OverlayService::show()
