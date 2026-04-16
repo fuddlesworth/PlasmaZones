@@ -245,6 +245,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     node->setCustomParams(7, customParams8());
 
     // ── Sync custom colors (indexed API) ─────────────────────────────
+    qCInfo(PlasmaZones::lcOverlay) << "syncColors item=" << this << "node=" << node
+                                   << "c1=" << customColor1().name(QColor::HexArgb)
+                                   << "c2=" << customColor2().name(QColor::HexArgb);
     node->setCustomColor(0, customColor1());
     node->setCustomColor(1, customColor2());
     node->setCustomColor(2, customColor3());

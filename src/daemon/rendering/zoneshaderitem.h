@@ -135,7 +135,7 @@ public:
      * PlasmaZones shader metadata uses keys like "customParams1_x", "customColor1",
      * "uTexture0" which must be parsed and applied to the corresponding properties.
      */
-    void setShaderParams(const QVariantMap& params);
+    void setShaderParams(const QVariantMap& params) override;
 
 Q_SIGNALS:
     void zonesChanged();

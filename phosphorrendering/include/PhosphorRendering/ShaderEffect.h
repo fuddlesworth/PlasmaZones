@@ -186,7 +186,7 @@ public:
     {
         return m_shaderParams;
     }
-    void setShaderParams(const QVariantMap& params);
+    virtual void setShaderParams(const QVariantMap& params);
 
     // ── Multipass ────────────────────────────────────────────────────
 
