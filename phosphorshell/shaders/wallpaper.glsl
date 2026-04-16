@@ -1,19 +1,19 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Desktop wallpaper texture binding (slot 11).
 // Include from effect.frag or pass*.frag with:
 //   #include <wallpaper.glsl>
 //
 // Opt-in: set "wallpaper": true in your shader's metadata.json.
-// The pipeline will automatically capture and supply the user's
-// Plasma desktop wallpaper image as uWallpaper.
+// The pipeline will automatically capture and supply the desktop
+// wallpaper image as uWallpaper.
 //
 // Use textureSize(uWallpaper, 0) to get the wallpaper resolution.
 // The texture is 1x1 transparent when no wallpaper is available.
 
-#ifndef PLASMAZONES_WALLPAPER_GLSL
-#define PLASMAZONES_WALLPAPER_GLSL
+#ifndef PHOSPHORSHELL_WALLPAPER_GLSL
+#define PHOSPHORSHELL_WALLPAPER_GLSL
 
 layout(binding = 11) uniform sampler2D uWallpaper;
 
@@ -36,4 +36,4 @@ vec2 wallpaperUv(vec2 fragCoord, vec2 screenResolution) {
     return uv;
 }
 
-#endif // PLASMAZONES_WALLPAPER_GLSL
+#endif // PHOSPHORSHELL_WALLPAPER_GLSL

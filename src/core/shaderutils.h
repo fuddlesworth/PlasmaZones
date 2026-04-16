@@ -1,15 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-// Compatibility wrapper — implementation moved to PhosphorShell library.
+// Compatibility wrapper — forwards to PhosphorShell implementations.
 
 #pragma once
 
+#include <PhosphorShell/ShaderRegistry.h> // pulls in phosphorshell_export.h
+
+// PhosphorShell has the canonical implementations in its internal shaderutils.h.
+// Re-declare identical inline functions here for PlasmaZones code that hasn't
+// been ported to use PhosphorShell directly.
+
 #include <QLatin1String>
 #include <QString>
-
-// Forward the utility functions from PhosphorShell into PlasmaZones namespace.
-// These are used by PlasmaZones code that hasn't been moved yet.
 
 namespace PlasmaZones {
 
@@ -20,12 +23,10 @@ inline QString normalizeWrapMode(const QString& wrap)
 
 inline QString normalizeFilterMode(const QString& filter)
 {
-    if (filter == QLatin1String("nearest")) {
+    if (filter == QLatin1String("nearest"))
         return QStringLiteral("nearest");
-    }
-    if (filter == QLatin1String("mipmap")) {
+    if (filter == QLatin1String("mipmap"))
         return QStringLiteral("mipmap");
-    }
     return QStringLiteral("linear");
 }
 

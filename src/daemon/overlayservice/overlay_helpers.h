@@ -23,10 +23,13 @@
 #include <atomic>
 
 #include <PhosphorShell/LayerSurface.h>
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 #include "../../core/logging.h"
 #include "../../core/enums.h"
+
+namespace PlasmaZones {
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
+} // namespace PlasmaZones
 
 namespace PlasmaZones {
 

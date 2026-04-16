@@ -10,10 +10,14 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-# When built as a subdirectory, inherit the parent project's version.
+# PhosphorShell's own version — used for SOVERSION and pkg-config.
+# When split to a standalone repo, this becomes the project() version.
+set(PHOSPHORSHELL_VERSION "0.1.0")
+
+# When built as a subdirectory, inherit the parent project's settings.
 # When standalone, set our own.
 if(NOT PROJECT_VERSION)
-    project(PhosphorShell VERSION 0.1.0 LANGUAGES C CXX)
+    project(PhosphorShell VERSION ${PHOSPHORSHELL_VERSION} LANGUAGES C CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_AUTOMOC ON)
@@ -132,7 +136,7 @@ target_link_libraries(PhosphorShell
 )
 
 set_target_properties(PhosphorShell PROPERTIES
-    VERSION ${PROJECT_VERSION}
+    VERSION ${PHOSPHORSHELL_VERSION}
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
@@ -172,10 +176,12 @@ install(TARGETS PhosphorShell
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-# Public headers
+# Public headers (exclude ShaderEffect.h until Phase 2 implementation)
 install(DIRECTORY include/PhosphorShell/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
     FILES_MATCHING PATTERN "*.h"
+    PATTERN "ShaderEffect.h" EXCLUDE
+    PATTERN "ShaderEffect" EXCLUDE
 )
 
 # Export header

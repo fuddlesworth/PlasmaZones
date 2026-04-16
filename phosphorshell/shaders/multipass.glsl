@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Multipass bindings. Include in effect.frag when using buffer channels (metadata multipass: true).
-// Declares iChannel0-3 and channelUv. Include after ZoneUniforms (needs iChannelResolution[4]).
+// Declares iChannel0-3 and channelUv. Include after common.glsl (needs iChannelResolution[4]).
 //
 //   #include <multipass.glsl>
 
-#ifndef PLASMAZONES_MULTIPASS_GLSL
-#define PLASMAZONES_MULTIPASS_GLSL
+#ifndef PHOSPHORSHELL_MULTIPASS_GLSL
+#define PHOSPHORSHELL_MULTIPASS_GLSL
 
 layout(binding = 2) uniform sampler2D iChannel0;
 layout(binding = 3) uniform sampler2D iChannel1;

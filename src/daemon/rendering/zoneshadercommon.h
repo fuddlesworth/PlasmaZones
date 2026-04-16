@@ -68,11 +68,11 @@ constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, base.iReso
 constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShell::BaseUniforms) - K_SCENE_HEADER_OFFSET;
 
 // Scene data: iResolution through end of zone arrays (everything except
-// matrix/opacity at the front and iTimeHi at the end of BaseUniforms).
+// matrix/opacity at the front). Includes iTimeHi (unavoidable in a contiguous
+// upload since it sits between iResolution and zone arrays after the UBO reorder).
 // Used when zone data changes.
 constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
-constexpr size_t K_SCENE_DATA_SIZE = offsetof(ZoneShaderUniforms, base.iTimeHi) - K_SCENE_DATA_OFFSET
-    + (sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms)); // + zone arrays
+constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
 
 // Zone extension region
 constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShell::BaseUniforms);

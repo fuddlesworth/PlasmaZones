@@ -7,8 +7,8 @@
 #pragma once
 
 #include <PhosphorShell/LayerSurface>
-#include <PhosphorShell/ShaderEffect>
 #include <PhosphorShell/ShaderRegistry>
 #include <PhosphorShell/ShaderIncludeResolver>
 #include <PhosphorShell/IUniformExtension>
 #include <PhosphorShell/IWallpaperProvider>
+// ShaderEffect excluded until Phase 2 implementation is complete.

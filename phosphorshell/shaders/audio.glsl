@@ -1,14 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Audio spectrum helpers. Include after common.glsl.
-// Requires uAudioSpectrum (binding 6) and iAudioSpectrumSize from ZoneUniforms.
+// Requires uAudioSpectrum (binding 6) and iAudioSpectrumSize from the UBO.
 //
 //   #include <common.glsl>
 //   #include <audio.glsl>
 
-#ifndef PLASMAZONES_AUDIO_GLSL
-#define PLASMAZONES_AUDIO_GLSL
+#ifndef PHOSPHORSHELL_AUDIO_GLSL
+#define PHOSPHORSHELL_AUDIO_GLSL
 
 // Audio spectrum texture (binding 6). 1D: bar index = x, y=0. R = bar value 0-1.
 // Only valid when iAudioSpectrumSize > 0. Include <audio.glsl> for helpers.
