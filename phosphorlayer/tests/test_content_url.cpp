@@ -127,6 +127,61 @@ private Q_SLOTS:
         QVERIFY(failSpy.at(0).at(0).toString().contains(QStringLiteral("QQuickItem")));
     }
 
+    void windowRootedQmlIsAdopted()
+    {
+        // Many consumers (PlasmaZones' overlays, panel apps, notification
+        // daemons) ship QML where the ROOT type is a Window — they manage
+        // size/visibility declaratively and expect the C++ side to adopt
+        // the window rather than create its own wrapper. Verify PhosphorLayer
+        // supports that pattern.
+        const QUrl url = writeQml(u"window.qml",
+                                  u"import QtQuick 2.15\nimport QtQuick.Window 2.15\n"
+                                  u"Window { width: 200; height: 100; property string tag: 'window-root' }\n");
+
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f({&t, &s});
+        SurfaceConfig cfg;
+        cfg.role = Roles::CenteredModal;
+        cfg.contentUrl = url;
+        cfg.screen = s.primary();
+        cfg.debugName = QStringLiteral("window-root");
+
+        auto* surface = f.create(std::move(cfg));
+        surface->show();
+        if (surface->state() != Surface::State::Shown) {
+            QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Shown, 2000);
+        }
+        auto* win = surface->window();
+        QVERIFY(win);
+        // The Surface's window IS the QML root (not a wrapper around it).
+        QCOMPARE(win->property("tag").toString(), QStringLiteral("window-root"));
+    }
+
+    void windowPropertiesInjectIntoWindowRoot()
+    {
+        // createWithInitialProperties is used when windowProperties is non-empty;
+        // for Window-rooted QML the properties land on the Window itself.
+        const QUrl url = writeQml(u"window-init.qml",
+                                  u"import QtQuick.Window 2.15\nWindow { property string injected: 'default' }\n");
+
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f({&t, &s});
+        SurfaceConfig cfg;
+        cfg.role = Roles::CenteredModal;
+        cfg.contentUrl = url;
+        cfg.screen = s.primary();
+        cfg.windowProperties = {{QStringLiteral("injected"), QStringLiteral("from-config")}};
+
+        auto* surface = f.create(std::move(cfg));
+        surface->show();
+        if (surface->state() != Surface::State::Shown) {
+            QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Shown, 2000);
+        }
+        QCOMPARE(surface->window()->property("injected").toString(), QStringLiteral("from-config"));
+    }
+
     void contextPropertiesAreVisibleToQml()
     {
         const QUrl url = writeQml(u"ctx.qml", u"import QtQuick 2.15\nItem { property string tag: injectedTag }\n");

@@ -175,6 +175,21 @@ private Q_SLOTS:
         QCOMPARE(surface, nullptr);
     }
 
+    void windowPropertiesApplyBeforeContent()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f({&t, &s});
+        auto cfg = buildConfig(s.primary());
+        cfg.windowProperties = {{QStringLiteral("myTag"), QStringLiteral("set")}, {QStringLiteral("myCount"), 7}};
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+        QVERIFY(surface->window() != nullptr);
+        QCOMPARE(surface->window()->property("myTag").toString(), QStringLiteral("set"));
+        QCOMPARE(surface->window()->property("myCount").toInt(), 7);
+    }
+
     void attachArgsReflectRoleAndOverrides()
     {
         MockTransport t;

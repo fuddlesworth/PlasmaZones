@@ -56,8 +56,10 @@ public:
         // Ordered teardown: transport → window → engine. Doing this in Impl's
         // dtor (rather than Surface's) keeps the lifetime dance local.
         m_handle.reset();
-        delete m_window;
-        m_window = nullptr;
+        if (m_window) {
+            m_window->deleteLater();
+            m_window = nullptr;
+        }
         if (m_engineOwned && m_engine) {
             m_engine->deleteLater();
         } else if (m_engine && m_deps.engineProvider) {
@@ -67,7 +69,7 @@ public:
     }
 
     Surface* const m_q;
-    const SurfaceConfig m_config;
+    SurfaceConfig m_config; // non-const so we can release contentItem in ensureContent
     const SurfaceDeps m_deps;
 
     State m_state = State::Constructed;
@@ -76,7 +78,7 @@ public:
     QQmlEngine* m_engine = nullptr;
     bool m_engineOwned = false;
     QQuickWindow* m_window = nullptr;
-    QQuickItem* m_rootItem = nullptr; ///< Either released from cfg.contentItem or created from cfg.contentUrl
+    QQuickItem* m_rootItem = nullptr; ///< Item-rooted content; null when QML root is a Window
     std::unique_ptr<QQmlComponent> m_component;
     std::unique_ptr<ITransportHandle> m_handle;
     QString m_failureReason;
@@ -170,9 +172,6 @@ private:
         if (!ensureEngine()) {
             return false;
         }
-        if (!ensureWindow()) {
-            return false;
-        }
         applyContextProperties();
         return ensureContent();
     }
@@ -201,18 +200,28 @@ private:
         return true;
     }
 
-    bool ensureWindow()
+    /**
+     * Lazily create a wrapper QQuickWindow for Item-rooted content.
+     * Not called for Window-rooted QML — that case adopts the QML root.
+     */
+    void ensureWrapperWindow()
     {
         if (m_window) {
-            return true;
+            return;
         }
         m_window = new QQuickWindow();
-        // Layer-shell surfaces are frameless and transparent by default. The
-        // consumer's QML can override via its own properties if it needs an
-        // opaque background.
+        // Layer-shell surfaces are frameless and transparent by default; the
+        // consumer's QML can override via its own properties.
         m_window->setFlag(Qt::FramelessWindowHint);
         m_window->setColor(Qt::transparent);
-        return true;
+        applyWindowProperties(m_window);
+    }
+
+    void applyWindowProperties(QQuickWindow* target)
+    {
+        for (auto it = m_config.windowProperties.begin(); it != m_config.windowProperties.end(); ++it) {
+            target->setProperty(it.key().toUtf8().constData(), it.value());
+        }
     }
 
     void applyContextProperties()
@@ -225,13 +234,12 @@ private:
 
     bool ensureContent()
     {
-        // contentItem is unique_ptr const-membered on SurfaceConfig; since
-        // the config is const we can't release() it. Work around by const_cast
-        // on Impl's copy (Impl owns the moved-in config).
-        auto& cfgMut = const_cast<SurfaceConfig&>(m_config);
-        if (cfgMut.contentItem) {
-            m_rootItem = cfgMut.contentItem.release();
-            attachRootItem();
+        if (m_config.contentItem) {
+            ensureWrapperWindow();
+            m_rootItem = m_config.contentItem.release();
+            m_rootItem->setParentItem(m_window->contentItem());
+            m_rootItem->setParent(m_window);
+            bindSize();
             return finishAttach();
         }
         if (!m_config.contentUrl.isEmpty()) {
@@ -270,28 +278,44 @@ private:
 
     bool instantiateFromComponent()
     {
-        QObject* root = m_component->create(m_engine->rootContext());
+        // createWithInitialProperties applies the window-property map to the
+        // root at construction time, so QML bindings see them on first
+        // evaluation. Fall back to plain create() when the map is empty to
+        // avoid the extra overhead.
+        QObject* root = nullptr;
+        auto* ctx = m_engine->rootContext();
+        if (m_config.windowProperties.isEmpty()) {
+            root = m_component->create(ctx);
+        } else {
+            root = m_component->createWithInitialProperties(m_config.windowProperties, ctx);
+        }
         if (!root) {
             failWith(m_component->errorString().isEmpty() ? QStringLiteral("QQmlComponent::create() returned nullptr")
                                                           : m_component->errorString());
             return false;
         }
-        auto* rootItem = qobject_cast<QQuickItem*>(root);
-        if (!rootItem) {
-            delete root;
-            failWith(QStringLiteral("Root object is not a QQuickItem"));
-            return false;
+        if (auto* win = qobject_cast<QQuickWindow*>(root)) {
+            // Window-rooted QML (common for PlasmaZones overlays). Adopt the
+            // Window as our primary; take C++ ownership so the QML engine's
+            // GC doesn't reclaim it while we still hold a transport handle.
+            m_window = win;
+            QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
+            // windowProperties were already passed to createWithInitialProperties
+            // above, so no need to re-apply here.
+            return finishAttach();
         }
-        m_rootItem = rootItem;
-        attachRootItem();
-        return finishAttach();
-    }
-
-    void attachRootItem()
-    {
-        m_rootItem->setParentItem(m_window->contentItem());
-        m_rootItem->setParent(m_window);
-        bindSize();
+        if (auto* item = qobject_cast<QQuickItem*>(root)) {
+            // Item-rooted QML — wrap in a fresh QQuickWindow and attach.
+            ensureWrapperWindow();
+            m_rootItem = item;
+            m_rootItem->setParentItem(m_window->contentItem());
+            m_rootItem->setParent(m_window);
+            bindSize();
+            return finishAttach();
+        }
+        delete root;
+        failWith(QStringLiteral("Root object is neither a QQuickWindow nor a QQuickItem"));
+        return false;
     }
 
     void bindSize()

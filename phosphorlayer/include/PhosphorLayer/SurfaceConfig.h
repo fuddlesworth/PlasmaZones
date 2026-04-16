@@ -55,8 +55,16 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     QScreen* screen = nullptr;
 
     /// Injected into the surface's QML root context. Keys become context
-    /// properties visible to the loaded QML.
+    /// properties visible to the loaded QML as global identifiers.
     QVariantMap contextProperties;
+
+    /// Applied to the QQuickWindow as dynamic properties (via QObject::
+    /// setProperty) BEFORE the QML content loads. Lets the QML access
+    /// them via the implicit `window.foo` binding. Distinct from
+    /// @ref contextProperties: window properties are per-surface (won't
+    /// leak between shared-engine surfaces) and are observable through
+    /// Qt's property system (QVariant).
+    QVariantMap windowProperties;
 
     /// Opt-in shared QQmlEngine. Nullptr (default) → Surface owns its own
     /// engine for full isolation. Non-null → Surface uses the provided
