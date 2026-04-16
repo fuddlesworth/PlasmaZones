@@ -168,20 +168,28 @@ QVariant Store::readVariant(const QString& group, const QString& key) const
         return {};
     }
     auto g = d->backend->group(group);
-    return readVariantAs(*g, key, def->defaultValue);
+    QVariant value = readVariantAs(*g, key, def->defaultValue);
+    if (def->validator) {
+        value = def->validator(value);
+    }
+    return value;
 }
 
 void Store::write(const QString& group, const QString& key, const QVariant& value)
 {
+    QVariant coerced = value;
     if (const KeyDef* def = d->schema.findKey(group, key)) {
-        if (def->expectedType != QMetaType::UnknownType && value.typeId() != static_cast<int>(def->expectedType)) {
+        if (def->validator) {
+            coerced = def->validator(coerced);
+        }
+        if (def->expectedType != QMetaType::UnknownType && coerced.typeId() != static_cast<int>(def->expectedType)) {
             qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
-                     qPrintable(key), QMetaType(value.typeId()).name(), QMetaType(def->expectedType).name());
+                     qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
         }
     }
     {
         auto g = d->backend->group(group);
-        writeVariantTo(*g, key, value);
+        writeVariantTo(*g, key, coerced);
     }
     Q_EMIT changed(group, key);
 }
@@ -257,6 +265,24 @@ void Store::importFromJson(const QJsonObject& snapshot)
 }
 
 // ─── Templated read<T> ───────────────────────────────────────────────────────
+// Each specialization fetches the typed value from the backend with the
+// schema default as fallback, then runs the validator (if any) so clamping
+// and normalization apply uniformly to every read path.
+
+namespace {
+template<typename T>
+T applyValidator(const KeyDef* def, T value)
+{
+    if (!def || !def->validator) {
+        return value;
+    }
+    const QVariant coerced = def->validator(QVariant::fromValue(value));
+    if (!coerced.canConvert<T>()) {
+        return value;
+    }
+    return coerced.value<T>();
+}
+} // namespace
 
 template<>
 QString Store::read<QString>(const QString& group, const QString& key) const
@@ -264,7 +290,7 @@ QString Store::read<QString>(const QString& group, const QString& key) const
     const KeyDef* def = d->schema.findKey(group, key);
     const QString defaultValue = def ? def->defaultValue.toString() : QString();
     auto g = d->backend->group(group);
-    return g->readString(key, defaultValue);
+    return applyValidator(def, g->readString(key, defaultValue));
 }
 
 template<>
@@ -273,7 +299,7 @@ int Store::read<int>(const QString& group, const QString& key) const
     const KeyDef* def = d->schema.findKey(group, key);
     const int defaultValue = def ? def->defaultValue.toInt() : 0;
     auto g = d->backend->group(group);
-    return g->readInt(key, defaultValue);
+    return applyValidator(def, g->readInt(key, defaultValue));
 }
 
 template<>
@@ -282,7 +308,7 @@ bool Store::read<bool>(const QString& group, const QString& key) const
     const KeyDef* def = d->schema.findKey(group, key);
     const bool defaultValue = def && def->defaultValue.toBool();
     auto g = d->backend->group(group);
-    return g->readBool(key, defaultValue);
+    return applyValidator(def, g->readBool(key, defaultValue));
 }
 
 template<>
@@ -291,7 +317,7 @@ double Store::read<double>(const QString& group, const QString& key) const
     const KeyDef* def = d->schema.findKey(group, key);
     const double defaultValue = def ? def->defaultValue.toDouble() : 0.0;
     auto g = d->backend->group(group);
-    return g->readDouble(key, defaultValue);
+    return applyValidator(def, g->readDouble(key, defaultValue));
 }
 
 template<>
@@ -300,7 +326,7 @@ QColor Store::read<QColor>(const QString& group, const QString& key) const
     const KeyDef* def = d->schema.findKey(group, key);
     const QColor defaultValue = def ? def->defaultValue.value<QColor>() : QColor();
     auto g = d->backend->group(group);
-    return g->readColor(key, defaultValue);
+    return applyValidator(def, g->readColor(key, defaultValue));
 }
 
 // The explicit specializations above ARE the definitions — no separate

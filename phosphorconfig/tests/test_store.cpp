@@ -141,6 +141,106 @@ private Q_SLOTS:
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Height")), 1080);
     }
 
+    void validator_clampsOnRead()
+    {
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("Window")] = {
+            {QStringLiteral("Width"), 800, QMetaType::Int, QString(),
+             [](const QVariant& v) {
+                 return QVariant(qBound(100, v.toInt(), 2000));
+             }},
+        };
+
+        auto backend = std::make_unique<JsonBackend>(m_path);
+        Store store(std::move(backend), s);
+
+        // Write a too-large value directly via the backend, bypassing the
+        // validator — simulates a hand-edited config or an older version.
+        {
+            auto g = store.backend()->group(QStringLiteral("Window"));
+            g->writeInt(QStringLiteral("Width"), 99999);
+        }
+
+        // Read via the Store — validator should clamp to 2000.
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 2000);
+    }
+
+    void validator_clampsOnWrite()
+    {
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("Window")] = {
+            {QStringLiteral("Width"), 800, QMetaType::Int, QString(),
+             [](const QVariant& v) {
+                 return QVariant(qBound(100, v.toInt(), 2000));
+             }},
+        };
+
+        auto backend = std::make_unique<JsonBackend>(m_path);
+        Store store(std::move(backend), s);
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 5);
+        // Backend should have received the clamped value (100), not 5.
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 100);
+
+        // And the raw backend read confirms the persisted value is clamped.
+        {
+            auto g = store.backend()->group(QStringLiteral("Window"));
+            QCOMPARE(g->readInt(QStringLiteral("Width"), 0), 100);
+        }
+    }
+
+    void validator_normalizesEnumString()
+    {
+        // Normalize an enum-style setting: accept { "fast", "medium", "slow" },
+        // coerce anything else to "medium".
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("Perf")] = {
+            {QStringLiteral("Mode"), QStringLiteral("medium"), QMetaType::QString, QString(),
+             [](const QVariant& v) {
+                 const QString str = v.toString();
+                 if (str == QStringLiteral("fast") || str == QStringLiteral("medium")
+                     || str == QStringLiteral("slow")) {
+                     return QVariant(str);
+                 }
+                 return QVariant(QStringLiteral("medium"));
+             }},
+        };
+
+        auto backend = std::make_unique<JsonBackend>(m_path);
+        Store store(std::move(backend), s);
+
+        store.write(QStringLiteral("Perf"), QStringLiteral("Mode"), QStringLiteral("turbo"));
+        QCOMPARE(store.read<QString>(QStringLiteral("Perf"), QStringLiteral("Mode")), QStringLiteral("medium"));
+
+        store.write(QStringLiteral("Perf"), QStringLiteral("Mode"), QStringLiteral("slow"));
+        QCOMPARE(store.read<QString>(QStringLiteral("Perf"), QStringLiteral("Mode")), QStringLiteral("slow"));
+    }
+
+    void validator_runsOnReadVariant()
+    {
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("X")] = {
+            {QStringLiteral("N"), 0, QMetaType::Int, QString(),
+             [](const QVariant& v) {
+                 return QVariant(qBound(0, v.toInt(), 10));
+             }},
+        };
+
+        auto backend = std::make_unique<JsonBackend>(m_path);
+        Store store(std::move(backend), s);
+
+        {
+            auto g = store.backend()->group(QStringLiteral("X"));
+            g->writeInt(QStringLiteral("N"), 999);
+        }
+
+        QCOMPARE(store.readVariant(QStringLiteral("X"), QStringLiteral("N")).toInt(), 10);
+    }
+
     void migrationChainRunsOnConstruction()
     {
         // Seed an on-disk v1 document.

@@ -27,6 +27,12 @@ class IGroupPathResolver;
 /// @c expectedType is an optional hint used by Store::write() to warn when a
 /// caller supplies a value of a mismatched type. Leave as @c QMetaType::UnknownType
 /// to disable the check.
+///
+/// @c validator runs on both read and write paths, giving consumers a single
+/// place to clamp ranges (@c qBound), normalize enum-style strings, or log
+/// and fall back to the default on invalid input. The returned QVariant is
+/// the value the caller observes (on read) or persists (on write). When
+/// unset, values pass through unchanged.
 struct PHOSPHORCONFIG_EXPORT KeyDef
 {
     QString key;
@@ -36,6 +42,13 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     /// Human-readable description. Not used at runtime — consumers may
     /// surface it in settings UIs or generated documentation.
     QString description;
+
+    /// Coercion applied on every read and every write. Typical uses:
+    ///   - qBound(min, v.toInt(), max)
+    ///   - normalize a string to one of a fixed set of values
+    ///   - log a warning and return defaultValue on invalid input
+    /// The QVariant signature lets one validator slot cover every type.
+    std::function<QVariant(const QVariant& value)> validator;
 };
 
 /// One step in a schema version migration chain. Transforms the root JSON
