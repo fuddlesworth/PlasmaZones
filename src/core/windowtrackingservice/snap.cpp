@@ -230,8 +230,11 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
         return SnapResult::noSnap();
     }
 
-    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution
-    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId);
+    // Reuse findEmptyZoneInLayout() with already-resolved layout to avoid double resolution.
+    // Filter occupancy by the current virtual desktop so windows parked on other desktops
+    // don't prevent auto-snap placement on the current desktop.
+    const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QString emptyZoneId = findEmptyZoneInLayout(layout, windowScreenId, desktopFilter);
     if (emptyZoneId.isEmpty()) {
         qCDebug(lcCore) << "snapToEmptyZone: no empty zone on" << windowScreenId;
         return SnapResult::noSnap();

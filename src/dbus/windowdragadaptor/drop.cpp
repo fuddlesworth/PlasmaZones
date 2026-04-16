@@ -282,9 +282,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
     if (requestSnapAssist) {
         Layout* layout = m_layoutManager->resolveLayoutForScreen(releaseScreenId);
         if (layout) {
-            // Use screen-filtered occupancy — without this, zones occupied on
-            // other screens appear occupied here when layouts share zone IDs.
-            QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId);
+            // Screen-filtered + desktop-filtered occupancy. Without the screen filter,
+            // zones occupied on other screens appear occupied here when layouts share
+            // zone IDs. Without the desktop filter, windows parked on other virtual
+            // desktops keep zones occupied on the current desktop — blocking snap
+            // assist (discussion #323) even though SnapAssistHandler::buildCandidates()
+            // already excludes other-desktop windows from the candidate list.
+            QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(releaseScreenId, curDesktopDrop);
             QString emptyJson =
                 GeometryUtils::buildEmptyZonesJson(layout, releaseScreen, m_settings, [&occupied](const Zone* z) {
                     return !occupied.contains(z->id());

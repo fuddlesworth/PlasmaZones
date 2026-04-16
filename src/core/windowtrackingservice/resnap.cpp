@@ -488,7 +488,10 @@ QVector<RotationEntry> WindowTrackingService::calculateSnapAllWindows(const QStr
     QVector<Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
-    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId);
+    // Filter occupancy by the current virtual desktop so windows parked on other
+    // desktops don't make zones appear occupied on the current-desktop batch snap.
+    const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Get screen and gap settings for geometry calculation
     QScreen* screen = screenId.isEmpty() ? Utils::primaryScreen() : Utils::findScreenByIdOrName(screenId);

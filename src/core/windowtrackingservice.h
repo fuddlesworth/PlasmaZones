@@ -778,12 +778,20 @@ private:
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
     Zone* findZoneById(const QString& zoneId) const;
-    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId) const;
+    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter = 0) const;
 
 public:
-    /// Build set of occupied zone UUIDs, optionally filtered by screen.
+    /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
+    ///
     /// Uses Utils::screensMatch() for format-agnostic screen comparison.
-    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString()) const;
+    ///
+    /// @param desktopFilter When > 0, only counts assignments whose window desktop
+    ///   matches (or is 0 = pinned/all-desktops). Pass the current virtual desktop
+    ///   for snap-assist / empty-zone queries so windows parked on other desktops
+    ///   do not make zones appear occupied — this mirrors the filtering done by
+    ///   SnapAssistHandler::buildCandidates() in the KWin effect, keeping the
+    ///   "occupied" and "candidate" definitions symmetric.
+    QSet<QUuid> buildOccupiedZoneSet(const QString& screenFilter = QString(), int desktopFilter = 0) const;
 
 public:
     /**
