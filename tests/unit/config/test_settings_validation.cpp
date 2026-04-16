@@ -21,7 +21,7 @@
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/config/configbackend_json.h"
+#include "../../../src/config/configbackends.h"
 #include "../../../src/core/constants.h"
 #include "../../../src/core/enums.h"
 #include "../helpers/IsolatedConfigGuard.h"

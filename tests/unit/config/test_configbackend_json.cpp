@@ -8,8 +8,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
-#include "../../../src/config/configbackend_json.h"
+#include "../../../src/config/configbackends.h"
 #include "../../../src/config/configdefaults.h"
+#include "../../../src/config/perscreenresolver.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -514,23 +515,29 @@ private Q_SLOTS:
 
     void testIsPerScreenPrefix()
     {
-        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("ZoneSelector:eDP-1")));
-        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("AutotileScreen:HDMI-1")));
-        QVERIFY(PlasmaZones::isPerScreenPrefix(QStringLiteral("SnappingScreen:DP-2")));
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("ZoneSelector:eDP-1")));
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("AutotileScreen:HDMI-1")));
+        QVERIFY(PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("SnappingScreen:DP-2")));
         // Assignment groups are NOT per-screen
-        QVERIFY(!PlasmaZones::isPerScreenPrefix(QStringLiteral("Assignment:eDP-1:Desktop:1")));
-        QVERIFY(!PlasmaZones::isPerScreenPrefix(QStringLiteral("General")));
+        QVERIFY(!PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("Assignment:eDP-1:Desktop:1")));
+        QVERIFY(!PlasmaZones::PerScreenPathResolver::isPerScreenPrefix(QStringLiteral("General")));
     }
 
     void testPrefixCategoryRoundTrip()
     {
-        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("AutotileScreen")), QStringLiteral("Autotile"));
-        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("SnappingScreen")), QStringLiteral("Snapping"));
-        QCOMPARE(PlasmaZones::prefixToCategory(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("AutotileScreen")),
+                 QStringLiteral("Autotile"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("SnappingScreen")),
+                 QStringLiteral("Snapping"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::prefixToCategory(QStringLiteral("ZoneSelector")),
+                 QStringLiteral("ZoneSelector"));
 
-        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Autotile")), QStringLiteral("AutotileScreen"));
-        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("Snapping")), QStringLiteral("SnappingScreen"));
-        QCOMPARE(PlasmaZones::categoryToPrefix(QStringLiteral("ZoneSelector")), QStringLiteral("ZoneSelector"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("Autotile")),
+                 QStringLiteral("AutotileScreen"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("Snapping")),
+                 QStringLiteral("SnappingScreen"));
+        QCOMPARE(PlasmaZones::PerScreenPathResolver::categoryToPrefix(QStringLiteral("ZoneSelector")),
+                 QStringLiteral("ZoneSelector"));
     }
 
     // =========================================================================

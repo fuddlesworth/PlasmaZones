@@ -33,7 +33,7 @@
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
-#include "../config/iconfigbackend.h"
+#include "../config/configbackends.h"
 #include "../dbus/layoutadaptor.h"
 #include "../dbus/settingsadaptor.h"
 #include "../dbus/overlayadaptor.h"

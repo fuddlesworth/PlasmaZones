@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
-#include "../iconfigbackend.h"
+#include "../configbackends.h"
 #include "../configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
@@ -146,7 +146,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
@@ -206,7 +206,7 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
     if (key == QLatin1String(K::SnapAssistEnabled))
@@ -216,7 +216,7 @@ QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
     return QVariant(group.readInt(key, 0));
 }
 
-QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
@@ -224,7 +224,8 @@ QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
     return QVariant(group.readInt(key, 0));
 }
 
-void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, const QHash<QString, QVariantMap>& source)
+void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& prefix,
+                            const QHash<QString, QVariantMap>& source)
 {
     const QStringList groups = backend->groupList();
     for (const QString& groupName : groups) {
@@ -281,10 +282,10 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     }
 }
 
-using PerScreenReadFn = QVariant (*)(IConfigGroup&, const QString&);
+using PerScreenReadFn = QVariant (*)(PhosphorConfig::IGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
+void loadPerScreenGroup(PhosphorConfig::IBackend* backend, const QStringList& allGroups, const QString& prefix,
                         const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
@@ -344,7 +345,7 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
     }
 }
 
-void Settings::loadPerScreenOverrides(IConfigBackend* backend)
+void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
@@ -392,7 +393,7 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
     return expanded;
 }
 
-void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
+void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving

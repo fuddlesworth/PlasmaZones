@@ -163,6 +163,7 @@ echo ""
 %{_bindir}/plasmazones-report
 
 # Libraries
+%{_libdir}/libPhosphorConfig.so*
 %{_libdir}/libPhosphorShell.so*
 %{_libdir}/libPhosphorRendering.so*
 %{_libdir}/libplasmazones_core.so*
@@ -173,6 +174,10 @@ echo ""
 
 # Layer-shell QPA plugin (PhosphorShell)
 %{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
+
+# PhosphorConfig development headers and CMake config
+%{_includedir}/PhosphorConfig/
+%{_libdir}/cmake/PhosphorConfig/
 
 # PhosphorShell development headers and CMake config
 %{_includedir}/PhosphorShell/

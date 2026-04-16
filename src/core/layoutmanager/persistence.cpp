@@ -14,7 +14,7 @@
 #include <QJsonDocument>
 #include <QStandardPaths>
 #include "../../config/configdefaults.h"
-#include "../../config/iconfigbackend.h"
+#include "../../config/configbackends.h"
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -224,7 +224,7 @@ void LayoutManager::saveLayouts()
     Q_EMIT layoutsSaved();
 }
 
-void LayoutManager::readAssignmentGroups(IConfigBackend* backend)
+void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     const QString assignmentPrefix = ConfigDefaults::assignmentGroupPrefix();
@@ -248,7 +248,7 @@ void LayoutManager::readAssignmentGroups(IConfigBackend* backend)
     }
 }
 
-void LayoutManager::readQuickLayouts(IConfigBackend* backend)
+void LayoutManager::readQuickLayouts(PhosphorConfig::IBackend* backend)
 {
     auto quickGroup = backend->group(ConfigDefaults::quickLayoutsGroup());
     for (int i = 1; i <= 9; ++i) {

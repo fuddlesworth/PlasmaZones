@@ -7,6 +7,10 @@ Files: *
 Copyright: 2024-2026 fuddlesworth
 License: GPL-3.0-or-later
 
+Files: phosphorconfig/*
+Copyright: 2026 fuddlesworth
+License: LGPL-2.1-or-later
+
 Files: phosphorshell/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later

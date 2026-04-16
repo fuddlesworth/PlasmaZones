@@ -2,85 +2,64 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configmigration.h"
-#include "configbackend_json.h"
-#include "configbackend_qsettings.h"
+
+#include "configbackends.h"
 #include "configdefaults.h"
-#include "iconfigbackend.h"
+#include "perscreenresolver.h"
+
+#include <PhosphorConfig/MigrationRunner.h>
+#include <PhosphorConfig/Schema.h>
+
 #include <QColor>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLatin1String>
-#include <array>
 #include <atomic>
 
 namespace PlasmaZones {
 
-// ── Migration step registry ─────────────────────────────────────────────────
-// To add a new version: implement migrateVxToVy(), append here, bump ConfigSchemaVersion.
+// ─── PhosphorConfig schema synthesis ────────────────────────────────────────
+// A minimal schema with only the migration chain populated. PZ's migration
+// runner only needs the version, the version key, and the migration steps —
+// group/key declarations belong to the Settings layer (future work).
 
-static constexpr auto s_migrationSteps = std::to_array<MigrationStep>({
-    {1, &ConfigMigration::migrateV1ToV2},
-    // {2, &ConfigMigration::migrateV2ToV3},
-});
+namespace {
+PhosphorConfig::Schema makeMigrationSchema()
+{
+    PhosphorConfig::Schema s;
+    s.version = ConfigSchemaVersion;
+    s.versionKey = ConfigKeys::versionKey();
+    s.migrations = {
+        {1, &ConfigMigration::migrateV1ToV2},
+        // {2, &ConfigMigration::migrateV2ToV3},
+    };
+    return s;
+}
+} // namespace
 
 std::span<const MigrationStep> ConfigMigration::migrationSteps()
 {
-    return s_migrationSteps;
+    // Kept for callers/tests that want a flat list of PZ-native steps. Built
+    // once lazily; the underlying function pointers never change at runtime.
+    static const std::array<MigrationStep, 1> s_steps{{
+        {1, &ConfigMigration::migrateV1ToV2},
+    }};
+    return {s_steps.data(), s_steps.size()};
 }
 
-// ── Migration chain runner ──────────────────────────────────────────────────
+// ── Migration chain runner (delegates to PhosphorConfig::MigrationRunner) ──
 
 void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
 {
-    int version = root.value(ConfigKeys::versionKey()).toInt(1);
-    if (version < 1) {
-        version = 1;
-    }
-    for (const auto& step : s_migrationSteps) {
-        if (version == step.fromVersion) {
-            qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
-            step.migrate(root);
-            version = root.value(ConfigKeys::versionKey()).toInt();
-            if (version != step.fromVersion + 1) {
-                qCritical("ConfigMigration: migration step v%d did not bump _version correctly (got %d)",
-                          step.fromVersion, version);
-                break;
-            }
-        }
-    }
+    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    PhosphorConfig::MigrationRunner(schema).runInMemory(root);
 }
 
 bool ConfigMigration::runMigrationChain(const QString& jsonPath)
 {
-    QFile f(jsonPath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("ConfigMigration: failed to open %s for schema migration", qPrintable(jsonPath));
-        return false;
-    }
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-    f.close();
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qWarning("ConfigMigration: invalid JSON in %s during schema migration", qPrintable(jsonPath));
-        return false;
-    }
-
-    QJsonObject root = doc.object();
-    const int oldVersion = root.value(ConfigKeys::versionKey()).toInt(1);
-    runMigrationChainInMemory(root);
-    const int newVersion = root.value(ConfigKeys::versionKey()).toInt();
-
-    if (newVersion == oldVersion) {
-        return true; // Nothing to do
-    }
-
-    if (!JsonConfigBackend::writeJsonAtomically(jsonPath, root)) {
-        qWarning("ConfigMigration: failed to write migrated config to %s", qPrintable(jsonPath));
-        return false;
-    }
-    qInfo("ConfigMigration: schema migration v%d → v%d complete", oldVersion, newVersion);
-    return true;
+    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    return PhosphorConfig::MigrationRunner(schema).runOnFile(jsonPath);
 }
 
 // ── ensureJsonConfig ────────────────────────────────────────────────────────
@@ -184,7 +163,7 @@ void ConfigMigration::resetMigrationGuardForTesting()
 
 bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath)
 {
-    const QMap<QString, QVariant> flatMap = QSettingsConfigBackend::readConfigFromDisk(iniPath);
+    const QMap<QString, QVariant> flatMap = PhosphorConfig::QSettingsBackend::readConfigFromDisk(iniPath);
     if (flatMap.isEmpty()) {
         qInfo("ConfigMigration: old config is empty — writing minimal JSON to complete migration");
     }
@@ -194,7 +173,7 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     root[ConfigKeys::versionKey()] = 1;
     runMigrationChainInMemory(root);
 
-    return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root);
 }
 
 QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap)
@@ -205,7 +184,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
     const QString generalGroup = ConfigDefaults::generalGroup();
     // Hardcoded v1 key name — the INI file uses "RenderingBackend"
     const QString renderingKey = QStringLiteral("RenderingBackend");
-    const QLatin1String PerScreenKeyStr(PerScreenKey);
+    const QString PerScreenKeyStr = PerScreenPathResolver::perScreenKey();
 
     for (auto it = flatMap.constBegin(); it != flatMap.constEnd(); ++it) {
         const QString& flatKey = it.key();
@@ -241,11 +220,11 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
 
         // Check for known per-screen group patterns: ZoneSelector:*, AutotileScreen:*, SnappingScreen:*
         // Other colon-containing groups (e.g., Assignment:ScreenId:Desktop:1) are regular groups.
-        if (isPerScreenPrefix(groupPart)) {
+        if (PerScreenPathResolver::isPerScreenPrefix(groupPart)) {
             const int colonIdx = groupPart.indexOf(QLatin1Char(':'));
             const QString prefix = groupPart.left(colonIdx);
             const QString screenId = groupPart.mid(colonIdx + 1);
-            const QString category = prefixToCategory(prefix);
+            const QString category = PerScreenPathResolver::prefixToCategory(prefix);
 
             QJsonObject perScreen = root.value(PerScreenKeyStr).toObject();
             QJsonObject cat = perScreen.value(category).toObject();
@@ -739,7 +718,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         QJsonObject sessionRoot;
         sessionRoot[wtGroup] = root.value(wtGroup);
         const QString sessionPath = ConfigDefaults::sessionFilePath();
-        if (!JsonConfigBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
+        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
             qWarning("ConfigMigration: failed to write session state to %s", qPrintable(sessionPath));
         }
         root.remove(wtGroup);
@@ -775,7 +754,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         }
         if (!assignRoot.isEmpty()) {
             const QString assignPath = ConfigDefaults::assignmentsFilePath();
-            if (!JsonConfigBackend::writeJsonAtomically(assignPath, assignRoot)) {
+            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(assignPath, assignRoot)) {
                 qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
             }
         }

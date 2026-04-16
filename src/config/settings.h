@@ -7,7 +7,7 @@
 #include "../core/constants.h"
 #include "../core/virtualscreen.h"
 #include "configdefaults.h"
-#include "iconfigbackend.h"
+#include "configbackends.h"
 #include <memory>
 #include <optional>
 #include <QFont>
@@ -19,7 +19,7 @@ namespace PlasmaZones {
 /**
  * @brief Global settings for PlasmaZones
  *
- * Implements the ISettings interface with IConfigBackend persistence.
+ * Implements the ISettings interface with PhosphorConfig::IBackend persistence.
  * Supports ricer-friendly customization with color themes, opacity,
  * and integration with system color schemes.
  *
@@ -37,14 +37,14 @@ public:
     /**
      * @brief Construct with an external (non-owned) config backend
      *
-     * Used by the daemon to share a single IConfigBackend across
+     * Used by the daemon to share a single PhosphorConfig::IBackend across
      * Settings, LayoutManager, and other components. Eliminates Qt's
      * QConfFile cache conflicts from multiple QSettings instances per file.
      *
      * @param backend Non-owned backend pointer (must outlive this Settings)
      * @param parent Parent QObject
      */
-    Settings(IConfigBackend* backend, QObject* parent);
+    Settings(PhosphorConfig::IBackend* backend, QObject* parent);
 
     // Activation settings
     Q_PROPERTY(QVariantList dragActivationTriggers READ dragActivationTriggers WRITE setDragActivationTriggers NOTIFY
@@ -1610,7 +1610,7 @@ private:
 
     /**
      * @brief Read and validate an integer from config with bounds checking
-     * @param group IConfigGroup to read from
+     * @param group PhosphorConfig::IGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param min Minimum valid value
@@ -1618,28 +1618,28 @@ private:
      * @param settingName Human-readable name for warning messages
      * @return Validated integer value
      */
-    int readValidatedInt(IConfigGroup& group, const QString& key, int defaultValue, int min, int max,
+    int readValidatedInt(PhosphorConfig::IGroup& group, const QString& key, int defaultValue, int min, int max,
                          const char* settingName);
 
     /**
      * @brief Read and validate a color from config
-     * @param group IConfigGroup to read from
+     * @param group PhosphorConfig::IGroup to read from
      * @param key Config key name
      * @param defaultValue Default if not found or invalid
      * @param settingName Human-readable name for warning messages
      * @return Validated QColor value
      */
-    QColor readValidatedColor(IConfigGroup& group, const QString& key, const QColor& defaultValue,
+    QColor readValidatedColor(PhosphorConfig::IGroup& group, const QString& key, const QColor& defaultValue,
                               const char* settingName);
 
     /**
      * @brief Load indexed shortcuts (1-9) from config group
-     * @param group IConfigGroup to read from
+     * @param group PhosphorConfig::IGroup to read from
      * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
      * @param shortcuts Array of 9 QString to populate
      * @param defaults Array of 9 default values
      */
-    void loadIndexedShortcuts(IConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+    void loadIndexedShortcuts(PhosphorConfig::IGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                               const QString (&defaults)[9]);
 
     /**
@@ -1651,11 +1651,11 @@ private:
 
     /**
      * @brief Save a trigger list to config as compact JSON
-     * @param group IConfigGroup to write to
+     * @param group PhosphorConfig::IGroup to write to
      * @param key Config key for the JSON trigger list
      * @param triggers The trigger list to serialize
      */
-    static void saveTriggerList(IConfigGroup& group, const QString& key, const QVariantList& triggers);
+    static void saveTriggerList(PhosphorConfig::IGroup& group, const QString& key, const QVariantList& triggers);
 
     /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
     using ShortcutSignalFn = void (Settings::*)();
@@ -1663,41 +1663,41 @@ private:
                             const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(IConfigBackend* backend);
-    void loadDisplayConfig(IConfigBackend* backend);
-    void loadAppearanceConfig(IConfigBackend* backend);
-    void loadZoneGeometryConfig(IConfigBackend* backend);
-    void loadBehaviorConfig(IConfigBackend* backend);
-    void loadZoneSelectorConfig(IConfigBackend* backend);
-    void loadPerScreenOverrides(IConfigBackend* backend);
-    void loadShortcutConfig(IConfigBackend* backend);
-    void loadAutotilingConfig(IConfigBackend* backend);
-    void loadEditorConfig(IConfigBackend* backend);
-    void loadVirtualScreenConfigs(IConfigBackend* backend);
+    void loadActivationConfig(PhosphorConfig::IBackend* backend);
+    void loadDisplayConfig(PhosphorConfig::IBackend* backend);
+    void loadAppearanceConfig(PhosphorConfig::IBackend* backend);
+    void loadZoneGeometryConfig(PhosphorConfig::IBackend* backend);
+    void loadBehaviorConfig(PhosphorConfig::IBackend* backend);
+    void loadZoneSelectorConfig(PhosphorConfig::IBackend* backend);
+    void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
+    void loadShortcutConfig(PhosphorConfig::IBackend* backend);
+    void loadAutotilingConfig(PhosphorConfig::IBackend* backend);
+    void loadEditorConfig(PhosphorConfig::IBackend* backend);
+    void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(IConfigBackend* backend);
-    void saveDisplayConfig(IConfigBackend* backend);
-    void saveAppearanceConfig(IConfigBackend* backend);
-    void saveZoneGeometryConfig(IConfigBackend* backend);
-    void saveBehaviorConfig(IConfigBackend* backend);
-    void saveZoneSelectorConfig(IConfigBackend* backend);
-    void saveAllPerScreenOverrides(IConfigBackend* backend);
-    void saveShortcutConfig(IConfigBackend* backend);
-    void saveAutotilingConfig(IConfigBackend* backend);
-    void saveEditorConfig(IConfigBackend* backend);
-    void saveVirtualScreenConfigs(IConfigBackend* backend);
+    void saveActivationConfig(PhosphorConfig::IBackend* backend);
+    void saveDisplayConfig(PhosphorConfig::IBackend* backend);
+    void saveAppearanceConfig(PhosphorConfig::IBackend* backend);
+    void saveZoneGeometryConfig(PhosphorConfig::IBackend* backend);
+    void saveBehaviorConfig(PhosphorConfig::IBackend* backend);
+    void saveZoneSelectorConfig(PhosphorConfig::IBackend* backend);
+    void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
+    void saveShortcutConfig(PhosphorConfig::IBackend* backend);
+    void saveAutotilingConfig(PhosphorConfig::IBackend* backend);
+    void saveEditorConfig(PhosphorConfig::IBackend* backend);
+    void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
     static QStringList managedGroupNames();
     // Delete all per-screen override groups (ZoneSelector:*, AutotileScreen:*, SnappingScreen:*).
-    static void deletePerScreenGroups(IConfigBackend* backend);
+    static void deletePerScreenGroups(PhosphorConfig::IBackend* backend);
     // Purge stale keys from all managed groups before save() rewrites them.
     void purgeStaleKeys();
 
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
-    std::unique_ptr<IConfigBackend> m_ownedBackend;
-    IConfigBackend* m_configBackend = nullptr; // always valid after construction
+    std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
+    PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation

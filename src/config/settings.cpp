@@ -4,7 +4,8 @@
 #include "settings.h"
 #include "colorimporter.h"
 #include "configdefaults.h"
-#include "iconfigbackend.h"
+#include "configbackends.h"
+#include "perscreenresolver.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -34,7 +35,7 @@ Settings::Settings(QObject* parent)
     load();
 }
 
-Settings::Settings(IConfigBackend* backend, QObject* parent)
+Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
 {
@@ -56,7 +57,7 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
     return uuid.toString();
 }
 
-int Settings::readValidatedInt(IConfigGroup& group, const QString& key, int defaultValue, int min, int max,
+int Settings::readValidatedInt(PhosphorConfig::IGroup& group, const QString& key, int defaultValue, int min, int max,
                                const char* settingName)
 {
     int value = group.readInt(key, defaultValue);
@@ -68,7 +69,7 @@ int Settings::readValidatedInt(IConfigGroup& group, const QString& key, int defa
     return value;
 }
 
-QColor Settings::readValidatedColor(IConfigGroup& group, const QString& key, const QColor& defaultValue,
+QColor Settings::readValidatedColor(PhosphorConfig::IGroup& group, const QString& key, const QColor& defaultValue,
                                     const char* settingName)
 {
     QColor color = group.readColor(key, defaultValue);
@@ -79,7 +80,7 @@ QColor Settings::readValidatedColor(IConfigGroup& group, const QString& key, con
     return color;
 }
 
-void Settings::loadIndexedShortcuts(IConfigGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
+void Settings::loadIndexedShortcuts(PhosphorConfig::IGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
                                     const QString (&defaults)[9])
 {
     for (int i = 0; i < 9; ++i) {
@@ -120,7 +121,7 @@ std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
     return result; // May be empty (valid [] means no triggers)
 }
 
-void Settings::saveTriggerList(IConfigGroup& group, const QString& key, const QVariantList& triggers)
+void Settings::saveTriggerList(PhosphorConfig::IGroup& group, const QString& key, const QVariantList& triggers)
 {
     QJsonArray arr;
     for (const QVariant& t : triggers) {
@@ -269,11 +270,12 @@ QStringList Settings::managedGroupNames()
     };
 }
 
-void Settings::deletePerScreenGroups(IConfigBackend* backend)
+void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     for (const QString& groupName : allGroups) {
-        if (isPerScreenPrefix(groupName) || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+        if (PerScreenPathResolver::isPerScreenPrefix(groupName)
+            || groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
             backend->deleteGroup(groupName);
         }
     }
@@ -297,7 +299,7 @@ void Settings::purgeStaleKeys()
     // — save() rewrites them from scratch with only currently-valid keys.
     QSet<QString> deleted;
     for (const QString& groupName : m_configBackend->groupList()) {
-        if (isPerScreenPrefix(groupName)) {
+        if (PerScreenPathResolver::isPerScreenPrefix(groupName)) {
             continue;
         }
         // VirtualScreen: groups are saved separately by saveVirtualScreenConfigs()

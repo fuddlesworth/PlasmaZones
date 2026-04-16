@@ -15,7 +15,7 @@ namespace PlasmaZones {
 
 // ── load() helpers ───────────────────────────────────────────────────────────
 
-void Settings::loadActivationConfig(IConfigBackend* backend)
+void Settings::loadActivationConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto snapping = backend->group(ConfigDefaults::snappingGroup());
@@ -52,7 +52,7 @@ void Settings::loadActivationConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadDisplayConfig(IConfigBackend* backend)
+void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto display = backend->group(ConfigDefaults::snappingBehaviorDisplayGroup());
@@ -109,7 +109,7 @@ void Settings::loadDisplayConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadAppearanceConfig(IConfigBackend* backend)
+void Settings::loadAppearanceConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
@@ -173,7 +173,7 @@ void Settings::loadAppearanceConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadZoneGeometryConfig(IConfigBackend* backend)
+void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
@@ -214,7 +214,7 @@ void Settings::loadZoneGeometryConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadBehaviorConfig(IConfigBackend* backend)
+void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto windowHandling = backend->group(ConfigDefaults::snappingBehaviorWindowHandlingGroup());
@@ -268,7 +268,7 @@ void Settings::loadBehaviorConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadZoneSelectorConfig(IConfigBackend* backend)
+void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 {
     auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
     m_zoneSelectorEnabled = zoneSelector->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::zoneSelectorEnabled());
@@ -303,7 +303,7 @@ void Settings::loadZoneSelectorConfig(IConfigBackend* backend)
                          ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax(), "zone selector max rows");
 }
 
-void Settings::loadShortcutConfig(IConfigBackend* backend)
+void Settings::loadShortcutConfig(PhosphorConfig::IBackend* backend)
 {
     auto shortcuts = backend->group(ConfigDefaults::shortcutsGlobalGroup());
     m_openEditorShortcut = shortcuts->readString(ConfigDefaults::openEditorKey(), ConfigDefaults::openEditorShortcut());
@@ -387,7 +387,7 @@ void Settings::loadShortcutConfig(IConfigBackend* backend)
                               ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut());
 }
 
-void Settings::loadAutotilingConfig(IConfigBackend* backend)
+void Settings::loadAutotilingConfig(PhosphorConfig::IBackend* backend)
 {
     // Use v2 schema structure: Tiling.* sub-groups
     {
@@ -611,7 +611,7 @@ void Settings::loadAutotilingConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::loadEditorConfig(IConfigBackend* backend)
+void Settings::loadEditorConfig(PhosphorConfig::IBackend* backend)
 {
     // Capture old values for post-load change-guarded signal emission
     const QString oldDuplicate = m_editorDuplicateShortcut;
@@ -696,7 +696,7 @@ void Settings::loadEditorConfig(IConfigBackend* backend)
 
 // ── save() helpers ───────────────────────────────────────────────────────────
 
-void Settings::saveEditorConfig(IConfigBackend* backend)
+void Settings::saveEditorConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
@@ -720,7 +720,7 @@ void Settings::saveEditorConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveActivationConfig(IConfigBackend* backend)
+void Settings::saveActivationConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto snapping = backend->group(ConfigDefaults::snappingGroup());
@@ -739,7 +739,7 @@ void Settings::saveActivationConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveDisplayConfig(IConfigBackend* backend)
+void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto display = backend->group(ConfigDefaults::snappingBehaviorDisplayGroup());
@@ -760,7 +760,7 @@ void Settings::saveDisplayConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveAppearanceConfig(IConfigBackend* backend)
+void Settings::saveAppearanceConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
@@ -795,7 +795,7 @@ void Settings::saveAppearanceConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveZoneGeometryConfig(IConfigBackend* backend)
+void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
@@ -816,7 +816,7 @@ void Settings::saveZoneGeometryConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveBehaviorConfig(IConfigBackend* backend)
+void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto windowHandling = backend->group(ConfigDefaults::snappingBehaviorWindowHandlingGroup());
@@ -843,7 +843,7 @@ void Settings::saveBehaviorConfig(IConfigBackend* backend)
     }
 }
 
-void Settings::saveZoneSelectorConfig(IConfigBackend* backend)
+void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 {
     auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
     zoneSelector->writeBool(ConfigDefaults::enabledKey(), m_zoneSelectorEnabled);
@@ -858,7 +858,7 @@ void Settings::saveZoneSelectorConfig(IConfigBackend* backend)
     zoneSelector->writeInt(ConfigDefaults::maxRowsKey(), m_zoneSelectorMaxRows);
 }
 
-void Settings::saveShortcutConfig(IConfigBackend* backend)
+void Settings::saveShortcutConfig(PhosphorConfig::IBackend* backend)
 {
     auto shortcuts = backend->group(ConfigDefaults::shortcutsGlobalGroup());
     shortcuts->writeString(ConfigDefaults::openEditorKey(), m_openEditorShortcut);
@@ -903,7 +903,7 @@ void Settings::saveShortcutConfig(IConfigBackend* backend)
                            m_rotateVirtualScreensCounterclockwiseShortcut);
 }
 
-void Settings::saveAutotilingConfig(IConfigBackend* backend)
+void Settings::saveAutotilingConfig(PhosphorConfig::IBackend* backend)
 {
     {
         auto tiling = backend->group(ConfigDefaults::tilingGroup());
@@ -996,7 +996,7 @@ void Settings::saveAutotilingConfig(IConfigBackend* backend)
 
 // ── Virtual screen config load/save ──────────────────────────────────────────
 
-void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
+void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
 {
     m_virtualScreenConfigs.clear();
     const QStringList allGroups = backend->groupList();
@@ -1099,7 +1099,7 @@ void Settings::loadVirtualScreenConfigs(IConfigBackend* backend)
     }
 }
 
-void Settings::saveVirtualScreenConfigs(IConfigBackend* backend)
+void Settings::saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
 {
     // Remove old VirtualScreen: groups that are no longer in the config
     const QStringList allGroups = backend->groupList();

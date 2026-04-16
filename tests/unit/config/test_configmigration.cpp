@@ -11,7 +11,7 @@
 
 #include "../../../src/config/configmigration.h"
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/config/configbackend_json.h"
+#include "../../../src/config/configbackends.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -340,7 +340,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Round-trip with JsonConfigBackend
+    // Round-trip with PhosphorConfig::JsonBackend
     // =========================================================================
 
     // =========================================================================
@@ -371,7 +371,7 @@ private Q_SLOTS:
 
         // Write the v1 JSON to disk
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         // Run migration
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -415,7 +415,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         // First migration
         QVERIFY(ConfigMigration::ensureJsonConfig());
@@ -444,7 +444,7 @@ private Q_SLOTS:
         root[QStringLiteral("AutotileShortcuts")] = autotileShortcuts;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -483,7 +483,7 @@ private Q_SLOTS:
         root[QStringLiteral("PerScreen")] = perScreen;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -502,7 +502,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Round-trip with JsonConfigBackend
+    // Round-trip with PhosphorConfig::JsonBackend
     // =========================================================================
 
     void testV1JsonMigration_unifiedSnapInterval()
@@ -519,7 +519,7 @@ private Q_SLOTS:
         root[QStringLiteral("Editor")] = editor;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -545,7 +545,7 @@ private Q_SLOTS:
         root[QStringLiteral("Editor")] = editor;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -568,7 +568,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -601,7 +601,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -631,7 +631,7 @@ private Q_SLOTS:
         root[QStringLiteral("Activation")] = activation;
 
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        QVERIFY(JsonConfigBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
+        QVERIFY(PhosphorConfig::JsonBackend::writeJsonAtomically(ConfigDefaults::configFilePath(), root));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 

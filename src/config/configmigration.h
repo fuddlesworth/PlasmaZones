@@ -16,6 +16,13 @@
 
 namespace PlasmaZones {
 
+/// Current config schema version. Written by JsonBackend::sync() (fresh
+/// installs, via the version stamp wired up in configbackends.cpp),
+/// migrateIniToJson() (INI upgrades), and migrateV1ToV2() (schema upgrades).
+/// v1: flat groups (Activation, Display, Appearance, etc.)
+/// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
+inline constexpr int ConfigSchemaVersion = 2;
+
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
 struct MigrationStep

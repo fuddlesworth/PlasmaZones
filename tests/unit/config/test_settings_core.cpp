@@ -15,7 +15,7 @@
 
 #include <QTest>
 #include <QSignalSpy>
-#include "config/configbackend_json.h"
+#include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
 #include "../../../src/config/configdefaults.h"
