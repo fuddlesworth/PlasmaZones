@@ -21,13 +21,13 @@ namespace PhosphorConfig {
 class Store::Private
 {
 public:
-    Private(std::unique_ptr<IBackend> backendIn, Schema schemaIn)
-        : backend(std::move(backendIn))
+    Private(IBackend* backendIn, Schema schemaIn)
+        : backend(backendIn)
         , schema(std::move(schemaIn))
     {
     }
 
-    std::unique_ptr<IBackend> backend;
+    IBackend* backend; // non-owning — lifetime managed by the caller
     Schema schema;
 };
 
@@ -110,13 +110,14 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
 
 // ─── Store ───────────────────────────────────────────────────────────────────
 
-Store::Store(std::unique_ptr<IBackend> backend, Schema schema, QObject* parent)
+Store::Store(IBackend* backend, Schema schema, QObject* parent)
     : QObject(parent)
-    , d(std::make_unique<Private>(std::move(backend), std::move(schema)))
+    , d(std::make_unique<Private>(backend, std::move(schema)))
 {
+    Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
     // Wire the schema's path resolver onto the JsonBackend when present.
     // QSettingsBackend has no resolver concept; passing it one is a no-op.
-    if (auto* json = dynamic_cast<JsonBackend*>(d->backend.get())) {
+    if (auto* json = dynamic_cast<JsonBackend*>(d->backend)) {
         if (d->schema.pathResolver) {
             json->setPathResolver(d->schema.pathResolver);
         }
@@ -148,7 +149,7 @@ Store::~Store() = default;
 
 IBackend* Store::backend() const
 {
-    return d->backend.get();
+    return d->backend;
 }
 
 const Schema& Store::schema() const

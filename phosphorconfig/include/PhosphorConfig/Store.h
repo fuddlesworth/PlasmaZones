@@ -46,11 +46,12 @@ class PHOSPHORCONFIG_EXPORT Store : public QObject
     Q_OBJECT
 
 public:
-    /// Construct a store over @p backend governed by @p schema. The schema's
-    /// migration chain runs against the backend's current state on entry;
-    /// after migration the version key is stamped and the backend synced.
-    /// Takes ownership of @p backend.
-    explicit Store(std::unique_ptr<IBackend> backend, Schema schema, QObject* parent = nullptr);
+    /// Construct a store that borrows @p backend and applies @p schema. The
+    /// backend must outlive the store — typically owned by the caller via
+    /// @c std::unique_ptr in a containing class. On entry the schema's
+    /// migration chain runs against the backend's in-memory state; after
+    /// migration the version key is stamped (JsonBackend only).
+    Store(IBackend* backend, Schema schema, QObject* parent = nullptr);
 
     ~Store() override;
 

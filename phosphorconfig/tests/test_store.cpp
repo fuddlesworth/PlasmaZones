@@ -50,8 +50,8 @@ private Q_SLOTS:
 
     void readReturnsSchemaDefaultWhenKeyMissing()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 800);
         QCOMPARE(store.read<bool>(QStringLiteral("Window"), QStringLiteral("Maximized")), false);
@@ -62,8 +62,8 @@ private Q_SLOTS:
 
     void writeEmitsChangedSignal()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         QSignalSpy spy(&store, &Store::changed);
         store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
@@ -76,8 +76,8 @@ private Q_SLOTS:
 
     void resetRestoresSchemaDefault()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 1024);
@@ -88,8 +88,8 @@ private Q_SLOTS:
 
     void resetGroupResetsEveryDeclaredKey()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
         store.write(QStringLiteral("Window"), QStringLiteral("Height"), 768);
@@ -104,8 +104,8 @@ private Q_SLOTS:
 
     void exportToJsonIncludesEveryDeclaredKey()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
 
@@ -122,8 +122,8 @@ private Q_SLOTS:
 
     void importFromJsonOverwritesDeclaredKeysOnly()
     {
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), makeSchema());
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
 
         QJsonObject snapshot;
         QJsonObject window;
@@ -152,8 +152,8 @@ private Q_SLOTS:
              }},
         };
 
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), s);
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
 
         // Write a too-large value directly via the backend, bypassing the
         // validator — simulates a hand-edited config or an older version.
@@ -177,8 +177,8 @@ private Q_SLOTS:
              }},
         };
 
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), s);
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
 
         store.write(QStringLiteral("Window"), QStringLiteral("Width"), 5);
         // Backend should have received the clamped value (100), not 5.
@@ -209,8 +209,8 @@ private Q_SLOTS:
              }},
         };
 
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), s);
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
 
         store.write(QStringLiteral("Perf"), QStringLiteral("Mode"), QStringLiteral("turbo"));
         QCOMPARE(store.read<QString>(QStringLiteral("Perf"), QStringLiteral("Mode")), QStringLiteral("medium"));
@@ -230,8 +230,8 @@ private Q_SLOTS:
              }},
         };
 
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), s);
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
 
         {
             auto g = store.backend()->group(QStringLiteral("X"));
@@ -267,8 +267,8 @@ private Q_SLOTS:
             {QStringLiteral("Width"), 0, QMetaType::Int},
         };
 
-        auto backend = std::make_unique<JsonBackend>(m_path);
-        Store store(std::move(backend), schema);
+        JsonBackend backend(m_path);
+        Store store(&backend, schema);
 
         QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 640);
 
