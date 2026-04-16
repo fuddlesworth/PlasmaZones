@@ -165,6 +165,7 @@ echo ""
 # Libraries
 %{_libdir}/libPhosphorShell.so*
 %{_libdir}/libPhosphorRendering.so*
+%{_libdir}/libPhosphorLayer.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
@@ -182,6 +183,10 @@ echo ""
 %{_includedir}/PhosphorRendering/
 %{_libdir}/cmake/PhosphorRendering/
 %{_datadir}/phosphorshell/
+
+# PhosphorLayer development headers and CMake config
+%{_includedir}/PhosphorLayer/
+%{_libdir}/cmake/PhosphorLayer/
 
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so

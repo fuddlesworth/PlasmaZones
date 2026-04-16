@@ -132,7 +132,8 @@ stdenv.mkDerivation {
     description = "Window tiling and autotiling for KDE Plasma 6.6+";
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     changelog = "https://github.com/fuddlesworth/PlasmaZones/blob/main/CHANGELOG.md";
-    # PlasmaZones is GPL-3.0+; bundled PhosphorShell and PhosphorRendering libraries are LGPL-2.1+
+    # PlasmaZones is GPL-3.0+; bundled PhosphorShell, PhosphorRendering, and
+    # PhosphorLayer libraries are LGPL-2.1+
     license = with lib.licenses; [ gpl3Plus lgpl21Plus ];
     platforms = lib.platforms.linux;
     mainProgram = "plasmazonesd";
