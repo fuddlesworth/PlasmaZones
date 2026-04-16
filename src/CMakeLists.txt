@@ -339,14 +339,9 @@ install(TARGETS plasmazones_core
 # ═══════════════════════════════════════════════════════════════════════════════
 set(plasmazones_rendering_SRCS
     daemon/rendering/zoneshadercommon.h
-    daemon/rendering/rendering_macros.h
-    daemon/rendering/zoneshadernodebase.h
-    daemon/rendering/zoneshadernoderhi/internal.h
+    daemon/rendering/zoneuniformextension.h
     daemon/rendering/zoneshadernoderhi.h
     daemon/rendering/zoneshadernoderhi.cpp
-    daemon/rendering/zoneshadernoderhi/setters.cpp
-    daemon/rendering/zoneshadernoderhi/pipeline.cpp
-    daemon/rendering/zoneshadernoderhi/uniforms.cpp
     daemon/rendering/zoneshaderitem.h
     daemon/rendering/zoneshaderitem.cpp
     daemon/rendering/zoneshaderitem/setters.cpp
@@ -365,6 +360,7 @@ target_link_libraries(plasmazones_rendering
     PUBLIC
         plasmazones_core
         Qt6::Quick
+        PhosphorRendering::PhosphorRendering
     PRIVATE
         Qt6::GuiPrivate
         Qt6::ShaderToolsPrivate

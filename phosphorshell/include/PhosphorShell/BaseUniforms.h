@@ -20,10 +20,20 @@ constexpr double kShaderTimeWrap = 1024.0;
 /// bytes for the UBO, writes the base region itself, and calls
 /// extension->write() for the remainder.
 ///
-/// Fields at offsets 88–91 (_reserved0, _reserved1) are reserved for
-/// consumer use within the base block. PlasmaZones uses them for
-/// zoneCount and highlightedCount — consumers that don't need zone
-/// awareness should leave them as 0.
+/// @par appField0 / appField1 escape hatch
+/// Two consumer-defined int fields at offsets 88–95. They exist regardless
+/// of use because they fill the std140 alignment slot between iResolution
+/// (vec2) and iMouse (vec4) — removing them would break the layout.
+///
+/// Use them when you have a small (≤2 ints), frequently-updated piece of
+/// state that needs to live INSIDE BaseUniforms (rather than the extension
+/// region) — typically because the fragment shader reads them on every
+/// pixel and you want them on the same cache line as iResolution. For
+/// larger or differently-shaped state, implement IUniformExtension.
+///
+/// The library writes them via the K_APP_FIELDS UBO region (8 bytes) so
+/// frequent updates don't trigger a full scene-header re-upload. Consumers
+/// that don't use them should leave them at 0.
 struct alignas(16) BaseUniforms
 {
     // Transform and opacity from Qt scene graph (offset 0)
@@ -38,7 +48,8 @@ struct alignas(16) BaseUniforms
     // Resolution
     float iResolution[2]; // vec2: 8 bytes at offset 80
 
-    // Consumer-defined (PlasmaZones: zoneCount, highlightedCount)
+    // Consumer-defined int slots — see class doc above for the escape-hatch
+    // design rationale. Written via ShaderNodeRhi::setAppField0/1.
     int appField0; // offset 88
     int appField1; // offset 92
 
@@ -82,6 +93,13 @@ constexpr size_t K_MATRIX_OPACITY_SIZE = offsetof(BaseUniforms, iTime); // 68 by
 // Animation time block (iTime, iTimeDelta, iFrame)
 constexpr size_t K_TIME_BLOCK_OFFSET = offsetof(BaseUniforms, iTime);
 constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int); // 12 bytes
+
+// App-fields block (appField0, appField1) — 8 bytes at offset 88.
+// Uploaded as a tiny standalone region when ONLY the consumer's escape-hatch
+// fields changed. Without this granular region, every appField update would
+// trigger a full scene-header re-upload (~512 bytes).
+constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
+constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 
 // Scene header: iResolution through end of iTextureResolution
 // (everything between time block and iTimeHi — excludes extension zone arrays)

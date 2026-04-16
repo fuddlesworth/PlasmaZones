@@ -306,6 +306,9 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # PhosphorShell library (layer-shell + shader pipeline)
 add_subdirectory(phosphorshell)
 
+# PhosphorRendering library (GPU shader rendering via Qt RHI)
+add_subdirectory(phosphorrendering)
+
 # Source directories
 add_subdirectory(src)
 option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)

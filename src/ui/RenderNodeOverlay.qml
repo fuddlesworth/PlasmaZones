@@ -111,8 +111,8 @@ Window {
     property bool _idled: false
 
     // Force shader re-read from disk (called by C++ on file change)
-    function loadShader() {
-        zoneShaderRenderer.loadShader();
+    function reloadShader() {
+        zoneShaderRenderer.reloadShader();
     }
 
     // Window flags - QPA layer-shell plugin handles the overlay behavior on Wayland

@@ -58,4 +58,9 @@ package() {
         "$pkgdir/usr/share/libalpm/hooks/plasmazones-kbuildsycoca.hook"
     install -Dm755 "PlasmaZones-$pkgver/packaging/arch/plasmazones-refresh-sycoca" \
         "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
+
+    # Package ships libPhosphorShell.so* and libPhosphorRendering.so* plus
+    # their CMake config and headers for downstream consumers. No separate
+    # -devel package is produced; these are installed by `cmake --install`
+    # above into /usr/lib and /usr/include and bundled with the main package.
 }

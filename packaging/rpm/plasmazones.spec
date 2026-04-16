@@ -164,6 +164,7 @@ echo ""
 
 # Libraries
 %{_libdir}/libPhosphorShell.so*
+%{_libdir}/libPhosphorRendering.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
@@ -173,8 +174,13 @@ echo ""
 # Layer-shell QPA plugin (PhosphorShell)
 %{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
 
-# PhosphorShell development headers and data
+# PhosphorShell development headers and CMake config
 %{_includedir}/PhosphorShell/
+%{_libdir}/cmake/PhosphorShell/
+
+# PhosphorRendering development headers and CMake config
+%{_includedir}/PhosphorRendering/
+%{_libdir}/cmake/PhosphorRendering/
 %{_datadir}/phosphorshell/
 
 # KCM sub-modules (System Settings)

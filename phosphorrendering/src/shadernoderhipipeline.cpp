@@ -1,22 +1,16 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "../zoneshadernoderhi.h"
 #include "internal.h"
-
-#include "../../../core/logging.h"
 
 #include <QQuickWindow>
 
-namespace PlasmaZones {
+namespace PhosphorRendering {
 
 // ============================================================================
 // Fullscreen Quad Pipeline (file-local helper, shared by buffer + image passes)
 // ============================================================================
 
-// Buffer passes render to intermediate textures and should NOT alpha-blend against
-// the clear color; use enableBlend=false for those so shaders can freely use the
-// alpha channel for data without darkening the RGB output.
 static std::unique_ptr<QRhiGraphicsPipeline>
 createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const QShader& vertexShader,
                              const QShader& fragmentShader, QRhiShaderResourceBindings* srb, bool enableBlend = true,
@@ -35,10 +29,7 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
     QList<QRhiGraphicsPipeline::TargetBlend> blends;
     QRhiGraphicsPipeline::TargetBlend blend;
     blend.enable = enableBlend;
-    // Premultiplied alpha blending (Qt Quick convention). The fragment shader
-    // outputs premultiplied color (rgb * alpha) via clampFragColor(), so srcColor
-    // uses One instead of SrcAlpha. This matches the Wayland compositor's
-    // expectation for surface alpha compositing on both Vulkan and OpenGL.
+    // Premultiplied alpha blending (Qt Quick convention).
     blend.srcColor = QRhiGraphicsPipeline::One;
     blend.dstColor = QRhiGraphicsPipeline::OneMinusSrcAlpha;
     blend.srcAlpha = QRhiGraphicsPipeline::One;
@@ -46,7 +37,7 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
     blends.append(blend);
     for (int i = 1; i < numColorAttachments; ++i) {
         QRhiGraphicsPipeline::TargetBlend depthBlend;
-        depthBlend.enable = false; // No blending for depth attachment
+        depthBlend.enable = false;
         blends.append(depthBlend);
     }
     pipeline->setTargetBlends(blends.begin(), blends.end());
@@ -61,7 +52,7 @@ createFullscreenQuadPipeline(QRhi* rhi, QRhiRenderPassDescriptor* rpDesc, const 
 // ensureBufferTarget
 // ============================================================================
 
-bool ZoneShaderNodeRhi::ensureBufferTarget()
+bool ShaderNodeRhi::ensureBufferTarget()
 {
     if (m_width <= 0 || m_height <= 0) {
         return true;
@@ -78,20 +69,17 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     if (m_useDepthBuffer && (!m_depthTexture || m_depthTexture->pixelSize() != bufferSize)) {
         m_depthTexture.reset(rhi->newTexture(QRhiTexture::R32F, bufferSize, 1, QRhiTexture::RenderTarget));
         if (!m_depthTexture->create()) {
-            qCWarning(lcOverlay) << "Failed to create depth texture";
+            qCWarning(lcShaderNode) << "Failed to create depth texture";
             return false;
         }
         if (!m_depthSampler) {
             m_depthSampler.reset(rhi->newSampler(QRhiSampler::Nearest, QRhiSampler::Nearest, QRhiSampler::None,
                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_depthSampler->create()) {
-                qCWarning(lcOverlay) << "Failed to create depth sampler";
+                qCWarning(lcShaderNode) << "Failed to create depth sampler";
                 return false;
             }
         }
-        // Force RT recreation since attachment count changed.
-        // Depth texture is bound at binding 12 in all SRBs; adding/removing it
-        // changes the SRB layout, so all pipelines must be recreated too.
         m_pipeline.reset();
         m_bufferPipeline.reset();
         m_bufferSrb.reset();
@@ -104,14 +92,10 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         }
     }
 
-    // NOTE: When useDepthBuffer is true, the same m_depthTexture is attached to ALL
-    // buffer render targets (single and multi-buffer). In multi-buffer mode, each pass
-    // overwrites the depth attachment — only the final buffer pass's depth output survives
-    // for the image pass to read at binding 12.
     if (m_useDepthBuffer && multiBufferMode && m_bufferPaths.size() > 1) {
         if (!m_depthMultiBufferWarned) {
             m_depthMultiBufferWarned = true;
-            qCWarning(lcOverlay)
+            qCWarning(lcShaderNode)
                 << "Depth buffer with" << m_bufferPaths.size()
                 << "buffer passes: only the last pass's depth output will be available in the image pass";
         }
@@ -119,11 +103,6 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     auto createTextureAndRT = [rhi, bufferSize, this](std::unique_ptr<QRhiTexture>& tex,
                                                       std::unique_ptr<QRhiTextureRenderTarget>& rt,
                                                       std::unique_ptr<QRhiRenderPassDescriptor>& rpd) -> bool {
-        // UsedWithLoadStore adds VK_IMAGE_USAGE_STORAGE_BIT, which disables
-        // NVIDIA's Delta Color Compression (DCC) on the texture. Without this,
-        // compressed render target data isn't decompressed when the texture is
-        // sampled in a later pass — Qt RHI's barrier tracking doesn't trigger
-        // the DCC decompression, causing rectangular tile artifacts on Vulkan.
         tex.reset(rhi->newTexture(QRhiTexture::RGBA16F, bufferSize, 1,
                                   QRhiTexture::RenderTarget | QRhiTexture::UsedWithLoadStore));
         if (!tex->create()) {
@@ -151,13 +130,13 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
             }
         }
         if (needCreate) {
-            qCInfo(lcOverlay) << "Creating multi-buffer textures:"
-                              << "bufferSize=" << bufferSize << "m_width=" << m_width << "m_height=" << m_height
-                              << "bufferScale=" << m_bufferScale << "passes=" << n;
+            qCInfo(lcShaderNode) << "Creating multi-buffer textures:"
+                                 << "bufferSize=" << bufferSize << "m_width=" << m_width << "m_height=" << m_height
+                                 << "bufferScale=" << m_bufferScale << "passes=" << n;
             for (int i = 0; i < n; ++i) {
                 if (!createTextureAndRT(m_multiBufferTextures[i], m_multiBufferRenderTargets[i],
                                         m_multiBufferRenderPassDescriptors[i])) {
-                    qCWarning(lcOverlay) << "Failed to create multi-buffer texture" << i;
+                    qCWarning(lcShaderNode) << "Failed to create multi-buffer texture" << i;
                     return false;
                 }
             }
@@ -179,7 +158,7 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
 
     if (!m_bufferTexture) {
         if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
-            qCWarning(lcOverlay) << "Failed to create buffer texture";
+            qCWarning(lcShaderNode) << "Failed to create buffer texture";
             return false;
         }
         if (!ensureBufferSampler(rhi, 0)) {
@@ -187,7 +166,7 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         }
         if (m_bufferFeedback
             && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
-            qCWarning(lcOverlay) << "Failed to create buffer texture B (ping-pong)";
+            qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
         m_srb.reset();
@@ -196,12 +175,12 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
     }
     if (m_bufferTexture->pixelSize() != bufferSize) {
         if (!createTextureAndRT(m_bufferTexture, m_bufferRenderTarget, m_bufferRenderPassDescriptor)) {
-            qCWarning(lcOverlay) << "Failed to resize buffer texture";
+            qCWarning(lcShaderNode) << "Failed to resize buffer texture";
             return false;
         }
         if (m_bufferFeedback
             && !createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
-            qCWarning(lcOverlay) << "Failed to resize buffer texture B";
+            qCWarning(lcShaderNode) << "Failed to resize buffer texture B";
             return false;
         }
         m_bufferPipeline.reset();
@@ -209,9 +188,10 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
         m_bufferSrbB.reset();
         m_srb.reset();
         m_srbB.reset();
+        m_bufferFeedbackCleared = false; // New textures need clearing
     } else if (m_bufferFeedback && !m_bufferTextureB) {
         if (!createTextureAndRT(m_bufferTextureB, m_bufferRenderTargetB, m_bufferRenderPassDescriptorB)) {
-            qCWarning(lcOverlay) << "Failed to create buffer texture B (ping-pong)";
+            qCWarning(lcShaderNode) << "Failed to create buffer texture B (ping-pong)";
             return false;
         }
         m_bufferPipeline.reset();
@@ -232,10 +212,10 @@ bool ZoneShaderNodeRhi::ensureBufferTarget()
 }
 
 // ============================================================================
-// ensureDummyChannelResources — shared by ensureBufferPipeline (multi/single)
+// ensureDummyChannelResources
 // ============================================================================
 
-bool ZoneShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
+bool ShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
 {
     if (!m_dummyChannelTexture) {
         m_dummyChannelTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
@@ -258,10 +238,10 @@ bool ZoneShaderNodeRhi::ensureDummyChannelResources(QRhi* rhi)
 }
 
 // ============================================================================
-// ensureBufferSampler — create/recreate sampler for a single buffer channel
+// ensureBufferSampler
 // ============================================================================
 
-bool ZoneShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
+bool ShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
 {
     if (index < 0 || index >= kMaxBufferPasses) {
         return false;
@@ -283,7 +263,7 @@ bool ZoneShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
     }
     m_bufferSamplers[index].reset(rhi->newSampler(minF, magF, mipF, addr, addr));
     if (!m_bufferSamplers[index]->create()) {
-        qCWarning(lcOverlay) << "Failed to create buffer sampler" << index;
+        qCWarning(lcShaderNode) << "Failed to create buffer sampler" << index;
         m_bufferSamplers[index].reset();
         return false;
     }
@@ -294,7 +274,7 @@ bool ZoneShaderNodeRhi::ensureBufferSampler(QRhi* rhi, int index)
 // ensureBufferPipeline
 // ============================================================================
 
-bool ZoneShaderNodeRhi::ensureBufferPipeline()
+bool ShaderNodeRhi::ensureBufferPipeline()
 {
     const bool multiBufferMode = m_bufferPaths.size() > 1;
     if (multiBufferMode) {
@@ -319,17 +299,8 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
             if (!m_multiBufferSrbs[i]) {
                 std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
                 QVector<QRhiShaderResourceBinding> bindings;
-                bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-                    0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-                if (m_labelsTexture && m_labelsSampler) {
-                    bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                        1, QRhiShaderResourceBinding::FragmentStage, m_labelsTexture.get(), m_labelsSampler.get()));
-                }
-                // Bind ALL 4 channel slots (bindings 2-5). The SPIR-V shader
-                // declares iChannel0-3 via multipass.glsl; on Vulkan, every
-                // declared binding must exist in the descriptor set layout.
-                // Unbound slots get a dummy 1×1 texture. OpenGL tolerates
-                // missing bindings but Vulkan treats them as undefined behavior.
+                appendUboAndExtraBindings(bindings);
+                // Bind ALL 4 channel slots (bindings 2-5): pass i sees outputs of passes 0..i-1.
                 for (int j = 0; j < kMaxBufferPasses; ++j) {
                     QRhiTexture* tex = (j < i && m_multiBufferTextures[j]) ? m_multiBufferTextures[j].get()
                                                                            : m_dummyChannelTexture.get();
@@ -340,17 +311,10 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                             2 + j, QRhiShaderResourceBinding::FragmentStage, tex, sam));
                     }
                 }
-                if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-                    bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                        6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(),
-                        m_audioSpectrumSampler.get()));
-                }
-                appendUserTextureBindings(bindings);
-                appendWallpaperBinding(bindings);
-                appendDepthBinding(bindings);
+                appendCommonTrailerBindings(bindings);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
-                    m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
+                    m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ") + QString::number(i);
                     return false;
                 }
                 m_multiBufferSrbs[i] = std::move(srb);
@@ -397,25 +361,10 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
     }
     m_bufferRenderPassFormat = format;
 
-    // NOTE: The SRB binding builders below (createBufferSrb, createImageSrbSingle,
-    // createImageSrbMulti, and the multi-buffer loop in ensureBufferPipeline) share
-    // the same overall structure (UBO:0, labels:1, channels:2-5, audio:6, user,
-    // wallpaper, depth) but differ in how channel textures at bindings 2-5 are
-    // resolved (feedback ping-pong vs multi-pass vs dummy). Extracting a common
-    // helper would require a channel-resolution callback, adding indirection
-    // without meaningful clarity gains.
     auto createBufferSrb = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
-        }
-        // Bind all 4 channel slots (bindings 2-5) — SPIR-V requires all declared
-        // bindings to exist in the descriptor set layout. Channel 0 gets the real
-        // feedback texture; channels 1-3 get a dummy 1×1 transparent texture.
+        appendUboAndExtraBindings(bindings);
         for (int ch = 0; ch < kMaxBufferPasses; ++ch) {
             QRhiTexture* tex = (ch == 0 && channel0Texture) ? channel0Texture : m_dummyChannelTexture.get();
             QRhiSampler* sam = (ch == 0 && channel0Texture && m_bufferSamplers[0]) ? m_bufferSamplers[0].get()
@@ -425,14 +374,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -469,7 +411,7 @@ bool ZoneShaderNodeRhi::ensureBufferPipeline()
 // ensurePipeline
 // ============================================================================
 
-bool ZoneShaderNodeRhi::ensurePipeline()
+bool ShaderNodeRhi::ensurePipeline()
 {
     QRhi* rhi = safeRhi();
     QRhiRenderTarget* rt = renderTarget();
@@ -502,15 +444,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
         }
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
-        }
-        // Bind all 4 channel slots (bindings 2-5). SPIR-V shaders that include
-        // multipass.glsl declare iChannel0-3; every declared binding must exist
-        // in the Vulkan descriptor set layout or the driver reads garbage.
+        appendUboAndExtraBindings(bindings);
         for (int ch = 0; ch < kMaxBufferPasses; ++ch) {
             QRhiTexture* tex = (ch == 0 && channel0Texture) ? channel0Texture : m_dummyChannelTexture.get();
             QRhiSampler* sam = (ch == 0 && channel0Sampler) ? channel0Sampler : m_dummyChannelSampler.get();
@@ -519,30 +453,17 @@ bool ZoneShaderNodeRhi::ensurePipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
     auto createImageSrbMulti = [rhi, this]() -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        if (m_labelsTexture && m_labelsSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_labelsTexture.get(), m_labelsSampler.get()));
-        }
+        appendUboAndExtraBindings(bindings);
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
         QRhiTexture* dummyTex = m_dummyChannelTexture.get();
         QRhiSampler* dummySam = m_dummyChannelSampler.get();
-        // Bind ALL 4 channel slots (bindings 2-5), not just 0..n-1.
         for (int i = 0; i < kMaxBufferPasses; ++i) {
             QRhiTexture* tex = (i < n && m_multiBufferTextures[i]) ? m_multiBufferTextures[i].get() : dummyTex;
             QRhiSampler* sam = (tex == dummyTex || !m_bufferSamplers[i]) ? dummySam : m_bufferSamplers[i].get();
@@ -551,14 +472,7 @@ bool ZoneShaderNodeRhi::ensurePipeline()
                     2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -598,4 +512,78 @@ bool ZoneShaderNodeRhi::ensurePipeline()
     return true;
 }
 
-} // namespace PlasmaZones
+void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    for (int t = 0; t < kMaxUserTextures; ++t) {
+        if (m_userTextures[t] && m_userTextureSamplers[t]) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(7 + t, QRhiShaderResourceBinding::FragmentStage,
+                                                                      m_userTextures[t].get(),
+                                                                      m_userTextureSamplers[t].get()));
+        }
+    }
+}
+
+void ShaderNodeRhi::appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(
+            6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+    }
+}
+
+void ShaderNodeRhi::appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+        0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+    appendExtraBindings(bindings);
+}
+
+void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    appendAudioBinding(bindings);
+    appendUserTextureBindings(bindings);
+    appendWallpaperBinding(bindings);
+    appendDepthBinding(bindings);
+}
+
+void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_useWallpaper && m_wallpaperTexture && m_wallpaperSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(11, QRhiShaderResourceBinding::FragmentStage,
+                                                                  m_wallpaperTexture.get(), m_wallpaperSampler.get()));
+    }
+}
+
+void ShaderNodeRhi::appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_useDepthBuffer && m_depthTexture && m_depthSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(12, QRhiShaderResourceBinding::FragmentStage,
+                                                                  m_depthTexture.get(), m_depthSampler.get()));
+    }
+}
+
+void ShaderNodeRhi::appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    for (const auto& [binding, extra] : m_extraBindings) {
+        if (extra.texture && extra.sampler) {
+            bindings.append(QRhiShaderResourceBinding::sampledTexture(binding, QRhiShaderResourceBinding::FragmentStage,
+                                                                      extra.texture, extra.sampler));
+        }
+    }
+}
+
+void ShaderNodeRhi::resetAllBindingsAndPipelines()
+{
+    m_srb.reset();
+    m_srbB.reset();
+    m_bufferSrb.reset();
+    m_bufferSrbB.reset();
+    m_pipeline.reset();
+    m_bufferPipeline.reset();
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
+        m_multiBufferSrbs[i].reset();
+        m_multiBufferPipelines[i].reset();
+    }
+}
+
+} // namespace PhosphorRendering

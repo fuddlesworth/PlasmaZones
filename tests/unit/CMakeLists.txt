@@ -282,6 +282,12 @@ add_executable(test_zone_shader_item ui/test_zone_shader_item.cpp)
 target_link_libraries(test_zone_shader_item PRIVATE Qt6::Test Qt6::Core Qt6::Quick plasmazones_rendering)
 add_test(NAME test_zone_shader_item COMMAND test_zone_shader_item)
 
+# Pure-data byte-layout test for the zone UBO extension. No GPU / scene graph
+# required — guards against silent C++/GLSL UBO drift after a struct refactor.
+add_executable(test_zone_uniform_extension ui/test_zone_uniform_extension.cpp)
+target_link_libraries(test_zone_uniform_extension PRIVATE Qt6::Test Qt6::Core plasmazones_rendering)
+add_test(NAME test_zone_uniform_extension COMMAND test_zone_uniform_extension)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # ui/ — Overlay Helpers Tests — need Qt6::Quick + QGuiApplication
 # ═══════════════════════════════════════════════════════════════════════════════

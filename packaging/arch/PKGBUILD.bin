@@ -30,5 +30,8 @@ sha256sums=('SKIP')
 install=plasmazones.install
 
 package() {
+    # Release tarball contains the full install prefix, including
+    # libPhosphorShell.so*, libPhosphorRendering.so*, CMake configs, and
+    # headers — a straight copy preserves them.
     cp -a "$srcdir/plasmazones-linux-x86_64/usr" "$pkgdir/usr"
 }

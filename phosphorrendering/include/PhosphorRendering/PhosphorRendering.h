@@ -1,0 +1,8 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <PhosphorRendering/ShaderCompiler.h>
+#include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorRendering/ShaderNodeRhi.h>
