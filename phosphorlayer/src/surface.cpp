@@ -313,21 +313,33 @@ private:
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
-            // Pre-empt AutomaticVisibility in case the QML root doesn't
-            // declare `visible: false`. If the window showed as part of
-            // completeCreate, the subsequent window->show() from our
-            // explicit show() would be redundant but harmless — the
-            // important part is that layer-shell is attached first.
-            win->setVisible(false);
+            // Pre-empt AutomaticVisibility — QQuickWindowQmlImpl::componentComplete
+            // checks `m_visibility` (NOT `m_visible`) and, when it finds the
+            // default AutomaticVisibility, calls setWindowVisibility(Windowed)
+            // which creates the platform window and shell surface. A plain
+            // setVisible(false) doesn't change m_visibility, so
+            // componentComplete auto-shows anyway and the wrong platform-window
+            // type can get locked in on partial-anchor surfaces (zone
+            // selector) where the compositor is sensitive to commit ordering.
+            // setProperty reaches through Q_PROPERTY to hit
+            // QQuickWindowQmlImpl::setVisibility, which stores the value in
+            // `m_visibility` before componentComplete reads it.
+            win->setProperty("visibility", QVariant::fromValue(QWindow::Hidden));
 
             if (!finishAttachWithoutTransition()) {
                 m_component->completeCreate();
                 return false;
             }
-            // NOW run componentComplete; QPA plugin sees the layer-shell
-            // dynamic properties and creates the platform window with the
-            // wlr-layer-shell role.
+            // NOW run componentComplete; since m_visibility == Hidden the
+            // AutomaticVisibility branch is skipped and the platform window
+            // is NOT created yet. It will be created on the consumer's
+            // explicit show(), at which point the QPA plugin reads our
+            // already-set _ps_layer_shell dynamic property and creates the
+            // platform window with the wlr-layer-shell role.
             m_component->completeCreate();
+            // Defensive: guarantee hidden state regardless of any
+            // componentComplete path that might have flipped visibility.
+            win->setVisible(false);
             transitionTo(State::Hidden);
             return true;
         }
