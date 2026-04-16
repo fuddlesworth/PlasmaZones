@@ -278,76 +278,85 @@ private:
 
     bool instantiateFromComponent()
     {
-        // Synchronous create(), mirroring the pre-migration createQmlWindow
-        // pattern exactly. For Window-rooted QML, componentComplete auto-
-        // shows the window (as xdg_toplevel because _ps_layer_shell isn't
-        // set yet). That's acceptable: we attach layer-shell immediately
-        // after and then call setVisible(false), which tears down the
-        // accidentally-created xdg_toplevel shell surface. The consumer's
-        // later show() call re-creates the shell surface, and this time
-        // the QPA plugin sees our _ps_layer_shell property and creates a
-        // layer_surface.
+        // beginCreate → attach → set non-zero size → completeCreate →
+        // setVisible(false). Both halves of this dance matter:
         //
-        // Previous attempts at a "clean" ordering (begin/attach/complete
-        // or visibility-Hidden pre-emption) each broke a subset of
-        // consumers: setVisible(false) without completeCreate left the
-        // platform window in a mixed state; visibility=Hidden blocked
-        // the QML-driven show() path that OSDs rely on. The hide-after-
-        // create pattern is the one Qt+PhosphorShell were tested with
-        // pre-migration and works uniformly across all seven consumers.
-        QObject* root = nullptr;
+        // 1) attach BEFORE completeCreate: Qt Wayland's createShellSurface
+        //    runs synchronously inside componentComplete's auto-show, and
+        //    reads _ps_layer_shell exactly once at that moment to choose
+        //    between xdg_toplevel and zwlr_layer_surface_v1. If we attach
+        //    after, the FIRST shell surface is xdg_toplevel and the wl_-
+        //    surface is locked into that role until the platform window is
+        //    fully destroyed. Doing it before makes the first attempt a
+        //    layer_surface with no stale role to clean up.
+        //
+        // 2) Non-zero size BEFORE completeCreate: PhosphorShell's
+        //    computeLayerSize sends zwlr_layer_surface_v1::set_size(w, h)
+        //    derived from QWindow::size(). For partial anchors that are
+        //    NOT doubly-anchored on either axis (e.g. zone selector at
+        //    Top|Left), w and h MUST be non-zero — a 0×0 commit causes
+        //    the compositor to send back a 0×0 configure and the surface
+        //    stays stuck. Setting screen geometry guarantees a valid
+        //    initial commit; consumers that want a different size call
+        //    setGeometry/setWidth/setHeight before show().
         auto* ctx = m_engine->rootContext();
-        if (m_config.windowProperties.isEmpty()) {
-            root = m_component->create(ctx);
-        } else {
-            root = m_component->createWithInitialProperties(m_config.windowProperties, ctx);
-        }
+        QObject* root = m_component->beginCreate(ctx);
         if (!root) {
-            failWith(m_component->errorString().isEmpty() ? QStringLiteral("QQmlComponent::create() returned nullptr")
-                                                          : m_component->errorString());
+            failWith(m_component->errorString().isEmpty()
+                         ? QStringLiteral("QQmlComponent::beginCreate() returned nullptr")
+                         : m_component->errorString());
             return false;
+        }
+
+        if (!m_config.windowProperties.isEmpty()) {
+            m_component->setInitialProperties(root, m_config.windowProperties);
         }
 
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
-            // Attach layer-shell (sets _ps_layer_shell on the QWindow).
+
+            // Sized first — see #2 above.
+            if (m_config.screen) {
+                const QRect geo = m_config.screen->geometry();
+                if (!geo.isEmpty()) {
+                    win->setGeometry(geo);
+                }
+            }
+
+            // Attached second — see #1 above.
             if (!finishAttach()) {
+                m_component->completeCreate();
                 return false;
             }
-            // Force FULL platform-window destroy so the next show() re-creates
-            // it from scratch. A plain setVisible(false) only unmaps on Qt
-            // Wayland — the shell-surface role (xdg_toplevel, accidentally
-            // created during componentComplete's auto-show before
-            // _ps_layer_shell was set) persists, and subsequent setVisible
-            // (true) calls just re-map that stale role. destroy() releases
-            // the native platform window entirely; the QQuickWindow C++
-            // object + QML tree survive, so the next show() re-creates the
-            // platform window and the PhosphorShell QPA plugin reads our
-            // now-set _ps_layer_shell and creates a layer_surface.
-            //
-            // Affects all destroy-once-reuse-many consumers (main overlay,
-            // zone selector, OSDs). Destroy-on-hide consumers (snap assist,
-            // layout picker) happen to avoid the stale-role problem by
-            // recreating the whole Surface every show — but this path is
-            // uniform across both categories.
+
+            // completeCreate triggers componentComplete, which (for
+            // AutomaticVisibility — the Qt Quick default) calls
+            // setWindowVisibility(Windowed) → QPA createShellSurface with
+            // _ps_layer_shell set and a non-zero size.
+            m_component->completeCreate();
+
+            // Leave the surface unmapped for the consumer's explicit
+            // show(). On Qt Wayland this unmaps the layer_surface; the
+            // role persists across hide/show cycles so the next
+            // setVisible(true) just remaps the same layer_surface.
             win->setVisible(false);
-            win->destroy();
             return true;
         }
 
         if (auto* item = qobject_cast<QQuickItem*>(root)) {
-            // Item-rooted QML — componentComplete on an Item doesn't drive
-            // platform-window creation, so the hide-after-create dance
-            // isn't needed here.
+            // Item-rooted QML doesn't drive platform-window creation —
+            // attach can happen after completeCreate without race risk.
             ensureWrapperWindow();
             m_rootItem = item;
             m_rootItem->setParentItem(m_window->contentItem());
             m_rootItem->setParent(m_window);
             bindSize();
+            m_component->completeCreate();
             return finishAttach();
         }
 
+        m_component->completeCreate();
         delete root;
         failWith(QStringLiteral("Root object is neither a QQuickWindow nor a QQuickItem"));
         return false;
