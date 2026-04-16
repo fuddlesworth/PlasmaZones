@@ -176,12 +176,47 @@ install(TARGETS PhosphorShell
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
-# Public headers (exclude ShaderEffect.h until Phase 2 implementation)
+# Export the targets file so downstream find_package(PhosphorShell) works AND
+# so dependent libraries (PhosphorRendering) can install their own export sets
+# that reference PhosphorShell::PhosphorShell. Without this, install(EXPORT) on
+# any consumer fails: "target requires target PhosphorShell that is not in any
+# export set."
+install(EXPORT PhosphorShellTargets
+    FILE PhosphorShellTargets.cmake
+    NAMESPACE PhosphorShell::
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+)
+
+# Generate and install a minimal find_package config so consumers can
+# `find_dependency(PhosphorShell)`.
+include(CMakePackageConfigHelpers)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake.in"
+"@PACKAGE_INIT@\n"
+"include(CMakeFindDependencyMacro)\n"
+"find_dependency(Qt6 COMPONENTS Core Gui)\n"
+"include(\"\${CMAKE_CURRENT_LIST_DIR}/PhosphorShellTargets.cmake\")\n"
+"check_required_components(PhosphorShell)\n"
+)
+configure_package_config_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake"
+    INSTALL_DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfigVersion.cmake"
+    VERSION 0.1.0
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShellConfigVersion.cmake"
+    DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorShell
+)
+
+# Public headers
 install(DIRECTORY include/PhosphorShell/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
     FILES_MATCHING PATTERN "*.h"
-    PATTERN "ShaderEffect.h" EXCLUDE
-    PATTERN "ShaderEffect" EXCLUDE
 )
 
 # Export header
