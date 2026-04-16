@@ -20,6 +20,9 @@
 #include <QMutexLocker>
 #include <QPointer>
 #include <PhosphorShell/LayerSurface.h>
+
+#include <PhosphorLayer/Surface.h>
+#include "pz_roles.h"
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
@@ -361,7 +364,7 @@ void OverlayService::createOverlayWindow(QScreen* screen)
 
 void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physScreen, const QRect& geometry)
 {
-    if (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayWindow) {
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].overlaySurface) {
         return;
     }
 
@@ -371,29 +374,54 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // Expose overlayService to QML context for error reporting
     m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
-    // Try shader overlay first, fall back to standard overlay if it fails
-    QQuickWindow* window = nullptr;
+    // Compute virtual-screen overrides up-front (wlr-layer-shell locks
+    // output+anchors at attach). Physical screen → AnchorAll; virtual
+    // screen → Top|Left plus clamped margins from the physical screen origin.
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    const QRect physScreenGeom = physScreen ? physScreen->geometry() : geometry;
+    const bool isVS = VirtualScreenId::isVirtual(screenId);
+    if (isVS && geometry.isValid() && geometry != physScreenGeom) {
+        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
+        const QRect clamped = geometry.intersected(physScreenGeom);
+        marginsOverride = QMargins(clamped.x() - physScreenGeom.x(), clamped.y() - physScreenGeom.y(), 0, 0);
+    } else {
+        anchorsOverride = PhosphorLayer::AnchorAll;
+    }
+
+    const auto role = PzRoles::Overlay.withScopePrefix(
+        QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+
+    // Try shader overlay first, fall back to standard overlay if it fails.
+    QVariantMap initProps;
     if (usingShader) {
-        // Set labelsTexture before QML loads so ZoneShaderItem binding never sees undefined
+        // Set labelsTexture before QML loads so ZoneShaderItem binding never sees undefined.
         QImage placeholder(1, 1, QImage::Format_ARGB32);
         placeholder.fill(Qt::transparent);
-        QVariantMap initProps;
         initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
-        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), physScreen, "shader overlay",
-                                 initProps);
-        if (window) {
+    }
+    initProps.insert(QStringLiteral("isShaderOverlay"), usingShader);
+
+    PhosphorLayer::Surface* surface = nullptr;
+    if (usingShader) {
+        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), physScreen, role,
+                                     "shader overlay", initProps, anchorsOverride, marginsOverride);
+        if (surface) {
             qCInfo(lcOverlay) << "Overlay window created: RenderNodeOverlay (ZoneShaderItem) for screen" << screenId;
         } else {
             qCWarning(lcOverlay) << "Falling back to standard overlay";
             usingShader = false;
+            initProps.insert(QStringLiteral("isShaderOverlay"), false);
         }
     }
-    if (!window) {
-        window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), physScreen, "overlay");
-        if (!window) {
+    if (!surface) {
+        surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneOverlay.qml")), physScreen, role, "overlay",
+                                     initProps, anchorsOverride, marginsOverride);
+        if (!surface) {
             return;
         }
     }
+    auto* window = surface->window();
 
     // Set window size to cover the target screen area (physical or virtual).
     // Position is controlled by layer-surface anchors + margins for virtual screens,
@@ -401,12 +429,9 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     window->setWidth(geometry.width());
     window->setHeight(geometry.height());
 
-    // Mark window type for reliable type detection
-    window->setProperty("isShaderOverlay", usingShader);
-
     // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
     // Use per-screen layout (same resolution as updateOverlayWindow) so each monitor
-    // gets the correct shader when per-screen assignments differ
+    // gets the correct shader when per-screen assignments differ.
     Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (usingShader && screenLayout) {
@@ -421,73 +446,59 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
 
-    // Configure layer surface for overlay.
-    // For virtual screens, the window is parented to the physical QScreen but sized
-    // to the virtual screen geometry. Anchors are NOT set to all-edges for virtual
-    // screens since the window doesn't cover the full physical screen.
-    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-overlay-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for overlay on" << screenId;
-        window->deleteLater();
-        return;
-    }
-    // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    updateWindowScreenPosition(window, screenId);
-
-    window->setVisible(false);
-
     // Connect to physical screen geometry changes.
     // For physical screens: update overlay size directly from the new geometry.
     // For virtual screens: recalculate geometry from ScreenManager since the
     // virtual screen bounds are derived from the physical screen geometry.
-    const bool isVirtualScreen = VirtualScreenId::isVirtual(screenId);
     QMetaObject::Connection geomConn;
     {
         QPointer<QScreen> screenPtr = physScreen;
         const QString sid = screenId; // Capture by value for lambda
-        const bool isVS = isVirtualScreen;
-        geomConn =
-            connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
-                if (!screenPtr) {
-                    return;
-                }
-                auto stateIt = m_screenStates.find(sid);
-                if (stateIt == m_screenStates.end())
-                    return; // State was cleaned up, ignore stale geometry signal
-                auto& st = stateIt.value();
-                if (auto* w = st.overlayWindow) {
-                    if (isVS) {
-                        // Virtual screen: recalculate geometry from ScreenManager since
-                        // virtual screen proportions are relative to the physical screen.
-                        const QRect vsGeom = updateWindowScreenPosition(w, sid);
-                        if (vsGeom.isValid()) {
-                            w->setWidth(vsGeom.width());
-                            w->setHeight(vsGeom.height());
-                            st.overlayGeometry = vsGeom;
-                            updateOverlayWindow(sid, screenPtr);
-                            return;
-                        }
-                    } else {
-                        // Physical screen: size directly from the new geometry.
-                        // Position is controlled by layer-surface anchors (AnchorAll),
-                        // setX/setY are no-ops on layer surfaces.
-                        w->setWidth(newGeom.width());
-                        w->setHeight(newGeom.height());
-                        st.overlayGeometry = newGeom;
-                        updateOverlayWindow(sid, screenPtr);
-                    }
-                }
-            });
+        const bool lambdaIsVS = isVS;
+        geomConn = connect(physScreen, &QScreen::geometryChanged, this,
+                           [this, screenPtr, sid, lambdaIsVS](const QRect& newGeom) {
+                               if (!screenPtr) {
+                                   return;
+                               }
+                               auto stateIt = m_screenStates.find(sid);
+                               if (stateIt == m_screenStates.end())
+                                   return; // State was cleaned up, ignore stale geometry signal
+                               auto& st = stateIt.value();
+                               if (auto* w = st.overlayWindow) {
+                                   if (lambdaIsVS) {
+                                       // Virtual screen: recalculate geometry from ScreenManager since
+                                       // virtual screen proportions are relative to the physical screen.
+                                       const QRect vsGeom = updateWindowScreenPosition(w, sid);
+                                       if (vsGeom.isValid()) {
+                                           w->setWidth(vsGeom.width());
+                                           w->setHeight(vsGeom.height());
+                                           st.overlayGeometry = vsGeom;
+                                           updateOverlayWindow(sid, screenPtr);
+                                           return;
+                                       }
+                                   } else {
+                                       // Physical screen: size directly from the new geometry.
+                                       // Position is controlled by layer-surface anchors (AnchorAll),
+                                       // setX/setY are no-ops on layer surfaces.
+                                       w->setWidth(newGeom.width());
+                                       w->setHeight(newGeom.height());
+                                       st.overlayGeometry = newGeom;
+                                       updateOverlayWindow(sid, screenPtr);
+                                   }
+                               }
+                           });
     }
 
     if (usingShader) {
         writeQmlProperty(window, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
     }
 
-    m_screenStates[screenId].overlayWindow = window;
-    m_screenStates[screenId].overlayPhysScreen = physScreen;
-    m_screenStates[screenId].overlayGeometry = geometry;
-    m_screenStates[screenId].overlayGeomConnection = geomConn;
+    auto& stateRef = m_screenStates[screenId];
+    stateRef.overlaySurface = surface;
+    stateRef.overlayWindow = window;
+    stateRef.overlayPhysScreen = physScreen;
+    stateRef.overlayGeometry = geometry;
+    stateRef.overlayGeomConnection = geomConn;
 }
 
 void OverlayService::recreateOverlayWindowsOnTypeMismatch()
@@ -645,15 +656,14 @@ void OverlayService::destroyOverlayWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
-        if (auto* window = it->overlayWindow) {
-            // Disconnect the stored geometryChanged connection specifically,
-            // rather than disconnecting all signals from the screen to a receiver.
-            // The connection targets `this` (not `window`), so the old blanket
-            // disconnect(screen, nullptr, window, nullptr) missed it entirely.
-            QObject::disconnect(it->overlayGeomConnection);
-            window->close();
-            window->destroy();
-            window->deleteLater();
+        // Disconnect the stored geometryChanged connection specifically,
+        // rather than disconnecting all signals from the screen to a receiver.
+        // The connection targets `this` (not `window`), so the old blanket
+        // disconnect(screen, nullptr, window, nullptr) missed it entirely.
+        QObject::disconnect(it->overlayGeomConnection);
+        if (it->overlaySurface) {
+            it->overlaySurface->deleteLater();
+            it->overlaySurface = nullptr;
             it->overlayWindow = nullptr;
         }
         it->overlayPhysScreen = nullptr;

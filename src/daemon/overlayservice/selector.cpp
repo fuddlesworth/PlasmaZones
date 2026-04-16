@@ -20,6 +20,9 @@
 #include <QQuickItem>
 #include <QQmlEngine>
 #include <PhosphorShell/LayerSurface.h>
+
+#include <PhosphorLayer/Surface.h>
+#include "pz_roles.h"
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
@@ -312,12 +315,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
-    if ((m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
-        return;
-    }
-
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, "zone selector");
-    if (!window) {
+    if (m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorSurface) {
         return;
     }
 
@@ -328,14 +326,32 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
     const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
-    // Configure layer surface for zone selector (LayerTop for pointer input)
-    if (!configureLayerSurface(window, physScreen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityNone,
-                               QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(++m_scopeGeneration),
-                               getAnchorsForPosition(pos))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for zone selector on" << screenId;
-        window->deleteLater();
+    // Convert LayerSurface::Anchors (wlr-layer-shell bitmask) → PhosphorLayer::Anchors.
+    // Values match the protocol exactly so this is a simple bit-by-bit translation.
+    const auto shellAnchors = getAnchorsForPosition(pos);
+    PhosphorLayer::Anchors plAnchors;
+    if (shellAnchors.testFlag(LayerSurface::AnchorTop)) {
+        plAnchors.setFlag(PhosphorLayer::Anchor::Top);
+    }
+    if (shellAnchors.testFlag(LayerSurface::AnchorBottom)) {
+        plAnchors.setFlag(PhosphorLayer::Anchor::Bottom);
+    }
+    if (shellAnchors.testFlag(LayerSurface::AnchorLeft)) {
+        plAnchors.setFlag(PhosphorLayer::Anchor::Left);
+    }
+    if (shellAnchors.testFlag(LayerSurface::AnchorRight)) {
+        plAnchors.setFlag(PhosphorLayer::Anchor::Right);
+    }
+
+    const auto role = PzRoles::ZoneSelector.withScopePrefix(
+        QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(++m_scopeGeneration));
+
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, role,
+                                       "zone selector", QVariantMap(), plAnchors, std::nullopt);
+    if (!surface) {
         return;
     }
+    auto* window = surface->window();
 
     // Store the intended geometry so hit-testing in updateSelectorPosition() can use it
     // before the compositor acknowledges the LayerShell surface position.
@@ -367,28 +383,28 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // Initial layout is applied by updateZoneSelectorWindow() which is always
     // called immediately after createZoneSelectorWindow() in showZoneSelector().
 
-    window->setVisible(false);
     auto conn = connect(window, SIGNAL(zoneSelected(QString, int, QVariant)), this,
                         SLOT(onZoneSelected(QString, int, QVariant)));
     if (!conn) {
         qCWarning(lcOverlay) << "Failed to connect zoneSelected signal for screen" << screenId
                              << "- zone selector layout switching will not work";
     }
-    m_screenStates[screenId].zoneSelectorWindow = window;
-    m_screenStates[screenId].zoneSelectorPhysScreen = physScreen;
+    auto& state = m_screenStates[screenId];
+    state.zoneSelectorSurface = surface;
+    state.zoneSelectorWindow = window;
+    state.zoneSelectorPhysScreen = physScreen;
 }
 
 void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
-        if (auto* window = it->zoneSelectorWindow) {
-            if (it->zoneSelectorPhysScreen) {
-                QObject::disconnect(it->zoneSelectorPhysScreen, nullptr, window, nullptr);
+        if (it->zoneSelectorSurface) {
+            if (it->zoneSelectorPhysScreen && it->zoneSelectorWindow) {
+                QObject::disconnect(it->zoneSelectorPhysScreen, nullptr, it->zoneSelectorWindow, nullptr);
             }
-            window->close();
-            window->destroy();
-            window->deleteLater();
+            it->zoneSelectorSurface->deleteLater();
+            it->zoneSelectorSurface = nullptr;
             it->zoneSelectorWindow = nullptr;
         }
         it->zoneSelectorPhysScreen = nullptr;
