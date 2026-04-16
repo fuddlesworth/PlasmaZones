@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorLayer/IScreenProvider.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 #include <PhosphorLayer/phosphorlayer_export.h>
@@ -11,14 +12,13 @@
 #include <QList>
 #include <QObject>
 #include <QPointer>
+#include <QScreen>
+#include <QSet>
 
-QT_BEGIN_NAMESPACE
-class QScreen;
-QT_END_NAMESPACE
+#include <functional>
 
 namespace PhosphorLayer {
 
-class IScreenProvider;
 class Surface;
 
 /**
@@ -46,6 +46,11 @@ class ScreenSurfaceRegistry
     static_assert(std::is_base_of_v<Surface, SurfaceT>, "SurfaceT must derive from PhosphorLayer::Surface");
 
 public:
+    /// Per-screen builder. Receives the target screen; returns a new Surface
+    /// (or subclass) bound to it. Nullptr return is permitted — the registry
+    /// skips that screen without logging.
+    using Builder = std::function<SurfaceT*(QScreen*)>;
+
     ScreenSurfaceRegistry(SurfaceFactory* factory, IScreenProvider* screens)
         : m_factory(factory)
         , m_screens(screens)
@@ -59,13 +64,31 @@ public:
     ScreenSurfaceRegistry(const ScreenSurfaceRegistry&) = delete;
     ScreenSurfaceRegistry& operator=(const ScreenSurfaceRegistry&) = delete;
 
-    /// Drop all tracked surfaces. QObject parent semantics handle deletion;
-    /// this method only un-registers them from our map.
+    /**
+     * @brief Create one Surface per screen reported by the provider.
+     *
+     * Takes a Builder because SurfaceConfig is move-only (contentItem) and
+     * per-screen context often differs (screen name, geometry, etc.).
+     * Passing a builder is strictly more flexible than cloning a single
+     * config, and gives the consumer a natural place to inject per-screen
+     * context properties.
+     *
+     * Idempotent: re-running with the same screen set is a no-op.
+     * Screens that already have an entry keep their existing surface; new
+     * screens get a freshly-built one.
+     */
+    QList<SurfaceT*> createForAllScreens(Builder builder);
+
+    /// Diff-sync against the provider's current screen list. Destroys
+    /// surfaces for removed screens; calls @p builder for newly-added ones.
+    /// Emits no signals — consumers listen to their surfaces directly.
+    void syncToScreens(Builder builder);
+
+    /// Drop all tracked surfaces (deleteLater on each, clear map).
     void clear();
 
     /// Register an externally-created Surface under @p screen.
-    /// Useful when a consumer subclasses Surface and constructs it itself
-    /// (until create() learns to return subclass instances).
+    /// Useful when a consumer subclasses Surface and constructs it itself.
     void adoptSurface(QScreen* screen, SurfaceT* surface);
 
     SurfaceT* surfaceForScreen(QScreen* screen) const;
@@ -87,6 +110,60 @@ private:
 };
 
 // ── Template implementations ───────────────────────────────────────────
+
+template<typename SurfaceT>
+QList<SurfaceT*> ScreenSurfaceRegistry<SurfaceT>::createForAllScreens(Builder builder)
+{
+    QList<SurfaceT*> out;
+    if (!m_screens) {
+        return out;
+    }
+    const auto list = m_screens->screens();
+    out.reserve(list.size());
+    for (QScreen* s : list) {
+        if (m_entries.contains(s) && m_entries.value(s).data()) {
+            out.append(m_entries.value(s).data());
+            continue;
+        }
+        SurfaceT* surface = builder ? builder(s) : nullptr;
+        if (surface) {
+            m_entries.insert(s, QPointer<SurfaceT>(surface));
+            out.append(surface);
+        }
+    }
+    return out;
+}
+
+template<typename SurfaceT>
+void ScreenSurfaceRegistry<SurfaceT>::syncToScreens(Builder builder)
+{
+    if (!m_screens) {
+        return;
+    }
+    const auto current = m_screens->screens();
+    const QSet<QScreen*> currentSet(current.begin(), current.end());
+
+    for (auto it = m_entries.begin(); it != m_entries.end();) {
+        if (!currentSet.contains(it.key())) {
+            if (SurfaceT* s = it.value().data()) {
+                s->deleteLater();
+            }
+            it = m_entries.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    for (QScreen* s : current) {
+        if (m_entries.contains(s) && m_entries.value(s).data()) {
+            continue;
+        }
+        SurfaceT* surface = builder ? builder(s) : nullptr;
+        if (surface) {
+            m_entries.insert(s, QPointer<SurfaceT>(surface));
+        }
+    }
+}
 
 template<typename SurfaceT>
 void ScreenSurfaceRegistry<SurfaceT>::clear()

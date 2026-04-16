@@ -29,6 +29,16 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+# PhosphorShell provides the default ILayerShellTransport implementation.
+# Listed as PUBLIC dep so downstream consumers using PhosphorShellTransport
+# get PhosphorShell headers on their include path transitively.
+find_package(PhosphorShell CONFIG QUIET)
+if(NOT PhosphorShell_FOUND)
+    # In-tree build: PhosphorShell was added via add_subdirectory() before us.
+    if(NOT TARGET PhosphorShell::PhosphorShell)
+        message(FATAL_ERROR "PhosphorLayer requires PhosphorShell (target PhosphorShell::PhosphorShell not found)")
+    endif()
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorLayer Library
@@ -39,6 +49,8 @@ set(phosphorlayer_SRCS
     src/surface.cpp
     src/surfacefactory.cpp
     src/topologycoordinator.cpp
+    src/defaults/defaultscreenprovider.cpp
+    src/defaults/phosphorshelltransport.cpp
 )
 
 set(phosphorlayer_public_HDRS
@@ -52,6 +64,8 @@ set(phosphorlayer_public_HDRS
     include/PhosphorLayer/IScreenProvider.h
     include/PhosphorLayer/ILayerShellTransport.h
     include/PhosphorLayer/IQmlEngineProvider.h
+    include/PhosphorLayer/defaults/DefaultScreenProvider.h
+    include/PhosphorLayer/defaults/PhosphorShellTransport.h
 )
 
 add_library(PhosphorLayer SHARED
@@ -84,6 +98,7 @@ target_link_libraries(PhosphorLayer
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
+        PhosphorShell::PhosphorShell
 )
 
 set_target_properties(PhosphorLayer PROPERTIES
@@ -127,6 +142,11 @@ install(FILES
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer
 )
 
+install(DIRECTORY include/PhosphorLayer/defaults/
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults
+    FILES_MATCHING PATTERN "*.h"
+)
+
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorLayer/phosphorlayer_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer
 )
@@ -160,3 +180,11 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorLayerConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorLayer
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

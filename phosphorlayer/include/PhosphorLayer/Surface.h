@@ -48,18 +48,23 @@ struct SurfaceDeps
  * | From           | Event                    | To            |
  * |----------------|--------------------------|---------------|
  * | Constructed    | warmUp()                 | Warming       |
- * | Constructed    | show()                   | Warming → Shown |
- * | Warming        | (content loaded)         | Hidden        |
+ * | Constructed    | show()                   | Warming       |
+ * | Warming        | (content ready, intent=warm) | Hidden     |
+ * | Warming        | (content ready, intent=show) | Shown      |
  * | Warming        | (content error)          | Failed        |
- * | Hidden/Warming | show()                   | Shown         |
- * | Shown          | hide()                   | Hiding        |
- * | Hiding         | (transport confirmed)    | Hidden        |
+ * | Hidden         | show()                   | Shown         |
+ * | Shown          | hide()                   | Hidden        |
  * | any            | (screen removed)         | Recreating    |
  * | Recreating     | (respawn complete)       | prior state   |
  * | any            | (transport rejected)     | Failed        |
  *
  * Invalid transitions (e.g. `show()` from Failed) log `qCWarning` with the
  * debugName and no-op. They never throw.
+ *
+ * `hide()` is synchronous from the caller's perspective — the window is
+ * unmapped immediately. We do not expose a transient "Hiding" state because
+ * the compositor's acknowledgement is invisible to application code and the
+ * surface is unusable until it's either Shown again or recreated.
  */
 class PHOSPHORLAYER_EXPORT Surface : public QObject
 {
@@ -69,12 +74,11 @@ class PHOSPHORLAYER_EXPORT Surface : public QObject
 public:
     enum class State {
         Constructed, ///< Config accepted; no window yet
-        Warming, ///< QML compiling / engine initializing (hidden)
-        Shown, ///< Layer surface configured by compositor; visible
-        Hiding, ///< hide() called; waiting for compositor ack
-        Hidden, ///< Fully hidden; can transition back to Shown
-        Recreating, ///< Destroyed in response to topology change; will respawn
-        Failed, ///< Unrecoverable (content error, transport rejected, etc.)
+        Warming, ///< Engine / window / content initialising
+        Shown, ///< Layer surface attached; window visible
+        Hidden, ///< Attached but window hidden — show() is cheap
+        Recreating, ///< Torn down in response to topology change; will respawn
+        Failed, ///< Unrecoverable (content error, transport rejected, …)
     };
     Q_ENUM(State)
 
@@ -104,8 +108,16 @@ public:
     /// @}
 
 Q_SIGNALS:
-    void stateChanged(State from, State to);
+    /// NOTIFY signal for the state Q_PROPERTY. Carries the new state so
+    /// slots don't need a round-trip getter call. The previous state is
+    /// not exposed — track it in your slot if you need it.
+    void stateChanged(State newState);
+
+    /// Emitted once when transitioning to State::Failed. `reason` is a
+    /// human-readable diagnostic (QML compile error, transport rejection,
+    /// etc.). Surface remains in Failed thereafter.
     void failed(const QString& reason);
+
     /// Last chance to save content state before a topology-driven teardown.
     /// After this signal, window() returns nullptr until the replacement
     /// Surface is constructed.
