@@ -4,7 +4,7 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../cavaservice.h"
-#include "../rendering/zoneshadernoderhi/internal.h"
+#include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
 #include "../../core/layout.h"
 #include "../../core/layoutmanager.h"
@@ -69,7 +69,7 @@ void OverlayService::setSettings(ISettings* settings)
                         return;
                     }
                     qCInfo(lcOverlay) << "Shader files changed on disk, triggering hot-reload";
-                    detail::clearBakeCache();
+                    PhosphorRendering::ShaderCompiler::clearCache();
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                         auto* window = it_.value().overlayWindow;
                         if (window && window->property("isShaderOverlay").toBool()) {

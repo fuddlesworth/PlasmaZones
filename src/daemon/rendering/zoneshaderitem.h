@@ -5,18 +5,12 @@
 
 #include "zoneshadercommon.h"
 
+#include <PhosphorRendering/ShaderEffect.h>
+
 #include <plasmazones_rendering_export.h>
-#include <QQuickItem>
-#include <QUrl>
-#include <QSizeF>
-#include <QVector4D>
-#include <QVariantList>
-#include <QVariantMap>
 #include <QImage>
-#include <QRectF>
-#include <QColor>
 #include <QMutex>
-#include <QStringList>
+#include <QVariantList>
 #include <QVector>
 #include <array>
 #include <atomic>
@@ -32,11 +26,15 @@ class ZoneShaderNodeRhi;
 /**
  * @brief QQuickItem for rendering zone overlays with custom shaders
  *
- * Renders zones using GLSL fragment shaders via Qt's scene graph.
- * Supports dynamic shader loading, animated uniforms, and custom parameters.
+ * Inherits from PhosphorRendering::ShaderEffect which provides all base
+ * shader rendering: Shadertoy uniforms, multipass, custom params/colors,
+ * textures, status. This subclass adds zone-specific functionality:
  *
- * Zone data is synchronized from the main thread to the render thread
- * using double-buffering with mutex protection.
+ * - Zone data array (QVariantList zones property for QML)
+ * - Zone counting (zoneCount, highlightedCount)
+ * - Hovered zone highlight (hoveredZoneIndex)
+ * - Labels texture (pre-rendered zone numbers)
+ * - ZoneShaderNodeRhi creation (delegates to PhosphorRendering::ShaderNodeRhi)
  *
  * Usage in QML:
  * @code
@@ -44,27 +42,16 @@ class ZoneShaderNodeRhi;
  *     anchors.fill: parent
  *     zones: zoneDataProvider.zones
  *     shaderSource: "qrc:/shaders/neon.frag"
- *     customColor1: Qt.vector4d(1.0, 0.5, 0.0, 1.0)
+ *     customColor1: "#ff8800"
  * }
  * @endcode
  */
-class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
+class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
     QML_ELEMENT
 
-    // Animation uniforms
-    Q_PROPERTY(qreal iTime READ iTime WRITE setITime NOTIFY iTimeChanged FINAL)
-    Q_PROPERTY(qreal iTimeDelta READ iTimeDelta WRITE setITimeDelta NOTIFY iTimeDeltaChanged FINAL)
-    Q_PROPERTY(int iFrame READ iFrame WRITE setIFrame NOTIFY iFrameChanged FINAL)
-
-    // Resolution uniform
-    Q_PROPERTY(QSizeF iResolution READ iResolution WRITE setIResolution NOTIFY iResolutionChanged FINAL)
-
-    // Mouse position uniform
-    Q_PROPERTY(QPointF iMouse READ iMouse WRITE setIMouse NOTIFY iMouseChanged FINAL)
-
-    // Zone data
+    // Zone data (zone-specific, not in parent)
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)
     Q_PROPERTY(int zoneCount READ zoneCount NOTIFY zoneCountChanged FINAL)
     Q_PROPERTY(int highlightedCount READ highlightedCount NOTIFY highlightedCountChanged FINAL)
@@ -72,128 +59,12 @@ class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public QQuickItem
     Q_PROPERTY(
         int hoveredZoneIndex READ hoveredZoneIndex WRITE setHoveredZoneIndex NOTIFY hoveredZoneIndexChanged FINAL)
 
-    // Shader source
-    Q_PROPERTY(QUrl shaderSource READ shaderSource WRITE setShaderSource NOTIFY shaderSourceChanged FINAL)
-    /** Multi-pass: path to buffer pass fragment shader (e.g. buffer.frag). Empty for single-pass. */
-    Q_PROPERTY(
-        QString bufferShaderPath READ bufferShaderPath WRITE setBufferShaderPath NOTIFY bufferShaderPathChanged FINAL)
-    /** Multi-pass: up to 4 buffer pass fragment shaders (A→B→C→D). When non-empty, overrides bufferShaderPath for
-     * multi-buffer. */
-    Q_PROPERTY(QStringList bufferShaderPaths READ bufferShaderPaths WRITE setBufferShaderPaths NOTIFY
-                   bufferShaderPathsChanged FINAL)
-    /** When true, buffer pass uses ping-pong (samples its own previous frame as iChannel0). Only when a single buffer
-     * pass. */
-    Q_PROPERTY(bool bufferFeedback READ bufferFeedback WRITE setBufferFeedback NOTIFY bufferFeedbackChanged FINAL)
-    /** Buffer resolution scale (e.g. 0.5 = half size); 0.125–1.0. */
-    Q_PROPERTY(qreal bufferScale READ bufferScale WRITE setBufferScale NOTIFY bufferScaleChanged FINAL)
-    /** Buffer channel wrap: "clamp" or "repeat". */
-    Q_PROPERTY(QString bufferWrap READ bufferWrap WRITE setBufferWrap NOTIFY bufferWrapChanged FINAL)
-    /** Per-channel buffer wraps (up to 4). Empty = all use bufferWrap. */
-    Q_PROPERTY(QStringList bufferWraps READ bufferWraps WRITE setBufferWraps NOTIFY bufferWrapsChanged FINAL)
-    /** Buffer channel filter: "nearest", "linear", or "mipmap". */
-    Q_PROPERTY(QString bufferFilter READ bufferFilter WRITE setBufferFilter NOTIFY bufferFilterChanged FINAL)
-    /** Per-channel buffer filters (up to 4). Empty = all use bufferFilter. */
-    Q_PROPERTY(QStringList bufferFilters READ bufferFilters WRITE setBufferFilters NOTIFY bufferFiltersChanged FINAL)
-    Q_PROPERTY(QVariantMap shaderParams READ shaderParams WRITE setShaderParams NOTIFY shaderParamsChanged FINAL)
-
-    // Custom parameters (32 floats in 8 vec4s, slots 0-31)
-    // All use consolidated customParamsChanged signal
-    Q_PROPERTY(QVector4D customParams1 READ customParams1 WRITE setCustomParams1 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams2 READ customParams2 WRITE setCustomParams2 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams3 READ customParams3 WRITE setCustomParams3 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams4 READ customParams4 WRITE setCustomParams4 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams5 READ customParams5 WRITE setCustomParams5 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams6 READ customParams6 WRITE setCustomParams6 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams7 READ customParams7 WRITE setCustomParams7 NOTIFY customParamsChanged FINAL)
-    Q_PROPERTY(QVector4D customParams8 READ customParams8 WRITE setCustomParams8 NOTIFY customParamsChanged FINAL)
-
-    // Custom colors (16 colors)
-    // All use consolidated customColorsChanged signal
-    Q_PROPERTY(QVector4D customColor1 READ customColor1 WRITE setCustomColor1 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor2 READ customColor2 WRITE setCustomColor2 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor3 READ customColor3 WRITE setCustomColor3 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor4 READ customColor4 WRITE setCustomColor4 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor5 READ customColor5 WRITE setCustomColor5 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor6 READ customColor6 WRITE setCustomColor6 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor7 READ customColor7 WRITE setCustomColor7 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor8 READ customColor8 WRITE setCustomColor8 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor9 READ customColor9 WRITE setCustomColor9 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor10 READ customColor10 WRITE setCustomColor10 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor11 READ customColor11 WRITE setCustomColor11 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor12 READ customColor12 WRITE setCustomColor12 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor13 READ customColor13 WRITE setCustomColor13 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor14 READ customColor14 WRITE setCustomColor14 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor15 READ customColor15 WRITE setCustomColor15 NOTIFY customColorsChanged FINAL)
-    Q_PROPERTY(QVector4D customColor16 READ customColor16 WRITE setCustomColor16 NOTIFY customColorsChanged FINAL)
-
     // Labels texture (pre-rendered zone numbers for shader pass)
     Q_PROPERTY(QImage labelsTexture READ labelsTexture WRITE setLabelsTexture NOTIFY labelsTextureChanged FINAL)
 
-    /** Audio spectrum from CAVA (0-1 per bar). Empty = disabled. Set from C++ OverlayService.
-     *  Accepts QVector<float> (fast C++ path) or QVariantList (QML path). */
-    Q_PROPERTY(QVariant audioSpectrum READ audioSpectrumVariant WRITE setAudioSpectrumVariant NOTIFY
-                   audioSpectrumChanged FINAL)
-
-    /** Desktop wallpaper image. Set from C++ OverlayService when shader subscribes via "wallpaper": true. */
-    Q_PROPERTY(
-        QImage wallpaperTexture READ wallpaperTexture WRITE setWallpaperTexture NOTIFY wallpaperTextureChanged FINAL)
-    /** Whether the current shader subscribes to the wallpaper texture. */
-    Q_PROPERTY(bool useWallpaper READ useWallpaper WRITE setUseWallpaper NOTIFY useWallpaperChanged FINAL)
-
-    /** Whether the current shader uses a depth buffer (R32F at binding 12). */
-    Q_PROPERTY(bool useDepthBuffer READ useDepthBuffer WRITE setUseDepthBuffer NOTIFY useDepthBufferChanged FINAL)
-
-    // Status
-    Q_PROPERTY(Status status READ status NOTIFY statusChanged FINAL)
-    Q_PROPERTY(QString errorLog READ errorLog NOTIFY errorLogChanged FINAL)
-
 public:
-    /**
-     * @brief Shader loading and compilation status
-     */
-    enum class Status {
-        Null, ///< No shader loaded
-        Loading, ///< Shader is being loaded/compiled
-        Ready, ///< Shader compiled successfully
-        Error ///< Shader compilation failed
-    };
-    Q_ENUM(Status)
-
     explicit ZoneShaderItem(QQuickItem* parent = nullptr);
     ~ZoneShaderItem() override;
-
-    // Animation getters/setters
-    qreal iTime() const
-    {
-        return m_iTime;
-    }
-    void setITime(qreal time);
-
-    qreal iTimeDelta() const
-    {
-        return m_iTimeDelta;
-    }
-    void setITimeDelta(qreal delta);
-
-    int iFrame() const
-    {
-        return m_iFrame;
-    }
-    void setIFrame(int frame);
-
-    // Resolution getter/setter
-    QSizeF iResolution() const
-    {
-        return m_iResolution;
-    }
-    void setIResolution(const QSizeF& resolution);
-
-    // Mouse position getter/setter
-    QPointF iMouse() const
-    {
-        return m_iMouse;
-    }
-    void setIMouse(const QPointF& mouse);
 
     // Zone data getters/setters
     const QVariantList& zones() const
@@ -217,246 +88,9 @@ public:
     }
     void setHoveredZoneIndex(int index);
 
-    // Shader source getter/setter
-    QUrl shaderSource() const
-    {
-        return m_shaderSource;
-    }
-    void setShaderSource(const QUrl& source);
-
-    QString bufferShaderPath() const
-    {
-        return m_bufferShaderPath;
-    }
-    void setBufferShaderPath(const QString& path);
-
-    QStringList bufferShaderPaths() const
-    {
-        return m_bufferShaderPaths;
-    }
-    void setBufferShaderPaths(const QStringList& paths);
-
-    bool bufferFeedback() const
-    {
-        return m_bufferFeedback;
-    }
-    void setBufferFeedback(bool enable);
-
-    qreal bufferScale() const
-    {
-        return m_bufferScale;
-    }
-    void setBufferScale(qreal scale);
-
-    QString bufferWrap() const
-    {
-        return m_bufferWrap;
-    }
-    void setBufferWrap(const QString& wrap);
-
-    QStringList bufferWraps() const
-    {
-        return m_bufferWraps;
-    }
-    void setBufferWraps(const QStringList& wraps);
-
-    QString bufferFilter() const
-    {
-        return m_bufferFilter;
-    }
-    void setBufferFilter(const QString& filter);
-
-    QStringList bufferFilters() const
-    {
-        return m_bufferFilters;
-    }
-    void setBufferFilters(const QStringList& filters);
-
-    QVariantMap shaderParams() const
-    {
-        return m_shaderParams;
-    }
-    void setShaderParams(const QVariantMap& params);
-
-    // Custom parameters getters/setters (32 floats in 8 vec4s)
-    QVector4D customParams1() const
-    {
-        return m_customParams1;
-    }
-    void setCustomParams1(const QVector4D& params);
-
-    QVector4D customParams2() const
-    {
-        return m_customParams2;
-    }
-    void setCustomParams2(const QVector4D& params);
-
-    QVector4D customParams3() const
-    {
-        return m_customParams3;
-    }
-    void setCustomParams3(const QVector4D& params);
-
-    QVector4D customParams4() const
-    {
-        return m_customParams4;
-    }
-    void setCustomParams4(const QVector4D& params);
-
-    QVector4D customParams5() const
-    {
-        return m_customParams5;
-    }
-    void setCustomParams5(const QVector4D& params);
-
-    QVector4D customParams6() const
-    {
-        return m_customParams6;
-    }
-    void setCustomParams6(const QVector4D& params);
-
-    QVector4D customParams7() const
-    {
-        return m_customParams7;
-    }
-    void setCustomParams7(const QVector4D& params);
-
-    QVector4D customParams8() const
-    {
-        return m_customParams8;
-    }
-    void setCustomParams8(const QVector4D& params);
-
-    // Custom color getters/setters (16 colors)
-    QVector4D customColor1() const
-    {
-        return m_customColor1;
-    }
-    void setCustomColor1(const QVector4D& color);
-
-    QVector4D customColor2() const
-    {
-        return m_customColor2;
-    }
-    void setCustomColor2(const QVector4D& color);
-
-    QVector4D customColor3() const
-    {
-        return m_customColor3;
-    }
-    void setCustomColor3(const QVector4D& color);
-
-    QVector4D customColor4() const
-    {
-        return m_customColor4;
-    }
-    void setCustomColor4(const QVector4D& color);
-
-    QVector4D customColor5() const
-    {
-        return m_customColor5;
-    }
-    void setCustomColor5(const QVector4D& color);
-
-    QVector4D customColor6() const
-    {
-        return m_customColor6;
-    }
-    void setCustomColor6(const QVector4D& color);
-
-    QVector4D customColor7() const
-    {
-        return m_customColor7;
-    }
-    void setCustomColor7(const QVector4D& color);
-
-    QVector4D customColor8() const
-    {
-        return m_customColor8;
-    }
-    void setCustomColor8(const QVector4D& color);
-
-    QVector4D customColor9() const
-    {
-        return m_customColor9;
-    }
-    void setCustomColor9(const QVector4D& color);
-
-    QVector4D customColor10() const
-    {
-        return m_customColor10;
-    }
-    void setCustomColor10(const QVector4D& color);
-
-    QVector4D customColor11() const
-    {
-        return m_customColor11;
-    }
-    void setCustomColor11(const QVector4D& color);
-
-    QVector4D customColor12() const
-    {
-        return m_customColor12;
-    }
-    void setCustomColor12(const QVector4D& color);
-
-    QVector4D customColor13() const
-    {
-        return m_customColor13;
-    }
-    void setCustomColor13(const QVector4D& color);
-
-    QVector4D customColor14() const
-    {
-        return m_customColor14;
-    }
-    void setCustomColor14(const QVector4D& color);
-
-    QVector4D customColor15() const
-    {
-        return m_customColor15;
-    }
-    void setCustomColor15(const QVector4D& color);
-
-    QVector4D customColor16() const
-    {
-        return m_customColor16;
-    }
-    void setCustomColor16(const QVector4D& color);
-
     // Labels texture getter/setter
     QImage labelsTexture() const;
     void setLabelsTexture(const QImage& image);
-
-    QVariant audioSpectrumVariant() const;
-    void setAudioSpectrumVariant(const QVariant& spectrum);
-    /** Direct setter from C++ avoiding QVariantList round-trip. */
-    void setAudioSpectrumRaw(const QVector<float>& spectrum);
-
-    QImage wallpaperTexture() const;
-    void setWallpaperTexture(const QImage& image);
-
-    bool useWallpaper() const
-    {
-        return m_useWallpaper;
-    }
-    void setUseWallpaper(bool use);
-
-    bool useDepthBuffer() const
-    {
-        return m_useDepthBuffer;
-    }
-    void setUseDepthBuffer(bool use);
-
-    // Status getters
-    Status status() const
-    {
-        return m_status;
-    }
-    QString errorLog() const
-    {
-        return m_errorLog;
-    }
 
     /**
      * @brief Get a thread-safe copy of zone data for rendering
@@ -487,46 +121,37 @@ public:
     QVector<ZoneColor> zoneBorderColors() const;
 
     /**
-     * @brief Force reload of shader from source (callable from QML)
+     * @brief Force reload of shader from source (callable from QML).
+     * Alias for reloadShader() for backward compatibility.
      */
-    Q_INVOKABLE void loadShader();
+    Q_INVOKABLE void loadShader()
+    {
+        reloadShader();
+    }
+
+    /**
+     * @brief Override setShaderParams to extract customParams/customColor/uTexture values.
+     *
+     * PlasmaZones shader metadata uses keys like "customParams1_x", "customColor1",
+     * "uTexture0" which must be parsed and applied to the corresponding properties.
+     */
+    void setShaderParams(const QVariantMap& params);
 
 Q_SIGNALS:
-    void iTimeChanged();
-    void iTimeDeltaChanged();
-    void iFrameChanged();
-    void iResolutionChanged();
-    void iMouseChanged();
     void zonesChanged();
     void zoneCountChanged();
     void highlightedCountChanged();
     void hoveredZoneIndexChanged();
-    void shaderSourceChanged();
-    void bufferShaderPathChanged();
-    void bufferShaderPathsChanged();
-    void bufferFeedbackChanged();
-    void bufferScaleChanged();
-    void bufferWrapChanged();
-    void bufferWrapsChanged();
-    void bufferFilterChanged();
-    void bufferFiltersChanged();
-    void shaderParamsChanged();
-    void customParamsChanged(); // Emitted when any customParams1-8 changes
-    void customColorsChanged(); // Emitted when any customColor1-16 changes
     void labelsTextureChanged();
-    void audioSpectrumChanged();
-    void wallpaperTextureChanged();
-    void useWallpaperChanged();
-    void useDepthBufferChanged();
-    void statusChanged();
-    void errorLogChanged();
 
 protected:
     /**
      * @brief Create or update the scene graph node for rendering
      *
-     * Called by Qt's scene graph on the render thread. This method
-     * synchronizes zone data and updates shader uniforms.
+     * Creates a ZoneShaderNodeRhi (subclass of PhosphorRendering::ShaderNodeRhi)
+     * and syncs zone-specific data. The parent class handles all base shader
+     * rendering via its own updatePaintNode, but we override to create the
+     * zone-specific node type and sync zone data.
      *
      * @param oldNode Previous node (may be nullptr)
      * @param data Update paint node data from Qt
@@ -535,7 +160,7 @@ protected:
     QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* data) override;
 
     /**
-     * @brief Handle geometry changes
+     * @brief Handle geometry changes — re-parse zones with new resolution
      */
     void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
 
@@ -544,57 +169,16 @@ protected:
      */
     void componentComplete() override;
 
-    /**
-     * @brief Handle item state changes (visibility, window attachment)
-     *
-     * On Vulkan, window hide destroys the swapchain and deactivates the scene graph.
-     * When the window is re-shown, pending update() requests from property writes
-     * during the hidden state are lost. Override itemChange to force an update when
-     * the item becomes visible again so updatePaintNode() is called.
-     */
-    void itemChange(ItemChange change, const ItemChangeData& value) override;
-
 private:
     /**
      * @brief Parse zone data from QVariantList to internal structures
-     *
-     * Converts the QML-friendly QVariantList format to optimized
-     * internal structures for shader rendering.
      */
     void parseZoneData();
 
     /**
      * @brief Update only highlight flags in m_zoneData (no full parse).
-     * Used when only hoveredZoneIndex changed to avoid shader restart.
-     * Precondition: setZones must have been called so m_zoneData is populated.
      */
     void updateHoveredHighlightOnly();
-
-    /**
-     * @brief Set error status with message
-     */
-    void setError(const QString& error);
-
-    /**
-     * @brief Set status and emit signal if changed
-     */
-    void setStatus(Status status);
-
-    /** @brief Get custom color by index (1–16). Used by setShaderParams loop. */
-    QVector4D customColorByIndex(int index) const;
-    /** @brief Set custom color by index (1–16). Used by setShaderParams loop. */
-    void setCustomColorByIndex(int index, const QVector4D& color);
-
-    // Animation state
-    qreal m_iTime = 0.0;
-    qreal m_iTimeDelta = 0.0;
-    int m_iFrame = 0;
-
-    // Resolution
-    QSizeF m_iResolution;
-
-    // Mouse position
-    QPointF m_iMouse;
 
     // Zone data (main thread access)
     QVariantList m_zones;
@@ -602,81 +186,26 @@ private:
     int m_highlightedCount = 0;
     int m_hoveredZoneIndex = -1;
 
-    // Shader configuration
-    QUrl m_shaderSource;
-    QString m_bufferShaderPath;
-    QStringList m_bufferShaderPaths;
-    bool m_bufferFeedback = false;
-    qreal m_bufferScale = 1.0;
-    QString m_bufferWrap = QStringLiteral("clamp");
-    QStringList m_bufferWraps;
-    QString m_bufferFilter = QStringLiteral("linear");
-    QStringList m_bufferFilters;
-    QVariantMap m_shaderParams;
-
-    // Custom shader parameters — initialized to -1.0 (the "unset" sentinel).
-    // Shaders use `>= 0.0` to distinguish set values from defaults.
-    QVector4D m_customParams1 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams2 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams3 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams4 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams5 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams6 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams7 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customParams8 = QVector4D(-1.0f, -1.0f, -1.0f, -1.0f);
-    QVector4D m_customColor1 = QVector4D(1.0f, 0.5f, 0.0f, 1.0f); // Default orange highlight
-    QVector4D m_customColor2 = QVector4D(0.2f, 0.2f, 0.2f, 0.8f); // Default gray inactive
-    QVector4D m_customColor3 = QVector4D(1.0f, 1.0f, 1.0f, 0.0f); // Default white, alpha 0 = not set
-    QVector4D m_customColor4 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
-    QVector4D m_customColor5 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
-    QVector4D m_customColor6 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
-    QVector4D m_customColor7 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
-    QVector4D m_customColor8 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f); // Default black, alpha 0 = not set
-    QVector4D m_customColor9 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor10 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor11 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor12 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor13 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor14 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor15 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-    QVector4D m_customColor16 = QVector4D(0.0f, 0.0f, 0.0f, 0.0f);
-
-    // Status
-    Status m_status = Status::Null;
-    QString m_errorLog;
-
-    // Labels texture (main thread writes, render thread reads via updatePaintNode)
-    QImage m_labelsTexture;
-    mutable QMutex m_labelsTextureMutex;
-
-    QVector<float> m_audioSpectrum;
-
-    // Desktop wallpaper texture (binding 11)
-    QImage m_wallpaperTexture;
-    mutable QMutex m_wallpaperTextureMutex;
-    bool m_useWallpaper = false;
-    bool m_useDepthBuffer = false;
-
-    // User texture data (bindings 7-10)
+    // User texture data (parsed from shaderParams, bindings 7-10)
     std::array<QString, 4> m_userTexturePaths;
     std::array<QImage, 4> m_userTextureImages;
     std::array<QString, 4> m_userTextureWraps;
     std::array<int, 4> m_userTextureSvgSizes = {1024, 1024, 1024, 1024};
+
+    // Labels texture (main thread writes, render thread reads via updatePaintNode)
+    QImage m_labelsTexture;
+    mutable QMutex m_labelsTextureMutex;
 
     // Thread-safe zone data storage
     // Protected by m_zoneDataMutex for render thread access
     mutable QMutex m_zoneDataMutex;
     ZoneDataSnapshot m_zoneData;
 
-    // Render node tracking for safe teardown (set in updatePaintNode, cleared in destructor)
-    ZoneShaderNodeRhi* m_renderNode = nullptr;
-
-    // Track connected window for sceneGraphInvalidated cleanup
-    QQuickWindow* m_connectedWindow = nullptr;
+    // Render node tracking for safe teardown
+    ZoneShaderNodeRhi* m_zoneRenderNode = nullptr;
 
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};
-    std::atomic<bool> m_shaderDirty{false};
     std::atomic<int> m_dataVersion{0};
 };
 

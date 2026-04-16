@@ -164,6 +164,7 @@ echo ""
 
 # Libraries
 %{_libdir}/libPhosphorShell.so*
+%{_libdir}/libPhosphorRendering.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
@@ -175,6 +176,9 @@ echo ""
 
 # PhosphorShell development headers and data
 %{_includedir}/PhosphorShell/
+
+# PhosphorRendering development headers
+%{_includedir}/PhosphorRendering/
 %{_datadir}/phosphorshell/
 
 # KCM sub-modules (System Settings)

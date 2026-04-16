@@ -197,24 +197,25 @@ private Q_SLOTS:
         ZoneShaderItem item;
 
         // Verify default color 1 is orange (1.0, 0.5, 0.0, 1.0)
-        QVector4D defaultColor = item.customColor1();
-        QVERIFY(qFuzzyCompare(defaultColor.x(), 1.0f));
-        QVERIFY(qFuzzyCompare(defaultColor.y(), 0.5f));
-        QVERIFY(qFuzzyIsNull(defaultColor.z())); // orange has no blue
-        QVERIFY(qFuzzyCompare(defaultColor.w(), 1.0f)); // fully opaque
+        // Use tolerance for QColor 16-bit internal precision in Qt6
+        constexpr float kEpsilon = 0.002f;
+        QColor defaultColor = item.customColor1();
+        QVERIFY(qAbs(static_cast<float>(defaultColor.redF()) - 1.0f) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.greenF()) - 0.5f) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(defaultColor.blueF())) < kEpsilon); // orange has no blue
+        QVERIFY(qAbs(static_cast<float>(defaultColor.alphaF()) - 1.0f) < kEpsilon); // fully opaque
 
         // Apply custom color via shaderParams
         QVariantMap params;
         params.insert(QStringLiteral("customColor1"), QColor(Qt::blue));
         item.setShaderParams(params);
 
-        QVector4D newColor = item.customColor1();
+        QColor newColor = item.customColor1();
         // Blue: (0, 0, 1, 1)
-        // Note: qFuzzyCompare fails near zero, use qFuzzyIsNull for zero checks
-        QVERIFY(qFuzzyIsNull(newColor.x()));
-        QVERIFY(qFuzzyIsNull(newColor.y()));
-        QVERIFY(qFuzzyCompare(newColor.z(), 1.0f));
-        QVERIFY(qFuzzyCompare(newColor.w(), 1.0f));
+        QVERIFY(qAbs(static_cast<float>(newColor.redF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.greenF())) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.blueF()) - 1.0f) < kEpsilon);
+        QVERIFY(qAbs(static_cast<float>(newColor.alphaF()) - 1.0f) < kEpsilon);
     }
 
     void testZoneShaderItem_setAudioSpectrumPreservesType()
@@ -225,7 +226,7 @@ private Q_SLOTS:
 
         // Use the raw QVector<float> fast path
         QVector<float> spectrum = {0.1f, 0.5f, 0.8f, 1.0f};
-        item.setAudioSpectrumRaw(spectrum);
+        item.setAudioSpectrum(spectrum);
 
         QCOMPARE(spectrumSpy.count(), 1);
 

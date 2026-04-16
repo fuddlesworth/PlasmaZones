@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zoneshaderitem.h"
-#include "zoneshadernodebase.h"
 #include "zoneshadernoderhi.h"
 
 #include "../../core/constants.h"
@@ -15,72 +14,21 @@
 
 namespace PlasmaZones {
 
-// DRY helper: convert QVector4D color to QColor (eliminates 8 repeated 3-line blocks in updatePaintNode)
-static QColor vec4ToQColor(const QVector4D& v)
-{
-    return QColor::fromRgbF(static_cast<float>(v.x()), static_cast<float>(v.y()), static_cast<float>(v.z()),
-                            static_cast<float>(v.w()));
-}
-
 // ============================================================================
 // Construction / Destruction
 // ============================================================================
 
 ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
-    : QQuickItem(parent)
+    : PhosphorRendering::ShaderEffect(parent)
 {
-    // Enable custom rendering via updatePaintNode
-    setFlag(ItemHasContents, true);
-
-    // When the scene graph is invalidated (e.g. window hide on Vulkan destroys
-    // the QRhi and all GPU resources), release the render node's QRhi objects
-    // and reset m_initialized so prepare() reinitializes with the new QRhi on
-    // the next show(). Without this, the node holds dangling pointers to
-    // destroyed QRhi resources, causing stalls or black windows after re-show.
-    //
-    // sceneGraphAboutToStop fires on the render thread BEFORE the scene graph
-    // is torn down, while the node and QRhi are still valid. This is safer than
-    // sceneGraphInvalidated which fires during/after teardown when the node may
-    // already be deleted. Use DirectConnection because this signal is emitted
-    // on the render thread and releaseResources() must run there (QRhi objects
-    // must be destroyed on the thread that owns the QRhi context).
-    connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* win) {
-        if (m_connectedWindow) {
-            disconnect(m_connectedWindow, &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
-            m_connectedWindow = nullptr;
-        }
-        if (win) {
-            m_connectedWindow = win;
-            connect(
-                win, &QQuickWindow::sceneGraphAboutToStop, this,
-                [this]() {
-                    if (m_renderNode) {
-                        m_renderNode->releaseResources();
-                    }
-                    // Mark shader dirty so updatePaintNode() reloads source on
-                    // the next scene graph sync after re-show. Without this,
-                    // prepare() tries to bake from cleared QShader objects.
-                    m_shaderDirty.store(true);
-                },
-                Qt::DirectConnection);
-        }
-    });
+    // ShaderEffect constructor already sets ItemHasContents and sceneGraph cleanup
 }
 
 ZoneShaderItem::~ZoneShaderItem()
 {
-    // Invalidate the render node's back-pointer to this item BEFORE our QObject
-    // members are torn down.  The scene graph render thread may still call
-    // prepare()/render() on the node between now and the node's eventual
-    // deletion; without this, m_item would be a dangling pointer.
-    //
-    // Guard: if the window (and its scene graph) was already destroyed, the node
-    // has been deleted by the SG and m_renderNode is dangling. QQuickItem::window()
-    // returns nullptr once the window is gone, so use that as our liveness check.
-    if (m_renderNode && window()) {
-        m_renderNode->invalidateItem();
-    }
-    m_renderNode = nullptr;
+    // The parent destructor handles invalidateItem() on the render node.
+    // We just need to clear our zone-specific tracking pointer.
+    m_zoneRenderNode = nullptr;
 }
 
 // ============================================================================
@@ -90,8 +38,8 @@ ZoneShaderItem::~ZoneShaderItem()
 void ZoneShaderItem::parseZoneData()
 {
     // Get current resolution for normalization
-    const float resW = m_iResolution.width() > 0 ? static_cast<float>(m_iResolution.width()) : 1.0f;
-    const float resH = m_iResolution.height() > 0 ? static_cast<float>(m_iResolution.height()) : 1.0f;
+    const float resW = iResolution().width() > 0 ? static_cast<float>(iResolution().width()) : 1.0f;
+    const float resH = iResolution().height() > 0 ? static_cast<float>(iResolution().height()) : 1.0f;
 
     // Prepare new zone data structures
     QVector<ZoneRect> newRects;
@@ -249,127 +197,124 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            // Invalidate the old node's back-pointer before deleting it
-            if (m_renderNode) {
-                m_renderNode->invalidateItem();
-                m_renderNode = nullptr;
+            // The parent tracks m_renderNode, but we also track m_zoneRenderNode
+            m_zoneRenderNode = nullptr;
+            // Let parent handle invalidation of the base render node
+            if (auto* rhiNode = static_cast<ZoneShaderNodeRhi*>(oldNode)) {
+                rhiNode->invalidateItem();
             }
             delete oldNode;
         }
         return nullptr;
     }
 
-    ZoneShaderNodeBase* node = static_cast<ZoneShaderNodeBase*>(oldNode);
+    auto* node = static_cast<ZoneShaderNodeRhi*>(oldNode);
     if (!node) {
-        // Scene graph deleted the previous node (e.g. releaseResources), or first call.
-        // Clear stale pointer — the old node no longer exists.
-        m_renderNode = nullptr;
-        auto* rhiNode = new ZoneShaderNodeRhi(this);
-        m_renderNode = rhiNode;
-        node = rhiNode;
-        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW render node (oldNode was null)";
+        // Scene graph deleted the previous node, or first call.
+        m_zoneRenderNode = nullptr;
+        node = new ZoneShaderNodeRhi(this);
+        m_zoneRenderNode = node;
+        qCInfo(PlasmaZones::lcOverlay) << "updatePaintNode: created NEW ZoneShaderNodeRhi (oldNode was null)";
     } else {
         qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: reusing existing node, shaderReady:"
                                         << node->isShaderReady();
     }
 
-    // Sync shader timing uniforms. iTime is passed through as double — the node
-    // splits it into wrapped-lo + wrap-offset before the GPU float32 cast.
-    node->setTime(m_iTime);
-    node->setTimeDelta(static_cast<float>(m_iTimeDelta));
-    node->setFrame(m_iFrame);
-    // Use logical pixels for iResolution — shader parameters (pxScale, edge
-    // widths, etc.) depend on a consistent resolution across backends. Buffer
-    // textures are also at logical resolution; the slight DPR mismatch with the
-    // physical render target is handled by bilinear upscaling in the image pass.
+    // ── Sync Shadertoy uniforms (base class properties → node) ──────
+    node->setTime(iTime());
+    node->setTimeDelta(static_cast<float>(iTimeDelta()));
+    node->setFrame(iFrame());
     node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
-    node->setMousePosition(m_iMouse);
+    node->setMousePosition(iMouse());
 
-    // Sync custom shader parameters (32 floats in 8 vec4s + 16 colors)
-    node->setCustomParams1(m_customParams1);
-    node->setCustomParams2(m_customParams2);
-    node->setCustomParams3(m_customParams3);
-    node->setCustomParams4(m_customParams4);
-    node->setCustomParams5(m_customParams5);
-    node->setCustomParams6(m_customParams6);
-    node->setCustomParams7(m_customParams7);
-    node->setCustomParams8(m_customParams8);
-    node->setCustomColor1(vec4ToQColor(m_customColor1));
-    node->setCustomColor2(vec4ToQColor(m_customColor2));
-    node->setCustomColor3(vec4ToQColor(m_customColor3));
-    node->setCustomColor4(vec4ToQColor(m_customColor4));
-    node->setCustomColor5(vec4ToQColor(m_customColor5));
-    node->setCustomColor6(vec4ToQColor(m_customColor6));
-    node->setCustomColor7(vec4ToQColor(m_customColor7));
-    node->setCustomColor8(vec4ToQColor(m_customColor8));
-    node->setCustomColor9(vec4ToQColor(m_customColor9));
-    node->setCustomColor10(vec4ToQColor(m_customColor10));
-    node->setCustomColor11(vec4ToQColor(m_customColor11));
-    node->setCustomColor12(vec4ToQColor(m_customColor12));
-    node->setCustomColor13(vec4ToQColor(m_customColor13));
-    node->setCustomColor14(vec4ToQColor(m_customColor14));
-    node->setCustomColor15(vec4ToQColor(m_customColor15));
-    node->setCustomColor16(vec4ToQColor(m_customColor16));
+    // ── Sync custom parameters (indexed API) ────────────────────────
+    node->setCustomParams(0, customParams1());
+    node->setCustomParams(1, customParams2());
+    node->setCustomParams(2, customParams3());
+    node->setCustomParams(3, customParams4());
+    node->setCustomParams(4, customParams5());
+    node->setCustomParams(5, customParams6());
+    node->setCustomParams(6, customParams7());
+    node->setCustomParams(7, customParams8());
 
-    // Sync labels texture (pre-rendered zone numbers for shader pass)
+    // ── Sync custom colors (indexed API) ─────────────────────────────
+    node->setCustomColor(0, customColor1());
+    node->setCustomColor(1, customColor2());
+    node->setCustomColor(2, customColor3());
+    node->setCustomColor(3, customColor4());
+    node->setCustomColor(4, customColor5());
+    node->setCustomColor(5, customColor6());
+    node->setCustomColor(6, customColor7());
+    node->setCustomColor(7, customColor8());
+    node->setCustomColor(8, customColor9());
+    node->setCustomColor(9, customColor10());
+    node->setCustomColor(10, customColor11());
+    node->setCustomColor(11, customColor12());
+    node->setCustomColor(12, customColor13());
+    node->setCustomColor(13, customColor14());
+    node->setCustomColor(14, customColor15());
+    node->setCustomColor(15, customColor16());
+
+    // ── Sync labels texture (zone-specific, not in parent) ───────────
     {
         QMutexLocker lock(&m_labelsTextureMutex);
         node->setLabelsTexture(m_labelsTexture);
     }
 
-    // Sync audio spectrum (CAVA bar data for audio-reactive shaders)
-    node->setAudioSpectrum(m_audioSpectrum);
+    // ── Sync audio spectrum ──────────────────────────────────────────
+    node->setAudioSpectrum(audioSpectrumVariant().value<QVector<float>>());
 
-    // Sync user textures (bindings 7-10)
+    // ── Sync user textures (bindings 7-10) ───────────────────────────
     for (int i = 0; i < 4; ++i) {
         node->setUserTexture(i, m_userTextureImages[i]);
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
     }
 
-    // Sync depth buffer (binding 12)
-    node->setUseDepthBuffer(m_useDepthBuffer);
+    // ── Sync depth buffer and wallpaper ──────────────────────────────
+    node->setUseDepthBuffer(useDepthBuffer());
+    node->setUseWallpaper(useWallpaper());
+    node->setWallpaperTexture(wallpaperTexture());
 
-    // Sync desktop wallpaper texture (binding 11)
-    node->setUseWallpaper(m_useWallpaper);
-    {
-        QMutexLocker lock(&m_wallpaperTextureMutex);
-        node->setWallpaperTexture(m_wallpaperTexture);
-    }
-
-    // Sync buffer shader path (multipass)
-    QStringList effectivePaths = m_bufferShaderPaths;
-    if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
-        effectivePaths.append(m_bufferShaderPath);
+    // ── Sync multipass buffer configuration ──────────────────────────
+    QStringList effectivePaths = bufferShaderPaths();
+    if (effectivePaths.isEmpty() && !bufferShaderPath().isEmpty()) {
+        effectivePaths.append(bufferShaderPath());
     }
     while (effectivePaths.size() > 4) {
         effectivePaths.removeLast();
     }
     node->setBufferShaderPaths(effectivePaths);
-    node->setBufferFeedback(m_bufferFeedback);
-    node->setBufferScale(m_bufferScale);
-    node->setBufferWrap(m_bufferWrap);
-    if (!m_bufferWraps.isEmpty()) {
-        node->setBufferWraps(m_bufferWraps);
+    node->setBufferFeedback(bufferFeedback());
+    node->setBufferScale(bufferScale());
+    node->setBufferWrap(bufferWrap());
+    if (!bufferWraps().isEmpty()) {
+        node->setBufferWraps(bufferWraps());
     }
-    node->setBufferFilter(m_bufferFilter);
-    if (!m_bufferFilters.isEmpty()) {
-        node->setBufferFilters(m_bufferFilters);
+    node->setBufferFilter(bufferFilter());
+    if (!bufferFilters().isEmpty()) {
+        node->setBufferFilters(bufferFilters());
     }
 
-    // Sync shader source FIRST (must compile before zone data can be used)
-    // Load when: item's m_shaderDirty, OR node not ready (e.g. after releaseResources)
-    const bool wasDirty = m_shaderDirty.exchange(false);
-    const bool needLoad = wasDirty || (m_shaderSource.isValid() && !m_shaderSource.isEmpty() && !node->isShaderReady());
-    qCDebug(PlasmaZones::lcOverlay) << "updatePaintNode: needLoad:" << needLoad << "wasDirty:" << wasDirty
-                                    << "shaderReady:" << node->isShaderReady() << "source:" << m_shaderSource;
-    if (needLoad) {
-        if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-            QString fragPath = m_shaderSource.toLocalFile();
-            if (m_shaderSource.scheme() == QLatin1String("qrc")) {
-                fragPath = QLatin1Char(':') + m_shaderSource.path();
+    // ── Sync uniform extension (zone extension) ──────────────────────
+    node->setUniformExtension(uniformExtension());
+
+    // ── Sync shader source ───────────────────────────────────────────
+    // PlasmaZones derives vertex shader path from zone.vert in the same directory.
+    const bool needLoad =
+        !node->isShaderReady() || (shaderSource().isValid() && !shaderSource().isEmpty() && !node->isShaderReady());
+    // Check if parent's shader dirty flag was set (parent uses atomic m_shaderDirty)
+    // Since we inherit ShaderEffect, we can check status changes
+    const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
+    const bool statusIsLoading = (status() == Status::Loading);
+
+    if (statusIsLoading || needLoad) {
+        if (shaderSourceValid) {
+            QString fragPath = shaderSource().toLocalFile();
+            if (shaderSource().scheme() == QLatin1String("qrc")) {
+                fragPath = QLatin1Char(':') + shaderSource().path();
             }
 
-            // Derive vertex shader path: zone.vert (fallback to legacy zone.vert.glsl for compatibility)
+            // Derive vertex shader path: zone.vert (fallback to legacy zone.vert.glsl)
             QString vertPath;
             if (!fragPath.isEmpty()) {
                 const QString dir = QFileInfo(fragPath).absolutePath();
@@ -378,8 +323,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 vertPath = QFile::exists(vertDefault) ? vertDefault : vertLegacy;
             }
 
+            // Set include paths for PlasmaZones shader system
+            node->setShaderIncludePaths(shaderIncludePaths());
+
             // Clear old shader sources before loading new ones
-            // This prevents stale vertex shader from being used with new fragment shader
             node->setVertexShaderSource(QString());
             node->setFragmentShaderSource(QString());
 
@@ -391,7 +338,6 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                     loaded = false;
                 }
             } else {
-                // Vertex shader is required - fail if not found
                 if (vertPath.isEmpty()) {
                     qCWarning(PlasmaZones::lcOverlay)
                         << "Required vertex shader not found (cannot derive path - fragment path is empty)";
@@ -423,7 +369,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 setError(errorMsg);
             }
         } else {
-            // Source empty (e.g. user selected "none") – clear node so we don't keep drawing old shader
+            // Source empty — clear node
             node->setVertexShaderSource(QString());
             node->setFragmentShaderSource(QString());
             node->invalidateShader();
@@ -431,10 +377,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         }
     }
 
-    // Sync zone data to the node AFTER shader is ready (thread-safe copy)
-    // Only sync if shader is ready, otherwise zone data won't render anyway
+    // ── Sync zone data to the node AFTER shader is ready ─────────────
     if (m_zoneDataDirty.load()) {
-        // Only sync if shader is ready to avoid pushing data to invalid shader
         if (node->isShaderReady()) {
             m_zoneDataDirty.exchange(false);
             ZoneDataSnapshot snapshot = getZoneDataSnapshot();
@@ -452,8 +396,6 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                                  static_cast<qreal>(rect.height));
                 zd.zoneNumber = rect.zoneNumber;
                 zd.isHighlighted = rect.highlighted;
-
-                // Border properties from thread-safe snapshot (no m_zones access needed)
                 zd.borderRadius = rect.borderRadius;
                 zd.borderWidth = rect.borderWidth;
 
@@ -475,10 +417,10 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         // If shader not ready, leave dirty flag set so we sync on next frame
     }
 
-    // Update status based on shader node state
-    if (node->isShaderReady() && m_status != Status::Ready) {
+    // ── Update status based on shader node state ─────────────────────
+    if (node->isShaderReady() && status() != Status::Ready) {
         setStatus(Status::Ready);
-    } else if (!node->shaderError().isEmpty() && m_status != Status::Error) {
+    } else if (!node->shaderError().isEmpty() && status() != Status::Error) {
         setError(node->shaderError());
     }
 
@@ -494,95 +436,22 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
 void ZoneShaderItem::geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry)
 {
-    QQuickItem::geometryChange(newGeometry, oldGeometry);
+    // Let parent handle iResolution update
+    PhosphorRendering::ShaderEffect::geometryChange(newGeometry, oldGeometry);
 
-    // Update iResolution when geometry changes
-    if (newGeometry.size() != oldGeometry.size()) {
-        const QSizeF newSize = newGeometry.size();
-
-        if (m_iResolution != newSize) {
-            m_iResolution = newSize;
-            Q_EMIT iResolutionChanged();
-
-            // Re-parse zones with new resolution for normalization
-            if (!m_zones.isEmpty()) {
-                parseZoneData();
-            }
-        }
-
-        update();
-    }
-}
-
-void ZoneShaderItem::itemChange(ItemChange change, const ItemChangeData& value)
-{
-    QQuickItem::itemChange(change, value);
-
-    if (change == ItemVisibleHasChanged && value.boolValue) {
-        // Item became visible — force scene graph update. On Vulkan, window hide
-        // destroys the swapchain; update() calls during the hidden period are lost.
-        // Without this, updatePaintNode() is never called after re-show.
-        m_shaderDirty = true;
-        update();
-        qCInfo(PlasmaZones::lcOverlay) << "ZoneShaderItem: became visible, forcing update";
+    // Re-parse zones with new resolution for normalization
+    if (newGeometry.size() != oldGeometry.size() && !m_zones.isEmpty()) {
+        parseZoneData();
     }
 }
 
 void ZoneShaderItem::componentComplete()
 {
-    QQuickItem::componentComplete();
-
-    // Initialize resolution from item size if not set
-    if (m_iResolution.isEmpty() && width() > 0 && height() > 0) {
-        m_iResolution = QSizeF(width(), height());
-        Q_EMIT iResolutionChanged();
-    }
+    PhosphorRendering::ShaderEffect::componentComplete();
 
     // Parse initial zone data if any
     if (!m_zones.isEmpty()) {
         parseZoneData();
-    }
-
-    // Load shader if source is set
-    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-        loadShader();
-    }
-}
-
-// ============================================================================
-// Shader Loading
-// ============================================================================
-
-void ZoneShaderItem::loadShader()
-{
-    if (!m_shaderSource.isValid() || m_shaderSource.isEmpty()) {
-        setStatus(Status::Null);
-        return;
-    }
-
-    setStatus(Status::Loading);
-    m_shaderDirty = true;
-    update();
-}
-
-// ============================================================================
-// Status Management
-// ============================================================================
-
-void ZoneShaderItem::setError(const QString& error)
-{
-    if (m_errorLog != error) {
-        m_errorLog = error;
-        Q_EMIT errorLogChanged();
-    }
-    setStatus(Status::Error);
-}
-
-void ZoneShaderItem::setStatus(Status status)
-{
-    if (m_status != status) {
-        m_status = status;
-        Q_EMIT statusChanged();
     }
 }
 
