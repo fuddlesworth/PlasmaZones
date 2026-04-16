@@ -303,7 +303,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync uniform extension (zone extension) ──────────────────────
-    node->setUniformExtension(uniformExtension());
+    // The ZoneShaderNodeRhi constructor already creates and attaches the
+    // ZoneUniformExtension. Don't overwrite it with the ShaderEffect's
+    // m_uniformExtension (which is null — the extension is node-owned, not item-owned).
 
     // ── Sync shader source ───────────────────────────────────────────
     // PlasmaZones derives vertex shader path from zone.vert in the same directory.
