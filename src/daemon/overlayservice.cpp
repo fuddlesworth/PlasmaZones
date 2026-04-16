@@ -32,7 +32,9 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
-#include "../core/layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 

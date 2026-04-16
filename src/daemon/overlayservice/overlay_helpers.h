@@ -22,7 +22,9 @@
 #include <QJsonParseError>
 #include <atomic>
 
-#include "../../core/layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 #include "../../core/logging.h"
 #include "../../core/enums.h"
 

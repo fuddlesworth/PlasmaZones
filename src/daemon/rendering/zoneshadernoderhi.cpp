@@ -15,7 +15,8 @@
 #include <cstring>
 
 #include "../../core/logging.h"
-#include "../../core/shaderincluderesolver.h"
+#include <PhosphorShell/ShaderIncludeResolver.h>
+using PhosphorShell::ShaderIncludeResolver;
 
 #include <rhi/qshaderbaker.h>
 

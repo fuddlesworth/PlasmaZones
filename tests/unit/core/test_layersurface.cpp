@@ -1,13 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "core/layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
 
 // Full definition needed for tests that directly construct LayerShellIntegration.
-// Include the PhosphorShell private header (full definition) then the
-// PlasmaZones compatibility wrapper (using alias into PlasmaZones namespace).
 #include "../../../phosphorshell/src/qpa/layershellintegration.h"
-#include "core/qpa/layershellintegration.h"
 
 #include <QTest>
 #include <QSignalSpy>
@@ -15,7 +12,7 @@
 #include <QPointer>
 #include <QWindow>
 
-using namespace PlasmaZones;
+using namespace PhosphorShell;
 
 class TestLayerSurface : public QObject
 {

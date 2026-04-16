@@ -25,8 +25,7 @@ set(plasmazones_core_SRCS
     core/logging.cpp
     core/translationloader.h
     core/translationloader.cpp
-    core/wallpaperprovider.h
-    core/wallpaperprovider.cpp
+    # wallpaperprovider moved to PhosphorShell
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
@@ -78,9 +77,7 @@ set(plasmazones_core_SRCS
     core/layoututils.h
     core/supportreport.cpp
     core/supportreport.h
-    core/shaderregistry/params.cpp
-    core/layersurface.cpp
-    core/layersurface.h
+    # layersurface + shaderregistry/params moved to PhosphorShell
     core/single_instance_service.cpp
     core/single_instance_service.h
     core/screen_resolver.cpp
@@ -97,10 +94,8 @@ set(plasmazones_core_SRCS
     core/zonedetector.h
     core/zonehighlighter.cpp
     core/zonehighlighter.h
-    core/shaderregistry.cpp
-    core/shaderregistry.h
-    core/shaderincluderesolver.cpp
-    core/shaderincluderesolver.h
+    core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
+    # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShell
     core/modifierutils.cpp
     core/modifierutils.h
     config/settings.cpp
