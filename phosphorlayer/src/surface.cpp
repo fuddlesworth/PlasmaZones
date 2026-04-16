@@ -278,54 +278,96 @@ private:
 
     bool instantiateFromComponent()
     {
-        // createWithInitialProperties applies the window-property map to the
-        // root at construction time, so QML bindings see them on first
-        // evaluation. Fall back to plain create() when the map is empty to
-        // avoid the extra overhead.
-        QObject* root = nullptr;
+        // beginCreate → attach transport → completeCreate.
+        //
+        // This ordering is load-bearing for Window-rooted QML. Qt Quick's
+        // QQuickWindowQmlImpl::componentComplete synchronously triggers
+        // setWindowVisibility(Windowed) which creates the platform window
+        // and locks in its shell-protocol role (layer_surface vs
+        // xdg_toplevel). The PhosphorShell QPA plugin decides based on the
+        // `_ps_layer_shell` dynamic property, which LayerSurface::get sets
+        // — so we MUST call it before completeCreate fires componentComplete.
+        //
+        // Calling create()/createWithInitialProperties() rolled these two
+        // steps into one, which placed the QPA call before attach and made
+        // the window map as xdg_toplevel. Visible result: snap assist and
+        // zone selector never appeared on layer-shell-only paths, and the
+        // main overlay had to prime the pipeline before later surfaces
+        // worked — the exact bug this split fixes.
         auto* ctx = m_engine->rootContext();
-        if (m_config.windowProperties.isEmpty()) {
-            root = m_component->create(ctx);
-        } else {
-            root = m_component->createWithInitialProperties(m_config.windowProperties, ctx);
-        }
+        QObject* root = m_component->beginCreate(ctx);
         if (!root) {
-            failWith(m_component->errorString().isEmpty() ? QStringLiteral("QQmlComponent::create() returned nullptr")
-                                                          : m_component->errorString());
+            failWith(m_component->errorString().isEmpty()
+                         ? QStringLiteral("QQmlComponent::beginCreate() returned nullptr")
+                         : m_component->errorString());
             return false;
         }
+
+        // Apply windowProperties before completeCreate so QML bindings on
+        // `window.foo` resolve on first evaluation instead of churning
+        // through undefined → value.
+        if (!m_config.windowProperties.isEmpty()) {
+            m_component->setInitialProperties(root, m_config.windowProperties);
+        }
+
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
-            // Window-rooted QML (common for PlasmaZones overlays). Adopt the
-            // Window as our primary; take C++ ownership so the QML engine's
-            // GC doesn't reclaim it while we still hold a transport handle.
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
-            // Force hidden BEFORE the transport attaches. Qt Quick's
-            // Window defaults to AutomaticVisibility which shows the
-            // window on componentComplete unless QML sets `visible: false`
-            // at the root. If we let that fire, the QPA plugin runs
-            // before finishAttach has set up the layer-shell role and
-            // the window maps as an xdg_toplevel instead — invisible on
-            // layer-shell-only compositors. Pre-empting with setVisible(false)
-            // keeps the surface hidden until our explicit show() call
-            // drives the transition with layer-shell properties in place.
+            // Pre-empt AutomaticVisibility in case the QML root doesn't
+            // declare `visible: false`. If the window showed as part of
+            // completeCreate, the subsequent window->show() from our
+            // explicit show() would be redundant but harmless — the
+            // important part is that layer-shell is attached first.
             win->setVisible(false);
-            // windowProperties were already passed to createWithInitialProperties
-            // above, so no need to re-apply here.
-            return finishAttach();
+
+            if (!finishAttachWithoutTransition()) {
+                m_component->completeCreate();
+                return false;
+            }
+            // NOW run componentComplete; QPA plugin sees the layer-shell
+            // dynamic properties and creates the platform window with the
+            // wlr-layer-shell role.
+            m_component->completeCreate();
+            transitionTo(State::Hidden);
+            return true;
         }
+
         if (auto* item = qobject_cast<QQuickItem*>(root)) {
-            // Item-rooted QML — wrap in a fresh QQuickWindow and attach.
+            // Item-rooted QML — componentComplete on an Item doesn't create
+            // a platform window, so ordering is less sensitive. Wrap in
+            // QQuickWindow, attach, then run completeCreate.
             ensureWrapperWindow();
             m_rootItem = item;
             m_rootItem->setParentItem(m_window->contentItem());
             m_rootItem->setParent(m_window);
             bindSize();
+            m_component->completeCreate();
             return finishAttach();
         }
+
+        m_component->completeCreate();
         delete root;
         failWith(QStringLiteral("Root object is neither a QQuickWindow nor a QQuickItem"));
         return false;
+    }
+
+    bool finishAttachWithoutTransition()
+    {
+        TransportAttachArgs args;
+        args.screen = m_config.screen;
+        args.layer = m_config.effectiveLayer();
+        args.anchors = m_config.effectiveAnchors();
+        args.exclusiveZone = m_config.effectiveExclusiveZone();
+        args.keyboard = m_config.effectiveKeyboard();
+        args.margins = m_config.effectiveMargins();
+        args.scope = m_config.role.scopePrefix;
+
+        m_handle = m_deps.transport->attach(m_window, args);
+        if (!m_handle) {
+            failWith(QStringLiteral("ILayerShellTransport::attach returned nullptr"));
+            return false;
+        }
+        return true;
     }
 
     void bindSize()
