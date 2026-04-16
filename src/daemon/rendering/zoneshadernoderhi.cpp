@@ -223,20 +223,19 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     // Build PlasmaZones-specific include paths
     const QString currentFileDir = QFileInfo(fragmentPath).absolutePath();
     const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
-    const QString systemShaderDir = QStandardPaths::locate(
+    const QStringList systemShaderDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
 
     QStringList includePaths;
     if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir)
         includePaths.append(shadersRootDir);
-    if (!systemShaderDir.isEmpty())
-        includePaths.append(systemShaderDir);
+    for (const QString& dir : systemShaderDirs) {
+        if (!includePaths.contains(dir))
+            includePaths.append(dir);
+    }
 
     // Delegate to PhosphorRendering's warmShaderBakeCacheForPaths
-    auto prResult = PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, includePaths);
-    result.success = prResult.success;
-    result.errorMessage = prResult.errorMessage;
-    return result;
+    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, includePaths);
 }
 
 } // namespace PlasmaZones

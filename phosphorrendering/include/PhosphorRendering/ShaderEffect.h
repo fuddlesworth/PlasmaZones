@@ -447,6 +447,17 @@ protected:
     void componentComplete() override;
     void itemChange(ItemChange change, const ItemChangeData& value) override;
 
+    /**
+     * @brief Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) to a render node.
+     *
+     * Does NOT sync user textures, uniform extension, or shader source — these differ
+     * between ShaderEffect and subclasses (e.g. ZoneShaderItem).
+     *
+     * Called from updatePaintNode(); subclasses that override updatePaintNode should call
+     * this instead of duplicating the property sync.
+     */
+    void syncBasePropertiesToNode(ShaderNodeRhi* node);
+
     void setError(const QString& error);
     void setStatus(Status newStatus);
 

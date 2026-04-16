@@ -39,7 +39,6 @@ void ShaderNodeRhi::setTime(double time)
         m_timeHi = newTimeHi;
         m_timeHiDirty = true;
     }
-    m_sceneDataDirty = true;
 }
 
 void ShaderNodeRhi::setTimeDelta(float delta)
@@ -196,7 +195,7 @@ void ShaderNodeRhi::setUserTextureWrap(int slot, const QString& wrap)
 
 void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
 {
-    if (m_wallpaperImage.constBits() == image.constBits() && m_wallpaperImage.size() == image.size()) {
+    if (m_wallpaperImage.cacheKey() == image.cacheKey()) {
         return;
     }
     m_wallpaperImage = image;

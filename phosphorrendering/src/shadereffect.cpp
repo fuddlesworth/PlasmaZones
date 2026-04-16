@@ -445,6 +445,8 @@ void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
         return;
     }
     m_shaderIncludePaths = paths;
+    m_shaderDirty = true;
+    update();
 }
 
 // ============================================================================
@@ -484,6 +486,63 @@ void ShaderEffect::setStatus(Status newStatus)
 }
 
 // ============================================================================
+// Shared Property Sync (used by updatePaintNode and subclass overrides)
+// ============================================================================
+
+void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
+{
+    // ── Shadertoy uniforms ───────────────────────────────────────────
+    // iTime is passed as double; the node splits into wrapped-lo + wrap-offset
+    // before GPU float32 cast.
+    node->setTime(m_iTime);
+    node->setTimeDelta(static_cast<float>(m_iTimeDelta));
+    node->setFrame(m_iFrame);
+    // Use logical pixels for iResolution (shader params depend on consistent
+    // resolution; DPR mismatch handled by bilinear upscaling in the image pass).
+    node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
+    node->setMousePosition(m_iMouse);
+
+    // ── Custom parameters (indexed API) ──────────────────────────────
+    for (int i = 0; i < 8; ++i)
+        node->setCustomParams(i, m_customParams[i]);
+
+    // ── Custom colors (indexed API) ──────────────────────────────────
+    for (int i = 0; i < 16; ++i)
+        node->setCustomColor(i, m_customColors[i]);
+
+    // ── Audio spectrum ───────────────────────────────────────────────
+    node->setAudioSpectrum(m_audioSpectrum);
+
+    // ── Depth buffer and wallpaper ───────────────────────────────────
+    node->setUseDepthBuffer(m_useDepthBuffer);
+    node->setUseWallpaper(m_useWallpaper);
+    {
+        QMutexLocker lock(&m_wallpaperTextureMutex);
+        node->setWallpaperTexture(m_wallpaperTexture);
+    }
+
+    // ── Multipass buffer configuration ───────────────────────────────
+    QStringList effectivePaths = m_bufferShaderPaths;
+    if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
+        effectivePaths.append(m_bufferShaderPath);
+    }
+    while (effectivePaths.size() > 4) {
+        effectivePaths.removeLast();
+    }
+    node->setBufferShaderPaths(effectivePaths);
+    node->setBufferFeedback(m_bufferFeedback);
+    node->setBufferScale(m_bufferScale);
+    node->setBufferWrap(m_bufferWrap);
+    if (!m_bufferWraps.isEmpty()) {
+        node->setBufferWraps(m_bufferWraps);
+    }
+    node->setBufferFilter(m_bufferFilter);
+    if (!m_bufferFilters.isEmpty()) {
+        node->setBufferFilters(m_bufferFilters);
+    }
+}
+
+// ============================================================================
 // Scene Graph Integration
 // ============================================================================
 
@@ -510,60 +569,13 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
         m_renderNode = node;
     }
 
-    // ── Sync Shadertoy uniforms ──────────────────────────────────────
-    // iTime is passed as double; the node splits into wrapped-lo + wrap-offset
-    // before GPU float32 cast.
-    node->setTime(m_iTime);
-    node->setTimeDelta(static_cast<float>(m_iTimeDelta));
-    node->setFrame(m_iFrame);
-    // Use logical pixels for iResolution (shader params depend on consistent
-    // resolution; DPR mismatch handled by bilinear upscaling in the image pass).
-    node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
-    node->setMousePosition(m_iMouse);
-
-    // ── Sync custom parameters (indexed API) ──────────────────────────
-    for (int i = 0; i < 8; ++i)
-        node->setCustomParams(i, m_customParams[i]);
-
-    // ── Sync custom colors (indexed API) ────────────────────────────
-    for (int i = 0; i < 16; ++i)
-        node->setCustomColor(i, m_customColors[i]);
-
-    // ── Sync audio spectrum ──────────────────────────────────────────
-    node->setAudioSpectrum(m_audioSpectrum);
+    // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
+    syncBasePropertiesToNode(node);
 
     // ── Sync user textures (bindings 7-10) ───────────────────────────
     for (int i = 0; i < 4; ++i) {
         node->setUserTexture(i, m_userTextureImages[i]);
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
-    }
-
-    // ── Sync depth buffer and wallpaper ──────────────────────────────
-    node->setUseDepthBuffer(m_useDepthBuffer);
-    node->setUseWallpaper(m_useWallpaper);
-    {
-        QMutexLocker lock(&m_wallpaperTextureMutex);
-        node->setWallpaperTexture(m_wallpaperTexture);
-    }
-
-    // ── Sync multipass buffer configuration ──────────────────────────
-    QStringList effectivePaths = m_bufferShaderPaths;
-    if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
-        effectivePaths.append(m_bufferShaderPath);
-    }
-    while (effectivePaths.size() > 4) {
-        effectivePaths.removeLast();
-    }
-    node->setBufferShaderPaths(effectivePaths);
-    node->setBufferFeedback(m_bufferFeedback);
-    node->setBufferScale(m_bufferScale);
-    node->setBufferWrap(m_bufferWrap);
-    if (!m_bufferWraps.isEmpty()) {
-        node->setBufferWraps(m_bufferWraps);
-    }
-    node->setBufferFilter(m_bufferFilter);
-    if (!m_bufferFilters.isEmpty()) {
-        node->setBufferFilters(m_bufferFilters);
     }
 
     // ── Sync uniform extension ───────────────────────────────────────

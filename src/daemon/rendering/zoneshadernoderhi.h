@@ -79,12 +79,8 @@ private:
     bool m_labelsInitialized = false;
 };
 
-/** Result of warmShaderBakeCacheForPaths for reporting to UI (e.g. shaderCompilationFinished). */
-struct WarmShaderBakeResult
-{
-    bool success = false;
-    QString errorMessage;
-};
+/** Alias for PhosphorRendering::WarmShaderBakeResult — avoids type duplication. */
+using WarmShaderBakeResult = PhosphorRendering::WarmShaderBakeResult;
 
 /**
  * Pre-load cache warming: load, bake, and insert shaders for the given paths into the

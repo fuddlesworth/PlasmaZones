@@ -38,6 +38,7 @@ namespace {
 
 struct BakeCache
 {
+    static constexpr int kMaxSize = 256;
     using Key = QPair<QByteArray, int>;
     QMutex mutex;
     QHash<Key, QShader> entries;
@@ -87,6 +88,9 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
     if (result.shader.isValid()) {
         result.success = true;
         QMutexLocker lock(&cache.mutex);
+        if (cache.entries.size() >= BakeCache::kMaxSize) {
+            cache.entries.erase(cache.entries.begin());
+        }
         cache.entries.insert(key, result.shader);
     } else {
         result.error = baker.errorMessage();

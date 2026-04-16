@@ -227,43 +227,14 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                                         << node->isShaderReady();
     }
 
-    // ── Sync Shadertoy uniforms (base class properties → node) ──────
-    node->setTime(iTime());
-    node->setTimeDelta(static_cast<float>(iTimeDelta()));
-    node->setFrame(iFrame());
-    node->setResolution(static_cast<float>(width()), static_cast<float>(height()));
-    node->setMousePosition(iMouse());
+    // ── Sync base properties (time, params, colors, audio, multipass, depth, wallpaper) ──
+    syncBasePropertiesToNode(node);
 
-    // ── Sync custom parameters (indexed API) ────────────────────────
-    node->setCustomParams(0, customParams1());
-    node->setCustomParams(1, customParams2());
-    node->setCustomParams(2, customParams3());
-    node->setCustomParams(3, customParams4());
-    node->setCustomParams(4, customParams5());
-    node->setCustomParams(5, customParams6());
-    node->setCustomParams(6, customParams7());
-    node->setCustomParams(7, customParams8());
-
-    // ── Sync custom colors (indexed API) ─────────────────────────────
-    qCInfo(PlasmaZones::lcOverlay) << "syncColors item=" << this << "node=" << node
-                                   << "c1=" << customColor1().name(QColor::HexArgb)
-                                   << "c2=" << customColor2().name(QColor::HexArgb);
-    node->setCustomColor(0, customColor1());
-    node->setCustomColor(1, customColor2());
-    node->setCustomColor(2, customColor3());
-    node->setCustomColor(3, customColor4());
-    node->setCustomColor(4, customColor5());
-    node->setCustomColor(5, customColor6());
-    node->setCustomColor(6, customColor7());
-    node->setCustomColor(7, customColor8());
-    node->setCustomColor(8, customColor9());
-    node->setCustomColor(9, customColor10());
-    node->setCustomColor(10, customColor11());
-    node->setCustomColor(11, customColor12());
-    node->setCustomColor(12, customColor13());
-    node->setCustomColor(13, customColor14());
-    node->setCustomColor(14, customColor15());
-    node->setCustomColor(15, customColor16());
+    // ── Sync user textures from ZoneShaderItem's parsed images (bindings 7-10) ──
+    for (int i = 0; i < 4; ++i) {
+        node->setUserTexture(i, m_userTextureImages[i]);
+        node->setUserTextureWrap(i, m_userTextureWraps[i]);
+    }
 
     // ── Sync labels texture (zone-specific, not in parent) ───────────
     {
@@ -271,44 +242,7 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
         node->setLabelsTexture(m_labelsTexture);
     }
 
-    // ── Sync audio spectrum ──────────────────────────────────────────
-    node->setAudioSpectrum(audioSpectrumVariant().value<QVector<float>>());
-
-    // ── Sync user textures (bindings 7-10) ───────────────────────────
-    for (int i = 0; i < 4; ++i) {
-        node->setUserTexture(i, m_userTextureImages[i]);
-        node->setUserTextureWrap(i, m_userTextureWraps[i]);
-    }
-
-    // ── Sync depth buffer and wallpaper ──────────────────────────────
-    node->setUseDepthBuffer(useDepthBuffer());
-    node->setUseWallpaper(useWallpaper());
-    node->setWallpaperTexture(wallpaperTexture());
-
-    // ── Sync multipass buffer configuration ──────────────────────────
-    QStringList effectivePaths = bufferShaderPaths();
-    if (effectivePaths.isEmpty() && !bufferShaderPath().isEmpty()) {
-        effectivePaths.append(bufferShaderPath());
-    }
-    while (effectivePaths.size() > 4) {
-        effectivePaths.removeLast();
-    }
-    node->setBufferShaderPaths(effectivePaths);
-    node->setBufferFeedback(bufferFeedback());
-    node->setBufferScale(bufferScale());
-    node->setBufferWrap(bufferWrap());
-    if (!bufferWraps().isEmpty()) {
-        node->setBufferWraps(bufferWraps());
-    }
-    node->setBufferFilter(bufferFilter());
-    if (!bufferFilters().isEmpty()) {
-        node->setBufferFilters(bufferFilters());
-    }
-
-    // ── Sync uniform extension (zone extension) ──────────────────────
-    // The ZoneShaderNodeRhi constructor already creates and attaches the
-    // ZoneUniformExtension. Don't overwrite it with the ShaderEffect's
-    // m_uniformExtension (which is null — the extension is node-owned, not item-owned).
+    // ── Uniform extension: NOT synced — ZoneShaderNodeRhi owns its ZoneUniformExtension ──
 
     // ── Sync shader source ───────────────────────────────────────────
     // PlasmaZones derives vertex shader path from zone.vert in the same directory.
