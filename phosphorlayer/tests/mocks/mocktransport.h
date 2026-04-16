@@ -4,12 +4,28 @@
 #pragma once
 
 #include <PhosphorLayer/ILayerShellTransport.h>
+#include <PhosphorLayer/SurfaceFactory.h>
 
 #include <QSize>
 
 #include <memory>
 
 namespace PhosphorLayer::Testing {
+
+/// Helper: build a SurfaceFactory::Deps without triggering
+/// -Wmissing-field-initializers. GCC warns on brace/designated inits
+/// that skip fields with default member initializers — centralising the
+/// construction here keeps each call site ergonomic and warning-free.
+inline PhosphorLayer::SurfaceFactory::Deps makeDeps(PhosphorLayer::ILayerShellTransport* transport,
+                                                    PhosphorLayer::IScreenProvider* screens,
+                                                    PhosphorLayer::IQmlEngineProvider* engineProvider = nullptr)
+{
+    PhosphorLayer::SurfaceFactory::Deps d;
+    d.transport = transport;
+    d.screens = screens;
+    d.engineProvider = engineProvider;
+    return d;
+}
 
 class MockTransportHandle : public ITransportHandle
 {

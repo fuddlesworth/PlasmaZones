@@ -20,7 +20,7 @@ private Q_SLOTS:
     void missingTransportYieldsNullptr()
     {
         MockScreenProvider s;
-        SurfaceFactory f({nullptr, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(nullptr, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -31,7 +31,7 @@ private Q_SLOTS:
     void missingScreenProviderYieldsNullptr()
     {
         MockTransport t;
-        SurfaceFactory f({&t, nullptr});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, nullptr));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -42,7 +42,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentItem = std::make_unique<QQuickItem>();
@@ -56,7 +56,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         QObject owner;
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
@@ -71,7 +71,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         QCOMPARE(f.deps().transport, &t);
         QCOMPARE(f.deps().screens, &s);
         QCOMPARE(f.deps().engineProvider, nullptr);

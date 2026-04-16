@@ -33,7 +33,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         ScreenSurfaceRegistry<> reg(&f, &s);
 
         const int n = s.screens().size();
@@ -54,7 +54,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         ScreenSurfaceRegistry<> reg(&f, &s);
 
         const auto first = reg.createForAllScreens([&](QScreen* screen) {
@@ -74,7 +74,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         ScreenSurfaceRegistry<> reg(&f, &s);
 
         if (s.screens().size() < 2) {
@@ -101,7 +101,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         ScreenSurfaceRegistry<> reg(&f, &s);
         reg.createForAllScreens([&](QScreen* screen) {
             return f.create(makeConfig(screen));

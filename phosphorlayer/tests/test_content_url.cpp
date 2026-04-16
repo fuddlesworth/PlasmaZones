@@ -58,7 +58,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;
@@ -85,7 +85,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;
@@ -110,7 +110,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;
@@ -140,7 +140,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;
@@ -167,7 +167,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;
@@ -188,7 +188,7 @@ private Q_SLOTS:
 
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.contentUrl = url;

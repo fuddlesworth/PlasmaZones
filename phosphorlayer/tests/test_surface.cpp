@@ -38,7 +38,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         QVERIFY(surface);
         QCOMPARE(surface->state(), Surface::State::Constructed);
@@ -50,7 +50,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         QSignalSpy spy(surface, &Surface::stateChanged);
 
@@ -75,7 +75,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         surface->warmUp();
         QCOMPARE(surface->state(), Surface::State::Hidden);
@@ -92,7 +92,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         surface->show();
         QCOMPARE(surface->state(), Surface::State::Shown);
@@ -109,7 +109,7 @@ private Q_SLOTS:
         MockTransport t;
         MockScreenProvider s;
         t.rejectNextAttach();
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary(), QStringLiteral("reject-test")));
         QSignalSpy failSpy(surface, &Surface::failed);
 
@@ -124,7 +124,7 @@ private Q_SLOTS:
         MockTransport t;
         MockScreenProvider s;
         t.rejectNextAttach();
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         surface->show();
         QCOMPARE(surface->state(), Surface::State::Failed);
@@ -141,7 +141,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.screen = s.primary();
@@ -155,7 +155,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         SurfaceConfig cfg;
         cfg.role = Roles::CenteredModal;
         cfg.screen = s.primary();
@@ -170,7 +170,7 @@ private Q_SLOTS:
         MockTransport t;
         MockScreenProvider s;
         t.setSupported(false);
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto* surface = f.create(buildConfig(s.primary()));
         QCOMPARE(surface, nullptr);
     }
@@ -179,7 +179,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto cfg = buildConfig(s.primary());
         cfg.windowProperties = {{QStringLiteral("myTag"), QStringLiteral("set")}, {QStringLiteral("myCount"), 7}};
         auto* surface = f.create(std::move(cfg));
@@ -194,7 +194,7 @@ private Q_SLOTS:
     {
         MockTransport t;
         MockScreenProvider s;
-        SurfaceFactory f({&t, &s});
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
         auto cfg = buildConfig(s.primary());
         cfg.role = Roles::FullscreenOverlay;
         cfg.marginsOverride = QMargins(5, 10, 15, 20);
