@@ -157,31 +157,37 @@ set_target_properties(phosphorshell-qpa PROPERTIES
 # Install
 # ═══════════════════════════════════════════════════════════════════════════════
 
-include(GNUInstallDirs)
+# Use KDE install dirs when available (in-tree build), fall back to GNUInstallDirs
+if(NOT DEFINED KDE_INSTALL_LIBDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_LIBDIR ${CMAKE_INSTALL_LIBDIR})
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+    set(KDE_INSTALL_DATADIR ${CMAKE_INSTALL_DATADIR})
+endif()
 
 # Library
 install(TARGETS PhosphorShell
     EXPORT PhosphorShellTargets
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
 )
 
 # Public headers
 install(DIRECTORY include/PhosphorShell/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/PhosphorShell
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
     FILES_MATCHING PATTERN "*.h"
 )
 
 # Export header
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorshell_export.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/PhosphorShell
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorShell
 )
 
 # QPA plugin
 if(NOT DEFINED QT6_INSTALL_PLUGINS)
     get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
     if(NOT QT6_INSTALL_PLUGINS)
-        set(QT6_INSTALL_PLUGINS "${CMAKE_INSTALL_LIBDIR}/qt6/plugins")
+        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_LIBDIR}/qt6/plugins")
     endif()
 endif()
 install(TARGETS phosphorshell-qpa
@@ -190,12 +196,12 @@ install(TARGETS phosphorshell-qpa
 
 # GLSL include library
 install(DIRECTORY shaders/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/phosphorshell/shaders
+    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshell/shaders
     FILES_MATCHING PATTERN "*.glsl"
 )
 
 # Protocol XML (for downstream development)
 install(DIRECTORY protocols/
-    DESTINATION ${CMAKE_INSTALL_DATADIR}/phosphorshell/protocols
+    DESTINATION ${KDE_INSTALL_DATADIR}/phosphorshell/protocols
     FILES_MATCHING PATTERN "*.xml"
 )

@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
                              << "Zone overlays will appear as regular windows (visible in taskbar,"
                              << "wrong z-order, no keyboard grab). This compositor may not support"
                              << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
-                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "Check that phosphorshell-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 

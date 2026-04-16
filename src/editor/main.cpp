@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
     if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
         qCCritical(lcEditor) << "Layer-shell QPA plugin did not initialize —"
                              << "shader preview overlays will use xdg_toplevel (wrong stacking)."
-                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "Check that phosphorshell-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 
