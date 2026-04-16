@@ -496,8 +496,13 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
-    m_layoutPickerSurface->show();
-    m_layoutPickerWindow->requestActivate();
+    // The QML root exposes a show() function that sets visible=true AND plays
+    // the show animation (contentWrapper opacity 0→1, container scale-in).
+    // Calling surface->show() would only set visible=true and skip the
+    // animation, so invoke the QML function directly. Surface stays in
+    // Hidden state — that's fine, the destroy-on-hide lifecycle doesn't
+    // rely on the state flag.
+    QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
                       << "active=" << activeId;

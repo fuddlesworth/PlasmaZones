@@ -300,6 +300,16 @@ private:
             // GC doesn't reclaim it while we still hold a transport handle.
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
+            // Force hidden BEFORE the transport attaches. Qt Quick's
+            // Window defaults to AutomaticVisibility which shows the
+            // window on componentComplete unless QML sets `visible: false`
+            // at the root. If we let that fire, the QPA plugin runs
+            // before finishAttach has set up the layer-shell role and
+            // the window maps as an xdg_toplevel instead — invisible on
+            // layer-shell-only compositors. Pre-empting with setVisible(false)
+            // keeps the surface hidden until our explicit show() call
+            // drives the transition with layer-shell properties in place.
+            win->setVisible(false);
             // windowProperties were already passed to createWithInitialProperties
             // above, so no need to re-apply here.
             return finishAttach();
