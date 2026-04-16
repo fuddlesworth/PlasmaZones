@@ -315,11 +315,24 @@ private:
             if (!finishAttach()) {
                 return false;
             }
-            // Hide regardless of whether componentComplete auto-showed us.
-            // Destroys any xdg_toplevel shell surface created before our
-            // attach registered; next window->show() re-creates it as
-            // layer_surface.
+            // Force FULL platform-window destroy so the next show() re-creates
+            // it from scratch. A plain setVisible(false) only unmaps on Qt
+            // Wayland — the shell-surface role (xdg_toplevel, accidentally
+            // created during componentComplete's auto-show before
+            // _ps_layer_shell was set) persists, and subsequent setVisible
+            // (true) calls just re-map that stale role. destroy() releases
+            // the native platform window entirely; the QQuickWindow C++
+            // object + QML tree survive, so the next show() re-creates the
+            // platform window and the PhosphorShell QPA plugin reads our
+            // now-set _ps_layer_shell and creates a layer_surface.
+            //
+            // Affects all destroy-once-reuse-many consumers (main overlay,
+            // zone selector, OSDs). Destroy-on-hide consumers (snap assist,
+            // layout picker) happen to avoid the stale-role problem by
+            // recreating the whole Surface every show — but this path is
+            // uniform across both categories.
             win->setVisible(false);
+            win->destroy();
             return true;
         }
 
