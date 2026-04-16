@@ -32,8 +32,10 @@ public:
     virtual void setHighlightedZones(const QVector<int>& indices) = 0;
     virtual void clearHighlights() = 0;
 
-    // Timing
-    virtual void setTime(float time) = 0;
+    // Timing. setTime takes a double because float32 precision on a seconds-
+    // since-start counter degrades past ~36 h uptime — the node splits it into
+    // iTime (wrapped) + iTimeHi (wrap offset) internally. See kShaderTimeWrap.
+    virtual void setTime(double time) = 0;
     virtual void setTimeDelta(float delta) = 0;
     virtual void setFrame(int frame) = 0;
     virtual void setResolution(float width, float height) = 0;

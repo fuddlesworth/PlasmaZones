@@ -281,8 +281,8 @@ vec3 constellationNetwork(vec2 uv, float time, float bassEnv, float midsEnv, flo
         float scatter = 1.0 + bassEnv * 0.3;
 
         vec2 pos = vec2(
-            0.5 + sin(time * freqX + phaseX) * ampX * scatter,
-            0.5 + cos(time * freqY + phaseY) * ampY * scatter
+            0.5 + timeSin(freqX, phaseX) * ampX * scatter,
+            0.5 + timeCos(freqY, phaseY) * ampY * scatter
         );
         dots[i] = pos;
     }
@@ -480,16 +480,16 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
 
     if (totalCount <= 1) {
         vec2 drift = vec2(
-            sin(time * 0.13) * 0.015 + sin(time * 0.29) * 0.008,
-            cos(time * 0.19) * 0.012 + cos(time * 0.11) * 0.006
+            timeSin(0.13) * 0.015 + timeSin(0.29) * 0.008,
+            timeCos(0.19) * 0.012 + timeCos(0.11) * 0.006
         );
         uv -= drift;
         // Gentle rotation
-        float rotAng = sin(time * 0.12) * 0.04;
+        float rotAng = timeSin(0.12) * 0.04;
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        float breathe = 1.0 + sin(time * 0.6) * 0.02;
+        float breathe = 1.0 + timeSin(0.6) * 0.02;
         float springT = fract(time * 1.2);
         float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
         instScale = logoScale * breathe * spring;
@@ -506,19 +506,19 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float f1 = 0.06 + float(idx) * 0.021;
     float f2 = 0.04 + float(idx) * 0.017;
     vec2 mdrift = vec2(
-        sin(time * f1 + h1 * TAU) * roam + sin(time * f1 * 2.1 + h3 * TAU) * roam * 0.3,
-        cos(time * f2 + h2 * TAU) * roam * 0.9 + cos(time * f2 * 1.6 + h4 * TAU) * roam * 0.25
+        timeSin(f1, h1 * TAU) * roam + timeSin(f1 * 2.1, h3 * TAU) * roam * 0.3,
+        timeCos(f2, h2 * TAU) * roam * 0.9 + timeCos(f2 * 1.6, h4 * TAU) * roam * 0.25
     );
     uv -= mdrift;
 
     // Per-instance rotation -- snowflake can rotate freely (6-fold symmetric)
-    float rotAng = sin(time * (0.1 + float(idx) * 0.025) + h4 * TAU) * 0.08;
+    float rotAng = timeSin(0.1 + float(idx) * 0.025, h4 * TAU) * 0.08;
     vec2 lp = uv - vec2(0.5);
     uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
 
     instScale = mix(sizeMin, sizeMax, h3) * logoScale;
-    float breathe = 1.0 + sin(time * (0.5 + float(idx) * 0.11) + h1 * TAU) * 0.02;
+    float breathe = 1.0 + timeSin(0.5 + float(idx) * 0.11, h1 * TAU) * 0.02;
     float springT = fract(time * 1.2 + h2);
     float spring = 1.0 + bassEnv * 0.12 * exp(-springT * 5.0) * cos(springT * 18.0);
     instScale *= breathe * spring;
@@ -945,7 +945,7 @@ vec4 renderNixosZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor
 
             // 4 root stems at different X positions
             for (int root = 0; root < 4; root++) {
-                float rootX = -0.6 + float(root) * 0.4 + sin(time * 0.05 + float(root)) * 0.05;
+                float rootX = -0.6 + float(root) * 0.4 + timeSin(0.05, float(root)) * 0.05;
                 vec2 stemBase = vec2(rootX, -1.0) * noiseScale;
                 stemBase.x *= aspect;
 

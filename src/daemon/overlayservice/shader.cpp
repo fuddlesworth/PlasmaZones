@@ -228,12 +228,16 @@ void OverlayService::updateShaderUniforms()
         currentTime = m_shaderTimer.elapsed();
     }
 
-    const float iTime = currentTime / 1000.0f;
+    // Keep iTime as double through the whole pipeline. ZoneShaderNodeRhi splits
+    // it into iTime (wrapped) + iTimeHi at the final GPU upload — see
+    // kShaderTimeWrap. Casting to float32 here would requantize the counter
+    // before the wrap, reintroducing the freezing bug at long uptimes.
+    const double iTime = static_cast<double>(currentTime) / 1000.0;
 
     // Calculate delta time with clamp (max 100ms prevents jumps after sleep/resume)
     constexpr float maxDelta = 0.1f;
     const qint64 lastTime = m_lastFrameTime.exchange(currentTime);
-    float iTimeDelta = qMin((currentTime - lastTime) / 1000.0f, maxDelta);
+    float iTimeDelta = qMin(static_cast<float>(currentTime - lastTime) / 1000.0f, maxDelta);
 
     // Prevent frame counter overflow (reset at 1 billion, ~193 days at 60fps)
     int frame = m_frameCount.fetch_add(1);

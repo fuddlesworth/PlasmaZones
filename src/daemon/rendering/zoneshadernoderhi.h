@@ -54,7 +54,7 @@ public:
     void setZoneCount(int count) override;
     void setHighlightedZones(const QVector<int>& indices) override;
     void clearHighlights() override;
-    void setTime(float time) override;
+    void setTime(double time) override;
     void setTimeDelta(float delta) override;
     void setFrame(int frame) override;
     void setResolution(float width, float height) override;
@@ -199,6 +199,7 @@ private:
     bool m_shaderDirty = true;
     bool m_uniformsDirty = true;
     bool m_timeDirty = true;
+    bool m_timeHiDirty = true; ///< iTimeHi wrap offset changed (rare — once per kShaderTimeWrap s)
     bool m_zoneDataDirty = true;
     bool m_sceneDataDirty =
         true; ///< Scene header (resolution, mouse, date, params) changed; avoids re-uploading zone arrays
@@ -208,9 +209,14 @@ private:
     QVector<ZoneData> m_zones;
     QVector<int> m_highlightedIndices;
 
-    float m_time = 0.0f;
+    // Full-precision elapsed seconds (double). Split into iTime (wrapped lo) +
+    // iTimeHi (wrap offset) at upload — keeping the accumulator in double here
+    // avoids float32 precision loss at long uptimes.
+    double m_time = 0.0;
     float m_timeDelta = 0.0f;
     int m_frame = 0;
+    // Cached iTimeHi so setTime can detect wrap-offset changes and flag upload.
+    float m_timeHi = 0.0f;
     float m_width = 0.0f;
     float m_height = 0.0f;
     QPointF m_mousePosition;

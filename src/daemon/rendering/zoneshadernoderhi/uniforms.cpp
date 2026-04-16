@@ -22,7 +22,10 @@ namespace PlasmaZones {
 
 void ZoneShaderNodeRhi::syncUniformsFromData()
 {
-    m_uniforms.iTime = m_time;
+    // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi
+    // (wrap offset). m_timeHi was cached in setTime() so we just copy it.
+    m_uniforms.iTime = static_cast<float>(m_time - static_cast<double>(m_timeHi));
+    m_uniforms.iTimeHi = m_timeHi;
     m_uniforms.iTimeDelta = m_timeDelta;
     // When feedback buffers haven't been cleared yet (new shader or re-creation),
     // override iFrame to 0 so feedback shaders can seed their initial state.
@@ -237,6 +240,12 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                static_cast<const char*>(static_cast<const void*>(&m_uniforms))
                                                    + K_TIME_BLOCK_OFFSET);
                 }
+                if (m_timeHiDirty) {
+                    // Wrap-offset advance — fires once per kShaderTimeWrap seconds.
+                    batch->updateDynamicBuffer(m_ubo.get(), K_TIME_HI_OFFSET, K_TIME_HI_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_uniforms))
+                                                   + K_TIME_HI_OFFSET);
+                }
                 if (m_zoneDataDirty) {
                     // Full scene data (includes zone arrays) — only when zone data actually changed
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_DATA_OFFSET, K_SCENE_DATA_SIZE,
@@ -249,7 +258,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                    + K_SCENE_HEADER_OFFSET);
                 }
                 // Defensive: if a future setter sets m_uniformsDirty without granular flags, do full upload
-                if (!m_timeDirty && !m_zoneDataDirty && !m_sceneDataDirty) {
+                if (!m_timeDirty && !m_timeHiDirty && !m_zoneDataDirty && !m_sceneDataDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(ZoneShaderUniforms), &m_uniforms);
                 }
             }
@@ -259,6 +268,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             }
             cb->resourceUpdate(batch);
             m_timeDirty = false;
+            m_timeHiDirty = false;
             m_zoneDataDirty = false;
             m_sceneDataDirty = false;
             m_uniformsDirty = false;
@@ -453,6 +463,7 @@ void ZoneShaderNodeRhi::releaseRhiResources()
     m_multiBufferShaderRetries = 0;
     m_uniformsDirty = true;
     m_timeDirty = true;
+    m_timeHiDirty = true;
     m_zoneDataDirty = true;
     m_sceneDataDirty = true;
     m_labelsTextureDirty = true;

@@ -9,6 +9,7 @@
 #include "../../../core/shaderutils.h"
 
 #include <QFileInfo>
+#include <cmath>
 
 namespace PlasmaZones {
 
@@ -69,11 +70,18 @@ void ZoneShaderNodeRhi::clearHighlights()
 // Timing / Resolution / Mouse Setters
 // ============================================================================
 
-void ZoneShaderNodeRhi::setTime(float time)
+void ZoneShaderNodeRhi::setTime(double time)
 {
     m_time = time;
     m_uniformsDirty = true;
     m_timeDirty = true;
+    // Detect wrap-offset change (once per kShaderTimeWrap seconds). When it
+    // advances, iTimeHi gets its own partial upload — see K_TIME_HI_OFFSET.
+    const float newTimeHi = static_cast<float>(std::floor(time / kShaderTimeWrap) * kShaderTimeWrap);
+    if (newTimeHi != m_timeHi) {
+        m_timeHi = newTimeHi;
+        m_timeHiDirty = true;
+    }
     // iDate is in the scene data region but is recomputed from the system clock
     // in syncUniformsFromData(), so it updates whenever m_sceneDataDirty is set.
     // Do NOT set m_zoneDataDirty — the time block has its own upload region.
@@ -540,6 +548,7 @@ void ZoneShaderNodeRhi::invalidateUniforms()
 {
     m_uniformsDirty = true;
     m_timeDirty = true;
+    m_timeHiDirty = true;
     m_zoneDataDirty = true;
     m_sceneDataDirty = true;
 }

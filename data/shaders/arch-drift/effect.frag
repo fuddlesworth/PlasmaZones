@@ -298,14 +298,14 @@ vec2 computeInstanceUV(int idx, int totalCount, vec2 globalUV, float aspect, flo
     float wobbleAmp = customParams[7].z >= 0.0 ? customParams[7].z : 0.12;
     uv.x = (uv.x - 0.5) * aspect + 0.5;
     if (totalCount <= 1) {
-        vec2 drift = vec2(sin(time * 0.11) * 0.015 + sin(time * 0.27) * 0.005,
-                          cos(time * 0.14) * 0.008 + cos(time * 0.09) * 0.004);
+        vec2 drift = vec2(timeSin(0.11) * 0.015 + timeSin(0.27) * 0.005,
+                          timeCos(0.14) * 0.008 + timeCos(0.09) * 0.004);
         uv -= drift;
-        float rotAng = sin(time * 0.08) * wobbleAmp;
+        float rotAng = timeSin(0.08) * wobbleAmp;
         vec2 lp = uv - vec2(0.5);
         uv = vec2(lp.x * cos(rotAng) - lp.y * sin(rotAng),
                    lp.x * sin(rotAng) + lp.y * cos(rotAng)) + vec2(0.5);
-        instScale = logoScale * (1.0 + sin(time * 0.5) * 0.01);
+        instScale = logoScale * (1.0 + timeSin(0.5) * 0.01);
         uv = (uv - 0.5) / instScale + LOGO_CENTER;
         return uv;
     }

@@ -20,6 +20,19 @@ namespace PlasmaZones {
  */
 constexpr int MaxZones = 64;
 
+// Shader time wrap period: the daemon tracks iTime at double precision but the
+// GPU uniform is float32. Without wrapping, float32 ULP grows with magnitude —
+// around 2^17 s of uptime, frame-to-frame deltas round to zero and iTime-driven
+// animation freezes. We expose iTime as two floats:
+//   iTime   = fmod(fullTime, kShaderTimeWrap)           // always in [0, WRAP)
+//   iTimeHi = floor(fullTime / kShaderTimeWrap) * WRAP  // integer wrap offset
+// Shaders that only need bounded animation ignore iTimeHi and use iTime directly.
+// Shaders that need continuous phase across wraps reconstruct via timeSin/timeCos
+// helpers in common.glsl.
+// Power of two keeps the split exact and float32 precision uniform: at iTime
+// near 1024, ULP is ~0.000122 s — ~136 ULPs per 60 fps frame, smooth.
+constexpr double kShaderTimeWrap = 1024.0;
+
 /**
  * @brief GPU uniform buffer layout following std140 rules
  *
@@ -82,6 +95,14 @@ struct alignas(16) ZoneShaderUniforms
 
     // User texture resolutions (bindings 7-10): [i][0]=width, [i][1]=height, [i][2..3]=padding
     float iTextureResolution[4][4];
+
+    // Wrap-offset counterpart of iTime — see kShaderTimeWrap above. iTime is the
+    // residual in [0, kShaderTimeWrap); iTimeHi is the integer-wrap offset. Sum
+    // reconstructs full elapsed time (up to float32 precision). Changes rarely
+    // (once per wrap period), so it gets its own partial-upload region instead
+    // of riding along with the per-frame time block.
+    float iTimeHi;
+    float _pad_after_iTimeHi[3]; // std140: round struct size up to vec4 boundary
 };
 
 static_assert(sizeof(ZoneShaderUniforms) <= 8192, "ZoneShaderUniforms exceeds expected size");
@@ -107,9 +128,17 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 constexpr size_t K_SCENE_HEADER_OFFSET = offsetof(ZoneShaderUniforms, iResolution);
 constexpr size_t K_SCENE_HEADER_SIZE = offsetof(ZoneShaderUniforms, zoneRects) - K_SCENE_HEADER_OFFSET;
 
-// Scene data: iResolution through end (zone counts, iMouse, params, colors, zone arrays)
+// Scene data: iResolution through end of iTextureResolution (zone counts, iMouse,
+// params, colors, zone arrays). Stops BEFORE iTimeHi so the rare iTimeHi upload
+// doesn't get bundled into the per-scene-change path.
 constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, iResolution);
-constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
+constexpr size_t K_SCENE_DATA_SIZE = offsetof(ZoneShaderUniforms, iTimeHi) - K_SCENE_DATA_OFFSET;
+
+// iTimeHi block: uploaded on its own when the wrap offset advances (once per
+// kShaderTimeWrap seconds). sizeof(float) is fine — std140 padding is ignored
+// by updateDynamicBuffer as long as we only upload the 4 bytes that matter.
+constexpr size_t K_TIME_HI_OFFSET = offsetof(ZoneShaderUniforms, iTimeHi);
+constexpr size_t K_TIME_HI_SIZE = sizeof(float);
 
 } // namespace ZoneShaderUboRegions
 

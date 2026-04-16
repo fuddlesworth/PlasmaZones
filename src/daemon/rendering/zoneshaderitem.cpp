@@ -273,8 +273,9 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                                         << node->isShaderReady();
     }
 
-    // Sync shader timing uniforms
-    node->setTime(static_cast<float>(m_iTime));
+    // Sync shader timing uniforms. iTime is passed through as double — the node
+    // splits it into wrapped-lo + wrap-offset before the GPU float32 cast.
+    node->setTime(m_iTime);
     node->setTimeDelta(static_cast<float>(m_iTimeDelta));
     node->setFrame(m_iFrame);
     // Use logical pixels for iResolution — shader parameters (pxScale, edge
