@@ -278,108 +278,66 @@ private:
 
     bool instantiateFromComponent()
     {
-        // beginCreate → attach transport → completeCreate.
+        // Synchronous create(), mirroring the pre-migration createQmlWindow
+        // pattern exactly. For Window-rooted QML, componentComplete auto-
+        // shows the window (as xdg_toplevel because _ps_layer_shell isn't
+        // set yet). That's acceptable: we attach layer-shell immediately
+        // after and then call setVisible(false), which tears down the
+        // accidentally-created xdg_toplevel shell surface. The consumer's
+        // later show() call re-creates the shell surface, and this time
+        // the QPA plugin sees our _ps_layer_shell property and creates a
+        // layer_surface.
         //
-        // This ordering is load-bearing for Window-rooted QML. Qt Quick's
-        // QQuickWindowQmlImpl::componentComplete synchronously triggers
-        // setWindowVisibility(Windowed) which creates the platform window
-        // and locks in its shell-protocol role (layer_surface vs
-        // xdg_toplevel). The PhosphorShell QPA plugin decides based on the
-        // `_ps_layer_shell` dynamic property, which LayerSurface::get sets
-        // — so we MUST call it before completeCreate fires componentComplete.
-        //
-        // Calling create()/createWithInitialProperties() rolled these two
-        // steps into one, which placed the QPA call before attach and made
-        // the window map as xdg_toplevel. Visible result: snap assist and
-        // zone selector never appeared on layer-shell-only paths, and the
-        // main overlay had to prime the pipeline before later surfaces
-        // worked — the exact bug this split fixes.
+        // Previous attempts at a "clean" ordering (begin/attach/complete
+        // or visibility-Hidden pre-emption) each broke a subset of
+        // consumers: setVisible(false) without completeCreate left the
+        // platform window in a mixed state; visibility=Hidden blocked
+        // the QML-driven show() path that OSDs rely on. The hide-after-
+        // create pattern is the one Qt+PhosphorShell were tested with
+        // pre-migration and works uniformly across all seven consumers.
+        QObject* root = nullptr;
         auto* ctx = m_engine->rootContext();
-        QObject* root = m_component->beginCreate(ctx);
-        if (!root) {
-            failWith(m_component->errorString().isEmpty()
-                         ? QStringLiteral("QQmlComponent::beginCreate() returned nullptr")
-                         : m_component->errorString());
-            return false;
+        if (m_config.windowProperties.isEmpty()) {
+            root = m_component->create(ctx);
+        } else {
+            root = m_component->createWithInitialProperties(m_config.windowProperties, ctx);
         }
-
-        // Apply windowProperties before completeCreate so QML bindings on
-        // `window.foo` resolve on first evaluation instead of churning
-        // through undefined → value.
-        if (!m_config.windowProperties.isEmpty()) {
-            m_component->setInitialProperties(root, m_config.windowProperties);
+        if (!root) {
+            failWith(m_component->errorString().isEmpty() ? QStringLiteral("QQmlComponent::create() returned nullptr")
+                                                          : m_component->errorString());
+            return false;
         }
 
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
-            // Pre-empt AutomaticVisibility — QQuickWindowQmlImpl::componentComplete
-            // checks `m_visibility` (NOT `m_visible`) and, when it finds the
-            // default AutomaticVisibility, calls setWindowVisibility(Windowed)
-            // which creates the platform window and shell surface. A plain
-            // setVisible(false) doesn't change m_visibility, so
-            // componentComplete auto-shows anyway and the wrong platform-window
-            // type can get locked in on partial-anchor surfaces (zone
-            // selector) where the compositor is sensitive to commit ordering.
-            // setProperty reaches through Q_PROPERTY to hit
-            // QQuickWindowQmlImpl::setVisibility, which stores the value in
-            // `m_visibility` before componentComplete reads it.
-            win->setProperty("visibility", QVariant::fromValue(QWindow::Hidden));
-
-            if (!finishAttachWithoutTransition()) {
-                m_component->completeCreate();
+            // Attach layer-shell (sets _ps_layer_shell on the QWindow).
+            if (!finishAttach()) {
                 return false;
             }
-            // NOW run componentComplete; since m_visibility == Hidden the
-            // AutomaticVisibility branch is skipped and the platform window
-            // is NOT created yet. It will be created on the consumer's
-            // explicit show(), at which point the QPA plugin reads our
-            // already-set _ps_layer_shell dynamic property and creates the
-            // platform window with the wlr-layer-shell role.
-            m_component->completeCreate();
-            // Defensive: guarantee hidden state regardless of any
-            // componentComplete path that might have flipped visibility.
+            // Hide regardless of whether componentComplete auto-showed us.
+            // Destroys any xdg_toplevel shell surface created before our
+            // attach registered; next window->show() re-creates it as
+            // layer_surface.
             win->setVisible(false);
-            transitionTo(State::Hidden);
             return true;
         }
 
         if (auto* item = qobject_cast<QQuickItem*>(root)) {
-            // Item-rooted QML — componentComplete on an Item doesn't create
-            // a platform window, so ordering is less sensitive. Wrap in
-            // QQuickWindow, attach, then run completeCreate.
+            // Item-rooted QML — componentComplete on an Item doesn't drive
+            // platform-window creation, so the hide-after-create dance
+            // isn't needed here.
             ensureWrapperWindow();
             m_rootItem = item;
             m_rootItem->setParentItem(m_window->contentItem());
             m_rootItem->setParent(m_window);
             bindSize();
-            m_component->completeCreate();
             return finishAttach();
         }
 
-        m_component->completeCreate();
         delete root;
         failWith(QStringLiteral("Root object is neither a QQuickWindow nor a QQuickItem"));
         return false;
-    }
-
-    bool finishAttachWithoutTransition()
-    {
-        TransportAttachArgs args;
-        args.screen = m_config.screen;
-        args.layer = m_config.effectiveLayer();
-        args.anchors = m_config.effectiveAnchors();
-        args.exclusiveZone = m_config.effectiveExclusiveZone();
-        args.keyboard = m_config.effectiveKeyboard();
-        args.margins = m_config.effectiveMargins();
-        args.scope = m_config.role.scopePrefix;
-
-        m_handle = m_deps.transport->attach(m_window, args);
-        if (!m_handle) {
-            failWith(QStringLiteral("ILayerShellTransport::attach returned nullptr"));
-            return false;
-        }
-        return true;
     }
 
     void bindSize()
