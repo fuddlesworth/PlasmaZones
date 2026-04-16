@@ -24,71 +24,71 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
 {
     // Split full-precision m_time (double) into iTime (wrapped lo) + iTimeHi
     // (wrap offset). m_timeHi was cached in setTime() so we just copy it.
-    m_uniforms.iTime = static_cast<float>(m_time - static_cast<double>(m_timeHi));
-    m_uniforms.iTimeHi = m_timeHi;
-    m_uniforms.iTimeDelta = m_timeDelta;
+    m_uniforms.base.iTime = static_cast<float>(m_time - static_cast<double>(m_timeHi));
+    m_uniforms.base.iTimeHi = m_timeHi;
+    m_uniforms.base.iTimeDelta = m_timeDelta;
     // When feedback buffers haven't been cleared yet (new shader or re-creation),
     // override iFrame to 0 so feedback shaders can seed their initial state.
     // Shaders like ember-trace and neon-phantom check iFrame == 0 for seeding.
-    m_uniforms.iFrame = (m_bufferFeedback && !m_bufferFeedbackCleared) ? 0 : m_frame;
-    m_uniforms.iResolution[0] = m_width;
-    m_uniforms.iResolution[1] = m_height;
-    m_uniforms.iMouse[0] = static_cast<float>(m_mousePosition.x());
-    m_uniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
-    m_uniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
-    m_uniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
+    m_uniforms.base.iFrame = (m_bufferFeedback && !m_bufferFeedbackCleared) ? 0 : m_frame;
+    m_uniforms.base.iResolution[0] = m_width;
+    m_uniforms.base.iResolution[1] = m_height;
+    m_uniforms.base.iMouse[0] = static_cast<float>(m_mousePosition.x());
+    m_uniforms.base.iMouse[1] = static_cast<float>(m_mousePosition.y());
+    m_uniforms.base.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
+    m_uniforms.base.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
     const QDateTime now = QDateTime::currentDateTime();
-    m_uniforms.iDate[0] = static_cast<float>(now.date().year());
-    m_uniforms.iDate[1] = static_cast<float>(now.date().month());
-    m_uniforms.iDate[2] = static_cast<float>(now.date().day());
-    m_uniforms.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60 + now.time().second()
-                                             + now.time().msec() / 1000.0);
-    m_uniforms.zoneCount = m_zones.size();
+    m_uniforms.base.iDate[0] = static_cast<float>(now.date().year());
+    m_uniforms.base.iDate[1] = static_cast<float>(now.date().month());
+    m_uniforms.base.iDate[2] = static_cast<float>(now.date().day());
+    m_uniforms.base.iDate[3] = static_cast<float>(now.time().hour() * 3600 + now.time().minute() * 60
+                                                  + now.time().second() + now.time().msec() / 1000.0);
+    m_uniforms.base.appField0 = m_zones.size(); // zoneCount
     int highlightedCount = 0;
     for (const auto& zone : m_zones) {
         if (zone.isHighlighted)
             ++highlightedCount;
     }
-    m_uniforms.highlightedCount = highlightedCount;
+    m_uniforms.base.appField1 = highlightedCount; // highlightedCount
 
-    m_uniforms.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentX] = m_customParams1.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentY] = m_customParams1.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentZ] = m_customParams1.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentW] = m_customParams1.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentX] = m_customParams2.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentY] = m_customParams2.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentZ] = m_customParams2.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentW] = m_customParams2.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentX] = m_customParams3.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentY] = m_customParams3.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentZ] = m_customParams3.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentW] = m_customParams3.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentX] = m_customParams4.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentY] = m_customParams4.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentZ] = m_customParams4.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentW] = m_customParams4.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentX] = m_customParams5.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentY] = m_customParams5.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentZ] = m_customParams5.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentW] = m_customParams5.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentX] = m_customParams6.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentY] = m_customParams6.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentZ] = m_customParams6.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentW] = m_customParams6.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentX] = m_customParams7.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentY] = m_customParams7.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentZ] = m_customParams7.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentW] = m_customParams7.w();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentX] = m_customParams8.x();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentY] = m_customParams8.y();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentZ] = m_customParams8.z();
-    m_uniforms.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentW] = m_customParams8.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentX] = m_customParams1.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentY] = m_customParams1.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentZ] = m_customParams1.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex1][RhiConstants::ComponentW] = m_customParams1.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentX] = m_customParams2.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentY] = m_customParams2.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentZ] = m_customParams2.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex2][RhiConstants::ComponentW] = m_customParams2.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentX] = m_customParams3.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentY] = m_customParams3.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentZ] = m_customParams3.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex3][RhiConstants::ComponentW] = m_customParams3.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentX] = m_customParams4.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentY] = m_customParams4.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentZ] = m_customParams4.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex4][RhiConstants::ComponentW] = m_customParams4.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentX] = m_customParams5.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentY] = m_customParams5.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentZ] = m_customParams5.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex5][RhiConstants::ComponentW] = m_customParams5.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentX] = m_customParams6.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentY] = m_customParams6.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentZ] = m_customParams6.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex6][RhiConstants::ComponentW] = m_customParams6.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentX] = m_customParams7.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentY] = m_customParams7.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentZ] = m_customParams7.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex7][RhiConstants::ComponentW] = m_customParams7.w();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentX] = m_customParams8.x();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentY] = m_customParams8.y();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentZ] = m_customParams8.z();
+    m_uniforms.base.customParams[RhiConstants::UniformVecIndex8][RhiConstants::ComponentW] = m_customParams8.w();
 
     auto setColor = [this](int idx, const QColor& c) {
-        m_uniforms.customColors[idx][0] = static_cast<float>(c.redF());
-        m_uniforms.customColors[idx][1] = static_cast<float>(c.greenF());
-        m_uniforms.customColors[idx][2] = static_cast<float>(c.blueF());
-        m_uniforms.customColors[idx][3] = static_cast<float>(c.alphaF());
+        m_uniforms.base.customColors[idx][0] = static_cast<float>(c.redF());
+        m_uniforms.base.customColors[idx][1] = static_cast<float>(c.greenF());
+        m_uniforms.base.customColors[idx][2] = static_cast<float>(c.blueF());
+        m_uniforms.base.customColors[idx][3] = static_cast<float>(c.alphaF());
     };
     setColor(0, m_customColor1);
     setColor(1, m_customColor2);
@@ -143,40 +143,40 @@ void ZoneShaderNodeRhi::syncUniformsFromData()
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
-                m_uniforms.iChannelResolution[i][0] = static_cast<float>(ps.width());
-                m_uniforms.iChannelResolution[i][1] = static_cast<float>(ps.height());
+                m_uniforms.base.iChannelResolution[i][0] = static_cast<float>(ps.width());
+                m_uniforms.base.iChannelResolution[i][1] = static_cast<float>(ps.height());
             } else if (!multiBufferMode && i == 0 && m_bufferTexture) {
                 QSize ps = m_bufferTexture->pixelSize();
-                m_uniforms.iChannelResolution[0][0] = static_cast<float>(ps.width());
-                m_uniforms.iChannelResolution[0][1] = static_cast<float>(ps.height());
+                m_uniforms.base.iChannelResolution[0][0] = static_cast<float>(ps.width());
+                m_uniforms.base.iChannelResolution[0][1] = static_cast<float>(ps.height());
             } else {
-                m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1
-                m_uniforms.iChannelResolution[i][1] = 1.0f;
+                m_uniforms.base.iChannelResolution[i][0] = 1.0f; // dummy 1x1
+                m_uniforms.base.iChannelResolution[i][1] = 1.0f;
             }
         } else {
-            m_uniforms.iChannelResolution[i][0] = 1.0f; // dummy 1x1 for unbound channels
-            m_uniforms.iChannelResolution[i][1] = 1.0f;
+            m_uniforms.base.iChannelResolution[i][0] = 1.0f; // dummy 1x1 for unbound channels
+            m_uniforms.base.iChannelResolution[i][1] = 1.0f;
         }
-        m_uniforms.iChannelResolution[i][2] = 0.0f;
-        m_uniforms.iChannelResolution[i][3] = 0.0f;
+        m_uniforms.base.iChannelResolution[i][2] = 0.0f;
+        m_uniforms.base.iChannelResolution[i][3] = 0.0f;
     }
-    m_uniforms.iAudioSpectrumSize = m_audioSpectrum.size();
+    m_uniforms.base.iAudioSpectrumSize = m_audioSpectrum.size();
 
     // iFlipBufferY set in uploadDirtyTextures() where rhi is available
-    m_uniforms._pad_after_audioSpectrum[0] = 0;
-    m_uniforms._pad_after_audioSpectrum[1] = 0;
+    m_uniforms.base._pad_after_audioSpectrum[0] = 0;
+    m_uniforms.base._pad_after_audioSpectrum[1] = 0;
 
     // User texture resolutions (bindings 7-10)
     for (int i = 0; i < 4; ++i) {
         if (i < kMaxUserTextures && m_userTextures[i] && !m_userTextureImages[i].isNull()) {
-            m_uniforms.iTextureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
-            m_uniforms.iTextureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
+            m_uniforms.base.iTextureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
+            m_uniforms.base.iTextureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
         } else {
-            m_uniforms.iTextureResolution[i][0] = 1.0f;
-            m_uniforms.iTextureResolution[i][1] = 1.0f;
+            m_uniforms.base.iTextureResolution[i][0] = 1.0f;
+            m_uniforms.base.iTextureResolution[i][1] = 1.0f;
         }
-        m_uniforms.iTextureResolution[i][2] = 0.0f;
-        m_uniforms.iTextureResolution[i][3] = 0.0f;
+        m_uniforms.base.iTextureResolution[i][2] = 0.0f;
+        m_uniforms.base.iTextureResolution[i][3] = 0.0f;
     }
 }
 
@@ -227,7 +227,7 @@ void ZoneShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         // NOTE: If a future RHI backend (e.g. Metal, Direct3D) does not need this
         // flip, this must become conditional again (check rhi->isYUpInFramebuffer()
         // and backend-specific viewport behavior).
-        m_uniforms.iFlipBufferY = 1;
+        m_uniforms.base.iFlipBufferY = 1;
         QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
         if (batch) {
             if (!m_didFullUploadOnce) {

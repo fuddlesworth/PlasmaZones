@@ -1,0 +1,5 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+// Stub — will be populated by generalizing PlasmaZones ZoneShaderNodeRhi
+// during Phase 2 migration. Key change: BaseUniforms + IUniformExtension.

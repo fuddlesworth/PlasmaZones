@@ -1,52 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+// Compatibility wrapper — implementation moved to PhosphorShell library.
+// PlasmaZones callers still use registerLayerShellPlugin() which now
+// registers the PhosphorShell QPA plugin.
+
 #pragma once
 
-#include <QByteArray>
-#include <QFile>
-#include <QString>
+#include <PhosphorShell/LayerShellPluginLoader.h>
 
 namespace PlasmaZones {
 
-/// Call before QGuiApplication to register the pz-layer-shell QPA plugin.
-/// Lightweight header — does not pull in Qt Wayland private headers.
-/// Respects any existing QT_WAYLAND_SHELL_INTEGRATION value (e.g. for debugging).
-/// Only sets the env var when WAYLAND_DISPLAY is set (proves a compositor is running).
-///
-/// Note: if the daemon is started before the compositor sets WAYLAND_DISPLAY
-/// (e.g. early systemd unit ordering), this will not register the plugin and
-/// overlays will fall back to xdg_toplevel. Ensure the daemon's systemd unit
-/// has After=graphical-session.target or equivalent to guarantee the compositor
-/// is running before the daemon starts.
+/// Registers the PhosphorShell QPA plugin for Wayland layer-shell surfaces.
+/// Call before QGuiApplication construction.
 inline void registerLayerShellPlugin()
 {
-    if (qEnvironmentVariableIsEmpty("QT_WAYLAND_SHELL_INTEGRATION")) {
-        // WAYLAND_DISPLAY proves a compositor is actually running. We do NOT fall
-        // back to XDG_SESSION_TYPE because it can be "wayland" on systemd machines
-        // even in SSH sessions or before the compositor starts, and XDG_RUNTIME_DIR
-        // is always set on systemd — so that combination is too permissive.
-        //
-        // Also check XDG_RUNTIME_DIR/wayland-0 as a fallback: some compositors
-        // (e.g. COSMIC) or systemd socket-activation setups may not set
-        // WAYLAND_DISPLAY but the socket exists at the default path.
-        if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY")) {
-            qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
-        } else {
-            // Fallback: check for common Wayland sockets. Compositors may use any
-            // socket name (wayland-0, wayland-1 for nested sessions, or custom names).
-            // We check the two most common defaults. COSMIC and some socket-activation
-            // setups may not set WAYLAND_DISPLAY but the socket still exists.
-            const QByteArray runtimeDir = qgetenv("XDG_RUNTIME_DIR");
-            if (!runtimeDir.isEmpty()) {
-                const QString runtimePath = QString::fromUtf8(runtimeDir);
-                if (QFile::exists(runtimePath + QStringLiteral("/wayland-0"))
-                    || QFile::exists(runtimePath + QStringLiteral("/wayland-1"))) {
-                    qputenv("QT_WAYLAND_SHELL_INTEGRATION", "pz-layer-shell");
-                }
-            }
-        }
-    }
+    PhosphorShell::registerLayerShellPlugin();
 }
 
 } // namespace PlasmaZones

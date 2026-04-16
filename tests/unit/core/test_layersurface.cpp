@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "core/layersurface.h"
+
+// Full definition needed for tests that directly construct LayerShellIntegration.
+// Include the PhosphorShell private header (full definition) then the
+// PlasmaZones compatibility wrapper (using alias into PlasmaZones namespace).
+#include "../../../phosphorshell/src/qpa/layershellintegration.h"
 #include "core/qpa/layershellintegration.h"
 
 #include <QTest>
@@ -108,7 +113,7 @@ private Q_SLOTS:
         QCOMPARE(surface->anchors(), LayerSurface::Anchors());
         QCOMPARE(surface->exclusiveZone(), int32_t(-1));
         QCOMPARE(surface->keyboardInteractivity(), LayerSurface::KeyboardInteractivityNone);
-        QCOMPARE(surface->scope(), QStringLiteral("plasmazones"));
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorshell"));
         QCOMPARE(surface->screen(), nullptr);
         QCOMPARE(surface->margins(), QMargins());
     }
@@ -233,7 +238,7 @@ private Q_SLOTS:
         surface->setScope(QStringLiteral("new-scope"));
         // setScope after show returns early without emitting (scope is immutable)
         QCOMPARE(spy.count(), 0);
-        QCOMPARE(surface->scope(), QStringLiteral("plasmazones")); // original default unchanged
+        QCOMPARE(surface->scope(), QStringLiteral("phosphorshell")); // original default unchanged
         window.close();
     }
 
@@ -389,7 +394,7 @@ private Q_SLOTS:
         QCOMPARE(window.property(LayerSurfaceProps::Anchors).toInt(), 0); // AnchorNone
         QCOMPARE(window.property(LayerSurfaceProps::ExclusiveZone).toInt(), -1);
         QCOMPARE(window.property(LayerSurfaceProps::Keyboard).toInt(), 0); // None
-        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("plasmazones"));
+        QCOMPARE(window.property(LayerSurfaceProps::Scope).toString(), QStringLiteral("phosphorshell"));
         QCOMPARE(window.property(LayerSurfaceProps::MarginsLeft).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsTop).toInt(), 0);
         QCOMPARE(window.property(LayerSurfaceProps::MarginsRight).toInt(), 0);

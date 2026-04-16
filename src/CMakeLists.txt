@@ -14,32 +14,8 @@ qt_policy(SET QTP0004 NEW)
 add_subdirectory(shared)
 add_subdirectory(compositor-common)
 
-# Generate wlr-layer-shell Wayland protocol client code
-set(_pz_proto_dir ${CMAKE_CURRENT_SOURCE_DIR}/core/protocols)
-set(_pz_gen_dir ${CMAKE_CURRENT_BINARY_DIR}/generated-protocols)
-file(MAKE_DIRECTORY ${_pz_gen_dir})
-
-add_custom_command(
-    OUTPUT ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
-           ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    COMMAND ${WAYLAND_SCANNER} client-header
-            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-client-protocol.h
-    COMMAND ${WAYLAND_SCANNER} private-code
-            ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-            ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    DEPENDS ${_pz_proto_dir}/wlr-layer-shell-unstable-v1.xml
-    COMMENT "Generating wlr-layer-shell Wayland protocol code"
-)
-
-# Generated protocol C code: skip PCH and unity build since it's plain C
-set_source_files_properties(
-    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/core/qpa/xdg_popup_stub.c
-    PROPERTIES
-        SKIP_PRECOMPILE_HEADERS ON
-        SKIP_UNITY_BUILD_INCLUSION ON
-)
+# Wayland layer-shell protocol code generation moved to PhosphorShell library.
+# PlasmaZones uses PhosphorShell::LayerSurface via compatibility wrappers in core/.
 
 # Core library sources
 set(plasmazones_core_SRCS
@@ -246,20 +222,10 @@ generate_export_header(plasmazones_core
     EXPORT_MACRO_NAME PLASMAZONES_EXPORT
 )
 
-# Layer-shell: our QPA plugin (no LayerShellQt)
-# QPA files are excluded from unity build to avoid include conflicts
-# with Qt Wayland private headers and the wayland-scanner-generated protocol header.
-target_sources(plasmazones_core PRIVATE
-    core/qpa/layershellintegration.cpp
-    core/qpa/layershellintegration.h
-    core/qpa/layershellwindow.cpp
-    core/qpa/layershellwindow.h
-    core/qpa/xdg_popup_stub.c
-    ${_pz_gen_dir}/wlr-layer-shell-unstable-v1-protocol.c
-)
+# Layer-shell: implementation moved to PhosphorShell library.
+# The compatibility wrappers (core/qpa/*.h) are header-only — no sources to compile.
+# PhosphorShell provides the QPA plugin, protocol code, and LayerSurface implementation.
 set_source_files_properties(
-    core/qpa/layershellintegration.cpp
-    core/qpa/layershellwindow.cpp
     config/configdefaults.cpp
     # Exclude from unity build to avoid forward-declaration conflicts
     # between AutotileEngine.h (forward-declares Settings) and
@@ -269,7 +235,7 @@ set_source_files_properties(
     dbus/windowdragadaptor/drop.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
 )
-target_include_directories(plasmazones_core PRIVATE ${_pz_gen_dir})
+# PhosphorShell headers are available via PUBLIC link dependency
 
 target_link_libraries(plasmazones_core
     PUBLIC
@@ -280,6 +246,7 @@ target_link_libraries(plasmazones_core
         Qt6::Gui
         Qt6::DBus
         plasmazones_compositor_common
+        PhosphorShell::PhosphorShell
     PRIVATE
         Wayland::Client
         Qt6::Concurrent
@@ -366,33 +333,11 @@ install(TARGETS plasmazones_core
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Layer Shell Qt Plugin (installed to Qt's wayland-shell-integration plugin dir)
+# Layer Shell Qt Plugin — now provided by PhosphorShell library
 # ═══════════════════════════════════════════════════════════════════════════════
-add_library(pz-layer-shell MODULE core/qpa/pzlayershellplugin.cpp)
-target_link_libraries(pz-layer-shell PRIVATE
-    plasmazones_core
-    Qt6::WaylandClientPrivate
-    Wayland::Client
-)
-target_include_directories(pz-layer-shell PRIVATE ${_pz_gen_dir})
-set_target_properties(pz-layer-shell PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins/wayland-shell-integration
-    INSTALL_RPATH "$ORIGIN/../../${CMAKE_INSTALL_LIBDIR}"
-)
-# Install to Qt's plugin dir (query via QT6_INSTALL_PLUGINS or fallback)
-if(NOT DEFINED QT6_INSTALL_PLUGINS)
-    get_target_property(QT6_INSTALL_PLUGINS Qt6::Core QT_INSTALL_PLUGINS)
-    if(NOT QT6_INSTALL_PLUGINS)
-        set(QT6_INSTALL_PLUGINS "${KDE_INSTALL_QTPLUGINDIR}")
-    endif()
-    if(NOT QT6_INSTALL_PLUGINS)
-        message(FATAL_ERROR "Cannot determine Qt plugin install directory. "
-            "Set QT6_INSTALL_PLUGINS or ensure ECM/KDE_INSTALL_QTPLUGINDIR is available.")
-    endif()
-endif()
-install(TARGETS pz-layer-shell
-    DESTINATION ${QT6_INSTALL_PLUGINS}/wayland-shell-integration
-)
+# The QPA plugin (phosphorshell-qpa) is built and installed by phosphorshell/CMakeLists.txt.
+# PlasmaZones::registerLayerShellPlugin() forwards to PhosphorShell::registerLayerShellPlugin()
+# which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorshell.
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Rendering Library (ZoneShaderItem, shared between daemon and editor)

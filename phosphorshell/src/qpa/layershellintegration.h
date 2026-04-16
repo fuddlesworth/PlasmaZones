@@ -1,0 +1,103 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#pragma once
+
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+#include <QCoreApplication>
+#include <QThread>
+#include <QtWaylandClient/private/qwaylandshellintegration_p.h>
+#include <phosphorshell_export.h>
+#include "wlr_layer_shell_protocol.h"
+
+namespace PhosphorShell {
+
+/// QPA shell integration plugin that binds zwlr_layer_shell_v1 and creates
+/// layer surfaces for windows marked with the _ps_layer_shell property.
+/// For regular (non-layer-shell) windows, delegates to Qt's built-in xdg-shell
+/// integration so they get proper xdg_toplevel/xdg_popup roles.
+class PHOSPHORSHELL_EXPORT LayerShellIntegration : public QtWaylandClient::QWaylandShellIntegration
+{
+public:
+    Q_DISABLE_COPY_MOVE(LayerShellIntegration)
+
+    LayerShellIntegration();
+    ~LayerShellIntegration() override;
+
+    bool initialize(QtWaylandClient::QWaylandDisplay* display) override;
+    QtWaylandClient::QWaylandShellSurface* createShellSurface(QtWaylandClient::QWaylandWindow* window) override;
+
+    struct zwlr_layer_shell_v1* layerShell() const
+    {
+        return m_globalAvailable ? m_layerShell : nullptr;
+    }
+
+    /// The protocol version we negotiated with the compositor (1-4).
+    /// Callers should check this before using version-gated features:
+    ///   v2: set_layer (runtime layer changes)
+    ///   v3: destroy request
+    ///   v4: on_demand keyboard interactivity
+    uint32_t boundVersion() const
+    {
+        return m_boundVersion;
+    }
+
+    /// Access the singleton instance (available after Qt loads the plugin).
+    /// Must only be called from the GUI thread.
+    static LayerShellIntegration* instance()
+    {
+        Q_ASSERT(QThread::currentThread() == qApp->thread());
+        return s_instance;
+    }
+
+    // Public for C callback struct initialization
+    static void registryHandler(void* data, struct wl_registry* registry, uint32_t id, const char* interface,
+                                uint32_t version);
+    static void registryRemoveHandler(void* data, struct wl_registry* registry, uint32_t id);
+
+    /// Register a callback invoked when the compositor removes the
+    /// zwlr_layer_shell_v1 global (compositor crash/restart).
+    /// Returns an opaque ID that can be passed to removeGlobalRemovedCallback()
+    /// to prevent use-after-free when the caller is destroyed before the event fires.
+    using GlobalRemovedCallback = std::function<void()>;
+    using CallbackId = uint64_t;
+    /// Note: if the global has already been removed (m_globalAvailable == false),
+    /// the callback will never fire. Callers registering after removal should
+    /// check layerShell() == nullptr and handle the "already gone" case directly.
+    CallbackId addGlobalRemovedCallback(GlobalRemovedCallback cb);
+    void removeGlobalRemovedCallback(CallbackId id);
+
+    /// Access the Wayland display for explicit flushing after surface creation.
+    QtWaylandClient::QWaylandDisplay* display() const
+    {
+        return m_display;
+    }
+
+private:
+    /// Fallback xdg-shell integration for regular (non-layer-shell) windows.
+    /// Loaded lazily on first use via Qt's shell integration factory.
+    std::unique_ptr<QtWaylandClient::QWaylandShellIntegration> m_xdgShell;
+    QtWaylandClient::QWaylandDisplay* m_display = nullptr;
+
+    struct zwlr_layer_shell_v1* m_layerShell = nullptr;
+    struct wl_registry* m_registry = nullptr;
+    uint32_t m_layerShellId = 0;
+    uint32_t m_boundVersion = 0;
+    // Tracks whether the compositor's global is still advertised.
+    // When false, layerShell() returns nullptr to prevent new surface creation,
+    // but m_layerShell is kept non-null for proper cleanup in the destructor
+    // (avoids leaking the wl_proxy when the global is removed at runtime).
+    bool m_globalAvailable = false;
+
+    std::vector<std::pair<CallbackId, GlobalRemovedCallback>> m_globalRemovedCallbacks;
+    CallbackId m_nextCallbackId = 1;
+
+    // GUI-thread-only singleton. All access (initialize(), instance(), destructor)
+    // happens on Qt's main thread. Do NOT access from worker threads.
+    static LayerShellIntegration* s_instance;
+};
+
+} // namespace PhosphorShell
