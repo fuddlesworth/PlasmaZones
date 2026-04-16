@@ -10,6 +10,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QStandardPaths>
 #include <QVariantMap>
 
 namespace PlasmaZones {
@@ -21,7 +22,15 @@ namespace PlasmaZones {
 ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     : PhosphorRendering::ShaderEffect(parent)
 {
-    // ShaderEffect constructor already sets ItemHasContents and sceneGraph cleanup
+    // Set PlasmaZones-specific shader include paths so that #include <common.glsl>
+    // in zone.vert/effect.frag resolves to the system shaders directory.
+    const QString systemShaderDir = QStandardPaths::locate(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
+    QStringList includePaths;
+    if (!systemShaderDir.isEmpty()) {
+        includePaths.append(systemShaderDir);
+    }
+    setShaderIncludePaths(includePaths);
 }
 
 ZoneShaderItem::~ZoneShaderItem()
