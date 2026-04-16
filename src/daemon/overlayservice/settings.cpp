@@ -96,6 +96,7 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
         if (oldManager) {
             disconnect(oldManager, &LayoutManager::activeLayoutChanged, this, nullptr);
             disconnect(oldManager, &LayoutManager::layoutAssigned, this, nullptr);
+            disconnect(oldManager, &LayoutManager::layoutAdded, this, nullptr);
         }
     }
     // Disconnect any per-Layout connections to active layouts the previous manager owned
@@ -124,10 +125,27 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
                         observeLayoutForLiveEdits(layout);
                         refreshVisibleWindows();
                     });
+            // Observe newly-created layouts so edits reach the overlay before
+            // the layout is ever activated/assigned (e.g. user creates a new
+            // layout in the editor and immediately tweaks its shader).
+            connect(manager, &LayoutManager::layoutAdded, this, [this](Layout* layout) {
+                observeLayoutForLiveEdits(layout);
+            });
 
-            // Observe the current active layout immediately so live edits to it
-            // (shader id/params, zones, appearance) propagate without waiting for
-            // a layout switch.
+            // Observe EVERY loaded layout, not just the globally-active one.
+            // A per-screen-assigned layout loaded from disk at startup never
+            // triggers activeLayoutChanged / layoutAssigned, so its
+            // layoutModified signal would otherwise be invisible to us —
+            // editor edits to its shader/zones required a daemon restart to
+            // take effect. Observing the whole set is cheap (one signal
+            // connection per layout) and idempotent thanks to the dedupe
+            // pass in observeLayoutForLiveEdits.
+            for (Layout* layout : manager->layouts()) {
+                observeLayoutForLiveEdits(layout);
+            }
+            // Redundant after the loop, but keeps the intent obvious in case
+            // activeLayout() is ever loaded through a different path than
+            // LayoutManager::layouts().
             observeLayoutForLiveEdits(manager->activeLayout());
         }
     }
