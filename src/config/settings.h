@@ -393,7 +393,7 @@ public:
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
 
-    // Virtual Screen Swap / Rotate (Meta+Ctrl+Alt+Shift+Arrow, Meta+Ctrl+Shift+[/])
+    // Virtual Screen Swap / Rotate (Meta+Ctrl+Shift+Arrow, Meta+Ctrl+Shift+[/])
     Q_PROPERTY(QString swapVirtualScreenLeftShortcut READ swapVirtualScreenLeftShortcut WRITE
                    setSwapVirtualScreenLeftShortcut NOTIFY swapVirtualScreenLeftShortcutChanged)
     Q_PROPERTY(QString swapVirtualScreenRightShortcut READ swapVirtualScreenRightShortcut WRITE

@@ -589,7 +589,7 @@ void ShortcutManager::setupSwapVirtualScreenShortcuts()
     SETUP_SHORTCUT(m_swapVirtualScreenDownAction, "Swap Virtual Screen Down", "swap_virtual_screen_down",
                    swapVirtualScreenDownShortcut, &ShortcutManager::onSwapVirtualScreenDown);
 
-    qCInfo(lcShortcuts) << "Swap virtual screen shortcuts registered (Meta+Ctrl+Alt+Shift+Arrow)";
+    qCInfo(lcShortcuts) << "Swap virtual screen shortcuts registered (Meta+Ctrl+Shift+Arrow)";
 }
 
 void ShortcutManager::setupRotateVirtualScreensShortcuts()

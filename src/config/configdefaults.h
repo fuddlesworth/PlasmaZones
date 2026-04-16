@@ -1251,19 +1251,19 @@ public:
 
     static QString swapVirtualScreenLeftShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Alt+Shift+Left");
+        return QStringLiteral("Meta+Ctrl+Shift+Left");
     }
     static QString swapVirtualScreenRightShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Alt+Shift+Right");
+        return QStringLiteral("Meta+Ctrl+Shift+Right");
     }
     static QString swapVirtualScreenUpShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Alt+Shift+Up");
+        return QStringLiteral("Meta+Ctrl+Shift+Up");
     }
     static QString swapVirtualScreenDownShortcut()
     {
-        return QStringLiteral("Meta+Ctrl+Alt+Shift+Down");
+        return QStringLiteral("Meta+Ctrl+Shift+Down");
     }
     static QString rotateVirtualScreensClockwiseShortcut()
     {
