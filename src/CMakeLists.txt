@@ -108,6 +108,8 @@ set(plasmazones_core_SRCS
     config/configbackends.cpp
     config/perscreenresolver.h
     config/perscreenresolver.cpp
+    config/settingsschema.h
+    config/settingsschema.cpp
     config/configmigration.h
     config/configmigration.cpp
     config/colorimporter.cpp

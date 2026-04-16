@@ -6,6 +6,7 @@
 #include "configdefaults.h"
 #include "configbackends.h"
 #include "perscreenresolver.h"
+#include "settingsschema.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -31,6 +32,7 @@ Settings::Settings(QObject* parent)
     : ISettings(parent)
     , m_ownedBackend(createDefaultConfigBackend())
     , m_configBackend(m_ownedBackend.get())
+    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
 {
     load();
 }
@@ -38,6 +40,7 @@ Settings::Settings(QObject* parent)
 Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
+    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
 {
     load();
 }
@@ -179,20 +182,9 @@ void Settings::load()
             rendering->readString(ConfigDefaults::backendKey(), ConfigDefaults::renderingBackend()));
     }
 
-    // Shaders (small enough to stay inline)
-    {
-        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        m_enableShaderEffects = shaders->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::enableShaderEffects());
-        m_shaderFrameRate = qBound(ConfigDefaults::shaderFrameRateMin(),
-                                   shaders->readInt(ConfigDefaults::frameRateKey(), ConfigDefaults::shaderFrameRate()),
-                                   ConfigDefaults::shaderFrameRateMax());
-        m_enableAudioVisualizer =
-            shaders->readBool(ConfigDefaults::audioVisualizerKey(), ConfigDefaults::enableAudioVisualizer());
-        m_audioSpectrumBarCount = qBound(
-            ConfigDefaults::audioSpectrumBarCountMin(),
-            shaders->readInt(ConfigDefaults::audioSpectrumBarCountKey(), ConfigDefaults::audioSpectrumBarCount()),
-            ConfigDefaults::audioSpectrumBarCountMax());
-    }
+    // Shaders is backed by m_store — nothing to load here. Getters read
+    // through the store on demand, with the schema's validator clamping
+    // FrameRate and BarCount to their configured ranges.
 
     loadShortcutConfig(m_configBackend);
     loadAutotilingConfig(m_configBackend);
@@ -344,16 +336,76 @@ void Settings::save()
         rendering->writeString(ConfigDefaults::backendKey(), m_renderingBackend);
     }
 
-    // Shader Effects
-    {
-        auto shaders = m_configBackend->group(ConfigDefaults::shadersGroup());
-        shaders->writeBool(ConfigDefaults::enabledKey(), m_enableShaderEffects);
-        shaders->writeInt(ConfigDefaults::frameRateKey(), m_shaderFrameRate);
-        shaders->writeBool(ConfigDefaults::audioVisualizerKey(), m_enableAudioVisualizer);
-        shaders->writeInt(ConfigDefaults::audioSpectrumBarCountKey(), m_audioSpectrumBarCount);
-    }
+    // Shaders is backed by m_store — setters write to the backend
+    // immediately, so save() only needs to flush alongside everything else.
 
     m_configBackend->sync();
+}
+
+// ── Shaders (PhosphorConfig::Store-backed) ──────────────────────────────────
+
+bool Settings::enableShaderEffects() const
+{
+    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey());
+}
+
+void Settings::setEnableShaderEffects(bool enable)
+{
+    if (enableShaderEffects() == enable) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::enabledKey(), enable);
+    Q_EMIT enableShaderEffectsChanged();
+    Q_EMIT settingsChanged();
+}
+
+int Settings::shaderFrameRate() const
+{
+    return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::frameRateKey());
+}
+
+void Settings::setShaderFrameRate(int fps)
+{
+    // Schema validator clamps on write, so a read-back after the write gives
+    // the canonical value even if the caller passed something out of range.
+    const int before = shaderFrameRate();
+    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::frameRateKey(), fps);
+    if (shaderFrameRate() == before) {
+        return;
+    }
+    Q_EMIT shaderFrameRateChanged();
+    Q_EMIT settingsChanged();
+}
+
+bool Settings::enableAudioVisualizer() const
+{
+    return m_store->read<bool>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey());
+}
+
+void Settings::setEnableAudioVisualizer(bool enable)
+{
+    if (enableAudioVisualizer() == enable) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioVisualizerKey(), enable);
+    Q_EMIT enableAudioVisualizerChanged();
+    Q_EMIT settingsChanged();
+}
+
+int Settings::audioSpectrumBarCount() const
+{
+    return m_store->read<int>(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey());
+}
+
+void Settings::setAudioSpectrumBarCount(int count)
+{
+    const int before = audioSpectrumBarCount();
+    m_store->write(ConfigDefaults::shadersGroup(), ConfigDefaults::audioSpectrumBarCountKey(), count);
+    if (audioSpectrumBarCount() == before) {
+        return;
+    }
+    Q_EMIT audioSpectrumBarCountChanged();
+    Q_EMIT settingsChanged();
 }
 
 // ── reset / color helpers ────────────────────────────────────────────────────

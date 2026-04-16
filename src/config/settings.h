@@ -8,6 +8,9 @@
 #include "../core/virtualscreen.h"
 #include "configdefaults.h"
 #include "configbackends.h"
+
+#include <PhosphorConfig/Store.h>
+
 #include <memory>
 #include <optional>
 #include <QFont>
@@ -1210,26 +1213,18 @@ public:
     }
     void setRenderingBackend(const QString& backend) override;
 
-    // Shader Effects
-    bool enableShaderEffects() const override
-    {
-        return m_enableShaderEffects;
-    }
+    // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Getters read through the store (validator clamps FrameRate and BarCount
+    // ranges uniformly); setters route the write through the store so the
+    // value is coerced + persisted in memory on the same call, with
+    // syncConfig()/save() flushing to disk.
+    bool enableShaderEffects() const override;
     void setEnableShaderEffects(bool enable) override;
-    int shaderFrameRate() const override
-    {
-        return m_shaderFrameRate;
-    }
+    int shaderFrameRate() const override;
     void setShaderFrameRate(int fps) override;
-    bool enableAudioVisualizer() const override
-    {
-        return m_enableAudioVisualizer;
-    }
+    bool enableAudioVisualizer() const override;
     void setEnableAudioVisualizer(bool enable) override;
-    int audioSpectrumBarCount() const override
-    {
-        return m_audioSpectrumBarCount;
-    }
+    int audioSpectrumBarCount() const override;
     void setAudioSpectrumBarCount(int count) override;
 
     // Global Shortcuts (for KGlobalAccel)
@@ -1698,6 +1693,11 @@ private:
     // Config backend — owned (standalone) or non-owned (shared from Daemon)
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
+
+    // Declarative store built on top of the backend. Every setting migrated
+    // from hand-written load*/save* functions routes through here. See
+    // settingsschema.cpp for the current list of migrated groups.
+    std::unique_ptr<PhosphorConfig::Store> m_store;
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
@@ -1860,11 +1860,7 @@ private:
     // Rendering
     QString m_renderingBackend = ConfigDefaults::renderingBackend();
 
-    // Shader Effects
-    bool m_enableShaderEffects = ConfigDefaults::enableShaderEffects();
-    int m_shaderFrameRate = ConfigDefaults::shaderFrameRate();
-    bool m_enableAudioVisualizer = ConfigDefaults::enableAudioVisualizer();
-    int m_audioSpectrumBarCount = ConfigDefaults::audioSpectrumBarCount();
+    // Shader Effects are stored in m_store; no cached members here.
 
     // Global Shortcuts (defaults from ConfigDefaults, canonical source)
     QString m_openEditorShortcut = ConfigDefaults::openEditorShortcut();

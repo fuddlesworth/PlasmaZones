@@ -642,15 +642,9 @@ void Settings::setRenderingBackend(const QString& backend)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Shader Effects
-// ═══════════════════════════════════════════════════════════════════════════════
-
-SETTINGS_SETTER(bool, EnableShaderEffects, m_enableShaderEffects, enableShaderEffectsChanged)
-SETTINGS_SETTER_CLAMPED(ShaderFrameRate, m_shaderFrameRate, shaderFrameRateChanged,
-                        ConfigDefaults::shaderFrameRateMin(), ConfigDefaults::shaderFrameRateMax())
-SETTINGS_SETTER(bool, EnableAudioVisualizer, m_enableAudioVisualizer, enableAudioVisualizerChanged)
-SETTINGS_SETTER_CLAMPED(AudioSpectrumBarCount, m_audioSpectrumBarCount, audioSpectrumBarCountChanged,
-                        ConfigDefaults::audioSpectrumBarCountMin(), ConfigDefaults::audioSpectrumBarCountMax())
+// Shader Effects — setters live in settings.cpp and route through
+// PhosphorConfig::Store (m_store). See settingsschema.cpp for the schema
+// and settings.cpp for the setter implementations.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shortcut setters
