@@ -23,14 +23,11 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
     m_transparentFallbackImage.fill(Qt::transparent);
 
-    // Set PlasmaZones-specific shader include paths
-    const QString systemShaderDir = QStandardPaths::locate(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
-    QStringList includePaths;
-    if (!systemShaderDir.isEmpty()) {
-        includePaths.append(systemShaderDir);
-    }
-    setShaderIncludePaths(includePaths);
+    // Set PlasmaZones-specific shader include paths (locateAll to get both
+    // user dir ~/.local/share and system dir /usr/share — locate() only returns
+    // the first match which may be the user dir that lacks common.glsl)
+    setShaderIncludePaths(QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory));
 }
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi() = default;

@@ -24,13 +24,11 @@ ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
 {
     // Set PlasmaZones-specific shader include paths so that #include <common.glsl>
     // in zone.vert/effect.frag resolves to the system shaders directory.
-    const QString systemShaderDir = QStandardPaths::locate(
+    // Use locateAll() because locate() stops at the first match (~/.local/share/
+    // which has user shaders but NOT common.glsl). We need the system dir too.
+    const QStringList allShaderDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
-    QStringList includePaths;
-    if (!systemShaderDir.isEmpty()) {
-        includePaths.append(systemShaderDir);
-    }
-    setShaderIncludePaths(includePaths);
+    setShaderIncludePaths(allShaderDirs);
 }
 
 ZoneShaderItem::~ZoneShaderItem()
@@ -334,6 +332,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
             // Set include paths for PlasmaZones shader system
             node->setShaderIncludePaths(shaderIncludePaths());
+            qCDebug(PlasmaZones::lcOverlay)
+                << "Shader include paths:" << shaderIncludePaths() << "vertPath:" << vertPath;
 
             // Clear old shader sources before loading new ones
             node->setVertexShaderSource(QString());
@@ -343,7 +343,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
             // Load vertex shader first - REQUIRED for zone rendering
             if (!vertPath.isEmpty() && QFile::exists(vertPath)) {
                 if (!node->loadVertexShader(vertPath)) {
-                    qCWarning(PlasmaZones::lcOverlay) << "Failed to load vertex shader:" << vertPath;
+                    qCWarning(PlasmaZones::lcOverlay)
+                        << "Failed to load vertex shader:" << vertPath << "error:" << node->shaderError();
                     loaded = false;
                 }
             } else {
