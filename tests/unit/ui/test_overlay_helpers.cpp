@@ -267,94 +267,95 @@ private Q_SLOTS:
     void testGetAnchorsForPosition_topLeft()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::TopLeft);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "TopLeft must have AnchorTop");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "TopLeft must have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "TopLeft must not have AnchorBottom");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "TopLeft must not have AnchorRight");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "TopLeft must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "TopLeft must have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom), "TopLeft must not have AnchorBottom");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "TopLeft must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_top()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Top);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Top must have AnchorTop");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "Top must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft),
                  "Top must have AnchorLeft (horizontal stretch)");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight),
                  "Top must have AnchorRight (horizontal stretch)");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "Top must not have AnchorBottom");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom), "Top must not have AnchorBottom");
     }
 
     void testGetAnchorsForPosition_topRight()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::TopRight);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "TopRight must have AnchorTop");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "TopRight must have AnchorRight");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "TopRight must not have AnchorLeft");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "TopRight must have AnchorTop");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "TopRight must have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "TopRight must not have AnchorLeft");
     }
 
     void testGetAnchorsForPosition_left()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Left);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "Left must have AnchorLeft");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Left must have AnchorTop (vertical stretch)");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "Left must have AnchorLeft");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop),
+                 "Left must have AnchorTop (vertical stretch)");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom),
                  "Left must have AnchorBottom (vertical stretch)");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "Left must not have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "Left must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_right()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Right);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "Right must have AnchorRight");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "Right must have AnchorRight");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop),
                  "Right must have AnchorTop (vertical stretch)");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom),
                  "Right must have AnchorBottom (vertical stretch)");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "Right must not have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "Right must not have AnchorLeft");
     }
 
     void testGetAnchorsForPosition_bottomLeft()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::BottomLeft);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "BottomLeft must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "BottomLeft must have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "BottomLeft must not have AnchorTop");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "BottomLeft must not have AnchorRight");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom), "BottomLeft must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "BottomLeft must have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "BottomLeft must not have AnchorTop");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "BottomLeft must not have AnchorRight");
     }
 
     void testGetAnchorsForPosition_bottom()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Bottom);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "Bottom must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom), "Bottom must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft),
                  "Bottom must have AnchorLeft (horizontal stretch)");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight),
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight),
                  "Bottom must have AnchorRight (horizontal stretch)");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "Bottom must not have AnchorTop");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "Bottom must not have AnchorTop");
     }
 
     void testGetAnchorsForPosition_bottomRight()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::BottomRight);
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorBottom), "BottomRight must have AnchorBottom");
-        QVERIFY2(anchors.testFlag(PlasmaZones::LayerSurface::AnchorRight), "BottomRight must have AnchorRight");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorLeft), "BottomRight must not have AnchorLeft");
-        QVERIFY2(!anchors.testFlag(PlasmaZones::LayerSurface::AnchorTop), "BottomRight must not have AnchorTop");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorBottom), "BottomRight must have AnchorBottom");
+        QVERIFY2(anchors.testFlag(PhosphorShell::LayerSurface::AnchorRight), "BottomRight must have AnchorRight");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorLeft), "BottomRight must not have AnchorLeft");
+        QVERIFY2(!anchors.testFlag(PhosphorShell::LayerSurface::AnchorTop), "BottomRight must not have AnchorTop");
     }
 
     void testGetAnchorsForPosition_center()
     {
         auto anchors = getAnchorsForPosition(ZoneSelectorPosition::Center);
-        QCOMPARE(anchors, PlasmaZones::LayerSurface::AnchorAll);
+        QCOMPARE(anchors, PhosphorShell::LayerSurface::AnchorAll);
     }
 
     void testGetAnchorsForPosition_defaultFallback()
     {
         // Invalid enum value should fall through to default (Top anchors)
         auto def = getAnchorsForPosition(static_cast<ZoneSelectorPosition>(99));
-        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorTop));
-        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorLeft));
-        QVERIFY(def.testFlag(PlasmaZones::LayerSurface::AnchorRight));
+        QVERIFY(def.testFlag(PhosphorShell::LayerSurface::AnchorTop));
+        QVERIFY(def.testFlag(PhosphorShell::LayerSurface::AnchorLeft));
+        QVERIFY(def.testFlag(PhosphorShell::LayerSurface::AnchorRight));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

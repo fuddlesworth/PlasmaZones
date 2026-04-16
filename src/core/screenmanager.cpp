@@ -21,7 +21,9 @@
 #include <QDBusServiceWatcher>
 #include <QRegularExpression>
 
-#include "layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 

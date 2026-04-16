@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "layershellwindow.h"
 #include "layershellintegration.h"
-#include "../layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
 
 #include <QLoggingCategory>
 #include <qpa/qwindowsysteminterface.h>
@@ -12,9 +12,9 @@
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
 #include <QtWaylandClient/private/qwaylandwindow_p.h>
 
-Q_LOGGING_CATEGORY(lcLayerShellWindow, "plasmazones.qpa.layershellwindow")
+Q_LOGGING_CATEGORY(lcLayerShellWindow, "phosphorshell.qpa.layershellwindow")
 
-namespace PlasmaZones {
+namespace PhosphorShell {
 
 static const struct zwlr_layer_surface_v1_listener s_layerSurfaceListener = {
     .configure = LayerShellWindow::handleConfigure,
@@ -30,7 +30,7 @@ LayerShellWindow::LayerShellWindow(LayerShellIntegration* integration, QtWayland
 
     // Read initial properties from QWindow dynamic properties
     int layer = qwindow->property(LayerSurfaceProps::Layer).toInt();
-    // Scope default ("plasmazones") is set by LayerSurface::get() — if still empty
+    // Scope default ("phosphorshell") is set by LayerSurface::get() — if still empty
     // here, the caller explicitly wants no scope (or forgot to set one).
     QString scope = qwindow->property(LayerSurfaceProps::Scope).toString();
 
@@ -236,8 +236,8 @@ QSize LayerShellWindow::computeConfigureSize(uint32_t width, uint32_t height) co
 {
     // Layer-shell sizing contract:
     //   - Axis anchored to both edges (e.g. Left+Right): client sent set_size(0,_),
-    //     compositor decides the width → we MUST accept the configure width.
-    //   - Axis NOT doubly-anchored: client sent an explicit size → the configure
+    //     compositor decides the width -> we MUST accept the configure width.
+    //   - Axis NOT doubly-anchored: client sent an explicit size -> the configure
     //     echoes it back. We keep the app-specified size to avoid overwriting
     //     carefully calculated OSD/popup dimensions.
     //
@@ -284,8 +284,8 @@ void LayerShellWindow::updatePosition()
     }
 
     // Note: we use screen->geometry() (full output rect) here. For surfaces with
-    // exclusiveZone=-1 (all PlasmaZones overlays), this is correct — they ignore
-    // other surfaces' exclusive zones and stretch to full output edges.
+    // exclusiveZone=-1 (overlays), this is correct — they ignore other surfaces'
+    // exclusive zones and stretch to full output edges.
     // For exclusiveZone=0 (geometry sensors), the compositor actually positions the
     // surface within the *available* area (pushed by panels), so this calculation
     // may be slightly off. This is acceptable because the geometry sensor is invisible
@@ -378,7 +378,7 @@ void LayerShellWindow::handleConfigure(void* data, struct zwlr_layer_surface_v1*
 
     // Trigger Qt's exposure state update. QWaylandWindow::calculateExposure()
     // checks mShellSurface->isExposed() which returns m_configured (now true).
-    // updateExposure() transitions QWaylandWindow::mExposed from false→true
+    // updateExposure() transitions QWaylandWindow::mExposed from false->true
     // and sends the expose event that starts Qt's rendering pipeline.
     // Without this call, the layer surface exists at the Wayland level but Qt
     // never paints it — mExposed stays false and isExposed() returns false.
@@ -420,4 +420,4 @@ void LayerShellWindow::handleClosed(void* data, struct zwlr_layer_surface_v1* su
     self->m_waylandWindow = nullptr;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorShell

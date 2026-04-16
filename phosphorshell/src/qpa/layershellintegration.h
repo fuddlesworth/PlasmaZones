@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -10,16 +10,16 @@
 #include <QCoreApplication>
 #include <QThread>
 #include <QtWaylandClient/private/qwaylandshellintegration_p.h>
-#include "../plasmazones_export.h"
+#include <phosphorshell_export.h>
 #include "wlr_layer_shell_protocol.h"
 
-namespace PlasmaZones {
+namespace PhosphorShell {
 
 /// QPA shell integration plugin that binds zwlr_layer_shell_v1 and creates
-/// layer surfaces for windows marked with the _pz_layer_shell property.
+/// layer surfaces for windows marked with the _ps_layer_shell property.
 /// For regular (non-layer-shell) windows, delegates to Qt's built-in xdg-shell
 /// integration so they get proper xdg_toplevel/xdg_popup roles.
-class PLASMAZONES_EXPORT LayerShellIntegration : public QtWaylandClient::QWaylandShellIntegration
+class PHOSPHORSHELL_EXPORT LayerShellIntegration : public QtWaylandClient::QWaylandShellIntegration
 {
 public:
     Q_DISABLE_COPY_MOVE(LayerShellIntegration)
@@ -35,7 +35,7 @@ public:
         return m_globalAvailable ? m_layerShell : nullptr;
     }
 
-    /// The protocol version we negotiated with the compositor (1–4).
+    /// The protocol version we negotiated with the compositor (1-4).
     /// Callers should check this before using version-gated features:
     ///   v2: set_layer (runtime layer changes)
     ///   v3: destroy request
@@ -100,4 +100,4 @@ private:
     static LayerShellIntegration* s_instance;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorShell

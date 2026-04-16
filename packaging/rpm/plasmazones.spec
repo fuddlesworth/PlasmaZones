@@ -163,14 +163,19 @@ echo ""
 %{_bindir}/plasmazones-report
 
 # Libraries
+%{_libdir}/libPhosphorShell.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
 # KWin effect plugin
 %{_libdir}/qt6/plugins/kwin/effects/plugins/kwin_effect_plasmazones.so
 
-# Layer-shell QPA plugin
-%{_libdir}/qt6/plugins/wayland-shell-integration/pz-layer-shell.so
+# Layer-shell QPA plugin (PhosphorShell)
+%{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
+
+# PhosphorShell development headers and data
+%{_includedir}/PhosphorShell/
+%{_datadir}/phosphorshell/
 
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so

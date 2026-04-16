@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "wallpaperprovider.h"
-#include "logging.h"
+#include <PhosphorShell/IWallpaperProvider.h>
 
 #include <QDir>
 #include <QFile>
+#include <QLoggingCategory>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
@@ -13,7 +13,9 @@
 #include <QTextStream>
 #include <QUrl>
 
-namespace PlasmaZones {
+namespace PhosphorShell {
+
+Q_LOGGING_CATEGORY(lcWallpaper, "phosphorshell.wallpaper")
 
 namespace {
 
@@ -126,7 +128,7 @@ public:
                             imagePath = QUrl(imagePath).toLocalFile();
                         }
                         if (!imagePath.isEmpty() && QFile::exists(imagePath)) {
-                            qCDebug(lcCore) << "Plasma wallpaper:" << imagePath;
+                            qCDebug(lcWallpaper) << "Plasma wallpaper:" << imagePath;
                             return imagePath;
                         }
                     }
@@ -149,7 +151,7 @@ public:
         // Try swww first (dynamic wallpaper tool, works on Hyprland and sway)
         QString swwwResult = querySwww();
         if (!swwwResult.isEmpty()) {
-            qCDebug(lcCore) << "swww wallpaper:" << swwwResult;
+            qCDebug(lcWallpaper) << "swww wallpaper:" << swwwResult;
             return swwwResult;
         }
 
@@ -174,7 +176,7 @@ public:
                 int commaIdx = value.indexOf(QLatin1Char(','));
                 QString path = (commaIdx >= 0) ? value.mid(commaIdx + 1).trimmed() : value;
                 if (QFile::exists(path)) {
-                    qCDebug(lcCore) << "Hyprpaper wallpaper:" << path;
+                    qCDebug(lcWallpaper) << "Hyprpaper wallpaper:" << path;
                     return path;
                 }
             }
@@ -193,7 +195,7 @@ public:
     {
         QString result = querySwww();
         if (!result.isEmpty()) {
-            qCDebug(lcCore) << "swww wallpaper (sway):" << result;
+            qCDebug(lcWallpaper) << "swww wallpaper (sway):" << result;
             return result;
         }
         // swaybg doesn't provide a query interface — no reliable way to read it
@@ -241,7 +243,7 @@ public:
                 uri = QUrl(uri).toLocalFile();
             }
             if (QFile::exists(uri)) {
-                qCDebug(lcCore) << "GNOME wallpaper:" << uri;
+                qCDebug(lcWallpaper) << "GNOME wallpaper:" << uri;
                 return uri;
             }
         }
@@ -282,8 +284,8 @@ std::unique_ptr<IWallpaperProvider> createWallpaperProvider()
         return std::make_unique<GnomeWallpaperProvider>();
     }
 
-    qCDebug(lcCore) << "No wallpaper provider for desktop:" << desktop;
+    qCDebug(lcWallpaper) << "No wallpaper provider for desktop:" << desktop;
     return std::make_unique<NullWallpaperProvider>();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorShell

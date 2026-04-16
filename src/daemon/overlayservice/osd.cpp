@@ -13,7 +13,9 @@
 #include <QSet>
 #include <QQmlEngine>
 #include <QGuiApplication>
-#include "../../core/layersurface.h"
+#include <PhosphorShell/LayerSurface.h>
+using PhosphorShell::LayerSurface;
+namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 

@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -7,7 +7,7 @@
 #include <QtWaylandClient/private/qwaylandshellsurface_p.h>
 #include "wlr_layer_shell_protocol.h"
 
-namespace PlasmaZones {
+namespace PhosphorShell {
 
 class LayerShellIntegration;
 
@@ -34,7 +34,7 @@ public:
         return m_layerSurface != nullptr;
     }
 
-    // Apply current properties from LayerSurface → protocol
+    // Apply current properties from LayerSurface -> protocol
     void applyProperties();
 
     // Calculate and set the window's screen position from anchors/margins/output
@@ -60,4 +60,4 @@ private:
     uint64_t m_globalRemovedCallbackId = 0;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorShell

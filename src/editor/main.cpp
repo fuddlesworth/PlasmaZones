@@ -5,8 +5,8 @@
 #include "EditorLaunchController.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../core/qpa/layershellpluginloader.h"
-#include "../core/layersurface.h"
+#include <PhosphorShell/LayerShellPluginLoader.h>
+#include <PhosphorShell/LayerSurface.h>
 #include "../core/screen_resolver.h"
 #include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
@@ -65,7 +65,7 @@ int main(int argc, char* argv[])
     }
 
     // Register our layer-shell QPA plugin before QGuiApplication
-    PlasmaZones::registerLayerShellPlugin();
+    PhosphorShell::registerLayerShellPlugin();
 
     // Read rendering backend preference and set graphics API BEFORE QGuiApplication.
     // Must match daemon's backend so shader previews render identically.
@@ -95,14 +95,14 @@ int main(int argc, char* argv[])
 
     // Register metatype for QVariant storage (LayerSurface stores itself
     // as a QWindow dynamic property via QVariant::fromValue).
-    qRegisterMetaType<PlasmaZones::LayerSurface*>();
+    qRegisterMetaType<PhosphorShell::LayerSurface*>();
 
     // Verify the layer-shell QPA plugin loaded successfully. If not, shader preview
     // overlays will be created as xdg_toplevel (wrong stacking/anchoring).
-    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PlasmaZones::LayerSurface::isSupported()) {
+    if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorShell::LayerSurface::isSupported()) {
         qCCritical(lcEditor) << "Layer-shell QPA plugin did not initialize —"
                              << "shader preview overlays will use xdg_toplevel (wrong stacking)."
-                             << "Check that pz-layer-shell.so is installed to Qt's"
+                             << "Check that phosphorshell-qpa.so is installed to Qt's"
                              << "wayland-shell-integration plugin directory.";
     }
 

@@ -15,7 +15,8 @@
 #include <cstring>
 
 #include "../../core/logging.h"
-#include "../../core/shaderincluderesolver.h"
+#include <PhosphorShell/ShaderIncludeResolver.h>
+using PhosphorShell::ShaderIncludeResolver;
 
 #include <rhi/qshaderbaker.h>
 
@@ -153,8 +154,8 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     Q_ASSERT(item != nullptr);
     std::memset(&m_uniforms, 0, sizeof(m_uniforms));
     QMatrix4x4 identity;
-    std::memcpy(m_uniforms.qt_Matrix, identity.constData(), 16 * sizeof(float));
-    m_uniforms.qt_Opacity = 1.0f;
+    std::memcpy(m_uniforms.base.qt_Matrix, identity.constData(), 16 * sizeof(float));
+    m_uniforms.base.qt_Opacity = 1.0f;
     // Initialize all customParams to -1.0 (the "unset" sentinel).
     // Shaders use `>= 0.0` checks to distinguish set values from defaults.
     // Without this, unset params read as 0.0 and bypass the default fallback.

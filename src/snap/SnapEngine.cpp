@@ -4,6 +4,7 @@
 #include "SnapEngine.h"
 #include "autotile/AutotileEngine.h"
 #include "dbus/snapnavigationtargets.h"
+#include "dbus/windowtrackingadaptor.h"
 #include "dbus/zonedetectionadaptor.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"

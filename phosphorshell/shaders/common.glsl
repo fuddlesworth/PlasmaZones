@@ -1,26 +1,30 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// PlasmaZones shared shader helpers (GLSL #version 450).
-// Include from effect.frag or zone.vert with:
-//   #include <common.glsl>   (from global shaders dir)
-//   #include "common.glsl"   (from current shader dir if copied locally)
+// PhosphorShell shared shader helpers (GLSL #version 450).
+// Declares the base uniform block (672 bytes) and generic utilities.
+// Consumer-specific extensions (e.g. zone arrays) are declared in the
+// consumer's own common.glsl which #includes this file or redeclares
+// a larger UBO block.
 //
-// Bindings 0-1: UBO and labels. Channels (2-5) in multipass.glsl.
+// Include from effect.frag or vertex shader with:
+//   #include <common.glsl>
+//
+// Bindings: 0 = UBO. Channels (2-5) in multipass.glsl.
 
-#ifndef PLASMAZONES_COMMON_GLSL
-#define PLASMAZONES_COMMON_GLSL
+#ifndef PHOSPHORSHELL_COMMON_GLSL
+#define PHOSPHORSHELL_COMMON_GLSL
 
-layout(std140, binding = 0) uniform ZoneUniforms {
-    // ── Base uniforms (PhosphorShell::BaseUniforms, 672 bytes) ───────
+layout(std140, binding = 0) uniform ShaderUniforms {
+    // ── PhosphorShell::BaseUniforms (672 bytes) ──────────────────────
     mat4 qt_Matrix;
     float qt_Opacity;
     float iTime;            // wrapped lo part, always in [0, kShaderTimeWrap). Safe to use directly.
     float iTimeDelta;
     int iFrame;
     vec2 iResolution;
-    int zoneCount;
-    int highlightedCount;
+    int appField0;          // consumer-defined (e.g. PlasmaZones: zoneCount)
+    int appField1;          // consumer-defined (e.g. PlasmaZones: highlightedCount)
     vec4 iMouse;        // xy = pixels, zw = normalized (0-1), Qt Y-down (Y=0 at top)
     vec4 iDate;         // xyzw = year, month, day, seconds since midnight
     vec4 customParams[8];
@@ -28,24 +32,16 @@ layout(std140, binding = 0) uniform ZoneUniforms {
     vec2 iChannelResolution[4];
     int iAudioSpectrumSize;  // number of bars; 0 = disabled
     int iFlipBufferY;        // always 1; both OpenGL and Vulkan need Y-flip when sampling buffer textures
-    // std140: 8 bytes implicit padding here (int+int=8 → next vec2 array aligned to 16)
+    // std140: 8 bytes implicit padding here (int+int=8 -> next vec2 array aligned to 16)
     vec2 iTextureResolution[4]; // user texture sizes (bindings 7-10); std140 pads each vec2 to 16 bytes
     float iTimeHi;       // integer wrap offset (changes once per kShaderTimeWrap seconds)
-    // ── Zone extension (after BaseUniforms) ──────────────────────────
-    vec4 zoneRects[64];
-    vec4 zoneFillColors[64];
-    vec4 zoneBorderColors[64];
-    vec4 zoneParams[64];
 };
 
-// Shader time-wrap period — must match kShaderTimeWrap in zoneshadercommon.h
+// Shader time-wrap period — must match kShaderTimeWrap in BaseUniforms.h
 // iTime is wrapped into [0, K_TIME_WRAP); iTimeHi is the floor-offset. Without
 // wrapping, float32 ULP would grow past one frame at ~36h uptime and kill any
 // animation driven purely by iTime.
 const float K_TIME_WRAP = 1024.0;
-
-layout(binding = 1) uniform sampler2D uZoneLabels;
-
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -103,15 +99,6 @@ vec4 clampFragColor(vec4 color) {
     return vec4(clamp(color.rgb, 0.0, 1.0) * a, a);
 }
 
-// Zone rect helpers: rect.xy/zw are normalized 0-1; multiply by iResolution for pixels.
-vec2 zoneRectPos(vec4 rect) { return rect.xy * iResolution; }
-vec2 zoneRectSize(vec4 rect) { return rect.zw * iResolution; }
-
-// Local UV within zone (0-1). Safe division; use for zone-relative sampling.
-vec2 zoneLocalUV(vec2 fragCoord, vec2 rectPos, vec2 rectSize) {
-    return (fragCoord - rectPos) / max(rectSize, vec2(0.001));
-}
-
 // Signed distance to rounded box (half-extents b, corner radius r)
 float sdRoundedBox(vec2 p, vec2 b, float r) {
     vec2 q = abs(p) - b + r;
@@ -124,7 +111,7 @@ float sdRoundedBox(vec2 p, vec2 b, float r) {
 // and FMA fusion, causing visible artifacts in multipass/feedback rendering
 // where sub-ULP differences accumulate across passes.
 
-// Pseudo-random: 1D in → 1D out (float → float)
+// Pseudo-random: 1D in -> 1D out (float -> float)
 // All arithmetic is unsigned to avoid signed overflow (undefined on SPIR-V).
 // Bias by 0x80000000 to map negative floats to distinct hash values near zero.
 float hash11(float n) {
@@ -136,9 +123,9 @@ float hash11(float n) {
     return float(h) / 4294967295.0;
 }
 
-// Pseudo-random: 2D in → 1D out (vec2 → float)
+// Pseudo-random: 2D in -> 1D out (vec2 -> float)
 // Bias by 0x80000000 so negative inputs (e.g. centered UV coordinates) don't
-// collide with positive inputs near zero after int→uint truncation.
+// collide with positive inputs near zero after int->uint truncation.
 float hash21(vec2 p) {
     uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
     q = q * uvec2(1597334673u, 3812015801u);
@@ -148,7 +135,7 @@ float hash21(vec2 p) {
     return float(h) / 4294967295.0;
 }
 
-// Pseudo-random: 2D in → 2D out (vec2 → vec2, e.g. for particle positions)
+// Pseudo-random: 2D in -> 2D out (vec2 -> vec2, e.g. for particle positions)
 // Must use different expressions for x and y; p.x*p.y == p.y*p.x would yield diagonal-only output
 vec2 hash22(vec2 p) {
     uvec2 q = uvec2(ivec2(p)) + uvec2(2147483648u);
@@ -158,26 +145,6 @@ vec2 hash22(vec2 p) {
     h1 = ((h1 >> 16u) ^ h1) * 2654435769u;
     h2 = ((h2 >> 16u) ^ h2) * 2654435769u;
     return vec2(float(h1 >> 16u), float(h2 >> 16u)) / 65535.0;
-}
-
-// Composite pre-rendered zone labels over the current color (premult alpha over).
-// labelsTex: sampler at binding 1; uv: fragCoord / max(iResolution, vec2(0.0001)); no Y flip
-vec4 compositeLabels(vec4 color, vec2 uv, sampler2D labelsTex) {
-    vec4 labels = texture(labelsTex, uv);
-    color.rgb = color.rgb * (1.0 - labels.a) + labels.rgb;
-    color.a = labels.a + color.a * (1.0 - labels.a);
-    return color;
-}
-
-// UV for labels texture sampling. Use with compositeLabels(color, labelsUv(fragCoord), labelsTex).
-vec2 labelsUv(vec2 fragCoord) {
-    vec2 res = max(iResolution, vec2(0.0001));
-    return fragCoord / res;
-}
-
-// Composite labels at fragCoord using uZoneLabels (binding 1)
-vec4 compositeLabelsWithUv(vec4 color, vec2 fragCoord) {
-    return compositeLabels(color, labelsUv(fragCoord), uZoneLabels);
 }
 
 // Premultiplied alpha over blend: result = src over dst
@@ -237,23 +204,4 @@ float angularNoise(float angle, float freq, float seed) {
     return noise2D(circlePos + seed);
 }
 
-// ─── Highlight / vitality helpers ────────────────────────────────────────
-
-// Standard vitality factor for highlight vs dormant state.
-// Returns 1.0 when highlighted, 0.3 (subdued) otherwise.
-float zoneVitality(bool isHighlighted) {
-    return isHighlighted ? 1.0 : 0.3;
-}
-
-// Desaturate toward grayscale proportional to dormancy (1=full color, 0=gray).
-vec3 vitalityDesaturate(vec3 col, float vitality) {
-    float lum = luminance(col);
-    return mix(vec3(lum), col, 0.4 + 0.6 * vitality);
-}
-
-// Interpolate a parameter between dormant and active values.
-float vitalityScale(float dormant, float alive, float vitality) {
-    return mix(dormant, alive, vitality);
-}
-
-#endif // PLASMAZONES_COMMON_GLSL
+#endif // PHOSPHORSHELL_COMMON_GLSL
