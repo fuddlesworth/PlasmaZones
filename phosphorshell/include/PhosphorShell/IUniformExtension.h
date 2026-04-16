@@ -20,6 +20,13 @@ public:
     virtual ~IUniformExtension() = default;
 
     /// Size in bytes of the extension region (must respect std140 alignment).
+    ///
+    /// Must be stable for the lifetime of the extension instance: the render
+    /// node sizes the UBO and its staging buffer once when the extension is
+    /// installed (via setUniformExtension) and reuses both across frames. A
+    /// changing size silently bypasses the resize path and risks UBO write
+    /// overruns. To change the size, install a fresh IUniformExtension
+    /// instance with the new size — that triggers UBO recreation.
     virtual int extensionSize() const = 0;
 
     /// Write extension data into @p buffer starting at @p offset.

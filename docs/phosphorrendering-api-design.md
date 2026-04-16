@@ -502,10 +502,12 @@ phosphorrendering/
 - Thread-safe snapshot system generalized to IUniformExtension
 
 ### Phase 2d: PlasmaZones becomes a consumer
-- ZoneShaderItem : PhosphorRendering::ShaderEffect
-- ZoneUniformExtension : PhosphorShell::IUniformExtension
-- ZoneShaderNodeBase deleted (replaced by ShaderNodeRhi)
-- rendering_macros.h deleted (setters simplified with indexed API)
+- `ZoneShaderItem : PhosphorRendering::ShaderEffect`
+- `ZoneUniformExtension : PhosphorShell::IUniformExtension`
+- The previous `ZoneShaderNodeBase` abstraction was removed during
+  extraction (replaced by inheriting `ShaderNodeRhi` directly).
+- The old `rendering_macros.h` setter-generation macros were removed in
+  favour of the indexed `setCustomParams(int, …)` API.
 - `ZoneShaderRenderer.qml` / `RenderNodeOverlay.qml`: `loadShader()` calls
   are now `reloadShader()` (inherited Q_INVOKABLE on ShaderEffect).
 

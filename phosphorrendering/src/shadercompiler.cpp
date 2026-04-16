@@ -6,9 +6,9 @@
 
 #include "internal.h"
 
+#include <QCache>
 #include <QFile>
 #include <QFileInfo>
-#include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QTextStream>
@@ -43,7 +43,11 @@ struct BakeCache
     static constexpr int kMaxSize = 256;
     using Key = QPair<QByteArray, int>;
     QMutex mutex;
-    QHash<Key, QShader> entries;
+    // QCache provides LRU eviction (touched on object()), unlike a plain QHash
+    // whose iteration-order eviction can flush the hot shader. Cost = 1 per
+    // entry → bounded at kMaxSize entries. QCache stores by pointer and owns
+    // the heap-allocated QShader.
+    QCache<Key, QShader> entries{kMaxSize};
 
     static BakeCache& instance()
     {
@@ -82,9 +86,10 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
     auto& cache = BakeCache::instance();
     {
         QMutexLocker lock(&cache.mutex);
-        auto it = cache.entries.constFind(key);
-        if (it != cache.entries.constEnd() && it->isValid()) {
-            result.shader = *it;
+        // object() touches the LRU position so frequently-used shaders stay
+        // resident even when the cache nears capacity.
+        if (QShader* hit = cache.entries.object(key); hit && hit->isValid()) {
+            result.shader = *hit;
             result.success = true;
             return result;
         }
@@ -96,9 +101,8 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
     QMutexLocker bakeLock(&bakeSerializationMutex());
     {
         QMutexLocker cacheLock(&cache.mutex);
-        auto it = cache.entries.constFind(key);
-        if (it != cache.entries.constEnd() && it->isValid()) {
-            result.shader = *it;
+        if (QShader* hit = cache.entries.object(key); hit && hit->isValid()) {
+            result.shader = *hit;
             result.success = true;
             return result;
         }
@@ -113,12 +117,9 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
     if (result.shader.isValid()) {
         result.success = true;
         QMutexLocker cacheLock(&cache.mutex);
-        // Eviction is arbitrary (QHash iteration order) — acceptable for a
-        // shader cache where all entries are equally likely to be reused.
-        if (cache.entries.size() >= BakeCache::kMaxSize) {
-            cache.entries.erase(cache.entries.begin());
-        }
-        cache.entries.insert(key, result.shader);
+        // QCache::insert evicts the LRU entry when over capacity. Heap-allocate
+        // because QCache owns its values.
+        cache.entries.insert(key, new QShader(result.shader));
     } else {
         result.error = baker.errorMessage();
     }

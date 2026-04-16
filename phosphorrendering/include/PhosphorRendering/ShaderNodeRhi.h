@@ -39,10 +39,17 @@ static constexpr int kMaxCustomColors = 16;
 // 7-10 (user textures), 11 (wallpaper), 12 (depth). Assigning any of those
 // via setExtraBinding() would duplicate SRB entries and is rejected at
 // runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
-// well. The upper bound matches Qt RHI's minimum-guaranteed SRB binding
-// count across backends.
+// well.
+//
+// PlasmaZones uses binding 1 for its zone-labels texture by convention.
+// Other consumers that interoperate with PlasmaZones should pick from
+// 13..kMaxConsumerBinding to avoid a per-instance overwrite.
 constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
-constexpr int kMaxConsumerBinding = 31; ///< Highest portable SRB binding
+/// Highest portable SRB binding. 31 matches Qt RHI's minimum guarantee
+/// (minMaxShaderResourceBindingCount) across all backends — Vulkan/D3D11/
+/// Metal/OpenGL all advertise at least 32 bindings. Going higher risks
+/// pipeline-creation failure on conservative drivers.
+constexpr int kMaxConsumerBinding = 31;
 constexpr int kReservedBindingRangeStart = 2; ///< First library-managed binding above 0
 constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
 
