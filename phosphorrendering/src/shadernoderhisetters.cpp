@@ -16,6 +16,15 @@ namespace PhosphorRendering {
 
 void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
 {
+    // Early-return if unchanged. ShaderEffect::updatePaintNode pushes the
+    // extension every frame; without this guard, a subclass that doesn't
+    // override updatePaintNode would tear down and rebuild the entire RHI
+    // pipeline (UBO, SRBs, graphics pipeline) on every frame — guaranteed
+    // render breakage. The reset is only needed when the extension size
+    // can change, which only happens on a real swap.
+    if (extension == m_uniformExtension) {
+        return;
+    }
     m_uniformExtension = std::move(extension);
     // Force UBO recreation with new size on next prepare()
     m_ubo.reset();
@@ -117,7 +126,9 @@ void ShaderNodeRhi::setAppField0(int value)
     }
     m_baseUniforms.appField0 = value;
     m_uniformsDirty = true;
-    m_sceneDataDirty = true;
+    // Use the granular K_APP_FIELDS region (8 bytes) instead of the full
+    // scene header (~512 bytes). PlasmaZones updates these on every hover.
+    m_appFieldsDirty = true;
 }
 
 void ShaderNodeRhi::setAppField1(int value)
@@ -127,7 +138,7 @@ void ShaderNodeRhi::setAppField1(int value)
     }
     m_baseUniforms.appField1 = value;
     m_uniformsDirty = true;
-    m_sceneDataDirty = true;
+    m_appFieldsDirty = true;
 }
 
 // ============================================================================
@@ -495,6 +506,7 @@ void ShaderNodeRhi::invalidateUniforms()
     m_timeHiDirty = true;
     m_extensionDirty = true;
     m_sceneDataDirty = true;
+    m_appFieldsDirty = true;
 }
 
 // ============================================================================

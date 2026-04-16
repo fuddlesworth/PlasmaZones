@@ -299,11 +299,8 @@ bool ShaderNodeRhi::ensureBufferPipeline()
             if (!m_multiBufferSrbs[i]) {
                 std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
                 QVector<QRhiShaderResourceBinding> bindings;
-                bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-                    0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-                // Extra bindings (consumer-managed, e.g. binding 1 for labels)
-                appendExtraBindings(bindings);
-                // Bind ALL 4 channel slots (bindings 2-5)
+                appendUboAndExtraBindings(bindings);
+                // Bind ALL 4 channel slots (bindings 2-5): pass i sees outputs of passes 0..i-1.
                 for (int j = 0; j < kMaxBufferPasses; ++j) {
                     QRhiTexture* tex = (j < i && m_multiBufferTextures[j]) ? m_multiBufferTextures[j].get()
                                                                            : m_dummyChannelTexture.get();
@@ -314,17 +311,10 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                             2 + j, QRhiShaderResourceBinding::FragmentStage, tex, sam));
                     }
                 }
-                if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-                    bindings.append(QRhiShaderResourceBinding::sampledTexture(
-                        6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(),
-                        m_audioSpectrumSampler.get()));
-                }
-                appendUserTextureBindings(bindings);
-                appendWallpaperBinding(bindings);
-                appendDepthBinding(bindings);
+                appendCommonTrailerBindings(bindings);
                 srb->setBindings(bindings.begin(), bindings.end());
                 if (!srb->create()) {
-                    m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ");
+                    m_shaderError = QStringLiteral("Failed to create multi-buffer pass SRB ") + QString::number(i);
                     return false;
                 }
                 m_multiBufferSrbs[i] = std::move(srb);
@@ -374,9 +364,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
     auto createBufferSrb = [rhi, this](QRhiTexture* channel0Texture) -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        appendExtraBindings(bindings);
+        appendUboAndExtraBindings(bindings);
         for (int ch = 0; ch < kMaxBufferPasses; ++ch) {
             QRhiTexture* tex = (ch == 0 && channel0Texture) ? channel0Texture : m_dummyChannelTexture.get();
             QRhiSampler* sam = (ch == 0 && channel0Texture && m_bufferSamplers[0]) ? m_bufferSamplers[0].get()
@@ -386,14 +374,7 @@ bool ShaderNodeRhi::ensureBufferPipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -463,9 +444,7 @@ bool ShaderNodeRhi::ensurePipeline()
         }
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        appendExtraBindings(bindings);
+        appendUboAndExtraBindings(bindings);
         for (int ch = 0; ch < kMaxBufferPasses; ++ch) {
             QRhiTexture* tex = (ch == 0 && channel0Texture) ? channel0Texture : m_dummyChannelTexture.get();
             QRhiSampler* sam = (ch == 0 && channel0Sampler) ? channel0Sampler : m_dummyChannelSampler.get();
@@ -474,23 +453,14 @@ bool ShaderNodeRhi::ensurePipeline()
                     2 + ch, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
     auto createImageSrbMulti = [rhi, this]() -> std::unique_ptr<QRhiShaderResourceBindings> {
         std::unique_ptr<QRhiShaderResourceBindings> srb(rhi->newShaderResourceBindings());
         QVector<QRhiShaderResourceBinding> bindings;
-        bindings.append(QRhiShaderResourceBinding::uniformBuffer(
-            0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
-        appendExtraBindings(bindings);
+        appendUboAndExtraBindings(bindings);
         const int n = qMin(m_bufferPaths.size(), kMaxBufferPasses);
         QRhiTexture* dummyTex = m_dummyChannelTexture.get();
         QRhiSampler* dummySam = m_dummyChannelSampler.get();
@@ -502,14 +472,7 @@ bool ShaderNodeRhi::ensurePipeline()
                     2 + i, QRhiShaderResourceBinding::FragmentStage, tex, sam));
             }
         }
-        if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
-            bindings.append(QRhiShaderResourceBinding::sampledTexture(6, QRhiShaderResourceBinding::FragmentStage,
-                                                                      m_audioSpectrumTexture.get(),
-                                                                      m_audioSpectrumSampler.get()));
-        }
-        appendUserTextureBindings(bindings);
-        appendWallpaperBinding(bindings);
-        appendDepthBinding(bindings);
+        appendCommonTrailerBindings(bindings);
         srb->setBindings(bindings.begin(), bindings.end());
         return srb->create() ? std::move(srb) : nullptr;
     };
@@ -558,6 +521,29 @@ void ShaderNodeRhi::appendUserTextureBindings(QVector<QRhiShaderResourceBinding>
                                                                       m_userTextureSamplers[t].get()));
         }
     }
+}
+
+void ShaderNodeRhi::appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    if (m_audioSpectrumTexture && m_audioSpectrumSampler) {
+        bindings.append(QRhiShaderResourceBinding::sampledTexture(
+            6, QRhiShaderResourceBinding::FragmentStage, m_audioSpectrumTexture.get(), m_audioSpectrumSampler.get()));
+    }
+}
+
+void ShaderNodeRhi::appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    bindings.append(QRhiShaderResourceBinding::uniformBuffer(
+        0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubo.get()));
+    appendExtraBindings(bindings);
+}
+
+void ShaderNodeRhi::appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings) const
+{
+    appendAudioBinding(bindings);
+    appendUserTextureBindings(bindings);
+    appendWallpaperBinding(bindings);
+    appendDepthBinding(bindings);
 }
 
 void ShaderNodeRhi::appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const

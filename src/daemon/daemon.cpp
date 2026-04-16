@@ -135,9 +135,14 @@ bool Daemon::init()
                 watcher->deleteLater();
             });
             reg->reportShaderBakeStarted(shaderId);
-            watcher->setFuture(
-                QtConcurrent::run(&m_shaderBakePool, [vertPath = info.vertexShaderPath, fragPath = info.sourcePath]() {
-                    return warmShaderBakeCacheForPaths(vertPath, fragPath);
+            // Pass the registry's authoritative search paths to the bake worker
+            // so include resolution matches the on-screen render path exactly.
+            // Snapshot now (registry can be mutated on the GUI thread; we're about
+            // to hop onto the bake thread).
+            const QStringList includePaths = reg->searchPaths();
+            watcher->setFuture(QtConcurrent::run(
+                &m_shaderBakePool, [vertPath = info.vertexShaderPath, fragPath = info.sourcePath, includePaths]() {
+                    return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
                 }));
         };
     connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {

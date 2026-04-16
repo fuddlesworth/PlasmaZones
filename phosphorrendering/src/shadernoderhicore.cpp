@@ -258,6 +258,9 @@ void ShaderNodeRhi::prepare()
             m_srb.reset();
             if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
                 QMutexLocker lock(&s_shaderCacheMutex);
+                if (s_shaderCache.size() >= kShaderCacheMaxSize) {
+                    shaderCacheEvictOne();
+                }
                 s_shaderCache[cacheKey] = ShaderCacheEntry{m_vertexShader, m_fragmentShader};
             }
         }

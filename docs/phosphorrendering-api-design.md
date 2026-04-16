@@ -306,67 +306,9 @@ public:
 
 ---
 
-### 4. BufferPassManager — `PhosphorRendering::BufferPassManager`
-
-Encapsulates multipass buffer rendering (single-pass ping-pong and multi-buffer
-chaining). Internal to ShaderNodeRhi but exposed for consumers that need direct
-control.
-
-```cpp
-#include <PhosphorRendering/BufferPassManager>
-```
-
-```cpp
-class PHOSPHORRENDERING_EXPORT BufferPassManager
-{
-public:
-    explicit BufferPassManager(QRhi* rhi);
-    ~BufferPassManager();
-
-    // ── Configuration ───────────────────────────────────────────────
-    void setMode(Mode mode);  // None, Single, Multi
-    enum class Mode { None, Single, Multi };
-
-    void setFeedback(bool enable);         // Ping-pong (single mode only)
-    void setScale(qreal scale);            // 0.125–1.0
-    void setWrap(int channel, const QString& wrap);
-    void setFilter(int channel, const QString& filter);
-
-    // ── Shader management ───────────────────────────────────────────
-    void setShaderPath(const QString& path);           // Single mode
-    void setShaderPaths(const QStringList& paths);     // Multi mode (1–4)
-    void setIncludePaths(const QStringList& paths);
-
-    // ── Render lifecycle ────────────────────────────────────────────
-
-    /// Create/resize FBO textures to match the given output size.
-    void ensureTargets(QSize outputSize);
-
-    /// Record buffer passes into the command buffer.
-    /// Called during prepare(), BEFORE the scene graph's main render pass.
-    void recordPasses(QRhiCommandBuffer* cb,
-                      QRhiBuffer* ubo,
-                      QRhiTexture* audioTex,
-                      QRhiTexture* wallpaperTex,
-                      QRhiTexture* depthTex,
-                      const std::array<QRhiTexture*, 4>& userTextures,
-                      QRhiTexture* extraBinding1Tex,  // nullptr if unused
-                      int frame);
-
-    /// Output texture for the image pass to sample as iChannel0.
-    QRhiTexture* outputTexture() const;
-
-    /// Depth texture (R32F) if depth buffer is enabled, nullptr otherwise.
-    QRhiTexture* depthTexture() const;
-
-    /// Per-channel resolution for UBO iChannelResolution[i].
-    QSize channelResolution(int channel) const;
-
-    // ── Status ──────────────────────────────────────────────────────
-    bool isReady() const;
-    QString error() const;
-};
-```
+<!-- BufferPassManager was an early design idea. The buffer-pass logic currently
+     lives inline in ShaderNodeRhi (see shadernoderhicore.cpp / pipeline.cpp).
+     If this is ever extracted, document the public class here. -->
 
 ---
 
@@ -391,7 +333,7 @@ Offset  Type        Name                    Managed by
 112     vec4        iDate                   ShaderNodeRhi (system clock)
 128     vec4[8]     customParams            ShaderNodeRhi (from ShaderEffect)
 256     vec4[16]    customColors            ShaderNodeRhi (from ShaderEffect)
-512     vec4[4]     iChannelResolution      ShaderNodeRhi (from BufferPassManager)
+512     vec4[4]     iChannelResolution      ShaderNodeRhi (per buffer-pass output)
 576     int         iAudioSpectrumSize      ShaderNodeRhi
 580     int         iFlipBufferY            ShaderNodeRhi (always 1)
 584     int[2]      _pad                    (std140 alignment)
@@ -504,30 +446,30 @@ phosphorrendering/
 │       ├── ShaderEffect               # Forwarding header
 │       ├── ShaderEffect.h             # QQuickItem
 │       ├── ShaderNodeRhi              # Forwarding header
-│       ├── ShaderNodeRhi.h            # QSGRenderNode
+│       ├── ShaderNodeRhi.h            # QSGRenderNode (multipass logic inline)
 │       ├── ShaderCompiler             # Forwarding header
-│       ├── ShaderCompiler.h           # Static compiler utility
-│       ├── BufferPassManager          # Forwarding header
-│       └── BufferPassManager.h        # Multipass orchestrator
+│       └── ShaderCompiler.h           # Static compiler utility
 └── src/
     ├── shadereffect.cpp
     ├── shadernoderhicore.cpp
-    ├── shadernoderhipipeline.cpp
+    ├── shadernoderhipipeline.cpp     # Buffer-pass / pipeline construction
     ├── shadernoderhiuniforms.cpp
     ├── shadernoderhisetters.cpp
     ├── shadercompiler.cpp
-    ├── bufferpassmanager.cpp
-    └── internal.h                     # RhiConstants, cache, macros
+    └── internal.h                     # RhiConstants, cache helpers
 ```
 
 ---
 
 ## Migration Path
 
-### Phase 2a: Create phosphorrendering/ with ShaderCompiler + BufferPassManager
+### Phase 2a: Create phosphorrendering/ with ShaderCompiler
 - Mechanical extraction of detail:: namespace → ShaderCompiler
-- Extract buffer pass logic → BufferPassManager
-- PlasmaZones still owns ZoneShaderNodeRhi but delegates to BufferPassManager
+- Buffer-pass logic moved with ShaderNodeRhi (kept inline rather than split into a
+  separate BufferPassManager class — the original split-out plan was abandoned
+  because the buffer logic is too tightly coupled to the node's UBO/SRB layout
+  to make a clean public API)
+- PlasmaZones still owns ZoneShaderNodeRhi as a thin subclass
 
 ### Phase 2b: Extract ShaderNodeRhi
 - Generalize ZoneShaderNodeRhi → PhosphorRendering::ShaderNodeRhi
@@ -571,10 +513,24 @@ don't use binding 1.
 
 ### appField0/appField1 in BaseUniforms
 
-These two int fields at offsets 88–95 are consumer-defined. PlasmaZones uses
-them for zoneCount/highlightedCount. A WM might use them for workspace count
-and active workspace index. The library writes 0 by default; consumers set
-them via IUniformExtension or ShaderNodeRhi's appField accessors.
+These two int fields at offsets 88–95 are an **explicit escape hatch**, not
+PlasmaZones-specific concepts that leaked into the library. They exist
+regardless of consumer use because they fill the std140 alignment slot between
+iResolution (vec2) and iMouse (vec4) — removing them would either waste 8
+bytes of padding or break the layout. Given they have to exist anyway, we
+expose them as setters so consumers don't need a full IUniformExtension for
+small bits of frequently-updated state.
+
+Use them when:
+- You need ≤2 ints inside BaseUniforms (not the extension region) for
+  cache-line locality with the rest of the per-frame Shadertoy uniforms.
+- The data updates often (PlasmaZones updates them on every mouse-hover).
+- The cost of IUniformExtension's per-frame `write()` indirection isn't
+  justified.
+
+The library uploads them via the K_APP_FIELDS UBO region (8 bytes at offset
+88), so frequent updates don't trigger a full scene-header re-upload. For
+anything larger or with a non-trivial layout, implement IUniformExtension.
 
 ### ShaderCompiler is static, not a service
 
@@ -582,8 +538,5 @@ Shader compilation is stateless (source → QShader). The cache is an
 optimization, not state. Making it static keeps the API simple and avoids
 lifecycle questions about when to create/destroy a compiler instance.
 
-### BufferPassManager owns its RHI resources
+<!-- BufferPassManager design notes deferred — see Phase 2a note above. -->
 
-The buffer manager creates and owns its FBO textures, render targets, and
-pipelines. ShaderNodeRhi queries outputTexture() for the image pass SRB.
-This clean ownership boundary makes it testable in isolation.

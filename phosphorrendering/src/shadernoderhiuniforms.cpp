@@ -147,9 +147,16 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 }
                 if (m_sceneDataDirty) {
                     // Scene header: iResolution through end of BaseUniforms
+                    // (subsumes the appFields region — no need for a separate upload).
                     batch->updateDynamicBuffer(m_ubo.get(), K_SCENE_HEADER_OFFSET, K_SCENE_HEADER_SIZE,
                                                static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
                                                    + K_SCENE_HEADER_OFFSET);
+                } else if (m_appFieldsDirty) {
+                    // Only appField0/appField1 changed (8 bytes at offset 88) —
+                    // skip the full ~512-byte scene-header upload.
+                    batch->updateDynamicBuffer(m_ubo.get(), K_APP_FIELDS_OFFSET, K_APP_FIELDS_SIZE,
+                                               static_cast<const char*>(static_cast<const void*>(&m_baseUniforms))
+                                                   + K_APP_FIELDS_OFFSET);
                 }
                 // Extension region: uploaded separately when dirty
                 if (m_uniformExtension && m_uniformExtension->isDirty()) {
@@ -162,7 +169,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                     m_extensionDirty = false;
                 }
                 // Defensive: if no granular flags set, do full base upload
-                if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty) {
+                if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
                     batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShell::BaseUniforms), &m_baseUniforms);
                 }
             }
@@ -175,6 +182,7 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
             m_timeHiDirty = false;
             m_extensionDirty = false;
             m_sceneDataDirty = false;
+            m_appFieldsDirty = false;
             m_uniformsDirty = false;
         }
     } else {
@@ -377,6 +385,7 @@ void ShaderNodeRhi::releaseRhiResources()
     m_timeHiDirty = true;
     m_extensionDirty = true;
     m_sceneDataDirty = true;
+    m_appFieldsDirty = true;
     m_audioSpectrumDirty = true;
 }
 

@@ -4,6 +4,8 @@
 #include <PhosphorRendering/ShaderEffect.h>
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
+#include "internal.h"
+
 #include <PhosphorShell/IUniformExtension.h>
 
 #include <QFile>
@@ -111,8 +113,11 @@ std::shared_ptr<PhosphorShell::IUniformExtension> ShaderEffect::uniformExtension
 
 void ShaderEffect::setITime(qreal time)
 {
-    constexpr qreal epsilon = 1e-9;
-    if (qAbs(m_iTime - time) < epsilon) {
+    // Relative comparison: a fixed 1e-9 absolute epsilon falls below ULP for
+    // m_iTime once it grows past ~1, so animation would silently freeze after
+    // a short runtime. Compare via qFuzzyCompare with +1.0 offset to handle
+    // both near-zero and large values uniformly.
+    if (qFuzzyCompare(m_iTime + 1.0, time + 1.0)) {
         return;
     }
     m_iTime = time;
@@ -122,8 +127,7 @@ void ShaderEffect::setITime(qreal time)
 
 void ShaderEffect::setITimeDelta(qreal delta)
 {
-    constexpr qreal epsilon = 1e-9;
-    if (qAbs(m_iTimeDelta - delta) < epsilon) {
+    if (qFuzzyCompare(m_iTimeDelta + 1.0, delta + 1.0)) {
         return;
     }
     m_iTimeDelta = delta;
@@ -382,7 +386,9 @@ void ShaderEffect::setAudioSpectrum(const QVector<float>& spectrum)
 
 void ShaderEffect::setUserTexture(int slot, const QImage& image)
 {
-    if (slot < 0 || slot >= 4) {
+    if (slot < 0 || slot >= kMaxUserTextures) {
+        qCWarning(lcShaderNode) << "setUserTexture: slot" << slot << "out of range [0," << (kMaxUserTextures - 1)
+                                << "]";
         return;
     }
     m_userTextureImages[slot] = image;
@@ -391,7 +397,9 @@ void ShaderEffect::setUserTexture(int slot, const QImage& image)
 
 void ShaderEffect::setUserTextureWrap(int slot, const QString& wrap)
 {
-    if (slot < 0 || slot >= 4) {
+    if (slot < 0 || slot >= kMaxUserTextures) {
+        qCWarning(lcShaderNode) << "setUserTextureWrap: slot" << slot << "out of range [0," << (kMaxUserTextures - 1)
+                                << "]";
         return;
     }
     m_userTextureWraps[slot] = wrap;
@@ -509,11 +517,11 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     node->setMousePosition(m_iMouse);
 
     // ── Custom parameters (indexed API) ──────────────────────────────
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < kMaxCustomParams; ++i)
         node->setCustomParams(i, m_customParams[i]);
 
     // ── Custom colors (indexed API) ──────────────────────────────────
-    for (int i = 0; i < 16; ++i)
+    for (int i = 0; i < kMaxCustomColors; ++i)
         node->setCustomColor(i, m_customColors[i]);
 
     // ── Audio spectrum ───────────────────────────────────────────────
@@ -532,8 +540,8 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
     if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
         effectivePaths.append(m_bufferShaderPath);
     }
-    while (effectivePaths.size() > 4) {
-        effectivePaths.removeLast();
+    if (effectivePaths.size() > kMaxBufferPasses) {
+        effectivePaths.resize(kMaxBufferPasses);
     }
     node->setBufferShaderPaths(effectivePaths);
     node->setBufferFeedback(m_bufferFeedback);
@@ -579,7 +587,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
     syncBasePropertiesToNode(node);
 
     // ── Sync user textures (bindings 7-10) ───────────────────────────
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < kMaxUserTextures; ++i) {
         node->setUserTexture(i, m_userTextureImages[i]);
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
     }

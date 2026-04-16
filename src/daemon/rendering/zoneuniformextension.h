@@ -97,6 +97,20 @@ private:
 
     static_assert(sizeof(ZoneExtensionData) == MaxZones * 4 * sizeof(float) * 4,
                   "ZoneExtensionData must be MaxZones * 4 arrays * 4 floats");
+    // Field offsets must match the GLSL UBO layout in common.glsl exactly.
+    // Reordering or inserting fields here silently breaks shader rendering
+    // (no compile error, just wrong colors/positions on every zone).
+    static_assert(offsetof(ZoneExtensionData, zoneRects) == 0, "zoneRects must be first");
+    static_assert(offsetof(ZoneExtensionData, zoneFillColors) == sizeof(float[MaxZones][4]),
+                  "zoneFillColors must follow zoneRects with no gap");
+    static_assert(offsetof(ZoneExtensionData, zoneBorderColors) == 2 * sizeof(float[MaxZones][4]),
+                  "zoneBorderColors must follow zoneFillColors with no gap");
+    static_assert(offsetof(ZoneExtensionData, zoneParams) == 3 * sizeof(float[MaxZones][4]),
+                  "zoneParams must follow zoneBorderColors with no gap");
+    // Verify ZoneExtensionData is binary-identical to the zone region of
+    // ZoneShaderUniforms (BaseUniforms + this == ZoneShaderUniforms layout).
+    static_assert(sizeof(ZoneExtensionData) == sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms),
+                  "ZoneExtensionData size must match ZoneShaderUniforms zone region size");
 
     ZoneExtensionData m_data;
     std::atomic<bool> m_dirty{true};

@@ -52,9 +52,18 @@ static constexpr int kMaxCustomColors = 16;
  * must be called from QQuickItem::updatePaintNode() during the scene graph sync phase
  * — the GUI thread is blocked and the render thread is idle at that point. Calling
  * setters outside updatePaintNode() is a data race with prepare()/render() on the
- * render thread. The consumer-owned QRhiTexture/QRhiSampler pointers passed to
- * setExtraBinding() must remain valid until removeExtraBinding() is called or the
- * node is destroyed.
+ * render thread. Only invalidateItem() is safe to call from the GUI thread outside
+ * the sync phase (it is the only flag exposed as std::atomic).
+ *
+ * @par Extra binding lifetime (CRITICAL)
+ * The consumer-owned QRhiTexture/QRhiSampler pointers passed to setExtraBinding()
+ * are stored as raw pointers and re-bound on every prepare() until
+ * removeExtraBinding() is called. If the consumer drops the texture/sampler
+ * (e.g. by calling unique_ptr::reset() or letting it fall out of scope) without
+ * first calling removeExtraBinding(), the next prepare() will dereference a
+ * dangling pointer — undefined behaviour, typically a crash inside the RHI
+ * backend. ALWAYS call removeExtraBinding(binding) before destroying the
+ * underlying QRhiTexture/QRhiSampler.
  */
 class PHOSPHORRENDERING_EXPORT ShaderNodeRhi : public QSGRenderNode
 {
@@ -93,11 +102,38 @@ public:
     void setCustomParams(int index, const QVector4D& params);
     void setCustomColor(int index, const QColor& color);
 
-    // ── App Fields (consumer-defined integers in BaseUniforms) ─────────
+    // ── App Fields (consumer escape hatch in BaseUniforms) ─────────────
+    /**
+     * @brief Write the consumer's two int slots inside BaseUniforms (offsets 88, 92).
+     *
+     * These are an intentional escape hatch — see PhosphorShell::BaseUniforms's
+     * class doc for the design rationale. They exist regardless of consumer
+     * use because they fill the std140 alignment slot between iResolution
+     * (vec2) and iMouse (vec4); consumers that don't need them simply leave
+     * them as 0.
+     *
+     * Use them when you have a small (≤2 ints), frequently-updated piece of
+     * data that needs to live INSIDE BaseUniforms rather than the extension
+     * region — typically because the fragment shader reads them on every
+     * pixel and you want to keep them on the same cache line as iResolution.
+     * For larger or differently-shaped state, implement IUniformExtension.
+     *
+     * Updating these fields is cheap: the library uploads only the 8-byte
+     * K_APP_FIELDS region rather than the full scene header.
+     */
     void setAppField0(int value);
     void setAppField1(int value);
 
     // ── Extra Bindings (consumer-managed texture bindings) ─────────────
+    /**
+     * @brief Bind a consumer-owned texture/sampler at the given binding number.
+     *
+     * @warning The texture and sampler are stored as raw pointers and reused
+     * across frames. The consumer MUST call removeExtraBinding(binding) before
+     * destroying the underlying QRhiTexture/QRhiSampler — failing to do so
+     * leaves a dangling pointer that will be dereferenced inside the RHI on
+     * the next prepare() (UB, typically a crash).
+     */
     void setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler);
     void removeExtraBinding(int binding);
 
@@ -148,6 +184,12 @@ private:
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendDepthBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    void appendAudioBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// UBO at binding 0 + consumer-managed extra bindings (e.g. binding 1).
+    void appendUboAndExtraBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
+    /// Bindings 6 (audio), 7-10 (user textures), 11 (wallpaper), 12 (depth) —
+    /// shared trailer between buffer-pass and image-pass SRBs.
+    void appendCommonTrailerBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
     QString loadAndExpandShader(const QString& path, QString* outError);
@@ -240,6 +282,7 @@ private:
     bool m_timeHiDirty = true; ///< iTimeHi wrap offset changed (rare)
     bool m_extensionDirty = true; ///< Extension UBO data changed (checked via IUniformExtension::isDirty())
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
+    bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
 
     // ── Base Uniforms ──────────────────────────────────────────────────

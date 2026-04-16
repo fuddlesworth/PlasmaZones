@@ -207,30 +207,33 @@ void ZoneShaderNodeRhi::releaseResources()
 // warmShaderBakeCacheForPaths — pre-load shader cache warming
 // ============================================================================
 
-WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath)
+WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, const QString& fragmentPath,
+                                                 const QStringList& includePaths)
 {
-    WarmShaderBakeResult result;
     if (vertexPath.isEmpty() || fragmentPath.isEmpty()) {
+        WarmShaderBakeResult result;
         result.errorMessage = QStringLiteral("Vertex or fragment path is empty");
         return result;
     }
 
-    // Build PlasmaZones-specific include paths
-    const QString currentFileDir = QFileInfo(fragmentPath).absolutePath();
-    const QString shadersRootDir = QFileInfo(currentFileDir).absolutePath();
-    const QStringList systemShaderDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory);
-
-    QStringList includePaths;
-    if (!shadersRootDir.isEmpty() && shadersRootDir != currentFileDir)
-        includePaths.append(shadersRootDir);
-    for (const QString& dir : systemShaderDirs) {
-        if (!includePaths.contains(dir))
-            includePaths.append(dir);
+    // Caller-provided include paths are authoritative when supplied (the daemon
+    // hands us ShaderRegistry::searchPaths(), which exactly matches what the
+    // render path uses). When omitted, fall back to the well-known system data
+    // dirs — this avoids the previous heuristic of "parent of the shader's
+    // parent dir", which silently broke for shaders not nested two levels
+    // deep under a recognised root.
+    QStringList paths = includePaths;
+    if (paths.isEmpty()) {
+        const QStringList systemShaderDirs =
+            QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"),
+                                      QStandardPaths::LocateDirectory);
+        for (const QString& dir : systemShaderDirs) {
+            if (!paths.contains(dir))
+                paths.append(dir);
+        }
     }
 
-    // Delegate to PhosphorRendering's warmShaderBakeCacheForPaths
-    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, includePaths);
+    return PhosphorRendering::warmShaderBakeCacheForPaths(vertexPath, fragmentPath, paths);
 }
 
 } // namespace PlasmaZones
