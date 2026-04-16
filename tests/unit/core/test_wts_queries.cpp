@@ -218,6 +218,46 @@ private Q_SLOTS:
         QVERIFY(!m_service->isWindowFloating(window2));
     }
 
+    // Regression test for discussion #323: windows parked on other virtual
+    // desktops must not make zones appear occupied on the current desktop,
+    // otherwise snap assist refuses to show the zone as "empty" even though
+    // SnapAssistHandler::buildCandidates() would exclude those windows from
+    // the candidate list (asymmetric filtering → snap assist never appears).
+    void testBuildOccupiedZoneSet_desktopFilter_skipsOtherDesktops()
+    {
+        QString screen = QStringLiteral("DP-1");
+        QUuid zone0 = *Utils::parseUuid(m_zoneIds[0]);
+        QUuid zone1 = *Utils::parseUuid(m_zoneIds[1]);
+        QUuid zone2 = *Utils::parseUuid(m_zoneIds[2]);
+
+        QString onDesk1 = QStringLiteral("app1:win:111");
+        QString onDesk2 = QStringLiteral("app2:win:222");
+        QString pinned = QStringLiteral("app3:win:333");
+
+        m_service->assignWindowToZone(onDesk1, m_zoneIds[0], screen, /*desktop=*/1);
+        m_service->assignWindowToZone(onDesk2, m_zoneIds[1], screen, /*desktop=*/2);
+        m_service->assignWindowToZone(pinned, m_zoneIds[2], screen, /*desktop=*/0);
+
+        // No filter (desktopFilter=0): every assignment counts, regardless of desktop.
+        QSet<QUuid> unfiltered = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/0);
+        QVERIFY(unfiltered.contains(zone0));
+        QVERIFY(unfiltered.contains(zone1));
+        QVERIFY(unfiltered.contains(zone2));
+
+        // Filter to desktop 1: zone held by desktop-2 window must NOT count;
+        // pinned (desktop=0) always counts.
+        QSet<QUuid> filteredToDesktop1 = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/1);
+        QVERIFY(filteredToDesktop1.contains(zone0));
+        QVERIFY(!filteredToDesktop1.contains(zone1));
+        QVERIFY(filteredToDesktop1.contains(zone2));
+
+        // Filter to desktop 2: symmetric — zone held by desktop-1 window is skipped.
+        QSet<QUuid> filteredToDesktop2 = m_service->buildOccupiedZoneSet(screen, /*desktopFilter=*/2);
+        QVERIFY(!filteredToDesktop2.contains(zone0));
+        QVERIFY(filteredToDesktop2.contains(zone1));
+        QVERIFY(filteredToDesktop2.contains(zone2));
+    }
+
     void testCalculateSnapAllWindows_fillsEmptyZones()
     {
         QStringList unsnappedWindows = {

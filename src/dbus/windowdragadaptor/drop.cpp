@@ -362,7 +362,14 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
         return;
     }
 
-    QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId);
+    // Screen-filtered + desktop-filtered occupancy. Without the desktop filter,
+    // windows parked on other virtual desktops keep their zone occupied on the
+    // current desktop, which blocks snap assist from offering the zone (discussion
+    // #323) — even though SnapAssistHandler::buildCandidates() already excludes
+    // other-desktop windows from the candidate list. Matches the filtering done
+    // by WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
+    const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
+    QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
     EmptyZoneList emptyZones =
         GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings, [&occupied](const Zone* z) {
             return !occupied.contains(z->id());
