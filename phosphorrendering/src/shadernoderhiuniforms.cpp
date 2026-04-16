@@ -108,6 +108,28 @@ void ShaderNodeRhi::syncBaseUniforms()
 }
 
 // ============================================================================
+// uploadExtensionToUbo — centralized extension upload (DRY)
+// ============================================================================
+//
+// Invariants:
+//   - Caller checked m_uniformExtension && extensionSize() > 0.
+//   - m_extensionStaging is sized to extensionSize(); we don't re-allocate
+//     when called repeatedly for the same extension.
+//   - Clears the extension's dirty bit and our m_extensionDirty mirror.
+void ShaderNodeRhi::uploadExtensionToUbo(QRhiResourceUpdateBatch* batch)
+{
+    const int extSize = m_uniformExtension->extensionSize();
+    if (m_extensionStaging.size() != extSize) {
+        m_extensionStaging.resize(extSize);
+    }
+    m_uniformExtension->write(m_extensionStaging.data(), 0);
+    const int extOffset = static_cast<int>(sizeof(PhosphorShell::BaseUniforms));
+    batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, m_extensionStaging.constData());
+    m_uniformExtension->clearDirty();
+    m_extensionDirty = false;
+}
+
+// ============================================================================
 // uploadDirtyTextures
 // ============================================================================
 //
@@ -126,9 +148,24 @@ void ShaderNodeRhi::syncBaseUniforms()
 // multipass SRBs/pipelines null when the draws record below, breaking rendering
 // with no compiler error. The inline restoration is just a safety net for the
 // image pass; the full prepare() sequence does the real work.
+//
+// Dirty-flag invariants (who sets what):
+//   m_timeDirty       ← setTime, setTimeDelta, setFrame, setBufferFeedback
+//                        (toggle), prepare() on feedback-buffer clear
+//   m_timeHiDirty     ← setTime (wrap-offset crossing)
+//   m_sceneDataDirty  ← setResolution, setMousePosition, setCustomParams,
+//                        setCustomColor, setAudioSpectrum, setUserTexture
+//   m_appFieldsDirty  ← setAppField0, setAppField1
+//   m_extensionDirty  ← tracked via m_uniformExtension->isDirty() (set by the
+//                        extension's own updateFromX() methods)
+//   m_uniformsDirty   ← mirror: true if any of the five above are true
+// A setter that forgets to update m_uniformsDirty will correctly dirty its
+// region but skip the upload pass entirely — keep the mirror in sync.
 void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 {
     using namespace PhosphorShell::UboRegions;
+
+    const bool extensionHasData = m_uniformExtension && m_uniformExtension->extensionSize() > 0;
 
     if (m_uniformsDirty) {
         syncBaseUniforms();
@@ -139,14 +176,8 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                 // Upload base uniforms
                 batch->updateDynamicBuffer(m_ubo.get(), 0, sizeof(PhosphorShell::BaseUniforms), &m_baseUniforms);
                 // Upload extension data if present
-                if (m_uniformExtension && m_uniformExtension->extensionSize() > 0) {
-                    const int extOffset = static_cast<int>(sizeof(PhosphorShell::BaseUniforms));
-                    const int extSize = m_uniformExtension->extensionSize();
-                    QByteArray extBuffer(extSize, '\0');
-                    m_uniformExtension->write(extBuffer.data(), 0);
-                    batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, extBuffer.constData());
-                    m_uniformExtension->clearDirty();
-                    m_extensionDirty = false;
+                if (extensionHasData) {
+                    uploadExtensionToUbo(batch);
                 }
                 m_didFullUploadOnce = true;
             } else {
@@ -174,14 +205,8 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
                                                    + K_APP_FIELDS_OFFSET);
                 }
                 // Extension region: uploaded separately when dirty
-                if (m_uniformExtension && m_uniformExtension->isDirty()) {
-                    const int extOffset = static_cast<int>(sizeof(PhosphorShell::BaseUniforms));
-                    const int extSize = m_uniformExtension->extensionSize();
-                    QByteArray extBuffer(extSize, '\0');
-                    m_uniformExtension->write(extBuffer.data(), 0);
-                    batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, extBuffer.constData());
-                    m_uniformExtension->clearDirty();
-                    m_extensionDirty = false;
+                if (extensionHasData && m_uniformExtension->isDirty()) {
+                    uploadExtensionToUbo(batch);
                 }
                 // Defensive: if no granular flags set, do full base upload
                 if (!m_timeDirty && !m_timeHiDirty && !m_sceneDataDirty && !m_appFieldsDirty) {
@@ -202,16 +227,10 @@ void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
         }
     } else {
         // Check extension dirty independently of base uniforms
-        if (m_uniformExtension && m_uniformExtension->isDirty()) {
+        if (extensionHasData && m_uniformExtension->isDirty()) {
             QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
             if (batch) {
-                const int extOffset = static_cast<int>(sizeof(PhosphorShell::BaseUniforms));
-                const int extSize = m_uniformExtension->extensionSize();
-                QByteArray extBuffer(extSize, '\0');
-                m_uniformExtension->write(extBuffer.data(), 0);
-                batch->updateDynamicBuffer(m_ubo.get(), extOffset, extSize, extBuffer.constData());
-                m_uniformExtension->clearDirty();
-                m_extensionDirty = false;
+                uploadExtensionToUbo(batch);
                 cb->resourceUpdate(batch);
             }
         }

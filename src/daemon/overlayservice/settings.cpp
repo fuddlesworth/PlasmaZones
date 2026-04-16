@@ -62,7 +62,8 @@ void OverlayService::setSettings(ISettings* settings)
             // Hot-reload shaders when files change on disk.
             // ShaderRegistry detects file changes via QFileSystemWatcher and emits
             // shadersChanged(). We tell each overlay window's ZoneShaderItem to
-            // re-read its source from disk by invoking loadShader().
+            // re-read its source from disk by invoking reloadShader() (inherited
+            // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
             if (auto* registry = ShaderRegistry::instance()) {
                 connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
                     if (!m_settings || !m_settings->enableShaderEffects()) {
@@ -73,11 +74,11 @@ void OverlayService::setSettings(ISettings* settings)
                     for (auto it_ = m_screenStates.constBegin(); it_ != m_screenStates.constEnd(); ++it_) {
                         auto* window = it_.value().overlayWindow;
                         if (window && window->property("isShaderOverlay").toBool()) {
-                            QMetaObject::invokeMethod(window, "loadShader");
+                            QMetaObject::invokeMethod(window, "reloadShader");
                         }
                     }
                     if (m_shaderPreviewWindow && m_shaderPreviewWindow->property("isShaderOverlay").toBool()) {
-                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "loadShader");
+                        QMetaObject::invokeMethod(m_shaderPreviewWindow, "reloadShader");
                     }
                 });
             }

@@ -149,7 +149,11 @@ void ShaderNodeRhi::prepare()
         + (m_uniformExtension ? m_uniformExtension->extensionSize() : 0);
 
     if (!m_initialized) {
-        m_initialized = true;
+        // Do NOT set m_initialized = true until every resource below has been
+        // created successfully. Flipping the flag up front would leave the node
+        // in a half-initialized state forever if any create() below fails
+        // (device lost, OOM): subsequent prepare() calls would skip this block
+        // and later draw with nullptr m_ubo / m_vbo.
         qCInfo(lcShaderNode) << "ShaderNodeRhi INIT — backend:" << rhi->backendName()
                              << "driver:" << rhi->driverInfo().deviceName
                              << "Y-up framebuffer:" << rhi->isYUpInFramebuffer() << "RT pixelSize:" << rt->pixelSize()
@@ -161,53 +165,81 @@ void ShaderNodeRhi::prepare()
             rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(RhiConstants::QuadVertices)));
         if (!m_vbo->create()) {
             m_shaderError = QStringLiteral("Failed to create vertex buffer");
+            m_vbo.reset();
             return;
         }
         m_ubo.reset(rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, uboSize));
         if (!m_ubo->create()) {
             m_shaderError = QStringLiteral("Failed to create uniform buffer");
+            m_vbo.reset();
+            m_ubo.reset();
             return;
         }
         // Audio spectrum texture (binding 6): 1x1 dummy when disabled
         m_audioSpectrumTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_audioSpectrumTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum texture");
+            m_vbo.reset();
+            m_ubo.reset();
+            m_audioSpectrumTexture.reset();
             return;
         }
         m_audioSpectrumSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                      QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_audioSpectrumSampler->create()) {
             m_shaderError = QStringLiteral("Failed to create audio spectrum sampler");
+            m_vbo.reset();
+            m_ubo.reset();
+            m_audioSpectrumTexture.reset();
+            m_audioSpectrumSampler.reset();
             return;
         }
         // User texture slots (bindings 7-10): 1x1 dummy textures
+        bool userTexturesOk = true;
         for (int i = 0; i < kMaxUserTextures; ++i) {
             m_userTextures[i].reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
             if (!m_userTextures[i]->create()) {
                 m_shaderError = QStringLiteral("Failed to create user texture ") + QString::number(i);
-                return;
+                userTexturesOk = false;
+                break;
             }
             m_userTextureSamplers[i].reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                            QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
             if (!m_userTextureSamplers[i]->create()) {
                 m_shaderError = QStringLiteral("Failed to create user texture sampler ") + QString::number(i);
-                return;
+                userTexturesOk = false;
+                break;
             }
             m_userTextureDirty[i] = true;
+        }
+        if (!userTexturesOk) {
+            m_vbo.reset();
+            m_ubo.reset();
+            m_audioSpectrumTexture.reset();
+            m_audioSpectrumSampler.reset();
+            for (int i = 0; i < kMaxUserTextures; ++i) {
+                m_userTextures[i].reset();
+                m_userTextureSamplers[i].reset();
+            }
+            return;
         }
         // Desktop wallpaper texture (binding 11): 1x1 dummy
         m_wallpaperTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
         if (!m_wallpaperTexture->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper texture");
+            releaseRhiResources();
             return;
         }
         m_wallpaperSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                                  QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
         if (!m_wallpaperSampler->create()) {
             m_shaderError = QStringLiteral("Failed to create wallpaper sampler");
+            releaseRhiResources();
             return;
         }
         m_wallpaperDirty = true;
+        // Every create() succeeded — commit the init flag last.
+        m_initialized = true;
     }
 
     if (m_shaderDirty) {
@@ -367,6 +399,14 @@ void ShaderNodeRhi::prepare()
                 cb->beginPass(m_bufferRenderTargetB.get(), clearColor, {1.0f, 0});
                 cb->endPass();
                 m_bufferFeedbackCleared = true;
+                // iFrame is computed as `cleared ? m_frame : 0` in syncBaseUniforms()
+                // and lives in K_TIME_BLOCK (offsets 68-79). The transition we just
+                // made invalidates whatever iFrame was uploaded at the top of this
+                // prepare() pass, so force a time-block re-upload on the next
+                // frame. Without this, the first post-clear frame would render
+                // with iFrame stuck at 0 on the GPU.
+                m_timeDirty = true;
+                m_uniformsDirty = true;
             }
             const int writeIndex = m_bufferFeedback ? (m_frame % 2) : 0;
             QRhiTextureRenderTarget* bufferRT = (m_bufferFeedback && writeIndex == 1 && m_bufferRenderTargetB)

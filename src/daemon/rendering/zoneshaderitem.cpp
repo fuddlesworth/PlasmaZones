@@ -3,6 +3,7 @@
 
 #include "zoneshaderitem.h"
 #include "zoneshadernoderhi.h"
+#include "zoneuniformextension.h"
 
 #include "../../config/configdefaults.h"
 #include "../../core/constants.h"
@@ -22,7 +23,16 @@ namespace PlasmaZones {
 
 ZoneShaderItem::ZoneShaderItem(QQuickItem* parent)
     : PhosphorRendering::ShaderEffect(parent)
+    , m_zoneExtension(std::make_shared<ZoneUniformExtension>())
 {
+    // Install our ZoneUniformExtension on the base class. We call the
+    // qualified base setter to bypass our own setUniformExtension() override
+    // (which rejects caller-supplied extensions). Thereafter, every
+    // updatePaintNode() → syncBasePropertiesToNode() pushes this extension
+    // down to the render node, so the zone UBO region stays populated across
+    // scene-graph node recreations.
+    ShaderEffect::setUniformExtension(m_zoneExtension);
+
     // Set PlasmaZones-specific shader include paths so that #include <common.glsl>
     // in zone.vert/effect.frag resolves to the system shaders directory.
     // Use locateAll() because locate() stops at the first match (~/.local/share/
@@ -43,6 +53,23 @@ ZoneShaderItem::~ZoneShaderItem()
     // The parent destructor handles invalidateItem() on the render node.
     // We just need to clear our zone-specific tracking pointer.
     m_zoneRenderNode = nullptr;
+}
+
+// ============================================================================
+// Refuse external uniform-extension replacement
+// ============================================================================
+
+void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
+{
+    // The zone UBO layout is load-bearing: ZoneShaderNodeRhi installs a
+    // ZoneUniformExtension whose byte layout matches common.glsl's zone
+    // arrays. Accepting a caller-supplied extension here would either
+    // de-align that layout or silently replace zone rendering with garbage.
+    // Log loudly at the point of misuse instead of inheriting the base
+    // class's silent-store behaviour.
+    Q_UNUSED(extension);
+    qCWarning(PlasmaZones::lcOverlay) << "ZoneShaderItem::setUniformExtension: ignored — zone rendering owns its own "
+                                      << "IUniformExtension (ZoneUniformExtension) and cannot accept a replacement.";
 }
 
 // ============================================================================
@@ -88,9 +115,13 @@ void ZoneShaderItem::parseZoneData()
         rect.highlighted = z.value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
             || (m_hoveredZoneIndex >= 0 && index == m_hoveredZoneIndex);
 
-        // Extract shader border properties (stored in snapshot for thread-safe access)
-        rect.borderRadius = z.value(QLatin1String("shaderBorderRadius"), 8.0f).toFloat();
-        rect.borderWidth = z.value(QLatin1String("shaderBorderWidth"), 2.0f).toFloat();
+        // Extract shader border properties (stored in snapshot for thread-safe access).
+        // Defaults mirror ConfigDefaults so the shader path picks up the same
+        // fallback values as the non-shader path when a zone doesn't override them.
+        rect.borderRadius =
+            z.value(QLatin1String("shaderBorderRadius"), static_cast<float>(ConfigDefaults::borderRadius())).toFloat();
+        rect.borderWidth =
+            z.value(QLatin1String("shaderBorderWidth"), static_cast<float>(ConfigDefaults::borderWidth())).toFloat();
 
         if (rect.highlighted) {
             ++highlightedCount;
@@ -335,12 +366,22 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
     }
 
     // ── Sync zone data to the node AFTER shader is ready ─────────────
+    //
+    // Three things happen together:
+    //   1. Convert our thread-safe ZoneDataSnapshot into the wire-format
+    //      ZoneData vector the extension's writer expects.
+    //   2. Push zone contents into m_zoneExtension (writes the UBO region).
+    //   3. Tell the node the new counts so it can update appField0/appField1
+    //      for the shader's per-zone loops / highlight gating.
+    //
+    // The extension update bypasses the node entirely — the node is a
+    // transient scene-graph object that gets recreated on releaseResources,
+    // while the extension lives for the lifetime of this item.
     if (m_zoneDataDirty.load()) {
         if (node->isShaderReady()) {
             m_zoneDataDirty.exchange(false);
             ZoneDataSnapshot snapshot = getZoneDataSnapshot();
 
-            // Convert snapshot to ZoneData format expected by the node
             QVector<ZoneData> zoneDataVec;
             zoneDataVec.reserve(snapshot.zoneCount);
 
@@ -369,7 +410,8 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
                 zoneDataVec.append(zd);
             }
 
-            node->setZones(zoneDataVec);
+            m_zoneExtension->updateFromZones(zoneDataVec);
+            node->setZoneCounts(snapshot.zoneCount, snapshot.highlightedCount);
         }
         // If shader not ready, leave dirty flag set so we sync on next frame
     }

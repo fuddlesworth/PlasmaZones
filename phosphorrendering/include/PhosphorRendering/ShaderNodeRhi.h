@@ -48,12 +48,17 @@ static constexpr int kMaxCustomColors = 16;
  * (commandBuffer(), renderTarget()).
  *
  * @par Threading contract
- * All setter methods (setTime, setResolution, setCustomParams, setExtraBinding, etc.)
- * must be called from QQuickItem::updatePaintNode() during the scene graph sync phase
- * — the GUI thread is blocked and the render thread is idle at that point. Calling
- * setters outside updatePaintNode() is a data race with prepare()/render() on the
- * render thread. Only invalidateItem() is safe to call from the GUI thread outside
- * the sync phase (it is the only flag exposed as std::atomic).
+ * Setters on **this class** (ShaderNodeRhi — setTime, setResolution, setCustomParams,
+ * setExtraBinding, etc.) must be called from QQuickItem::updatePaintNode() during
+ * the scene graph sync phase — the GUI thread is blocked and the render thread is
+ * idle at that point. Calling these setters outside updatePaintNode() is a data
+ * race with prepare()/render() on the render thread. Only invalidateItem() is
+ * safe to call from the GUI thread outside the sync phase (it is the only flag
+ * exposed as std::atomic).
+ *
+ * (Setters on the sibling ShaderEffect class are a different story — those run
+ * on the GUI thread and stage their changes into ShaderEffect's own members, to
+ * be pushed down to this node during the next sync phase.)
  *
  * @par Extra binding lifetime (CRITICAL)
  * The consumer-owned QRhiTexture/QRhiSampler pointers passed to setExtraBinding()
@@ -90,6 +95,11 @@ public:
 
     // ── Uniform Extension ──────────────────────────────────────────────
     void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension);
+    /** Access the currently-installed uniform extension (may be nullptr). */
+    std::shared_ptr<PhosphorShell::IUniformExtension> uniformExtension() const
+    {
+        return m_uniformExtension;
+    }
 
     // ── Timing ─────────────────────────────────────────────────────────
     void setTime(double time);
@@ -133,9 +143,15 @@ public:
      * destroying the underlying QRhiTexture/QRhiSampler — failing to do so
      * leaves a dangling pointer that will be dereferenced inside the RHI on
      * the next prepare() (UB, typically a crash).
+     *
+     * @return true on success; false if `binding` collides with a library-
+     * managed slot (0, 2-12) or falls outside the supported range. A `true`
+     * return for an identical (binding, texture, sampler) triple is a no-op —
+     * the SRB/pipeline is NOT rebuilt when nothing actually changed.
      */
-    void setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler);
-    void removeExtraBinding(int binding);
+    bool setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler);
+    /// @return true if a binding existed at that slot and was removed.
+    bool removeExtraBinding(int binding);
 
     // ── Textures ───────────────────────────────────────────────────────
     void setAudioSpectrum(const QVector<float>& spectrum);
@@ -174,10 +190,17 @@ public:
     /// Normalize filter mode string to "nearest", "linear", or "mipmap".
     static QString normalizeFilterMode(const QString& filter);
 
-private:
-    /** Thread-safe QRhi accessor: returns nullptr when m_item is invalidated or has no window. */
+protected:
+    /**
+     * @brief Thread-safe QRhi accessor.
+     * @return The active QRhi for the owning window, or nullptr when the item
+     * has been invalidated or has no window. Subclasses that override prepare()
+     * should route through this helper rather than `commandBuffer()->rhi()` so
+     * the post-invalidateItem() guard stays uniform.
+     */
     QRhi* safeRhi() const;
 
+private:
     bool ensurePipeline();
     bool ensureBufferPipeline();
     bool ensureBufferTarget();
@@ -185,6 +208,12 @@ private:
     bool ensureBufferSampler(QRhi* rhi, int index);
     void syncBaseUniforms();
     void uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb);
+    /**
+     * Append the extension region to a resource update batch.
+     * @pre m_uniformExtension && m_uniformExtension->extensionSize() > 0
+     * Reuses m_extensionStaging to avoid per-frame render-thread allocations.
+     */
+    void uploadExtensionToUbo(QRhiResourceUpdateBatch* batch);
     void releaseRhiResources();
     void appendUserTextureBindings(QVector<QRhiShaderResourceBinding>& bindings) const;
     void appendWallpaperBinding(QVector<QRhiShaderResourceBinding>& bindings) const;
@@ -205,6 +234,10 @@ private:
 
     // ── Uniform Extension ──────────────────────────────────────────────
     std::shared_ptr<PhosphorShell::IUniformExtension> m_uniformExtension;
+    /// Reused staging buffer for extension uploads — resized only when the
+    /// extension's reported size changes (avoids a render-thread QByteArray
+    /// allocation every frame that the extension is dirty).
+    QByteArray m_extensionStaging;
 
     // ── Shader Include Paths ───────────────────────────────────────────
     QStringList m_shaderIncludePaths;

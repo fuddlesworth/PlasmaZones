@@ -138,8 +138,16 @@ public:
 
     // ── Uniform extension ────────────────────────────────────────────
 
-    /// Attach a uniform extension that appends custom data after BaseUniforms.
-    void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension);
+    /**
+     * @brief Attach a uniform extension that appends custom data after BaseUniforms.
+     *
+     * Stored on this item and pushed down to the render node in
+     * syncBasePropertiesToNode(). `virtual` so a subclass that owns its own
+     * extension (e.g. ZoneShaderItem) can intercept stray assignments and
+     * preserve its internal extension contract instead of having the call
+     * silently no-op.
+     */
+    virtual void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension);
     std::shared_ptr<PhosphorShell::IUniformExtension> uniformExtension() const;
 
     // ── Shadertoy uniforms ───────────────────────────────────────────
@@ -363,6 +371,32 @@ public:
         return m_customColors[15];
     }
     void setCustomColor16(const QColor& color);
+
+    // ── Indexed accessors (avoid per-slot function-pointer tables at call sites) ──
+    /**
+     * @brief Read a customParams slot by index.
+     * @param index [0, 8). Returns a zero vector for out-of-range indices.
+     */
+    QVector4D customParamAt(int index) const;
+    /**
+     * @brief Write a customParams slot by index.
+     * @param index [0, 8). Out-of-range indices are ignored.
+     *
+     * Emits customParamsChanged() and schedules an update only when the value
+     * actually differs from the stored slot.
+     */
+    void setCustomParamAt(int index, const QVector4D& params);
+
+    /**
+     * @brief Read a customColor slot by index.
+     * @param index [0, 16). Returns an invalid QColor for out-of-range indices.
+     */
+    QColor customColorAt(int index) const;
+    /**
+     * @brief Write a customColor slot by index.
+     * @param index [0, 16). Out-of-range indices are ignored.
+     */
+    void setCustomColorAt(int index, const QColor& color);
 
     // ── Textures ─────────────────────────────────────────────────────
 

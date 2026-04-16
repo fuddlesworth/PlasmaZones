@@ -335,6 +335,54 @@ PR_COLOR_SETTER(CustomColor16, 15)
 #undef PR_COLOR_SETTER
 
 // ============================================================================
+// Indexed accessors — thin wrappers over the slot arrays for callers that
+// already know which slot they want (keeps QML-facing Q_PROPERTYs intact while
+// removing boilerplate from consumer code that iterates slots).
+// ============================================================================
+
+QVector4D ShaderEffect::customParamAt(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(m_customParams.size())) {
+        return QVector4D();
+    }
+    return m_customParams[index];
+}
+
+void ShaderEffect::setCustomParamAt(int index, const QVector4D& params)
+{
+    if (index < 0 || index >= static_cast<int>(m_customParams.size())) {
+        return;
+    }
+    if (m_customParams[index] == params) {
+        return;
+    }
+    m_customParams[index] = params;
+    Q_EMIT customParamsChanged();
+    update();
+}
+
+QColor ShaderEffect::customColorAt(int index) const
+{
+    if (index < 0 || index >= static_cast<int>(m_customColors.size())) {
+        return QColor();
+    }
+    return m_customColors[index];
+}
+
+void ShaderEffect::setCustomColorAt(int index, const QColor& color)
+{
+    if (index < 0 || index >= static_cast<int>(m_customColors.size())) {
+        return;
+    }
+    if (m_customColors[index] == color) {
+        return;
+    }
+    m_customColors[index] = color;
+    Q_EMIT customColorsChanged();
+    update();
+}
+
+// ============================================================================
 // Audio Spectrum
 // ============================================================================
 
@@ -547,6 +595,14 @@ void ShaderEffect::syncBasePropertiesToNode(ShaderNodeRhi* node)
         node->setWallpaperTexture(m_wallpaperTexture);
     }
 
+    // ── Uniform extension ────────────────────────────────────────────
+    // Push the extension stored on this item (if any) so subclasses that
+    // override updatePaintNode() and delegate to syncBasePropertiesToNode()
+    // inherit the same install-through-item contract as the base class —
+    // avoids a silent no-op on ShaderEffect::setUniformExtension when a
+    // subclass forgot to sync.
+    node->setUniformExtension(m_uniformExtension);
+
     // ── Multipass buffer configuration ───────────────────────────────
     QStringList effectivePaths = m_bufferShaderPaths;
     if (effectivePaths.isEmpty() && !m_bufferShaderPath.isEmpty()) {
@@ -604,8 +660,7 @@ QSGNode* ShaderEffect::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* da
         node->setUserTextureWrap(i, m_userTextureWraps[i]);
     }
 
-    // ── Sync uniform extension ───────────────────────────────────────
-    node->setUniformExtension(m_uniformExtension);
+    // Uniform extension is synced inside syncBasePropertiesToNode() above.
 
     // ── Sync shader source (must compile before rendering) ───────────
     const bool wasDirty = m_shaderDirty.exchange(false);

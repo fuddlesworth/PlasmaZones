@@ -16,13 +16,16 @@ namespace PhosphorRendering {
 
 void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension)
 {
-    // Early-return if unchanged. ShaderEffect::updatePaintNode pushes the
-    // extension every frame; without this guard, a subclass that doesn't
-    // override updatePaintNode would tear down and rebuild the entire RHI
-    // pipeline (UBO, SRBs, graphics pipeline) on every frame — guaranteed
-    // render breakage. The reset is only needed when the extension size
-    // can change, which only happens on a real swap.
-    if (extension == m_uniformExtension) {
+    // Early-return only if the pointer AND the reported extension size match.
+    // Comparing purely by pointer (as an earlier revision did) would skip the
+    // UBO resize path whenever a consumer mutated an existing extension in
+    // place and re-pushed the same shared_ptr to signal "my size changed" —
+    // the GPU UBO would stay at the old size while write() scribbled past the
+    // end. ShaderEffect::updatePaintNode pushes the extension every frame, so
+    // this guard still covers the common no-change case.
+    const int newSize = extension ? extension->extensionSize() : 0;
+    const int oldSize = m_uniformExtension ? m_uniformExtension->extensionSize() : 0;
+    if (extension == m_uniformExtension && newSize == oldSize) {
         return;
     }
     m_uniformExtension = std::move(extension);
@@ -30,6 +33,9 @@ void ShaderNodeRhi::setUniformExtension(std::shared_ptr<PhosphorShell::IUniformE
     m_ubo.reset();
     m_initialized = false;
     m_didFullUploadOnce = false;
+    // Resize staging buffer to match. Keep capacity to avoid churn if the size
+    // oscillates. Actual memset/fill happens on upload.
+    m_extensionStaging.resize(newSize);
     resetAllBindingsAndPipelines();
 }
 
@@ -145,7 +151,7 @@ void ShaderNodeRhi::setAppField1(int value)
 // Extra Bindings (consumer-managed)
 // ============================================================================
 
-void ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
+bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
     // The library owns the following bindings, and assigning to any of them
     // via setExtraBinding would produce duplicate SRB entries (undefined RHI
@@ -156,25 +162,40 @@ void ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampl
     //   7-10   — user textures
     //   11     — wallpaper
     //   12     — depth
-    // Binding 1 and 13+ are free for consumer use.
-    if (binding == 0 || (binding >= 2 && binding <= 12)) {
-        qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding
-                                << "conflicts with a library-managed binding (0, 2-12) — ignored";
-        return;
+    // Binding 1 and 13..31 are free for consumer use. The upper bound (31)
+    // matches Qt RHI's minimum-guaranteed SRB binding count across backends;
+    // anything higher is not portable.
+    constexpr int kMaxConsumerBinding = 31;
+    if (binding == 0 || (binding >= 2 && binding <= 12) || binding < 0 || binding > kMaxConsumerBinding) {
+        qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding << "out of allowed range (1 or 13-"
+                                << kMaxConsumerBinding << ") — ignored";
+        return false;
+    }
+    // Idempotent re-registration: skip the SRB/pipeline teardown when the
+    // stored (texture, sampler) pair already matches. Without this guard,
+    // consumers that re-push the same pointers every frame (common during
+    // steady-state rendering) would trigger a full pipeline rebuild on every
+    // frame.
+    auto it = m_extraBindings.find(binding);
+    if (it != m_extraBindings.end() && it->second.texture == texture && it->second.sampler == sampler) {
+        return true;
     }
     m_extraBindings[binding] = ExtraBinding{texture, sampler};
     m_extraBindingsDirty = true;
     resetAllBindingsAndPipelines();
+    return true;
 }
 
-void ShaderNodeRhi::removeExtraBinding(int binding)
+bool ShaderNodeRhi::removeExtraBinding(int binding)
 {
     auto it = m_extraBindings.find(binding);
-    if (it != m_extraBindings.end()) {
-        m_extraBindings.erase(it);
-        m_extraBindingsDirty = true;
-        resetAllBindingsAndPipelines();
+    if (it == m_extraBindings.end()) {
+        return false;
     }
+    m_extraBindings.erase(it);
+    m_extraBindingsDirty = true;
+    resetAllBindingsAndPipelines();
+    return true;
 }
 
 // ============================================================================
@@ -341,6 +362,11 @@ void ShaderNodeRhi::setBufferFeedback(bool enable)
     m_bufferRenderTargetB.reset();
     m_bufferRenderPassDescriptorB.reset();
     m_bufferFeedbackCleared = false;
+    // iFrame calculation in syncBaseUniforms() depends on m_bufferFeedback +
+    // m_bufferFeedbackCleared. Toggling feedback changes that expression, so
+    // the K_TIME_BLOCK (which hosts iFrame) must be re-uploaded next frame.
+    m_timeDirty = true;
+    m_uniformsDirty = true;
 }
 
 void ShaderNodeRhi::setBufferScale(qreal scale)

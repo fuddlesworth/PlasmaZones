@@ -4,14 +4,11 @@
 #pragma once
 
 #include "zoneshadercommon.h"
-#include "zoneuniformextension.h"
 
 #include <PhosphorRendering/ShaderNodeRhi.h>
 
 #include <QImage>
 #include <QQuickItem>
-#include <QVector>
-#include <QVector4D>
 
 #include <memory>
 
@@ -27,12 +24,14 @@ namespace PlasmaZones {
  * VBO, UBO, SRBs, pipelines, multipass, textures, shader baking, etc.
  *
  * This subclass adds zone-specific state:
- * - Zone data arrays (via ZoneUniformExtension as IUniformExtension)
  * - Labels texture at binding 1 (via setExtraBinding)
  * - Zone count / highlighted count in BaseUniforms::appField0/appField1
  *
- * The zone extension data is appended after BaseUniforms in the UBO, matching
- * the GLSL UBO layout in common.glsl exactly.
+ * Zone UBO data (rects, colors, params) is written by ZoneUniformExtension,
+ * which is OWNED by ZoneShaderItem — the item registers it via
+ * ShaderEffect::setUniformExtension() and drives updates directly. The node
+ * does not hold a QVector<ZoneData> cache; it only reports counts to the
+ * shader via setZoneCounts().
  */
 class ZoneShaderNodeRhi : public PhosphorRendering::ShaderNodeRhi
 {
@@ -40,12 +39,16 @@ public:
     explicit ZoneShaderNodeRhi(QQuickItem* item);
     ~ZoneShaderNodeRhi() override;
 
-    // ── Zone Data ─────────────────────────────────────────────────────
-    void setZones(const QVector<ZoneData>& zones);
-    void setZone(int index, const ZoneData& data);
-    void setZoneCount(int count);
-    void setHighlightedZones(const QVector<int>& indices);
-    void clearHighlights();
+    /**
+     * @brief Publish zone and highlighted counts to the shader.
+     *
+     * Writes BaseUniforms::appField0 (total) and appField1 (highlighted) —
+     * the shader uses these to bound its per-zone loops and gate highlight
+     * logic. Called from ZoneShaderItem::updatePaintNode() during the sync
+     * phase, alongside the ZoneUniformExtension update that carries the
+     * actual per-zone data.
+     */
+    void setZoneCounts(int total, int highlighted);
 
     // ── Labels Texture (binding 1 via setExtraBinding) ────────────────
     void setLabelsTexture(const QImage& image);
@@ -57,21 +60,8 @@ public:
     void releaseResources() override;
 
 private:
-    /** Recompute highlighted count from m_zones and set appField1. */
-    void updateHighlightedCount();
-
-    /** Thread-safe QRhi accessor for labels texture management. */
-    QRhi* safeRhiForLabels() const;
-
     /** Upload labels texture when dirty (called from prepare). */
     void uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb);
-
-    // Zone data
-    QVector<ZoneData> m_zones;
-    QVector<int> m_highlightedIndices;
-
-    // Zone uniform extension (appends zone arrays after BaseUniforms)
-    std::shared_ptr<ZoneUniformExtension> m_zoneExtension;
 
     // Labels texture (binding 1 via setExtraBinding)
     QImage m_labelsImage;

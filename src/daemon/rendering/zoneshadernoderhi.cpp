@@ -15,9 +15,9 @@ namespace PlasmaZones {
 ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
     : PhosphorRendering::ShaderNodeRhi(item)
 {
-    // Create zone uniform extension and attach to parent
-    m_zoneExtension = std::make_shared<ZoneUniformExtension>();
-    setUniformExtension(m_zoneExtension);
+    // The ZoneUniformExtension is owned by the ZoneShaderItem and is pushed
+    // down to this node each frame through ShaderEffect::syncBasePropertiesToNode().
+    // No extension allocation happens here.
 
     // 1x1 transparent fallback for when labels are disabled
     m_transparentFallbackImage = QImage(1, 1, QImage::Format_RGBA8888);
@@ -30,96 +30,28 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/shaders"), QStandardPaths::LocateDirectory));
 }
 
-ZoneShaderNodeRhi::~ZoneShaderNodeRhi() = default;
+ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
+{
+    // Drop the labels extra binding BEFORE our m_labelsTexture/m_labelsSampler
+    // unique_ptrs run their destructors. The parent's m_extraBindings map
+    // stores raw pointers to these resources; leaving a stale entry pointing
+    // at freed memory is only safe today because ~ShaderNodeRhi() happens to
+    // not dereference m_extraBindings during teardown. Calling
+    // removeExtraBinding() here makes the invariant explicit and future-proofs
+    // against any code parent-side teardown might add that walks that map.
+    removeExtraBinding(1);
+}
 
 // ============================================================================
-// Zone Data Setters
+// Zone Counts
 // ============================================================================
 
-void ZoneShaderNodeRhi::updateHighlightedCount()
+void ZoneShaderNodeRhi::setZoneCounts(int total, int highlighted)
 {
-    int count = 0;
-    for (const auto& zone : m_zones) {
-        if (zone.isHighlighted)
-            ++count;
-    }
-    setAppField1(count);
-}
-
-void ZoneShaderNodeRhi::setZones(const QVector<ZoneData>& zones)
-{
-    const int count = qMin(zones.size(), MaxZones);
-    m_zones = zones.mid(0, count);
-
-    // Update extension with new zone data
-    m_zoneExtension->updateFromZones(m_zones);
-
-    // Update appField0 (zoneCount) and appField1 (highlightedCount)
-    setAppField0(m_zones.size());
-    updateHighlightedCount();
-
-    invalidateUniforms();
-}
-
-void ZoneShaderNodeRhi::setZone(int index, const ZoneData& data)
-{
-    if (index < 0 || index >= MaxZones) {
-        return;
-    }
-    // Reject sparse writes — silently growing m_zones with default-initialized
-    // entries would render invisible garbage zones and inflate appField0
-    // beyond the caller's expectation. Callers must populate 0..N-1 first via
-    // setZones() before using setZone(N) to extend.
-    if (index > m_zones.size()) {
-        qCWarning(lcOverlay) << "ZoneShaderNodeRhi::setZone: sparse write rejected; index" << index
-                             << "exceeds current size" << m_zones.size() << "by more than 1";
-        return;
-    }
-    if (index == m_zones.size()) {
-        m_zones.append(data);
-    } else {
-        m_zones[index] = data;
-    }
-    m_zoneExtension->updateFromZones(m_zones);
-
-    setAppField0(m_zones.size());
-    updateHighlightedCount();
-
-    invalidateUniforms();
-}
-
-void ZoneShaderNodeRhi::setZoneCount(int count)
-{
-    if (count >= 0 && count <= MaxZones) {
-        m_zones.resize(count);
-        m_zoneExtension->updateFromZones(m_zones);
-        setAppField0(m_zones.size());
-        invalidateUniforms();
-    }
-}
-
-void ZoneShaderNodeRhi::setHighlightedZones(const QVector<int>& indices)
-{
-    m_highlightedIndices = indices;
-    for (int i = 0; i < m_zones.size(); ++i) {
-        m_zones[i].isHighlighted = indices.contains(i);
-    }
-    m_zoneExtension->updateFromZones(m_zones);
-
-    updateHighlightedCount();
-
-    invalidateUniforms();
-}
-
-void ZoneShaderNodeRhi::clearHighlights()
-{
-    m_highlightedIndices.clear();
-    for (auto& zone : m_zones) {
-        zone.isHighlighted = false;
-    }
-    m_zoneExtension->updateFromZones(m_zones);
-    setAppField1(0);
-    invalidateUniforms();
+    const int clampedTotal = qBound(0, total, MaxZones);
+    const int clampedHighlighted = qBound(0, highlighted, clampedTotal);
+    setAppField0(clampedTotal);
+    setAppField1(clampedHighlighted);
 }
 
 // ============================================================================

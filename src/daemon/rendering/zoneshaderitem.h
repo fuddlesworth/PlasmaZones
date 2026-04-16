@@ -6,6 +6,7 @@
 #include "zoneshadercommon.h"
 
 #include <PhosphorRendering/ShaderEffect.h>
+#include <PhosphorShell/IUniformExtension.h>
 
 #include <plasmazones_rendering_export.h>
 #include <QImage>
@@ -14,6 +15,7 @@
 #include <QVector>
 #include <array>
 #include <atomic>
+#include <memory>
 
 QT_BEGIN_NAMESPACE
 class QSGNode;
@@ -22,6 +24,7 @@ QT_END_NAMESPACE
 namespace PlasmaZones {
 
 class ZoneShaderNodeRhi;
+class ZoneUniformExtension;
 
 /**
  * @brief QQuickItem for rendering zone overlays with custom shaders
@@ -120,14 +123,8 @@ public:
      */
     QVector<ZoneColor> zoneBorderColors() const;
 
-    /**
-     * @brief Force reload of shader from source (callable from QML).
-     * Alias for reloadShader() for backward compatibility.
-     */
-    Q_INVOKABLE void loadShader()
-    {
-        reloadShader();
-    }
+    // Note: reloadShader() is inherited from ShaderEffect (Q_INVOKABLE). Call
+    // that directly from QML / C++ — no zone-specific alias needed.
 
     /**
      * @brief Override setShaderParams to extract customParams/customColor/uTexture values.
@@ -136,6 +133,19 @@ public:
      * "uTexture0" which must be parsed and applied to the corresponding properties.
      */
     void setShaderParams(const QVariantMap& params) override;
+
+    /**
+     * @brief Refuse external uniform-extension replacement.
+     *
+     * ZoneShaderItem owns an internal ZoneUniformExtension (created in its
+     * constructor) that writes the zone UBO region the GLSL side expects.
+     * Replacing it with an arbitrary extension would either crash rendering
+     * (layout mismatch with common.glsl) or silently produce wrong output.
+     * We override the base setter to refuse + log rather than silently
+     * accept and ignore, so misuse fails loud at the earliest possible call
+     * site.
+     */
+    void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> extension) override;
 
 Q_SIGNALS:
     void zonesChanged();
@@ -203,6 +213,13 @@ private:
 
     // Render node tracking for safe teardown
     ZoneShaderNodeRhi* m_zoneRenderNode = nullptr;
+
+    // ZoneUniformExtension owned HERE (not on the node) so its lifetime
+    // matches the QML-visible item rather than the transient QSGRenderNode.
+    // Registered on the base class via ShaderEffect::setUniformExtension in
+    // the constructor; parent's syncBasePropertiesToNode pushes it down to
+    // each render node that gets created for this item.
+    std::shared_ptr<ZoneUniformExtension> m_zoneExtension;
 
     // Dirty flags for render thread synchronization
     std::atomic<bool> m_zoneDataDirty{false};

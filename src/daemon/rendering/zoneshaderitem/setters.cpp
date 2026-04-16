@@ -95,88 +95,51 @@ void ZoneShaderItem::setShaderParams(const QVariantMap& params)
     // Call parent to store and emit
     PhosphorRendering::ShaderEffect::setShaderParams(params);
 
-    // Extract float params: customParams1_x through customParams8_w (slots 0-31)
+    // Extract float params: customParams1_x through customParams8_w (slots 0-31).
+    // Uses the indexed customParamAt / setCustomParamAt API on the base class
+    // so we don't need two 8-entry tables of member-function pointers.
     auto extractFloat = [&params](const QString& key, float defaultVal) -> float {
-        if (params.contains(key)) {
-            bool ok = false;
-            float val = params.value(key).toFloat(&ok);
-            return ok ? val : defaultVal;
+        const auto it = params.constFind(key);
+        if (it == params.constEnd()) {
+            return defaultVal;
         }
-        return defaultVal;
-    };
-
-    // Extract and apply custom params (8 vec4s, keyed as customParamsN_{x,y,z,w})
-    using ParamGetter = QVector4D (ShaderEffect::*)() const;
-    using ParamSetter = void (ShaderEffect::*)(const QVector4D&);
-    static const ParamGetter paramGetters[] = {
-        &ShaderEffect::customParams1, &ShaderEffect::customParams2, &ShaderEffect::customParams3,
-        &ShaderEffect::customParams4, &ShaderEffect::customParams5, &ShaderEffect::customParams6,
-        &ShaderEffect::customParams7, &ShaderEffect::customParams8,
-    };
-    static const ParamSetter paramSetters[] = {
-        &ShaderEffect::setCustomParams1, &ShaderEffect::setCustomParams2, &ShaderEffect::setCustomParams3,
-        &ShaderEffect::setCustomParams4, &ShaderEffect::setCustomParams5, &ShaderEffect::setCustomParams6,
-        &ShaderEffect::setCustomParams7, &ShaderEffect::setCustomParams8,
+        bool ok = false;
+        const float val = it->toFloat(&ok);
+        return ok ? val : defaultVal;
     };
 
     for (int i = 0; i < 8; ++i) {
-        QVector4D cp = (this->*paramGetters[i])();
+        QVector4D cp = customParamAt(i);
         const QString prefix = QStringLiteral("customParams") + QString::number(i + 1) + QLatin1Char('_');
         cp.setX(extractFloat(prefix + QLatin1Char('x'), cp.x()));
         cp.setY(extractFloat(prefix + QLatin1Char('y'), cp.y()));
         cp.setZ(extractFloat(prefix + QLatin1Char('z'), cp.z()));
         cp.setW(extractFloat(prefix + QLatin1Char('w'), cp.w()));
-        (this->*paramSetters[i])(cp);
+        setCustomParamAt(i, cp);
     }
 
     // Color params: customColor1-16
     auto extractColor = [&params](const QString& key, const QColor& defaultVal) -> QColor {
-        if (params.contains(key)) {
-            QVariant val = params.value(key);
-            if (val.canConvert<QColor>()) {
-                return val.value<QColor>();
-            }
-            if (val.typeId() == QMetaType::QString) {
-                QColor color(val.toString());
-                if (color.isValid()) {
-                    return color;
-                }
+        const auto it = params.constFind(key);
+        if (it == params.constEnd()) {
+            return defaultVal;
+        }
+        const QVariant& val = *it;
+        if (val.canConvert<QColor>()) {
+            return val.value<QColor>();
+        }
+        if (val.typeId() == QMetaType::QString) {
+            QColor color(val.toString());
+            if (color.isValid()) {
+                return color;
             }
         }
         return defaultVal;
     };
 
-    static const char* const colorKeys[] = {
-        "customColor1",  "customColor2",  "customColor3",  "customColor4",  "customColor5",  "customColor6",
-        "customColor7",  "customColor8",  "customColor9",  "customColor10", "customColor11", "customColor12",
-        "customColor13", "customColor14", "customColor15", "customColor16",
-    };
-
-    // Array of setter function pointers to avoid switch
-    using ColorSetter = void (ShaderEffect::*)(const QColor&);
-    static const ColorSetter colorSetters[] = {
-        &ShaderEffect::setCustomColor1,  &ShaderEffect::setCustomColor2,  &ShaderEffect::setCustomColor3,
-        &ShaderEffect::setCustomColor4,  &ShaderEffect::setCustomColor5,  &ShaderEffect::setCustomColor6,
-        &ShaderEffect::setCustomColor7,  &ShaderEffect::setCustomColor8,  &ShaderEffect::setCustomColor9,
-        &ShaderEffect::setCustomColor10, &ShaderEffect::setCustomColor11, &ShaderEffect::setCustomColor12,
-        &ShaderEffect::setCustomColor13, &ShaderEffect::setCustomColor14, &ShaderEffect::setCustomColor15,
-        &ShaderEffect::setCustomColor16,
-    };
-
-    using ColorGetter = QColor (ShaderEffect::*)() const;
-    static const ColorGetter colorGetters[] = {
-        &ShaderEffect::customColor1,  &ShaderEffect::customColor2,  &ShaderEffect::customColor3,
-        &ShaderEffect::customColor4,  &ShaderEffect::customColor5,  &ShaderEffect::customColor6,
-        &ShaderEffect::customColor7,  &ShaderEffect::customColor8,  &ShaderEffect::customColor9,
-        &ShaderEffect::customColor10, &ShaderEffect::customColor11, &ShaderEffect::customColor12,
-        &ShaderEffect::customColor13, &ShaderEffect::customColor14, &ShaderEffect::customColor15,
-        &ShaderEffect::customColor16,
-    };
-
     for (int i = 0; i < 16; ++i) {
-        QColor current = (this->*colorGetters[i])();
-        QColor extracted = extractColor(QString::fromLatin1(colorKeys[i]), current);
-        (this->*colorSetters[i])(extracted);
+        const QString key = QStringLiteral("customColor") + QString::number(i + 1);
+        setCustomColorAt(i, extractColor(key, customColorAt(i)));
     }
 
     // User texture params: uTexture0-3 paths, wrap modes, and SVG render sizes
