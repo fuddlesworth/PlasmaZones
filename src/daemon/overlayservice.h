@@ -241,6 +241,11 @@ private:
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();
 
+    // Connect to a Layout's layoutModified signal so live edits from the editor
+    // (shader id/params, zone geometry, appearance) propagate to the live overlay
+    // without waiting for a layout switch or daemon restart.
+    void observeLayoutForLiveEdits(Layout* layout);
+
     // Hide overlay/selector windows on screens where the current context is disabled,
     // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
     void hideDisabledAndRefresh();
@@ -307,6 +312,7 @@ private:
     QPointer<Layout> m_layout;
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
+    QList<QPointer<Layout>> m_observedLayouts; ///< Layouts we watch for live edits
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;

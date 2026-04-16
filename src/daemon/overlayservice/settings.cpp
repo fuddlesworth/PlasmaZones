@@ -98,6 +98,13 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             disconnect(oldManager, &LayoutManager::layoutAssigned, this, nullptr);
         }
     }
+    // Disconnect any per-Layout connections to active layouts the previous manager owned
+    for (const QPointer<Layout>& layout : std::as_const(m_observedLayouts)) {
+        if (layout) {
+            disconnect(layout, &Layout::layoutModified, this, nullptr);
+        }
+    }
+    m_observedLayouts.clear();
 
     m_layoutManager = layoutManager;
 
@@ -108,15 +115,46 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
         if (manager) {
             // Update visible zone selector and overlay windows when layout changes.
             // Hidden windows are skipped — showZoneSelector()/show() refresh before showing.
-            connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* /*layout*/) {
+            connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+                observeLayoutForLiveEdits(layout);
                 refreshVisibleWindows();
             });
             connect(manager, &LayoutManager::layoutAssigned, this,
-                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, Layout* /*layout*/) {
+                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, Layout* layout) {
+                        observeLayoutForLiveEdits(layout);
                         refreshVisibleWindows();
                     });
+
+            // Observe the current active layout immediately so live edits to it
+            // (shader id/params, zones, appearance) propagate without waiting for
+            // a layout switch.
+            observeLayoutForLiveEdits(manager->activeLayout());
         }
     }
+}
+
+void OverlayService::observeLayoutForLiveEdits(Layout* layout)
+{
+    if (!layout) {
+        return;
+    }
+    // Walk the list, skipping null QPointers (entries auto-cleared on Layout destroy).
+    // Compact stale entries while we're at it so the list doesn't grow without bound.
+    for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
+        if (it->isNull()) {
+            it = m_observedLayouts.erase(it);
+        } else if (it->data() == layout) {
+            return; // Already observing
+        } else {
+            ++it;
+        }
+    }
+    // Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
+    // shaderParams, zones, appearance, etc.). Without this hook the editor's
+    // changes only reach the live overlay after a layout switch or daemon
+    // restart, since LayoutManager::activeLayoutChanged only fires on switch.
+    connect(layout, &Layout::layoutModified, this, &OverlayService::refreshVisibleWindows);
+    m_observedLayouts.append(QPointer<Layout>(layout));
 }
 
 void OverlayService::refreshVisibleWindows()
