@@ -543,19 +543,28 @@ Destroy + recreate is the honest model.
 
 ---
 
-## Future Extensions
+## Extensions (shipped in v1)
 
-Not in scope for v1, but the architecture leaves room for:
-
-- **Session restore**: serialize `SurfaceConfig` set to JSON; restore on launch.
-  `ISurfaceStore` interface would slot in next to the other injected deps.
-- **Multi-transport**: an `XdgToplevelTransport` for platforms without
-  layer-shell — satisfies the `ILayerShellTransport` contract with reasonable
-  degradation (no exclusive zones, position hints only).
-- **Animations**: `ISurfaceAnimator` for fade/slide-in transitions. Currently
-  left to the consumer's QML.
-- **Accessibility**: a11y tree propagation across surfaces — requires AT-SPI
-  wiring that PhosphorShell doesn't expose yet.
+- **`ISurfaceStore`**: key-value JSON persistence interface for surface-
+  related application state (which surfaces were visible, last-selected
+  options, etc.). Default impl `JsonSurfaceStore` uses `QSaveFile` for
+  atomic writes. The library does not auto-persist anything through
+  this interface — consumers decide what to save.
+- **`XdgToplevelTransport`**: fallback `ILayerShellTransport` for
+  compositors without wlr-layer-shell. Degrades gracefully: layer
+  stacking and exclusive zones are ignored, keyboard forced to
+  OnDemand, anchors become position hints. Lets PhosphorLayer run on
+  GNOME / nested sessions / non-Plasma compositors.
+- **`ISurfaceAnimator`**: hook point for show/hide transitions that
+  cannot be expressed in pure QML (pre-show measurement, orchestrated
+  multi-surface transitions). Default impl `NoOpSurfaceAnimator` calls
+  the completion callback synchronously; 99 % of consumers animate
+  in QML.
+- **Accessibility**: layered surfaces expose Qt's built-in QAccessible
+  tree natively through the QQuickItem content — no library-side
+  plumbing is required. Consumers add `Accessible.*` attached
+  properties to their QML the same way they would for any Qt Quick
+  application.
 
 ---
 

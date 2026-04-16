@@ -51,6 +51,8 @@ set(phosphorlayer_SRCS
     src/topologycoordinator.cpp
     src/defaults/defaultscreenprovider.cpp
     src/defaults/phosphorshelltransport.cpp
+    src/defaults/xdgtopleveltransport.cpp
+    src/defaults/jsonsurfacestore.cpp
 )
 
 set(phosphorlayer_public_HDRS
@@ -64,8 +66,13 @@ set(phosphorlayer_public_HDRS
     include/PhosphorLayer/IScreenProvider.h
     include/PhosphorLayer/ILayerShellTransport.h
     include/PhosphorLayer/IQmlEngineProvider.h
+    include/PhosphorLayer/ISurfaceStore.h
+    include/PhosphorLayer/ISurfaceAnimator.h
     include/PhosphorLayer/defaults/DefaultScreenProvider.h
     include/PhosphorLayer/defaults/PhosphorShellTransport.h
+    include/PhosphorLayer/defaults/XdgToplevelTransport.h
+    include/PhosphorLayer/defaults/JsonSurfaceStore.h
+    include/PhosphorLayer/defaults/NoOpSurfaceAnimator.h
 )
 
 add_library(PhosphorLayer SHARED
