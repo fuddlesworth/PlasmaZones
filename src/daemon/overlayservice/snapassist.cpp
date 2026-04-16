@@ -16,6 +16,10 @@
 #include <QKeyEvent>
 #include <QTimer>
 #include <PhosphorShell/LayerSurface.h>
+
+#include <PhosphorLayer/Surface.h>
+#include <PhosphorLayer/ILayerShellTransport.h>
+#include "pz_roles.h"
 using PhosphorShell::LayerSurface;
 namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
@@ -121,7 +125,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     const bool reuseWindow = m_snapAssistWindow && m_snapAssistWindow->isVisible() && m_snapAssistScreenId == screenId;
     if (!reuseWindow) {
         destroySnapAssistWindow();
-        createSnapAssistWindow(screen);
+        createSnapAssistWindowFor(screen, screenGeom, screenId);
         if (!m_snapAssistWindow) {
             Q_EMIT snapAssistDismissed();
             return;
@@ -187,27 +191,14 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderRadius"), m_settings->borderRadius());
     }
 
-    // Configure layer surface only on fresh creation (not reuse) — reconfiguring
-    // an already-visible layer surface with a new scope is unnecessary and can
-    // confuse KWin's rate-limiting. Size/screen are already correct for reuse.
-    if (reuseWindow) {
-        // Restore exclusive keyboard grab for Escape handling — it was released
-        // in onSnapAssistWindowSelected() to keep the desktop responsive during
-        // the D-Bus roundtrip.
-        if (auto* ls = LayerSurface::find(m_snapAssistWindow)) {
-            ls->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityExclusive);
+    // On reuse, restore exclusive keyboard grab via the mutable transport handle —
+    // it was released in onSnapAssistWindowSelected() to keep the desktop responsive
+    // during the D-Bus roundtrip. Fresh-create path already attaches with Exclusive
+    // via PzRoles::SnapAssist, so nothing extra to do there.
+    if (reuseWindow && m_snapAssistSurface) {
+        if (auto* handle = m_snapAssistSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::Exclusive);
         }
-    } else {
-        if (!configureLayerSurface(
-                m_snapAssistWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
-                QStringLiteral("plasmazones-snap-assist-%1-%2").arg(screenId).arg(++m_scopeGeneration))) {
-            qCWarning(lcOverlay) << "showSnapAssist: failed to configure layer surface";
-            destroySnapAssistWindow();
-            Q_EMIT snapAssistDismissed();
-            return;
-        }
-        // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-        updateWindowScreenPosition(m_snapAssistWindow, screenId);
     }
 
     if (!reuseWindow) {
@@ -215,7 +206,9 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
         m_snapAssistWindow->setWidth(screenGeom.width());
         m_snapAssistWindow->setHeight(screenGeom.height());
     }
-    m_snapAssistWindow->show();
+    if (m_snapAssistSurface) {
+        m_snapAssistSurface->show();
+    }
     // Ensure the window receives keyboard focus for Escape handling on Wayland.
     // KeyboardInteractivityExclusive tells the compositor to send keyboard events,
     // but Qt may not set internal focus without an explicit activation request.
@@ -306,7 +299,12 @@ bool OverlayService::isSnapAssistVisible() const
 
 void OverlayService::createSnapAssistWindow(QScreen* physScreen)
 {
-    if (m_snapAssistWindow) {
+    createSnapAssistWindowFor(physScreen, QRect(), QString());
+}
+
+void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId)
+{
+    if (m_snapAssistSurface) {
         return;
     }
 
@@ -316,17 +314,38 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
         return;
     }
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, "snap assist");
-    if (!window) {
+    // Virtual-screen anchors + margins (wlr-layer-shell attaches output+anchors
+    // immutably, so they have to be right at create time).
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    const QRect physGeom = screen->geometry();
+    const bool isVirtualScreen = screenGeom.isValid() && screenGeom != physGeom;
+    if (isVirtualScreen) {
+        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
+        const QRect clamped = screenGeom.intersected(physGeom);
+        marginsOverride = QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0);
+    } else {
+        anchorsOverride = PhosphorLayer::AnchorAll;
+    }
+
+    const QString scopeId = resolvedId.isEmpty() ? Utils::screenIdentifier(screen) : resolvedId;
+    const auto role = PzRoles::SnapAssist.withScopePrefix(
+        QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/SnapAssistOverlay.qml")), screen, role,
+                                       "snap assist", QVariantMap(), anchorsOverride, marginsOverride);
+    if (!surface) {
         qCWarning(lcOverlay) << "Failed to create snap assist overlay";
         return;
     }
 
-    m_snapAssistWindow = window;
+    m_snapAssistSurface = surface;
+    m_snapAssistWindow = surface->window();
     m_snapAssistScreen = screen;
 
-    connect(window, &QObject::destroyed, this, [this, win = window]() {
-        if (m_snapAssistWindow == win) {
+    connect(surface, &QObject::destroyed, this, [this, surf = surface]() {
+        if (m_snapAssistSurface == surf) {
+            m_snapAssistSurface = nullptr;
             m_snapAssistWindow = nullptr;
             m_snapAssistScreen = nullptr;
             m_snapAssistScreenId.clear();
@@ -334,37 +353,31 @@ void OverlayService::createSnapAssistWindow(QScreen* physScreen)
     });
 
     // Emit snapAssistDismissed when the window is closed by QML (backdrop click, Escape)
-    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+    connect(m_snapAssistWindow, &QWindow::visibleChanged, this, [this](bool visible) {
         if (!visible) {
             Q_EMIT snapAssistDismissed();
         }
     });
 
-    // Connect windowSelected from QML: convert overlay-local geometry to screen
-    // coordinates before emitting (KWin effect needs global coordinates for moveResize)
-    connect(window, SIGNAL(windowSelected(QString, QString, QString)), this,
+    connect(m_snapAssistWindow, SIGNAL(windowSelected(QString, QString, QString)), this,
             SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
 
     // Install event filter for reliable Escape key handling on Wayland.
-    // The QML Shortcut may not fire if the layer shell keyboard focus
-    // isn't fully reflected in Qt's internal focus model.
-    window->installEventFilter(this);
-    window->setVisible(false);
+    m_snapAssistWindow->installEventFilter(this);
+    // Surface is in Hidden state (warmed) — caller calls show() after setting properties.
 }
 
 void OverlayService::destroySnapAssistWindow()
 {
-    if (m_snapAssistWindow) {
-        // Disconnect visibleChanged before closing to prevent spurious snapAssistDismissed
-        // when the window is being destroyed and recreated (e.g. showSnapAssist recreate cycle)
-        disconnect(m_snapAssistWindow, &QWindow::visibleChanged, this, nullptr);
-        // Disconnect screen signals so no geometryChanged etc. are delivered during teardown
-        if (m_snapAssistScreen) {
-            disconnect(m_snapAssistScreen, nullptr, m_snapAssistWindow, nullptr);
+    if (m_snapAssistSurface) {
+        if (m_snapAssistWindow) {
+            disconnect(m_snapAssistWindow, &QWindow::visibleChanged, this, nullptr);
+            if (m_snapAssistScreen) {
+                disconnect(m_snapAssistScreen, nullptr, m_snapAssistWindow, nullptr);
+            }
         }
-        m_snapAssistWindow->close();
-        m_snapAssistWindow->destroy();
-        m_snapAssistWindow->deleteLater();
+        m_snapAssistSurface->deleteLater();
+        m_snapAssistSurface = nullptr;
         m_snapAssistWindow = nullptr;
     }
     m_snapAssistScreen = nullptr;
@@ -377,9 +390,9 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
     // Release exclusive keyboard grab immediately so the desktop remains
     // responsive while the D-Bus roundtrip to KWin processes the snap.
     // The window stays visible for potential reuse by showSnapAssist() continuation.
-    if (m_snapAssistWindow) {
-        if (auto* ls = LayerSurface::find(m_snapAssistWindow)) {
-            ls->setKeyboardInteractivity(LayerSurface::KeyboardInteractivityNone);
+    if (m_snapAssistSurface) {
+        if (auto* handle = m_snapAssistSurface->transport()) {
+            handle->setKeyboardInteractivity(PhosphorLayer::KeyboardInteractivity::None);
         }
     }
 
@@ -425,9 +438,11 @@ void OverlayService::showLayoutPicker(const QString& screenId)
         selectorWindow->hide();
     }
 
-    // Always destroy and recreate for fresh state
+    // Always destroy and recreate for fresh state. Pass the resolved geometry
+    // so the Surface attaches with correct virtual-screen anchors + margins
+    // (wlr-layer-shell doesn't let us reconfigure those post-attach).
     destroyLayoutPickerWindow();
-    createLayoutPickerWindow(screen);
+    createLayoutPickerWindowFor(screen, screenGeom, resolvedId);
     if (!m_layoutPickerWindow) {
         return;
     }
@@ -476,23 +491,12 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Theme colors and zone appearance (consistent with zone selector)
     writeColorSettings(m_layoutPickerWindow, m_settings);
 
-    // Layer shell with keyboard interactivity — position to virtual or physical screen
-    if (!configureLayerSurface(
-            m_layoutPickerWindow, screen, LayerSurface::LayerTop, LayerSurface::KeyboardInteractivityExclusive,
-            QStringLiteral("plasmazones-layout-picker-%1-%2").arg(resolvedId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "showLayoutPicker: failed to configure layer surface";
-        destroyLayoutPickerWindow();
-        return;
-    }
-    // Apply virtual screen positioning (anchors + margins) after configureLayerSurface
-    updateWindowScreenPosition(m_layoutPickerWindow, resolvedId);
-
+    // Anchors + margins were baked into the Surface by createLayoutPickerWindowFor above
+    // using screenGeom, so positioning is already correct.
     assertWindowOnScreen(m_layoutPickerWindow, screen, screenGeom);
-    // Size only — position is controlled by layer-surface anchors + margins,
-    // setX/setY are no-ops on layer surfaces.
     m_layoutPickerWindow->setWidth(screenGeom.width());
     m_layoutPickerWindow->setHeight(screenGeom.height());
-    QMetaObject::invokeMethod(m_layoutPickerWindow, "show");
+    m_layoutPickerSurface->show();
     m_layoutPickerWindow->requestActivate();
 
     qCInfo(lcOverlay) << "showLayoutPicker: screen=" << resolvedId << "layouts=" << layoutsList.size()
@@ -518,19 +522,56 @@ bool OverlayService::isLayoutPickerVisible() const
 
 void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
 {
-    if (m_layoutPickerWindow) {
+    createLayoutPickerWindowFor(physScreen, QRect(), QString());
+}
+
+void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom,
+                                                 const QString& resolvedId)
+{
+    if (m_layoutPickerSurface) {
         return;
     }
 
     QScreen* screen = physScreen ? physScreen : Utils::primaryScreen();
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, "layout picker");
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to create layout picker overlay";
+    if (!screen) {
         return;
     }
 
-    connect(window, &QObject::destroyed, this, [this, win = window]() {
-        if (m_layoutPickerWindow == win) {
+    // Compute virtual-screen anchors/margins once, up front, since wlr-layer-
+    // shell's anchors/output are immutable post-attach (v3; v4's mutable
+    // anchors aren't exposed via PhosphorLayer yet). Physical screen → anchor
+    // all four edges; virtual screen → anchor Top+Left with margin offset so
+    // the window lands in the right region.
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    const QRect physGeom = screen->geometry();
+    const bool isVirtualScreen = screenGeom.isValid() && screenGeom != physGeom;
+    if (isVirtualScreen) {
+        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
+        const QRect clamped = screenGeom.intersected(physGeom);
+        marginsOverride = QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0);
+    } else {
+        anchorsOverride = PhosphorLayer::AnchorAll;
+    }
+
+    // Per-instance scope disambiguator so the compositor sees each open/close
+    // cycle as a fresh surface (prevents configure-event rate-limiting on rapid
+    // reopens).
+    const QString scopeId = resolvedId.isEmpty() ? Utils::screenIdentifier(screen) : resolvedId;
+    const auto role = PzRoles::LayoutPicker.withScopePrefix(
+        QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/LayoutPickerOverlay.qml")), screen, role,
+                                       "layout picker", QVariantMap(), anchorsOverride, marginsOverride);
+    if (!surface) {
+        return;
+    }
+
+    auto* window = surface->window();
+
+    connect(surface, &QObject::destroyed, this, [this, surf = surface]() {
+        if (m_layoutPickerSurface == surf) {
+            m_layoutPickerSurface = nullptr;
             m_layoutPickerWindow = nullptr;
             m_layoutPickerScreen = nullptr;
             m_layoutPickerScreenId.clear();
@@ -544,21 +585,22 @@ void OverlayService::createLayoutPickerWindow(QScreen* physScreen)
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);
 
+    m_layoutPickerSurface = surface;
     m_layoutPickerWindow = window;
-    window->setVisible(false);
+    // Surface is already warmed (hidden) — caller calls show() after setting properties.
 }
 
 void OverlayService::destroyLayoutPickerWindow()
 {
-    if (m_layoutPickerWindow) {
-        disconnect(m_layoutPickerWindow, &QWindow::visibleChanged, this, nullptr);
-        // Disconnect screen signals so no geometryChanged etc. are delivered during teardown
-        if (auto* screen = m_layoutPickerWindow->screen()) {
-            disconnect(screen, nullptr, m_layoutPickerWindow, nullptr);
+    if (m_layoutPickerSurface) {
+        if (m_layoutPickerWindow) {
+            disconnect(m_layoutPickerWindow, &QWindow::visibleChanged, this, nullptr);
+            if (auto* screen = m_layoutPickerWindow->screen()) {
+                disconnect(screen, nullptr, m_layoutPickerWindow, nullptr);
+            }
         }
-        m_layoutPickerWindow->close();
-        m_layoutPickerWindow->destroy();
-        m_layoutPickerWindow->deleteLater();
+        m_layoutPickerSurface->deleteLater();
+        m_layoutPickerSurface = nullptr;
         m_layoutPickerWindow = nullptr;
     }
     m_layoutPickerScreen = nullptr;

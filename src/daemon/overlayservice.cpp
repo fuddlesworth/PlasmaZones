@@ -421,7 +421,9 @@ QQuickWindow* OverlayService::createQmlWindow(const QUrl& qmlUrl, QScreen* scree
 
 PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, QScreen* screen,
                                                            const PhosphorLayer::Role& role, const char* windowType,
-                                                           const QVariantMap& windowProperties)
+                                                           const QVariantMap& windowProperties,
+                                                           std::optional<PhosphorLayer::Anchors> anchorsOverride,
+                                                           std::optional<QMargins> marginsOverride)
 {
     if (!screen) {
         qCWarning(lcOverlay) << "createLayerSurface: screen is null for" << windowType;
@@ -438,6 +440,8 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
     cfg.screen = screen;
     cfg.sharedEngine = m_engine.get(); // keep i18n + context properties unified
     cfg.windowProperties = windowProperties;
+    cfg.anchorsOverride = anchorsOverride;
+    cfg.marginsOverride = marginsOverride;
     cfg.debugName = QString::fromUtf8(windowType);
 
     auto* surface = m_surfaceFactory->create(std::move(cfg), this);

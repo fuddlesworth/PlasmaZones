@@ -5,6 +5,7 @@
 
 #include <QElapsedTimer>
 #include <QHash>
+#include <QMargins>
 #include <QMutex>
 #include <QObject>
 #include <QPointer>
@@ -12,6 +13,9 @@
 #include <QString>
 #include <atomic>
 #include <memory>
+#include <optional>
+
+#include <PhosphorLayer/Role.h>
 
 #include "../core/interfaces.h"
 #include "../core/layout.h"
@@ -24,7 +28,7 @@ class ILayerShellTransport;
 class IScreenProvider;
 class Surface;
 class SurfaceFactory;
-struct Role;
+// Role is a value type — full definition pulled in via Role.h above.
 } // namespace PhosphorLayer
 
 namespace PlasmaZones {
@@ -426,9 +430,11 @@ private:
     void destroyAllWindowsForPhysicalScreen(QScreen* screen);
 
     void createSnapAssistWindow(QScreen* physScreen);
+    void createSnapAssistWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
     void destroySnapAssistWindow();
 
     void createLayoutPickerWindow(QScreen* physScreen);
+    void createLayoutPickerWindowFor(QScreen* physScreen, const QRect& screenGeom, const QString& resolvedId);
     void destroyLayoutPickerWindow();
 
     /** Update a candidate's thumbnail in m_snapAssistCandidates and push to QML. */
@@ -482,12 +488,18 @@ private:
      * @param windowType        debug/telemetry label
      * @param windowProperties  QVariantMap applied as dynamic properties on the
      *                          QQuickWindow before QML loads
+     * @param anchorsOverride   if set, overrides the role's anchors (used for
+     *                          virtual-screen positioning)
+     * @param marginsOverride   if set, overrides the role's margins (used for
+     *                          virtual-screen positioning)
      *
      * @return the surface on success; nullptr on failure (warnings logged internally).
      */
     PhosphorLayer::Surface* createLayerSurface(const QUrl& qmlUrl, QScreen* screen, const PhosphorLayer::Role& role,
                                                const char* windowType,
-                                               const QVariantMap& windowProperties = QVariantMap());
+                                               const QVariantMap& windowProperties = QVariantMap(),
+                                               std::optional<PhosphorLayer::Anchors> anchorsOverride = std::nullopt,
+                                               std::optional<QMargins> marginsOverride = std::nullopt);
 
     // Audio viz: push spectrum to overlay windows
     void onAudioSpectrumUpdated(const QVector<float>& spectrum);
