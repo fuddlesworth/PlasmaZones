@@ -147,13 +147,19 @@ void ShaderNodeRhi::setAppField1(int value)
 
 void ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
-    // Binding 0 is the UBO, 2-5 are buffer channels, 6 is audio, 7-10 are user
-    // textures, 11 is wallpaper, 12 is depth. Binding 1 is reserved-but-unmanaged
-    // (consumers like PlasmaZones use it for labels). Reject conflicts with
-    // managed built-in bindings.
+    // The library owns the following bindings, and assigning to any of them
+    // via setExtraBinding would produce duplicate SRB entries (undefined RHI
+    // behaviour):
+    //   0      — UBO (BaseUniforms + extension region)
+    //   2-5    — multipass buffer channels
+    //   6      — audio spectrum
+    //   7-10   — user textures
+    //   11     — wallpaper
+    //   12     — depth
+    // Binding 1 and 13+ are free for consumer use.
     if (binding == 0 || (binding >= 2 && binding <= 12)) {
         qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding
-                                << "conflicts with a built-in binding (0, 2-12) — ignored";
+                                << "conflicts with a library-managed binding (0, 2-12) — ignored";
         return;
     }
     m_extraBindings[binding] = ExtraBinding{texture, sampler};
@@ -221,7 +227,8 @@ void ShaderNodeRhi::setWallpaperTexture(const QImage& image)
     }
     m_wallpaperImage = image;
     m_wallpaperDirty = true;
-    m_uniformsDirty = true;
+    // Wallpaper is a plain texture at binding 11 with no BaseUniforms field —
+    // its upload goes through m_wallpaperDirty and doesn't need a UBO roundtrip.
 }
 
 void ShaderNodeRhi::setUseWallpaper(bool use)

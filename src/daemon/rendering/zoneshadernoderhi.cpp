@@ -63,18 +63,29 @@ void ZoneShaderNodeRhi::setZones(const QVector<ZoneData>& zones)
 
 void ZoneShaderNodeRhi::setZone(int index, const ZoneData& data)
 {
-    if (index >= 0 && index < MaxZones) {
-        if (index >= m_zones.size()) {
-            m_zones.resize(index + 1);
-        }
-        m_zones[index] = data;
-        m_zoneExtension->updateFromZones(m_zones);
-
-        setAppField0(m_zones.size());
-        updateHighlightedCount();
-
-        invalidateUniforms();
+    if (index < 0 || index >= MaxZones) {
+        return;
     }
+    // Reject sparse writes — silently growing m_zones with default-initialized
+    // entries would render invisible garbage zones and inflate appField0
+    // beyond the caller's expectation. Callers must populate 0..N-1 first via
+    // setZones() before using setZone(N) to extend.
+    if (index > m_zones.size()) {
+        qCWarning(lcOverlay) << "ZoneShaderNodeRhi::setZone: sparse write rejected; index" << index
+                             << "exceeds current size" << m_zones.size() << "by more than 1";
+        return;
+    }
+    if (index == m_zones.size()) {
+        m_zones.append(data);
+    } else {
+        m_zones[index] = data;
+    }
+    m_zoneExtension->updateFromZones(m_zones);
+
+    setAppField0(m_zones.size());
+    updateHighlightedCount();
+
+    invalidateUniforms();
 }
 
 void ZoneShaderNodeRhi::setZoneCount(int count)
@@ -127,31 +138,36 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         return;
     }
 
-    // Initialize labels texture resources on first use
+    // Initialize labels texture resources on first use. Only flip
+    // m_labelsInitialized after BOTH resources create successfully — otherwise
+    // a transient RHI failure (device lost, OOM) would leave the init block
+    // skipped forever while m_labelsTextureDirty stays set.
     if (!m_labelsInitialized) {
+        std::unique_ptr<QRhiTexture> tex(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
+        if (!tex->create()) {
+            return; // retry next frame
+        }
+        std::unique_ptr<QRhiSampler> sam(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                                         QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
+        if (!sam->create()) {
+            return; // retry next frame; tex deleted by unique_ptr
+        }
+        m_labelsTexture = std::move(tex);
+        m_labelsSampler = std::move(sam);
         m_labelsInitialized = true;
-        m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, QSize(1, 1)));
-        if (!m_labelsTexture->create()) {
-            return;
-        }
-        m_labelsSampler.reset(rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
-                                              QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge));
-        if (!m_labelsSampler->create()) {
-            return;
-        }
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
     }
 
-    m_labelsTextureDirty = false;
     const QSize targetSize = (!m_labelsImage.isNull() && m_labelsImage.width() > 0 && m_labelsImage.height() > 0)
         ? m_labelsImage.size()
         : QSize(1, 1);
     if (m_labelsTexture->pixelSize() != targetSize) {
-        m_labelsTexture.reset(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
-        if (!m_labelsTexture->create()) {
-            return;
+        std::unique_ptr<QRhiTexture> resized(rhi->newTexture(QRhiTexture::RGBA8, targetSize));
+        if (!resized->create()) {
+            return; // keep dirty; retry next frame with old texture still bound
         }
-        // Re-register the extra binding with the new texture
+        m_labelsTexture = std::move(resized);
+        // Re-register the extra binding with the new texture pointer.
         setExtraBinding(1, m_labelsTexture.get(), m_labelsSampler.get());
     }
     QRhiResourceUpdateBatch* batch = rhi->nextResourceUpdateBatch();
@@ -162,6 +178,8 @@ void ZoneShaderNodeRhi::uploadLabelsTexture(QRhi* rhi, QRhiCommandBuffer* cb)
         batch->uploadTexture(m_labelsTexture.get(), src);
         cb->resourceUpdate(batch);
     }
+    // Only clear the dirty flag after a successful upload completes.
+    m_labelsTextureDirty = false;
 }
 
 // ============================================================================

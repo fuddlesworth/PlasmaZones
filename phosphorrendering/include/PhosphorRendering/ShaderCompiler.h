@@ -19,7 +19,12 @@ namespace PhosphorRendering {
 /// Compilation results are cached by source hash to avoid redundant QShaderBaker
 /// invocations. The cache is in-memory only — cleared on process restart.
 ///
-/// All methods are thread-safe (render threads may compile concurrently).
+/// @par Thread-safety
+/// All methods are safe to call from any thread. Cache reads are lock-free for
+/// already-baked sources. Cache misses serialize on an internal bake mutex —
+/// QShaderBaker (glslang) is not reentrant, and concurrent bake() calls crash
+/// inside QSpirvCompiler::compileToSpirv(), so the mutex is load-bearing and
+/// must not be removed. loadAndExpand() is pure I/O and runs concurrently.
 class PHOSPHORRENDERING_EXPORT ShaderCompiler
 {
 public:

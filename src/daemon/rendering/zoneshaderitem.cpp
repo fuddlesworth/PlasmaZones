@@ -253,13 +253,15 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     // ── Sync shader source ───────────────────────────────────────────
     // PlasmaZones derives vertex shader path from zone.vert in the same directory.
+    // Consume the parent's atomic dirty flag so runtime setShaderSource /
+    // setShaderIncludePaths / reloadShader() calls actually trigger a reload —
+    // without this, only status transitions reached the reload branch.
+    const bool wasDirty = consumeShaderDirty();
     const bool needLoad = !node->isShaderReady();
-    // Check if parent's shader dirty flag was set (parent uses atomic m_shaderDirty)
-    // Since we inherit ShaderEffect, we can check status changes
     const bool shaderSourceValid = shaderSource().isValid() && !shaderSource().isEmpty();
     const bool statusIsLoading = (status() == Status::Loading);
 
-    if (statusIsLoading || needLoad) {
+    if (wasDirty || statusIsLoading || needLoad) {
         if (shaderSourceValid) {
             QString fragPath = shaderSource().toLocalFile();
             if (shaderSource().scheme() == QLatin1String("qrc")) {

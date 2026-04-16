@@ -78,6 +78,16 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
 
 ShaderEffect::~ShaderEffect()
 {
+    // Disconnect the DirectConnection sceneGraphAboutToStop callback FIRST.
+    // That lambda executes on the render thread and dereferences m_renderNode;
+    // QObject::disconnect is thread-safe and blocks until any in-flight
+    // invocation completes, so after this line the render thread cannot race
+    // our subsequent member teardown.
+    if (m_connectedWindow) {
+        disconnect(m_connectedWindow, &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
+        m_connectedWindow = nullptr;
+    }
+
     // Invalidate the render node's back-pointer before our members are torn
     // down. The scene graph render thread may still call prepare()/render() on
     // the node between now and the node's deletion; without this, the item
@@ -202,7 +212,8 @@ void ShaderEffect::setBufferShaderPath(const QString& path)
         m_bufferShaderPaths = newPaths;
         Q_EMIT bufferShaderPathsChanged();
     }
-    m_shaderDirty = true;
+    // No m_shaderDirty here: changing buffer paths reloads the BUFFER shader
+    // (handled by ShaderNodeRhi's own m_bufferShaderDirty), not the main shader.
     Q_EMIT bufferShaderPathChanged();
     update();
 }
@@ -218,7 +229,7 @@ void ShaderEffect::setBufferShaderPaths(const QStringList& paths)
         m_bufferShaderPath = newPath;
         Q_EMIT bufferShaderPathChanged();
     }
-    m_shaderDirty = true;
+    // Main shader is unaffected — see setBufferShaderPath above.
     update();
     Q_EMIT bufferShaderPathsChanged();
 }
@@ -246,7 +257,7 @@ void ShaderEffect::setBufferScale(qreal scale)
 
 void ShaderEffect::setBufferWrap(const QString& wrap)
 {
-    const QString use = (wrap == QLatin1String("repeat")) ? QStringLiteral("repeat") : QStringLiteral("clamp");
+    const QString use = ShaderNodeRhi::normalizeWrapMode(wrap);
     if (m_bufferWrap == use) {
         return;
     }
@@ -267,15 +278,7 @@ void ShaderEffect::setBufferWraps(const QStringList& wraps)
 
 void ShaderEffect::setBufferFilter(const QString& filter)
 {
-    // Normalize to "nearest", "linear", or "mipmap"
-    QString use;
-    if (filter == QLatin1String("nearest")) {
-        use = QStringLiteral("nearest");
-    } else if (filter == QLatin1String("mipmap")) {
-        use = QStringLiteral("mipmap");
-    } else {
-        use = QStringLiteral("linear");
-    }
+    const QString use = ShaderNodeRhi::normalizeFilterMode(filter);
     if (m_bufferFilter == use) {
         return;
     }
@@ -459,8 +462,17 @@ void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
         return;
     }
     m_shaderIncludePaths = paths;
-    m_shaderDirty = true;
-    update();
+    // Marking dirty alone is not enough: include expansion happens inside
+    // loadFragmentShader()/loadVertexShader() and the expanded source is
+    // cached on the node. A pure re-bake of the cached source would still
+    // carry the OLD include contents. Route through reloadShader() when a
+    // source is active so the node re-reads and re-expands from disk.
+    if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
+        reloadShader();
+    } else {
+        m_shaderDirty = true;
+        update();
+    }
 }
 
 // ============================================================================

@@ -21,8 +21,8 @@
 
 #include <array>
 #include <atomic>
+#include <map>
 #include <memory>
-#include <unordered_map>
 
 #include <rhi/qrhi.h>
 
@@ -168,6 +168,12 @@ public:
     // ── Include Paths ──────────────────────────────────────────────────
     void setShaderIncludePaths(const QStringList& paths);
 
+    /// Normalize wrap mode string to "clamp" or "repeat" (static helper,
+    /// safe to call from any thread — operates on its arguments only).
+    static QString normalizeWrapMode(const QString& wrap);
+    /// Normalize filter mode string to "nearest", "linear", or "mipmap".
+    static QString normalizeFilterMode(const QString& filter);
+
 private:
     /** Thread-safe QRhi accessor: returns nullptr when m_item is invalidated or has no window. */
     QRhi* safeRhi() const;
@@ -193,10 +199,6 @@ private:
     void resetAllBindingsAndPipelines();
     void bakeBufferShaders();
     QString loadAndExpandShader(const QString& path, QString* outError);
-
-    /// Normalize wrap/filter mode strings
-    static QString normalizeWrapMode(const QString& wrap);
-    static QString normalizeFilterMode(const QString& filter);
 
     QQuickItem* m_item = nullptr;
     std::atomic<bool> m_itemValid{true};
@@ -308,7 +310,11 @@ private:
         QRhiTexture* texture = nullptr;
         QRhiSampler* sampler = nullptr;
     };
-    std::unordered_map<int, ExtraBinding> m_extraBindings;
+    // std::map (ordered) so SRB construction produces a deterministic binding
+    // order regardless of insertion/erasure history. An unordered_map can
+    // produce different iteration orders after erasures, which Qt RHI
+    // backends may hash into different pipeline layout signatures.
+    std::map<int, ExtraBinding> m_extraBindings;
     bool m_extraBindingsDirty = false;
 
     // ── 1x1 Transparent Fallback ───────────────────────────────────────

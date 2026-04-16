@@ -458,6 +458,19 @@ protected:
      */
     void syncBasePropertiesToNode(ShaderNodeRhi* node);
 
+    /**
+     * @brief Atomically read-and-clear the shader-dirty flag.
+     *
+     * Subclasses that override updatePaintNode() must call this to observe
+     * pending reload requests from setShaderSource / setShaderIncludePaths /
+     * reloadShader(). Without consuming the flag, runtime include-path
+     * changes never reach the render node.
+     */
+    bool consumeShaderDirty()
+    {
+        return m_shaderDirty.exchange(false);
+    }
+
     void setError(const QString& error);
     void setStatus(Status newStatus);
 

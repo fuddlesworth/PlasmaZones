@@ -64,9 +64,9 @@ void ShaderNodeRhi::syncBaseUniforms()
 
     // iChannelResolution
     const bool multiBufferMode = m_bufferPaths.size() > 1;
-    const int numChannels =
-        multiBufferMode ? qMin(m_bufferPaths.size(), 4) : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
-    for (int i = 0; i < 4; ++i) {
+    const int numChannels = multiBufferMode ? qMin(m_bufferPaths.size(), static_cast<qsizetype>(kMaxBufferPasses))
+                                            : (m_bufferShaderReady && m_bufferTexture ? 1 : 0);
+    for (int i = 0; i < kMaxBufferPasses; ++i) {
         if (i < numChannels) {
             if (multiBufferMode && m_multiBufferTextures[i]) {
                 QSize ps = m_multiBufferTextures[i]->pixelSize();
@@ -94,8 +94,8 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms._pad_after_audioSpectrum[1] = 0;
 
     // User texture resolutions (bindings 7-10)
-    for (int i = 0; i < 4; ++i) {
-        if (i < kMaxUserTextures && m_userTextures[i] && !m_userTextureImages[i].isNull()) {
+    for (int i = 0; i < kMaxUserTextures; ++i) {
+        if (m_userTextures[i] && !m_userTextureImages[i].isNull()) {
             m_baseUniforms.iTextureResolution[i][0] = static_cast<float>(m_userTextureImages[i].width());
             m_baseUniforms.iTextureResolution[i][1] = static_cast<float>(m_userTextureImages[i].height());
         } else {
@@ -110,7 +110,22 @@ void ShaderNodeRhi::syncBaseUniforms()
 // ============================================================================
 // uploadDirtyTextures
 // ============================================================================
-
+//
+// Ordering contract (load-bearing — do not reorder prepare()'s calls):
+//   prepare() ──▶ bakeBufferShaders()
+//              ──▶ uploadDirtyTextures()         ← this function
+//              ──▶ ensureBufferTarget()
+//              ──▶ ensureBufferPipeline()        ← restores buffer pipelines
+//              ──▶ ensurePipeline()              ← restores image pipeline
+//              ──▶ (multipass draws recorded)
+//
+// When a texture is resized here we call resetAllBindingsAndPipelines() +
+// ensurePipeline() inline, but ensurePipeline() only restores the IMAGE-pass
+// pipeline. Buffer-pass pipelines are restored by ensureBufferPipeline() which
+// runs after us in prepare() — swapping those two calls would leave the
+// multipass SRBs/pipelines null when the draws record below, breaking rendering
+// with no compiler error. The inline restoration is just a safety net for the
+// image pass; the full prepare() sequence does the real work.
 void ShaderNodeRhi::uploadDirtyTextures(QRhi* rhi, QRhiCommandBuffer* cb)
 {
     using namespace PhosphorShell::UboRegions;

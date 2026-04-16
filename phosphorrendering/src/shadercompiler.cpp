@@ -50,6 +50,16 @@ struct BakeCache
     }
 };
 
+// QShaderBaker → glslang is not reentrant: concurrent bake() calls crash inside
+// QSpirvCompiler::compileToSpirv(). All bakes must serialize on this mutex.
+// Held across the bake only — not across cache reads, so already-cached shaders
+// still resolve without contention.
+QMutex& bakeSerializationMutex()
+{
+    static QMutex m;
+    return m;
+}
+
 } // namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -78,7 +88,20 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
         }
     }
 
-    // Cache miss — bake
+    // Cache miss — bake under the serialization mutex (glslang is not reentrant).
+    // Double-check inside the lock so a concurrent caller that beat us to the
+    // bake doesn't trigger a second redundant bake.
+    QMutexLocker bakeLock(&bakeSerializationMutex());
+    {
+        QMutexLocker cacheLock(&cache.mutex);
+        auto it = cache.entries.constFind(key);
+        if (it != cache.entries.constEnd() && it->isValid()) {
+            result.shader = *it;
+            result.success = true;
+            return result;
+        }
+    }
+
     QShaderBaker baker;
     baker.setGeneratedShaderVariants({QShader::StandardShader});
     baker.setGeneratedShaders(bakeTargets());
@@ -87,13 +110,7 @@ ShaderCompiler::Result ShaderCompiler::compile(const QByteArray& source, QShader
 
     if (result.shader.isValid()) {
         result.success = true;
-        QMutexLocker lock(&cache.mutex);
-        // Double-check: another thread may have inserted while we were baking
-        auto existing = cache.entries.constFind(key);
-        if (existing != cache.entries.constEnd()) {
-            result.shader = *existing;
-            return result;
-        }
+        QMutexLocker cacheLock(&cache.mutex);
         // Eviction is arbitrary (QHash iteration order) — acceptable for a
         // shader cache where all entries are equally likely to be reused.
         if (cache.entries.size() >= BakeCache::kMaxSize) {
