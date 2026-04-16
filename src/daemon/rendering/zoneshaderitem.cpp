@@ -242,9 +242,11 @@ QSGNode* ZoneShaderItem::updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData* 
 
     if (width() <= 0 || height() <= 0) {
         if (oldNode) {
-            // The parent tracks m_renderNode, but we also track m_zoneRenderNode
+            // Mirror the parent ShaderEffect's zero-size branch: invalidate
+            // both our zone-specific pointer AND the base m_renderNode before
+            // deleting. Without the parent's nullification, a subsequent
+            // syncBasePropertiesToNode would walk a dangling pointer.
             m_zoneRenderNode = nullptr;
-            // Let parent handle invalidation of the base render node
             if (auto* rhiNode = static_cast<ZoneShaderNodeRhi*>(oldNode)) {
                 rhiNode->invalidateItem();
             }

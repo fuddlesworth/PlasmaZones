@@ -56,13 +56,15 @@ ShaderEffect::ShaderEffect(QQuickItem* parent)
     // sceneGraphAboutToStop fires on the render thread BEFORE teardown, while
     // the node and QRhi are still valid. Use DirectConnection because the
     // signal is emitted on the render thread.
+    //
+    // m_connectedWindow is a QPointer so a window destroyed out from under us
+    // (reparent-during-teardown) leaves a null pointer instead of dangling.
     connect(this, &QQuickItem::windowChanged, this, [this](QQuickWindow* win) {
         if (m_connectedWindow) {
-            disconnect(m_connectedWindow, &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
-            m_connectedWindow = nullptr;
+            disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
         }
+        m_connectedWindow = win;
         if (win) {
-            m_connectedWindow = win;
             connect(
                 win, &QQuickWindow::sceneGraphAboutToStop, this,
                 [this]() {
@@ -84,8 +86,8 @@ ShaderEffect::~ShaderEffect()
     // invocation completes, so after this line the render thread cannot race
     // our subsequent member teardown.
     if (m_connectedWindow) {
-        disconnect(m_connectedWindow, &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
-        m_connectedWindow = nullptr;
+        disconnect(m_connectedWindow.data(), &QQuickWindow::sceneGraphAboutToStop, this, nullptr);
+        m_connectedWindow.clear();
     }
 
     // Invalidate the render node's back-pointer before our members are torn
@@ -184,6 +186,23 @@ void ShaderEffect::setShaderSource(const QUrl& source)
     if (m_shaderSource == source) {
         return;
     }
+    // Reject URL schemes we cannot load. Clearing the source (empty/invalid
+    // URL) is always allowed. loadFragmentShader() below only handles local
+    // file paths and qrc: resources, so http://, ftp://, etc. would fail
+    // later with a generic "Shader loading failed" — reject at the boundary
+    // per CLAUDE.md "input validation at system boundaries" so misuse is
+    // diagnosed where the bad URL enters the API.
+    if (source.isValid() && !source.isEmpty()) {
+        const QString scheme = source.scheme();
+        const bool isLocal = source.isLocalFile() || scheme.isEmpty() || scheme == QLatin1String("file")
+            || scheme == QLatin1String("qrc");
+        if (!isLocal) {
+            qCWarning(lcShaderNode) << "setShaderSource: unsupported URL scheme" << scheme
+                                    << "— only file:// and qrc: are accepted";
+            setError(QStringLiteral("Unsupported shader URL scheme: ") + scheme);
+            return;
+        }
+    }
     m_shaderSource = source;
     m_shaderDirty = true;
     setStatus(Status::Loading);
@@ -207,14 +226,21 @@ void ShaderEffect::setBufferShaderPath(const QString& path)
         return;
     }
     m_bufferShaderPath = path;
+    // Coalesce singular/plural updates: mutate both members then emit both
+    // signals once. Previously each setter emitted `...Changed` twice and
+    // scheduled two scene-graph updates when a QML binding drove the other
+    // property; a single update() pass is enough.
     const QStringList newPaths = path.isEmpty() ? QStringList() : QStringList{path};
-    if (m_bufferShaderPaths != newPaths) {
+    const bool pathsChanged = (m_bufferShaderPaths != newPaths);
+    if (pathsChanged) {
         m_bufferShaderPaths = newPaths;
-        Q_EMIT bufferShaderPathsChanged();
     }
     // No m_shaderDirty here: changing buffer paths reloads the BUFFER shader
     // (handled by ShaderNodeRhi's own m_bufferShaderDirty), not the main shader.
     Q_EMIT bufferShaderPathChanged();
+    if (pathsChanged) {
+        Q_EMIT bufferShaderPathsChanged();
+    }
     update();
 }
 
@@ -225,13 +251,16 @@ void ShaderEffect::setBufferShaderPaths(const QStringList& paths)
     }
     m_bufferShaderPaths = paths;
     const QString newPath = paths.isEmpty() ? QString() : paths.constFirst();
-    if (m_bufferShaderPath != newPath) {
+    const bool singularChanged = (m_bufferShaderPath != newPath);
+    if (singularChanged) {
         m_bufferShaderPath = newPath;
-        Q_EMIT bufferShaderPathChanged();
     }
     // Main shader is unaffected — see setBufferShaderPath above.
-    update();
     Q_EMIT bufferShaderPathsChanged();
+    if (singularChanged) {
+        Q_EMIT bufferShaderPathChanged();
+    }
+    update();
 }
 
 void ShaderEffect::setBufferFeedback(bool enable)
@@ -513,14 +542,14 @@ void ShaderEffect::setShaderIncludePaths(const QStringList& paths)
     // Marking dirty alone is not enough: include expansion happens inside
     // loadFragmentShader()/loadVertexShader() and the expanded source is
     // cached on the node. A pure re-bake of the cached source would still
-    // carry the OLD include contents. Route through reloadShader() when a
-    // source is active so the node re-reads and re-expands from disk.
+    // carry the OLD include contents. Inline the two-line reload instead of
+    // calling reloadShader() so a QML binding on statusChanged can't loop
+    // back through this setter.
     if (m_shaderSource.isValid() && !m_shaderSource.isEmpty()) {
-        reloadShader();
-    } else {
-        m_shaderDirty = true;
-        update();
+        setStatus(Status::Loading);
     }
+    m_shaderDirty = true;
+    update();
 }
 
 // ============================================================================

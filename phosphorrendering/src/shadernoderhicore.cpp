@@ -31,16 +31,31 @@ struct ShaderCacheEntry
 // Separate from ShaderCompiler's source-based cache — this one avoids
 // re-reading and re-expanding files when the mtime hasn't changed.
 using ShaderCache = QHash<QByteArray, ShaderCacheEntry>;
-ShaderCache s_shaderCache;
-QMutex s_shaderCacheMutex;
+
+// Access both the cache and its mutex through accessors so ShaderCompiler::
+// clearCache() (defined in shadercompiler.cpp) can fan out to both caches
+// in one place. Without this fan-out, a hot-reload that called clearCache()
+// would wipe the source-hash cache while the filename cache kept serving
+// stale baked shaders.
+ShaderCache& filenameShaderCache()
+{
+    static ShaderCache c;
+    return c;
+}
+QMutex& filenameShaderCacheMutex()
+{
+    static QMutex m;
+    return m;
+}
 
 constexpr int kShaderCacheMaxSize = 64;
 
 static void shaderCacheEvictOne()
 {
-    if (s_shaderCache.isEmpty())
+    auto& cache = filenameShaderCache();
+    if (cache.isEmpty())
         return;
-    s_shaderCache.erase(s_shaderCache.begin());
+    cache.erase(cache.begin());
 }
 
 static constexpr char kShaderCacheKeyDelim = '\0';
@@ -58,6 +73,15 @@ static QByteArray shaderCacheKey(const QString& vertPath, qint64 vertMtime, cons
 }
 
 } // anonymous namespace
+
+// Fan-out hook called from ShaderCompiler::clearCache(). Defined in this TU
+// because the filename cache is private here; declared in internal.h so the
+// compiler TU can see it without cross-cpp forward references.
+void clearFilenameShaderCache()
+{
+    QMutexLocker lock(&filenameShaderCacheMutex());
+    filenameShaderCache().clear();
+}
 
 QString ShaderNodeRhi::loadAndExpandShader(const QString& path, QString* outError)
 {
@@ -253,9 +277,10 @@ void ShaderNodeRhi::prepare()
 
         const QByteArray cacheKey = shaderCacheKey(m_vertexPath, m_vertexMtime, m_fragmentPath, m_fragmentMtime);
         if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
-            QMutexLocker lock(&s_shaderCacheMutex);
-            auto it = s_shaderCache.constFind(cacheKey);
-            if (it != s_shaderCache.constEnd()) {
+            QMutexLocker lock(&filenameShaderCacheMutex());
+            auto& cache = filenameShaderCache();
+            auto it = cache.constFind(cacheKey);
+            if (it != cache.constEnd()) {
                 m_vertexShader = it->vertex;
                 m_fragmentShader = it->fragment;
                 m_shaderReady = true;
@@ -289,11 +314,12 @@ void ShaderNodeRhi::prepare()
             m_pipeline.reset();
             m_srb.reset();
             if (!m_vertexPath.isEmpty() && !m_fragmentPath.isEmpty()) {
-                QMutexLocker lock(&s_shaderCacheMutex);
-                if (s_shaderCache.size() >= kShaderCacheMaxSize) {
+                QMutexLocker lock(&filenameShaderCacheMutex());
+                auto& cache = filenameShaderCache();
+                if (cache.size() >= kShaderCacheMaxSize) {
                     shaderCacheEvictOne();
                 }
-                s_shaderCache[cacheKey] = ShaderCacheEntry{m_vertexShader, m_fragmentShader};
+                cache[cacheKey] = ShaderCacheEntry{m_vertexShader, m_fragmentShader};
             }
         }
     }
@@ -543,11 +569,12 @@ WarmShaderBakeResult warmShaderBakeCacheForPaths(const QString& vertexPath, cons
     }
 
     const QByteArray key = shaderCacheKey(vertexPath, vertMtime, fragmentPath, fragMtime);
-    QMutexLocker lock(&s_shaderCacheMutex);
-    if (s_shaderCache.size() >= kShaderCacheMaxSize) {
+    QMutexLocker lock(&filenameShaderCacheMutex());
+    auto& cache = filenameShaderCache();
+    if (cache.size() >= kShaderCacheMaxSize) {
         shaderCacheEvictOne();
     }
-    s_shaderCache[key] = ShaderCacheEntry{vertResult.shader, fragResult.shader};
+    cache[key] = ShaderCacheEntry{vertResult.shader, fragResult.shader};
     result.success = true;
     return result;
 }

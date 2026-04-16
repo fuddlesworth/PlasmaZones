@@ -33,10 +33,17 @@ void ShaderNodeRhi::syncBaseUniforms()
     m_baseUniforms.iMouse[1] = static_cast<float>(m_mousePosition.y());
     m_baseUniforms.iMouse[2] = m_width > 0 ? static_cast<float>(m_mousePosition.x() / m_width) : 0.0f;
     m_baseUniforms.iMouse[3] = m_height > 0 ? static_cast<float>(m_mousePosition.y() / m_height) : 0.0f;
-    // Only recompute iDate when scene data is being uploaded (avoids stale GPU
-    // values — iDate lives in the scene-header region, not the time region)
-    if (m_sceneDataDirty || !m_didFullUploadOnce) {
+    // iDate only advances once per second. m_sceneDataDirty is set by every
+    // mouse-move/resize event, so naïvely recomputing iDate whenever it's
+    // true would hit QDateTime::currentDateTime() at 60+ Hz during
+    // interaction. Guard with a 1-second cached timestamp — iDate still
+    // refreshes during idle (sceneDataDirty remains set for the first frame
+    // of each redraw cycle), but we skip ~60 redundant calls per second.
+    if (!m_didFullUploadOnce
+        || (m_sceneDataDirty
+            && (m_lastDateRefreshMs == 0 || (QDateTime::currentMSecsSinceEpoch() - m_lastDateRefreshMs) >= 1000))) {
         const QDateTime now = QDateTime::currentDateTime();
+        m_lastDateRefreshMs = now.toMSecsSinceEpoch();
         m_baseUniforms.iDate[0] = static_cast<float>(now.date().year());
         m_baseUniforms.iDate[1] = static_cast<float>(now.date().month());
         m_baseUniforms.iDate[2] = static_cast<float>(now.date().day());

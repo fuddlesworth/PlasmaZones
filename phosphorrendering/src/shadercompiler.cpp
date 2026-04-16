@@ -4,6 +4,8 @@
 #include <PhosphorRendering/ShaderCompiler.h>
 #include <PhosphorShell/ShaderIncludeResolver.h>
 
+#include "internal.h"
+
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
@@ -184,9 +186,14 @@ ShaderCompiler::Result ShaderCompiler::compileFromFile(const QString& path, cons
 
 void ShaderCompiler::clearCache()
 {
-    auto& cache = BakeCache::instance();
-    QMutexLocker lock(&cache.mutex);
-    cache.entries.clear();
+    {
+        auto& cache = BakeCache::instance();
+        QMutexLocker lock(&cache.mutex);
+        cache.entries.clear();
+    }
+    // Also flush the filename+mtime cache in shadernoderhicore.cpp so a
+    // single clearCache() call fully invalidates all baked-shader state.
+    clearFilenameShaderCache();
 }
 
 } // namespace PhosphorRendering

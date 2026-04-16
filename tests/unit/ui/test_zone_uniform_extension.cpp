@@ -33,6 +33,9 @@ private Q_SLOTS:
     void write_singleZone_populatesFirstSlotAndZerosRest();
     void write_fullCapacity_usesAllSlots();
     void write_overflow_truncatesToMaxZones();
+    void write_overflow_doesNotWritePastBufferEnd();
+    void write_shrinkingZones_zerosVacatedSlots();
+    void write_nonZeroOffset_writesAtRequestedOffset();
     void dirty_initiallyTrue_clearable();
     void dirty_setOnUpdateFromZones();
     void layout_matchesZoneShaderUniformsOffsets();
@@ -204,6 +207,104 @@ void TestZoneUniformExtension::write_overflow_truncatesToMaxZones()
     // have overflowed and corrupted memory; the static_assert in the header
     // backs this up at compile time, but we still want a runtime check that
     // updateFromZones doesn't index past MaxZones.
+}
+
+void TestZoneUniformExtension::write_overflow_doesNotWritePastBufferEnd()
+{
+    // Poison the region immediately after the extension buffer, then verify
+    // write() never touches those bytes even when updateFromZones is fed
+    // too many zones. Catches silent stride mistakes that the static_assert
+    // would miss if a future refactor moved zoneParams inside a union.
+    ZoneUniformExtension ext;
+    QVector<ZoneData> zones;
+    for (int i = 0; i < MaxZones + 10; ++i) {
+        zones.append(
+            makeZone(i, 0, 1, 1, QColor::fromRgbF(0, 0, 0, 1), QColor::fromRgbF(0, 0, 0, 1), 0.0f, 0.0f, false, i));
+    }
+    ext.updateFromZones(zones);
+
+    constexpr int kGuardBytes = 64;
+    std::vector<char> buf(static_cast<size_t>(ext.extensionSize()) + kGuardBytes, static_cast<char>(0xAA));
+    ext.write(buf.data(), 0);
+
+    // Bytes after extensionSize() must still be 0xAA — write() must not have
+    // scribbled past the end of the caller's buffer.
+    for (int i = 0; i < kGuardBytes; ++i) {
+        const unsigned char actual = static_cast<unsigned char>(buf[ext.extensionSize() + i]);
+        QCOMPARE(actual, static_cast<unsigned char>(0xAA));
+    }
+}
+
+void TestZoneUniformExtension::write_shrinkingZones_zerosVacatedSlots()
+{
+    // Populate all slots, then shrink to a smaller set. The vacated tail
+    // (slots [small, MaxZones)) must be zeroed on the next updateFromZones.
+    // Without this, stale data from the previous update would render as
+    // ghost zones — the test is a guard against an "optimisation" that
+    // iterates only zones.size() instead of MaxZones.
+    ZoneUniformExtension ext;
+    QVector<ZoneData> full;
+    for (int i = 0; i < MaxZones; ++i) {
+        full.append(makeZone(i + 100.0, i + 200.0, 10.0, 20.0, QColor::fromRgbF(1, 0, 0, 1),
+                             QColor::fromRgbF(0, 1, 0, 1), 5.0f, 2.0f, true, i));
+    }
+    ext.updateFromZones(full);
+
+    QVector<ZoneData> small;
+    small.append(makeZone(0.0, 0.0, 1.0, 2.0, QColor::fromRgbF(0.5f, 0.5f, 0.5f, 1), QColor::fromRgbF(0, 0, 0, 1), 1.0f,
+                          1.0f, false, 0));
+    ext.updateFromZones(small);
+
+    std::vector<char> buf(ext.extensionSize(), static_cast<char>(0xFF));
+    ext.write(buf.data(), 0);
+
+    // Slot 0 populated with the small zone.
+    Vec4 r0 = readVec4(buf, 0, 0);
+    QCOMPARE(r0.x, 0.0f);
+    QCOMPARE(r0.y, 0.0f);
+    QCOMPARE(r0.z, 1.0f);
+    QCOMPARE(r0.w, 2.0f);
+
+    // Slots 1..MaxZones-1 must be zero — not leftover 0xFF or the old
+    // populated data.
+    for (int i = 1; i < MaxZones; ++i) {
+        for (int arr = 0; arr < kArraysPerZone; ++arr) {
+            const Vec4 v = readVec4(buf, arr, i);
+            QCOMPARE(v.x, 0.0f);
+            QCOMPARE(v.y, 0.0f);
+            QCOMPARE(v.z, 0.0f);
+            QCOMPARE(v.w, 0.0f);
+        }
+    }
+}
+
+void TestZoneUniformExtension::write_nonZeroOffset_writesAtRequestedOffset()
+{
+    // The UBO writer calls write(buf, offset = sizeof(BaseUniforms)) so the
+    // extension region lands after the base struct. Ensure write() honours
+    // offset — a refactor to memcpy(buf, ...) instead of memcpy(buf+offset,
+    // ...) would break the UBO layout silently.
+    ZoneUniformExtension ext;
+    QVector<ZoneData> zones;
+    zones.append(makeZone(7.0, 8.0, 9.0, 10.0, QColor::fromRgbF(0.2f, 0.3f, 0.4f, 1.0f),
+                          QColor::fromRgbF(0.5f, 0.6f, 0.7f, 1.0f), 0.0f, 0.0f, false, 3));
+    ext.updateFromZones(zones);
+
+    constexpr int kPrefix = 32;
+    std::vector<char> buf(static_cast<size_t>(kPrefix + ext.extensionSize()), static_cast<char>(0xCC));
+    ext.write(buf.data(), kPrefix);
+
+    // Prefix bytes untouched — verifies write() didn't stomp on them.
+    for (int i = 0; i < kPrefix; ++i) {
+        QCOMPARE(static_cast<unsigned char>(buf[i]), static_cast<unsigned char>(0xCC));
+    }
+    // Extension data lands at offset kPrefix.
+    Vec4 r;
+    std::memcpy(&r, buf.data() + kPrefix, sizeof(r));
+    QCOMPARE(r.x, 7.0f);
+    QCOMPARE(r.y, 8.0f);
+    QCOMPARE(r.z, 9.0f);
+    QCOMPARE(r.w, 10.0f);
 }
 
 void TestZoneUniformExtension::dirty_initiallyTrue_clearable()

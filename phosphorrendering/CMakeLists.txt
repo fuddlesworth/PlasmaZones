@@ -56,8 +56,12 @@ add_library(PhosphorRendering SHARED
 
 add_library(PhosphorRendering::PhosphorRendering ALIAS PhosphorRendering)
 
+# Generate the export header under the PhosphorRendering/ prefix so the
+# same `#include <PhosphorRendering/phosphorrendering_export.h>` resolves in
+# both in-tree builds (via BUILD_INTERFACE below) and installed consumers
+# (the header is installed alongside the other public headers).
 generate_export_header(PhosphorRendering
-    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphorrendering_export.h
+    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/PhosphorRendering/phosphorrendering_export.h
     EXPORT_MACRO_NAME PHOSPHORRENDERING_EXPORT
 )
 
@@ -119,7 +123,7 @@ install(FILES
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorRendering
 )
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorrendering_export.h
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorRendering/phosphorrendering_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorRendering
 )
 

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <phosphorrendering_export.h>
+#include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <QColor>
 #include <QImage>
@@ -16,6 +16,7 @@
 #include <QVariantMap>
 #include <QVector4D>
 
+#include <QPointer>
 #include <array>
 #include <atomic>
 #include <memory>
@@ -41,22 +42,14 @@ class ShaderNodeRhi;
  * Extend with IUniformExtension to append application-specific uniform data
  * after the base UBO layout.
  *
- * QML usage:
- * @code
- * import PhosphorRendering
- *
- * ShaderEffect {
- *     anchors.fill: parent
- *     shaderSource: "file:///path/to/effect.frag"
- *     customParams1: Qt.vector4d(0.1, 0.5, 0.0, 1.0)
- *     customColor1: "#ff8800"
- * }
- * @endcode
+ * Consumers that want this type available in QML must register it themselves
+ * with qmlRegisterType() under their own module URI. The library does not
+ * ship a QML module — doing so would force every consumer onto one module
+ * name and duplicate registration with subclasses (e.g. ZoneShaderItem).
  */
 class PHOSPHORRENDERING_EXPORT ShaderEffect : public QQuickItem
 {
     Q_OBJECT
-    QML_ELEMENT
 
     // ── Shadertoy-compatible animation uniforms ──────────────────────
     Q_PROPERTY(qreal iTime READ iTime WRITE setITime NOTIFY iTimeChanged FINAL)
@@ -581,7 +574,9 @@ private:
 
     // ── Render node tracking ─────────────────────────────────────────
     ShaderNodeRhi* m_renderNode = nullptr;
-    QQuickWindow* m_connectedWindow = nullptr;
+    // QPointer defends against reparent/teardown storms where the window is
+    // destroyed out from under us before windowChanged(nullptr) fires.
+    QPointer<QQuickWindow> m_connectedWindow;
 
     // ── Thread-safe dirty flags for main -> render thread sync ───────
     std::atomic<bool> m_shaderDirty{false};

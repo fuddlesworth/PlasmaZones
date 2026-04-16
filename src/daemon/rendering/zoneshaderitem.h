@@ -52,7 +52,9 @@ class ZoneUniformExtension;
 class PLASMAZONES_RENDERING_EXPORT ZoneShaderItem : public PhosphorRendering::ShaderEffect
 {
     Q_OBJECT
-    QML_ELEMENT
+    // Registered manually via qmlRegisterType in daemon/main.cpp and
+    // editor/main.cpp under the "PlasmaZones" module URI. QML_ELEMENT here
+    // would be inert (no qt_add_qml_module target exists) and misleading.
 
     // Zone data (zone-specific, not in parent)
     Q_PROPERTY(QVariantList zones READ zones WRITE setZones NOTIFY zonesChanged FINAL)

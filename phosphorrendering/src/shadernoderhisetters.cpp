@@ -153,21 +153,12 @@ void ShaderNodeRhi::setAppField1(int value)
 
 bool ShaderNodeRhi::setExtraBinding(int binding, QRhiTexture* texture, QRhiSampler* sampler)
 {
-    // The library owns the following bindings, and assigning to any of them
-    // via setExtraBinding would produce duplicate SRB entries (undefined RHI
-    // behaviour):
-    //   0      — UBO (BaseUniforms + extension region)
-    //   2-5    — multipass buffer channels
-    //   6      — audio spectrum
-    //   7-10   — user textures
-    //   11     — wallpaper
-    //   12     — depth
-    // Binding 1 and 13..31 are free for consumer use. The upper bound (31)
-    // matches Qt RHI's minimum-guaranteed SRB binding count across backends;
-    // anything higher is not portable.
-    constexpr int kMaxConsumerBinding = 31;
-    if (binding == 0 || (binding >= 2 && binding <= 12) || binding < 0 || binding > kMaxConsumerBinding) {
-        qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding << "out of allowed range (1 or 13-"
+    // The allowed range (binding 1 plus 13..kMaxConsumerBinding) is defined
+    // as a public helper in ShaderNodeRhi.h (isConsumerBinding) so consumers
+    // can query the policy without duplicating the range table.
+    if (!isConsumerBinding(binding)) {
+        qCWarning(lcShaderNode) << "setExtraBinding: binding" << binding << "out of allowed range ("
+                                << kFirstFreeConsumerBinding << "or" << (kReservedBindingRangeEnd + 1) << "-"
                                 << kMaxConsumerBinding << ") — ignored";
         return false;
     }

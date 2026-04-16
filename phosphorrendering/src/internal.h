@@ -19,6 +19,12 @@ namespace PhosphorRendering {
 
 Q_DECLARE_LOGGING_CATEGORY(lcShaderNode)
 
+/// Clear the filename+mtime cache that lives in shadernoderhicore.cpp.
+/// Called from ShaderCompiler::clearCache() so a single public clearCache()
+/// call flushes BOTH caches — otherwise a hot-reload would wipe the
+/// source-hash cache while the filename cache kept serving stale bakes.
+void clearFilenameShaderCache();
+
 namespace RhiConstants {
 
 inline constexpr float QuadVertices[] = {

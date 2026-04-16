@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <phosphorrendering_export.h>
+#include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <QList>
 #include <QString>
@@ -52,6 +52,11 @@ public:
     static QString loadAndExpand(const QString& path, const QStringList& includePaths, QString* outError = nullptr);
 
     /// Clear the in-memory compilation cache (e.g. on shader hot-reload).
+    ///
+    /// Clears both the source-hash BakeCache AND the filename+mtime cache in
+    /// the node core — after this call, the next prepare() will re-read and
+    /// re-compile shader files from disk. Both caches share clearCache() so
+    /// consumers can call one function to fully invalidate.
     static void clearCache();
 
     /// Bake target list: SPIR-V 1.0, GLSL 330, GLSL ES 300/310/320.

@@ -12,6 +12,7 @@
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
+#include <QTimer>
 
 namespace PlasmaZones {
 
@@ -27,9 +28,13 @@ void OverlayService::setSettings(ISettings* settings)
             disconnect(m_settings, &ISettings::audioSpectrumBarCountChanged, this, nullptr);
             disconnect(m_settings, &ISettings::shaderFrameRateChanged, this, nullptr);
         }
-        // Disconnect old ShaderRegistry connection (if any) to prevent duplicates
-        if (auto* registry = ShaderRegistry::instance()) {
-            disconnect(registry, &ShaderRegistry::shadersChanged, this, nullptr);
+        // Disconnect the specific shadersChanged lambda we stashed below.
+        // disconnect(src, sig, this, nullptr) would sever ALL slots on this
+        // receiver — fine today, but a trap if another shadersChanged
+        // handler is ever added.
+        if (m_shadersChangedConnection) {
+            QObject::disconnect(m_shadersChangedConnection);
+            m_shadersChangedConnection = {};
         }
 
         m_settings = settings;
@@ -37,8 +42,8 @@ void OverlayService::setSettings(ISettings* settings)
         // Connect to new settings signals
         if (m_settings) {
             auto refreshZoneSelectors = [this]() {
-                for (const QString& sid : m_screenStates.keys()) {
-                    updateZoneSelectorWindow(sid);
+                for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+                    updateZoneSelectorWindow(it.key());
                 }
             };
             connect(m_settings, &ISettings::settingsChanged, this, refreshZoneSelectors);
@@ -65,7 +70,7 @@ void OverlayService::setSettings(ISettings* settings)
             // re-read its source from disk by invoking reloadShader() (inherited
             // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
             if (auto* registry = ShaderRegistry::instance()) {
-                connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
+                m_shadersChangedConnection = connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
                     if (!m_settings || !m_settings->enableShaderEffects()) {
                         return;
                     }
@@ -98,6 +103,7 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             disconnect(oldManager, &LayoutManager::activeLayoutChanged, this, nullptr);
             disconnect(oldManager, &LayoutManager::layoutAssigned, this, nullptr);
             disconnect(oldManager, &LayoutManager::layoutAdded, this, nullptr);
+            disconnect(oldManager, &LayoutManager::layoutRemoved, this, nullptr);
         }
     }
     // Disconnect any per-Layout connections to active layouts the previous manager owned
@@ -132,6 +138,12 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             connect(manager, &LayoutManager::layoutAdded, this, [this](Layout* layout) {
                 observeLayoutForLiveEdits(layout);
             });
+            // Drop per-layout connections + the m_observedLayouts entry when
+            // a layout is deleted. Without this, QPointer auto-null would
+            // leave tombstone entries in m_observedLayouts that only get
+            // compacted the next time observeLayoutForLiveEdits() runs —
+            // unbounded growth during editor create/delete sessions.
+            connect(manager, &LayoutManager::layoutRemoved, this, &OverlayService::stopObservingLayout);
 
             // Observe EVERY loaded layout, not just the globally-active one.
             // A per-screen-assigned layout loaded from disk at startup never
@@ -172,22 +184,54 @@ void OverlayService::observeLayoutForLiveEdits(Layout* layout)
     // shaderParams, zones, appearance, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
     // restart, since LayoutManager::activeLayoutChanged only fires on switch.
-    connect(layout, &Layout::layoutModified, this, &OverlayService::refreshVisibleWindows);
+    //
+    // Route through a coalescing shim: zone-drag in the editor can fire
+    // layoutModified dozens of times per second; refreshVisibleWindows is
+    // the expensive path (rebuilds zone variant lists + uploads labels).
+    // The shim schedules a single refresh at the next event-loop tick.
+    connect(layout, &Layout::layoutModified, this, [this]() {
+        if (m_refreshCoalescePending) {
+            return;
+        }
+        m_refreshCoalescePending = true;
+        // 16 ms ≈ one display frame — small enough that live-edit feels
+        // instant, large enough that a burst of Q_PROPERTY writes collapses
+        // into one refresh.
+        QTimer::singleShot(16, this, [this]() {
+            m_refreshCoalescePending = false;
+            refreshVisibleWindows();
+        });
+    });
     m_observedLayouts.append(QPointer<Layout>(layout));
+}
+
+void OverlayService::stopObservingLayout(Layout* layout)
+{
+    if (!layout) {
+        return;
+    }
+    disconnect(layout, &Layout::layoutModified, this, nullptr);
+    for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
+        if (it->isNull() || it->data() == layout) {
+            it = m_observedLayouts.erase(it);
+        } else {
+            ++it;
+        }
+    }
 }
 
 void OverlayService::refreshVisibleWindows()
 {
     if (m_zoneSelectorVisible) {
-        for (const QString& sid : m_screenStates.keys()) {
-            updateZoneSelectorWindow(sid);
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            updateZoneSelectorWindow(it.key());
         }
     }
     if (m_visible) {
-        for (const QString& screenId : m_screenStates.keys()) {
-            QScreen* physScreen = m_screenStates.value(screenId).overlayPhysScreen;
+        for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
+            QScreen* physScreen = it.value().overlayPhysScreen;
             if (physScreen) {
-                updateOverlayWindow(screenId, physScreen);
+                updateOverlayWindow(it.key(), physScreen);
             }
         }
     }

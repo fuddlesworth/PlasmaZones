@@ -307,8 +307,13 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(snapshot.rects[0].height, 400.0f));
     }
 
-    void testZoneShaderItem_invalidShaderSourceSetsErrorStatus()
+    void testZoneShaderItem_shaderSourceTransitionsToLoadingInHeadlessMode()
     {
+        // Renamed from the old misleading "SetsErrorStatus" — in headless
+        // tests there is no scene graph, so updatePaintNode never runs and
+        // setShaderSource's Loading state never advances to Error or Null.
+        // That's all this test can assert without a QQuickView on a live
+        // compositor.
         ZoneShaderItem item;
 
         // Setting a valid URL transitions to Loading (actual loading happens in updatePaintNode)
@@ -320,6 +325,19 @@ private Q_SLOTS:
         // is called from updatePaintNode (scene graph), not available in headless mode.
         item.setShaderSource(QUrl());
         QCOMPARE(item.status(), ZoneShaderItem::Status::Loading);
+    }
+
+    void testZoneShaderItem_unsupportedUrlSchemeSetsError()
+    {
+        // http:// / ftp:// / etc. can't be loaded by the RHI pipeline; the
+        // library now rejects them at setShaderSource() (input-validation
+        // boundary) with an Error status + log, rather than silently
+        // deferring to the render thread where it would fail with a
+        // generic "Shader loading failed" message.
+        ZoneShaderItem item;
+        item.setShaderSource(QUrl(QStringLiteral("http://example.com/shader.frag")));
+        QCOMPARE(item.status(), ZoneShaderItem::Status::Error);
+        QVERIFY(!item.errorLog().isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════

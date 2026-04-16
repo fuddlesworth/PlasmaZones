@@ -246,6 +246,12 @@ private:
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(Layout* layout);
 
+    // Stop observing a layout (e.g. because LayoutManager just removed it).
+    // Disconnects the per-layout layoutModified signal and erases the entry
+    // from m_observedLayouts. Idempotent — calling for an unobserved layout
+    // is a no-op.
+    void stopObservingLayout(Layout* layout);
+
     // Hide overlay/selector windows on screens where the current context is disabled,
     // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
     void hideDisabledAndRefresh();
@@ -313,6 +319,18 @@ private:
     QPointer<ISettings> m_settings;
     ILayoutManager* m_layoutManager = nullptr;
     QList<QPointer<Layout>> m_observedLayouts; ///< Layouts we watch for live edits
+
+    // Precise disconnect handles for signal sources whose slots are lambdas
+    // (disconnect(src, sig, this, nullptr) would sever ALL slots matching —
+    // safe today but trap-prone if a second connection is ever added).
+    QMetaObject::Connection m_shadersChangedConnection;
+    // Debounce layoutModified → refreshVisibleWindows. layoutModified fires on
+    // every Q_PROPERTY change (e.g. per-frame during a zone drag), so
+    // coalescing prevents redundant rebuilds of zone variant lists + label
+    // texture re-uploads. Guarded by the single-shot timer pattern: first
+    // fire starts a timer; subsequent fires before the timer elapses do
+    // nothing; the timer callback runs refreshVisibleWindows once.
+    bool m_refreshCoalescePending = false;
     int m_currentVirtualDesktop = 1; // Current virtual desktop (1-based)
     QString m_currentActivity; // Current KDE activity (empty = all activities)
     bool m_visible = false;

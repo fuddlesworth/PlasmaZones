@@ -32,13 +32,14 @@ ZoneShaderNodeRhi::ZoneShaderNodeRhi(QQuickItem* item)
 
 ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
 {
-    // Drop the labels extra binding BEFORE our m_labelsTexture/m_labelsSampler
-    // unique_ptrs run their destructors. The parent's m_extraBindings map
-    // stores raw pointers to these resources; leaving a stale entry pointing
-    // at freed memory is only safe today because ~ShaderNodeRhi() happens to
-    // not dereference m_extraBindings during teardown. Calling
-    // removeExtraBinding() here makes the invariant explicit and future-proofs
-    // against any code parent-side teardown might add that walks that map.
+    // The parent's m_extraBindings map stores raw pointers to our
+    // m_labelsTexture / m_labelsSampler. Those unique_ptr members run their
+    // destructors AFTER this body returns (normal member-destruction order),
+    // but the parent destructor runs AFTER them — so a hypothetical future
+    // ~ShaderNodeRhi that walked m_extraBindings would see dangling
+    // pointers. Call removeExtraBinding() now so the invariant "entries in
+    // m_extraBindings always point to live resources" holds for the entire
+    // teardown sequence.
     removeExtraBinding(1);
 }
 

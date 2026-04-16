@@ -7,6 +7,8 @@
 
 #include <PhosphorShell/IUniformExtension.h>
 
+#include <QMutex>
+#include <QMutexLocker>
 #include <atomic>
 #include <cstring>
 
@@ -21,7 +23,12 @@ namespace PlasmaZones {
  * The zone data layout matches the GLSL UBO declaration in common.glsl exactly,
  * and is binary-compatible with the zone region of ZoneShaderUniforms.
  *
- * Called on the render thread during prepare().
+ * @par Threading
+ * write() runs on the render thread during prepare(); updateFromZones()
+ * runs on the GUI thread (from ZoneShaderItem::updatePaintNode — sync phase).
+ * Sync phase is meant to block the render thread, but some Qt render loops
+ * can advance through prepare() before the next sync fires, so m_mutex
+ * serialises reads and writes of m_data to prevent torn copies.
  */
 class ZoneUniformExtension : public PhosphorShell::IUniformExtension
 {
@@ -38,6 +45,7 @@ public:
 
     void write(char* buffer, int offset) const override
     {
+        QMutexLocker lock(&m_mutex);
         std::memcpy(buffer + offset, &m_data, sizeof(m_data));
     }
 
@@ -51,11 +59,12 @@ public:
         m_dirty.store(false, std::memory_order_release);
     }
 
-    /// Update zone data from a vector of ZoneData. Called on the GUI thread during the
-    /// scene graph sync phase (updatePaintNode). Safe because the render thread is blocked
-    /// during the sync phase.
+    /// Update zone data from a vector of ZoneData. Called on the GUI thread
+    /// (typically from updatePaintNode's sync phase). Mutex-guarded against
+    /// a concurrent write() on the render thread — see class Threading note.
     void updateFromZones(const QVector<ZoneData>& zones)
     {
+        QMutexLocker lock(&m_mutex);
         for (int i = 0; i < MaxZones; ++i) {
             if (i < zones.size()) {
                 const ZoneData& zone = zones[i];
@@ -113,6 +122,7 @@ private:
                   "ZoneExtensionData size must match ZoneShaderUniforms zone region size");
 
     ZoneExtensionData m_data;
+    mutable QMutex m_mutex;
     std::atomic<bool> m_dirty{true};
 };
 

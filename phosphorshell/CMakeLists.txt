@@ -10,8 +10,8 @@
 
 cmake_minimum_required(VERSION 3.16)
 
-# PhosphorShell's own version — used for SOVERSION and pkg-config.
-# When split to a standalone repo, this becomes the project() version.
+# PhosphorShell's own version — used for SOVERSION. When split to a
+# standalone repo, this becomes the project() version.
 set(PHOSPHORSHELL_VERSION "0.1.0")
 
 # When built as a subdirectory, inherit the parent project's settings.

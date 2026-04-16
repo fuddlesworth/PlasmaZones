@@ -94,7 +94,18 @@ consumer-facing class — drop it into QML and point it at a .frag file.
 
 ```cpp
 /// Attach a uniform extension (appends data after BaseUniforms in the UBO).
-void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> ext);
+/// `virtual` — a subclass that owns its own extension (e.g. ZoneShaderItem)
+/// can override to refuse external replacement.
+/// Passing `nullptr` CLEARS any previously-set extension; do not call with
+/// nullptr unless you intend to unset.
+virtual void setUniformExtension(std::shared_ptr<PhosphorShell::IUniformExtension> ext);
+
+/// Apply a QVariantMap of named shader parameters to the corresponding
+/// properties. `virtual` — subclasses can override to parse additional
+/// domain-specific keys (ZoneShaderItem parses customParams*, customColor*,
+/// uTexture%N*, etc.). Base implementation stores the map and emits
+/// shaderParamsChanged only.
+virtual void setShaderParams(const QVariantMap& params);
 
 /// Set user texture (bindings 7–10, slot 0–3).
 void setUserTexture(int slot, const QImage& image);
@@ -103,14 +114,21 @@ void setUserTextureWrap(int slot, const QString& wrap);
 /// Set include paths for shader #include resolution.
 void setShaderIncludePaths(const QStringList& paths);
 
-/// Force shader reload.
+/// Force shader reload (reads source from disk, re-expands includes, re-bakes).
+/// Exposed as Q_INVOKABLE so QML can trigger hot-reload.
 Q_INVOKABLE void reloadShader();
 ```
 
 #### QML Usage
 
+Consumers must register the type themselves (no QML module is shipped):
+
+```cpp
+qmlRegisterType<PhosphorRendering::ShaderEffect>("MyApp", 1, 0, "ShaderEffect");
+```
+
 ```qml
-import PhosphorRendering
+import MyApp 1.0
 
 ShaderEffect {
     anchors.fill: parent
@@ -409,7 +427,8 @@ add_library(PhosphorRendering SHARED
     src/shadernoderhiuniforms.cpp    # UBO sync + texture uploads
     src/shadernoderhisetters.cpp     # Property setters
     src/shadercompiler.cpp
-    src/bufferpassmanager.cpp
+    # (no separate bufferpassmanager.cpp — buffer-pass logic lives in
+    # shadernoderhicore.cpp / shadernoderhipipeline.cpp; see Phase 2a note)
 )
 add_library(PhosphorRendering::PhosphorRendering ALIAS PhosphorRendering)
 
@@ -487,6 +506,8 @@ phosphorrendering/
 - ZoneUniformExtension : PhosphorShell::IUniformExtension
 - ZoneShaderNodeBase deleted (replaced by ShaderNodeRhi)
 - rendering_macros.h deleted (setters simplified with indexed API)
+- `ZoneShaderRenderer.qml` / `RenderNodeOverlay.qml`: `loadShader()` calls
+  are now `reloadShader()` (inherited Q_INVOKABLE on ShaderEffect).
 
 ---
 

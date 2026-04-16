@@ -21,16 +21,19 @@ constexpr double kShaderTimeWrap = 1024.0;
 /// extension->write() for the remainder.
 ///
 /// @par appField0 / appField1 escape hatch
-/// Fields at offsets 88–95 are an intentional escape hatch for consumers that
-/// need a small, frequently-updated piece of data inside the base block (i.e.
-/// before the extension region) without paying the cost of a full
-/// IUniformExtension implementation. PlasmaZones uses them for zoneCount /
-/// highlightedCount, which change on every mouse-hover and are read by the
-/// fragment shader on every pixel. Consumers that don't need them should
-/// leave them as 0 — the fields exist regardless because they fill the
-/// std140 alignment slot between iResolution (vec2) and iMouse (vec4).
-/// The library writes them cheaply via the K_APP_FIELDS UBO region (8 bytes)
-/// so frequent updates don't trigger a full scene-header re-upload.
+/// Two consumer-defined int fields at offsets 88–95. They exist regardless
+/// of use because they fill the std140 alignment slot between iResolution
+/// (vec2) and iMouse (vec4) — removing them would break the layout.
+///
+/// Use them when you have a small (≤2 ints), frequently-updated piece of
+/// state that needs to live INSIDE BaseUniforms (rather than the extension
+/// region) — typically because the fragment shader reads them on every
+/// pixel and you want them on the same cache line as iResolution. For
+/// larger or differently-shaped state, implement IUniformExtension.
+///
+/// The library writes them via the K_APP_FIELDS UBO region (8 bytes) so
+/// frequent updates don't trigger a full scene-header re-upload. Consumers
+/// that don't use them should leave them at 0.
 struct alignas(16) BaseUniforms
 {
     // Transform and opacity from Qt scene graph (offset 0)
@@ -45,8 +48,8 @@ struct alignas(16) BaseUniforms
     // Resolution
     float iResolution[2]; // vec2: 8 bytes at offset 80
 
-    // Consumer escape hatch (PlasmaZones: zoneCount, highlightedCount)
-    // — see class doc above for the design rationale.
+    // Consumer-defined int slots — see class doc above for the escape-hatch
+    // design rationale. Written via ShaderNodeRhi::setAppField0/1.
     int appField0; // offset 88
     int appField1; // offset 92
 
@@ -93,9 +96,8 @@ constexpr size_t K_TIME_BLOCK_SIZE = sizeof(float) + sizeof(float) + sizeof(int)
 
 // App-fields block (appField0, appField1) — 8 bytes at offset 88.
 // Uploaded as a tiny standalone region when ONLY the consumer's escape-hatch
-// fields changed (e.g. PlasmaZones' zoneCount/highlightedCount on every hover).
-// Without this granular region, every hover would trigger a full scene-header
-// re-upload (~512 bytes).
+// fields changed. Without this granular region, every appField update would
+// trigger a full scene-header re-upload (~512 bytes).
 constexpr size_t K_APP_FIELDS_OFFSET = offsetof(BaseUniforms, appField0);
 constexpr size_t K_APP_FIELDS_SIZE = sizeof(int) * 2;
 

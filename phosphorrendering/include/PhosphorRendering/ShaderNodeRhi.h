@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <phosphorrendering_export.h>
+#include <PhosphorRendering/phosphorrendering_export.h>
 
 #include <PhosphorShell/BaseUniforms.h>
 #include <PhosphorShell/IUniformExtension.h>
@@ -33,6 +33,25 @@ static constexpr int kMaxBufferPasses = 4;
 static constexpr int kMaxUserTextures = 4;
 static constexpr int kMaxCustomParams = 8;
 static constexpr int kMaxCustomColors = 16;
+
+// ── Consumer binding range (for setExtraBinding) ────────────────────────
+// Library-managed bindings: 0 (UBO), 2-5 (multipass buffers), 6 (audio),
+// 7-10 (user textures), 11 (wallpaper), 12 (depth). Assigning any of those
+// via setExtraBinding() would duplicate SRB entries and is rejected at
+// runtime. Binding 1 is the one "free-in-the-gap" slot; 13..31 are free as
+// well. The upper bound matches Qt RHI's minimum-guaranteed SRB binding
+// count across backends.
+constexpr int kFirstFreeConsumerBinding = 1; ///< First slot usable via setExtraBinding()
+constexpr int kMaxConsumerBinding = 31; ///< Highest portable SRB binding
+constexpr int kReservedBindingRangeStart = 2; ///< First library-managed binding above 0
+constexpr int kReservedBindingRangeEnd = 12; ///< Last library-managed binding
+
+/// @return true if @p binding is usable by consumers via setExtraBinding().
+constexpr bool isConsumerBinding(int binding) noexcept
+{
+    return binding >= kFirstFreeConsumerBinding && binding <= kMaxConsumerBinding
+        && (binding < kReservedBindingRangeStart || binding > kReservedBindingRangeEnd);
+}
 
 /**
  * @brief QSGRenderNode for fullscreen-quad shader rendering via Qt RHI (Vulkan / OpenGL)
@@ -116,18 +135,7 @@ public:
     /**
      * @brief Write the consumer's two int slots inside BaseUniforms (offsets 88, 92).
      *
-     * These are an intentional escape hatch — see PhosphorShell::BaseUniforms's
-     * class doc for the design rationale. They exist regardless of consumer
-     * use because they fill the std140 alignment slot between iResolution
-     * (vec2) and iMouse (vec4); consumers that don't need them simply leave
-     * them as 0.
-     *
-     * Use them when you have a small (≤2 ints), frequently-updated piece of
-     * data that needs to live INSIDE BaseUniforms rather than the extension
-     * region — typically because the fragment shader reads them on every
-     * pixel and you want to keep them on the same cache line as iResolution.
-     * For larger or differently-shaped state, implement IUniformExtension.
-     *
+     * See PhosphorShell::BaseUniforms for the full escape-hatch rationale.
      * Updating these fields is cheap: the library uploads only the 8-byte
      * K_APP_FIELDS region rather than the full scene header.
      */
@@ -319,6 +327,10 @@ private:
     bool m_sceneDataDirty = true; ///< Scene header (resolution, mouse, date, params) changed
     bool m_appFieldsDirty = false; ///< Only appField0/appField1 changed (8-byte upload, not full scene header)
     bool m_didFullUploadOnce = false;
+    /// Epoch-ms of the last iDate recomputation. Throttles
+    /// QDateTime::currentDateTime() to once per second during mouse-driven
+    /// scene-header churn (iDate only advances at 1 Hz anyway).
+    qint64 m_lastDateRefreshMs = 0;
 
     // ── Base Uniforms ──────────────────────────────────────────────────
     PhosphorShell::BaseUniforms m_baseUniforms = {};

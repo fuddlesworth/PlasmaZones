@@ -70,13 +70,14 @@ QImage ZoneShaderItem::labelsTexture() const
 
 void ZoneShaderItem::setLabelsTexture(const QImage& image)
 {
-    QImage newImage = image;
+    // No cacheKey() short-circuit: every detached copy of an identical QImage
+    // gets a new cacheKey, so the guard would almost never hit and would hide
+    // the ordinary case where rebuilds always flow through. Size/format/hash
+    // dedupe is already handled upstream in OverlayService::updateLabelsTextureForWindow
+    // via labelsTextureHash; here we just accept the incoming image.
     {
         QMutexLocker lock(&m_labelsTextureMutex);
-        if (m_labelsTexture.cacheKey() == newImage.cacheKey()) {
-            return;
-        }
-        m_labelsTexture = std::move(newImage);
+        m_labelsTexture = image;
     }
     Q_EMIT labelsTextureChanged();
     update();
