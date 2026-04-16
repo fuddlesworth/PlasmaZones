@@ -374,9 +374,7 @@ add_test(NAME bench_dbus_adaptors COMMAND bench_dbus_adaptors)
 # LABELS=bench lets CI skip the verbose benchmark output via
 # `ctest -LE bench` while still letting `ctest -L bench` select it
 # explicitly for the perf-regression run.
-set_tests_properties(bench_dbus_adaptors PROPERTIES
-    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
-    LABELS "bench")
+set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
@@ -388,49 +386,9 @@ add_test(NAME test_compositor_common COMMAND test_compositor_common)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Headless environment support
-# Set QT_QPA_PLATFORM=offscreen so tests run in CI containers without a display
+# Apply QT_QPA_PLATFORM=offscreen to every test in this directory so new tests
+# added above automatically inherit it — a hand-maintained list rotted and left
+# tests aborting in CI when the author forgot to append.
 # ═══════════════════════════════════════════════════════════════════════════════
-set(_all_tests
-    test_window_identity
-    test_window_tracking_snap test_window_tracking_float
-    test_session_persistence test_session_persistence_layout
-    test_wts_lifecycle test_wts_session test_wts_queries test_wts_dirty_mask
-    test_tiling_algo_masterstack test_tiling_algo_spiral_monocle
-    test_tiling_algo_grid_threecolumn test_tiling_algo_wide_centered
-    test_tiling_algo_cascade_stair_spread
-    test_tiling_algo_lshape test_tiling_algo_deck_zen test_tiling_algo_edge_cases
-    test_tiling_algo_bsp
-    test_algorithm_registry test_algorithm_registry_custom
-    test_scripted_algorithm test_split_tree test_scripted_algorithm_loader
-    test_autotile_engine_core test_autotile_engine_master
-    test_autotile_engine_minsize test_autotile_engine_overflow
-    test_autotile_engine_retry
-    test_autotile_engine_order_cycling
-    test_autotile_drag_insert
-    test_autotile_tile_request_validation
-    test_autotile_ext_startup_float test_autotile_ext_algoswitch
-    test_autotile_ext_overflow
-    test_tiling_state_windows test_tiling_state_config test_tiling_state_serial
-    test_overflow_manager
-    test_geometry_utils_minsizes test_geometry_utils_overlaps test_geometry_utils_bsp
-    test_geometry_utils_serialization test_wts_clearfloat test_wts_virtual_migration test_wts_crossmode_float test_snap_engine
-    test_settings_core test_settings_validation test_settings_perscreen
-    test_settings_virtualscreen test_virtualscreen_staged
-    test_configdefaults test_configbackend_json test_configmigration
-    test_layout_core test_layout_zones
-    test_layoutmanager_persistence test_layoutmanager_cycling test_layoutmanager_assignment
-    test_virtual_screen test_virtual_screen_manager test_snap_assist_virtual
-    test_layersurface
-    test_support_report
-    test_zone_detection_layout test_zone_detector_overlap test_zone_detection_service
-    test_per_screen_config test_navigation_controller test_settings_bridge
-    test_zone_shader_item test_overlay_helpers
-    test_wta_convenience test_settings_schema test_settings_adaptor_batch test_compositor_bridge
-    test_dbus_adaptor_routing
-    test_autotile_adaptor_panel_gate
-    test_drag_policy
-    test_dbus_validation
-    test_layout_adaptor_signals
-    test_compositor_common
-)
+get_property(_all_tests DIRECTORY . PROPERTY TESTS)
 set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
