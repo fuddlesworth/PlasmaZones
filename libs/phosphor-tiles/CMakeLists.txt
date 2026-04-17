@@ -64,10 +64,12 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
     include/PhosphorTiles/ScriptedAlgorithmSandbox.h
+    include/PhosphorTiles/AutotileLayoutSource.h
 )
 
 set(phosphortiles_SRCS
     src/algorithmregistry.cpp
+    src/autotilelayoutsource.cpp
     src/tilingalgorithm.cpp
     src/tilingstate.cpp
     src/tilingstateserialization.cpp

@@ -6,7 +6,14 @@
 /// Umbrella include for PhosphorTiles. Consumers may include individual
 /// headers for tighter dependencies.
 ///
-/// This header expands as algorithm primitives migrate from src/autotile/
-/// into libs/phosphor-tiles/include/PhosphorTiles/ — see the umbrella in
-/// libs/phosphor-zones/include/PhosphorZones/PhosphorZones.h for the
-/// shape it will take.
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmHelpers.h>
+#include <PhosphorTiles/ScriptedAlgorithmJsBuiltins.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/ScriptedAlgorithmSandbox.h>
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
