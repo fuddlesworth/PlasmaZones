@@ -25,7 +25,7 @@ constexpr int PreviewSize = 1000;
 constexpr auto RecommendedDefaultAlgorithmId = "bsp";
 }
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) const
 {
@@ -386,4 +386,4 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     return list;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

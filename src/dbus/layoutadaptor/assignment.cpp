@@ -287,8 +287,8 @@ QString LayoutAdaptor::getScreenStates()
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
         obj[QLatin1String("algorithmId")] = algoId;
         if (!algoId.isEmpty()) {
-            auto* registry = AlgorithmRegistry::instance();
-            TilingAlgorithm* algo = registry->algorithm(algoId);
+            auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+            PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algoId);
             obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
         } else {
             obj[QLatin1String("algorithmName")] = QString();
@@ -596,7 +596,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     // Validate tiling algorithm if non-empty
     if (!tilingAlgorithm.isEmpty()) {
-        if (!AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
+        if (!PhosphorTiles::AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
             return;
         }

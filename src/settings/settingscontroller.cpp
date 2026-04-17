@@ -109,7 +109,7 @@ VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QStr
 
 SettingsController::~SettingsController()
 {
-    // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
+    // Disconnect all pending algorithm registration watchers — PhosphorTiles::AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
     for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
@@ -125,7 +125,8 @@ SettingsController::SettingsController(QObject* parent)
     , m_screenHelper(&m_settings, this)
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
-    , m_localAutotileSource(std::make_unique<PhosphorTiles::AutotileLayoutSource>(AlgorithmRegistry::instance()))
+    , m_localAutotileSource(
+          std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
 {
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
@@ -167,19 +168,20 @@ SettingsController::SettingsController(QObject* parent)
     m_startupRenderingBackend = m_settings.renderingBackend();
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
-    // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
+    // The daemon also creates its own PhosphorTiles::ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate
-    // the shared AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new ScriptedAlgorithmLoader(this);
+    // the shared PhosphorTiles::AlgorithmRegistry singleton within their respective processes.
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(this);
     scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Emit both signals: availableAlgorithmsChanged for algorithm-specific
     // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
     // (the layouts list includes autotile entries from the registry).
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::availableAlgorithmsChanged);
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this, &SettingsController::layoutsChanged);
+    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+            &SettingsController::layoutsChanged);
 
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
@@ -2353,9 +2355,9 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 QVariantList SettingsController::availableAlgorithms() const
 {
     QVariantList algorithms;
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     for (const QString& id : registry->availableAlgorithms()) {
-        TilingAlgorithm* algo = registry->algorithm(id);
+        PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
             QVariantMap algoMap;
             algoMap[QStringLiteral("id")] = id;
@@ -2381,8 +2383,8 @@ QVariantList SettingsController::availableAlgorithms() const
 
 QVariantList SettingsController::customParamsForAlgorithm(const QString& algorithmId) const
 {
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return {};
     }
@@ -2412,8 +2414,8 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
     }
 
     // Validate paramName exists in the algorithm's declared custom params
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return;
     }
@@ -2458,16 +2460,16 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
 
     QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
-    QVariantMap customParams = algoEntry.value(PerAlgoKeys::CustomParams).toMap();
+    QVariantMap customParams = algoEntry.value(PhosphorTiles::PerAlgoKeys::CustomParams).toMap();
     customParams[paramName] = coerced;
-    algoEntry[PerAlgoKeys::CustomParams] = customParams;
+    algoEntry[PhosphorTiles::PerAlgoKeys::CustomParams] = customParams;
 
     // Preserve existing splitRatio/masterCount if not already in the entry
-    if (!algoEntry.contains(PerAlgoKeys::SplitRatio)) {
-        algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
+    if (!algoEntry.contains(PhosphorTiles::PerAlgoKeys::SplitRatio)) {
+        algoEntry[PhosphorTiles::PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
     }
-    if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
-        algoEntry[PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
+    if (!algoEntry.contains(PhosphorTiles::PerAlgoKeys::MasterCount)) {
+        algoEntry[PhosphorTiles::PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
     }
 
     perAlgo[algorithmId] = algoEntry;
@@ -2480,7 +2482,7 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
     const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     const QVariant algoEntry = perAlgo.value(algorithmId);
     if (algoEntry.isValid()) {
-        const QVariant customVar = algoEntry.toMap().value(PerAlgoKeys::CustomParams);
+        const QVariant customVar = algoEntry.toMap().value(PhosphorTiles::PerAlgoKeys::CustomParams);
         if (customVar.isValid()) {
             return customVar.toMap();
         }
@@ -2491,8 +2493,8 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
                                                           double splitRatio, int masterCount) const
 {
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         return {};
     }
@@ -2500,19 +2502,19 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
     const int previewSize = 1000;
     const QRect previewRect(0, 0, previewSize, previewSize);
 
-    TilingState state(QStringLiteral("preview"));
+    PhosphorTiles::TilingState state(QStringLiteral("preview"));
     state.setMasterCount(masterCount);
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    TilingParams params = TilingParams::forPreview(count, previewRect, &state);
+    PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(count, previewRect, &state);
 
     // Include saved custom params so preview reflects user configuration
     params.customParams = savedCustomParams(algorithmId);
 
     QVector<QRect> zones = algo->calculateZones(params);
 
-    return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+    return PhosphorTiles::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
 }
 
 void SettingsController::openAlgorithmsFolder()
@@ -2550,7 +2552,7 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     }
 
     const bool ok = QFile::copy(filePath, destPath);
-    // ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
+    // PhosphorTiles::ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
     return ok;
 }
 
@@ -2566,11 +2568,11 @@ QString SettingsController::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
         return QString();
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo)
         return QString();
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
+    auto* scripted = qobject_cast<PhosphorTiles::ScriptedAlgorithm*>(algo);
     if (!scripted)
         return QString();
     const QString path = scripted->filePath();
@@ -2595,10 +2597,10 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
     // Cancel any existing watcher for this ID to prevent stacking
     cancelAlgorithmWatcher(expectedId);
 
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     auto conn = std::make_shared<QMetaObject::Connection>();
     m_algorithmWatchers[expectedId] = conn;
-    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
+    *conn = connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
                     [this, expectedId](const QString& registeredId) {
                         if (registeredId == expectedId) {
                             auto it = m_algorithmWatchers.find(expectedId);
@@ -2678,8 +2680,8 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Only user-created algorithms can be deleted."));
@@ -2731,8 +2733,8 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));
         return false;

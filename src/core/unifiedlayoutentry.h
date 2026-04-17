@@ -11,7 +11,7 @@
 // the overlay / zone selector / D-Bus layout list.
 //
 // Lives OUTSIDE layoututils.h because it pulls in autotile's
-// AlgorithmRegistry to compose algorithm entries. Keeping the autotile
+// PhosphorTiles::AlgorithmRegistry to compose algorithm entries. Keeping the autotile
 // coupling in this separate TU lets layoututils stay pure zone/layout
 // primitives (prerequisite for extracting those into phosphor-zones
 // without dragging autotile into the library's dependency graph).
@@ -54,7 +54,7 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
     qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
     bool recommended = true; ///< True if layout matches the current screen's aspect ratio
     QString zoneNumberDisplay; ///< How zone numbers are displayed in previews ("all", "last", etc.)
-    bool memory = false; ///< True if algorithm maintains persistent state (SplitTree)
+    bool memory = false; ///< True if algorithm maintains persistent state (PhosphorTiles::SplitTree)
     bool supportsMasterCount = false; ///< True if algorithm supports configurable master window count
     bool supportsSplitRatio = false; ///< True if algorithm supports configurable split ratio
     bool producesOverlappingZones = false; ///< True if algorithm can produce overlapping zones

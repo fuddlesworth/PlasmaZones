@@ -13,9 +13,9 @@ using namespace PlasmaZones;
 namespace {
 
 /**
- * @brief Add N windows named "win0" .. "win{N-1}" to the given TilingState.
+ * @brief Add N windows named "win0" .. "win{N-1}" to the given PhosphorTiles::TilingState.
  */
-void addNumberedWindows(TilingState& state, int count)
+void addNumberedWindows(PhosphorTiles::TilingState& state, int count)
 {
     for (int i = 0; i < count; ++i) {
         state.addWindow(QStringLiteral("win%1").arg(i));
@@ -25,7 +25,7 @@ void addNumberedWindows(TilingState& state, int count)
 } // anonymous namespace
 
 /**
- * @brief Unit tests for TilingState configuration properties.
+ * @brief Unit tests for PhosphorTiles::TilingState configuration properties.
  *
  * Tests cover:
  * - Master count (default, set/get, clamping, signals, isMaster, master/stack lists)
@@ -44,13 +44,13 @@ private Q_SLOTS:
 
     void testMasterCount_default()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QCOMPARE(state.masterCount(), ConfigDefaults::autotileMasterCount());
     }
 
     void testMasterCount_setAndGet()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         addNumberedWindows(state, 5);
 
         state.setMasterCount(3);
@@ -59,46 +59,46 @@ private Q_SLOTS:
 
     void testMasterCount_clampToMin()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         state.setMasterCount(0);
-        QCOMPARE(state.masterCount(), AutotileDefaults::MinMasterCount);
+        QCOMPARE(state.masterCount(), PhosphorTiles::AutotileDefaults::MinMasterCount);
 
         state.setMasterCount(-5);
-        QCOMPARE(state.masterCount(), AutotileDefaults::MinMasterCount);
+        QCOMPARE(state.masterCount(), PhosphorTiles::AutotileDefaults::MinMasterCount);
     }
 
     void testMasterCount_clampToMax()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         addNumberedWindows(state, 3);
 
         // masterCount clamps to MaxMasterCount (absolute limit), not window count.
         // Algorithms clamp operationally when calculating zones.
         state.setMasterCount(10);
-        QCOMPARE(state.masterCount(), AutotileDefaults::MaxMasterCount);
+        QCOMPARE(state.masterCount(), PhosphorTiles::AutotileDefaults::MaxMasterCount);
     }
 
     void testMasterCount_clampToMaxConstant()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         addNumberedWindows(state, 20);
 
         // With many windows, should clamp to MaxMasterCount
         state.setMasterCount(100);
-        QCOMPARE(state.masterCount(), AutotileDefaults::MaxMasterCount);
+        QCOMPARE(state.masterCount(), PhosphorTiles::AutotileDefaults::MaxMasterCount);
     }
 
     void testMasterCount_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
 
-        QSignalSpy masterSpy(&state, &TilingState::masterCountChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy masterSpy(&state, &PhosphorTiles::TilingState::masterCountChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.setMasterCount(2);
         QCOMPARE(masterSpy.count(), 1);
@@ -107,10 +107,10 @@ private Q_SLOTS:
 
     void testMasterCount_noSignalOnSameValue()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        QSignalSpy masterSpy(&state, &TilingState::masterCountChanged);
+        QSignalSpy masterSpy(&state, &PhosphorTiles::TilingState::masterCountChanged);
         // Default is 1, setting to 1 again should not emit
         state.setMasterCount(1);
         QCOMPARE(masterSpy.count(), 0);
@@ -118,7 +118,7 @@ private Q_SLOTS:
 
     void testIsMaster_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -131,7 +131,7 @@ private Q_SLOTS:
 
     void testIsMaster_floatingExcluded()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.setFloating(QStringLiteral("A"), true);
@@ -143,7 +143,7 @@ private Q_SLOTS:
 
     void testMasterWindows_and_stackWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -160,34 +160,34 @@ private Q_SLOTS:
 
     void testSplitRatio_default()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QCOMPARE(state.splitRatio(), ConfigDefaults::autotileSplitRatio());
     }
 
     void testSplitRatio_setAndGet()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
         QVERIFY(qFuzzyCompare(state.splitRatio(), 0.7));
     }
 
     void testSplitRatio_clampMin()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.01); // Below MinSplitRatio (0.1)
-        QVERIFY(qFuzzyCompare(state.splitRatio(), AutotileDefaults::MinSplitRatio));
+        QVERIFY(qFuzzyCompare(state.splitRatio(), PhosphorTiles::AutotileDefaults::MinSplitRatio));
     }
 
     void testSplitRatio_clampMax()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.99); // Above MaxSplitRatio (0.9)
-        QVERIFY(qFuzzyCompare(state.splitRatio(), AutotileDefaults::MaxSplitRatio));
+        QVERIFY(qFuzzyCompare(state.splitRatio(), PhosphorTiles::AutotileDefaults::MaxSplitRatio));
     }
 
     void testSplitRatio_increase()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         state.increaseSplitRatio(0.1);
         QVERIFY(qFuzzyCompare(state.splitRatio(), 0.6));
@@ -195,7 +195,7 @@ private Q_SLOTS:
 
     void testSplitRatio_decrease()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         state.decreaseSplitRatio(0.1);
         QVERIFY(qFuzzyCompare(state.splitRatio(), 0.4));
@@ -203,9 +203,9 @@ private Q_SLOTS:
 
     void testSplitRatio_signal()
     {
-        TilingState state(QStringLiteral("test"));
-        QSignalSpy ratioSpy(&state, &TilingState::splitRatioChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QSignalSpy ratioSpy(&state, &PhosphorTiles::TilingState::splitRatioChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.setSplitRatio(0.7);
         QCOMPARE(ratioSpy.count(), 1);
@@ -214,9 +214,9 @@ private Q_SLOTS:
 
     void testSplitRatio_noSignalOnSameValue()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         // Default comes from ConfigDefaults::autotileSplitRatio()
-        QSignalSpy ratioSpy(&state, &TilingState::splitRatioChanged);
+        QSignalSpy ratioSpy(&state, &PhosphorTiles::TilingState::splitRatioChanged);
         state.setSplitRatio(ConfigDefaults::autotileSplitRatio());
         QCOMPARE(ratioSpy.count(), 0);
     }
@@ -227,7 +227,7 @@ private Q_SLOTS:
 
     void testFloating_setAndCheck()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         QVERIFY(!state.isFloating(QStringLiteral("win1")));
@@ -239,7 +239,7 @@ private Q_SLOTS:
 
     void testFloating_untrackedWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
 
         // Setting floating on untracked window should be ignored
         state.setFloating(QStringLiteral("nonexistent"), true);
@@ -248,7 +248,7 @@ private Q_SLOTS:
 
     void testFloating_toggle()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         bool result = state.toggleFloating(QStringLiteral("win1"));
@@ -262,7 +262,7 @@ private Q_SLOTS:
 
     void testFloating_toggleUntracked()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
 
         // Toggle on untracked should return false and do nothing
         bool result = state.toggleFloating(QStringLiteral("nonexistent"));
@@ -271,7 +271,7 @@ private Q_SLOTS:
 
     void testFloating_tiledWindowCount()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -289,7 +289,7 @@ private Q_SLOTS:
 
     void testFloating_tiledWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -300,7 +300,7 @@ private Q_SLOTS:
 
     void testFloating_floatingWindowsList()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -315,12 +315,12 @@ private Q_SLOTS:
 
     void testFloating_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        QSignalSpy floatSpy(&state, &TilingState::floatingChanged);
-        QSignalSpy countSpy(&state, &TilingState::windowCountChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy floatSpy(&state, &PhosphorTiles::TilingState::floatingChanged);
+        QSignalSpy countSpy(&state, &PhosphorTiles::TilingState::windowCountChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.setFloating(QStringLiteral("win1"), true);
         QCOMPARE(floatSpy.count(), 1);
@@ -335,10 +335,10 @@ private Q_SLOTS:
 
     void testFloating_noSignalOnSameValue()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        QSignalSpy floatSpy(&state, &TilingState::floatingChanged);
+        QSignalSpy floatSpy(&state, &PhosphorTiles::TilingState::floatingChanged);
         // Already not floating, setting to false should be no-op
         state.setFloating(QStringLiteral("win1"), false);
         QCOMPARE(floatSpy.count(), 0);

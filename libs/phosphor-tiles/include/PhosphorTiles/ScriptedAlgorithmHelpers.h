@@ -11,7 +11,7 @@
 #include <QVariantMap>
 #include <QVector>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 /**
@@ -98,4 +98,4 @@ QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, i
 QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, const QString& scriptId);
 
 } // namespace ScriptedHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

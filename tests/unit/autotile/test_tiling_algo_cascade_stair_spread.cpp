@@ -32,17 +32,17 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* cascade()
+    PhosphorTiles::TilingAlgorithm* cascade()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("cascade"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("cascade"));
     }
-    TilingAlgorithm* stair()
+    PhosphorTiles::TilingAlgorithm* stair()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("stair"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("stair"));
     }
-    TilingAlgorithm* spread()
+    PhosphorTiles::TilingAlgorithm* spread()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("spread"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("spread"));
     }
 
 private Q_SLOTS:
@@ -60,7 +60,7 @@ private Q_SLOTS:
 
     void testCascade_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(cascade()
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -68,7 +68,7 @@ private Q_SLOTS:
 
     void testStair_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(stair()
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -76,7 +76,7 @@ private Q_SLOTS:
 
     void testSpread_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(spread()
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -97,7 +97,7 @@ private Q_SLOTS:
 
     void testCascade_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = cascade()->calculateZones(
             makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -106,7 +106,7 @@ private Q_SLOTS:
 
     void testCascade_multipleWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = cascade()->calculateZones(
             makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -127,7 +127,7 @@ private Q_SLOTS:
 
     void testCascade_gaps()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = cascade()->calculateZones(
             makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -139,7 +139,7 @@ private Q_SLOTS:
 
     void testCascade_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(100, 200, 1920, 1080);
         auto zones =
             cascade()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -165,7 +165,7 @@ private Q_SLOTS:
 
     void testStair_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             stair()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -174,7 +174,7 @@ private Q_SLOTS:
 
     void testStair_multipleWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             stair()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -191,7 +191,7 @@ private Q_SLOTS:
 
     void testStair_gaps()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = stair()->calculateZones(
             makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -203,7 +203,7 @@ private Q_SLOTS:
 
     void testStair_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(100, 200, 1920, 1080);
         auto zones =
             stair()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -229,7 +229,7 @@ private Q_SLOTS:
 
     void testSpread_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = spread()->calculateZones(
             makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -239,7 +239,7 @@ private Q_SLOTS:
 
     void testSpread_multipleWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = spread()->calculateZones(
             makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -262,7 +262,7 @@ private Q_SLOTS:
 
     void testSpread_gaps()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = spread()->calculateZones(
             makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -274,7 +274,7 @@ private Q_SLOTS:
 
     void testSpread_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(100, 200, 1920, 1080);
         auto zones =
             spread()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -290,7 +290,7 @@ private Q_SLOTS:
 
     void testCascade_largeCount()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = cascade()->calculateZones(
             makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
@@ -302,7 +302,7 @@ private Q_SLOTS:
 
     void testStair_largeCount()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = stair()->calculateZones(
             makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
@@ -314,7 +314,7 @@ private Q_SLOTS:
 
     void testSpread_largeCount()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = spread()->calculateZones(
             makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);

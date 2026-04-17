@@ -7,7 +7,7 @@
 #include <QtMath>
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -491,4 +491,4 @@ void TilingState::forEachTiledWindow(const std::function<bool(const QString& win
     }
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

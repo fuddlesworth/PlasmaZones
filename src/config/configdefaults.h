@@ -15,7 +15,7 @@
 #include "../core/enums.h"
 #include "configkeys.h"
 #include "plasmazones_export.h"
-// AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
+// PhosphorTiles::AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
 // the user-facing default accessors.
 #include <PhosphorTiles/AutotileConstants.h>
 
@@ -709,15 +709,15 @@ public:
     }
     static constexpr qreal autotileSplitRatio()
     {
-        return AutotileDefaults::DefaultSplitRatio;
+        return PhosphorTiles::AutotileDefaults::DefaultSplitRatio;
     }
     static constexpr qreal autotileSplitRatioMin()
     {
-        return AutotileDefaults::MinSplitRatio;
+        return PhosphorTiles::AutotileDefaults::MinSplitRatio;
     }
     static constexpr qreal autotileSplitRatioMax()
     {
-        return AutotileDefaults::MaxSplitRatio;
+        return PhosphorTiles::AutotileDefaults::MaxSplitRatio;
     }
     static constexpr qreal autotileSplitRatioStep()
     {
@@ -733,15 +733,15 @@ public:
     }
     static constexpr int autotileMasterCount()
     {
-        return AutotileDefaults::DefaultMasterCount;
+        return PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     }
     static constexpr int autotileMasterCountMin()
     {
-        return AutotileDefaults::MinMasterCount;
+        return PhosphorTiles::AutotileDefaults::MinMasterCount;
     }
     static constexpr int autotileMasterCountMax()
     {
-        return AutotileDefaults::MaxMasterCount;
+        return PhosphorTiles::AutotileDefaults::MaxMasterCount;
     }
     static constexpr int autotileInnerGap()
     {
@@ -749,11 +749,11 @@ public:
     }
     static constexpr int autotileInnerGapMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileInnerGapMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static constexpr int autotileOuterGap()
     {
@@ -761,11 +761,11 @@ public:
     }
     static constexpr int autotileOuterGapMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static bool autotileUsePerSideOuterGap()
     {
@@ -777,11 +777,11 @@ public:
     }
     static constexpr int autotileOuterGapTopMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapTopMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapBottom()
     {
@@ -789,11 +789,11 @@ public:
     }
     static constexpr int autotileOuterGapBottomMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapBottomMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapLeft()
     {
@@ -801,11 +801,11 @@ public:
     }
     static constexpr int autotileOuterGapLeftMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapLeftMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static int autotileOuterGapRight()
     {
@@ -813,11 +813,11 @@ public:
     }
     static constexpr int autotileOuterGapRightMin()
     {
-        return AutotileDefaults::MinGap;
+        return PhosphorTiles::AutotileDefaults::MinGap;
     }
     static constexpr int autotileOuterGapRightMax()
     {
-        return AutotileDefaults::MaxGap;
+        return PhosphorTiles::AutotileDefaults::MaxGap;
     }
     static constexpr bool autotileFocusNewWindows()
     {
@@ -833,23 +833,23 @@ public:
     }
     static constexpr int autotileInsertPositionMin()
     {
-        return AutotileDefaults::MinInsertPosition;
+        return PhosphorTiles::AutotileDefaults::MinInsertPosition;
     }
     static constexpr int autotileInsertPositionMax()
     {
-        return AutotileDefaults::MaxInsertPosition;
+        return PhosphorTiles::AutotileDefaults::MaxInsertPosition;
     }
     static constexpr int autotileMaxWindows()
     {
-        return AutotileDefaults::DefaultMaxWindows;
+        return PhosphorTiles::AutotileDefaults::DefaultMaxWindows;
     }
     static constexpr int autotileMaxWindowsMin()
     {
-        return AutotileDefaults::MinMaxWindows;
+        return PhosphorTiles::AutotileDefaults::MinMaxWindows;
     }
     static constexpr int autotileMaxWindowsMax()
     {
-        return AutotileDefaults::MaxMaxWindows;
+        return PhosphorTiles::AutotileDefaults::MaxMaxWindows;
     }
     static bool animationsEnabled()
     {
@@ -861,11 +861,11 @@ public:
     }
     static constexpr int animationDurationMin()
     {
-        return AutotileDefaults::MinAnimationDuration;
+        return PhosphorTiles::AutotileDefaults::MinAnimationDuration;
     }
     static constexpr int animationDurationMax()
     {
-        return AutotileDefaults::MaxAnimationDuration;
+        return PhosphorTiles::AutotileDefaults::MaxAnimationDuration;
     }
     static int animationSequenceMode()
     {
@@ -885,11 +885,11 @@ public:
     }
     static constexpr int animationStaggerIntervalMin()
     {
-        return AutotileDefaults::MinAnimationStaggerIntervalMs;
+        return PhosphorTiles::AutotileDefaults::MinAnimationStaggerIntervalMs;
     }
     static constexpr int animationStaggerIntervalMax()
     {
-        return AutotileDefaults::MaxAnimationStaggerIntervalMs;
+        return PhosphorTiles::AutotileDefaults::MaxAnimationStaggerIntervalMs;
     }
     static QString animationEasingCurve()
     {

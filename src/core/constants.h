@@ -24,7 +24,7 @@
 #include <PhosphorZones/ZoneDefaults.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
-// NOTE: AutotileJsonKeys / AutotileDefaults previously lived inline here and
+// NOTE: PhosphorTiles::AutotileJsonKeys / PhosphorTiles::AutotileDefaults previously lived inline here and
 // were re-exported from <PhosphorTiles/AutotileConstants.h> via a transitive
 // include.  That transitive chain forced every PlasmaZones consumer (including
 // libraries like PhosphorZones that have no use for autotile symbols) to
@@ -78,7 +78,7 @@ constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (c
 using AspectRatioClass = ::PhosphorLayout::AspectRatioClass;
 namespace ScreenClassification = ::PhosphorLayout::ScreenClassification;
 
-// AutotileDefaults lives in autotile/AutotileConstants.h (re-included above).
+// PhosphorTiles::AutotileDefaults lives in autotile/AutotileConstants.h (re-included above).
 
 /**
  * @brief Editor-specific constants
@@ -166,7 +166,7 @@ inline constexpr QLatin1String Region{"region"};
 inline constexpr QLatin1String Screens{"screens"};
 }
 
-// AutotileJsonKeys lives in autotile/AutotileConstants.h (re-included above).
+// PhosphorTiles::AutotileJsonKeys lives in autotile/AutotileConstants.h (re-included above).
 
 /**
  * @brief Per-screen override key names (PascalCase — distinct from camelCase JSON keys)

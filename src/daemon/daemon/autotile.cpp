@@ -64,7 +64,7 @@ void Daemon::updateAutotileScreens()
         }
     }
 
-    // Capture window order for screens LEAVING autotile before TilingState is destroyed.
+    // Capture window order for screens LEAVING autotile before PhosphorTiles::TilingState is destroyed.
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
     // restores the same window positions. Without this, only the settingsChanged path
     // (handleAutotileDisabled) captured orders — layout cycling lost them.
@@ -119,8 +119,8 @@ void Daemon::updateAutotileScreens()
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithm();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
-                    auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(globalAlgo);
+                    auto* screenAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
@@ -276,7 +276,7 @@ void Daemon::handleSnappingToAutotile()
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
     QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
-        algoId = AlgorithmRegistry::defaultAlgorithmId();
+        algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
     const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
 

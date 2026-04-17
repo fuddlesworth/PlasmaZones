@@ -7,7 +7,7 @@
 #include <QString>
 #include <QTextStream>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 /**
@@ -167,4 +167,4 @@ QString clampSplitRatioJs()
 }
 
 } // namespace ScriptedHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

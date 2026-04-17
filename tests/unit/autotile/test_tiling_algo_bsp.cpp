@@ -27,9 +27,9 @@ private:
     QRect m_portraitScreen{0, 0, 1080, 1920};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* bsp()
+    PhosphorTiles::TilingAlgorithm* bsp()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
     }
 
     /**
@@ -40,7 +40,7 @@ private:
         auto* algo = bsp();
         if (!algo)
             return {};
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(splitRatio);
         return algo->calculateZones(
             makeParams(windowCount, screen, &state, gap, ::PhosphorLayout::EdgeGaps::uniform(0)));

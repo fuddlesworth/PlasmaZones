@@ -242,7 +242,7 @@ void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
         int modeInt = grp->readInt(QLatin1String("Mode"), 0);
         entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
         entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
-        entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
+        entry.tilingAlgorithm = grp->readString(QLatin1String("PhosphorTiles::TilingAlgorithm"));
 
         m_assignments[key] = entry;
     }
@@ -529,7 +529,7 @@ void LayoutManager::saveAssignments()
         auto group = m_configBackend->group(groupName);
         group->writeInt(QLatin1String("Mode"), static_cast<int>(entry.mode));
         group->writeString(QLatin1String("SnappingLayout"), entry.snappingLayout);
-        group->writeString(QLatin1String("TilingAlgorithm"), entry.tilingAlgorithm);
+        group->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), entry.tilingAlgorithm);
     }
 
     // Write [QuickLayouts] group

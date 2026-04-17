@@ -210,7 +210,7 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
-    auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -234,13 +234,14 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                TilingState* state = m_autotileEngine->stateForScreen(screenId);
+                PhosphorTiles::TilingState* state = m_autotileEngine->stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();
                 }
             }
-            QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
+            QVariantList zones =
+                PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
             QString layoutId = LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
                                             false, screenId, algo->supportsMasterCount(),
@@ -419,7 +420,7 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (LayoutId::isAutotile(assignmentId)) {
             const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
-            auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
+            auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algoId);
             const QString displayName = algo ? algo->name() : algoId;
             showAlgorithmOsdDeferred(algoId, displayName, screenId);
         } else {

@@ -7,7 +7,7 @@
 #include <QJSValue>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 bool hardenSandbox(QJSEngine* engine)
 {
@@ -200,4 +200,4 @@ bool hardenSandbox(QJSEngine* engine)
     return true;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

@@ -31,10 +31,10 @@ class TestAutotileEngineOrderCycling : public QObject
 private:
     PlasmaZones::TestHelpers::ScriptedAlgoTestSetup m_scriptSetup;
 
-    /// Add windows to a screen's TilingState (simulates KWin windowAdded events)
+    /// Add windows to a screen's PhosphorTiles::TilingState (simulates KWin windowAdded events)
     void addWindowsToScreen(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
-        TilingState* state = engine.stateForScreen(screenId);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenId);
         QVERIFY(state);
         for (const QString& id : windowIds) {
             state->addWindow(id);
@@ -77,7 +77,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({});
         QVERIFY(!engine.isEnabled());
 
-        // TilingState is destroyed — tiledWindowOrder returns empty
+        // PhosphorTiles::TilingState is destroyed — tiledWindowOrder returns empty
         QVERIFY(engine.tiledWindowOrder(screen).isEmpty());
 
         // Step 4: Seed the captured order, then re-add screen (simulates cycling back)
@@ -160,7 +160,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Seed is ignored if TilingState already has windows
+    // Seed is ignored if PhosphorTiles::TilingState already has windows
     // =========================================================================
 
     void testSeed_ignoredWhenWindowsExist()

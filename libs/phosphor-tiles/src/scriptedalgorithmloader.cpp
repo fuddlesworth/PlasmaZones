@@ -13,7 +13,7 @@
 #include <QSet>
 #include <QStandardPaths>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 // Single file-scope constant shared by loadFromDirectory() and reWatchFiles()
 static constexpr int MaxWatchedFilesPerDir = 100;
@@ -361,4 +361,4 @@ QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, in
     return result;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

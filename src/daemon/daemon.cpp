@@ -100,9 +100,10 @@ Daemon::Daemon(QObject* parent)
     // layoutSource() any time after Daemon is constructed.  Population happens
     // lazily on first availableLayouts() call: the layout manager has loaded
     // from disk by then, and the algorithm registry is populated by the
-    // ScriptedAlgorithmLoader during init().
+    // PhosphorTiles::ScriptedAlgorithmLoader during init().
     m_zonesLayoutSource = std::make_unique<PhosphorZones::ZonesLayoutSource>(m_layoutManager.get());
-    m_autotileLayoutSource = std::make_unique<PhosphorTiles::AutotileLayoutSource>(AlgorithmRegistry::instance());
+    m_autotileLayoutSource =
+        std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance());
     m_layoutSource = std::make_unique<PhosphorLayout::CompositeLayoutSource>();
     m_layoutSource->addSource(m_zonesLayoutSource.get());
     m_layoutSource->addSource(m_autotileLayoutSource.get());
@@ -266,7 +267,7 @@ bool Daemon::init()
         m_prevAutotileEnabled = autotileNow;
 
         // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams = AlgorithmRegistry::configuredPreviewParams();
+        const auto prevPreviewParams = PhosphorTiles::AlgorithmRegistry::configuredPreviewParams();
 
         // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
@@ -275,11 +276,11 @@ bool Daemon::init()
 
         // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
         // notify layout list consumers to refetch with updated previews
-        if (AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
+        if (PhosphorTiles::AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
         }
 
-        // Capture autotile window order BEFORE any mode switch destroys TilingState.
+        // Capture autotile window order BEFORE any mode switch destroys PhosphorTiles::TilingState.
         // Saved for deterministic re-seeding when autotile is re-enabled.
         if (autotileToggled && !autotileNow) {
             m_lastAutotileOrders = captureAutotileOrders();
@@ -406,14 +407,15 @@ bool Daemon::init()
     m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
-    // user-defined algorithms are registered in AlgorithmRegistry before the
+    // user-defined algorithms are registered in PhosphorTiles::AlgorithmRegistry before the
     // engine resolves the configured algorithm ID.
-    m_scriptedAlgorithmLoader = std::make_unique<ScriptedAlgorithmLoader>();
+    m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>();
     // When scripted algorithms change (hot-reload), notify layout list consumers
-    connect(m_scriptedAlgorithmLoader.get(), &ScriptedAlgorithmLoader::algorithmsChanged, this, [this]() {
-        if (m_layoutAdaptor)
-            m_layoutAdaptor->notifyLayoutListChanged();
-    });
+    connect(m_scriptedAlgorithmLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+            [this]() {
+                if (m_layoutAdaptor)
+                    m_layoutAdaptor->notifyLayoutListChanged();
+            });
     m_scriptedAlgorithmLoader->scanAndRegister();
 
     m_autotileEngine->syncFromSettings(m_settings.get());

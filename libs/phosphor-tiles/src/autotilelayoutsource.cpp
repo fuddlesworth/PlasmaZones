@@ -23,7 +23,7 @@ namespace {
 // rendered by the existing daemon-side D-Bus path.
 constexpr int PreviewCanvasSize = 1000;
 
-PhosphorLayout::AlgorithmMetadata buildMetadata(PlasmaZones::TilingAlgorithm* algorithm)
+PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* algorithm)
 {
     PhosphorLayout::AlgorithmMetadata meta;
     if (!algorithm) {
@@ -50,14 +50,14 @@ QString makePreviewId(const QString& algorithmId)
 
 } // namespace
 
-PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm* algorithm, int windowCount)
+PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!algorithm) {
         return preview;
     }
 
-    auto* registry = PlasmaZones::AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     const QString algorithmId = registry ? registry->availableAlgorithms().value(0) : QString();
     // Recover this algorithm's id by reverse lookup — the algorithm itself
     // doesn't expose it, the registry owns the mapping.
@@ -80,8 +80,8 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm*
     const int effectiveCount = windowCount > 0 ? windowCount : algorithm->defaultMaxWindows();
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 
-    PlasmaZones::TilingState previewState(QStringLiteral("preview"));
-    PlasmaZones::TilingParams params = PlasmaZones::TilingParams::forPreview(effectiveCount, canvas, &previewState);
+    PhosphorTiles::TilingState previewState(QStringLiteral("preview"));
+    PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(effectiveCount, canvas, &previewState);
 
     const QVector<QRect> rects = algorithm->calculateZones(params);
 
@@ -110,7 +110,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm*
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
 
-AutotileLayoutSource::AutotileLayoutSource(PlasmaZones::AlgorithmRegistry* registry)
+AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry)
     : m_registry(registry)
 {
 }
@@ -126,7 +126,7 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
 
     const auto algorithms = m_registry->allAlgorithms();
     result.reserve(algorithms.size());
-    for (PlasmaZones::TilingAlgorithm* algorithm : algorithms) {
+    for (PhosphorTiles::TilingAlgorithm* algorithm : algorithms) {
         if (!algorithm) {
             continue;
         }
@@ -147,7 +147,7 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
         return {};
     }
     const QString algorithmId = id.mid(prefix.size());
-    PlasmaZones::TilingAlgorithm* algorithm = m_registry->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(algorithmId);
     return algorithm ? previewFromAlgorithm(algorithm, windowCount) : PhosphorLayout::LayoutPreview{};
 }
 

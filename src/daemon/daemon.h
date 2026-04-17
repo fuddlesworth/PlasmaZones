@@ -51,10 +51,16 @@ class AutotileNavigationAdapter;
 class ScreenModeRouter;
 class SnapNavigationAdapter;
 class VirtualScreenSwapper;
-class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
+} // namespace PlasmaZones
+
+namespace PhosphorTiles {
+class ScriptedAlgorithmLoader;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -96,7 +102,7 @@ public:
      *
      * Returns a composite that aggregates PhosphorZones::ZonesLayoutSource
      * (over m_layoutManager) and PhosphorTiles::AutotileLayoutSource (over
-     * the in-process AlgorithmRegistry singleton).  Daemon-internal
+     * the in-process PhosphorTiles::AlgorithmRegistry singleton).  Daemon-internal
      * consumers — overlay layout picker, snap-assist preview thumbnails,
      * the layout adaptor's D-Bus surface — see one ILayoutSource* and
      * branch on `LayoutPreview::isAutotile` rather than on which
@@ -243,7 +249,7 @@ private:
     /**
      * @brief Capture autotile window order for all autotile screens
      *
-     * Must be called BEFORE any mode switch that destroys TilingState
+     * Must be called BEFORE any mode switch that destroys PhosphorTiles::TilingState
      * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
      *
      * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
@@ -351,7 +357,7 @@ private:
     // The two concrete layout sources composed behind layoutSource(): manual
     // layouts via ZonesLayoutSource (over m_layoutManager) and autotile
     // algorithm previews via AutotileLayoutSource (over the in-process
-    // AlgorithmRegistry singleton).  Owned separately because the composite
+    // PhosphorTiles::AlgorithmRegistry singleton).  Owned separately because the composite
     // borrows their pointers and we need their lifetimes pinned to Daemon.
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_zonesLayoutSource;
     std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_autotileLayoutSource;
@@ -389,7 +395,7 @@ private:
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
     // Scripted algorithm loader (file watcher for user-defined JS algorithms)
-    std::unique_ptr<ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+    std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;

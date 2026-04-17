@@ -131,7 +131,7 @@ private Q_SLOTS:
         // Process pending retiles
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         // win1 and win2 should be tiled, win3 should have been rejected by maxWindows gate
         QCOMPARE(state->tiledWindowCount(), 2);
@@ -196,11 +196,11 @@ private Q_SLOTS:
         {
             AutotileEngine engine(nullptr, nullptr, nullptr);
 
-            TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+            PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
             state->addWindow(QStringLiteral("win2"));
 
-            TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
+            PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("HDMI-1"));
             state2->addWindow(QStringLiteral("win3"));
 
             serialized = engine.serializeWindowOrders();
@@ -239,7 +239,7 @@ private Q_SLOTS:
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("firefox|{uuid1}"));
         state->addWindow(QStringLiteral("konsole|{uuid2}"));
         state->addWindow(QStringLiteral("dolphin|{uuid3}"));
@@ -284,7 +284,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state);
         // Pre-seeded order should place win1 before win2 (matching desktop 1's saved order)
         const QStringList order = state->windowOrder();
@@ -316,7 +316,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win3"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state);
         // Pre-seeded order should place win3 before win4 (matching desktop 2's saved order)
         const QStringList order = state->windowOrder();
@@ -350,7 +350,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state);
         // If win2 was restored as floating, it should be floating in the state
         QVERIFY2(state->isFloating(QStringLiteral("win2")),
@@ -362,7 +362,7 @@ private Q_SLOTS:
         // saveState()/loadState() should silently no-op when no delegate is set
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("win1"));
 
         // These should not crash or have any effect
@@ -422,7 +422,7 @@ private Q_SLOTS:
         // Establish a known baseline ratio
         settings.setAutotileSplitRatio(0.5);
         engine.syncFromSettings(&settings);
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QVERIFY(qFuzzyCompare(engine.config()->splitRatio, 0.5));
 
@@ -468,7 +468,7 @@ private Q_SLOTS:
 
         settings.setAutotileMasterCount(1);
         engine.syncFromSettings(&settings);
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QCOMPARE(engine.config()->masterCount, 1);
 
@@ -507,7 +507,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win3"), screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         // Cap of 2: third window is rejected at the gate.
         QCOMPARE(state->tiledWindowCount(), 2);
@@ -543,7 +543,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win3"), screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QCOMPARE(state->tiledWindowCount(), 2);
 
@@ -587,7 +587,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 
@@ -659,7 +659,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("winB1"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state);
         const QStringList order = state->windowOrder();
         QCOMPARE(order.size(), 2);
@@ -710,7 +710,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("winA1"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state);
         const QStringList order = state->windowOrder();
         QCOMPARE(order.size(), 2);
@@ -734,7 +734,7 @@ private Q_SLOTS:
 
         // Create engine with windows
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("firefox|{uuid1}"));
         state->addWindow(QStringLiteral("konsole|{uuid2}"));
         state->setFloating(QStringLiteral("konsole|{uuid2}"), true);
@@ -768,7 +768,7 @@ private Q_SLOTS:
         engine2.windowOpened(QStringLiteral("firefox|{uuid1}"), QStringLiteral("eDP-1"), 0, 0);
         QCoreApplication::processEvents();
 
-        TilingState* state2 = engine2.stateForScreen(QStringLiteral("eDP-1"));
+        PhosphorTiles::TilingState* state2 = engine2.stateForScreen(QStringLiteral("eDP-1"));
         QVERIFY(state2);
 
         // Window order should be restored (firefox first, as in original)

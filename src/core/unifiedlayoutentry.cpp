@@ -85,13 +85,13 @@ static UnifiedLayoutEntry entryFromLayout(Layout* layout)
 
 static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
 {
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     if (!registry) {
         return;
     }
     const QStringList algoIds = registry->availableAlgorithms();
     for (const QString& algoId : algoIds) {
-        TilingAlgorithm* algo = registry->algorithm(algoId);
+        PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algoId);
         if (!algo) {
             continue;
         }
@@ -100,9 +100,9 @@ static void appendAutotileEntries(QVector<UnifiedLayoutEntry>& list)
         entry.name = algo->name();
         entry.description = algo->description();
         entry.isAutotile = true;
-        entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
+        entry.previewZones = PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
-        entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        entry.zoneCount = PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo);
         entry.zoneNumberDisplay = algo->zoneNumberDisplay();
         entry.memory = algo->supportsMemory();
         entry.supportsMasterCount = algo->supportsMasterCount();

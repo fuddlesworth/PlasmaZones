@@ -15,7 +15,7 @@
 
 class QJSEngine;
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 struct WatchdogContext; // defined in ScriptedAlgorithm.cpp (internal implementation detail)
 
@@ -242,4 +242,4 @@ private:
     bool m_cachedValuesLoaded = false;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

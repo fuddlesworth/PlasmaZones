@@ -7,7 +7,7 @@
 #include "tileslogging.h"
 #include <QJsonArray>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 // Use shared JSON keys from constants.h
 using namespace AutotileJsonKeys;
@@ -276,4 +276,4 @@ void TilingState::syncTreeLazyCreate()
     }
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

@@ -105,7 +105,7 @@ private Q_SLOTS:
         // geometry so recalculateLayout() would bail with "invalid screen
         // geometry". The zones themselves aren't under test; the JSON
         // shape around them is.
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QVERIFY(state);
         state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
 
@@ -142,7 +142,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QVERIFY(state);
         const QRect fullArea(0, 0, 1920, 1080);
         state->setCalculatedZones({fullArea, fullArea});
@@ -182,7 +182,7 @@ private Q_SLOTS:
 
         QSignalSpy tiledSpy(&engine, &AutotileEngine::windowsTiled);
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QVERIFY(state);
         state->setCalculatedZones({QRect(10, 10, 950, 1060), QRect(960, 10, 950, 1060)});
         engine.retile(screenName);

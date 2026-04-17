@@ -169,7 +169,7 @@ void Daemon::connectDesktopActivity()
         }
         // Desktop switch invalidates the TilingStateKey context — cancel any
         // active drag-insert preview before the engine's desktop changes,
-        // otherwise cancel/commit would operate on the wrong TilingState.
+        // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
         if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
             m_autotileEngine->cancelDragInsertPreview();
         }
@@ -202,7 +202,7 @@ void Daemon::connectDesktopActivity()
         showDesktopSwitchOsd(desktop, currentActivity());
     });
 
-    // Prune stale TilingState entries and disabled-desktop numbers when desktops are removed
+    // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
         // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
         // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
@@ -251,7 +251,7 @@ void Daemon::connectDesktopActivity()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Prune stale TilingState entries and disabled-activity IDs when activities are added/removed
+        // Prune stale PhosphorTiles::TilingState entries and disabled-activity IDs when activities are added/removed
         connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
             if (!m_activityManager) {
                 return;
@@ -618,7 +618,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     const VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
-    // that any TilingState created by the upcoming updateAutotileScreens
+    // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
     const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;

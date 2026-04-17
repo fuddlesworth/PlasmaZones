@@ -10,7 +10,7 @@
 #include <QVariantMap>
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, int maxZones)
@@ -237,4 +237,4 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
 }
 
 } // namespace ScriptedHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

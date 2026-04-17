@@ -8,10 +8,10 @@
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 class AlgorithmRegistry;
 class TilingAlgorithm;
-} // namespace PlasmaZones
+} // namespace PhosphorTiles
 
 namespace PhosphorTiles {
 
@@ -24,7 +24,7 @@ namespace PhosphorTiles {
 /// Provided as a free function so consumers that already hold a
 /// TilingAlgorithm* can build a preview without going through
 /// AutotileLayoutSource (mirrors PhosphorZones::previewFromLayout).
-PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm* algorithm,
+PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm,
                                                                         int windowCount = 4);
 
 /// ILayoutSource adapter wrapping the AlgorithmRegistry singleton.
@@ -45,7 +45,7 @@ public:
     /// and must keep it alive for the source's lifetime.  Pass nullptr only
     /// if you intend to swap in a registry later (the source returns empty
     /// previews until set).
-    explicit AutotileLayoutSource(PlasmaZones::AlgorithmRegistry* registry);
+    explicit AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry);
     ~AutotileLayoutSource() override;
 
     /// Default window count used for `availableLayouts()` previews when the
@@ -64,7 +64,7 @@ public:
                                             const QSize& canvas = {}) const override;
 
 private:
-    PlasmaZones::AlgorithmRegistry* m_registry;
+    PhosphorTiles::AlgorithmRegistry* m_registry;
 };
 
 } // namespace PhosphorTiles

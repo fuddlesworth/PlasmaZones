@@ -88,7 +88,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones,
             // Gap column: lock to current width so the sweep preserves it
             colMinDim[c] = gapWidth;
         } else if (colHasConstraint[c]) {
-            colMinDim[c] = qMax(colMinDim[c], AutotileDefaults::MinZoneSizePx);
+            colMinDim[c] = qMax(colMinDim[c], PhosphorTiles::AutotileDefaults::MinZoneSizePx);
         } else {
             // Unconstrained occupied column: use 1px floor to prevent zero-width zones
             colMinDim[c] = qMax(colMinDim[c], 1);
@@ -240,7 +240,7 @@ static void pairwiseFallback(QVector<QRect>& zones, const QVector<int>& minDims,
     };
 
     auto getMinDim = [&](int i) -> int {
-        return qMax(minDims[i], AutotileDefaults::MinZoneSizePx);
+        return qMax(minDims[i], PhosphorTiles::AutotileDefaults::MinZoneSizePx);
     };
 
     // Apply a boundary shift between requester and donor.
@@ -469,7 +469,8 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
     } else {
         bool widthDeficit = false;
         for (int i = 0; i < n; ++i) {
-            if (minWidths[i] > 0 && zones[i].width() < qMax(minWidths[i], AutotileDefaults::MinZoneSizePx)) {
+            if (minWidths[i] > 0
+                && zones[i].width() < qMax(minWidths[i], PhosphorTiles::AutotileDefaults::MinZoneSizePx)) {
                 widthDeficit = true;
                 break;
             }
@@ -485,7 +486,8 @@ void enforceWindowMinSizes(QVector<QRect>& zones, const QVector<QSize>& minSizes
     } else {
         bool heightDeficit = false;
         for (int i = 0; i < n; ++i) {
-            if (minHeights[i] > 0 && zones[i].height() < qMax(minHeights[i], AutotileDefaults::MinZoneSizePx)) {
+            if (minHeights[i] > 0
+                && zones[i].height() < qMax(minHeights[i], PhosphorTiles::AutotileDefaults::MinZoneSizePx)) {
                 heightDeficit = true;
                 break;
             }

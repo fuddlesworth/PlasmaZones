@@ -16,7 +16,7 @@
 #include <QVariantMap>
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 /**
  * @brief Named constants for per-algorithm settings keys
@@ -333,7 +333,7 @@ PHOSPHORTILES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegist
  * Usage in algorithm .cpp file:
  * @code
  * namespace {
- * PlasmaZones::AlgorithmRegistrar<MyAlgorithm> registrar(
+ * PhosphorTiles::AlgorithmRegistrar<MyAlgorithm> registrar(
  *     QLatin1String("my-algo"), 10);  // priority 10
  * }
  * @endcode
@@ -359,4 +359,4 @@ public:
     }
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

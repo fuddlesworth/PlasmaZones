@@ -10,7 +10,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 /**
  * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
@@ -79,4 +79,4 @@ private:
     static constexpr int RefreshDebounceMs = 500;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

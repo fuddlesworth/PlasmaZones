@@ -72,7 +72,7 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
  * @brief Explicit per-context assignment entry storing both mode fields
  *
  * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and TilingAlgorithm. Toggling between modes only flips the mode field —
+ * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
  * the other field is preserved, eliminating the need for shadow assignments.
  */
 struct AssignmentEntry

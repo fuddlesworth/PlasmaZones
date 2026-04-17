@@ -18,7 +18,7 @@
 namespace PlasmaZones {
 
 /**
- * @brief Per-screen overflow window tracking (pure tracking — no TilingState mutation)
+ * @brief Per-screen overflow window tracking (pure tracking — no PhosphorTiles::TilingState mutation)
  *
  * Manages the bookkeeping for windows that are auto-floated when the tiled
  * window count exceeds maxWindows. Uses per-screen storage
@@ -28,7 +28,7 @@ namespace PlasmaZones {
  * Distinguished from user-floated windows so they can be auto-unfloated
  * when room becomes available (e.g., window closed, maxWindows increased).
  *
- * This class does NOT mutate TilingState. It returns lists of window IDs
+ * This class does NOT mutate PhosphorTiles::TilingState. It returns lists of window IDs
  * that should be floated/unfloated and the caller performs the mutations
  * and signal emissions.
  */
@@ -61,12 +61,12 @@ public:
      * @brief Identify windows beyond tileCount that should be auto-floated
      *
      * Marks the excess windows as overflow. Does NOT call state->setFloating();
-     * the caller is responsible for mutating TilingState and emitting signals.
+     * the caller is responsible for mutating PhosphorTiles::TilingState and emitting signals.
      *
-     * @param windowsInState List of all tiled windows (from TilingState)
+     * @param windowsInState List of all tiled windows (from PhosphorTiles::TilingState)
      * @param isFloating Predicate: returns true if a window is already floating
      * @param screenId Screen where overflow is being applied
-     * @param windows Ordered window list from TilingState::tiledWindows()
+     * @param windows Ordered window list from PhosphorTiles::TilingState::tiledWindows()
      * @param tileCount Number of available tile zones
      * @return Window IDs that should be newly auto-floated (caller mutates state)
      */
@@ -75,7 +75,7 @@ public:
     /**
      * @brief Identify overflow windows that should be unfloated when room opens
      *
-     * Also purges stale entries (windows no longer floating or not in TilingState)
+     * Also purges stale entries (windows no longer floating or not in PhosphorTiles::TilingState)
      * to prevent overflow tracking from growing unbounded.
      *
      * Does NOT call state->setFloating(); the caller performs mutations.
@@ -84,7 +84,7 @@ public:
      * @param tiledCount Current number of tiled (non-floating) windows
      * @param maxWindows Maximum windows allowed on the screen
      * @param isFloating Predicate: returns true if window is currently floating
-     * @param containsWindow Predicate: returns true if window exists in TilingState
+     * @param containsWindow Predicate: returns true if window exists in PhosphorTiles::TilingState
      * @return Window IDs that should be unfloated (caller mutates state and emits signals)
      */
     QStringList recoverIfRoom(const QString& screenId, int tiledCount, int maxWindows,

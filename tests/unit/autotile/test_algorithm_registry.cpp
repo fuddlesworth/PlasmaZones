@@ -20,7 +20,7 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Unit tests for AlgorithmRegistry: singleton, built-in algorithms,
+ * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: singleton, built-in algorithms,
  *        retrieval, and default algorithm behavior.
  */
 class TestAlgorithmRegistry : public QObject
@@ -42,8 +42,8 @@ private Q_SLOTS:
 
     void testSingleton_sameInstance()
     {
-        auto* instance1 = AlgorithmRegistry::instance();
-        auto* instance2 = AlgorithmRegistry::instance();
+        auto* instance1 = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* instance2 = PhosphorTiles::AlgorithmRegistry::instance();
 
         QVERIFY(instance1 != nullptr);
         QCOMPARE(instance1, instance2);
@@ -55,7 +55,7 @@ private Q_SLOTS:
 
     void testBuiltIn_masterStackRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("master-stack"));
 
         QVERIFY(algo != nullptr);
@@ -66,7 +66,7 @@ private Q_SLOTS:
 
     void testBuiltIn_columnsRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("columns"));
 
         QVERIFY(algo != nullptr);
@@ -77,7 +77,7 @@ private Q_SLOTS:
 
     void testBuiltIn_bspRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("bsp"));
 
         QVERIFY(algo != nullptr);
@@ -88,7 +88,7 @@ private Q_SLOTS:
 
     void testBuiltIn_rowsRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("rows"));
 
         QVERIFY(algo != nullptr);
@@ -99,7 +99,7 @@ private Q_SLOTS:
 
     void testBuiltIn_dwindleRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("dwindle"));
 
         QVERIFY(algo != nullptr);
@@ -110,7 +110,7 @@ private Q_SLOTS:
 
     void testBuiltIn_spiralRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("spiral"));
 
         QVERIFY(algo != nullptr);
@@ -121,7 +121,7 @@ private Q_SLOTS:
 
     void testBuiltIn_monocleRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("monocle"));
 
         QVERIFY(algo != nullptr);
@@ -132,7 +132,7 @@ private Q_SLOTS:
 
     void testBuiltIn_threeColumnRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("three-column"));
 
         QVERIFY(algo != nullptr);
@@ -143,7 +143,7 @@ private Q_SLOTS:
 
     void testBuiltIn_gridRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("grid"));
 
         QVERIFY(algo != nullptr);
@@ -154,7 +154,7 @@ private Q_SLOTS:
 
     void testBuiltIn_wideRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("wide"));
 
         QVERIFY(algo != nullptr);
@@ -165,7 +165,7 @@ private Q_SLOTS:
 
     void testBuiltIn_centeredMasterRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QLatin1String("centered-master"));
 
         QVERIFY(algo != nullptr);
@@ -176,7 +176,7 @@ private Q_SLOTS:
 
     void testBuiltIn_allRegistered()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto available = registry->availableAlgorithms();
 
         QVERIFY(available.contains(QLatin1String("master-stack")));
@@ -204,7 +204,7 @@ private Q_SLOTS:
 
     void testBuiltIn_builtinIdBackwardsCompatibility()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         const QStringList builtinIds = {
             // 15 original C++-to-JS converted algorithms
             QLatin1String("bsp"),
@@ -240,8 +240,8 @@ private Q_SLOTS:
 
     void testBuiltIn_allAlgorithmsCalculateZones()
     {
-        auto* registry = AlgorithmRegistry::instance();
-        TilingState state(QStringLiteral("test"));
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         const QRect screen(0, 0, 1920, 1080);
         const auto allIds = registry->availableAlgorithms();
         QVERIFY2(allIds.size() >= 15,
@@ -267,12 +267,12 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
+        QCOMPARE(PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
     }
 
     void testDefault_algorithmInstance()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* defaultAlgo = registry->defaultAlgorithm();
         auto* bsp = registry->algorithm(QLatin1String("bsp"));
 
@@ -286,7 +286,7 @@ private Q_SLOTS:
 
     void testRetrieval_unknownReturnsNull()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QStringLiteral("nonexistent-algorithm"));
 
         QVERIFY(algo == nullptr);
@@ -294,7 +294,7 @@ private Q_SLOTS:
 
     void testRetrieval_emptyIdReturnsNull()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry->algorithm(QString());
 
         QVERIFY(algo == nullptr);
@@ -302,7 +302,7 @@ private Q_SLOTS:
 
     void testRetrieval_hasAlgorithm()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
 
         QVERIFY(registry->hasAlgorithm(QLatin1String("master-stack")));
         QVERIFY(registry->hasAlgorithm(QLatin1String("columns")));
@@ -320,7 +320,7 @@ private Q_SLOTS:
 
     void testRetrieval_allAlgorithms()
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto all = registry->allAlgorithms();
 
         // At least 15 built-in algorithms are registered before any scripted loader runs
@@ -339,8 +339,8 @@ private Q_SLOTS:
     void testFrozenGlobals_jsReassignmentBlocked()
     {
         // TODO: The current test infrastructure does not expose a way to evaluate
-        // arbitrary JS code in the sandboxed QJSEngine of a ScriptedAlgorithm.
-        // The engine is private to each ScriptedAlgorithm instance, and there is
+        // arbitrary JS code in the sandboxed QJSEngine of a PhosphorTiles::ScriptedAlgorithm.
+        // The engine is private to each PhosphorTiles::ScriptedAlgorithm instance, and there is
         // no public evaluateJs() method.
         //
         // What should be tested:
@@ -361,8 +361,8 @@ private Q_SLOTS:
 
         // Verify determinism as an indirect frozen-globals check: two identical
         // calls must produce identical output.
-        auto* registry = AlgorithmRegistry::instance();
-        TilingState state(QStringLiteral("test"));
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         const QRect screen(0, 0, 1920, 1080);
 
@@ -400,7 +400,7 @@ private Q_SLOTS:
             identicalZones.append(previewRect);
         }
 
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
+        auto result = PhosphorTiles::AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
         QCOMPARE(result.size(), 4);
 
         for (int i = 0; i < result.size(); ++i) {
@@ -422,7 +422,7 @@ private Q_SLOTS:
             identicalZones.append(previewRect);
         }
 
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
+        auto result = PhosphorTiles::AlgorithmRegistry::zonesToRelativeGeometry(identicalZones, previewRect);
         QCOMPARE(result.size(), 16);
 
         for (int i = 0; i < result.size(); ++i) {
@@ -442,7 +442,7 @@ private Q_SLOTS:
         QVector<QRect> singleZone;
         singleZone.append(previewRect);
 
-        auto result = AlgorithmRegistry::zonesToRelativeGeometry(singleZone, previewRect);
+        auto result = PhosphorTiles::AlgorithmRegistry::zonesToRelativeGeometry(singleZone, previewRect);
         QCOMPARE(result.size(), 1);
 
         auto geo = result[0].toMap()[QLatin1String("relativeGeometry")].toMap();

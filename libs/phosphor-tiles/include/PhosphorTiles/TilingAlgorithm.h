@@ -18,7 +18,7 @@
 #include <QVector>
 #include <functional>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 // Shorthand for the shared shape — declared here (rather than relying on a
 // transitive include of core/constants.h) so this header is self-contained.
@@ -633,4 +633,4 @@ Q_SIGNALS:
     void configurationChanged();
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

@@ -889,8 +889,8 @@ private:
     // gallery, layout-import preview thumbnails, etc.).
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
-    // Autotile previews come from the in-process AlgorithmRegistry singleton
-    // (populated by ScriptedAlgorithmLoader) — same wrapping pattern as
+    // Autotile previews come from the in-process PhosphorTiles::AlgorithmRegistry singleton
+    // (populated by PhosphorTiles::ScriptedAlgorithmLoader) — same wrapping pattern as
     // m_localLayoutSource so the editor renders manual + autotile previews
     // through one uniform path.  Source borrows the registry pointer.
     std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;

@@ -246,7 +246,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
     // Handle autotile algorithm preview layouts
     if (LayoutId::isAutotile(id)) {
         QString algoId = LayoutId::extractAlgorithmId(id);
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry ? registry->algorithm(algoId) : nullptr;
         if (!algo) {
             qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
@@ -257,9 +257,9 @@ QString LayoutAdaptor::getLayout(const QString& id)
         entry.name = algo->name();
         entry.description = algo->description();
         entry.isAutotile = true;
-        entry.previewZones = AlgorithmRegistry::generatePreviewZones(algo);
+        entry.previewZones = PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
-        entry.zoneCount = AlgorithmRegistry::effectiveMaxWindows(algo);
+        entry.zoneCount = PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo);
         QJsonObject json = LayoutUtils::toJson(entry);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);

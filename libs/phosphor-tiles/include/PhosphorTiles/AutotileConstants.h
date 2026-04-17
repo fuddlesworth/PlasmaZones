@@ -21,7 +21,7 @@
  * etc.) reach these symbols transparently via `core/constants.h`, which
  * re-includes this header for backward source compatibility.
  */
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 /**
  * @brief Auto-tiling algorithm defaults
@@ -125,4 +125,4 @@ inline constexpr QLatin1String InsertAsMaster{"asMaster"};
 inline constexpr QLatin1String SplitTreeKey{"splitTree"};
 } // namespace AutotileJsonKeys
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

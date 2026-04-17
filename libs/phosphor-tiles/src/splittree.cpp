@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -548,4 +548,4 @@ int SplitTree::countLeaves(const SplitNode* node, int depth) const
     return countLeaves(node->first.get(), depth + 1) + countLeaves(node->second.get(), depth + 1);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

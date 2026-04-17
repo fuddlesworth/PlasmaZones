@@ -1385,7 +1385,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
 // Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
-// AlgorithmRegistry for validation; per-algorithm settings round-trip as a
+// PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 
 PZ_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
@@ -1398,9 +1398,10 @@ QString Settings::defaultAutotileAlgorithm() const
 void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
     QString validated = algorithm;
-    if (!algorithm.startsWith(QLatin1String("script:")) && !AlgorithmRegistry::instance()->algorithm(algorithm)) {
+    if (!algorithm.startsWith(QLatin1String("script:"))
+        && !PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
-        validated = AlgorithmRegistry::defaultAlgorithmId();
+        validated = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
     if (defaultAutotileAlgorithm() == validated) {
         return;

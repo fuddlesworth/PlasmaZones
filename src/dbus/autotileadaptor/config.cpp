@@ -53,15 +53,16 @@ double AutotileAdaptor::masterRatio() const
 
 // NOTE: D-Bus property changes (masterRatio, masterCount, etc.) update runtime state
 // only. They are NOT written back to KConfig/Settings. Per-screen state (including
-// splitRatio) is persisted separately via TilingState save/load on daemon shutdown.
+// splitRatio) is persisted separately via PhosphorTiles::TilingState save/load on daemon shutdown.
 void AutotileAdaptor::setMasterRatio(double ratio)
 {
     if (!ensureEngineAndConfig("setMasterRatio")) {
         return;
     }
-    ratio = qBound(AutotileDefaults::MinSplitRatio, ratio, AutotileDefaults::MaxSplitRatio);
+    ratio =
+        qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, ratio, PhosphorTiles::AutotileDefaults::MaxSplitRatio);
     if (!qFuzzyCompare(m_engine->config()->splitRatio, ratio)) {
-        // Update config AND all per-screen TilingState objects (which algorithms use)
+        // Update config AND all per-screen PhosphorTiles::TilingState objects (which algorithms use)
         m_engine->setGlobalSplitRatio(ratio);
         Q_EMIT configChanged();
     }
@@ -80,9 +81,10 @@ void AutotileAdaptor::setMasterCount(int count)
     if (!ensureEngineAndConfig("setMasterCount")) {
         return;
     }
-    count = qBound(AutotileDefaults::MinMasterCount, count, AutotileDefaults::MaxMasterCount);
+    count =
+        qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, count, PhosphorTiles::AutotileDefaults::MaxMasterCount);
     if (m_engine->config()->masterCount != count) {
-        // Update config AND all per-screen TilingState objects (which algorithms use)
+        // Update config AND all per-screen PhosphorTiles::TilingState objects (which algorithms use)
         m_engine->setGlobalMasterCount(count);
         Q_EMIT configChanged();
     }
@@ -183,7 +185,7 @@ void AutotileAdaptor::increaseMasterRatio(double delta)
         return;
     }
     qCDebug(lcDbusAutotile) << "increaseMasterRatio: delta=" << delta;
-    // Note: This modifies per-screen TilingState, not global config.
+    // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
     // tilingChanged signal is emitted by engine after retile.
     m_engine->increaseMasterRatio(delta);
 }
@@ -199,7 +201,7 @@ void AutotileAdaptor::decreaseMasterRatio(double delta)
         return;
     }
     qCDebug(lcDbusAutotile) << "decreaseMasterRatio: delta=" << delta;
-    // Note: This modifies per-screen TilingState, not global config.
+    // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
     // tilingChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterRatio(delta);
 }
@@ -210,7 +212,7 @@ void AutotileAdaptor::increaseMasterCount()
         return;
     }
     qCDebug(lcDbusAutotile) << "increaseMasterCount";
-    // Note: This modifies per-screen TilingState, not global config.
+    // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
     // tilingChanged signal is emitted by engine after retile.
     m_engine->increaseMasterCount();
 }
@@ -221,7 +223,7 @@ void AutotileAdaptor::decreaseMasterCount()
         return;
     }
     qCDebug(lcDbusAutotile) << "decreaseMasterCount";
-    // Note: This modifies per-screen TilingState, not global config.
+    // Note: This modifies per-screen PhosphorTiles::TilingState, not global config.
     // tilingChanged signal is emitted by engine after retile.
     m_engine->decreaseMasterCount();
 }

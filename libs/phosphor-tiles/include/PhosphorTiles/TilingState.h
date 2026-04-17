@@ -16,7 +16,7 @@
 #include <functional>
 #include <memory>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 class SplitTree;
 struct SplitNode;
@@ -457,4 +457,4 @@ private:
     void syncTreeLazyCreate();
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

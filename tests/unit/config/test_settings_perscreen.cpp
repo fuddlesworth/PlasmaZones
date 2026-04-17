@@ -84,7 +84,8 @@ private Q_SLOTS:
         QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
         // Key is stored in short form ("MasterCount") after normalization
         int stored = overrides.value(QStringLiteral("MasterCount")).toInt();
-        QVERIFY2(stored >= AutotileDefaults::MinMasterCount && stored <= AutotileDefaults::MaxMasterCount,
+        QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
+                     && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
     }
 

@@ -50,7 +50,7 @@ void Daemon::initializeAutotile()
             // Defer OSD display (same rationale as autotileApplied handler above).
             if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                 && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+                auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
                 QString displayName = algo ? algo->name() : algorithmId;
                 QString screenId;
                 if (m_autotileEngine) {
@@ -211,7 +211,7 @@ void Daemon::initializeAutotile()
                 return;
             }
 
-            // Capture autotile window order BEFORE layout switch destroys TilingState.
+            // Capture autotile window order BEFORE layout switch destroys PhosphorTiles::TilingState.
             // Merge (not replace) into m_lastAutotileOrders so other desktops' saved
             // orders are preserved — a replace would discard them.
             if (wasAutotile) {
@@ -267,7 +267,7 @@ void Daemon::initializeAutotile()
                     algoId = m_settings->defaultAutotileAlgorithm();
                 }
                 if (algoId.isEmpty()) {
-                    algoId = AlgorithmRegistry::defaultAlgorithmId();
+                    algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
                 }
                 if (!algoId.isEmpty()) {
                     applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
@@ -701,10 +701,10 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
 
 void Daemon::syncAutotileFloatStatePassive(const QString& windowId, bool floating, const QString& screenId)
 {
-    // Passive state-sync: update WTS to match the engine's internal TilingState,
+    // Passive state-sync: update WTS to match the engine's internal PhosphorTiles::TilingState,
     // but DO NOT call applyGeometryForFloat. This path is entered when the
     // engine inserts a window whose WTS floating state diverges from the
-    // TilingState (e.g. snap→autotile drag drops a window whose WTS still
+    // PhosphorTiles::TilingState (e.g. snap→autotile drag drops a window whose WTS still
     // says floating from a prior snap-mode Meta+F). The window already has a
     // valid position (the drop location); teleporting it via the stored
     // pre-tile rect would resize and jump it — discussion #271.

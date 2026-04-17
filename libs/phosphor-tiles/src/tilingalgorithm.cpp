@@ -6,7 +6,7 @@
 #include <PhosphorTiles/TilingState.h>
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -545,4 +545,4 @@ qreal TilingAlgorithm::clampOrProportionalFallback(qreal ratio, qreal minFirstRa
     return ratio;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

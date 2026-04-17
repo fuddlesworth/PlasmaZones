@@ -10,7 +10,7 @@
 using namespace PlasmaZones;
 
 /**
- * @brief Unit tests for TilingState window order management.
+ * @brief Unit tests for PhosphorTiles::TilingState window order management.
  *
  * Covers addWindow, removeWindow, moveWindow, swapWindows, promoteToMaster,
  * insertAfterFocused, rotateWindows, and moveToPosition.
@@ -27,7 +27,7 @@ private Q_SLOTS:
 
     void testAddWindow_basic()
     {
-        TilingState state(QStringLiteral("screen0"));
+        PhosphorTiles::TilingState state(QStringLiteral("screen0"));
         QCOMPARE(state.screenId(), QStringLiteral("screen0"));
         QCOMPARE(state.windowCount(), 0);
 
@@ -44,7 +44,7 @@ private Q_SLOTS:
 
     void testAddWindow_duplicate()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(state.addWindow(QStringLiteral("win1")));
 
         // Adding same window again should fail
@@ -54,7 +54,7 @@ private Q_SLOTS:
 
     void testAddWindow_emptyString()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
 
         // Empty string should be rejected
         QVERIFY(!state.addWindow(QString()));
@@ -64,7 +64,7 @@ private Q_SLOTS:
 
     void testAddWindow_positionInsertion()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
@@ -81,7 +81,7 @@ private Q_SLOTS:
 
     void testAddWindow_positionOutOfRange()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         // Position beyond size should append to end
@@ -95,9 +95,9 @@ private Q_SLOTS:
 
     void testAddWindow_signal()
     {
-        TilingState state(QStringLiteral("test"));
-        QSignalSpy countSpy(&state, &TilingState::windowCountChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QSignalSpy countSpy(&state, &PhosphorTiles::TilingState::windowCountChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.addWindow(QStringLiteral("win1"));
         QCOMPARE(countSpy.count(), 1);
@@ -106,7 +106,7 @@ private Q_SLOTS:
 
     void testRemoveWindow_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.addWindow(QStringLiteral("win3"));
@@ -119,7 +119,7 @@ private Q_SLOTS:
 
     void testRemoveWindow_nonExistent()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
         QVERIFY(!state.removeWindow(QStringLiteral("nonexistent")));
@@ -128,13 +128,13 @@ private Q_SLOTS:
 
     void testRemoveWindow_clearsFocused()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.addWindow(QStringLiteral("win2"));
         state.setFocusedWindow(QStringLiteral("win1"));
         QCOMPARE(state.focusedWindow(), QStringLiteral("win1"));
 
-        QSignalSpy focusSpy(&state, &TilingState::focusedWindowChanged);
+        QSignalSpy focusSpy(&state, &PhosphorTiles::TilingState::focusedWindowChanged);
         state.removeWindow(QStringLiteral("win1"));
         QVERIFY(state.focusedWindow().isEmpty());
         QCOMPARE(focusSpy.count(), 1);
@@ -142,7 +142,7 @@ private Q_SLOTS:
 
     void testRemoveWindow_clearsFloating()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
         state.setFloating(QStringLiteral("win1"), true);
         QVERIFY(state.isFloating(QStringLiteral("win1")));
@@ -154,11 +154,11 @@ private Q_SLOTS:
 
     void testRemoveWindow_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("win1"));
 
-        QSignalSpy countSpy(&state, &TilingState::windowCountChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy countSpy(&state, &PhosphorTiles::TilingState::windowCountChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.removeWindow(QStringLiteral("win1"));
         QCOMPARE(countSpy.count(), 1);
@@ -171,7 +171,7 @@ private Q_SLOTS:
 
     void testMoveWindow_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -183,11 +183,11 @@ private Q_SLOTS:
 
     void testMoveWindow_sameIndex()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
-        QSignalSpy orderSpy(&state, &TilingState::windowOrderChanged);
+        QSignalSpy orderSpy(&state, &PhosphorTiles::TilingState::windowOrderChanged);
 
         // Moving to same position is a no-op but returns success
         QVERIFY(state.moveWindow(0, 0));
@@ -197,7 +197,7 @@ private Q_SLOTS:
 
     void testMoveWindow_invalidIndex()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(!state.moveWindow(-1, 0));
@@ -208,12 +208,12 @@ private Q_SLOTS:
 
     void testMoveWindow_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
-        QSignalSpy orderSpy(&state, &TilingState::windowOrderChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy orderSpy(&state, &PhosphorTiles::TilingState::windowOrderChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.moveWindow(0, 1);
         QCOMPARE(orderSpy.count(), 1);
@@ -222,7 +222,7 @@ private Q_SLOTS:
 
     void testSwapWindows_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -233,17 +233,17 @@ private Q_SLOTS:
 
     void testSwapWindows_sameIndex()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
-        QSignalSpy orderSpy(&state, &TilingState::windowOrderChanged);
+        QSignalSpy orderSpy(&state, &PhosphorTiles::TilingState::windowOrderChanged);
         QVERIFY(state.swapWindows(0, 0));
         QCOMPARE(orderSpy.count(), 0);
     }
 
     void testSwapWindows_invalidIndex()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(!state.swapWindows(-1, 0));
@@ -252,7 +252,7 @@ private Q_SLOTS:
 
     void testSwapWindowsById_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -264,7 +264,7 @@ private Q_SLOTS:
 
     void testSwapWindowsById_nonExistent()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(!state.swapWindowsById(QStringLiteral("A"), QStringLiteral("B")));
@@ -273,7 +273,7 @@ private Q_SLOTS:
 
     void testSwapWindowsById_sameWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         // Swapping same window with itself is a no-op success
@@ -286,7 +286,7 @@ private Q_SLOTS:
 
     void testPromoteToMaster_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -298,11 +298,11 @@ private Q_SLOTS:
 
     void testPromoteToMaster_alreadyFirst()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
-        QSignalSpy orderSpy(&state, &TilingState::windowOrderChanged);
+        QSignalSpy orderSpy(&state, &PhosphorTiles::TilingState::windowOrderChanged);
         QVERIFY(state.promoteToMaster(QStringLiteral("A")));
         // No signal when already at position 0
         QCOMPARE(orderSpy.count(), 0);
@@ -310,7 +310,7 @@ private Q_SLOTS:
 
     void testPromoteToMaster_nonExistent()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(!state.promoteToMaster(QStringLiteral("nonexistent")));
@@ -318,7 +318,7 @@ private Q_SLOTS:
 
     void testMoveToFront_aliasForPromote()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -329,7 +329,7 @@ private Q_SLOTS:
 
     void testInsertAfterFocused_withFocus()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -343,7 +343,7 @@ private Q_SLOTS:
 
     void testInsertAfterFocused_noFocus()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         // No focused window set
@@ -355,7 +355,7 @@ private Q_SLOTS:
 
     void testInsertAfterFocused_duplicate()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
 
@@ -365,7 +365,7 @@ private Q_SLOTS:
 
     void testInsertAfterFocused_emptyId()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.setFocusedWindow(QStringLiteral("A"));
 
@@ -378,7 +378,7 @@ private Q_SLOTS:
 
     void testRotateWindows_clockwise()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -390,7 +390,7 @@ private Q_SLOTS:
 
     void testRotateWindows_counterclockwise()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -402,7 +402,7 @@ private Q_SLOTS:
 
     void testRotateWindows_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         // Cannot rotate with only 1 window
@@ -412,13 +412,13 @@ private Q_SLOTS:
 
     void testRotateWindows_noWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(!state.rotateWindows(true));
     }
 
     void testRotateWindows_withFloatingWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B")); // will be floating
         state.addWindow(QStringLiteral("C"));
@@ -443,7 +443,7 @@ private Q_SLOTS:
 
     void testRotateWindows_allFloatingExceptOne()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.setFloating(QStringLiteral("A"), true);
@@ -454,12 +454,12 @@ private Q_SLOTS:
 
     void testRotateWindows_signal()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
 
-        QSignalSpy orderSpy(&state, &TilingState::windowOrderChanged);
-        QSignalSpy stateSpy(&state, &TilingState::stateChanged);
+        QSignalSpy orderSpy(&state, &PhosphorTiles::TilingState::windowOrderChanged);
+        QSignalSpy stateSpy(&state, &PhosphorTiles::TilingState::stateChanged);
 
         state.rotateWindows(true);
         QCOMPARE(orderSpy.count(), 1);
@@ -472,7 +472,7 @@ private Q_SLOTS:
 
     void testMoveToPosition_basic()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
         state.addWindow(QStringLiteral("B"));
         state.addWindow(QStringLiteral("C"));
@@ -483,7 +483,7 @@ private Q_SLOTS:
 
     void testMoveToPosition_nonExistent()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.addWindow(QStringLiteral("A"));
 
         QVERIFY(!state.moveToPosition(QStringLiteral("nonexistent"), 0));

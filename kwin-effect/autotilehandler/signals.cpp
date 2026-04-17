@@ -247,7 +247,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             m_notifiedWindows.insert(windowId);
                         } else {
                             // Genuinely new window opened while this desktop was
-                            // not active — notify daemon so it's added to TilingState
+                            // not active — notify daemon so it's added to PhosphorTiles::TilingState
                             notifyWindowAdded(w);
                         }
                     }

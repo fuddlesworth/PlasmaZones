@@ -24,7 +24,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PhosphorTiles::AlgorithmRegistry::instance();
     }
 
     // =========================================================================
@@ -43,7 +43,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), screen);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QVERIFY(state->containsWindow(QStringLiteral("win1")));
 
@@ -69,7 +69,7 @@ private Q_SLOTS:
 
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QCOMPARE(state->windowCount(), 3);
     }
@@ -126,14 +126,14 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), screen1);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(screen1);
         QVERIFY(state1->containsWindow(QStringLiteral("win1")));
 
         engine.windowFocused(QStringLiteral("win1"), screen2);
         QCoreApplication::processEvents();
 
         QVERIFY(!state1->containsWindow(QStringLiteral("win1")));
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state2 = engine.stateForScreen(screen2);
         QVERIFY(state2->containsWindow(QStringLiteral("win1")));
     }
 
@@ -169,7 +169,7 @@ private Q_SLOTS:
 
         engine.floatWindow(QStringLiteral("win1"));
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state->isFloating(QStringLiteral("win1")));
 
         QSignalSpy floatSpy(&engine, &AutotileEngine::windowFloatingChanged);
@@ -190,7 +190,7 @@ private Q_SLOTS:
 
         engine.floatWindow(QStringLiteral("win1"));
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state->isFloating(QStringLiteral("win1")));
 
         engine.setAutotileScreens({});

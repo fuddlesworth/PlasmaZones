@@ -5,7 +5,7 @@
 
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 namespace ScriptedHelpers {
 
 /**
@@ -210,4 +210,4 @@ QString threeColumnLayoutJs();
 QString clampSplitRatioJs();
 
 } // namespace ScriptedHelpers
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

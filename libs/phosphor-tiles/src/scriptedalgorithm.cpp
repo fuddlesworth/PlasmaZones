@@ -49,7 +49,7 @@ struct ReentrancyGuard
 
 } // namespace
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -1003,4 +1003,4 @@ const QVector<ScriptedHelpers::CustomParamDef>& ScriptedAlgorithm::customParamDe
     return m_metadata.customParams;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

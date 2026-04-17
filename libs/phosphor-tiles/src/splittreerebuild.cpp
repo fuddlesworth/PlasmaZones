@@ -7,7 +7,7 @@
 
 #include <QSet>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -124,4 +124,4 @@ int SplitTree::applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ra
     return index;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

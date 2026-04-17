@@ -36,7 +36,7 @@ private:
     static constexpr auto Screen2 = "HDMI-1";
 
     /// Helper: open windows through the engine lifecycle so m_windowToStateKey
-    /// is properly populated (unlike direct TilingState::addWindow).
+    /// is properly populated (unlike direct PhosphorTiles::TilingState::addWindow).
     void openWindows(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
         for (const QString& id : windowIds) {
@@ -45,12 +45,12 @@ private:
         QCoreApplication::processEvents();
     }
 
-    /// Helper: add windows directly to TilingState WITHOUT populating
+    /// Helper: add windows directly to PhosphorTiles::TilingState WITHOUT populating
     /// m_windowToStateKey. Use only for "fresh adoption" tests where the
     /// window is intentionally untracked by the engine.
     void addWindowsToState(AutotileEngine& engine, const QString& screenId, const QStringList& windowIds)
     {
-        TilingState* state = engine.stateForScreen(screenId);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenId);
         Q_ASSERT(state);
         for (const QString& id : windowIds) {
             state->addWindow(id);
@@ -121,7 +121,7 @@ private Q_SLOTS:
         // Move A from index 0 to index 2
         engine.updateDragInsertPreview(2);
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         const QStringList tiled = state->tiledWindows();
         QCOMPARE(tiled.size(), 3);
@@ -142,7 +142,7 @@ private Q_SLOTS:
 
         QVERIFY(!engine.hasDragInsertPreview());
         // Order should persist after commit
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QCOMPARE(state->tiledWindows()[2], QStringLiteral("A"));
     }
 
@@ -478,7 +478,7 @@ private Q_SLOTS:
         QVERIFY(engine.hasDragInsertPreview());
 
         // Remove s2 from autotile — preview must be cancelled before its
-        // TilingState gets torn down.
+        // PhosphorTiles::TilingState gets torn down.
         engine.setAutotileScreens({s1});
         QVERIFY(!engine.hasDragInsertPreview());
     }

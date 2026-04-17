@@ -31,7 +31,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PhosphorTiles::AlgorithmRegistry::instance();
     }
 
     // =========================================================================

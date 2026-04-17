@@ -33,7 +33,8 @@ EditorController::EditorController(QObject* parent)
     , m_undoController(new UndoController(this))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
-    , m_localAutotileSource(std::make_unique<PhosphorTiles::AutotileLayoutSource>(AlgorithmRegistry::instance()))
+    , m_localAutotileSource(
+          std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
 {
     // Populate the daemon-independent layout source from disk on startup
     // so localLayoutPreviews() returns a populated list immediately. The

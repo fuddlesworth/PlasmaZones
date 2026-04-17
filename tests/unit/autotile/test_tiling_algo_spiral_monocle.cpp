@@ -29,21 +29,21 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* spiral()
+    PhosphorTiles::TilingAlgorithm* spiral()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("spiral"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("spiral"));
     }
-    TilingAlgorithm* dwindleAlgo()
+    PhosphorTiles::TilingAlgorithm* dwindleAlgo()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
     }
-    TilingAlgorithm* monocle()
+    PhosphorTiles::TilingAlgorithm* monocle()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("monocle"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("monocle"));
     }
-    TilingAlgorithm* rows()
+    PhosphorTiles::TilingAlgorithm* rows()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("rows"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("rows"));
     }
 
 private Q_SLOTS:
@@ -63,7 +63,7 @@ private Q_SLOTS:
 
     void testSpiral_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(spiral()
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -71,7 +71,7 @@ private Q_SLOTS:
 
     void testDwindle_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(dwindleAlgo()
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -79,8 +79,8 @@ private Q_SLOTS:
 
     void testDwindleMemory_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        auto* dwMem = AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto* dwMem = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
         QVERIFY(dwMem != nullptr);
         QVERIFY(
             dwMem->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
@@ -103,7 +103,7 @@ private Q_SLOTS:
 
     void testSpiral_oneWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = spiral()->calculateZones(
             makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -112,7 +112,7 @@ private Q_SLOTS:
 
     void testSpiral_twoWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
         auto zones = spiral()->calculateZones(
@@ -131,7 +131,7 @@ private Q_SLOTS:
 
     void testSpiral_fiveWindows_fourDirectionRotation()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
         auto zones = spiral()->calculateZones(
@@ -161,7 +161,7 @@ private Q_SLOTS:
 
     void testSpiral_differenceFromDwindle()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
         auto spiralZones = spiral()->calculateZones(
@@ -180,7 +180,7 @@ private Q_SLOTS:
 
     void testSpiral_manyWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
 
         auto zones = spiral()->calculateZones(
@@ -210,7 +210,7 @@ private Q_SLOTS:
 
     void testMonocle_oneWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = monocle()->calculateZones(
             makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -219,7 +219,7 @@ private Q_SLOTS:
 
     void testMonocle_twoWindows_allFullScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = monocle()->calculateZones(
             makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
@@ -229,7 +229,7 @@ private Q_SLOTS:
 
     void testMonocle_manyWindows_allIdentical()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones = monocle()->calculateZones(
             makeParams(10, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 10);
@@ -240,7 +240,7 @@ private Q_SLOTS:
 
     void testMonocle_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(200, 100, 1920, 1080);
         auto zones =
             monocle()->calculateZones(makeParams(5, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -265,7 +265,7 @@ private Q_SLOTS:
 
     void testRows_oneWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -274,7 +274,7 @@ private Q_SLOTS:
 
     void testRows_twoWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
@@ -292,7 +292,7 @@ private Q_SLOTS:
 
     void testRows_threeWindows_heightDistribution()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -311,7 +311,7 @@ private Q_SLOTS:
 
     void testRows_remainderHandling()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(7, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 7);
@@ -329,7 +329,7 @@ private Q_SLOTS:
 
     void testRows_contiguousRows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
@@ -347,7 +347,7 @@ private Q_SLOTS:
 
     void testRows_manyWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             rows()->calculateZones(makeParams(10, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 10);
@@ -364,7 +364,7 @@ private Q_SLOTS:
 
     void testRows_offsetScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QRect offsetScreen(100, 50, 1920, 1080);
         auto zones =
             rows()->calculateZones(makeParams(4, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));

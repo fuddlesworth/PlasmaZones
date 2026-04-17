@@ -61,8 +61,8 @@ private Q_SLOTS:
 
         // When the per-screen algo differs and global maxWindows is at the global
         // algo's default, effectiveMaxWindows should return the per-screen algo's default
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* bspAlgo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        auto* msAlgo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(bspAlgo);
         QVERIFY(msAlgo);
 
@@ -91,7 +91,7 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(screen, overrides);
 
         // User has explicitly customized global maxWindows away from algo default
-        auto* msAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        auto* msAlgo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
         QVERIFY(msAlgo);
         engine.config()->maxWindows = msAlgo->defaultMaxWindows() + 2;
 
@@ -103,7 +103,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     // Unlimited overflow mode returns the named sentinel so std::min clamps
     // become idempotent and onWindowAdded's gate is wide open. The constant
-    // lives in AutotileDefaults so any caller (resolver, tests, future
+    // lives in PhosphorTiles::AutotileDefaults so any caller (resolver, tests, future
     // headroom math) shares one definition.
     // ─────────────────────────────────────────────────────────────────────
     void testPerScreen_effectiveMaxWindows_unlimitedReturnsSentinel()
@@ -116,7 +116,7 @@ private Q_SLOTS:
         engine.config()->overflowBehavior = AutotileOverflowBehavior::Unlimited;
 
         const int effective = engine.effectiveMaxWindows(screen);
-        QCOMPARE(effective, AutotileDefaults::UnlimitedMaxWindowsSentinel);
+        QCOMPARE(effective, PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -141,7 +141,7 @@ private Q_SLOTS:
         engine.applyPerScreenConfig(screenA, overrides);
 
         QCOMPARE(engine.effectiveMaxWindows(screenA), 3);
-        QCOMPARE(engine.effectiveMaxWindows(screenB), AutotileDefaults::UnlimitedMaxWindowsSentinel);
+        QCOMPARE(engine.effectiveMaxWindows(screenB), PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -183,7 +183,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("SplitRatio")] = 0.75;
         engine.applyPerScreenConfig(screen, overrides);
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         QVERIFY(state);
         QVERIFY(qFuzzyCompare(state->splitRatio(), 0.75));
 
@@ -198,7 +198,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen});
 
         // Add windows so master count can be verified
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
         state->addWindow(QStringLiteral("win3"));
@@ -217,7 +217,7 @@ private Q_SLOTS:
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         state->setSplitRatio(0.75);
 
         // Override with a new algorithm but NO explicit SplitRatio override.
@@ -226,7 +226,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("Algorithm")] = QLatin1String("bsp");
         engine.applyPerScreenConfig(screen, overrides);
 
-        auto* bspAlgo = AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        auto* bspAlgo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
         QVERIFY(bspAlgo);
         QVERIFY(qFuzzyCompare(state->splitRatio(), bspAlgo->defaultSplitRatio()));
     }
@@ -245,7 +245,7 @@ private Q_SLOTS:
         engine.config()->splitRatio = 0.6;
         engine.config()->masterCount = 1;
 
-        TilingState* state = engine.stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screen);
         state->addWindow(QStringLiteral("win1"));
         state->addWindow(QStringLiteral("win2"));
 

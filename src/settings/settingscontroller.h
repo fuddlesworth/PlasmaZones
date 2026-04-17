@@ -872,8 +872,8 @@ private:
     // PhosphorLayout::ILayoutSource contract.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
-    // Autotile previews come from the in-process AlgorithmRegistry singleton
-    // (populated by ScriptedAlgorithmLoader) — same wrapping pattern as
+    // Autotile previews come from the in-process PhosphorTiles::AlgorithmRegistry singleton
+    // (populated by PhosphorTiles::ScriptedAlgorithmLoader) — same wrapping pattern as
     // m_localLayoutSource so settings renders manual + autotile previews
     // through one uniform path with no D-Bus round-trip.
     std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;

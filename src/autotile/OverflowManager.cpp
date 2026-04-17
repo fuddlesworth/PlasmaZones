@@ -92,7 +92,7 @@ QStringList OverflowManager::recoverIfRoom(const QString& screenId, int tiledCou
 
     // Collect candidates first (avoid mutating during iteration).
     // Also detect stale entries: overflow windows that are no longer floating
-    // or no longer in the TilingState should be purged to prevent them
+    // or no longer in the PhosphorTiles::TilingState should be purged to prevent them
     // from getting stuck in the overflow set permanently.
     QStringList candidates;
     QStringList stale;

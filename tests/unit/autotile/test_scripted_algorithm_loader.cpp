@@ -43,7 +43,7 @@ private:
      */
     void cleanupScriptedAlgorithms(const QStringList& ids)
     {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         for (const QString& id : ids) {
             if (registry->hasAlgorithm(id)) {
                 registry->unregisterAlgorithm(id);
@@ -92,13 +92,13 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
         loader.emplace();
 
-        QSignalSpy spy(&*loader, &ScriptedAlgorithmLoader::algorithmsChanged);
+        QSignalSpy spy(&*loader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged);
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:gamma")));
         QCOMPARE(spy.count(), 1);
 
@@ -137,11 +137,11 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
         loader.emplace();
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:valid-name")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has space")));
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:has.dot")));
@@ -175,11 +175,11 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", (xdgRoot.path() + QStringLiteral("/system")).toUtf8());
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
         loader.emplace();
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:shared")));
 
         // The user version should have overridden the system version
@@ -212,11 +212,11 @@ private Q_SLOTS:
         qputenv("XDG_DATA_DIRS", xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        std::optional<ScriptedAlgorithmLoader> loader;
+        std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
         loader.emplace();
         loader->scanAndRegister();
 
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         QVERIFY(registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
 
         // Delete the script file
@@ -248,7 +248,7 @@ private Q_SLOTS:
 
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        ScriptedAlgorithmLoader loader;
+        PhosphorTiles::ScriptedAlgorithmLoader loader;
         loader.ensureUserDirectoryExists();
 
         // The directory should now exist

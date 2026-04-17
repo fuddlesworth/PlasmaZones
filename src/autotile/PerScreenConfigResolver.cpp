@@ -37,20 +37,22 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     // can resolve per-screen values and skip screens with overrides.
     m_perScreenOverrides[screenId] = overrides;
 
-    TilingState* state = m_engine->stateForScreen(screenId);
+    PhosphorTiles::TilingState* state = m_engine->stateForScreen(screenId);
     if (!state) {
         return;
     }
 
-    // Apply TilingState-level overrides (splitRatio, masterCount)
+    // Apply PhosphorTiles::TilingState-level overrides (splitRatio, masterCount)
     auto it = overrides.constFind(QStringLiteral("SplitRatio"));
     if (it != overrides.constEnd()) {
-        state->setSplitRatio(qBound(AutotileDefaults::MinSplitRatio, it->toDouble(), AutotileDefaults::MaxSplitRatio));
+        state->setSplitRatio(qBound(PhosphorTiles::AutotileDefaults::MinSplitRatio, it->toDouble(),
+                                    PhosphorTiles::AutotileDefaults::MaxSplitRatio));
     }
 
     it = overrides.constFind(QStringLiteral("MasterCount"));
     if (it != overrides.constEnd()) {
-        state->setMasterCount(qBound(AutotileDefaults::MinMasterCount, it->toInt(), AutotileDefaults::MaxMasterCount));
+        state->setMasterCount(qBound(PhosphorTiles::AutotileDefaults::MinMasterCount, it->toInt(),
+                                     PhosphorTiles::AutotileDefaults::MaxMasterCount));
     }
 
     // If algorithm changed and split ratio wasn't explicitly overridden,
@@ -58,8 +60,8 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     it = overrides.constFind(QStringLiteral("Algorithm"));
     if (it != overrides.constEnd()) {
         QString algoId = it->toString();
-        auto* registry = AlgorithmRegistry::instance();
-        TilingAlgorithm* newAlgo = registry->algorithm(algoId);
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(algoId);
         if (newAlgo) {
             if (!overrides.contains(QStringLiteral("SplitRatio"))) {
                 state->setSplitRatio(newAlgo->defaultSplitRatio());
@@ -88,8 +90,8 @@ void PerScreenConfigResolver::clearPerScreenConfig(const QString& screenId)
     if (!m_perScreenOverrides.remove(screenId)) {
         return;
     }
-    // Restore global defaults on TilingState
-    TilingState* state = m_engine->stateForScreen(screenId);
+    // Restore global defaults on PhosphorTiles::TilingState
+    PhosphorTiles::TilingState* state = m_engine->stateForScreen(screenId);
     if (state) {
         state->setSplitRatio(m_engine->config()->splitRatio);
         state->setMasterCount(m_engine->config()->masterCount);
@@ -150,14 +152,14 @@ std::optional<QVariant> PerScreenConfigResolver::perScreenOverride(const QString
 int PerScreenConfigResolver::effectiveInnerGap(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, QStringLiteral("InnerGap")))
-        return qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+        return qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
     return m_engine->config()->innerGap;
 }
 
 int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
 {
     if (auto v = perScreenOverride(screenId, QStringLiteral("OuterGap")))
-        return qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+        return qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
     return m_engine->config()->outerGap;
 }
 
@@ -173,16 +175,24 @@ int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
     if (topOv || bottomOv || leftOv || rightOv) {
         // Use per-screen uniform gap as base, then per-side overrides on top
         const int base = effectiveOuterGap(screenId);
-        return ::PhosphorLayout::EdgeGaps{
-            topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
-            bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
-            leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
-            rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base};
+        return ::PhosphorLayout::EdgeGaps{topOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, topOv->toInt(),
+                                                         PhosphorTiles::AutotileDefaults::MaxGap)
+                                                : base,
+                                          bottomOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, bottomOv->toInt(),
+                                                            PhosphorTiles::AutotileDefaults::MaxGap)
+                                                   : base,
+                                          leftOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, leftOv->toInt(),
+                                                          PhosphorTiles::AutotileDefaults::MaxGap)
+                                                 : base,
+                                          rightOv ? qBound(PhosphorTiles::AutotileDefaults::MinGap, rightOv->toInt(),
+                                                           PhosphorTiles::AutotileDefaults::MaxGap)
+                                                  : base};
     }
 
     // Check per-screen uniform outer gap
     if (auto v = perScreenOverride(screenId, QStringLiteral("OuterGap"))) {
-        const int gap = qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
+        const int gap =
+            qBound(PhosphorTiles::AutotileDefaults::MinGap, v->toInt(), PhosphorTiles::AutotileDefaults::MaxGap);
         return ::PhosphorLayout::EdgeGaps::uniform(gap);
     }
 
@@ -215,14 +225,15 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    (e.g. keep a secondary monitor at maxWindows=3 while the primary
     //    runs unlimited).
     if (auto v = perScreenOverride(screenId, PerScreenKeys::MaxWindows))
-        return qBound(AutotileDefaults::MinMaxWindows, v->toInt(), AutotileDefaults::MaxMaxWindows);
+        return qBound(PhosphorTiles::AutotileDefaults::MinMaxWindows, v->toInt(),
+                      PhosphorTiles::AutotileDefaults::MaxMaxWindows);
 
     // 2. Global Unlimited: Krohnkite-style "no cap". The sentinel
-    //    (AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
+    //    (PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel) is passed to std::min
     //    in recalculateLayout, making the clamp idempotent. Also opens
     //    onWindowAdded's gate (tiledWindowCount >= maxWin is never true).
     if (m_engine->config()->overflowBehavior == AutotileOverflowBehavior::Unlimited) {
-        return AutotileDefaults::UnlimitedMaxWindowsSentinel;
+        return PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel;
     }
 
     // 3. When the per-screen algorithm differs from the global algorithm,
@@ -232,7 +243,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    explicitly customized global maxWindows away from the global algo's default.
     const QString screenAlgo = effectiveAlgorithmId(screenId);
     if (screenAlgo != m_engine->m_algorithmId) {
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* screenAlgoPtr = registry->algorithm(screenAlgo);
         auto* globalAlgoPtr = registry->algorithm(m_engine->m_algorithmId);
         if (screenAlgoPtr) {
@@ -266,9 +277,9 @@ QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) c
     return m_engine->m_algorithmId;
 }
 
-TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(const QString& screenId) const
+PhosphorTiles::TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(const QString& screenId) const
 {
-    return AlgorithmRegistry::instance()->algorithm(effectiveAlgorithmId(screenId));
+    return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(effectiveAlgorithmId(screenId));
 }
 
 } // namespace PlasmaZones

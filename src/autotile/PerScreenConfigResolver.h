@@ -10,11 +10,14 @@
 #include <QVariantMap>
 #include <optional>
 
+namespace PhosphorTiles {
+class TilingAlgorithm;
+}
+
 namespace PlasmaZones {
 
 class AutotileConfig;
 class AutotileEngine;
-class TilingAlgorithm;
 
 /**
  * @brief Resolves per-screen configuration overrides for autotiling
@@ -41,7 +44,7 @@ public:
     /**
      * @brief Apply per-screen configuration overrides
      *
-     * Merges per-screen autotile settings into the TilingState for a screen.
+     * Merges per-screen autotile settings into the PhosphorTiles::TilingState for a screen.
      * Overrides take precedence over global config for that screen.
      *
      * @param screenId Screen to configure
@@ -53,7 +56,7 @@ public:
      * @brief Clear per-screen configuration overrides
      *
      * Removes all overrides for the screen and restores global defaults
-     * on its TilingState.
+     * on its PhosphorTiles::TilingState.
      *
      * @param screenId Screen to clear overrides for
      */
@@ -95,7 +98,7 @@ public:
     int effectiveMaxWindows(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
-    TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
+    PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
 private:
     std::optional<QVariant> perScreenOverride(const QString& screenId, const QString& key) const;

@@ -38,7 +38,7 @@ void NavigationController::focusPrevious()
 void NavigationController::focusMaster()
 {
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
     if (windows.isEmpty()) {
         Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("focus_master"),
@@ -57,7 +57,7 @@ void NavigationController::focusMaster()
 void NavigationController::swapFocusedWithMaster()
 {
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
@@ -88,7 +88,7 @@ void NavigationController::swapFocusedWithMaster()
 void NavigationController::rotateWindowOrder(bool clockwise)
 {
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.size() < 2 || !state) {
@@ -120,7 +120,7 @@ void NavigationController::swapFocusedInDirection(const QString& direction, cons
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
 
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.size() < 2 || !state) {
@@ -163,7 +163,7 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
     const bool forward = (direction == QLatin1String("right") || direction == QLatin1String("down"));
 
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
@@ -183,7 +183,7 @@ void NavigationController::focusInDirection(const QString& direction, const QStr
 void NavigationController::moveFocusedToPosition(int position)
 {
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
 
     if (windows.isEmpty() || !state) {
@@ -220,7 +220,7 @@ void NavigationController::moveFocusedToPosition(int position)
 void NavigationController::increaseMasterRatio(qreal delta)
 {
     QString screenId;
-    TilingState* state = resolveActiveState(screenId);
+    PhosphorTiles::TilingState* state = resolveActiveState(screenId);
     if (!state) {
         Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_ratio"), QStringLiteral("no_focus"),
                                                      QString(), QString(), QString());
@@ -262,18 +262,20 @@ void NavigationController::decreaseMasterRatio(qreal delta)
 
 void NavigationController::setGlobalSplitRatio(qreal ratio)
 {
-    ratio = std::clamp(ratio, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
+    ratio = std::clamp(ratio, PhosphorTiles::AutotileDefaults::MinSplitRatio,
+                       PhosphorTiles::AutotileDefaults::MaxSplitRatio);
     m_engine->config()->splitRatio = ratio;
-    applyToAllStates([ratio](TilingState* state) {
+    applyToAllStates([ratio](PhosphorTiles::TilingState* state) {
         state->setSplitRatio(ratio);
     });
 }
 
 void NavigationController::setGlobalMasterCount(int count)
 {
-    count = std::clamp(count, AutotileDefaults::MinMasterCount, AutotileDefaults::MaxMasterCount);
+    count = std::clamp(count, PhosphorTiles::AutotileDefaults::MinMasterCount,
+                       PhosphorTiles::AutotileDefaults::MaxMasterCount);
     m_engine->config()->masterCount = count;
-    applyToAllStates([count](TilingState* state) {
+    applyToAllStates([count](PhosphorTiles::TilingState* state) {
         state->setMasterCount(count);
     });
 }
@@ -285,7 +287,7 @@ void NavigationController::setGlobalMasterCount(int count)
 void NavigationController::adjustMasterCount(int delta)
 {
     QString screenId;
-    TilingState* state = resolveActiveState(screenId);
+    PhosphorTiles::TilingState* state = resolveActiveState(screenId);
     if (!state) {
         Q_EMIT m_engine->navigationFeedbackRequested(false, QStringLiteral("master_count"), QStringLiteral("no_focus"),
                                                      QString(), QString(), QString());
@@ -321,7 +323,7 @@ void NavigationController::adjustMasterCount(int delta)
 // Private helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-TilingState* NavigationController::resolveActiveState(QString& outScreenId) const
+PhosphorTiles::TilingState* NavigationController::resolveActiveState(QString& outScreenId) const
 {
     outScreenId = resolveActiveScreen();
     if (outScreenId.isEmpty()) {
@@ -350,7 +352,7 @@ QString NavigationController::resolveActiveScreen() const
 void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirst)
 {
     QString screenId;
-    TilingState* state = nullptr;
+    PhosphorTiles::TilingState* state = nullptr;
     const QStringList windows = tiledWindowsForFocusedScreen(screenId, state);
     if (windows.isEmpty()) {
         return;
@@ -366,7 +368,8 @@ void NavigationController::emitFocusRequestAtIndex(int indexOffset, bool useFirs
     Q_EMIT m_engine->focusWindowRequested(windows.at(targetIndex));
 }
 
-QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenId, TilingState*& outState)
+QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScreenId,
+                                                               PhosphorTiles::TilingState*& outState)
 {
     outState = nullptr;
 
@@ -376,7 +379,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         const auto key = m_engine->currentKeyForScreen(m_engine->m_activeScreen);
         auto sit = m_engine->m_screenStates.constFind(key);
         if (sit != m_engine->m_screenStates.constEnd()) {
-            TilingState* state = sit.value();
+            PhosphorTiles::TilingState* state = sit.value();
             if (state && !state->focusedWindow().isEmpty()) {
                 outScreenId = m_engine->m_activeScreen;
                 outState = state;
@@ -390,7 +393,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
         if (it.key().desktop != m_engine->m_currentDesktop || it.key().activity != m_engine->m_currentActivity) {
             continue;
         }
-        TilingState* state = it.value();
+        PhosphorTiles::TilingState* state = it.value();
         if (state && !state->focusedWindow().isEmpty()) {
             outScreenId = it.key().screenId;
             outState = state;
@@ -413,7 +416,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
     return {};
 }
 
-void NavigationController::applyToAllStates(const std::function<void(TilingState*)>& operation)
+void NavigationController::applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation)
 {
     if (m_engine->m_screenStates.isEmpty()) {
         return; // No states to modify

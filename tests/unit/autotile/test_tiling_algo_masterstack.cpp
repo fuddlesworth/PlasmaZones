@@ -26,9 +26,9 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* ms()
+    PhosphorTiles::TilingAlgorithm* ms()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
     }
 
 private Q_SLOTS:
@@ -40,7 +40,7 @@ private Q_SLOTS:
 
     void testPixelPerfect_masterStackHeightDistribution()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setMasterCount(1);
         auto zones =
             ms()->calculateZones(makeParams(8, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -65,7 +65,7 @@ private Q_SLOTS:
 
     void testMasterStack_oneWindow()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
             ms()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -74,7 +74,7 @@ private Q_SLOTS:
 
     void testMasterStack_twoWindows_defaultRatio()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
         auto zones =
             ms()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -93,7 +93,7 @@ private Q_SLOTS:
 
     void testMasterStack_multipleStack()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         auto zones =
             ms()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
@@ -111,7 +111,7 @@ private Q_SLOTS:
 
     void testMasterStack_multipleMasters()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         for (int i = 0; i < 5; ++i) {
             state.addWindow(QStringLiteral("window%1").arg(i));
         }
@@ -136,7 +136,7 @@ private Q_SLOTS:
 
     void testMasterStack_allMasters()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         for (int i = 0; i < 5; ++i) {
             state.addWindow(QStringLiteral("window%1").arg(i));
         }
@@ -154,7 +154,7 @@ private Q_SLOTS:
 
     void testMasterStack_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(ms()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
     }

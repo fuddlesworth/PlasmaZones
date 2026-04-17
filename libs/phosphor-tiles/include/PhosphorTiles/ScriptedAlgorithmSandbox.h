@@ -6,7 +6,7 @@
 class QJSEngine;
 class QString;
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 /**
  * @brief Harden a QJSEngine sandbox for safe user-script execution
@@ -24,4 +24,4 @@ namespace PlasmaZones {
  */
 bool hardenSandbox(QJSEngine* engine);
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

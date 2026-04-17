@@ -15,7 +15,7 @@
 
 #include <memory>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 /**
  * @brief A single node in the binary split tree
@@ -262,4 +262,4 @@ private:
                                                    int& nodeCount, QSet<QString>& seenIds);
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

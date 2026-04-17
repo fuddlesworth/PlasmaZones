@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
@@ -120,4 +120,4 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
     return node;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorTiles

@@ -56,7 +56,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        TilingState* state = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(vsId);
 
         QVERIFY(state != nullptr);
         QCOMPARE(state->screenId(), vsId);
@@ -69,8 +69,8 @@ private Q_SLOTS:
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
 
-        TilingState* state0 = engine.stateForScreen(vs0);
-        TilingState* state1 = engine.stateForScreen(vs1);
+        PhosphorTiles::TilingState* state0 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(vs1);
 
         QVERIFY(state0 != nullptr);
         QVERIFY(state1 != nullptr);
@@ -84,8 +84,8 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        TilingState* first = engine.stateForScreen(vsId);
-        TilingState* second = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* first = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* second = engine.stateForScreen(vsId);
 
         QCOMPARE(first, second);
     }
@@ -98,7 +98,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:99");
-        TilingState* state = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(vsId);
 
         QVERIFY(state == nullptr);
     }
@@ -121,7 +121,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
         const QString vs0 = VirtualScreenId::make(physId, 0);
-        TilingState* state = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(vs0);
 
         // With no real QScreen backing the physical screen, the geometry cache
         // is empty, so screenGeometry() returns an invalid QRect. stateForScreen
@@ -143,22 +143,22 @@ private Q_SLOTS:
 
         engine.setCurrentDesktop(1);
         engine.setAutotileScreens({vsId});
-        TilingState* stateD1 = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* stateD1 = engine.stateForScreen(vsId);
         QVERIFY(stateD1 != nullptr);
 
         engine.setCurrentDesktop(2);
         engine.setAutotileScreens({vsId});
-        TilingState* stateD2 = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* stateD2 = engine.stateForScreen(vsId);
         QVERIFY(stateD2 != nullptr);
 
-        // Different desktops produce different TilingState instances
+        // Different desktops produce different PhosphorTiles::TilingState instances
         QVERIFY(stateD1 != stateD2);
     }
 
     void stateForScreen_rejectsEmptyScreenId()
     {
         AutotileEngine engine(nullptr, nullptr, nullptr);
-        TilingState* state = engine.stateForScreen(QString());
+        PhosphorTiles::TilingState* state = engine.stateForScreen(QString());
         QVERIFY(state == nullptr);
     }
 
@@ -228,7 +228,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-single"), vsId);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(vsId);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(vsId);
         QVERIFY(state != nullptr);
         QCOMPARE(state->screenId(), vsId);
         QVERIFY(state->containsWindow(QStringLiteral("win-single")));
@@ -264,8 +264,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-move"), vs0);
         QCoreApplication::processEvents();
 
-        TilingState* state0 = engine.stateForScreen(vs0);
-        TilingState* state1 = engine.stateForScreen(vs1);
+        PhosphorTiles::TilingState* state0 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(vs1);
         QVERIFY(state0 != nullptr);
         QVERIFY(state1 != nullptr);
         QVERIFY(state0->containsWindow(QStringLiteral("win-move")));
@@ -309,7 +309,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win1"), vs0);
         QCoreApplication::processEvents();
 
-        TilingState* state0 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* state0 = engine.stateForScreen(vs0);
         QVERIFY(state0 != nullptr);
         QVERIFY(state0->containsWindow(QStringLiteral("win1")));
 
@@ -532,8 +532,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win2"), vs1);
         QCoreApplication::processEvents();
 
-        TilingState* state0 = engine.stateForScreen(vs0);
-        TilingState* state1 = engine.stateForScreen(vs1);
+        PhosphorTiles::TilingState* state0 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(vs1);
 
         QVERIFY(state0 != nullptr);
         QVERIFY(state1 != nullptr);
@@ -569,7 +569,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-d1"), vs0);
         QCoreApplication::processEvents();
 
-        TilingState* stateD1 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* stateD1 = engine.stateForScreen(vs0);
         QVERIFY(stateD1 != nullptr);
         QVERIFY(stateD1->containsWindow(QStringLiteral("win-d1")));
 
@@ -577,7 +577,7 @@ private Q_SLOTS:
         engine.setCurrentDesktop(2);
         engine.setAutotileScreens({vs0});
 
-        TilingState* stateD2 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* stateD2 = engine.stateForScreen(vs0);
         QVERIFY(stateD2 != nullptr);
         // Desktop 2 state should be empty — it's a different TilingStateKey
         QCOMPARE(stateD2->windowCount(), 0);
@@ -689,9 +689,9 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-right"), vs2);
         QCoreApplication::processEvents();
 
-        TilingState* s0 = engine.stateForScreen(vs0);
-        TilingState* s1 = engine.stateForScreen(vs1);
-        TilingState* s2 = engine.stateForScreen(vs2);
+        PhosphorTiles::TilingState* s0 = engine.stateForScreen(vs0);
+        PhosphorTiles::TilingState* s1 = engine.stateForScreen(vs1);
+        PhosphorTiles::TilingState* s2 = engine.stateForScreen(vs2);
 
         QVERIFY(s0 && s1 && s2);
         QVERIFY(s0 != s1 && s1 != s2 && s0 != s2);
