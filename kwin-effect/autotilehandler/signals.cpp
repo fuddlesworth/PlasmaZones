@@ -440,7 +440,7 @@ void AutotileHandler::slotScreensChanged(const QStringList& screenIds, bool isDe
                             for (KWin::EffectWindow* ew : allWindows) {
                                 if (!ew || !m_effect->shouldHandleWindow(ew))
                                     continue;
-                                if (WindowIdUtils::extractAppId(m_effect->getWindowId(ew)) != stableId)
+                                if (::PhosphorIdentity::WindowId::extractAppId(m_effect->getWindowId(ew)) != stableId)
                                     continue;
                                 if (!added.contains(m_effect->getWindowScreenId(ew)))
                                     continue;

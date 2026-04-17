@@ -8,8 +8,8 @@
 #include <QImage>
 #include <QPixmap>
 
-namespace PlasmaZones {
-namespace WindowIdUtils {
+namespace PhosphorIdentity {
+namespace WindowId {
 
 QString iconToDataUrl(const QIcon& icon, int size)
 {
@@ -29,5 +29,5 @@ QString iconToDataUrl(const QIcon& icon, int size)
     return QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
 }
 
-} // namespace WindowIdUtils
-} // namespace PlasmaZones
+} // namespace WindowId
+} // namespace PhosphorIdentity

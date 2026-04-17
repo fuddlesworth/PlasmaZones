@@ -333,7 +333,7 @@ AppRuleMatch Layout::matchAppRule(const QString& windowClass) const
         // Segment-aware match: "firefox" matches "org.mozilla.firefox" (dot-boundary),
         // "org.mozilla.firefox" matches "firefox", exact match always works.
         // Prevents "fire" from matching "firefox" (no dot boundary).
-        if (WindowIdUtils::appIdMatches(windowClass, rule.pattern)) {
+        if (::PhosphorIdentity::WindowId::appIdMatches(windowClass, rule.pattern)) {
             return {rule.zoneNumber, rule.targetScreen};
         }
     }

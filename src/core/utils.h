@@ -188,11 +188,11 @@ inline constexpr QLatin1StringView Down{"down"};
 /**
  * @brief Extract app identity from a full window ID
  *
- * Delegates to WindowIdUtils::extractAppId (canonical implementation in compositor-common).
+ * Delegates to ::PhosphorIdentity::WindowId::extractAppId (canonical implementation in compositor-common).
  */
 inline QString extractAppId(const QString& windowId)
 {
-    return WindowIdUtils::extractAppId(windowId);
+    return ::PhosphorIdentity::WindowId::extractAppId(windowId);
 }
 
 // extractWindowClass() was removed — it was an alias for extractAppId() that
@@ -219,7 +219,7 @@ inline QString extractAppId(const QString& windowId)
  */
 inline QString extractInstanceId(const QString& windowId)
 {
-    return WindowIdUtils::extractInstanceId(windowId);
+    return ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
 }
 
 // composeWindowId() was removed — the "appId|uuid" composite format is no
@@ -247,11 +247,11 @@ inline QString extractInstanceId(const QString& windowId)
 /**
  * @brief Segment-aware app ID matching for exclusion lists.
  *
- * Delegates to WindowIdUtils::appIdMatches (canonical implementation in compositor-common).
+ * Delegates to ::PhosphorIdentity::WindowId::appIdMatches (canonical implementation in compositor-common).
  */
 inline bool appIdMatches(const QString& appId, const QString& pattern)
 {
-    return WindowIdUtils::appIdMatches(appId, pattern);
+    return ::PhosphorIdentity::WindowId::appIdMatches(appId, pattern);
 }
 
 /**

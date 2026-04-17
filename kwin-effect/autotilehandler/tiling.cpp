@@ -140,7 +140,7 @@ void AutotileHandler::slotWindowsTileRequested(const TileRequestList& tileReques
     QHash<QString, QVector<int>> appIdToEntryIndices;
     for (int i = 0; i < entries.size(); ++i) {
         if (!entries[i].candidates.isEmpty()) {
-            appIdToEntryIndices[WindowIdUtils::extractAppId(entries[i].windowId)].append(i);
+            appIdToEntryIndices[::PhosphorIdentity::WindowId::extractAppId(entries[i].windowId)].append(i);
         }
     }
     for (const QVector<int>& indices : std::as_const(appIdToEntryIndices)) {

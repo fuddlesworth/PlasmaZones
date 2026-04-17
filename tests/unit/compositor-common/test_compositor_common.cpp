@@ -6,7 +6,7 @@
  * @brief Unit tests for compositor-common shared library types
  *
  * Tests D-Bus type roundtrips, FloatingCache logic, TriggerParser modifier
- * checking, and WindowIdUtils string utilities.
+ * checking, and WindowId string utilities.
  */
 
 #include <QTest>
@@ -750,29 +750,30 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // WindowIdUtils: extractAppId
+    // WindowId: extractAppId
     // =================================================================
 
     void testExtractAppId()
     {
-        QCOMPARE(PlasmaZones::WindowIdUtils::extractAppId(QStringLiteral("firefox|42")), QStringLiteral("firefox"));
-        QCOMPARE(PlasmaZones::WindowIdUtils::extractAppId(QStringLiteral("firefox")), QStringLiteral("firefox"));
-        QCOMPARE(PlasmaZones::WindowIdUtils::extractAppId(QString()), QString());
-        QCOMPARE(PlasmaZones::WindowIdUtils::extractAppId(QStringLiteral("org.kde.dolphin|123")),
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("firefox|42")), QStringLiteral("firefox"));
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("firefox")), QStringLiteral("firefox"));
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QString()), QString());
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("org.kde.dolphin|123")),
                  QStringLiteral("org.kde.dolphin"));
     }
 
     // =================================================================
-    // WindowIdUtils: deriveShortName
+    // WindowId: deriveShortName
     // =================================================================
 
     void testDeriveShortName()
     {
-        QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QStringLiteral("org.kde.dolphin")),
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.dolphin")),
                  QStringLiteral("dolphin"));
-        QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QStringLiteral("firefox")), QStringLiteral("firefox"));
-        QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QString()), QString());
-        QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QStringLiteral("com.example.app")), QStringLiteral("app"));
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("firefox")), QStringLiteral("firefox"));
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QString()), QString());
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("com.example.app")),
+                 QStringLiteral("app"));
     }
 
     // =================================================================
@@ -1109,24 +1110,24 @@ private Q_SLOTS:
     }
 
     // =================================================================
-    // WindowIdUtils: extractAppId leading separator edge case
+    // WindowId: extractAppId leading separator edge case
     // =================================================================
 
     void testExtractAppIdLeadingSeparator()
     {
         // Separator at index 0 means sep is NOT > 0, so should return original
-        QCOMPARE(PlasmaZones::WindowIdUtils::extractAppId(QStringLiteral("|instance")), QStringLiteral("|instance"));
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("|instance")), QStringLiteral("|instance"));
     }
 
     // =================================================================
-    // WindowIdUtils: deriveShortName trailing dot edge case
+    // WindowId: deriveShortName trailing dot edge case
     // =================================================================
 
     void testDeriveShortNameTrailingDot()
     {
         // Dot at end position: dotIdx == length()-1, guard (dotIdx < length()-1) is false
         // so it returns the full string unchanged
-        QCOMPARE(PlasmaZones::WindowIdUtils::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("org.kde."));
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("org.kde."));
     }
 
     // =================================================================

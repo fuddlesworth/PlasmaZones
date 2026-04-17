@@ -9,21 +9,18 @@
 #include <QString>
 #include <QStringView>
 
-namespace PlasmaZones {
+namespace PhosphorIdentity {
 
 /**
  * @brief Compositor-agnostic window-identity utilities.
  *
  * Operates on the canonical composite window-id format `"appId|instanceId"`.
  * The format is stable across processes — KWin effect, daemon, and every
- * library reading window assignments must spell it the same way.  Owning
- * the parser/builder/matcher in PhosphorIdentity is the single source of
- * truth.
- *
- * Namespace `PlasmaZones::WindowIdUtils` is preserved for source compat
- * with existing callers that emerged before the library extraction.
+ * library reading window assignments must spell it the same way.  This is
+ * the single source of truth for parsing, building, and matching the
+ * format.
  */
-namespace WindowIdUtils {
+namespace WindowId {
 
 /**
  * @brief Extract app identity from window ID (portion before the '|' separator)
@@ -136,5 +133,5 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
  */
 PHOSPHORIDENTITY_EXPORT QString iconToDataUrl(const QIcon& icon, int size);
 
-} // namespace WindowIdUtils
-} // namespace PlasmaZones
+} // namespace WindowId
+} // namespace PhosphorIdentity

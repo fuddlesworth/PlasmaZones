@@ -29,7 +29,7 @@ public:
         if (m_floatingWindows.contains(windowId)) {
             return true;
         }
-        QString appId = WindowIdUtils::extractAppId(windowId);
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         return (appId != windowId && m_floatingWindows.contains(appId));
     }
 
@@ -39,7 +39,7 @@ public:
             m_floatingWindows.insert(windowId);
         } else {
             m_floatingWindows.remove(windowId);
-            QString appId = WindowIdUtils::extractAppId(windowId);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
             if (appId != windowId) {
                 // Only remove bare appId key if no other full-ID entry shares it.
                 // Without this guard, clearing "firefox|1" would also clear the bare
@@ -47,7 +47,7 @@ public:
                 // appId fallback even though "firefox|2" is still floating.
                 bool otherFullIdExists = false;
                 for (const QString& entry : m_floatingWindows) {
-                    if (entry != appId && WindowIdUtils::extractAppId(entry) == appId) {
+                    if (entry != appId && ::PhosphorIdentity::WindowId::extractAppId(entry) == appId) {
                         otherFullIdExists = true;
                         break;
                     }

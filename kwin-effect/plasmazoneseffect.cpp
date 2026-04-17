@@ -662,7 +662,7 @@ void PlasmaZonesEffect::slotWindowAdded(KWin::EffectWindow* w)
     // when the cache was populated and when the window opens. Re-check the
     // entry's screen mode via the autotile handler before applying.
     if (canSnapRestore && !m_snapRestoreCache.isEmpty()) {
-        QString appId = WindowIdUtils::extractAppId(windowId);
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         auto cacheIt = m_snapRestoreCache.find(appId);
         if (cacheIt != m_snapRestoreCache.end()) {
             const CachedSnapRestore& cached = cacheIt.value();
@@ -1345,7 +1345,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
             if (reply.isValid()) {
                 const QStringList trackedWindows = reply.value();
                 for (const QString& windowId : trackedWindows) {
-                    QString appId = WindowIdUtils::extractAppId(windowId);
+                    QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
                     if (!appId.isEmpty()) {
                         trackedAppIds.insert(appId);
                     }
@@ -1380,7 +1380,7 @@ void PlasmaZonesEffect::processDaemonReadyWindowState()
                 if (window->isMinimized()) {
                     continue;
                 }
-                QString appId = WindowIdUtils::extractAppId(getWindowId(window));
+                QString appId = ::PhosphorIdentity::WindowId::extractAppId(getWindowId(window));
                 if (trackedAppIds.contains(appId)) {
                     continue;
                 }
@@ -2341,9 +2341,9 @@ void PlasmaZonesEffect::slotMoveSpecificWindowToZoneRequested(const QString& win
         }
     }
     if (!targetWindow) {
-        QString appId = WindowIdUtils::extractAppId(windowId);
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
         for (KWin::EffectWindow* w : windows) {
-            if (w && shouldHandleWindow(w) && WindowIdUtils::extractAppId(getWindowId(w)) == appId) {
+            if (w && shouldHandleWindow(w) && ::PhosphorIdentity::WindowId::extractAppId(getWindowId(w)) == appId) {
                 targetWindow = w;
                 break;
             }
@@ -2478,11 +2478,11 @@ void PlasmaZonesEffect::slotApplyGeometriesBatch(const WindowGeometryList& geome
         // Exact match first, appId fallback for single-instance apps
         KWin::EffectWindow* window = windowMap.value(entry.windowId);
         if (!window) {
-            QString appId = WindowIdUtils::extractAppId(entry.windowId);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(entry.windowId);
             KWin::EffectWindow* candidate = nullptr;
             int matchCount = 0;
             for (auto it = windowMap.constBegin(); it != windowMap.constEnd(); ++it) {
-                if (WindowIdUtils::extractAppId(it.key()) == appId) {
+                if (::PhosphorIdentity::WindowId::extractAppId(it.key()) == appId) {
                     candidate = it.value();
                     if (++matchCount > 1)
                         break;
@@ -2593,7 +2593,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
         if (snapReply.isValid()) {
             for (const QString& id : snapReply.value()) {
                 snappedFullIds.insert(id);
-                snappedAppIds.insert(WindowIdUtils::extractAppId(id));
+                snappedAppIds.insert(::PhosphorIdentity::WindowId::extractAppId(id));
             }
         }
 
@@ -2607,7 +2607,7 @@ void PlasmaZonesEffect::slotSnapAllWindowsRequested(const QString& screenId)
             }
 
             QString windowId = getWindowId(w);
-            QString appId = WindowIdUtils::extractAppId(windowId);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
 
             // User-initiated snap commands override floating state.
             // windowSnapped() on the daemon will clear floating via clearFloatingStateForSnap().
@@ -2740,7 +2740,7 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
             // Extract app IDs from tracked windows for comparison
             const QStringList trackedWindows = reply.value();
             for (const QString& windowId : trackedWindows) {
-                QString appId = WindowIdUtils::extractAppId(windowId);
+                QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
                 if (!appId.isEmpty()) {
                     trackedAppIds.insert(appId);
                 }
@@ -2765,7 +2765,7 @@ void PlasmaZonesEffect::slotPendingRestoresAvailable()
 
             // Check if this window is already tracked using local set lookup (O(1))
             QString windowId = getWindowId(window);
-            QString appId = WindowIdUtils::extractAppId(windowId);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
             if (trackedAppIds.contains(appId)) {
                 continue; // Already tracked
             }
@@ -2871,7 +2871,7 @@ void PlasmaZonesEffect::slotRunningWindowsRequested()
         }
         seenClasses.insert(windowClass);
 
-        QString appName = WindowIdUtils::deriveShortName(windowClass);
+        QString appName = ::PhosphorIdentity::WindowId::deriveShortName(windowClass);
         if (appName.isEmpty()) {
             appName = windowClass;
         }
@@ -3549,14 +3549,14 @@ KWin::EffectWindow* PlasmaZonesEffect::findWindowById(const QString& windowId) c
 
     // Fallback: appId-based fuzzy match (for cross-session restore where
     // the UUID portion changed but the appId is the same)
-    const QString targetAppId = WindowIdUtils::extractAppId(windowId);
+    const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     KWin::EffectWindow* appMatch = nullptr;
     int matchCount = 0;
 
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         const QString wId = getWindowId(w);
-        if (WindowIdUtils::extractAppId(wId) == targetAppId) {
+        if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             appMatch = w;
             ++matchCount;
         }
@@ -3579,7 +3579,7 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
     if (windowId.isEmpty()) {
         return out;
     }
-    const QString targetAppId = WindowIdUtils::extractAppId(windowId);
+    const QString targetAppId = ::PhosphorIdentity::WindowId::extractAppId(windowId);
     const auto windows = KWin::effects->stackingOrder();
     for (KWin::EffectWindow* w : windows) {
         const QString wId = getWindowId(w);
@@ -3591,7 +3591,7 @@ QVector<KWin::EffectWindow*> PlasmaZonesEffect::findAllWindowsById(const QString
             // the tile entry — leaving the new window untiled.
             return {w};
         }
-        if (WindowIdUtils::extractAppId(wId) == targetAppId) {
+        if (::PhosphorIdentity::WindowId::extractAppId(wId) == targetAppId) {
             out.append(w);
         }
     }

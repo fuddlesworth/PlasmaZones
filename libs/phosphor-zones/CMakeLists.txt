@@ -108,7 +108,7 @@ target_link_libraries(PhosphorZones
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
     PRIVATE
-        # Layout::matchAppRule uses PhosphorIdentity::WindowIdUtils for
+        # Layout::matchAppRule uses PhosphorIdentity::WindowId for
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
