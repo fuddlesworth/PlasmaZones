@@ -42,19 +42,10 @@ std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
 }
 } // namespace
 
-Settings::Settings(QObject* parent)
-    : ISettings(parent)
-    , m_ownedBackend(migrateAndCreateOwnedBackend())
-    , m_configBackend(m_ownedBackend.get())
-    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
-{
-    load();
-}
-
 Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
-    , m_store(nullptr)
+    , m_store(std::make_unique<PhosphorConfig::Store>(backend, buildSettingsSchema(), this))
 {
     // Contract: @p backend MUST already be pointing at a migrated config
     // file. Production entry points (daemon/main, settings/main, editor
@@ -63,9 +54,17 @@ Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     // used when callers share one backend across Settings + LayoutManager
     // + other components, so the migration responsibility lives with them.
     //
-    // (The owning ctor above routes through migrateAndCreateOwnedBackend
+    // (The owning ctor below routes through migrateAndCreateOwnedBackend
     // which performs the migration itself for standalone tools and tests.)
-    m_store = std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this);
+    load();
+}
+
+Settings::Settings(QObject* parent)
+    : ISettings(parent)
+    , m_ownedBackend(migrateAndCreateOwnedBackend())
+    , m_configBackend(m_ownedBackend.get())
+    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+{
     load();
 }
 

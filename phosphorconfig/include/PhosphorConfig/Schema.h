@@ -57,13 +57,6 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     /// the comparison to never match, rewriting the file and firing
     /// `changed()` on every save even when no user change occurred.
     std::function<QVariant(const QVariant& value)> validator;
-
-    /// Deprecated. writeString is now always verbatim — no JSON-shape
-    /// reinterpretation. Structured data (QVariantList / QVariantMap) is
-    /// routed through @c IGroup::writeJson, which stores natively in
-    /// backends that support it. This flag is retained so pre-existing
-    /// schemas still compile; it has no effect at runtime.
-    bool verbatimStringStorage = false;
 };
 
 /// One step in a schema version migration chain. Transforms the root JSON

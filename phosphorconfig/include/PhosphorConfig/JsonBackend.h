@@ -43,7 +43,6 @@ public:
     void writeColor(const QString& key, const QColor& value) override;
     void writeJson(const QString& key, const QJsonValue& value) override;
     QJsonValue readJson(const QString& key, const QJsonValue& defaultValue = {}) const override;
-    void writeStringRaw(const QString& key, const QString& value) override;
 
     bool hasKey(const QString& key) const override;
     void deleteKey(const QString& key) override;
@@ -117,6 +116,11 @@ public:
     /// so fresh stores carry the current version from day one. Default
     /// disables the behaviour (empty key).
     void setVersionStamp(const QString& key, int version);
+
+    /// Currently-installed version stamp as @c {key, version}. Returns an
+    /// empty key when no stamp is installed. Used by shared-backend safety
+    /// checks (see @c Store::Store) to detect a clobber.
+    std::pair<QString, int> versionStamp() const;
 
     /// Atomically write @p root to @p filePath (temp file + rename via
     /// @c QSaveFile). Exposed for use by @c MigrationRunner and other

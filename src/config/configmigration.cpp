@@ -11,10 +11,13 @@
 #include <PhosphorConfig/Schema.h>
 
 #include <QColor>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLatin1String>
+#include <QLockFile>
 #include <array>
 #include <atomic>
 
@@ -88,6 +91,38 @@ bool ConfigMigration::ensureJsonConfig()
         return true;
     }
 
+    // Cross-process migration lock: PZ starts multiple processes (daemon,
+    // settings, editor) in parallel at session start, each of which calls
+    // ensureJsonConfig in its own ctor path. Without this lock, two
+    // concurrent starts can race the read-migrate-write sequence of
+    // migrateIniToJson / runMigrationChain — the later writer silently
+    // overwrites the earlier migration's output.
+    //
+    // QLockFile is an advisory flock-style lock that cleans up automatically
+    // when the owning process exits (including crashes, via stale-lock
+    // detection). 5-second stale window covers the real-world migration
+    // cost; a genuinely hung peer won't starve us forever.
+    //
+    // QLockFile requires the lock file's parent directory to exist —
+    // ensureJsonConfigImpl below also needs the directory for any write it
+    // performs, so create it up front. Silently fail the mkpath and let
+    // tryLock report the lock-creation failure as the primary error.
+    const QString jsonPath = ConfigDefaults::configFilePath();
+    QDir().mkpath(QFileInfo(jsonPath).absolutePath());
+    QLockFile lock(jsonPath + QStringLiteral(".migrate.lock"));
+    lock.setStaleLockTime(5000);
+    if (!lock.tryLock(5000)) {
+        // Couldn't acquire the lock within the timeout. The peer may have
+        // completed successfully (in which case our next call will see
+        // the current schema version and return early) — fall through and
+        // let ensureJsonConfigImpl re-check the on-disk state.
+        qWarning("ConfigMigration: could not acquire migration lock within 5s — proceeding without lock");
+    }
+
+    // Re-check the migrated flag after acquiring the lock. Another process
+    // may have just released it after stamping the current schema version;
+    // re-reading the file lets us short-circuit without paying the parse
+    // cost again.
     const bool ok = ensureJsonConfigImpl();
     if (ok) {
         s_migrated.store(true, std::memory_order_release);
@@ -128,9 +163,12 @@ bool ConfigMigration::ensureJsonConfigImpl()
             return false;
         }
 
-        // Real parse-error corruption — check if INI backup exists for re-migration.
-        const QString iniPath = ConfigDefaults::legacyConfigFilePath();
-        if (corrupt && !QFile::exists(iniPath)) {
+        // Real parse-error corruption — always back up to .corrupt.bak before
+        // removing. Whether or not an INI exists to re-migrate from, the user
+        // may want to recover hand-made edits from the corrupt JSON (a parse
+        // error can be one stray character in an otherwise valid file).
+        // Asymmetric "rename if no INI, silent rm if INI exists" was a trap.
+        if (corrupt) {
             const QString corruptBak = jsonPath + QStringLiteral(".corrupt.bak");
             if (QFile::exists(corruptBak) && !QFile::remove(corruptBak)) {
                 qWarning("ConfigMigration: failed to remove old %s — leaving corrupt JSON in place",
@@ -142,20 +180,17 @@ bool ConfigMigration::ensureJsonConfigImpl()
                          qPrintable(corruptBak));
                 return false;
             }
-            qWarning(
-                "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
-                "using defaults",
-                qPrintable(corruptBak));
-            return true;
-        }
-        if (corrupt) {
-            // Have an INI to re-migrate from — drop the corrupt JSON so we
-            // re-run INI→JSON below.
-            if (!QFile::remove(jsonPath)) {
-                qWarning("ConfigMigration: failed to remove corrupt JSON %s before INI re-migration",
-                         qPrintable(jsonPath));
-                return false;
+            const QString iniPath = ConfigDefaults::legacyConfigFilePath();
+            if (!QFile::exists(iniPath)) {
+                qWarning(
+                    "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
+                    "using defaults",
+                    qPrintable(corruptBak));
+                return true;
             }
+            qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
+                     qPrintable(corruptBak));
+            // Fall through to the INI migration path below.
         } else if (whitespaceOnly) {
             // Drop the empty file so the INI-or-fresh-install path below is clean.
             if (!QFile::remove(jsonPath)) {

@@ -84,7 +84,14 @@ public:
     void write(const QString& group, const QString& key, const QVariant& value);
 
     /// Reset one key to its schema default. No-op when the key is undeclared.
-    /// Emits @c changed if the key existed in the backing store.
+    ///
+    /// Only emits @c changed when the key was actually present in the
+    /// backing store — a reset on a never-written key is a no-op that
+    /// skips the @c changed() emission, since the read path already
+    /// returned the schema default and no observer would see a change.
+    /// Callers relying on @c reset() to force a QML rebinding on a
+    /// pristine key should re-read via @c read and emit their own
+    /// signal instead.
     void reset(const QString& group, const QString& key);
 
     /// Reset every key declared in @p group. Undeclared extras are left alone.
@@ -101,6 +108,12 @@ public:
     /// Overwrite declared keys from @p snapshot. Unknown groups/keys in
     /// @p snapshot are ignored (silently — no adaptive migration).
     /// Use @c MigrationRunner first if @p snapshot came from an older schema.
+    ///
+    /// Keys declared in the schema but ABSENT from @p snapshot are also
+    /// skipped — @c importFromJson is strictly additive / overwriting,
+    /// never subtractive. For a full "restore defaults from snapshot"
+    /// workflow, call @c resetAll() before @c importFromJson so absent
+    /// keys land at their schema defaults.
     void importFromJson(const QJsonObject& snapshot);
 
     /// Flush the underlying backend. Returns the backend's sync() result —

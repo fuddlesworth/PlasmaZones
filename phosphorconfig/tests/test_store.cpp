@@ -493,6 +493,75 @@ private Q_SLOTS:
         QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
     }
 
+    void read_int64RoundTripsThroughStringFallback()
+    {
+        // Oversized int64 values are persisted as strings by writeVariantTo
+        // (covered by write_int64_fallsBackToStringWhenOutOfRange). The read
+        // path for LongLong-typed keys must parse the string back so the
+        // Store API round-trips — otherwise the default-fallback silently
+        // drops the stored value.
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("G")] = {
+            {QStringLiteral("Big"), qlonglong(0), QMetaType::LongLong},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        const qlonglong big = static_cast<qlonglong>(std::numeric_limits<int>::max()) + 12345;
+        store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
+
+        const QVariant got = store.readVariant(QStringLiteral("G"), QStringLiteral("Big"));
+        QCOMPARE(got.toLongLong(), big);
+    }
+
+    void read_uint64RoundTripsThroughStringFallback()
+    {
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("G")] = {
+            {QStringLiteral("Big"), qulonglong(0), QMetaType::ULongLong},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        const qulonglong big = static_cast<qulonglong>(std::numeric_limits<int>::max()) + 99ULL;
+        store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
+
+        const QVariant got = store.readVariant(QStringLiteral("G"), QStringLiteral("Big"));
+        QCOMPARE(got.toULongLong(), big);
+    }
+
+    void sharedBackend_refusesConflictingVersionStamp()
+    {
+        // Two Stores share one backend. Both have a version stamp; the
+        // second one mismatches the first. The second construction must
+        // NOT clobber the first stamp — otherwise the on-disk version key
+        // would end up inconsistent with the Schema the first Store built
+        // its migration chain against.
+        JsonBackend backend(m_path);
+
+        Schema first;
+        first.version = 1;
+        first.versionKey = QStringLiteral("_version");
+        first.groups[QStringLiteral("G")] = {{QStringLiteral("K"), 0, QMetaType::Int}};
+        Store storeA(&backend, first);
+
+        Schema second;
+        second.version = 2;
+        second.versionKey = QStringLiteral("_version");
+        second.groups[QStringLiteral("H")] = {{QStringLiteral("K"), 0, QMetaType::Int}};
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("refusing to overwrite")));
+        Store storeB(&backend, second);
+
+        const auto [key, version] = backend.versionStamp();
+        QCOMPARE(key, QStringLiteral("_version"));
+        QCOMPARE(version, 1); // first Store's stamp wins.
+    }
+
     void migrationChainRunsOnConstruction()
     {
         // Seed an on-disk v1 document.

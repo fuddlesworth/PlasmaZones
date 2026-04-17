@@ -18,7 +18,6 @@
 #include <QSet>
 #include <QStringList>
 
-#include <functional>
 #include <limits>
 
 namespace PhosphorConfig {
@@ -412,14 +411,6 @@ void JsonGroup::writeString(const QString& key, const QString& value)
     setGroupObject(obj);
 }
 
-void JsonGroup::writeStringRaw(const QString& key, const QString& value)
-{
-    // writeString is now always verbatim; this alias stays for source
-    // compatibility with callers that historically opted out of the
-    // (now-removed) JSON-shape reinterpretation heuristic.
-    writeString(key, value);
-}
-
 void JsonGroup::writeJson(const QString& key, const QJsonValue& value)
 {
     if (refuseWrite("writeJson")) {
@@ -687,6 +678,17 @@ bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject
 
 void JsonBackend::deleteGroup(const QString& name)
 {
+    // Refuse to delete while a JsonGroup is alive — the live group holds
+    // a reference to the shared root and observing a mid-delete mutation
+    // through it would surface inconsistent reads. Symmetric with
+    // replaceRoot / reparseConfiguration, which assert the same invariant.
+    Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::deleteGroup",
+               "Cannot deleteGroup while JsonGroup instances are alive");
+    if (d->activeGroupCount != 0) {
+        qCritical("PhosphorConfig::JsonBackend: refusing deleteGroup('%s') — %d group(s) still active",
+                  qPrintable(name), d->activeGroupCount);
+        return;
+    }
     const auto segments = resolvePath(d->resolver, name, "JsonBackend::deleteGroup");
     if (segments.isEmpty()) {
         qWarning("PhosphorConfig::JsonBackend: ignoring deleteGroup for malformed name '%s'", qPrintable(name));
@@ -727,6 +729,34 @@ void JsonBackend::removeRootKey(const QString& key)
     }
 }
 
+namespace {
+/// Depth-limited recursive enumerator for @c JsonBackend::groupList(). Kept
+/// as a plain free function (not a @c std::function lambda) so the hot
+/// @c Settings::save() → @c purgeStaleKeys() → @c groupList() path doesn't
+/// pay a heap allocation per call.
+void enumerateDotPathGroups(const QJsonObject& obj, const QString& prefix, int depth, const QSet<QString>& skipRoots,
+                            QStringList& out)
+{
+    if (depth >= MaxDotPathDepth) {
+        return;
+    }
+    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+        // Reserved keys are filtered at every depth, not just depth 0.
+        // A resolver like PerScreenPathResolver owns "PerScreen" as an
+        // opaque container — its children ("PerScreen.Autotile.<id>")
+        // must not be re-exposed as generic dot-path groups.
+        if (skipRoots.contains(it.key())) {
+            continue;
+        }
+        if (it.value().isObject()) {
+            const QString path = prefix.isEmpty() ? it.key() : (prefix + QLatin1Char('.') + it.key());
+            out.append(path);
+            enumerateDotPathGroups(it.value().toObject(), path, depth + 1, skipRoots, out);
+        }
+    }
+}
+} // namespace
+
 QStringList JsonBackend::groupList() const
 {
     QStringList groups;
@@ -748,27 +778,7 @@ QStringList JsonBackend::groupList() const
         }
     }
 
-    std::function<void(const QJsonObject&, const QString&, int)> enumerate = [&](const QJsonObject& obj,
-                                                                                 const QString& prefix, int depth) {
-        if (depth >= MaxDotPathDepth) {
-            return;
-        }
-        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-            // Reserved keys are filtered at every depth, not just depth 0.
-            // A resolver like PerScreenPathResolver owns "PerScreen" as an
-            // opaque container — its children ("PerScreen.Autotile.<id>")
-            // must not be re-exposed as generic dot-path groups.
-            if (skipRoots.contains(it.key())) {
-                continue;
-            }
-            if (it.value().isObject()) {
-                const QString path = prefix.isEmpty() ? it.key() : (prefix + QLatin1Char('.') + it.key());
-                groups.append(path);
-                enumerate(it.value().toObject(), path, depth + 1);
-            }
-        }
-    };
-    enumerate(d->root, QString(), 0);
+    enumerateDotPathGroups(d->root, QString(), 0, skipRoots, groups);
 
     // Resolver-owned group names.
     if (d->resolver) {
@@ -810,6 +820,11 @@ void JsonBackend::setVersionStamp(const QString& key, int version)
 {
     d->versionStampKey = key;
     d->versionStampValue = version;
+}
+
+std::pair<QString, int> JsonBackend::versionStamp() const
+{
+    return {d->versionStampKey, d->versionStampValue};
 }
 
 QJsonObject JsonBackend::jsonRootSnapshot() const

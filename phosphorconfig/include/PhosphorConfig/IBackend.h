@@ -115,15 +115,6 @@ public:
         return arr.at(0);
     }
 
-    /// Deprecated alias for @c writeString. Historically bypassed a now-removed
-    /// JSON-shape reinterpretation heuristic; kept as a forwarder so existing
-    /// callers (and the per-KeyDef @c verbatimStringStorage opt-in) compile
-    /// unchanged. New code should use @c writeString directly.
-    virtual void writeStringRaw(const QString& key, const QString& value)
-    {
-        writeString(key, value);
-    }
-
     // Key management.
     virtual bool hasKey(const QString& key) const = 0;
     virtual void deleteKey(const QString& key) = 0;

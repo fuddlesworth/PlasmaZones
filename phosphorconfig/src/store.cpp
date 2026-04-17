@@ -127,10 +127,44 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
     case QMetaType::Bool:
         return QVariant(g.readBool(key, defaultValue.toBool()));
     case QMetaType::Int:
-    case QMetaType::LongLong:
     case QMetaType::UInt:
-    case QMetaType::ULongLong:
         return QVariant(g.readInt(key, defaultValue.toInt()));
+    case QMetaType::LongLong: {
+        // writeVariantTo persists out-of-range int64 values as strings (see
+        // writeInt64 below) so readInt(...) would parse-fail and silently
+        // fall back to the default, dropping the stored value. Read as
+        // string first and parse with toLongLong, falling through to
+        // readInt for values written as native JSON numbers.
+        if (!g.hasKey(key)) {
+            return QVariant(defaultValue.toLongLong());
+        }
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            bool ok = false;
+            const qlonglong parsed = raw.toLongLong(&ok);
+            if (ok) {
+                return QVariant(parsed);
+            }
+        }
+        // Either empty string or non-parseable — fall back to readInt so
+        // values written via writeInt still round-trip, then widen.
+        return QVariant(static_cast<qlonglong>(g.readInt(key, defaultValue.toInt())));
+    }
+    case QMetaType::ULongLong: {
+        if (!g.hasKey(key)) {
+            return QVariant(defaultValue.toULongLong());
+        }
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            bool ok = false;
+            const qulonglong parsed = raw.toULongLong(&ok);
+            if (ok) {
+                return QVariant(parsed);
+            }
+        }
+        const int asInt = g.readInt(key, defaultValue.toInt());
+        return QVariant(asInt < 0 ? 0ULL : static_cast<qulonglong>(asInt));
+    }
     case QMetaType::Double:
     case QMetaType::Float:
         return QVariant(g.readDouble(key, defaultValue.toDouble()));
@@ -204,7 +238,20 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
             }
         }
         if (!d->schema.versionKey.isEmpty()) {
-            json->setVersionStamp(d->schema.versionKey, d->schema.version);
+            // Shared-backend safety: if another Store has already attached a
+            // version stamp with a different key or version, refuse to
+            // clobber it. Stores sharing one backend must agree on their
+            // version-stamping convention for exactly the same reason they
+            // must agree on the path resolver.
+            const auto [existingKey, existingVersion] = json->versionStamp();
+            if (existingKey.isEmpty()) {
+                json->setVersionStamp(d->schema.versionKey, d->schema.version);
+            } else if (existingKey != d->schema.versionKey || existingVersion != d->schema.version) {
+                qWarning(
+                    "PhosphorConfig::Store: backend already has a version stamp ('%s' = %d) — refusing to "
+                    "overwrite with ('%s' = %d). Stores sharing a backend must agree on the version stamp.",
+                    qPrintable(existingKey), existingVersion, qPrintable(d->schema.versionKey), d->schema.version);
+            }
         }
 
         // Run the migration chain against the backend's in-memory state.

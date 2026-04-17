@@ -114,10 +114,10 @@ private Q_SLOTS:
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
-            // writeStringRaw bypasses JsonBackend's JSON-shape heuristic so
-            // the literal "{broken json[" survives the write instead of being
-            // reparsed (and failing) into a native JSON value.
-            behavior->writeStringRaw(ConfigDefaults::triggersKey(), QStringLiteral("{broken json["));
+            // writeString is always verbatim — the literal "{broken json["
+            // survives the write as a string, and the Store's trigger-list
+            // reader falls back to the schema default when parsing fails.
+            behavior->writeString(ConfigDefaults::triggersKey(), QStringLiteral("{broken json["));
             behavior.reset();
             backend->sync();
         }

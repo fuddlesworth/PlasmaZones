@@ -391,6 +391,18 @@ bool QSettingsBackend::sync()
 
 void QSettingsBackend::deleteGroup(const QString& name)
 {
+    // Refuse to delete while a QSettingsGroup is holding beginGroup() state
+    // — QSettings' current-group pointer would be left dangling mid-write
+    // if we mutated the backing file here. Symmetric with the JsonBackend
+    // single-active-group invariant; the stateful QSettings cursor makes
+    // this a correctness issue rather than a style nit.
+    Q_ASSERT_X(m_activeGroupCount == 0, "PhosphorConfig::QSettingsBackend::deleteGroup",
+               "Cannot deleteGroup while QSettingsGroup instances are alive");
+    if (m_activeGroupCount != 0) {
+        qCritical("PhosphorConfig::QSettingsBackend: refusing deleteGroup('%s') — %d group(s) still active",
+                  qPrintable(name), m_activeGroupCount);
+        return;
+    }
     m_settings->remove(name);
 }
 
