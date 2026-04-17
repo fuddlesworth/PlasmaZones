@@ -13,6 +13,10 @@
 #include <QHash>
 #include <optional>
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
 namespace PlasmaZones {
 
 class LayoutManager; // Concrete type needed for signal connections
@@ -41,11 +45,46 @@ public:
     void setActivityManager(ActivityManager* am);
     void setSettings(ISettings* settings);
 
+    /**
+     * @brief Wire in the source-agnostic ILayoutSource bridge.
+     *
+     * Backs the @c getLayoutPreviewList / @c getLayoutPreview slots. When
+     * unset, those slots return empty JSON — clients should call them only
+     * after the daemon has finished init(). Accepts the abstract base so
+     * the future autotile preview source (or a composite) can plug in
+     * without changing the adaptor.
+     */
+    void setLayoutSource(PhosphorLayout::ILayoutSource* source);
+
 public Q_SLOTS:
     // Layout queries
     QString getActiveLayout();
     QStringList getLayoutList();
     QString getLayout(const QString& id);
+
+    /**
+     * @brief Source-agnostic preview list (manual layouts today, autotile
+     *        algorithms once phosphor-tile-algo lands).
+     *
+     * Returns a JSON array. Each entry is a serialized
+     * PhosphorLayout::LayoutPreview (id, displayName, zones in 0–1
+     * relative coords, isAutotile, optional algorithm metadata).
+     * Renderers consume this uniformly without branching on whether
+     * the entry is manual or autotile.
+     *
+     * Returns "[]" when no source is wired (early startup).
+     */
+    QString getLayoutPreviewList();
+
+    /**
+     * @brief Source-agnostic preview for one entry.
+     *
+     * @p id from getLayoutPreviewList. @p windowCount is honoured by
+     * autotile sources (algorithm runs at that count); manual sources
+     * ignore it. Returns "{}" when @p id is unknown to the wired
+     * source or no source is set.
+     */
+    QString getLayoutPreview(const QString& id, int windowCount);
 
     // Layout management
     void setActiveLayout(const QString& id);
@@ -358,6 +397,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     ISettings* m_settings = nullptr;
+    PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
 
     // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
     // the KCM initiated the change and doesn't need the echo back.

@@ -19,6 +19,10 @@
 #include "../core/shaderregistry.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
+
+#include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -563,6 +567,109 @@ QStringList LayoutAdaptor::getVirtualDesktopNames()
 void LayoutAdaptor::setSettings(ISettings* settings)
 {
     m_settings = settings;
+}
+
+void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    m_layoutSource = source;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Source-agnostic Layout Preview (PhosphorLayout::ILayoutSource bridge)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+namespace {
+
+QJsonObject algorithmMetadataToJson(const PhosphorLayout::AlgorithmMetadata& meta)
+{
+    QJsonObject json;
+    json[QStringLiteral("supportsMasterCount")] = meta.supportsMasterCount;
+    json[QStringLiteral("supportsSplitRatio")] = meta.supportsSplitRatio;
+    json[QStringLiteral("producesOverlappingZones")] = meta.producesOverlappingZones;
+    json[QStringLiteral("supportsCustomParams")] = meta.supportsCustomParams;
+    json[QStringLiteral("memory")] = meta.memory;
+    json[QStringLiteral("isScripted")] = meta.isScripted;
+    json[QStringLiteral("isUserScript")] = meta.isUserScript;
+    json[QStringLiteral("isSystemEntry")] = meta.isSystemEntry();
+    if (!meta.zoneNumberDisplay.isEmpty()) {
+        json[QStringLiteral("zoneNumberDisplay")] = meta.zoneNumberDisplay;
+    }
+    return json;
+}
+
+QJsonObject layoutPreviewToJson(const PhosphorLayout::LayoutPreview& preview)
+{
+    QJsonObject json;
+    json[QStringLiteral("id")] = preview.id;
+    json[QStringLiteral("displayName")] = preview.displayName;
+    if (!preview.description.isEmpty()) {
+        json[QStringLiteral("description")] = preview.description;
+    }
+    json[QStringLiteral("zoneCount")] = preview.zoneCount;
+    json[QStringLiteral("isAutotile")] = preview.isAutotile;
+    json[QStringLiteral("recommended")] = preview.recommended;
+    json[QStringLiteral("autoAssign")] = preview.autoAssign;
+    json[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
+    if (preview.referenceAspectRatio > 0.0) {
+        json[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
+    }
+
+    // Zones as nested {x, y, width, height} objects matching the existing
+    // zone-preview JSON shape used by overlay / picker QML.
+    QJsonArray zonesArray;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QJsonObject zoneJson;
+        zoneJson[QStringLiteral("x")] = r.x();
+        zoneJson[QStringLiteral("y")] = r.y();
+        zoneJson[QStringLiteral("width")] = r.width();
+        zoneJson[QStringLiteral("height")] = r.height();
+        if (i < preview.zoneNumbers.size()) {
+            zoneJson[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
+        }
+        zonesArray.append(zoneJson);
+    }
+    json[QStringLiteral("zones")] = zonesArray;
+
+    if (!preview.sectionKey.isEmpty()) {
+        json[QStringLiteral("sectionKey")] = preview.sectionKey;
+        json[QStringLiteral("sectionLabel")] = preview.sectionLabel;
+        json[QStringLiteral("sectionOrder")] = preview.sectionOrder;
+    }
+
+    if (preview.algorithm.has_value()) {
+        json[QStringLiteral("algorithm")] = algorithmMetadataToJson(preview.algorithm.value());
+    }
+
+    return json;
+}
+
+} // namespace
+
+QString LayoutAdaptor::getLayoutPreviewList()
+{
+    if (!m_layoutSource) {
+        return QStringLiteral("[]");
+    }
+    QJsonArray array;
+    const auto previews = m_layoutSource->availableLayouts();
+    for (const auto& preview : previews) {
+        array.append(layoutPreviewToJson(preview));
+    }
+    return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
+}
+
+QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
+{
+    if (!m_layoutSource || id.isEmpty()) {
+        return QStringLiteral("{}");
+    }
+    const auto preview = m_layoutSource->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        // ILayoutSource contract: empty id signals "unknown to this source".
+        return QStringLiteral("{}");
+    }
+    return QString::fromUtf8(QJsonDocument(layoutPreviewToJson(preview)).toJson(QJsonDocument::Compact));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
