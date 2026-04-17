@@ -455,77 +455,33 @@ public:
     }
     void setZoneSpanModifierInt(int modifier);
 
-    bool showZonesOnAllMonitors() const override
-    {
-        return m_showZonesOnAllMonitors;
-    }
+    // Display — PhosphorConfig::Store-backed.
+    bool showZonesOnAllMonitors() const override;
     void setShowZonesOnAllMonitors(bool show) override;
-
-    QStringList disabledMonitors() const override
-    {
-        return m_disabledMonitors;
-    }
+    QStringList disabledMonitors() const override;
     void setDisabledMonitors(const QStringList& screenIdOrNames) override;
     bool isMonitorDisabled(const QString& screenIdOrName) const override;
-
-    QStringList disabledDesktops() const override
-    {
-        return m_disabledDesktops;
-    }
+    QStringList disabledDesktops() const override;
     void setDisabledDesktops(const QStringList& entries) override;
     bool isDesktopDisabled(const QString& screenIdOrName, int desktop) const override;
-
-    QStringList disabledActivities() const override
-    {
-        return m_disabledActivities;
-    }
+    QStringList disabledActivities() const override;
     void setDisabledActivities(const QStringList& entries) override;
     bool isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const override;
-
-    bool showZoneNumbers() const override
-    {
-        return m_showZoneNumbers;
-    }
+    bool showZoneNumbers() const override;
     void setShowZoneNumbers(bool show) override;
-
-    bool flashZonesOnSwitch() const override
-    {
-        return m_flashZonesOnSwitch;
-    }
+    bool flashZonesOnSwitch() const override;
     void setFlashZonesOnSwitch(bool flash) override;
-
-    bool showOsdOnLayoutSwitch() const override
-    {
-        return m_showOsdOnLayoutSwitch;
-    }
+    bool showOsdOnLayoutSwitch() const override;
     void setShowOsdOnLayoutSwitch(bool show) override;
-
-    bool showNavigationOsd() const override
-    {
-        return m_showNavigationOsd;
-    }
+    bool showNavigationOsd() const override;
     void setShowNavigationOsd(bool show) override;
-
-    OsdStyle osdStyle() const override
-    {
-        return m_osdStyle;
-    }
+    OsdStyle osdStyle() const override;
     void setOsdStyle(OsdStyle style) override;
-    int osdStyleInt() const
-    {
-        return static_cast<int>(m_osdStyle);
-    }
+    int osdStyleInt() const;
     void setOsdStyleInt(int style);
-
-    OverlayDisplayMode overlayDisplayMode() const override
-    {
-        return m_overlayDisplayMode;
-    }
+    OverlayDisplayMode overlayDisplayMode() const override;
     void setOverlayDisplayMode(OverlayDisplayMode mode) override;
-    int overlayDisplayModeInt() const
-    {
-        return static_cast<int>(m_overlayDisplayMode);
-    }
+    int overlayDisplayModeInt() const;
     void setOverlayDisplayModeInt(int mode);
 
     // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
@@ -648,10 +604,7 @@ public:
     }
     void setDefaultLayoutId(const QString& layoutId) override;
 
-    bool filterLayoutsByAspectRatio() const override
-    {
-        return m_filterLayoutsByAspectRatio;
-    }
+    bool filterLayoutsByAspectRatio() const override;
     void setFilterLayoutsByAspectRatio(bool filter) override;
 
     // Ordering — PhosphorConfig::Store-backed (see settingsschema.cpp).
@@ -662,38 +615,20 @@ public:
     QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
-    QStringList excludedApplications() const override
-    {
-        return m_excludedApplications;
-    }
+    // Exclusions — PhosphorConfig::Store-backed.
+    QStringList excludedApplications() const override;
     void setExcludedApplications(const QStringList& apps) override;
     Q_INVOKABLE void addExcludedApplication(const QString& app);
     Q_INVOKABLE void removeExcludedApplicationAt(int index);
-
-    QStringList excludedWindowClasses() const override
-    {
-        return m_excludedWindowClasses;
-    }
+    QStringList excludedWindowClasses() const override;
     void setExcludedWindowClasses(const QStringList& classes) override;
     Q_INVOKABLE void addExcludedWindowClass(const QString& cls);
     Q_INVOKABLE void removeExcludedWindowClassAt(int index);
-
-    bool excludeTransientWindows() const override
-    {
-        return m_excludeTransientWindows;
-    }
+    bool excludeTransientWindows() const override;
     void setExcludeTransientWindows(bool exclude) override;
-
-    int minimumWindowWidth() const override
-    {
-        return m_minimumWindowWidth;
-    }
+    int minimumWindowWidth() const override;
     void setMinimumWindowWidth(int width) override;
-
-    int minimumWindowHeight() const override
-    {
-        return m_minimumWindowHeight;
-    }
+    int minimumWindowHeight() const override;
     void setMinimumWindowHeight(int height) override;
 
     // Zone Selector
@@ -1362,16 +1297,7 @@ private:
     bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
 
     // Display
-    bool m_showZonesOnAllMonitors = ConfigDefaults::showOnAllMonitors();
-    QStringList m_disabledMonitors;
-    QStringList m_disabledDesktops;
-    QStringList m_disabledActivities;
-    bool m_showZoneNumbers = ConfigDefaults::showNumbers();
-    bool m_flashZonesOnSwitch = ConfigDefaults::flashOnSwitch();
-    bool m_showOsdOnLayoutSwitch = ConfigDefaults::showOsdOnLayoutSwitch();
-    bool m_showNavigationOsd = ConfigDefaults::showNavigationOsd();
-    OsdStyle m_osdStyle = OsdStyle::Preview; // Default to visual preview
-    OverlayDisplayMode m_overlayDisplayMode = OverlayDisplayMode::ZoneRectangles;
+    // Display is stored in m_store; no cached members here.
 
     // Appearance
     // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
@@ -1397,17 +1323,13 @@ private:
     QString m_defaultLayoutId;
 
     // Layout filtering
-    bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
+    // filterLayoutsByAspectRatio is stored in m_store.
 
     // Ordering
     // Ordering is stored in m_store; no cached members here.
 
     // Exclusions
-    QStringList m_excludedApplications;
-    QStringList m_excludedWindowClasses;
-    bool m_excludeTransientWindows = ConfigDefaults::excludeTransientWindows();
-    int m_minimumWindowWidth = ConfigDefaults::minimumWindowWidth();
-    int m_minimumWindowHeight = ConfigDefaults::minimumWindowHeight();
+    // Exclusions are stored in m_store; no cached members here.
 
     // Zone Selector
     bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();

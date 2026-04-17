@@ -281,18 +281,18 @@ void Settings::purgeStaleKeys()
         return storeGroups.contains(group) || storeAncestors.contains(group);
     };
 
-    // Pass 1: Store-declared groups get per-key purging — keep declared keys,
-    // delete everything else. This preserves the authoritative values while
-    // still evicting anything left over from a renamed or removed key.
-    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
-        const QString& groupName = it.key();
-        QSet<QString> declared;
-        for (const auto& def : it.value()) {
-            declared.insert(def.key);
-        }
+    // Pass 1: per-key scalar purging inside Store-claimed paths.
+    //
+    // Store-declared groups: keep the declared key set, delete everything else
+    // (evicts stale leftovers from renamed / removed keys).
+    //
+    // Store ancestor groups (e.g. "Snapping" when the schema declares
+    // "Snapping.Appearance.Colors"): declared set is empty, so every scalar
+    // leaf key gets deleted. save*Config will rewrite valid scalars a moment
+    // later; sub-objects (the actual Store-claimed descendants) are preserved
+    // because we only touch non-object children.
+    auto purgeScalarsIn = [&](const QString& groupName, const QSet<QString>& declared) {
         auto g = m_configBackend->group(groupName);
-        // hasKey() doesn't expose an iterator, so probe the keys we found
-        // when the group is enumerated as a JSON leaf (flat children).
         const QJsonObject snapshot = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend)->jsonRootSnapshot();
         QJsonObject cursor = snapshot;
         for (const QString& seg : groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts)) {
@@ -300,12 +300,23 @@ void Settings::purgeStaleKeys()
         }
         for (auto keyIt = cursor.constBegin(); keyIt != cursor.constEnd(); ++keyIt) {
             if (keyIt.value().isObject()) {
-                continue; // sub-group, not a leaf key
+                continue; // sub-group — not a leaf scalar key
             }
             if (!declared.contains(keyIt.key())) {
                 g->deleteKey(keyIt.key());
             }
         }
+    };
+
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        QSet<QString> declared;
+        for (const auto& def : it.value()) {
+            declared.insert(def.key);
+        }
+        purgeScalarsIn(it.key(), declared);
+    }
+    for (const QString& ancestor : std::as_const(storeAncestors)) {
+        purgeScalarsIn(ancestor, {});
     }
 
     // Pass 2: anything else in the backend that isn't preserved, isn't
@@ -342,6 +353,18 @@ void Settings::purgeStaleKeys()
 void Settings::save()
 {
     purgeStaleKeys();
+
+    // Flush every Store-declared key so the on-disk file always carries
+    // the complete declared set after save, not just the keys a user
+    // happened to mutate. Keys that haven't been written yet fall back to
+    // the schema default via Store::readVariant, and the write path runs
+    // the validator so clamped/normalized values land as the canonical form.
+    const auto& schema = m_store->schema();
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        for (const auto& def : it.value()) {
+            m_store->write(it.key(), def.key, m_store->readVariant(it.key(), def.key));
+        }
+    }
 
     saveActivationConfig(m_configBackend);
     saveDisplayConfig(m_configBackend);
@@ -666,6 +689,336 @@ PZ_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
 PZ_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
 PZ_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
 PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
+
+// ── Display (PhosphorConfig::Store-backed) ──────────────────────────────────
+// Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
+// share snappingEffectsGroup with the already-migrated Appearance.Blur.
+// QStringList keys go over the wire as comma-joined strings; the getters
+// parse back to QStringList here.
+
+namespace {
+QStringList parseCommaListImpl(const QString& raw)
+{
+    if (raw.isEmpty()) {
+        return {};
+    }
+    QStringList parts = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (auto& s : parts) {
+        s = s.trimmed();
+    }
+    return parts;
+}
+} // namespace
+
+PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
+PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
+                  showZonesOnAllMonitorsChanged)
+
+QStringList Settings::disabledMonitors() const
+{
+    // Resolve connector names → stable screen ids on every read. Stored
+    // connector names stay human-readable; consumers see canonical ids.
+    QStringList entries = parseCommaListImpl(
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey()));
+    for (auto& name : entries) {
+        if (Utils::isConnectorName(name)) {
+            const QString resolved = Utils::screenIdForName(name);
+            if (resolved != name) {
+                name = resolved;
+            }
+        }
+    }
+    return entries;
+}
+
+void Settings::setDisabledMonitors(const QStringList& screenIdOrNames)
+{
+    const QString joined = screenIdOrNames.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey())
+        == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey(), joined);
+    Q_EMIT disabledMonitorsChanged();
+    Q_EMIT settingsChanged();
+}
+
+bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
+{
+    const QStringList entries = disabledMonitors();
+    if (entries.contains(screenIdOrName)) {
+        return true;
+    }
+    // Backward compat: resolve between connector name and screen id so
+    // stored entries still match across the two representations.
+    if (Utils::isConnectorName(screenIdOrName)) {
+        const QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName && entries.contains(resolved)) {
+            return true;
+        }
+    } else {
+        const QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && entries.contains(connector)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QStringList Settings::disabledDesktops() const
+{
+    return parseCommaListImpl(
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey()));
+}
+
+void Settings::setDisabledDesktops(const QStringList& entries)
+{
+    const QString joined = entries.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey())
+        == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey(), joined);
+    Q_EMIT disabledDesktopsChanged();
+    Q_EMIT settingsChanged();
+}
+
+bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
+{
+    if (desktop <= 0) {
+        return false;
+    }
+    const QStringList entries = disabledDesktops();
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        const QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName) {
+            namesToCheck.append(resolved);
+        }
+    } else {
+        const QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName) {
+            namesToCheck.append(connector);
+        }
+    }
+    const QString desktopStr = QString::number(desktop);
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (entries.contains(name + QLatin1Char('/') + desktopStr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+QStringList Settings::disabledActivities() const
+{
+    return parseCommaListImpl(m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(),
+                                                     ConfigDefaults::disabledActivitiesKey()));
+}
+
+void Settings::setDisabledActivities(const QStringList& entries)
+{
+    const QString joined = entries.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey())
+        == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey(), joined);
+    Q_EMIT disabledActivitiesChanged();
+    Q_EMIT settingsChanged();
+}
+
+bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
+{
+    if (activityId.isEmpty()) {
+        return false;
+    }
+    const QStringList entries = disabledActivities();
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        const QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName) {
+            namesToCheck.append(resolved);
+        }
+    } else {
+        const QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName) {
+            namesToCheck.append(connector);
+        }
+    }
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (entries.contains(name + QLatin1Char('/') + activityId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+PZ_STORE_GET(bool, showZoneNumbers, snappingEffectsGroup, showNumbersKey, bool)
+PZ_STORE_SET_BOOL(setShowZoneNumbers, snappingEffectsGroup, showNumbersKey, showZoneNumbersChanged)
+PZ_STORE_GET(bool, flashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, bool)
+PZ_STORE_SET_BOOL(setFlashZonesOnSwitch, snappingEffectsGroup, flashOnSwitchKey, flashZonesOnSwitchChanged)
+PZ_STORE_GET(bool, showOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, bool)
+PZ_STORE_SET_BOOL(setShowOsdOnLayoutSwitch, snappingEffectsGroup, osdOnLayoutSwitchKey, showOsdOnLayoutSwitchChanged)
+PZ_STORE_GET(bool, showNavigationOsd, snappingEffectsGroup, navigationOsdKey, bool)
+PZ_STORE_SET_BOOL(setShowNavigationOsd, snappingEffectsGroup, navigationOsdKey, showNavigationOsdChanged)
+
+// Enum setters: stored as int, exposed via the enum-typed getter/setter and
+// also via the int adapters QML uses (osdStyleInt / overlayDisplayModeInt).
+
+OsdStyle Settings::osdStyle() const
+{
+    return static_cast<OsdStyle>(
+        m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::osdStyleKey()));
+}
+int Settings::osdStyleInt() const
+{
+    return static_cast<int>(osdStyle());
+}
+void Settings::setOsdStyle(OsdStyle style)
+{
+    const int before = m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::osdStyleKey());
+    m_store->write(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::osdStyleKey(), static_cast<int>(style));
+    const int after = m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::osdStyleKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT osdStyleChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setOsdStyleInt(int style)
+{
+    if (style >= 0 && style <= static_cast<int>(OsdStyle::Preview)) {
+        setOsdStyle(static_cast<OsdStyle>(style));
+    }
+}
+
+OverlayDisplayMode Settings::overlayDisplayMode() const
+{
+    return static_cast<OverlayDisplayMode>(
+        m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::overlayDisplayModeKey()));
+}
+int Settings::overlayDisplayModeInt() const
+{
+    return static_cast<int>(overlayDisplayMode());
+}
+void Settings::setOverlayDisplayMode(OverlayDisplayMode mode)
+{
+    const int before =
+        m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::overlayDisplayModeKey());
+    m_store->write(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::overlayDisplayModeKey(),
+                   static_cast<int>(mode));
+    const int after =
+        m_store->read<int>(ConfigDefaults::snappingEffectsGroup(), ConfigDefaults::overlayDisplayModeKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT overlayDisplayModeChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setOverlayDisplayModeInt(int mode)
+{
+    if (mode >= 0 && mode <= static_cast<int>(OverlayDisplayMode::LayoutPreview)) {
+        setOverlayDisplayMode(static_cast<OverlayDisplayMode>(mode));
+    }
+}
+
+// filterLayoutsByAspectRatio sits in snappingBehaviorDisplayGroup with the
+// other display settings — NOTIFY signal is filterLayoutsByAspectRatioChanged.
+PZ_STORE_GET(bool, filterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey, bool)
+PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, filterByAspectRatioKey,
+                  filterLayoutsByAspectRatioChanged)
+
+// ── Exclusions (PhosphorConfig::Store-backed) ───────────────────────────────
+
+QStringList Settings::excludedApplications() const
+{
+    return parseCommaListImpl(
+        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
+}
+
+void Settings::setExcludedApplications(const QStringList& apps)
+{
+    const QString joined = apps.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()) == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), joined);
+    Q_EMIT excludedApplicationsChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::addExcludedApplication(const QString& app)
+{
+    const QString trimmed = app.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = excludedApplications();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setExcludedApplications(list);
+}
+
+void Settings::removeExcludedApplicationAt(int index)
+{
+    QStringList list = excludedApplications();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setExcludedApplications(list);
+}
+
+QStringList Settings::excludedWindowClasses() const
+{
+    return parseCommaListImpl(
+        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()));
+}
+
+void Settings::setExcludedWindowClasses(const QStringList& classes)
+{
+    const QString joined = classes.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()) == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(), joined);
+    Q_EMIT excludedWindowClassesChanged();
+    Q_EMIT settingsChanged();
+}
+
+void Settings::addExcludedWindowClass(const QString& cls)
+{
+    const QString trimmed = cls.trimmed();
+    if (trimmed.isEmpty()) {
+        return;
+    }
+    QStringList list = excludedWindowClasses();
+    if (list.contains(trimmed)) {
+        return;
+    }
+    list.append(trimmed);
+    setExcludedWindowClasses(list);
+}
+
+void Settings::removeExcludedWindowClassAt(int index)
+{
+    QStringList list = excludedWindowClasses();
+    if (index < 0 || index >= list.size()) {
+        return;
+    }
+    list.removeAt(index);
+    setExcludedWindowClasses(list);
+}
+
+PZ_STORE_GET(bool, excludeTransientWindows, exclusionsGroup, transientWindowsKey, bool)
+PZ_STORE_SET_BOOL(setExcludeTransientWindows, exclusionsGroup, transientWindowsKey, excludeTransientWindowsChanged)
+PZ_STORE_GET(int, minimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, int)
+PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, minimumWindowWidthChanged)
+PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
+PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 

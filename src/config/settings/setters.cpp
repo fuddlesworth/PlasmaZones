@@ -90,83 +90,9 @@ SETTINGS_SETTER(bool, SnappingEnabled, m_snappingEnabled, snappingEnabledChanged
 // Display setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SETTINGS_SETTER(bool, ShowZonesOnAllMonitors, m_showZonesOnAllMonitors, showZonesOnAllMonitorsChanged)
-SETTINGS_SETTER(const QStringList&, DisabledMonitors, m_disabledMonitors, disabledMonitorsChanged)
-
-bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
-{
-    if (m_disabledMonitors.contains(screenIdOrName)) {
-        return true;
-    }
-    // Backward compat: if screenIdOrName looks like a connector name (no colons),
-    // resolve to stable EDID-based screen ID and check again
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
-        if (resolved != screenIdOrName && m_disabledMonitors.contains(resolved)) {
-            return true;
-        }
-    } else {
-        // screenIdOrName is a screen ID — try reverse lookup to connector name
-        // (covers unmigrated entries from screens disconnected during load)
-        QString connector = Utils::screenNameForId(screenIdOrName);
-        if (!connector.isEmpty() && m_disabledMonitors.contains(connector)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-SETTINGS_SETTER(const QStringList&, DisabledDesktops, m_disabledDesktops, disabledDesktopsChanged)
-
-bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) const
-{
-    if (desktop <= 0)
-        return false;
-
-    // Resolve screen identifier bidirectionally (same pattern as isMonitorDisabled)
-    QStringList namesToCheck = {screenIdOrName};
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
-        if (resolved != screenIdOrName)
-            namesToCheck.append(resolved);
-    } else {
-        QString connector = Utils::screenNameForId(screenIdOrName);
-        if (!connector.isEmpty() && connector != screenIdOrName)
-            namesToCheck.append(connector);
-    }
-
-    const QString desktopStr = QString::number(desktop);
-    for (const QString& name : std::as_const(namesToCheck)) {
-        if (m_disabledDesktops.contains(name + QLatin1Char('/') + desktopStr))
-            return true;
-    }
-    return false;
-}
-
-SETTINGS_SETTER(const QStringList&, DisabledActivities, m_disabledActivities, disabledActivitiesChanged)
-
-bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& activityId) const
-{
-    if (activityId.isEmpty())
-        return false;
-
-    QStringList namesToCheck = {screenIdOrName};
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
-        if (resolved != screenIdOrName)
-            namesToCheck.append(resolved);
-    } else {
-        QString connector = Utils::screenNameForId(screenIdOrName);
-        if (!connector.isEmpty() && connector != screenIdOrName)
-            namesToCheck.append(connector);
-    }
-
-    for (const QString& name : std::as_const(namesToCheck)) {
-        if (m_disabledActivities.contains(name + QLatin1Char('/') + activityId))
-            return true;
-    }
-    return false;
-}
+// Display setters moved to settings.cpp (PhosphorConfig::Store-backed).
+// isMonitorDisabled/isDesktopDisabled/isActivityDisabled helpers also live
+// in settings.cpp so they can read the Store-backed disabled-* list getters.
 
 bool Settings::isScreenLocked(const QString& screenIdOrName) const
 {
@@ -233,32 +159,7 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
     }
 }
 
-SETTINGS_SETTER(bool, ShowZoneNumbers, m_showZoneNumbers, showZoneNumbersChanged)
-SETTINGS_SETTER(bool, FlashZonesOnSwitch, m_flashZonesOnSwitch, flashZonesOnSwitchChanged)
-SETTINGS_SETTER(bool, ShowOsdOnLayoutSwitch, m_showOsdOnLayoutSwitch, showOsdOnLayoutSwitchChanged)
-SETTINGS_SETTER(bool, ShowNavigationOsd, m_showNavigationOsd, showNavigationOsdChanged)
-
-void Settings::setOsdStyle(OsdStyle style)
-{
-    if (m_osdStyle != style) {
-        m_osdStyle = style;
-        Q_EMIT osdStyleChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-SETTINGS_SETTER_ENUM_INT(OsdStyle, OsdStyle, 0, static_cast<int>(OsdStyle::Preview))
-
-void Settings::setOverlayDisplayMode(OverlayDisplayMode mode)
-{
-    if (m_overlayDisplayMode != mode) {
-        m_overlayDisplayMode = mode;
-        Q_EMIT overlayDisplayModeChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-SETTINGS_SETTER_ENUM_INT(OverlayDisplayMode, OverlayDisplayMode, 0, static_cast<int>(OverlayDisplayMode::LayoutPreview))
+// Effects toggles + OSD enum setters moved to settings.cpp (Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Appearance setters — PhosphorConfig::Store-backed, live in settings.cpp.
@@ -309,68 +210,8 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
     }
 }
 
-void Settings::setFilterLayoutsByAspectRatio(bool filter)
-{
-    if (m_filterLayoutsByAspectRatio != filter) {
-        m_filterLayoutsByAspectRatio = filter;
-        Q_EMIT filterLayoutsByAspectRatioChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// Ordering setters moved to settings.cpp (PhosphorConfig::Store-backed).
-
-SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
-
-void Settings::addExcludedApplication(const QString& app)
-{
-    const QString trimmed = app.trimmed();
-    if (trimmed.isEmpty() || m_excludedApplications.contains(trimmed)) {
-        return;
-    }
-    m_excludedApplications.append(trimmed);
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::removeExcludedApplicationAt(int index)
-{
-    if (index < 0 || index >= m_excludedApplications.size()) {
-        return;
-    }
-    m_excludedApplications.removeAt(index);
-    Q_EMIT excludedApplicationsChanged();
-    Q_EMIT settingsChanged();
-}
-
-SETTINGS_SETTER(const QStringList&, ExcludedWindowClasses, m_excludedWindowClasses, excludedWindowClassesChanged)
-
-void Settings::addExcludedWindowClass(const QString& cls)
-{
-    const QString trimmed = cls.trimmed();
-    if (trimmed.isEmpty() || m_excludedWindowClasses.contains(trimmed)) {
-        return;
-    }
-    m_excludedWindowClasses.append(trimmed);
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
-}
-
-void Settings::removeExcludedWindowClassAt(int index)
-{
-    if (index < 0 || index >= m_excludedWindowClasses.size()) {
-        return;
-    }
-    m_excludedWindowClasses.removeAt(index);
-    Q_EMIT excludedWindowClassesChanged();
-    Q_EMIT settingsChanged();
-}
-
-SETTINGS_SETTER(bool, ExcludeTransientWindows, m_excludeTransientWindows, excludeTransientWindowsChanged)
-SETTINGS_SETTER_CLAMPED(MinimumWindowWidth, m_minimumWindowWidth, minimumWindowWidthChanged,
-                        ConfigDefaults::minimumWindowWidthMin(), ConfigDefaults::minimumWindowWidthMax())
-SETTINGS_SETTER_CLAMPED(MinimumWindowHeight, m_minimumWindowHeight, minimumWindowHeightChanged,
-                        ConfigDefaults::minimumWindowHeightMin(), ConfigDefaults::minimumWindowHeightMax())
+// filterLayoutsByAspectRatio + Exclusions (apps, window classes, transient,
+// min width, min height) moved to settings.cpp (PhosphorConfig::Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone Selector setters

@@ -25,6 +25,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendZoneGeometrySchema(s);
     appendShortcutsSchema(s);
     appendEditorSchema(s);
+    appendExclusionsSchema(s);
+    appendDisplaySchema(s);
 
     return s;
 }
@@ -413,6 +415,68 @@ void appendEditorSchema(PhosphorConfig::Schema& schema)
         {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool},
         {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int, {}, modifierOr(CD::fillOnDropModifier())},
     };
+}
+
+// ─── Exclusions ─────────────────────────────────────────────────────────────
+// Apps and window classes to exclude from snapping + minimum-size filters
+// + the transient-window toggle. List keys use canonicalCommaList to
+// normalize formatting; ints are clamped.
+
+void appendExclusionsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::exclusionsGroup()] = {
+        {CD::applicationsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::windowClassesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::transientWindowsKey(), CD::excludeTransientWindows(), QMetaType::Bool},
+        {CD::minimumWindowWidthKey(),
+         CD::minimumWindowWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::minimumWindowWidthMin(), CD::minimumWindowWidthMax())},
+        {CD::minimumWindowHeightKey(),
+         CD::minimumWindowHeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::minimumWindowHeightMin(), CD::minimumWindowHeightMax())},
+    };
+}
+
+// ─── Display ────────────────────────────────────────────────────────────────
+// Snapping.Behavior.Display plus the Effects sub-group entries that aren't
+// the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
+// OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
+// Note: disabled-monitor connector-name resolution (Utils::screenIdForName)
+// stays PZ-side — we keep the wire format as comma-joined and let the
+// Settings getter do the resolution step.
+
+void appendDisplaySchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+
+    schema.groups[CD::snappingBehaviorDisplayGroup()] = {
+        {CD::showOnAllMonitorsKey(), CD::showOnAllMonitors(), QMetaType::Bool},
+        {CD::disabledMonitorsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::disabledDesktopsKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::disabledActivitiesKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
+    };
+
+    // Append Display-owned keys to the existing Effects group (Blur was
+    // migrated earlier under Appearance — we add the rest here so Effects
+    // is now fully Store-backed).
+    auto& effects = schema.groups[CD::snappingEffectsGroup()];
+    effects.append({CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool});
+    effects.append({CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool});
+    effects.append({CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool});
+    effects.append({CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool});
+    effects.append(
+        {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())});
+    effects.append({CD::overlayDisplayModeKey(),
+                    CD::overlayDisplayMode(),
+                    QMetaType::Int,
+                    {},
+                    clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax())});
 }
 
 } // namespace PlasmaZones

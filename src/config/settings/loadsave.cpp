@@ -54,59 +54,11 @@ void Settings::loadActivationConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto display = backend->group(ConfigDefaults::snappingBehaviorDisplayGroup());
-        m_showZonesOnAllMonitors =
-            display->readBool(ConfigDefaults::showOnAllMonitorsKey(), ConfigDefaults::showOnAllMonitors());
-        // DisabledMonitors is a comma-separated string list
-        QString disabledMonitorsStr = display->readString(ConfigDefaults::disabledMonitorsKey());
-        m_disabledMonitors = disabledMonitorsStr.isEmpty()
-            ? QStringList()
-            : disabledMonitorsStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
-        for (int i = 0; i < m_disabledMonitors.size(); ++i) {
-            m_disabledMonitors[i] = m_disabledMonitors[i].trimmed();
-            const QString& name = m_disabledMonitors[i];
-            if (Utils::isConnectorName(name)) {
-                QString resolved = Utils::screenIdForName(name);
-                if (resolved != name) {
-                    m_disabledMonitors[i] = resolved;
-                }
-            }
-        }
-        // DisabledDesktops is a comma-separated list of "screenId/desktopNumber" composite keys
-        QString disabledDesktopsStr = display->readString(ConfigDefaults::disabledDesktopsKey());
-        m_disabledDesktops = disabledDesktopsStr.isEmpty()
-            ? QStringList()
-            : disabledDesktopsStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
-        for (int i = 0; i < m_disabledDesktops.size(); ++i) {
-            m_disabledDesktops[i] = m_disabledDesktops[i].trimmed();
-        }
-        // DisabledActivities is a comma-separated list of "screenId/activityUuid" composite keys
-        QString disabledActivitiesStr = display->readString(ConfigDefaults::disabledActivitiesKey());
-        m_disabledActivities = disabledActivitiesStr.isEmpty()
-            ? QStringList()
-            : disabledActivitiesStr.split(QLatin1Char(','), Qt::SkipEmptyParts);
-        for (int i = 0; i < m_disabledActivities.size(); ++i) {
-            m_disabledActivities[i] = m_disabledActivities[i].trimmed();
-        }
-        m_filterLayoutsByAspectRatio =
-            display->readBool(ConfigDefaults::filterByAspectRatioKey(), ConfigDefaults::filterLayoutsByAspectRatio());
-    }
-    {
-        auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
-        m_showZoneNumbers = effects->readBool(ConfigDefaults::showNumbersKey(), ConfigDefaults::showNumbers());
-        m_flashZonesOnSwitch = effects->readBool(ConfigDefaults::flashOnSwitchKey(), ConfigDefaults::flashOnSwitch());
-        m_showOsdOnLayoutSwitch =
-            effects->readBool(ConfigDefaults::osdOnLayoutSwitchKey(), ConfigDefaults::showOsdOnLayoutSwitch());
-        m_showNavigationOsd =
-            effects->readBool(ConfigDefaults::navigationOsdKey(), ConfigDefaults::showNavigationOsd());
-        m_osdStyle = static_cast<OsdStyle>(readValidatedInt(*effects, ConfigDefaults::osdStyleKey(),
-                                                            ConfigDefaults::osdStyle(), ConfigDefaults::osdStyleMin(),
-                                                            ConfigDefaults::osdStyleMax(), "OSD style"));
-        m_overlayDisplayMode = static_cast<OverlayDisplayMode>(readValidatedInt(
-            *effects, ConfigDefaults::overlayDisplayModeKey(), ConfigDefaults::overlayDisplayMode(),
-            ConfigDefaults::overlayDisplayModeMin(), ConfigDefaults::overlayDisplayModeMax(), "overlay display mode"));
-    }
+    Q_UNUSED(backend);
+    // Display is backed by PhosphorConfig::Store. Disabled-monitor
+    // connector-name resolution lives in the getter (see
+    // Settings::disabledMonitors in settings.cpp) so stored connector names
+    // get resolved to stable screen ids on every read.
 }
 
 // loadAppearanceConfig removed: Appearance group (Colors, Labels, Opacity,
@@ -150,29 +102,7 @@ void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
                                    .value_or(ConfigDefaults::snapAssistTriggers());
     }
 
-    // Exclusions
-    {
-        auto exclusions = backend->group(ConfigDefaults::exclusionsGroup());
-        QString excludedAppsStr = exclusions->readString(ConfigDefaults::applicationsKey());
-        m_excludedApplications = excludedAppsStr.isEmpty() ? QStringList() : excludedAppsStr.split(QLatin1Char(','));
-        for (auto& app : m_excludedApplications)
-            app = app.trimmed();
-        QString excludedClassesStr = exclusions->readString(ConfigDefaults::windowClassesKey());
-        m_excludedWindowClasses =
-            excludedClassesStr.isEmpty() ? QStringList() : excludedClassesStr.split(QLatin1Char(','));
-        for (auto& cls : m_excludedWindowClasses)
-            cls = cls.trimmed();
-        m_excludeTransientWindows =
-            exclusions->readBool(ConfigDefaults::transientWindowsKey(), ConfigDefaults::excludeTransientWindows());
-        int minWidth =
-            exclusions->readInt(ConfigDefaults::minimumWindowWidthKey(), ConfigDefaults::minimumWindowWidth());
-        m_minimumWindowWidth =
-            qBound(ConfigDefaults::minimumWindowWidthMin(), minWidth, ConfigDefaults::minimumWindowWidthMax());
-        int minHeight =
-            exclusions->readInt(ConfigDefaults::minimumWindowHeightKey(), ConfigDefaults::minimumWindowHeight());
-        m_minimumWindowHeight =
-            qBound(ConfigDefaults::minimumWindowHeightMin(), minHeight, ConfigDefaults::minimumWindowHeightMax());
-    }
+    // Exclusions are backed by PhosphorConfig::Store.
 }
 
 void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
@@ -441,23 +371,8 @@ void Settings::saveActivationConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto display = backend->group(ConfigDefaults::snappingBehaviorDisplayGroup());
-        display->writeBool(ConfigDefaults::showOnAllMonitorsKey(), m_showZonesOnAllMonitors);
-        display->writeString(ConfigDefaults::disabledMonitorsKey(), m_disabledMonitors.join(QLatin1Char(',')));
-        display->writeString(ConfigDefaults::disabledDesktopsKey(), m_disabledDesktops.join(QLatin1Char(',')));
-        display->writeString(ConfigDefaults::disabledActivitiesKey(), m_disabledActivities.join(QLatin1Char(',')));
-        display->writeBool(ConfigDefaults::filterByAspectRatioKey(), m_filterLayoutsByAspectRatio);
-    }
-    {
-        auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
-        effects->writeBool(ConfigDefaults::showNumbersKey(), m_showZoneNumbers);
-        effects->writeBool(ConfigDefaults::flashOnSwitchKey(), m_flashZonesOnSwitch);
-        effects->writeBool(ConfigDefaults::osdOnLayoutSwitchKey(), m_showOsdOnLayoutSwitch);
-        effects->writeBool(ConfigDefaults::navigationOsdKey(), m_showNavigationOsd);
-        effects->writeInt(ConfigDefaults::osdStyleKey(), static_cast<int>(m_osdStyle));
-        effects->writeInt(ConfigDefaults::overlayDisplayModeKey(), static_cast<int>(m_overlayDisplayMode));
-    }
+    Q_UNUSED(backend);
+    // Display is backed by PhosphorConfig::Store.
 }
 
 // saveAppearanceConfig removed: Appearance setters persist writes through
@@ -488,14 +403,7 @@ void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)
         snapAssist->writeBool(ConfigDefaults::enabledKey(), m_snapAssistEnabled);
         saveTriggerList(*snapAssist, ConfigDefaults::triggersKey(), m_snapAssistTriggers);
     }
-    {
-        auto exclusions = backend->group(ConfigDefaults::exclusionsGroup());
-        exclusions->writeString(ConfigDefaults::applicationsKey(), m_excludedApplications.join(QLatin1Char(',')));
-        exclusions->writeString(ConfigDefaults::windowClassesKey(), m_excludedWindowClasses.join(QLatin1Char(',')));
-        exclusions->writeBool(ConfigDefaults::transientWindowsKey(), m_excludeTransientWindows);
-        exclusions->writeInt(ConfigDefaults::minimumWindowWidthKey(), m_minimumWindowWidth);
-        exclusions->writeInt(ConfigDefaults::minimumWindowHeightKey(), m_minimumWindowHeight);
-    }
+    // Exclusions are backed by PhosphorConfig::Store.
 }
 
 void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)
