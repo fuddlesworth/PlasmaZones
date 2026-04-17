@@ -8,7 +8,6 @@
 #include "../constants.h"
 #include "../layoututils.h"
 #include "../logging.h"
-#include "../shaderregistry.h"
 #include "../utils.h"
 #include "../zone.h"
 #include <QJsonArray>
@@ -120,22 +119,21 @@ QJsonObject Layout::toJson() const
         json[JsonKeys::SystemSourcePath] = m_systemSourcePath;
     }
 
-    // Shader support - only persist params belonging to the active shader
-    if (!ShaderRegistry::isNoneShader(m_shaderId)) {
+    // Shader support — empty shaderId means "no shader", we only persist the
+    // key when populated. Layout is a pure data holder: it persists whatever
+    // m_shaderParams was last set to, without reaching into a UI-side
+    // validator. Stale-param cleanup (stripping values whose keys don't
+    // belong to the current shader) is the editor's responsibility on the
+    // edit boundary — see EditorController::stripStaleShaderParams and the
+    // shader-refresh path that calls it when the active shader changes.
+    // Keeping Layout decoupled from ShaderRegistry lets the core data type
+    // eventually live in a standalone phosphor-zones library without
+    // pulling phosphor-shell into the dependency graph.
+    if (!m_shaderId.isEmpty()) {
         json[JsonKeys::ShaderId] = m_shaderId;
     }
     if (!m_shaderParams.isEmpty()) {
-        QVariantMap paramsToSave = m_shaderParams;
-
-        // Strip stale params from other shaders and validate values
-        auto* registry = ShaderRegistry::instance();
-        if (registry && !ShaderRegistry::isNoneShader(m_shaderId)) {
-            paramsToSave = registry->validateAndCoerceParams(m_shaderId, m_shaderParams);
-        }
-
-        if (!paramsToSave.isEmpty()) {
-            json[JsonKeys::ShaderParams] = QJsonObject::fromVariantMap(paramsToSave);
-        }
+        json[JsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
     }
 
     // App-to-zone rules - only serialize if non-empty
