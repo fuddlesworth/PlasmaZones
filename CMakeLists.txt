@@ -62,12 +62,12 @@ endif()
 # Qt6 enables this by default when using qt_add_qml_module
 set(QT_QML_GENERATE_QMLLS_INI ON CACHE BOOL "Generate QML language server config")
 
-# Create AUTOMOC include directories to prevent -Wmissing-include-dirs warnings
-# These directories are added to include paths by Qt's AUTOMOC but may not exist
-# if no MOC-generated code is produced for certain targets
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qml_autogen/include)
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_autogen/include)
-file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/src/shared/plasmazones_shared_qmlplugin_init_autogen/include)
+# AUTOMOC's `<target>_autogen/include` path is cleaned by `--clean-first`
+# and then recreated mid-build by the autogen step, so `-Wmissing-include-dirs`
+# intermittently fires against these directories. Instead of racing the
+# clean/autogen ordering from here at configure time (which `--clean-first`
+# would wipe again), the suppression is scoped to src/shared/CMakeLists.txt
+# where the affected QML-module targets live — see that file for details.
 
 # KDE/Qt requirements (Plasma 6.6 target: KF 6.6, Qt 6.6, KWin 6.6)
 set(QT_MIN_VERSION "6.6.0")
