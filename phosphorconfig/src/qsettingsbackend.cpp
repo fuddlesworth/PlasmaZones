@@ -255,6 +255,14 @@ void QSettingsGroup::deleteKey(const QString& key)
     m_settings->remove(key);
 }
 
+QStringList QSettingsGroup::keyList() const
+{
+    // childKeys() returns only the scalar keys directly under the current
+    // group — nested sub-groups are accessed via childGroups(). That matches
+    // the JsonGroup::keyList() contract.
+    return m_settings->childKeys();
+}
+
 // ─── Instance tracking (debug builds) ───────────────────────────────────────
 // Warns when >1 backend is created for the same config file. The design
 // relies on exactly one QSettings per file so Qt's QConfFile cache observes

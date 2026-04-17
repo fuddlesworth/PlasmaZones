@@ -142,6 +142,22 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
                 json->reparseConfiguration();
             }
         }
+    } else {
+        // Non-JsonBackend path: path resolvers, version stamping, and the
+        // migration chain are all JsonBackend-only. Warn the caller so a
+        // silently-dropped resolver or migration chain doesn't turn into a
+        // surprise at runtime.
+        if (d->schema.pathResolver) {
+            qWarning(
+                "PhosphorConfig::Store: schema supplies a pathResolver, but the backend is not a JsonBackend "
+                "— the resolver will NOT be applied");
+        }
+        if (!d->schema.migrations.isEmpty()) {
+            qWarning(
+                "PhosphorConfig::Store: schema declares %lld migration step(s), but the backend is not a "
+                "JsonBackend — migrations will NOT run",
+                static_cast<long long>(d->schema.migrations.size()));
+        }
     }
 }
 
@@ -179,7 +195,8 @@ QVariant Store::readVariant(const QString& group, const QString& key) const
 void Store::write(const QString& group, const QString& key, const QVariant& value)
 {
     QVariant coerced = value;
-    if (const KeyDef* def = d->schema.findKey(group, key)) {
+    const KeyDef* def = d->schema.findKey(group, key);
+    if (def) {
         if (def->validator) {
             coerced = def->validator(coerced);
         }
@@ -190,6 +207,12 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
     }
     {
         auto g = d->backend->group(group);
+        // Skip the write (and the changed() emission) when the coerced value
+        // already matches what's on the backend. Eliminates spurious signals
+        // for flush loops that rewrite every declared key on save().
+        if (def && g->hasKey(key) && readVariantAs(*g, key, def->defaultValue) == coerced) {
+            return;
+        }
         writeVariantTo(*g, key, coerced);
     }
     Q_EMIT changed(group, key);

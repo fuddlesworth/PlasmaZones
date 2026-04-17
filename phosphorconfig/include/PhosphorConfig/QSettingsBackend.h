@@ -44,6 +44,7 @@ public:
 
     bool hasKey(const QString& key) const override;
     void deleteKey(const QString& key) override;
+    QStringList keyList() const override;
 
 private:
     QSettings* m_settings;

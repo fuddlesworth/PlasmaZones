@@ -50,6 +50,12 @@ public:
     virtual bool hasKey(const QString& key) const = 0;
     virtual void deleteKey(const QString& key) = 0;
 
+    /// Enumerate scalar leaf keys directly under this group. Nested sub-groups
+    /// (dot-path children in JsonBackend) are NOT included — consumers that
+    /// want to purge stale keys without touching declared descendants can
+    /// iterate this list against the schema. Order is implementation-defined.
+    virtual QStringList keyList() const = 0;
+
     IGroup(const IGroup&) = delete;
     IGroup& operator=(const IGroup&) = delete;
 

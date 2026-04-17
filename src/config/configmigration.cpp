@@ -15,6 +15,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLatin1String>
+#include <array>
 #include <atomic>
 
 namespace PlasmaZones {

@@ -15,6 +15,7 @@
 #include <QLatin1String>
 #include <QList>
 #include <QSaveFile>
+#include <QSet>
 #include <QStringList>
 
 #include <functional>
@@ -27,6 +28,21 @@ namespace {
 /// Maximum nesting depth for recursive JSON traversal. Guards against stack
 /// overflow from pathologically deep dot paths or malicious configs.
 constexpr int MaxDotPathDepth = 8;
+
+/// Warn-once sink for per-key log messages. JsonBackend is single-threaded by
+/// contract (main/GUI thread only), so the set doesn't need synchronization.
+/// Keyed by "<tag>:<key>" so separate warning categories never clobber each
+/// other's dedup state.
+bool shouldWarnOnce(const char* tag, const QString& key)
+{
+    static QSet<QString> s_warned;
+    const QString id = QLatin1String(tag) + QLatin1Char(':') + key;
+    if (s_warned.contains(id)) {
+        return false;
+    }
+    s_warned.insert(id);
+    return true;
+}
 
 /// Split a dot-path group name into segments with depth enforcement.
 /// Returns empty list if the group name resolves to no segments, or if it
@@ -233,14 +249,23 @@ int JsonGroup::readInt(const QString& key, int defaultValue) const
         if (d >= static_cast<double>(std::numeric_limits<int>::min())
             && d <= static_cast<double>(std::numeric_limits<int>::max())) {
             const int result = static_cast<int>(d);
-            if (d != static_cast<double>(result)) {
-                qWarning("PhosphorConfig::JsonGroup: key '%s' contains non-integer double %g, truncating to %d",
-                         qPrintable(key), d, result);
+            // Truncating a non-integer double silently would hide a bad
+            // hand-edit; warning on every read would flood the log for a
+            // key read many times per session. Warn once per key.
+            if (d != static_cast<double>(result) && shouldWarnOnce("readInt.trunc", key)) {
+                qWarning(
+                    "PhosphorConfig::JsonGroup: key '%s' contains non-integer double %g, truncating to %d "
+                    "(further truncations on this key will be suppressed)",
+                    qPrintable(key), d, result);
             }
             return result;
         }
-        qWarning("PhosphorConfig::JsonGroup: key '%s' contains double %g outside int range, using default %d",
-                 qPrintable(key), d, defaultValue);
+        if (shouldWarnOnce("readInt.oor", key)) {
+            qWarning(
+                "PhosphorConfig::JsonGroup: key '%s' contains double %g outside int range, using default %d "
+                "(further out-of-range reads on this key will be suppressed)",
+                qPrintable(key), d, defaultValue);
+        }
         return defaultValue;
     }
     if (val.isString()) {
@@ -408,6 +433,23 @@ void JsonGroup::deleteKey(const QString& key)
         obj.remove(key);
         setGroupObject(obj);
     }
+}
+
+QStringList JsonGroup::keyList() const
+{
+    QStringList keys;
+    const QJsonObject obj = groupObject();
+    for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+        // Scalar leaves only — nested object children are sub-groups, not keys
+        // on this group. A Store-claimed descendant (e.g. "Snapping.Behavior"
+        // is an ancestor of "Snapping.Behavior.ZoneSpan") is filtered out here
+        // so a consumer purging stale keys can iterate keyList() without
+        // clobbering declared sub-group contents.
+        if (!it.value().isObject()) {
+            keys.append(it.key());
+        }
+    }
+    return keys;
 }
 
 // ─── JsonBackend ────────────────────────────────────────────────────────────

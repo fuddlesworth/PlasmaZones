@@ -12,7 +12,6 @@
 #include <PhosphorConfig/Store.h>
 
 #include <memory>
-#include <optional>
 #include <QFont>
 #include <QHash>
 #include <QVariantMap>
@@ -956,59 +955,6 @@ Q_SIGNALS:
     void virtualScreenConfigsChanged();
 
 private:
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // Helper Methods for load()
-    // ═══════════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @brief Read and validate an integer from config with bounds checking
-     * @param group PhosphorConfig::IGroup to read from
-     * @param key Config key name
-     * @param defaultValue Default if not found or invalid
-     * @param min Minimum valid value
-     * @param max Maximum valid value
-     * @param settingName Human-readable name for warning messages
-     * @return Validated integer value
-     */
-    int readValidatedInt(PhosphorConfig::IGroup& group, const QString& key, int defaultValue, int min, int max,
-                         const char* settingName);
-
-    /**
-     * @brief Read and validate a color from config
-     * @param group PhosphorConfig::IGroup to read from
-     * @param key Config key name
-     * @param defaultValue Default if not found or invalid
-     * @param settingName Human-readable name for warning messages
-     * @return Validated QColor value
-     */
-    QColor readValidatedColor(PhosphorConfig::IGroup& group, const QString& key, const QColor& defaultValue,
-                              const char* settingName);
-
-    /**
-     * @brief Load indexed shortcuts (1-9) from config group
-     * @param group PhosphorConfig::IGroup to read from
-     * @param keyPattern Pattern with %1 placeholder (e.g., "QuickLayout%1Shortcut")
-     * @param shortcuts Array of 9 QString to populate
-     * @param defaults Array of 9 default values
-     */
-    void loadIndexedShortcuts(PhosphorConfig::IGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
-                              const QString (&defaults)[9]);
-
-    /**
-     * @brief Parse a trigger list from JSON string
-     * @param json JSON array string
-     * @return Parsed list (capped at MaxTriggersPerAction), or std::nullopt if empty/invalid
-     */
-    static std::optional<QVariantList> parseTriggerListJson(const QString& json);
-
-    /**
-     * @brief Save a trigger list to config as compact JSON
-     * @param group PhosphorConfig::IGroup to write to
-     * @param key Config key for the JSON trigger list
-     * @param triggers The trigger list to serialize
-     */
-    static void saveTriggerList(PhosphorConfig::IGroup& group, const QString& key, const QVariantList& triggers);
-
     /// Member-function-pointer alias used by the indexed shortcut setters
     /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
     /// per-index NOTIFY signal.

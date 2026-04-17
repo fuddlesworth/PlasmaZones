@@ -207,6 +207,27 @@ private Q_SLOTS:
         QCOMPARE(readBack.value(QStringLiteral("k")).toInt(), 42);
     }
 
+    void keyList_returnsScalarLeavesOnly()
+    {
+        JsonBackend b(m_path);
+        auto parent = b.group(QStringLiteral("Parent"));
+        parent->writeInt(QStringLiteral("scalarA"), 1);
+        parent->writeString(QStringLiteral("scalarB"), QStringLiteral("x"));
+        parent.reset();
+
+        // Create a sub-group so "Parent" now has both scalars and an object child.
+        auto child = b.group(QStringLiteral("Parent.Child"));
+        child->writeInt(QStringLiteral("inner"), 2);
+        child.reset();
+
+        auto parentAgain = b.group(QStringLiteral("Parent"));
+        const QStringList keys = parentAgain->keyList();
+        QVERIFY(keys.contains(QStringLiteral("scalarA")));
+        QVERIFY(keys.contains(QStringLiteral("scalarB")));
+        // Child is a sub-group, not a scalar key — must NOT appear.
+        QVERIFY(!keys.contains(QStringLiteral("Child")));
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
     QString m_path;

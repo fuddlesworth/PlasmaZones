@@ -64,7 +64,7 @@ void MigrationRunner::runInMemory(QJsonObject& root) const
         if (!step.migrate) {
             qCritical("PhosphorConfig::MigrationRunner: step v%d has null migrate function — aborting chain",
                       step.fromVersion);
-            break;
+            return;
         }
         qInfo("PhosphorConfig::MigrationRunner: running migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
         step.migrate(root);
@@ -72,9 +72,20 @@ void MigrationRunner::runInMemory(QJsonObject& root) const
         if (bumped != step.fromVersion + 1) {
             qCritical("PhosphorConfig::MigrationRunner: step v%d did not bump '%s' to %d (got %d) — aborting chain",
                       step.fromVersion, qPrintable(m_schema.versionKey), step.fromVersion + 1, bumped);
-            break;
+            return;
         }
         version = bumped;
+    }
+
+    // Chain finished but we didn't reach the declared target version — the
+    // schema is missing a step for some intermediate version. Silent skip
+    // here would leave users permanently stuck at the stalled version with
+    // no diagnostic.
+    if (version < m_schema.version) {
+        qWarning(
+            "PhosphorConfig::MigrationRunner: chain exhausted at v%d but Schema::version is %d — no step found "
+            "with fromVersion=%d. Persisted config will NOT reach the target schema version.",
+            version, m_schema.version, version);
     }
 }
 

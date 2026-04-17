@@ -172,13 +172,9 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
          {},
          clampInt(CD::borderRadiusMin(), CD::borderRadiusMax())},
     };
-
-    // Effects group currently holds only the blur toggle — sharing the
-    // "Appearance" load function on the PZ side made it convenient to
-    // migrate here together.
-    schema.groups[CD::snappingEffectsGroup()] = {
-        {CD::blurKey(), CD::enableBlur(), QMetaType::Bool},
-    };
+    // Effects.Blur lives in the Effects group alongside the display-OSD keys;
+    // the whole Effects group is declared in one shot by appendDisplaySchema
+    // below to avoid split-across-two-call-sites ordering bugs.
 }
 
 // ─── Ordering ───────────────────────────────────────────────────────────────
@@ -480,21 +476,23 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
         {CD::filterByAspectRatioKey(), CD::filterLayoutsByAspectRatio(), QMetaType::Bool},
     };
 
-    // Append Display-owned keys to the existing Effects group (Blur was
-    // migrated earlier under Appearance — we add the rest here so Effects
-    // is now fully Store-backed).
-    auto& effects = schema.groups[CD::snappingEffectsGroup()];
-    effects.append({CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool});
-    effects.append({CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool});
-    effects.append({CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool});
-    effects.append({CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool});
-    effects.append(
-        {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())});
-    effects.append({CD::overlayDisplayModeKey(),
-                    CD::overlayDisplayMode(),
-                    QMetaType::Int,
-                    {},
-                    clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax())});
+    // Full Effects group declared here in one shot. Blur is logically an
+    // appearance-level setting but shares the Effects JSON container with
+    // the display-OSD keys below; declaring the whole container from one
+    // call site keeps the schema build order-independent.
+    schema.groups[CD::snappingEffectsGroup()] = {
+        {CD::blurKey(), CD::enableBlur(), QMetaType::Bool},
+        {CD::showNumbersKey(), CD::showNumbers(), QMetaType::Bool},
+        {CD::flashOnSwitchKey(), CD::flashOnSwitch(), QMetaType::Bool},
+        {CD::osdOnLayoutSwitchKey(), CD::showOsdOnLayoutSwitch(), QMetaType::Bool},
+        {CD::navigationOsdKey(), CD::showNavigationOsd(), QMetaType::Bool},
+        {CD::osdStyleKey(), CD::osdStyle(), QMetaType::Int, {}, clampInt(CD::osdStyleMin(), CD::osdStyleMax())},
+        {CD::overlayDisplayModeKey(),
+         CD::overlayDisplayMode(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax())},
+    };
 }
 
 // ─── Zone Selector ──────────────────────────────────────────────────────────

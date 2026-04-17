@@ -8,7 +8,6 @@
 #include "perscreenresolver.h"
 #include "settingsschema.h"
 
-#include <PhosphorConfig/JsonBackend.h>
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -17,7 +16,6 @@
 #include <QMetaProperty>
 #include <QPalette>
 #include <QFile>
-#include <QTextStream>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -25,7 +23,6 @@
 #include <QUuid>
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/AutotileConfig.h"
-#include <climits> // For INT_MAX in readValidatedInt
 
 namespace PlasmaZones {
 
@@ -61,84 +58,6 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
         return QString();
     }
     return uuid.toString();
-}
-
-int Settings::readValidatedInt(PhosphorConfig::IGroup& group, const QString& key, int defaultValue, int min, int max,
-                               const char* settingName)
-{
-    int value = group.readInt(key, defaultValue);
-    if (value < min || value > max) {
-        qCWarning(lcConfig) << settingName << ":" << value << "invalid, using default (must be" << min << "-" << max
-                            << ")";
-        value = defaultValue;
-    }
-    return value;
-}
-
-QColor Settings::readValidatedColor(PhosphorConfig::IGroup& group, const QString& key, const QColor& defaultValue,
-                                    const char* settingName)
-{
-    QColor color = group.readColor(key, defaultValue);
-    if (!color.isValid()) {
-        qCWarning(lcConfig) << settingName << "color: invalid, using default";
-        color = defaultValue;
-    }
-    return color;
-}
-
-void Settings::loadIndexedShortcuts(PhosphorConfig::IGroup& group, const QString& keyPattern, QString (&shortcuts)[9],
-                                    const QString (&defaults)[9])
-{
-    for (int i = 0; i < 9; ++i) {
-        QString key = keyPattern.arg(i + 1);
-        shortcuts[i] = group.readString(key, defaults[i]);
-    }
-}
-
-std::optional<QVariantList> Settings::parseTriggerListJson(const QString& json)
-{
-    if (json.isEmpty()) {
-        return std::nullopt;
-    }
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
-        qCWarning(lcConfig) << "Invalid trigger list JSON:" << parseError.errorString() << "- using fallback";
-        return std::nullopt;
-    }
-    QVariantList result;
-    const QJsonArray arr = doc.array();
-    for (const QJsonValue& val : arr) {
-        if (val.isObject()) {
-            QJsonObject obj = val.toObject();
-            QVariantMap trigger;
-            trigger[ConfigDefaults::triggerModifierField()] =
-                obj.value(ConfigDefaults::triggerModifierField()).toInt(0);
-            trigger[ConfigDefaults::triggerMouseButtonField()] =
-                obj.value(ConfigDefaults::triggerMouseButtonField()).toInt(0);
-            result.append(trigger);
-        } else {
-            qCWarning(lcConfig) << "Trigger array: non-object element at index" << result.size() << ", skipping";
-        }
-    }
-    if (result.size() > MaxTriggersPerAction) {
-        result = result.mid(0, MaxTriggersPerAction);
-    }
-    return result; // May be empty (valid [] means no triggers)
-}
-
-void Settings::saveTriggerList(PhosphorConfig::IGroup& group, const QString& key, const QVariantList& triggers)
-{
-    QJsonArray arr;
-    for (const QVariant& t : triggers) {
-        auto map = t.toMap();
-        QJsonObject obj;
-        obj[ConfigDefaults::triggerModifierField()] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
-        obj[ConfigDefaults::triggerMouseButtonField()] =
-            map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
-        arr.append(obj);
-    }
-    group.writeString(key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
 }
 
 // ── load() dispatcher ────────────────────────────────────────────────────────
@@ -279,17 +198,13 @@ void Settings::purgeStaleKeys()
     // because we only touch non-object children.
     auto purgeScalarsIn = [&](const QString& groupName, const QSet<QString>& declared) {
         auto g = m_configBackend->group(groupName);
-        const QJsonObject snapshot = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend)->jsonRootSnapshot();
-        QJsonObject cursor = snapshot;
-        for (const QString& seg : groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts)) {
-            cursor = cursor.value(seg).toObject();
-        }
-        for (auto keyIt = cursor.constBegin(); keyIt != cursor.constEnd(); ++keyIt) {
-            if (keyIt.value().isObject()) {
-                continue; // sub-group — not a leaf scalar key
-            }
-            if (!declared.contains(keyIt.key())) {
-                g->deleteKey(keyIt.key());
+        // IGroup::keyList returns scalar-leaf keys only; nested sub-groups are
+        // filtered out by the backend so deleting undeclared keys here never
+        // touches a Store-claimed descendant.
+        const QStringList existingKeys = g->keyList();
+        for (const QString& key : existingKeys) {
+            if (!declared.contains(key)) {
+                g->deleteKey(key);
             }
         }
     };
@@ -566,12 +481,21 @@ PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChange
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
 // normalizes the canonical format (trim/dedup), so the round-trip through
-// the store always produces the same string for any equivalent input.
+// the store always produces the same string for any equivalent input. The
+// parser below is still defensive (trim + skip-empty) in case a caller
+// reads a string written before the validator was installed.
 
 namespace {
 QStringList parseCommaList(const QString& raw)
 {
-    return raw.isEmpty() ? QStringList{} : raw.split(QLatin1Char(','));
+    if (raw.isEmpty()) {
+        return {};
+    }
+    QStringList parts = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (auto& s : parts) {
+        s = s.trimmed();
+    }
+    return parts;
 }
 } // namespace
 
@@ -677,21 +601,7 @@ PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, 
 // Display.* keys live in snappingBehaviorDisplayGroup; OSD + Effects keys
 // share snappingEffectsGroup with the already-migrated Appearance.Blur.
 // QStringList keys go over the wire as comma-joined strings; the getters
-// parse back to QStringList here.
-
-namespace {
-QStringList parseCommaListImpl(const QString& raw)
-{
-    if (raw.isEmpty()) {
-        return {};
-    }
-    QStringList parts = raw.split(QLatin1Char(','), Qt::SkipEmptyParts);
-    for (auto& s : parts) {
-        s = s.trimmed();
-    }
-    return parts;
-}
-} // namespace
+// parse back via parseCommaList (defined above in the Ordering section).
 
 PZ_STORE_GET(bool, showZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey, bool)
 PZ_STORE_SET_BOOL(setShowZonesOnAllMonitors, snappingBehaviorDisplayGroup, showOnAllMonitorsKey,
@@ -701,7 +611,7 @@ QStringList Settings::disabledMonitors() const
 {
     // Resolve connector names → stable screen ids on every read. Stored
     // connector names stay human-readable; consumers see canonical ids.
-    QStringList entries = parseCommaListImpl(
+    QStringList entries = parseCommaList(
         m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey()));
     for (auto& name : entries) {
         if (Utils::isConnectorName(name)) {
@@ -750,7 +660,7 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
 
 QStringList Settings::disabledDesktops() const
 {
-    return parseCommaListImpl(
+    return parseCommaList(
         m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey()));
 }
 
@@ -795,8 +705,8 @@ bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) con
 
 QStringList Settings::disabledActivities() const
 {
-    return parseCommaListImpl(m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(),
-                                                     ConfigDefaults::disabledActivitiesKey()));
+    return parseCommaList(m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(),
+                                                 ConfigDefaults::disabledActivitiesKey()));
 }
 
 void Settings::setDisabledActivities(const QStringList& entries)
@@ -916,8 +826,7 @@ PZ_STORE_SET_BOOL(setFilterLayoutsByAspectRatio, snappingBehaviorDisplayGroup, f
 
 QStringList Settings::excludedApplications() const
 {
-    return parseCommaListImpl(
-        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
+    return parseCommaList(m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()));
 }
 
 void Settings::setExcludedApplications(const QStringList& apps)
@@ -957,7 +866,7 @@ void Settings::removeExcludedApplicationAt(int index)
 
 QStringList Settings::excludedWindowClasses() const
 {
-    return parseCommaListImpl(
+    return parseCommaList(
         m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()));
 }
 
@@ -1551,7 +1460,7 @@ void Settings::setAutotileOverflowBehaviorInt(int behavior)
 
 QStringList Settings::lockedScreens() const
 {
-    return parseCommaListImpl(
+    return parseCommaList(
         m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey()));
 }
 void Settings::setLockedScreens(const QStringList& screens)

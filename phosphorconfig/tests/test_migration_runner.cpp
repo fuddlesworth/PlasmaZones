@@ -163,6 +163,32 @@ private Q_SLOTS:
         QCOMPARE(root.value(QStringLiteral("schema_revision")).toInt(), 2);
     }
 
+    void chain_warnsOnMissingIntermediateStep()
+    {
+        // schema.version=3 but only a v1→v2 step is registered. The chain
+        // should run v1→v2, then emit a warning because there's no v2→v3
+        // step, leaving persisted version at 2.
+        Schema schema;
+        schema.version = 3;
+        schema.migrations = {
+            {1,
+             [](QJsonObject& root) {
+                 root[QStringLiteral("_version")] = 2;
+             }},
+            // No {2, ...} step — simulates a developer bumping version
+            // without writing the corresponding migration function.
+        };
+
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("chain exhausted at v2 but Schema::version is 3")));
+        MigrationRunner(schema).runInMemory(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 2);
+    }
+
 private:
     std::unique_ptr<QTemporaryDir> m_tmp;
     QString m_path;

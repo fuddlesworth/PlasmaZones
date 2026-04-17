@@ -3,13 +3,17 @@
 
 /**
  * @file test_settings_validation.cpp
- * @brief Unit tests for Settings validation helpers and exclusion matching
+ * @brief End-to-end validation tests for the PhosphorConfig::Store schema
  *
- * Split from test_settings.cpp. Tests cover:
- * 1. readValidatedInt -- out-of-range returns default
- * 2. readValidatedColor -- invalid color returns default
- * 3. parseTriggerListJson -- invalid JSON, max trigger cap
- * 4. Window exclusion matching (case-insensitive substring)
+ * The tests here seed the backing JSON config with deliberately-invalid or
+ * out-of-range values, then construct a Settings object and verify that the
+ * schema validator coerces the value on read. Covers:
+ *  1. clampInt validator -- out-of-range int snaps to the schema default.
+ *  2. validColorOr validator -- invalid color string falls back to default.
+ *  3. Trigger list JSON parse -- invalid JSON drops back to the default,
+ *     max-size cap at MaxTriggersPerAction is enforced.
+ *  4. validIntOr enum validator -- unknown enum value snaps to the safe
+ *     default rather than the nearest in-range neighbour.
  */
 
 #include <QTest>
@@ -36,12 +40,13 @@ class TestSettingsValidation : public QObject
 private Q_SLOTS:
 
     // =========================================================================
-    // readValidatedInt
+    // Schema clampInt validator (out-of-range int)
     // =========================================================================
 
     /**
-     * readValidatedInt must return the default when the stored value is out of range.
-     * We test this indirectly by writing an out-of-range value and loading.
+     * The clampInt validator wired into the Zone padding KeyDef must coerce
+     * a hand-written 999 into the schema max, so the reader sees the
+     * canonical default instead of the raw invalid value.
      */
     void testReadValidatedInt_outOfRange_returnsDefault()
     {
@@ -60,12 +65,12 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // readValidatedColor
+    // Schema validColorOr validator (invalid color string)
     // =========================================================================
 
     /**
-     * readValidatedColor must return the default when the config has an invalid color.
-     * We test by writing gibberish as a color string.
+     * The validColorOr validator must fall back to the schema default when
+     * the stored string fails to parse as a valid QColor.
      */
     void testReadValidatedColor_invalidColor_returnsDefault()
     {
@@ -85,17 +90,17 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // parseTriggerListJson
+    // Trigger list JSON parse (invalid JSON + max-size cap)
     // =========================================================================
 
     /**
-     * parseTriggerListJson must return nullopt for invalid JSON.
+     * Invalid JSON in the drag-activation trigger list must fall back to the
+     * schema default rather than propagating a corrupt list upwards.
      */
     void testParseTriggerListJson_invalidJson_returnsNullopt()
     {
         IsolatedConfigGuard guard;
 
-        // parseTriggerListJson is a static method, test it through config
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
             auto activation = backend->group(QStringLiteral("Activation"));
@@ -117,7 +122,8 @@ private Q_SLOTS:
     }
 
     /**
-     * parseTriggerListJson must cap the list at MaxTriggersPerAction (4).
+     * Trigger lists must be capped at MaxTriggersPerAction (4), so a config
+     * containing 6 triggers reads back with at most 4.
      */
     void testParseTriggerListJson_capsAtMaxTriggers()
     {
