@@ -312,6 +312,9 @@ add_subdirectory(phosphorshell)
 # PhosphorRendering library (GPU shader rendering via Qt RHI)
 add_subdirectory(phosphorrendering)
 
+# PhosphorLayer library (wlr-layer-shell surface lifecycle management)
+add_subdirectory(phosphorlayer)
+
 # Source directories
 add_subdirectory(src)
 option(BUILD_KWIN_EFFECT "Build KWin C++ effect plugin (needs KWin 6.6+)" ON)

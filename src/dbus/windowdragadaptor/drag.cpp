@@ -90,6 +90,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     // it false because the overlay window is gone and showAtPosition on
     // the next tick will recreate it fresh.
     m_zoneSelectorShown = false;
+    m_zoneSelectorShownOn.clear();
     m_lastCursorX = 0;
     m_lastCursorY = 0;
 
@@ -628,6 +629,7 @@ void WindowDragAdaptor::dragMoved(const QString& windowId, int cursorX, int curs
         // Modifier held: overlay takes priority — dismiss zone selector if open
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
             m_overlayService->hideZoneSelector();
             m_overlayService->clearSelectedZone();
         }

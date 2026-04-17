@@ -7,10 +7,13 @@
 
 #include <QFont>
 #include <QGuiApplication>
+#include <QMargins>
 #include <QPalette>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
+
+#include <PhosphorLayer/Role.h>
 
 #include "overlay_helpers.h"
 #include "../../core/screenmanager.h"
@@ -107,54 +110,57 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
             ConfigDefaults::previewLockAspect(), ConfigDefaults::gridColumns(),  ConfigDefaults::triggerDistance()};
 }
 
-// Configure layer surface properties in one call.
-// Pass std::nullopt for anchors to skip setting them (caller will set separately).
-// This avoids conflating AnchorNone (a valid value) with "not provided".
-// exclusiveZone defaults to -1 (overlay ignores panels); use 0 for sensors.
-// Returns true if configuration succeeded, false if layer-shell is unavailable
-// or LayerSurface creation failed. Callers should check the return value and
-// handle the unsupported case (e.g. skip showing the overlay, or degrade gracefully).
-[[nodiscard]] inline bool configureLayerSurface(QQuickWindow* window, QScreen* screen, LayerSurface::Layer layer,
-                                                LayerSurface::KeyboardInteractivity keyboardInteractivity,
-                                                const QString& scope,
-                                                std::optional<LayerSurface::Anchors> anchors = std::nullopt,
-                                                int32_t exclusiveZone = -1)
-{
-    if (!window) {
-        return false;
-    }
-    if (!LayerSurface::isSupported()) {
-        qCWarning(lcOverlay) << "configureLayerSurface: zwlr_layer_shell_v1 not available —"
-                             << "window will be created as xdg_toplevel (wrong stacking/anchoring)."
-                             << "This is expected on compositors without layer-shell support (e.g. GNOME/Mutter).";
-        return false;
-    }
-    auto* layerSurface = LayerSurface::get(window);
-    if (!layerSurface) {
-        qCWarning(lcOverlay) << "configureLayerSurface: LayerSurface::get() returned nullptr for window"
-                             << window->objectName() << "— layer surface properties will not be applied";
-        return false;
-    }
-    // Batch all property changes into a single propertiesChanged() emission
-    // so the QPA plugin only does one applyProperties()+commit round-trip.
-    LayerSurface::BatchGuard batch(layerSurface);
-    layerSurface->setScreen(screen);
-    layerSurface->setLayer(layer);
-    layerSurface->setKeyboardInteractivity(keyboardInteractivity);
-    if (anchors.has_value()) {
-        layerSurface->setAnchors(*anchors);
-    }
-    layerSurface->setExclusiveZone(exclusiveZone);
-    layerSurface->setScope(scope);
-    return true;
-}
-
 // Resolve target screen from a screen name/ID string with fallback to primary.
 // Delegates to ScreenManager::resolvePhysicalScreen which handles virtual screen
 // IDs, connector names, and falls back to primary screen.
 inline QScreen* resolveTargetScreen(const QString& screenId)
 {
     return ScreenManager::resolvePhysicalScreen(screenId);
+}
+
+/// Resolve the PhosphorLayer anchors + margins for a surface that targets
+/// @p vsGeom on a physical screen whose current geometry is @p physGeom.
+///
+/// Physical screens (vsGeom invalid or equal to physGeom) get AnchorAll +
+/// zero margins so wlr-layer-shell sizes them to the full output. Virtual
+/// screens (vsGeom is a strict sub-rect of physGeom) get Top|Left anchors
+/// plus margins pinning them to the VS's top-left corner within the
+/// physical screen's origin. This is the vocabulary wlr-layer-shell
+/// understands — it has no "position window within output" verb.
+///
+/// Extracted because four independent call sites (overlay create, overlay
+/// geometryChanged, overlay rekey, snap-assist create) previously inlined
+/// the same math. Any drift between them showed up as virtual-screen
+/// overlays landing on the wrong spot after a hot-plug.
+struct VsLayerPlacement
+{
+    PhosphorLayer::Anchors anchors;
+    QMargins margins;
+};
+
+inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& physGeom)
+{
+    const bool isVirtual = vsGeom.isValid() && vsGeom != physGeom;
+    if (!isVirtual) {
+        return {PhosphorLayer::AnchorAll, QMargins()};
+    }
+    const QRect clamped = vsGeom.intersected(physGeom);
+    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
+            QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0)};
+}
+
+/// Resolve anchors + margins for a floating surface whose absolute top-left
+/// should land at @p topLeft within the physical screen @p physGeom. Always
+/// Top|Left-anchored with margins relative to the physical origin.
+/// Used by shader-preview paths that position the preview window at a
+/// caller-chosen absolute coordinate inside the monitor (rather than at a
+/// virtual-screen sub-region). Separate from layerPlacementForVs because the
+/// VS variant treats "topLeft == physGeom.topLeft" as "fullscreen → AnchorAll",
+/// which would drop the margins a floating preview needs.
+inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& physGeom)
+{
+    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
+            QMargins(qMax(0, topLeft.x() - physGeom.x()), qMax(0, topLeft.y() - physGeom.y()), 0, 0)};
 }
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).
@@ -214,46 +220,6 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     }
     // shaderSource LAST — triggers statusChanged() → QML binding cascade
     writeQmlProperty(window, QStringLiteral("shaderSource"), info.shaderUrl);
-}
-
-/// Configure LayerSurface anchors and margins for a window on a virtual or physical screen.
-/// For virtual screens (screenGeom != physScreen->geometry()), anchors top-left with offset margins.
-/// For physical screens, anchors all four edges for full coverage.
-inline void applyLayerShellScreenPosition(QWindow* window, QScreen* physScreen, const QRect& screenGeom)
-{
-    auto* layerSurface = LayerSurface::find(window);
-    if (!layerSurface || !physScreen)
-        return;
-
-    layerSurface->setScreen(physScreen);
-
-    const bool isVirtualScreen = screenGeom.isValid() && (screenGeom != physScreen->geometry());
-    LayerSurface::BatchGuard batch(layerSurface);
-    if (isVirtualScreen) {
-        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        const QRect physGeom = physScreen->geometry();
-        // Clamp virtual screen geometry to physical screen bounds to prevent overlay escape
-        const QRect clampedGeom = screenGeom.intersected(physGeom);
-        layerSurface->setMargins(QMargins(clampedGeom.x() - physGeom.x(), clampedGeom.y() - physGeom.y(), 0, 0));
-        // Explicit resize required — with only two anchors, LayerSurface won't auto-size
-        window->resize(clampedGeom.size());
-    } else {
-        layerSurface->setAnchors(LayerSurface::AnchorAll);
-    }
-}
-
-/// Resolve screen geometry from ScreenManager and apply layer-shell positioning.
-/// Combines resolveScreenGeometry() + resolveTargetScreen() + applyLayerShellScreenPosition()
-/// into a single call.  Returns the resolved geometry (invalid QRect on failure).
-inline QRect updateWindowScreenPosition(QWindow* window, const QString& screenId)
-{
-    const QRect geom = resolveScreenGeometry(screenId);
-    QScreen* physScreen = resolveTargetScreen(screenId);
-    if (!physScreen || !geom.isValid()) {
-        return QRect();
-    }
-    applyLayerShellScreenPosition(window, physScreen, geom);
-    return geom;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

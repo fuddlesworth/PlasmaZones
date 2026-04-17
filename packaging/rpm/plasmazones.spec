@@ -154,6 +154,7 @@ echo ""
 
 %files
 %license LICENSE
+%license COPYING.LESSER
 %doc README.md
 
 # Executables
@@ -166,6 +167,7 @@ echo ""
 %{_libdir}/libPhosphorConfig.so*
 %{_libdir}/libPhosphorShell.so*
 %{_libdir}/libPhosphorRendering.so*
+%{_libdir}/libPhosphorLayer.so*
 %{_libdir}/libplasmazones_core.so*
 %{_libdir}/libplasmazones_rendering.so*
 
@@ -179,14 +181,19 @@ echo ""
 %{_includedir}/PhosphorConfig/
 %{_libdir}/cmake/PhosphorConfig/
 
-# PhosphorShell development headers and CMake config
+# PhosphorShell development headers, CMake config, and runtime data
+# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorshell/).
 %{_includedir}/PhosphorShell/
 %{_libdir}/cmake/PhosphorShell/
+%{_datadir}/phosphorshell/
 
 # PhosphorRendering development headers and CMake config
 %{_includedir}/PhosphorRendering/
 %{_libdir}/cmake/PhosphorRendering/
-%{_datadir}/phosphorshell/
+
+# PhosphorLayer development headers and CMake config
+%{_includedir}/PhosphorLayer/
+%{_libdir}/cmake/PhosphorLayer/
 
 # KCM sub-modules (System Settings)
 %{_libdir}/qt6/plugins/plasma/kcms/systemsettings/kcm_plasmazones_*.so
