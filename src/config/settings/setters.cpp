@@ -3,7 +3,6 @@
 
 #include "../settings.h"
 #include "../configdefaults.h"
-#include "macros.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"

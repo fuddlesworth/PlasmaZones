@@ -134,6 +134,13 @@ public:
     /// that commits snapshots off-thread.
     void clearDirty();
 
+    /// Replace the in-memory document with @p root. Marks the backend
+    /// dirty — callers who paired this with a successful
+    /// @c writeJsonAtomically may call @c clearDirty() immediately after
+    /// to restore the "in-memory matches disk" invariant. Must not be
+    /// called while any @c JsonGroup views are alive.
+    void replaceRoot(QJsonObject root);
+
 private:
     friend class JsonGroup;
 

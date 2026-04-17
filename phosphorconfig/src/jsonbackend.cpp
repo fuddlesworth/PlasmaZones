@@ -233,6 +233,13 @@ void JsonGroup::setGroupObject(const QJsonObject& obj)
         qWarning("PhosphorConfig::JsonGroup: refusing write to malformed group '%s'", qPrintable(m_groupName));
         return;
     }
+    // Short-circuit when the leaf already matches — the Settings::save()
+    // flush loop rewrites every declared key on every save; without this
+    // check, every save forces a full atomic file rewrite even when
+    // nothing changed.
+    if (navigatePath(m_root, segments) == obj) {
+        return;
+    }
     writeAtPath(m_root, segments, obj);
     m_backend->markDirty();
 }
@@ -472,7 +479,13 @@ void JsonGroup::writeColor(const QString& key, const QColor& value)
 
 bool JsonGroup::hasKey(const QString& key) const
 {
-    return groupObject().contains(key);
+    // Match keyList()'s scalar-only contract: nested sub-groups are not
+    // "keys" on this group. Returning true for sub-groups would let
+    // callers that use hasKey() as a "should I purge this stale key?"
+    // guard accidentally clobber declared descendants.
+    const QJsonObject obj = groupObject();
+    const auto it = obj.constFind(key);
+    return it != obj.constEnd() && !it.value().isObject();
 }
 
 void JsonGroup::deleteKey(const QString& key)
@@ -481,10 +494,21 @@ void JsonGroup::deleteKey(const QString& key)
         return;
     }
     QJsonObject obj = groupObject();
-    if (obj.contains(key)) {
-        obj.remove(key);
-        setGroupObject(obj);
+    if (!obj.contains(key)) {
+        return;
     }
+    obj.remove(key);
+    if (obj.isEmpty()) {
+        // Prune the group itself rather than leaving a {} husk on disk,
+        // matching removeAtPath's empty-parent pruning behaviour.
+        const auto segments = resolvePath(m_backend->d->resolver, m_groupName, "JsonGroup::deleteKey");
+        if (!segments.isEmpty()) {
+            removeAtPath(m_root, segments);
+            m_backend->markDirty();
+            return;
+        }
+    }
+    setGroupObject(obj);
 }
 
 QStringList JsonGroup::keyList() const
@@ -717,6 +741,14 @@ std::shared_ptr<IGroupPathResolver> JsonBackend::pathResolver() const
 
 void JsonBackend::setRootGroupName(const QString& name)
 {
+    // Warn if the previous root group already carries any writes, since
+    // renaming mid-life orphans those keys under the old name on disk.
+    if (d->rootGroupName != name && !d->root.value(d->rootGroupName).toObject().isEmpty()) {
+        qWarning(
+            "PhosphorConfig::JsonBackend: setRootGroupName('%s') called after the previous root group '%s' "
+            "already holds keys — existing root-level writes will NOT be migrated.",
+            qPrintable(name), qPrintable(d->rootGroupName));
+    }
     d->rootGroupName = name;
 }
 
@@ -744,6 +776,18 @@ QString JsonBackend::filePath() const
 void JsonBackend::clearDirty()
 {
     d->dirty = false;
+}
+
+void JsonBackend::replaceRoot(QJsonObject root)
+{
+    Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::replaceRoot",
+               "Cannot replaceRoot while JsonGroup instances are alive");
+    d->root = std::move(root);
+    // Callers that pair this with a successful writeJsonAtomically()
+    // know the on-disk and in-memory states match; they should call
+    // clearDirty() right after. We mark dirty here to cover the general
+    // case where disk state is unknown.
+    d->dirty = true;
 }
 
 } // namespace PhosphorConfig

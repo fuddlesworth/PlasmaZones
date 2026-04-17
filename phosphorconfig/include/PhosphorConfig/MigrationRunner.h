@@ -38,6 +38,12 @@ public:
     /// advanced — atomically write the result back. Returns @c true on
     /// success, on "nothing to do", or on "file doesn't exist" (fresh
     /// install). Returns @c false only on parse or write errors.
+    ///
+    /// Not safe against concurrent writers — the read-migrate-write
+    /// sequence has no file lock. Assumes single-process single-user
+    /// desktop-config usage; a second process mutating the file between
+    /// our read and our atomic rename would silently have its edits
+    /// overwritten.
     bool runOnFile(const QString& jsonPath) const;
 
     /// Current version persisted in @p root, or 1 if unset / invalid.

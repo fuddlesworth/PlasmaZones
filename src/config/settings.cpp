@@ -5,6 +5,7 @@
 #include "colorimporter.h"
 #include "configdefaults.h"
 #include "configbackends.h"
+#include "configmigration.h"
 #include "perscreenresolver.h"
 #include "settingsschema.h"
 
@@ -28,9 +29,22 @@ namespace PlasmaZones {
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 
+namespace {
+std::unique_ptr<PhosphorConfig::IBackend> migrateAndCreateOwnedBackend()
+{
+    // Defensive: ensure INI→JSON + schema-version migration has run before
+    // we open the backend. Production entry points (daemon/main,
+    // settings/main, editor controller) already call this; routing it
+    // through the owning ctor makes tests and one-off tools safe too.
+    // ensureJsonConfig is idempotent via a process-level atomic.
+    ConfigMigration::ensureJsonConfig();
+    return createDefaultConfigBackend();
+}
+} // namespace
+
 Settings::Settings(QObject* parent)
     : ISettings(parent)
-    , m_ownedBackend(createDefaultConfigBackend())
+    , m_ownedBackend(migrateAndCreateOwnedBackend())
     , m_configBackend(m_ownedBackend.get())
     , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
 {
@@ -166,7 +180,14 @@ void Settings::purgeStaleKeys()
     // Root-level groups that must survive a save() cycle — written
     // independently of Settings::save(). Assignment:* and QuickLayouts
     // live in assignments.json and aren't seen here.
+    //
+    // "General" is preserved because JsonBackend uses it as the default
+    // rootGroupName for writeRootString/readRootString — any caller
+    // that persists a root-level key (current or future: KCM metadata,
+    // first-run markers, etc.) lands there. Wiping it on every save
+    // would silently destroy those values.
     const QStringList preservedGroups = {
+        ConfigDefaults::generalGroup(),
         ConfigDefaults::tilingQuickLayoutSlotsGroup(),
         ConfigDefaults::updatesGroup(),
     };
@@ -240,7 +261,8 @@ void Settings::purgeStaleKeys()
     // claimed by the Store, and isn't a per-screen / virtual-screen group
     // gets blanket-deleted. save*Config runs next and rewrites unmigrated
     // managed groups from their cached members.
-    QSet<QString> deleted;
+    QSet<QString> deletedTopLevels;
+    QSet<QString> deletedSubPaths;
     for (const QString& groupName : m_configBackend->groupList()) {
         if (PerScreenPathResolver::isPerScreenPrefix(groupName)) {
             continue;
@@ -253,16 +275,20 @@ void Settings::purgeStaleKeys()
         }
         const int dotIdx = groupName.indexOf(QLatin1Char('.'));
         const QString topLevel = (dotIdx >= 0) ? groupName.left(dotIdx) : groupName;
-        if (deleted.contains(topLevel) || preservedGroups.contains(topLevel)) {
+        if (deletedTopLevels.contains(topLevel) || preservedGroups.contains(topLevel)) {
             continue;
         }
         // When the top-level itself is a Store ancestor, we can't delete
         // the whole thing — descend and delete only the non-claimed child.
         if (isStoreClaimed(topLevel)) {
+            if (deletedSubPaths.contains(groupName)) {
+                continue;
+            }
             m_configBackend->deleteGroup(groupName);
+            deletedSubPaths.insert(groupName);
         } else {
             m_configBackend->deleteGroup(topLevel);
-            deleted.insert(topLevel);
+            deletedTopLevels.insert(topLevel);
         }
     }
 }

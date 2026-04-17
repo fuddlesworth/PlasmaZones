@@ -192,17 +192,20 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
             runner.runInMemory(snapshot);
             const int after = snapshot.value(d->schema.versionKey).toInt(before);
             if (after != before) {
-                // Rewrite the file in place, then have the backend re-read
-                // it. Can't update the backend's internal QJsonObject from
-                // here (it's private), so the round-trip keeps both in sync.
+                // Rewrite the file in place, then push the migrated snapshot
+                // into the backend's in-memory state. Going through
+                // replaceRoot + clearDirty skips the disk re-read + parse
+                // cycle that reparseConfiguration would do — we already
+                // know the content is equivalent to disk.
                 //
                 // If the atomic write fails, leave the backend's in-memory
-                // state at the unmigrated version: reparseConfiguration()
-                // would reload the unmigrated file anyway, and skipping it
-                // means the in-memory migration result is preserved until
-                // the next save() retries the disk commit.
+                // state at the unmigrated version: a fresh load from disk
+                // would show the unmigrated file anyway, and skipping the
+                // replace means the in-memory state matches disk until the
+                // next save() retries the disk commit.
                 if (JsonBackend::writeJsonAtomically(json->filePath(), snapshot)) {
-                    json->reparseConfiguration();
+                    json->replaceRoot(std::move(snapshot));
+                    json->clearDirty();
                 } else {
                     qWarning(
                         "PhosphorConfig::Store: failed to commit migrated config to %s — backend continues "
@@ -280,8 +283,17 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         // Skip the write (and the changed() emission) when the coerced value
         // already matches what's on the backend. Eliminates spurious signals
         // for flush loops that rewrite every declared key on save().
-        if (def && g->hasKey(key) && readVariantAs(*g, key, def->defaultValue) == coerced) {
-            return;
+        // The on-disk read is passed through the same validator as the write
+        // so a canonicalised input (e.g. comma-list trim/dedup) correctly
+        // compares equal to the previously-persisted canonical value.
+        if (def && g->hasKey(key)) {
+            QVariant current = readVariantAs(*g, key, def->defaultValue);
+            if (def->validator) {
+                current = def->validator(current);
+            }
+            if (current == coerced) {
+                return;
+            }
         }
         writeVariantTo(*g, key, coerced, verbatimString);
     }
@@ -311,8 +323,15 @@ void Store::resetGroup(const QString& group)
     if (it == d->schema.groups.constEnd()) {
         return;
     }
+    // Hold a single IGroup for the whole group so we don't pay the
+    // resolver/path-walk cost once per declared key.
+    auto g = d->backend->group(group);
     for (const KeyDef& def : *it) {
-        reset(group, def.key);
+        const bool wasPresent = g->hasKey(def.key);
+        writeVariantTo(*g, def.key, def.defaultValue, def.verbatimStringStorage);
+        if (wasPresent) {
+            Q_EMIT changed(group, def.key);
+        }
     }
 }
 
@@ -343,6 +362,21 @@ QJsonObject Store::exportToJson() const
 
 void Store::importFromJson(const QJsonObject& snapshot)
 {
+    // Reject snapshots stamped with a different schema version. Callers
+    // with an older snapshot must run MigrationRunner on it first —
+    // otherwise we'd silently drop or mis-type keys that changed shape
+    // between versions.
+    if (!d->schema.versionKey.isEmpty() && snapshot.contains(d->schema.versionKey)) {
+        const int snapshotVersion = snapshot.value(d->schema.versionKey).toInt(0);
+        if (snapshotVersion != 0 && snapshotVersion != d->schema.version) {
+            qWarning(
+                "PhosphorConfig::Store::importFromJson: snapshot version %d does not match schema version %d — "
+                "refusing import. Run MigrationRunner on the snapshot first.",
+                snapshotVersion, d->schema.version);
+            return;
+        }
+    }
+
     for (auto git = d->schema.groups.constBegin(); git != d->schema.groups.constEnd(); ++git) {
         if (!snapshot.contains(git.key())) {
             continue;
@@ -376,6 +410,49 @@ T applyValidator(const KeyDef* def, T value)
     }
     return coerced.value<T>();
 }
+
+/// Per-type reader: dispatch to the right IGroup accessor using the
+/// KeyDef's default as the fallback. Specializations match the explicit
+/// Store::read<T> set declared in the header.
+template<typename T>
+T readTyped(IGroup& g, const KeyDef& def);
+
+template<>
+QString readTyped<QString>(IGroup& g, const KeyDef& def)
+{
+    return g.readString(def.key, def.defaultValue.toString());
+}
+template<>
+int readTyped<int>(IGroup& g, const KeyDef& def)
+{
+    return g.readInt(def.key, def.defaultValue.toInt());
+}
+template<>
+bool readTyped<bool>(IGroup& g, const KeyDef& def)
+{
+    return g.readBool(def.key, def.defaultValue.toBool());
+}
+template<>
+double readTyped<double>(IGroup& g, const KeyDef& def)
+{
+    return g.readDouble(def.key, def.defaultValue.toDouble());
+}
+template<>
+QColor readTyped<QColor>(IGroup& g, const KeyDef& def)
+{
+    return g.readColor(def.key, def.defaultValue.value<QColor>());
+}
+
+template<typename T>
+T readDeclared(const Schema& schema, IBackend* backend, const QString& group, const QString& key, T fallback)
+{
+    const KeyDef* def = schema.findKey(group, key);
+    if (!def) {
+        return fallback;
+    }
+    auto g = backend->group(group);
+    return applyValidator(def, readTyped<T>(*g, *def));
+}
 } // namespace
 
 // Undeclared keys return a value-initialized T (matching the docstring on
@@ -386,56 +463,31 @@ T applyValidator(const KeyDef* def, T value)
 template<>
 QString Store::read<QString>(const QString& group, const QString& key) const
 {
-    const KeyDef* def = d->schema.findKey(group, key);
-    if (!def) {
-        return QString();
-    }
-    auto g = d->backend->group(group);
-    return applyValidator(def, g->readString(key, def->defaultValue.toString()));
+    return readDeclared<QString>(d->schema, d->backend, group, key, QString());
 }
 
 template<>
 int Store::read<int>(const QString& group, const QString& key) const
 {
-    const KeyDef* def = d->schema.findKey(group, key);
-    if (!def) {
-        return 0;
-    }
-    auto g = d->backend->group(group);
-    return applyValidator(def, g->readInt(key, def->defaultValue.toInt()));
+    return readDeclared<int>(d->schema, d->backend, group, key, 0);
 }
 
 template<>
 bool Store::read<bool>(const QString& group, const QString& key) const
 {
-    const KeyDef* def = d->schema.findKey(group, key);
-    if (!def) {
-        return false;
-    }
-    auto g = d->backend->group(group);
-    return applyValidator(def, g->readBool(key, def->defaultValue.toBool()));
+    return readDeclared<bool>(d->schema, d->backend, group, key, false);
 }
 
 template<>
 double Store::read<double>(const QString& group, const QString& key) const
 {
-    const KeyDef* def = d->schema.findKey(group, key);
-    if (!def) {
-        return 0.0;
-    }
-    auto g = d->backend->group(group);
-    return applyValidator(def, g->readDouble(key, def->defaultValue.toDouble()));
+    return readDeclared<double>(d->schema, d->backend, group, key, 0.0);
 }
 
 template<>
 QColor Store::read<QColor>(const QString& group, const QString& key) const
 {
-    const KeyDef* def = d->schema.findKey(group, key);
-    if (!def) {
-        return QColor();
-    }
-    auto g = d->backend->group(group);
-    return applyValidator(def, g->readColor(key, def->defaultValue.value<QColor>()));
+    return readDeclared<QColor>(d->schema, d->backend, group, key, QColor());
 }
 
 // The explicit specializations above ARE the definitions — no separate

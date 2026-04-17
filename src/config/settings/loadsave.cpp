@@ -14,6 +14,17 @@ namespace PlasmaZones {
 // still need explicit load/save logic are the per-physical-screen Virtual
 // Screen configs (below), whose QHash<QString, VirtualScreenConfig> shape
 // doesn't fit the Store's scalar-key-per-setting model.
+//
+// BACKEND NOTE: the per-screen-index key compositions below use '/' as an
+// intra-key separator (e.g. "0/Name"). This is backend-specific:
+//   - JsonBackend: '/' has no special meaning in key names, so the keys
+//     land as literal scalar entries under the group object.
+//   - QSettingsBackend: '/' is the native group separator, so the same
+//     writes create nested sub-groups on disk.
+// PlasmaZones only ships JsonBackend in production (see configbackends.cpp),
+// so the literal-key shape is the authoritative wire format. If a future
+// QSettingsBackend consumer wants to read/write virtual-screen configs,
+// it must migrate the key format (e.g. replace '/' with '_') first.
 
 // ── Virtual screen config load/save ──────────────────────────────────────────
 
