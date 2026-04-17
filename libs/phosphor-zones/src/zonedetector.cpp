@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "zonedetector.h"
-#include "zonehighlighter.h"
-#include "logging.h"
+#include <PhosphorZones/ZoneDetector.h>
+#include <PhosphorZones/ZoneHighlighter.h>
+#include "zoneslogging.h"
 #include <QSet>
 #include <algorithm>
 #include <cmath>
@@ -27,21 +27,21 @@ void ZoneDetector::setLayout(Layout* layout)
     if (m_layout != layout) {
         // Disconnect from old layout's destroyed signal
         if (m_layout) {
-            qCDebug(lcZone) << "Disconnecting from previous layout";
+            qCDebug(PhosphorZones::lcZonesLib) << "Disconnecting from previous layout";
             disconnect(m_layout, &QObject::destroyed, this, nullptr);
         }
         m_layout = layout;
         // Connect to new layout's destroyed signal to prevent dangling pointer
         if (m_layout) {
-            qCInfo(lcZone) << "Layout set with" << m_layout->zones().size() << "zones";
+            qCInfo(PhosphorZones::lcZonesLib) << "Layout set with" << m_layout->zones().size() << "zones";
             connect(m_layout, &QObject::destroyed, this, [this]() {
-                qCDebug(lcZone) << "Layout destroyed, clearing";
+                qCDebug(PhosphorZones::lcZonesLib) << "Layout destroyed, clearing";
                 m_layout = nullptr;
                 m_highlighter->clearHighlights();
                 Q_EMIT layoutChanged();
             });
         } else {
-            qCDebug(lcZone) << "Layout cleared (set to null)";
+            qCDebug(PhosphorZones::lcZonesLib) << "Layout cleared (set to null)";
         }
         m_highlighter->clearHighlights();
         Q_EMIT layoutChanged();
@@ -53,7 +53,7 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
     ZoneDetectionResult result;
 
     if (!m_layout) {
-        qCDebug(lcZone) << "detectZone: No layout set";
+        qCDebug(PhosphorZones::lcZonesLib) << "detectZone: No layout set";
         return result;
     }
 
@@ -65,7 +65,7 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
         result.primaryZone = containingZone;
         result.snapGeometry = containingZone->geometry();
         result.distance = 0;
-        qCDebug(lcZone) << "Cursor at" << cursorPos << "is inside zone" << containingZone->id();
+        qCDebug(PhosphorZones::lcZonesLib) << "Cursor at" << cursorPos << "is inside zone" << containingZone->id();
         return result;
     }
 
@@ -75,10 +75,10 @@ ZoneDetectionResult ZoneDetector::detectZone(const QPointF& cursorPos) const
         result.primaryZone = nearest;
         result.snapGeometry = nearest->geometry();
         result.distance = nearest->distanceToPoint(cursorPos);
-        qCDebug(lcZone) << "Cursor at" << cursorPos << "nearest to zone" << nearest->id()
-                        << "distance:" << result.distance;
+        qCDebug(PhosphorZones::lcZonesLib)
+            << "Cursor at" << cursorPos << "nearest to zone" << nearest->id() << "distance:" << result.distance;
     } else {
-        qCDebug(lcZone) << "No zone found for cursor at" << cursorPos;
+        qCDebug(PhosphorZones::lcZonesLib) << "No zone found for cursor at" << cursorPos;
     }
 
     return result;
@@ -182,7 +182,7 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
     }
 
     if (iterations >= maxIterations) {
-        qCWarning(lcZone) << "Zone expansion: max iterations reached, possible infinite loop";
+        qCWarning(PhosphorZones::lcZonesLib) << "Zone expansion: max iterations reached, possible infinite loop";
     }
 
     // Preserve layout order for consistent output

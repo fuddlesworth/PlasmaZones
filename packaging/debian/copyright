@@ -11,6 +11,10 @@ Files: libs/phosphor-layout-api/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later
 
+Files: libs/phosphor-zones/*
+Copyright: 2026 fuddlesworth
+License: LGPL-2.1-or-later
+
 Files: libs/phosphor-config/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later

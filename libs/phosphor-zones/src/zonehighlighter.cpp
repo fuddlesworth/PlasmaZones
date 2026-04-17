@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "zonehighlighter.h"
-#include "zone.h"
+#include <PhosphorZones/ZoneHighlighter.h>
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 

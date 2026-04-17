@@ -165,6 +165,7 @@ echo ""
 
 # Libraries
 %{_libdir}/libPhosphorLayoutApi.so*
+%{_libdir}/libPhosphorZones.so*
 %{_libdir}/libPhosphorConfig.so*
 %{_libdir}/libPhosphorShell.so*
 %{_libdir}/libPhosphorRendering.so*
@@ -181,6 +182,10 @@ echo ""
 # PhosphorLayoutApi development headers and CMake config
 %{_includedir}/PhosphorLayoutApi/
 %{_libdir}/cmake/PhosphorLayoutApi/
+
+# PhosphorZones development headers and CMake config
+%{_includedir}/PhosphorZones/
+%{_libdir}/cmake/PhosphorZones/
 
 # PhosphorConfig development headers and CMake config
 %{_includedir}/PhosphorConfig/

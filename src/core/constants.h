@@ -5,6 +5,7 @@
 
 #include <QColor>
 #include <QLatin1String>
+#include <QMetaType>
 #include <QString>
 #include <limits>
 

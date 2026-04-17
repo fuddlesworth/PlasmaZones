@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "zone.h"
+#include <PhosphorZones/Zone.h>
 #include "constants.h"
 #include <QJsonArray>
 #include <cmath>

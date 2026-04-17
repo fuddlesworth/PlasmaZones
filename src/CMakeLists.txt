@@ -62,12 +62,8 @@ set(plasmazones_core_SRCS
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    core/zone.cpp
-    core/zone.h
-    core/layout.cpp
-    core/layout/serialization.cpp
-    core/layout/factories.cpp
-    core/layout.h
+    # zone, layout, layoututils, zonedetector, zonehighlighter moved to libs/phosphor-zones/
+    # (shim headers in core/ keep `#include "core/zone.h"` etc. working)
     core/layoutmanager.cpp
     core/layoutmanager/persistence.cpp
     core/layoutmanager/assignments.cpp
@@ -77,8 +73,6 @@ set(plasmazones_core_SRCS
     core/layoutworker/layoutcomputeservice.cpp
     core/layoutworker/layoutcomputeservice.h
     core/layoutworker/types.h
-    core/layoututils.cpp
-    core/layoututils.h
     core/unifiedlayoutentry.cpp
     core/unifiedlayoutentry.h
     core/supportreport.cpp
@@ -96,10 +90,6 @@ set(plasmazones_core_SRCS
     core/virtualdesktopmanager.h
     core/activitymanager.cpp
     core/activitymanager.h
-    core/zonedetector.cpp
-    core/zonedetector.h
-    core/zonehighlighter.cpp
-    core/zonehighlighter.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShell
     core/modifierutils.cpp
@@ -249,7 +239,9 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
+        PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorShell::PhosphorShell
+        PhosphorZones::PhosphorZones
     PRIVATE
         Wayland::Client
         Qt6::Concurrent

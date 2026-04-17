@@ -4,9 +4,9 @@
 // Layout static factory methods for predefined layout templates.
 // Part of Layout class — split from layout.cpp for SRP.
 
-#include "../layout.h"
-#include "../constants.h"
-#include "../zone.h"
+#include <PhosphorZones/Layout.h>
+#include "constants.h"
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 

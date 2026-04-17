@@ -1,12 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 #include "constants.h"
-#include "layoututils.h"
-#include "logging.h"
-#include "shaderregistry.h"
-#include "utils.h"
+#include <PhosphorZones/LayoutUtils.h>
+#include "zoneslogging.h"
+#include <window_id.h>
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
@@ -335,7 +334,7 @@ AppRuleMatch Layout::matchAppRule(const QString& windowClass) const
         // Segment-aware match: "firefox" matches "org.mozilla.firefox" (dot-boundary),
         // "org.mozilla.firefox" matches "firefox", exact match always works.
         // Prevents "fire" from matching "firefox" (no dot boundary).
-        if (Utils::appIdMatches(windowClass, rule.pattern)) {
+        if (WindowIdUtils::appIdMatches(windowClass, rule.pattern)) {
             return {rule.zoneNumber, rule.targetScreen};
         }
     }
@@ -555,7 +554,8 @@ void Layout::recalculateZoneGeometries(const QRectF& screenGeometry)
     }
     m_lastRecalcGeometry = screenGeometry;
 
-    qCDebug(lcLayout) << "recalculateZoneGeometries layout=" << m_name << "screenGeometry=" << screenGeometry;
+    qCDebug(PhosphorZones::lcLayoutLib) << "recalculateZoneGeometries layout=" << m_name
+                                        << "screenGeometry=" << screenGeometry;
     for (auto* zone : m_zones) {
         QRectF absGeometry = zone->calculateAbsoluteGeometry(screenGeometry);
         zone->setGeometry(absGeometry);

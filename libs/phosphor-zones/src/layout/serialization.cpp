@@ -4,12 +4,11 @@
 // Layout JSON serialization / deserialization.
 // Part of Layout class — split from layout.cpp for SRP.
 
-#include "../layout.h"
-#include "../constants.h"
-#include "../layoututils.h"
-#include "../logging.h"
-#include "../utils.h"
-#include "../zone.h"
+#include <PhosphorZones/Layout.h>
+#include "constants.h"
+#include <PhosphorZones/LayoutUtils.h>
+#include "../zoneslogging.h"
+#include <PhosphorZones/Zone.h>
 #include <QJsonArray>
 
 namespace PlasmaZones {
@@ -237,18 +236,13 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops,
                                        layout->m_allowedActivities);
 
-    // Migrate legacy connector names in allowedScreens to screen IDs
-    for (int i = 0; i < layout->m_allowedScreens.size(); ++i) {
-        if (Utils::isConnectorName(layout->m_allowedScreens[i])) {
-            QString resolved = Utils::screenIdForName(layout->m_allowedScreens[i]);
-            if (resolved != layout->m_allowedScreens[i]) {
-                layout->m_allowedScreens[i] = resolved;
-            } else {
-                qCDebug(lcLayout) << "allowedScreens: could not resolve connector name" << layout->m_allowedScreens[i]
-                                  << "to screen ID (monitor may be disconnected)";
-            }
-        }
-    }
+    // Note: allowedScreens may contain either connector names ("DP-2") or
+    // EDID-based screen IDs ("LG:Model:115107"). Resolution between the
+    // two forms happens at visibility-check time via screensMatch — this
+    // load path stores the strings verbatim. (Previously this loop did an
+    // eager connector-name → screen-ID translation via QGuiApplication,
+    // which forced a daemon-side dependency that prevented zones from
+    // running headless in the editor / settings preview path.)
 
     const auto zonesArray = json[JsonKeys::Zones].toArray();
     for (const auto& zoneValue : zonesArray) {

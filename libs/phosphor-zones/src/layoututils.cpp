@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "layoututils.h"
+#include <PhosphorZones/LayoutUtils.h>
 #include "constants.h"
-#include "layout.h"
-#include "zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 
 #include <QColor>
 #include <QJsonArray>

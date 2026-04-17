@@ -3,52 +3,8 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
-#include <QObject>
-#include <QVector>
+// Backward-compat shim — actual definition lives in libs/phosphor-zones/.
+// Existing `#include "core/zonehighlighter.h"` consumers keep working; new code
+// should prefer `#include <PhosphorZones/ZoneHighlighter.h>` directly.
 
-namespace PlasmaZones {
-
-class Zone;
-
-/**
- * @brief Manages zone highlighting state
- *
- * Separates UI state from detection logic. ZoneDetector runs the detection
- * algorithms; this class manages the visual highlighting.
- */
-class PLASMAZONES_EXPORT ZoneHighlighter : public QObject
-{
-    Q_OBJECT
-
-public:
-    explicit ZoneHighlighter(QObject* parent = nullptr);
-    ~ZoneHighlighter() override = default;
-
-    /**
-     * @brief Highlight a single zone
-     * @param zone Zone to highlight
-     */
-    Q_INVOKABLE void highlightZone(Zone* zone);
-
-    /**
-     * @brief Highlight multiple zones
-     * @param zones Zones to highlight
-     */
-    Q_INVOKABLE void highlightZones(const QVector<Zone*>& zones);
-
-    /**
-     * @brief Clear all highlights
-     */
-    Q_INVOKABLE void clearHighlights();
-
-Q_SIGNALS:
-    void zoneHighlighted(Zone* zone);
-    void zonesHighlighted(const QVector<Zone*>& zones);
-    void highlightsCleared();
-
-private:
-    QVector<Zone*> m_highlightedZones;
-};
-
-} // namespace PlasmaZones
+#include <PhosphorZones/ZoneHighlighter.h>
