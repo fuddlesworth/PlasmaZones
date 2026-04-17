@@ -310,6 +310,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-zones)       # manual zone-layout primitives (Zone, Layout, ZoneDetector)
+add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
 add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
