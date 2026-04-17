@@ -93,6 +93,14 @@ Daemon::Daemon(QObject* parent)
     connect(m_settings.get(), &ISettings::adjacentThresholdChanged, this, [this]() {
         m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
     });
+
+    // Build the manual-layout PhosphorLayout::ILayoutSource over our layout
+    // manager. Construction here (rather than later in init()) because the
+    // source is a thin wrapper — no I/O, no signal hookup — and consumers
+    // can ask for layoutSource() any time after Daemon is constructed.
+    // Population happens lazily on first availableLayouts() call when the
+    // layout manager has finished loading from disk.
+    m_layoutSource = std::make_unique<PhosphorZones::ZonesLayoutSource>(m_layoutManager.get());
 }
 
 Daemon::~Daemon()

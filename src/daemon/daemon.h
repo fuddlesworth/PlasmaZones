@@ -17,6 +17,7 @@
 #include "../autotile/AutotileEngine.h"
 
 #include <PhosphorConfig/IBackend.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 namespace PlasmaZones {
 
@@ -86,6 +87,23 @@ public:
     Settings* settings() const
     {
         return m_settings.get();
+    }
+
+    /**
+     * @brief Layout-preview source over the daemon's manual layouts.
+     *
+     * Wraps m_layoutManager in the PhosphorLayout::ILayoutSource contract
+     * (LayoutPreview + availableLayouts/previewAt). Daemon-internal
+     * consumers that just want to render previews — overlay layout
+     * picker, snap-assist preview thumbnails, future D-Bus query
+     * methods — should hit this rather than reaching for raw
+     * Layout* pointers, so they can later swap to a unified source
+     * that also covers autotile algorithm previews from a future
+     * phosphor-tile-algo library without changing the consumer code.
+     */
+    PhosphorLayout::ILayoutSource* layoutSource() const
+    {
+        return m_layoutSource.get();
     }
     OverlayService* overlayService() const
     {
@@ -329,6 +347,10 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
+    // ZonesLayoutSource wraps m_layoutManager for the
+    // PhosphorLayout::ILayoutSource contract — see layoutSource() doc.
+    // Constructed in Daemon's body ctor after m_layoutManager is ready.
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_layoutSource;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<ZoneDetector> m_zoneDetector;
