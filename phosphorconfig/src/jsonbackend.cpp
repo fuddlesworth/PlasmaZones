@@ -491,13 +491,16 @@ void JsonGroup::writeColor(const QString& key, const QColor& value)
 
 bool JsonGroup::hasKey(const QString& key) const
 {
-    // Match keyList()'s scalar-only contract: nested sub-groups are not
-    // "keys" on this group. Returning true for sub-groups would let
-    // callers that use hasKey() as a "should I purge this stale key?"
-    // guard accidentally clobber declared descendants.
-    const QJsonObject obj = groupObject();
-    const auto it = obj.constFind(key);
-    return it != obj.constEnd() && !it.value().isObject();
+    // Report any existing value — scalar OR object. Schema-declared keys with
+    // structured values (QVariantMap, nested JSON) land as JSON objects on
+    // disk, and hiding them here silently breaks Store::write's equality
+    // short-circuit and Store::reset's "is there a stored value?" guard.
+    //
+    // The "purge stale keys without clobbering declared descendants" concern
+    // that originally motivated the object-filter is handled by keyList(),
+    // which iterates scalar leaves only — purge loops must use keyList(),
+    // not hasKey().
+    return groupObject().contains(key);
 }
 
 void JsonGroup::deleteKey(const QString& key)
@@ -553,11 +556,13 @@ JsonBackend::~JsonBackend()
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::~JsonBackend",
                "JsonGroup still alive when backend is being destroyed");
-    // Flush any pending deferred-sync write synchronously before the timer
-    // (and the rest of Data) is destroyed. Without this, a daemon running
-    // with Deferred policy that gets torn down between sync() and the
-    // debounce firing would silently drop the pending changes.
-    if (d->syncPolicy == SyncPolicy::Deferred && d->dirty) {
+    // Flush any dirty in-memory state to disk before destruction. Covers
+    // both Deferred mode (pending debounce timer) and Synchronous mode where
+    // a consumer has written without calling sync() — matching QSettings'
+    // auto-sync-on-destroy behaviour so process shutdown doesn't silently
+    // drop user changes. flushPending cancels any pending timer and routes
+    // through flushNow, which is a no-op when clean.
+    if (d->dirty) {
         flushPending();
     }
 }

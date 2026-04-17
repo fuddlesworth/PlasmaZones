@@ -33,8 +33,11 @@ class PLASMAZONES_EXPORT Settings : public ISettings
     Q_OBJECT
 
 public:
-    /** Maximum number of activation triggers per action (drag, multi-zone, zone span) */
-    static constexpr int MaxTriggersPerAction = 4;
+    /** Maximum number of activation triggers per action (drag, multi-zone, zone span).
+     *  Source of truth lives in ConfigDefaults::maxTriggersPerAction() so both this
+     *  public accessor and the schema-side validator (canonicalTriggerList) read
+     *  from the same constant without either side depending on the other. */
+    static constexpr int MaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
     /**
      * @brief Construct with an external (non-owned) config backend

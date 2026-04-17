@@ -563,6 +563,11 @@ QStringList Settings::snappingLayoutOrder() const
 
 void Settings::setSnappingLayoutOrder(const QStringList& order)
 {
+    // Read the canonical stored form before AND after writing so the
+    // canonicalCommaList validator gets to pick the comparison points.
+    // Comparing the user's (possibly non-canonical) input to the stored
+    // canonical value would emit a spurious `changed` signal every time a
+    // caller passed e.g. " a , b " while disk already holds "a,b".
     const QString before =
         m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
     m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey(),
@@ -584,6 +589,8 @@ QStringList Settings::tilingAlgorithmOrder() const
 
 void Settings::setTilingAlgorithmOrder(const QStringList& order)
 {
+    // See setSnappingLayoutOrder — post-write compare against the canonical
+    // form avoids spurious change signals for equivalent non-canonical input.
     const QString before =
         m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
     m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey(),
@@ -682,12 +689,20 @@ QStringList Settings::disabledMonitors() const
 
 void Settings::setDisabledMonitors(const QStringList& screenIdOrNames)
 {
-    const QString joined = screenIdOrNames.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey())
-        == joined) {
+    // Post-write compare — the canonicalCommaList validator normalises
+    // whitespace/duplicates on write, so a caller passing e.g. "DP-1, HDMI-1 "
+    // against a stored "DP-1,HDMI-1" would fail the pre-write equality check
+    // and fire a spurious changed signal even though the canonical form is
+    // identical.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey(),
+                   screenIdOrNames.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey(), joined);
     Q_EMIT disabledMonitorsChanged();
     Q_EMIT settingsChanged();
 }
@@ -722,12 +737,17 @@ QStringList Settings::disabledDesktops() const
 
 void Settings::setDisabledDesktops(const QStringList& entries)
 {
-    const QString joined = entries.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey())
-        == joined) {
+    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // rationale.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey(),
+                   entries.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledDesktopsKey(), joined);
     Q_EMIT disabledDesktopsChanged();
     Q_EMIT settingsChanged();
 }
@@ -767,12 +787,17 @@ QStringList Settings::disabledActivities() const
 
 void Settings::setDisabledActivities(const QStringList& entries)
 {
-    const QString joined = entries.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey())
-        == joined) {
+    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // rationale.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
+    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey(),
+                   entries.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledActivitiesKey(), joined);
     Q_EMIT disabledActivitiesChanged();
     Q_EMIT settingsChanged();
 }
@@ -887,11 +912,16 @@ QStringList Settings::excludedApplications() const
 
 void Settings::setExcludedApplications(const QStringList& apps)
 {
-    const QString joined = apps.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey()) == joined) {
+    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // rationale. Callers like addExcludedApplication rely on this setter not
+    // firing the changed signal when the de-duplicated / trimmed form
+    // already matches storage.
+    const QString before = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
+    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), apps.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::applicationsKey(), joined);
     Q_EMIT excludedApplicationsChanged();
     Q_EMIT settingsChanged();
 }
@@ -928,11 +958,16 @@ QStringList Settings::excludedWindowClasses() const
 
 void Settings::setExcludedWindowClasses(const QStringList& classes)
 {
-    const QString joined = classes.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey()) == joined) {
+    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // rationale.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
+    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(),
+                   classes.join(QLatin1Char(',')));
+    const QString after = m_store->read<QString>(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::exclusionsGroup(), ConfigDefaults::windowClassesKey(), joined);
     Q_EMIT excludedWindowClassesChanged();
     Q_EMIT settingsChanged();
 }
@@ -1084,11 +1119,14 @@ PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, 
 // @c Store::write — the Store routes structured values through
 // @c IGroup::writeJson so they land on disk as native JSON arrays.
 //
-// The schema-side cap is pinned against Settings::MaxTriggersPerAction so
-// a future change to the Settings constant surfaces as a compile error
-// rather than a silent drift between the setter and the validator.
-static_assert(Settings::MaxTriggersPerAction == 4,
-              "MaxTriggersPerAction changed — update kSchemaMaxTriggersPerAction in settingsschema.cpp to match");
+// Both Settings::MaxTriggersPerAction and the schema's trigger-list cap
+// derive from ConfigDefaults::maxTriggersPerAction() — see that accessor
+// for the single source of truth. This assert is defence-in-depth in
+// case a future refactor accidentally detaches Settings from the shared
+// constant.
+static_assert(Settings::MaxTriggersPerAction == ConfigDefaults::maxTriggersPerAction(),
+              "Settings::MaxTriggersPerAction must equal ConfigDefaults::maxTriggersPerAction — "
+              "single source of truth lives in ConfigDefaults.");
 
 PZ_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
@@ -1101,13 +1139,18 @@ QVariantList Settings::dragActivationTriggers() const
 }
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
-    // The schema validator (canonicalTriggerList) also caps, but do it here
-    // too so the equality check compares apples-to-apples with the read path.
-    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (dragActivationTriggers() == capped) {
+    // Post-write compare — the schema's canonicalTriggerList validator
+    // drops non-map entries, strips unknown keys, and caps the list. A
+    // pre-write equality check against the stored canonical form would fire
+    // a spurious changed signal whenever the caller passed a list that
+    // canonicalises to the same value (e.g. extra keys, sub-cap padding).
+    const QVariantList before = dragActivationTriggers();
+    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(),
+                   triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = dragActivationTriggers();
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT dragActivationTriggersChanged();
     Q_EMIT settingsChanged();
 }
@@ -1126,30 +1169,45 @@ int Settings::zoneSpanModifierInt() const
 }
 void Settings::setZoneSpanModifier(DragModifier modifier)
 {
+    // Write-then-compare so the schema's validIntOr validator gets the first
+    // word on whether the request is valid. A pre-write equality check like
+    // `before == static_cast<int>(modifier)` would let an invalid modifier
+    // (e.g. 99) sneak past: the store would snap it to Disabled=0 and skip
+    // the disk write, but we'd then stamp a trigger list with modifier=99
+    // baked in because the synthesis below ran with the raw input.
     const int before =
         m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
-    if (before == static_cast<int>(modifier)) {
-        return;
-    }
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
                    static_cast<int>(modifier));
+    const int after =
+        m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+    if (after == before) {
+        return;
+    }
 
-    // Keep the trigger list's first entry's modifier in sync.
-    QVariantList triggers = zoneSpanTriggers();
+    // Modifier actually changed. Sync the trigger list's first entry — using
+    // the validator-coerced `after` value, not the raw input, so an invalid
+    // request that was snapped to the default doesn't smuggle a
+    // {modifier: 99} phantom into the trigger list.
+    const QVariantList beforeTriggers = zoneSpanTriggers();
+    QVariantList triggers = beforeTriggers;
     if (!triggers.isEmpty()) {
         QVariantMap first = triggers.first().toMap();
-        first[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+        first[ConfigDefaults::triggerModifierField()] = after;
         triggers[0] = first;
     } else {
         QVariantMap trigger;
-        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+        trigger[ConfigDefaults::triggerModifierField()] = after;
         trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
         triggers = {trigger};
     }
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(), triggers);
+    const QVariantList afterTriggers = zoneSpanTriggers();
 
     Q_EMIT zoneSpanModifierChanged();
-    Q_EMIT zoneSpanTriggersChanged();
+    if (afterTriggers != beforeTriggers) {
+        Q_EMIT zoneSpanTriggersChanged();
+    }
     Q_EMIT settingsChanged();
 }
 void Settings::setZoneSpanModifierInt(int modifier)
@@ -1192,16 +1250,24 @@ QVariantList Settings::zoneSpanTriggers() const
 }
 void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 {
-    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (zoneSpanTriggers() == capped) {
-        return;
-    }
-    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(), capped);
+    // Post-write compare — see setDragActivationTriggers for the
+    // canonicalisation rationale. Snapshot both triggers AND the legacy
+    // modifier up front so we only emit the NOTIFY signals whose value
+    // actually changed.
+    const QVariantList beforeTriggers = zoneSpanTriggers();
+    const int beforeModifier =
+        m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+
+    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(),
+                   triggers.mid(0, MaxTriggersPerAction));
 
     // Sync legacy modifier member from first trigger with a non-zero modifier.
+    // Derive from the validator-coerced post-write list so a
+    // {modifier: 99} entry in the input doesn't leak past the clamp.
+    const QVariantList afterTriggers = zoneSpanTriggers();
     DragModifier synced = DragModifier::Disabled;
-    for (const auto& t : capped) {
-        int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
+    for (const auto& t : afterTriggers) {
+        const int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
         if (mod != 0) {
             synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
             break;
@@ -1209,9 +1275,20 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
     }
     m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
                    static_cast<int>(synced));
+    const int afterModifier =
+        m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
 
-    Q_EMIT zoneSpanTriggersChanged();
-    Q_EMIT zoneSpanModifierChanged();
+    const bool triggersChanged = afterTriggers != beforeTriggers;
+    const bool modifierChanged = afterModifier != beforeModifier;
+    if (!triggersChanged && !modifierChanged) {
+        return;
+    }
+    if (triggersChanged) {
+        Q_EMIT zoneSpanTriggersChanged();
+    }
+    if (modifierChanged) {
+        Q_EMIT zoneSpanModifierChanged();
+    }
     Q_EMIT settingsChanged();
 }
 
@@ -1293,11 +1370,15 @@ QVariantList Settings::snapAssistTriggers() const
 }
 void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 {
-    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (snapAssistTriggers() == capped) {
+    // Post-write compare — see setDragActivationTriggers for the
+    // canonicalisation rationale.
+    const QVariantList before = snapAssistTriggers();
+    m_store->write(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(),
+                   triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = snapAssistTriggers();
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT snapAssistTriggersChanged();
     Q_EMIT settingsChanged();
 }
@@ -1516,11 +1597,17 @@ QStringList Settings::lockedScreens() const
 }
 void Settings::setLockedScreens(const QStringList& screens)
 {
-    const QString joined = screens.join(QLatin1Char(','));
-    if (m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey()) == joined) {
+    // Post-write compare — see setDisabledMonitors for the canonicalisation
+    // rationale.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey());
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey(),
+                   screens.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey());
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey(), joined);
     Q_EMIT lockedScreensChanged();
     Q_EMIT settingsChanged();
 }
@@ -1594,11 +1681,15 @@ QVariantList Settings::autotileDragInsertTriggers() const
 }
 void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
-    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (autotileDragInsertTriggers() == capped) {
+    // Post-write compare — see setDragActivationTriggers for the
+    // canonicalisation rationale.
+    const QVariantList before = autotileDragInsertTriggers();
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(),
+                   triggers.mid(0, MaxTriggersPerAction));
+    const QVariantList after = autotileDragInsertTriggers();
+    if (before == after) {
         return;
     }
-    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT autotileDragInsertTriggersChanged();
     Q_EMIT settingsChanged();
 }

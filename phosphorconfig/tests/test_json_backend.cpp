@@ -344,6 +344,41 @@ private Q_SLOTS:
         QVERIFY(!keys.contains(QStringLiteral("Child")));
     }
 
+    void hasKey_reportsJsonObjectValues()
+    {
+        // Schema-declared keys that hold structured values (QVariantMap,
+        // trigger lists written as JSON objects, etc.) land as JSON object
+        // nodes on disk. hasKey() must report them — otherwise Store::write's
+        // equality short-circuit and Store::reset's "is there a stored value?"
+        // guard would silently skip such keys, leaving the on-disk state
+        // out of sync with Store's view.
+        JsonBackend b(m_path);
+        auto g = b.group(QStringLiteral("G"));
+        QJsonObject payload;
+        payload[QStringLiteral("k")] = QStringLiteral("v");
+        g->writeJson(QStringLiteral("structured"), payload);
+        QVERIFY(g->hasKey(QStringLiteral("structured")));
+    }
+
+    void destructor_flushesDirtySynchronousState()
+    {
+        // QSettings auto-syncs on destruction; PhosphorConfig must do the
+        // same so a consumer that wrote under Synchronous mode without
+        // calling sync() doesn't silently lose the change at process
+        // shutdown.
+        {
+            JsonBackend b(m_path);
+            auto g = b.group(QStringLiteral("G"));
+            g->writeInt(QStringLiteral("n"), 7);
+            g.reset();
+            // No explicit b.sync() — rely on the destructor to flush.
+        }
+        QVERIFY(QFile::exists(m_path));
+        JsonBackend b2(m_path);
+        auto g2 = b2.group(QStringLiteral("G"));
+        QCOMPARE(g2->readInt(QStringLiteral("n"), 0), 7);
+    }
+
     // ── Deferred sync policy ──────────────────────────────────────────────
 
     void deferredSync_coalescesRepeatedSyncsIntoOneFlush()

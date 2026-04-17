@@ -99,11 +99,10 @@ QVariant canonicalCommaList(const QVariant& v)
 /// every write so the flush loop enforces the cap even when the setter
 /// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
 ///
-/// Mirrors @c Settings::MaxTriggersPerAction — kept inline to avoid a
-/// settings.h dependency from the schema translation unit. If this
-/// constant ever diverges from the one in @c settings.h the cap would
-/// silently drift; a static_assert in settings.cpp pins them together.
-constexpr int kSchemaMaxTriggersPerAction = 4;
+/// Both this file's cap and Settings::MaxTriggersPerAction resolve to
+/// ConfigDefaults::maxTriggersPerAction() — single source of truth, no
+/// drift possible because neither TU carries its own literal.
+constexpr int kSchemaMaxTriggersPerAction = ConfigDefaults::maxTriggersPerAction();
 
 QVariant canonicalTriggerList(const QVariant& v)
 {

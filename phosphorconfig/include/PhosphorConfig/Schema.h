@@ -41,7 +41,13 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
 
     /// Human-readable description. Not used at runtime — consumers may
     /// surface it in settings UIs or generated documentation.
-    QString description;
+    ///
+    /// The default-member-initializer (= {}) is load-bearing: aggregate
+    /// initializers across the codebase omit this trailing field, and GCC's
+    /// @c -Wmissing-field-initializers fires when omitted fields lack an
+    /// NSDMI. Keeping the explicit = {} here silences the warning without
+    /// forcing every call site to spell out two trailing empties.
+    QString description = {};
 
     /// Coercion applied on every read and every write. Typical uses:
     ///   - qBound(min, v.toInt(), max)
@@ -56,7 +62,9 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     /// validator (e.g. one that appends a character each call) would cause
     /// the comparison to never match, rewriting the file and firing
     /// `changed()` on every save even when no user change occurred.
-    std::function<QVariant(const QVariant& value)> validator;
+    ///
+    /// @c description above documents why the = {} default matters here too.
+    std::function<QVariant(const QVariant& value)> validator = {};
 };
 
 /// One step in a schema version migration chain. Transforms the root JSON
