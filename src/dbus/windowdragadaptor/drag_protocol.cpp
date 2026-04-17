@@ -198,7 +198,7 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
     return effectivePolicy;
 }
 
-bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons)
+bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons, int cursorX, int cursorY)
 {
     // Already active? nothing to do.
     if (!m_draggedWindowId.isEmpty()) {
@@ -212,7 +212,25 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     const Qt::KeyboardModifiers mods = static_cast<Qt::KeyboardModifiers>(modifiers);
     const bool triggerHeld = anyTriggerHeld(m_cachedActivationTriggers, mods, mouseButtons);
     const bool toggleMode = m_settings && m_settings->toggleActivation();
-    if (!triggerHeld && !toggleMode) {
+
+    // Edge-hover activation: if the zone selector feature is enabled and the
+    // cursor is near an edge that would trigger the popup, treat that as a
+    // commitment to snap — the same intent the activation modifier signals.
+    // Without this path, non-modifier drags stayed pending forever, the
+    // zone-selector trigger inside dragMoved never ran, and the popup never
+    // appeared. Repro: drag a window, don't hold the modifier, hover an
+    // edge — nothing happens.
+    bool edgeActivation = false;
+    if (!triggerHeld && !toggleMode && m_settings && m_settings->zoneSelectorEnabled()) {
+        auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
+        if (resolved.qscreen
+            && !isContextDisabled(m_settings, resolved.screenId, m_layoutManager->currentVirtualDesktop(),
+                                  m_layoutManager->currentActivity())) {
+            edgeActivation = isNearTriggerEdge(resolved.qscreen, cursorX, cursorY, resolved.screenId);
+        }
+    }
+
+    if (!triggerHeld && !toggleMode && !edgeActivation) {
         return false;
     }
 
@@ -225,7 +243,8 @@ bool WindowDragAdaptor::activateSnapDragIfNeeded(int modifiers, int mouseButtons
     // Keep m_pendingSnapDragWasSnapped — dragStarted re-derives m_wasSnapped
     // from live tracking state.
 
-    qCInfo(lcDbusWindow) << "activateSnapDragIfNeeded: promoting" << pendingId << "to active drag";
+    qCInfo(lcDbusWindow) << "activateSnapDragIfNeeded: promoting" << pendingId << "to active drag"
+                         << "via=" << (edgeActivation ? "edge-hover" : "modifier");
     dragStarted(pendingId, static_cast<double>(pendingGeo.x()), static_cast<double>(pendingGeo.y()),
                 static_cast<double>(pendingGeo.width()), static_cast<double>(pendingGeo.height()), pendingButtons);
     return !m_draggedWindowId.isEmpty();
@@ -419,11 +438,12 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
         return;
     }
 
-    // Pending snap-path drag: try to activate if the trigger is now held.
-    // If it's still pending after the check, return — the daemon does no
-    // overlay work until the user commits to zone selection.
+    // Pending snap-path drag: try to activate if the trigger is now held
+    // or the cursor has reached an edge-trigger region. If it's still
+    // pending after the check, return — the daemon does no overlay work
+    // until the user commits to zone selection.
     if (m_draggedWindowId.isEmpty() && m_pendingSnapDragWindowId == windowId) {
-        if (!activateSnapDragIfNeeded(modifiers, mouseButtons)) {
+        if (!activateSnapDragIfNeeded(modifiers, mouseButtons, cursorX, cursorY)) {
             return;
         }
     }

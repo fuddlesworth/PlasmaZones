@@ -19,12 +19,9 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <PhosphorShell/LayerSurface.h>
 
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
@@ -76,16 +73,22 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             const QRect geom = mgr->screenGeometry(screenId);
-            if (!(m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
-                createZoneSelectorWindow(screenId, physScreen, geom.isValid() ? geom : physScreen->geometry());
+            const QRect targetGeom = geom.isValid() ? geom : physScreen->geometry();
+            // Destroy + recreate each show — mirrors LayoutPickerOverlay. The
+            // fresh layer-shell attach is also what the layout picker does
+            // (and it works), so pre-warming + hide/re-show gymnastics are
+            // unnecessary here.
+            destroyZoneSelectorWindow(screenId);
+            createZoneSelectorWindow(screenId, physScreen, targetGeom);
+            auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
+            if (!window) {
+                continue;
             }
-            if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
-                assertWindowOnScreen(window, physScreen, geom.isValid() ? geom : physScreen->geometry());
-                updateZoneSelectorWindow(screenId);
-                window->show();
-            } else {
-                qCWarning(lcOverlay) << "No window found for screen" << screenId;
-            }
+            assertWindowOnScreen(window, physScreen, targetGeom);
+            updateZoneSelectorWindow(screenId);
+            window->setWidth(targetGeom.width());
+            window->setHeight(targetGeom.height());
+            QMetaObject::invokeMethod(window, "show");
         }
     } else {
         // Fallback: no ScreenManager
@@ -94,26 +97,26 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
                 continue;
             }
             QString screenId = Utils::screenIdentifier(screen);
-            // Skip monitors/desktops/activities where PlasmaZones is disabled
             if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-            if (!(m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorWindow)) {
-                auto* smgr = ScreenManager::instance();
-                QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
-                                                                                : screen->geometry();
-                createZoneSelectorWindow(screenId, screen, geom);
+            auto* smgr = ScreenManager::instance();
+            QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
+                                                                            : screen->geometry();
+            destroyZoneSelectorWindow(screenId);
+            createZoneSelectorWindow(screenId, screen, geom);
+            auto* window = m_screenStates.value(screenId).zoneSelectorWindow;
+            if (!window) {
+                continue;
             }
-            if (auto* window = m_screenStates.value(screenId).zoneSelectorWindow) {
-                assertWindowOnScreen(window, screen);
-                updateZoneSelectorWindow(screenId);
-                window->show();
-            } else {
-                qCWarning(lcOverlay) << "No window found for screen" << screen->name();
-            }
+            assertWindowOnScreen(window, screen);
+            updateZoneSelectorWindow(screenId);
+            window->setWidth(geom.width());
+            window->setHeight(geom.height());
+            QMetaObject::invokeMethod(window, "show");
         }
     }
 
@@ -128,13 +131,11 @@ void OverlayService::hideZoneSelector()
 
     m_zoneSelectorVisible = false;
 
-    // Note: Don't clear selected zone here - we need it for snapping when drag ends
-    // The selected zone will be cleared after the snap is processed
+    // Note: Don't clear selected zone here — we need it for snapping when
+    // drag ends. The selected zone is cleared after the snap is processed.
 
-    // Destroy windows instead of hiding. When Vulkan is the scene graph backend,
-    // hide() destroys the VkSwapchainKHR but Qt doesn't reinitialize it on
-    // re-show — this affects ALL QQuickWindows, not just those with custom render
-    // nodes. showZoneSelector() will create fresh windows via createZoneSelectorWindow().
+    // Destroy on hide (mirrors LayoutPickerOverlay). Next showZoneSelector()
+    // will create a fresh surface.
     const QStringList screenIds = m_screenStates.keys();
     for (const QString& screenId : screenIds) {
         destroyZoneSelectorWindow(screenId);
@@ -324,30 +325,30 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // Build resolved per-screen config
     const ZoneSelectorConfig config =
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
-    const auto pos = static_cast<ZoneSelectorPosition>(config.position);
 
-    // Convert LayerSurface::Anchors (wlr-layer-shell bitmask) → PhosphorLayer::Anchors.
-    // Values match the protocol exactly so this is a simple bit-by-bit translation.
-    const auto shellAnchors = getAnchorsForPosition(pos);
-    PhosphorLayer::Anchors plAnchors;
-    if (shellAnchors.testFlag(LayerSurface::AnchorTop)) {
-        plAnchors.setFlag(PhosphorLayer::Anchor::Top);
-    }
-    if (shellAnchors.testFlag(LayerSurface::AnchorBottom)) {
-        plAnchors.setFlag(PhosphorLayer::Anchor::Bottom);
-    }
-    if (shellAnchors.testFlag(LayerSurface::AnchorLeft)) {
-        plAnchors.setFlag(PhosphorLayer::Anchor::Left);
-    }
-    if (shellAnchors.testFlag(LayerSurface::AnchorRight)) {
-        plAnchors.setFlag(PhosphorLayer::Anchor::Right);
+    // Confine the layer-shell surface to the (virtual) screen region. Mirrors
+    // overlay.cpp's pattern: physical screen → AnchorAll; virtual screen →
+    // Top|Left anchors with margins offsetting into the physical screen, so
+    // the compositor positions + sizes the surface to the VS sub-region.
+    // Without this, a VS selector covers the whole physical screen and the
+    // QML-internal corner anchor lands on the wrong VS.
+    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    std::optional<QMargins> marginsOverride;
+    const QRect physScreenGeom = physScreen->geometry();
+    const bool isVS = VirtualScreenId::isVirtual(screenId);
+    if (isVS && screenGeom.isValid() && screenGeom != physScreenGeom) {
+        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
+        const QRect clamped = screenGeom.intersected(physScreenGeom);
+        marginsOverride = QMargins(clamped.x() - physScreenGeom.x(), clamped.y() - physScreenGeom.y(), 0, 0);
+    } else {
+        anchorsOverride = PhosphorLayer::AnchorAll;
     }
 
     const auto role = PzRoles::ZoneSelector.withScopePrefix(
         QStringLiteral("plasmazones-selector-%1-%2").arg(screenId).arg(++m_scopeGeneration));
 
     auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/ZoneSelectorWindow.qml")), physScreen, role,
-                                       "zone selector", QVariantMap(), plAnchors, std::nullopt);
+                                       "zone selector", QVariantMap(), anchorsOverride, marginsOverride);
     if (!surface) {
         return;
     }

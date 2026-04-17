@@ -229,9 +229,11 @@ private:
 
     // Promote the pending snap-path drag (stashed by beginDrag) to an
     // active drag by running the legacy dragStarted setup. Called from
-    // updateDragCursor once the activation trigger is first held.
+    // updateDragCursor once the activation trigger is first held OR the
+    // cursor enters a zone-selector edge region (edge-hover is an
+    // alternative "user wants to snap" commitment).
     // Returns true if promotion happened or the drag was already active.
-    bool activateSnapDragIfNeeded(int modifiers, int mouseButtons);
+    bool activateSnapDragIfNeeded(int modifiers, int mouseButtons, int cursorX, int cursorY);
 
     // Discard any pending snap-path drag state. Called from endDrag and
     // handleWindowClosed to prevent leftover pending state leaking into
@@ -355,6 +357,10 @@ private:
     // again (refreshFromIdle) or when the drag ends.
     bool m_overlayIdled = false;
     bool m_zoneSelectorShown = false;
+    // Tracks which (virtual) screen the selector is currently shown on, so we
+    // can detect cursor-crosses-VS-while-still-near-edge and re-show on the
+    // new VS instead of leaving the old one stuck visible.
+    QString m_zoneSelectorShownOn;
     int m_lastCursorX = 0;
     int m_lastCursorY = 0;
     bool m_wasSnapped = false; // True if window was snapped to a zone when drag started

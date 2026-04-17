@@ -254,6 +254,7 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         // Hide zone selector if shown
         if (m_zoneSelectorShown && m_overlayService) {
             m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
             m_overlayService->hideZoneSelector();
             m_overlayService->clearSelectedZone();
         }
@@ -313,6 +314,7 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
                              m_layoutManager->currentActivity())) {
         if (m_zoneSelectorShown) {
             m_zoneSelectorShown = false;
+            m_zoneSelectorShownOn.clear();
             m_overlayService->hideZoneSelector();
         }
         return;
@@ -320,15 +322,24 @@ void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
 
     bool nearEdge = isNearTriggerEdge(screen, cursorX, cursorY, selectorScreenId);
 
+    if (nearEdge && m_zoneSelectorShown && m_zoneSelectorShownOn != selectorScreenId) {
+        // Cursor moved into a different (virtual) screen's edge zone while the
+        // selector was shown on the previous one. Hide + re-show on the new VS
+        // so the popup follows the cursor instead of stranding on the old VS.
+        m_overlayService->hideZoneSelector();
+        m_zoneSelectorShown = false;
+        m_zoneSelectorShownOn.clear();
+    }
+
     if (nearEdge && !m_zoneSelectorShown) {
         // Show zone selector on the cursor's screen only
         m_zoneSelectorShown = true;
-        // Call directly - QDBusAbstractAdaptor signals don't work for internal Qt connections
-        // Pass screen ID string (supports virtual screen IDs like "physicalId/vs:N")
+        m_zoneSelectorShownOn = selectorScreenId;
         m_overlayService->showZoneSelector(selectorScreenId);
     } else if (!nearEdge && m_zoneSelectorShown) {
         // Hide zone selector when cursor moves away from edge
         m_zoneSelectorShown = false;
+        m_zoneSelectorShownOn.clear();
         m_overlayService->hideZoneSelector();
     }
 
@@ -453,6 +464,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
     // usage also hangs.
     if (m_zoneSelectorShown && m_overlayService) {
         m_zoneSelectorShown = false;
+        m_zoneSelectorShownOn.clear();
         m_overlayService->hideZoneSelector();
     }
     if (m_overlayService) {
