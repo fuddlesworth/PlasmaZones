@@ -5,7 +5,7 @@
 
 #include "zone.h"
 #include "layout.h"
-#include "interfaces.h"
+#include "izonedetector.h"
 #include "constants.h"
 #include <QPointF>
 #include <QRectF>

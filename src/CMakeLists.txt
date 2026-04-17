@@ -29,6 +29,10 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
+    core/ilayoutmanager.h
+    core/ioverlayservice.h
+    core/isettings.h
+    core/izonedetector.h
     core/inavigationactions.h
     core/iwindowengine.h
     core/settings_interfaces.h
