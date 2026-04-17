@@ -116,31 +116,9 @@ void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
-        m_zonePadding =
-            readValidatedInt(*gaps, ConfigDefaults::innerKey(), ConfigDefaults::zonePadding(),
-                             ConfigDefaults::zonePaddingMin(), ConfigDefaults::zonePaddingMax(), "zone padding");
-        m_outerGap = readValidatedInt(*gaps, ConfigDefaults::outerKey(), ConfigDefaults::outerGap(),
-                                      ConfigDefaults::outerGapMin(), ConfigDefaults::outerGapMax(), "outer gap");
-        m_usePerSideOuterGap = gaps->readBool(ConfigDefaults::usePerSideKey(), ConfigDefaults::usePerSideOuterGap());
-        m_outerGapTop =
-            readValidatedInt(*gaps, ConfigDefaults::topKey(), ConfigDefaults::outerGapTop(),
-                             ConfigDefaults::outerGapTopMin(), ConfigDefaults::outerGapTopMax(), "outer gap top");
-        m_outerGapBottom = readValidatedInt(*gaps, ConfigDefaults::bottomKey(), ConfigDefaults::outerGapBottom(),
-                                            ConfigDefaults::outerGapBottomMin(), ConfigDefaults::outerGapBottomMax(),
-                                            "outer gap bottom");
-        m_outerGapLeft =
-            readValidatedInt(*gaps, ConfigDefaults::leftKey(), ConfigDefaults::outerGapLeft(),
-                             ConfigDefaults::outerGapLeftMin(), ConfigDefaults::outerGapLeftMax(), "outer gap left");
-        m_outerGapRight =
-            readValidatedInt(*gaps, ConfigDefaults::rightKey(), ConfigDefaults::outerGapRight(),
-                             ConfigDefaults::outerGapRightMin(), ConfigDefaults::outerGapRightMax(), "outer gap right");
-        m_adjacentThreshold = readValidatedInt(
-            *gaps, ConfigDefaults::adjacentThresholdKey(), ConfigDefaults::adjacentThreshold(),
-            ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax(), "adjacent threshold");
-    }
-    // Performance is backed by m_store — clamp validators in the schema.
+    Q_UNUSED(backend);
+    // Zone geometry + Performance are backed by m_store — clamp validators
+    // in the schema handle what the old readValidatedInt call chain did.
 }
 
 void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
@@ -676,18 +654,9 @@ void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
-        gaps->writeInt(ConfigDefaults::innerKey(), m_zonePadding);
-        gaps->writeInt(ConfigDefaults::outerKey(), m_outerGap);
-        gaps->writeBool(ConfigDefaults::usePerSideKey(), m_usePerSideOuterGap);
-        gaps->writeInt(ConfigDefaults::topKey(), m_outerGapTop);
-        gaps->writeInt(ConfigDefaults::bottomKey(), m_outerGapBottom);
-        gaps->writeInt(ConfigDefaults::leftKey(), m_outerGapLeft);
-        gaps->writeInt(ConfigDefaults::rightKey(), m_outerGapRight);
-        gaps->writeInt(ConfigDefaults::adjacentThresholdKey(), m_adjacentThreshold);
-    }
-    // Performance is backed by m_store — setters persist directly.
+    Q_UNUSED(backend);
+    // Zone geometry + Performance are backed by m_store — setters persist
+    // immediately; save() flushes via m_configBackend->sync().
 }
 
 void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)

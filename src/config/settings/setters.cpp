@@ -267,25 +267,9 @@ SETTINGS_SETTER_ENUM_INT(OverlayDisplayMode, OverlayDisplayMode, 0, static_cast<
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone geometry setters
+// Zone geometry + Performance setters moved to settings.cpp
+// (PhosphorConfig::Store-backed).
 // ═══════════════════════════════════════════════════════════════════════════════
-
-SETTINGS_SETTER_CLAMPED(ZonePadding, m_zonePadding, zonePaddingChanged, ConfigDefaults::zonePaddingMin(),
-                        ConfigDefaults::zonePaddingMax())
-SETTINGS_SETTER_CLAMPED(OuterGap, m_outerGap, outerGapChanged, ConfigDefaults::outerGapMin(),
-                        ConfigDefaults::outerGapMax())
-SETTINGS_SETTER(bool, UsePerSideOuterGap, m_usePerSideOuterGap, usePerSideOuterGapChanged)
-SETTINGS_SETTER_CLAMPED(OuterGapTop, m_outerGapTop, outerGapTopChanged, ConfigDefaults::outerGapTopMin(),
-                        ConfigDefaults::outerGapTopMax())
-SETTINGS_SETTER_CLAMPED(OuterGapBottom, m_outerGapBottom, outerGapBottomChanged, ConfigDefaults::outerGapBottomMin(),
-                        ConfigDefaults::outerGapBottomMax())
-SETTINGS_SETTER_CLAMPED(OuterGapLeft, m_outerGapLeft, outerGapLeftChanged, ConfigDefaults::outerGapLeftMin(),
-                        ConfigDefaults::outerGapLeftMax())
-SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, ConfigDefaults::outerGapRightMin(),
-                        ConfigDefaults::outerGapRightMax())
-SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged,
-                        ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax())
-// Performance setters moved to settings.cpp (PhosphorConfig::Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Behavior setters

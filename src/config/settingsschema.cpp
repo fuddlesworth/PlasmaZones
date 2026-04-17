@@ -22,6 +22,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendAnimationsSchema(s);
     appendRenderingSchema(s);
     appendPerformanceSchema(s);
+    appendZoneGeometrySchema(s);
 
     return s;
 }
@@ -247,6 +248,36 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::minimumZoneDisplaySizePxMin(), CD::minimumZoneDisplaySizePxMax())},
+    };
+}
+
+// ─── Zone Geometry (Snapping.Gaps) ──────────────────────────────────────────
+// Inner/outer gaps (uniform + per-side), adjacency threshold.
+
+void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::snappingGapsGroup()] = {
+        {CD::innerKey(), CD::zonePadding(), QMetaType::Int, {}, clampInt(CD::zonePaddingMin(), CD::zonePaddingMax())},
+        {CD::outerKey(), CD::outerGap(), QMetaType::Int, {}, clampInt(CD::outerGapMin(), CD::outerGapMax())},
+        {CD::usePerSideKey(), CD::usePerSideOuterGap(), QMetaType::Bool},
+        {CD::topKey(), CD::outerGapTop(), QMetaType::Int, {}, clampInt(CD::outerGapTopMin(), CD::outerGapTopMax())},
+        {CD::bottomKey(),
+         CD::outerGapBottom(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapBottomMin(), CD::outerGapBottomMax())},
+        {CD::leftKey(), CD::outerGapLeft(), QMetaType::Int, {}, clampInt(CD::outerGapLeftMin(), CD::outerGapLeftMax())},
+        {CD::rightKey(),
+         CD::outerGapRight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::outerGapRightMin(), CD::outerGapRightMax())},
+        {CD::adjacentThresholdKey(),
+         CD::adjacentThreshold(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::adjacentThresholdMin(), CD::adjacentThresholdMax())},
     };
 }
 

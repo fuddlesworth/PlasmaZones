@@ -646,6 +646,27 @@ PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplay
 PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
                  minimumZoneDisplaySizePxChanged)
 
+// ── Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
+// Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
+// clampInt validators enforce the same ranges readValidatedInt used to.
+
+PZ_STORE_GET(int, zonePadding, snappingGapsGroup, innerKey, int)
+PZ_STORE_SET_INT(setZonePadding, snappingGapsGroup, innerKey, zonePaddingChanged)
+PZ_STORE_GET(int, outerGap, snappingGapsGroup, outerKey, int)
+PZ_STORE_SET_INT(setOuterGap, snappingGapsGroup, outerKey, outerGapChanged)
+PZ_STORE_GET(bool, usePerSideOuterGap, snappingGapsGroup, usePerSideKey, bool)
+PZ_STORE_SET_BOOL(setUsePerSideOuterGap, snappingGapsGroup, usePerSideKey, usePerSideOuterGapChanged)
+PZ_STORE_GET(int, outerGapTop, snappingGapsGroup, topKey, int)
+PZ_STORE_SET_INT(setOuterGapTop, snappingGapsGroup, topKey, outerGapTopChanged)
+PZ_STORE_GET(int, outerGapBottom, snappingGapsGroup, bottomKey, int)
+PZ_STORE_SET_INT(setOuterGapBottom, snappingGapsGroup, bottomKey, outerGapBottomChanged)
+PZ_STORE_GET(int, outerGapLeft, snappingGapsGroup, leftKey, int)
+PZ_STORE_SET_INT(setOuterGapLeft, snappingGapsGroup, leftKey, outerGapLeftChanged)
+PZ_STORE_GET(int, outerGapRight, snappingGapsGroup, rightKey, int)
+PZ_STORE_SET_INT(setOuterGapRight, snappingGapsGroup, rightKey, outerGapRightChanged)
+PZ_STORE_GET(int, adjacentThreshold, snappingGapsGroup, adjacentThresholdKey, int)
+PZ_STORE_SET_INT(setAdjacentThreshold, snappingGapsGroup, adjacentThresholdKey, adjacentThresholdChanged)
+
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()

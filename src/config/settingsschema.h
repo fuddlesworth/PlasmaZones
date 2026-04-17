@@ -34,5 +34,6 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema);
 void appendAnimationsSchema(PhosphorConfig::Schema& schema);
 void appendRenderingSchema(PhosphorConfig::Schema& schema);
 void appendPerformanceSchema(PhosphorConfig::Schema& schema);
+void appendZoneGeometrySchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

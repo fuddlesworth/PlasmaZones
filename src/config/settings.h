@@ -564,52 +564,22 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    int zonePadding() const override
-    {
-        return m_zonePadding;
-    }
+    // Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
+    int zonePadding() const override;
     void setZonePadding(int padding) override;
-
-    int outerGap() const override
-    {
-        return m_outerGap;
-    }
+    int outerGap() const override;
     void setOuterGap(int gap) override;
-
-    bool usePerSideOuterGap() const override
-    {
-        return m_usePerSideOuterGap;
-    }
+    bool usePerSideOuterGap() const override;
     void setUsePerSideOuterGap(bool enabled) override;
-
-    int outerGapTop() const override
-    {
-        return m_outerGapTop;
-    }
+    int outerGapTop() const override;
     void setOuterGapTop(int gap) override;
-
-    int outerGapBottom() const override
-    {
-        return m_outerGapBottom;
-    }
+    int outerGapBottom() const override;
     void setOuterGapBottom(int gap) override;
-
-    int outerGapLeft() const override
-    {
-        return m_outerGapLeft;
-    }
+    int outerGapLeft() const override;
     void setOuterGapLeft(int gap) override;
-
-    int outerGapRight() const override
-    {
-        return m_outerGapRight;
-    }
+    int outerGapRight() const override;
     void setOuterGapRight(int gap) override;
-
-    int adjacentThreshold() const override
-    {
-        return m_adjacentThreshold;
-    }
+    int adjacentThreshold() const override;
     void setAdjacentThreshold(int threshold) override;
 
     // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
@@ -1634,14 +1604,7 @@ private:
     // m_store; no cached members here.
 
     // Zone settings
-    int m_zonePadding = ConfigDefaults::zonePadding();
-    int m_outerGap = ConfigDefaults::outerGap();
-    bool m_usePerSideOuterGap = ConfigDefaults::usePerSideOuterGap();
-    int m_outerGapTop = ConfigDefaults::outerGapTop();
-    int m_outerGapBottom = ConfigDefaults::outerGapBottom();
-    int m_outerGapLeft = ConfigDefaults::outerGapLeft();
-    int m_outerGapRight = ConfigDefaults::outerGapRight();
-    int m_adjacentThreshold = ConfigDefaults::adjacentThreshold();
+    // Zone geometry is stored in m_store; no cached members here.
 
     // Performance and behavior
     // Performance is stored in m_store; no cached members here.
