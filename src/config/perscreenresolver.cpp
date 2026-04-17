@@ -50,6 +50,23 @@ bool PerScreenPathResolver::isPerScreenPrefix(const QString& groupName)
     return false;
 }
 
+bool PerScreenPathResolver::isMalformedPerScreen(const QString& groupName)
+{
+    // "ZoneSelector:" / "AutotileScreen:" / "SnappingScreen:" — prefix present
+    // with a trailing colon but no screen id. Without this check, toJsonPath
+    // would decline (via isPerScreenPrefix returning false) and the backend
+    // would fall back to dot-path, storing the name as an orphan top-level
+    // key on disk.
+    for (const auto& m : kPerScreenMappings) {
+        const auto prefixLen = static_cast<int>(qstrlen(m.prefix));
+        if (groupName.size() == prefixLen + 1 && groupName.startsWith(QLatin1String(m.prefix))
+            && groupName.at(prefixLen) == QLatin1Char(':')) {
+            return true;
+        }
+    }
+    return false;
+}
+
 QString PerScreenPathResolver::prefixToCategory(const QString& prefix)
 {
     for (const auto& m : kPerScreenMappings) {
@@ -77,6 +94,13 @@ PerScreenPathResolver::~PerScreenPathResolver() = default;
 
 std::optional<QStringList> PerScreenPathResolver::toJsonPath(const QString& groupName) const
 {
+    // Claim bare-prefix names ("ZoneSelector:", etc.) with an empty path so
+    // the backend rejects the operation with a "malformed" warning instead
+    // of falling back to dot-path and storing them as orphan top-level keys.
+    if (isMalformedPerScreen(groupName)) {
+        return QStringList{};
+    }
+
     if (!isPerScreenPrefix(groupName)) {
         return std::nullopt;
     }
@@ -89,9 +113,9 @@ std::optional<QStringList> PerScreenPathResolver::toJsonPath(const QString& grou
     const QString prefix = groupName.left(colonIdx);
     const QString screenId = groupName.mid(colonIdx + 1);
     if (screenId.isEmpty()) {
-        // Empty screen id: reject with an empty path so the backend logs
-        // a "malformed" warning instead of silently inserting an empty-string
-        // key into the JSON tree.
+        // isMalformedPerScreen catches this up front, but keep a defensive
+        // empty-path return so a future caller path that invokes toJsonPath
+        // without the pre-check doesn't fall through silently.
         return QStringList{};
     }
 

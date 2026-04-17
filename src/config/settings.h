@@ -43,6 +43,12 @@ public:
      * Settings, LayoutManager, and other components. Eliminates Qt's
      * QConfFile cache conflicts from multiple QSettings instances per file.
      *
+     * CONTRACT: @p backend MUST be pointing at a config file that has
+     * already been migrated to the current schema. Callers are responsible
+     * for invoking ConfigMigration::ensureJsonConfig() before constructing
+     * the backend. Production entry points (daemon/main, settings/main,
+     * editor controller) already do this at startup.
+     *
      * @param backend Non-owned backend pointer (must outlive this Settings)
      * @param parent Parent QObject
      */

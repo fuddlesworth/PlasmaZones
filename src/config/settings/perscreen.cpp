@@ -125,9 +125,25 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::InnerGap)
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k.startsWith(PerScreenKeys::OuterGap))
+    // Per-side gaps each have their own min/max — match exactly, not by prefix.
+    // A single startsWith("OuterGap") would apply the uniform-gap bounds to
+    // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
+    // those bounds diverge from the uniform ones.
+    if (k == QLatin1String("OuterGap"))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
+    if (k == QLatin1String("OuterGapTop"))
+        return QVariant(
+            qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
+    if (k == QLatin1String("OuterGapBottom"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapBottomMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapBottomMax()));
+    if (k == QLatin1String("OuterGapLeft"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapLeftMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapLeftMax()));
+    if (k == QLatin1String("OuterGapRight"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapRightMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapRightMax()));
     if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));

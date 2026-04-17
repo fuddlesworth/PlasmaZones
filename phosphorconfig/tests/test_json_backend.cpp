@@ -295,6 +295,34 @@ private Q_SLOTS:
         QVERIFY(!b.sync());
     }
 
+    void sync_preservesFilePermissions()
+    {
+        // QSaveFile commits via a rename to a fresh inode; without the
+        // explicit perm restore in writeJsonAtomically, a user's chmod 600
+        // would silently widen on every save.
+        JsonBackend b(m_path);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeInt(QStringLiteral("k"), 1);
+        }
+        QVERIFY(b.sync());
+
+        // Qt encodes both "Owner" (mapped to platform ACL) and "User" (file
+        // owner's effective perms) bits; on Linux setPermissions writes both
+        // sides of the pair for each bit, so the readback includes both.
+        const QFile::Permissions tightened = QFile::ReadOwner | QFile::WriteOwner | QFile::ReadUser | QFile::WriteUser;
+        QVERIFY(QFile::setPermissions(m_path, tightened));
+        QCOMPARE(QFile::permissions(m_path), tightened);
+
+        // Next sync writes a new value and must preserve the tightened perms.
+        {
+            auto g = b.group(QStringLiteral("G"));
+            g->writeInt(QStringLiteral("k"), 2);
+        }
+        QVERIFY(b.sync());
+        QCOMPARE(QFile::permissions(m_path), tightened);
+    }
+
     void keyList_returnsScalarLeavesOnly()
     {
         JsonBackend b(m_path);

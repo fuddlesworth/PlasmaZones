@@ -56,13 +56,15 @@ Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     , m_configBackend(backend)
     , m_store(nullptr)
 {
-    // Mirror the owned-backend ctor's defensive call so callers that wire up
-    // a backend without going through migrateAndCreateOwnedBackend (tests,
-    // future integrations) still get migration on construction.
-    // ensureJsonConfig is process-level idempotent — production entry points
-    // (daemon/main, settings/main, editor controller) already call it at
-    // startup and the second call is a single atomic load.
-    ConfigMigration::ensureJsonConfig();
+    // Contract: @p backend MUST already be pointing at a migrated config
+    // file. Production entry points (daemon/main, settings/main, editor
+    // controller) call ConfigMigration::ensureJsonConfig() exactly once at
+    // startup, before instantiating the backend. The non-owning ctor is
+    // used when callers share one backend across Settings + LayoutManager
+    // + other components, so the migration responsibility lives with them.
+    //
+    // (The owning ctor above routes through migrateAndCreateOwnedBackend
+    // which performs the migration itself for standalone tools and tests.)
     m_store = std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this);
     load();
 }
@@ -1160,6 +1162,11 @@ void Settings::setZoneSpanModifierInt(int modifier)
 
 QVariantList Settings::zoneSpanTriggers() const
 {
+    // ZoneSpan uniquely carries BOTH a legacy scalar "Modifier" key and a
+    // v2 "Triggers" list — historical result of the migration path where
+    // the old setting was a single modifier. SnapAssist and DragActivation
+    // only have the trigger list, so no equivalent synthesis applies there.
+    //
     // When Triggers is absent on disk, synthesize a single-entry list from
     // the actual ZoneSpanModifier value instead of returning the schema's
     // static default. That keeps the two settings in sync when only one was

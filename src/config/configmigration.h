@@ -100,7 +100,11 @@ private:
 
     // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
-    static QJsonValue convertValue(const QVariant& value);
+    /// Convert an INI value to its JSON form. @p keyName is the leaf key
+    /// (without group prefix); it's used to decide whether a comma-separated
+    /// int list should be read as an r,g,b[,a] color — the content heuristic
+    /// alone can't tell a color from e.g. a comma-separated layout order.
+    static QJsonValue convertValue(const QString& keyName, const QVariant& value);
 };
 
 } // namespace PlasmaZones

@@ -393,6 +393,106 @@ private Q_SLOTS:
         QVERIFY(!g->hasKey(QStringLiteral("undeclared")));
     }
 
+    void importFromJson_rejectsNonNumericVersion()
+    {
+        // A snapshot whose version key is a string (e.g. exported then
+        // accidentally stringified) must be refused. Without the explicit
+        // type check, QJsonValue::toInt(0) collapses to 0 and the mismatch
+        // test silently lets a malformed snapshot overwrite declared keys.
+        JsonBackend backend(m_path);
+        Schema schema = makeSchema();
+        schema.version = 2;
+        Store store(&backend, schema);
+
+        store.write(QStringLiteral("Window"), QStringLiteral("Width"), 1024);
+
+        QJsonObject snapshot;
+        snapshot[QStringLiteral("_version")] = QStringLiteral("2"); // string, not int
+        QJsonObject window;
+        window[QStringLiteral("Width")] = 2048;
+        snapshot[QStringLiteral("Window")] = window;
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("not a JSON number")));
+        store.importFromJson(snapshot);
+
+        // Import was refused — the prior value stays.
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 1024);
+    }
+
+    void importFromJson_acceptsMissingVersionKey()
+    {
+        // A snapshot without any version key is acceptable — callers doing
+        // partial imports shouldn't be required to stamp one in. Only an
+        // explicitly present but wrongly-typed key is a hard error.
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        QJsonObject snapshot;
+        QJsonObject window;
+        window[QStringLiteral("Width")] = 333;
+        snapshot[QStringLiteral("Window")] = window;
+
+        store.importFromJson(snapshot);
+        QCOMPARE(store.read<int>(QStringLiteral("Window"), QStringLiteral("Width")), 333);
+    }
+
+    void concurrentGroup_secondGroupIsReadOnly()
+    {
+#ifndef QT_NO_DEBUG
+        // JsonGroup's single-active-group check is a Q_ASSERT_X in debug
+        // builds — deliberately fail fast so callers catch the bug locally.
+        // The read-only fallback only matters in release (NDEBUG), where the
+        // assert is stripped and the backend must still protect the live
+        // group. Skip the test in debug builds.
+        QSKIP("Debug build: Q_ASSERT_X fires before the release-mode fallback runs.");
+#else
+        JsonBackend backend(m_path);
+        // Seed a value so reads can verify the read-only fallback.
+        {
+            auto seed = backend.group(QStringLiteral("G"));
+            seed->writeInt(QStringLiteral("N"), 42);
+        }
+
+        auto first = backend.group(QStringLiteral("G"));
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("other group\\(s\\) still active")));
+        auto second = backend.group(QStringLiteral("G"));
+
+        // Reads on the disabled group still work (they observe the shared
+        // root), but writes are refused without mutating storage.
+        QCOMPARE(second->readInt(QStringLiteral("N"), 0), 42);
+
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping writeInt")));
+        second->writeInt(QStringLiteral("N"), 99);
+
+        // The write was silently dropped — first (the live group) still sees 42.
+        QCOMPARE(first->readInt(QStringLiteral("N"), 0), 42);
+#endif
+    }
+
+    void write_uintLargerThanIntMaxFallsBackToString()
+    {
+        // QMetaType::UInt values above INT_MAX used to be cast directly,
+        // wrapping to a negative signed value. Route through the same
+        // uint64 range-check as ULongLong so oversized values persist as
+        // strings rather than silently corrupting.
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("G")] = {
+            {QStringLiteral("Big"), 0u, QMetaType::UInt},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        const uint big = static_cast<uint>(std::numeric_limits<int>::max()) + 1u;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("does not fit in int")));
+        store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
+
+        // Stored as a string — raw readString picks up the canonical form.
+        auto g = store.backend()->group(QStringLiteral("G"));
+        QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
+    }
+
     void migrationChainRunsOnConstruction()
     {
         // Seed an on-disk v1 document.

@@ -60,50 +60,47 @@ public:
     /// supported, or as a compact-JSON string for backends without a native
     /// representation.
     ///
-    /// The default implementation serializes to a compact JSON string and
-    /// forwards to @c writeString. JsonBackend overrides this to keep the
-    /// value as a native JSON node on disk, which lets external tools (or
-    /// migration code) see the structure directly.
+    /// The default implementation serializes every value — including strings
+    /// — to its compact JSON form before storing, so readJson can round-trip
+    /// it by re-parsing. Strings land on disk quoted (@c "hello", not
+    /// @c hello); consumers that need the raw string should go through
+    /// @c writeString / @c readString directly. JsonBackend overrides this
+    /// to keep the value as a native JSON node on disk.
     virtual void writeJson(const QString& key, const QJsonValue& value)
     {
-        if (value.isString()) {
-            writeString(key, value.toString());
-            return;
-        }
-        // QJsonDocument only accepts arrays/objects at the root, so wrap
-        // scalars through a QJsonArray and unwrap back to their compact form.
-        QJsonDocument doc;
+        // QJsonDocument only accepts arrays/objects at the root. For scalar
+        // values (including strings, so writeJson/readJson round-trip
+        // correctly via a single uniform encoding) wrap in a one-element
+        // array and strip the brackets; for arrays/objects emit the compact
+        // form directly.
         if (value.isArray()) {
-            doc.setArray(value.toArray());
-        } else if (value.isObject()) {
-            doc.setObject(value.toObject());
-        } else {
-            // Null/bool/double: represent as compact JSON via a one-element
-            // array and strip the brackets. The resulting string round-trips
-            // through @c readJson because QJsonDocument::fromJson accepts
-            // bare scalars when wrapped in a container.
-            QJsonArray wrapped;
-            wrapped.append(value);
-            const QByteArray raw = QJsonDocument(wrapped).toJson(QJsonDocument::Compact);
-            // Strip leading '[' and trailing ']'.
-            writeString(key, QString::fromUtf8(raw.mid(1, raw.size() - 2)));
+            writeString(key, QString::fromUtf8(QJsonDocument(value.toArray()).toJson(QJsonDocument::Compact)));
             return;
         }
-        writeString(key, QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+        if (value.isObject()) {
+            writeString(key, QString::fromUtf8(QJsonDocument(value.toObject()).toJson(QJsonDocument::Compact)));
+            return;
+        }
+        QJsonArray wrapped;
+        wrapped.append(value);
+        const QByteArray raw = QJsonDocument(wrapped).toJson(QJsonDocument::Compact);
+        writeString(key, QString::fromUtf8(raw.mid(1, raw.size() - 2)));
     }
 
     /// Read a structured JSON value. Returns @c defaultValue when the key
     /// is absent or unparseable.
     ///
     /// The default implementation calls @c readString and parses the result.
-    /// JsonBackend overrides to return the native JSON node directly without
-    /// a string round-trip.
+    /// Uses @c hasKey (not string emptiness) to distinguish an absent key
+    /// from a present empty-string, so empty-string values written through
+    /// @c writeJson round-trip correctly. JsonBackend overrides to return
+    /// the native JSON node directly without a string round-trip.
     virtual QJsonValue readJson(const QString& key, const QJsonValue& defaultValue = {}) const
     {
-        const QString raw = readString(key);
-        if (raw.isEmpty()) {
+        if (!hasKey(key)) {
             return defaultValue;
         }
+        const QString raw = readString(key);
         // Wrap so QJsonDocument::fromJson accepts bare scalars.
         const QByteArray wrapped = QByteArray("[") + raw.toUtf8() + QByteArray("]");
         QJsonParseError err;

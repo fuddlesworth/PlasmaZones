@@ -71,13 +71,13 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
         g.writeBool(key, value.toBool());
         break;
     case QMetaType::Int:
-    case QMetaType::UInt:
-        // UInt up to INT_MAX fits; above that falls through via writeUint64
-        // only for the LongLong/ULongLong cases — for QMetaType::UInt alone,
-        // Qt's implicit promotion handles values >INT_MAX by wrapping. A
-        // stricter check would require a separate writeUInt accessor; the
-        // narrowing cost is accepted for the common 0..INT_MAX range.
         g.writeInt(key, value.toInt());
+        break;
+    case QMetaType::UInt:
+        // UInt values > INT_MAX would wrap if cast directly. Route through
+        // the same range-check as ULongLong so oversized values are
+        // persisted as strings rather than silently corrupted.
+        writeUint64(value.toUInt());
         break;
     case QMetaType::LongLong:
         writeInt64(value.toLongLong());
@@ -398,9 +398,22 @@ void Store::importFromJson(const QJsonObject& snapshot)
     // with an older snapshot must run MigrationRunner on it first —
     // otherwise we'd silently drop or mis-type keys that changed shape
     // between versions.
+    //
+    // The version key must be a JSON number. A missing key is acceptable
+    // (callers doing partial imports / fresh exports), but a string or
+    // other wrongly-typed value means the snapshot is malformed and we
+    // refuse rather than letting the zero-default mask a type error.
     if (!d->schema.versionKey.isEmpty() && snapshot.contains(d->schema.versionKey)) {
-        const int snapshotVersion = snapshot.value(d->schema.versionKey).toInt(0);
-        if (snapshotVersion != 0 && snapshotVersion != d->schema.version) {
+        const QJsonValue versionValue = snapshot.value(d->schema.versionKey);
+        if (!versionValue.isDouble()) {
+            qWarning(
+                "PhosphorConfig::Store::importFromJson: snapshot '%s' is not a JSON number — refusing import "
+                "(malformed snapshot).",
+                qPrintable(d->schema.versionKey));
+            return;
+        }
+        const int snapshotVersion = versionValue.toInt();
+        if (snapshotVersion != d->schema.version) {
             qWarning(
                 "PhosphorConfig::Store::importFromJson: snapshot version %d does not match schema version %d — "
                 "refusing import. Run MigrationRunner on the snapshot first.",

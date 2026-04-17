@@ -12,7 +12,12 @@
 #include "../../../src/config/configmigration.h"
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configbackends.h"
+#include "../../../src/config/settingsschema.h"
 #include "../helpers/IsolatedConfigGuard.h"
+
+#include <PhosphorConfig/Schema.h>
+
+#include <QSet>
 
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
@@ -636,6 +641,279 @@ private Q_SLOTS:
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
         QVERIFY(!QFile::exists(ConfigDefaults::sessionFilePath()));
+    }
+
+    void testINIColorHeuristic_preservesNonColorIntLists()
+    {
+        // iniMapToJson has a heuristic: 3 or 4 comma-separated ints in 0..255
+        // are treated as an r,g,b[,a] color and converted to hex. The
+        // docstring explicitly calls out this assumption; guard against a
+        // future setting whose wire format happens to fit the pattern but
+        // isn't a color. For now the only such shape in the config tree is
+        // trigger lists (which are JSON, not comma-separated), but this
+        // test locks the behavior so a regression surfaces loudly.
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Appearance]\n"
+                                    "HighlightColor=82,148,226,255\n"
+                                    "\n"
+                                    "[Ordering]\n"
+                                    // NOT a color: just a comma list of small
+                                    // ints (e.g. a layout order by index).
+                                    // Must round-trip as a string, not a hex.
+                                    "SnappingLayoutOrder=1,2,3\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        QJsonObject ordering = root.value(QStringLiteral("Ordering")).toObject();
+        const QJsonValue order = ordering.value(QStringLiteral("SnappingLayoutOrder"));
+        QVERIFY2(order.isString(),
+                 "Non-color int list must remain a string after migration — "
+                 "color heuristic over-fired on comma-separated small ints.");
+        QCOMPARE(order.toString(), QStringLiteral("1,2,3"));
+    }
+
+    void testSchemaCoversEveryMigrationDestinationKey()
+    {
+        // Cross-check: every leaf key that migrateV1ToV2 writes into the v2
+        // tree must be declared in the v2 settings schema. Catches silent
+        // drift between the migration's destination names and the live
+        // schema — e.g. if someone renames a key in ConfigDefaults and only
+        // updates one side, this test surfaces the mismatch at build time
+        // instead of at user-config-load time.
+        //
+        // The schema uses dot-path group names ("Snapping.Behavior.ZoneSpan")
+        // while migrateV1ToV2 produces nested JSON objects. Flatten both to
+        // a QSet<QString> of "Group.Path/Key" entries for comparison.
+        IsolatedConfigGuard guard;
+
+        // Use an INI covering every v1 group the migration handles. The
+        // exact values don't matter — we only care about which destination
+        // keys get produced.
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Activation]\n"
+                                    "SnappingEnabled=true\n"
+                                    "DragActivationTriggers=[{\"modifier\":2,\"mouseButton\":0}]\n"
+                                    "ToggleActivation=false\n"
+                                    "ZoneSpanEnabled=true\n"
+                                    "ZoneSpanModifier=4\n"
+                                    "ZoneSpanTriggers=[]\n"
+                                    "SnapAssistFeatureEnabled=true\n"
+                                    "SnapAssistEnabled=false\n"
+                                    "SnapAssistTriggers=[]\n"
+                                    "\n"
+                                    "[Display]\n"
+                                    "ShowOnAllMonitors=true\n"
+                                    "DisabledMonitors=a\n"
+                                    "DisabledDesktops=b\n"
+                                    "DisabledActivities=c\n"
+                                    "ShowNumbers=true\n"
+                                    "FlashOnSwitch=true\n"
+                                    "ShowOsdOnLayoutSwitch=true\n"
+                                    "ShowNavigationOsd=true\n"
+                                    "OsdStyle=0\n"
+                                    "OverlayDisplayMode=0\n"
+                                    "\n"
+                                    "[Behavior]\n"
+                                    "FilterLayoutsByAspectRatio=true\n"
+                                    "KeepOnResolutionChange=true\n"
+                                    "MoveNewToLastZone=true\n"
+                                    "RestoreSizeOnUnsnap=true\n"
+                                    "StickyWindowHandling=0\n"
+                                    "RestoreWindowsToZonesOnLogin=true\n"
+                                    "DefaultLayoutId=\n"
+                                    "\n"
+                                    "[Appearance]\n"
+                                    "UseSystemColors=true\n"
+                                    "HighlightColor=1,2,3,255\n"
+                                    "InactiveColor=4,5,6,255\n"
+                                    "BorderColor=7,8,9,255\n"
+                                    "ActiveOpacity=0.1\n"
+                                    "InactiveOpacity=0.2\n"
+                                    "BorderWidth=1\n"
+                                    "BorderRadius=2\n"
+                                    "LabelFontColor=0,0,0,255\n"
+                                    "LabelFontFamily=Sans\n"
+                                    "LabelFontSizeScale=1.0\n"
+                                    "LabelFontWeight=50\n"
+                                    "LabelFontItalic=false\n"
+                                    "LabelFontUnderline=false\n"
+                                    "LabelFontStrikeout=false\n"
+                                    "EnableBlur=false\n"
+                                    "\n"
+                                    "[Zones]\n"
+                                    "Padding=4\n"
+                                    "OuterGap=8\n"
+                                    "UsePerSideOuterGap=false\n"
+                                    "OuterGapTop=1\n"
+                                    "OuterGapBottom=2\n"
+                                    "OuterGapLeft=3\n"
+                                    "OuterGapRight=4\n"
+                                    "AdjacentThreshold=5\n"
+                                    "PollIntervalMs=100\n"
+                                    "MinimumZoneSizePx=50\n"
+                                    "MinimumZoneDisplaySizePx=60\n"
+                                    "\n"
+                                    "[Exclusions]\n"
+                                    "ExcludeTransientWindows=true\n"
+                                    "MinimumWindowWidth=100\n"
+                                    "MinimumWindowHeight=100\n"
+                                    "Applications=a\n"
+                                    "WindowClasses=b\n"
+                                    "\n"
+                                    "[ZoneSelector]\n"
+                                    "Enabled=true\n"
+                                    "TriggerDistance=20\n"
+                                    "Position=0\n"
+                                    "LayoutMode=0\n"
+                                    "PreviewWidth=100\n"
+                                    "PreviewHeight=100\n"
+                                    "PreviewLockAspect=true\n"
+                                    "GridColumns=2\n"
+                                    "SizeMode=0\n"
+                                    "MaxRows=5\n"
+                                    "\n"
+                                    "[Autotiling]\n"
+                                    "AutotileEnabled=true\n"
+                                    "DefaultAutotileAlgorithm=bsp\n"
+                                    "AutotileSplitRatio=0.5\n"
+                                    "AutotileSplitRatioStep=0.05\n"
+                                    "AutotileMasterCount=1\n"
+                                    "AutotileMaxWindows=8\n"
+                                    "AutotileInsertPosition=0\n"
+                                    "AutotileFocusNewWindows=true\n"
+                                    "AutotileFocusFollowsMouse=false\n"
+                                    "AutotileRespectMinimumSize=true\n"
+                                    "AutotileStickyWindowHandling=0\n"
+                                    "LockedScreens=\n"
+                                    "AutotileUseSystemBorderColors=false\n"
+                                    "AutotileBorderColor=1,2,3,255\n"
+                                    "AutotileInactiveBorderColor=4,5,6,255\n"
+                                    "AutotileHideTitleBars=false\n"
+                                    "AutotileShowBorder=true\n"
+                                    "AutotileBorderWidth=1\n"
+                                    "AutotileBorderRadius=1\n"
+                                    "AutotileInnerGap=4\n"
+                                    "AutotileOuterGap=4\n"
+                                    "AutotileUsePerSideOuterGap=false\n"
+                                    "AutotileOuterGapTop=1\n"
+                                    "AutotileOuterGapBottom=1\n"
+                                    "AutotileOuterGapLeft=1\n"
+                                    "AutotileOuterGapRight=1\n"
+                                    "AutotileSmartGaps=false\n"
+                                    "\n"
+                                    "[AutotileShortcuts]\n"
+                                    "ToggleShortcut=Meta+T\n"
+                                    "FocusMasterShortcut=Meta+M\n"
+                                    "SwapMasterShortcut=Meta+S\n"
+                                    "IncMasterRatioShortcut=Meta+L\n"
+                                    "DecMasterRatioShortcut=Meta+H\n"
+                                    "IncMasterCountShortcut=Meta+I\n"
+                                    "DecMasterCountShortcut=Meta+D\n"
+                                    "RetileShortcut=Meta+R\n"
+                                    "\n"
+                                    "[Animations]\n"
+                                    "AnimationsEnabled=true\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=easeOutCubic\n"
+                                    "AnimationMinDistance=10\n"
+                                    "AnimationSequenceMode=0\n"
+                                    "AnimationStaggerInterval=0\n"
+                                    "\n"
+                                    "[GlobalShortcuts]\n"
+                                    "OpenEditorShortcut=Meta+E\n"
+                                    "\n"
+                                    "[Editor]\n"
+                                    "EditorDuplicateShortcut=Ctrl+D\n"
+                                    "EditorSplitHorizontalShortcut=Ctrl+H\n"
+                                    "EditorSplitVerticalShortcut=Ctrl+V\n"
+                                    "EditorFillShortcut=Ctrl+F\n"
+                                    "GridSnappingEnabled=true\n"
+                                    "EdgeSnappingEnabled=true\n"
+                                    "SnapIntervalX=0.05\n"
+                                    "SnapIntervalY=0.05\n"
+                                    "SnapOverrideModifier=67108864\n"
+                                    "FillOnDropEnabled=false\n"
+                                    "FillOnDropModifier=0\n"
+                                    "\n"
+                                    "[Ordering]\n"
+                                    "SnappingLayoutOrder=a,b\n"
+                                    "TilingAlgorithmOrder=a,b\n"
+                                    "\n"
+                                    "[Rendering]\n"
+                                    "RenderingBackend=vulkan\n"
+                                    "\n"
+                                    "[Shaders]\n"
+                                    "EnableShaderEffects=true\n"
+                                    "ShaderFrameRate=60\n"
+                                    "EnableAudioVisualizer=false\n"
+                                    "AudioSpectrumBarCount=32\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+
+        // Build the set of declared "Group.Path/Key" pairs from the schema.
+        const PhosphorConfig::Schema schema = buildSettingsSchema();
+        QSet<QString> declared;
+        for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+            for (const PhosphorConfig::KeyDef& def : it.value()) {
+                declared.insert(it.key() + QLatin1Char('/') + def.key);
+            }
+        }
+
+        // Walk the migrated JSON tree, collecting every scalar leaf as
+        // "Group.Path/Key". Migration-only reserved keys (_version,
+        // PerScreen container — resolver-owned) are filtered out.
+        //
+        // Some root keys live outside the schema by design:
+        //   - TilingQuickLayoutSlots, Updates: managed outside Settings.
+        //   - Rendering.Backend: declared in the schema. Verify.
+        QSet<QString> produced;
+        QStringList stack; // path prefix as dot-path segments
+        std::function<void(const QJsonObject&)> collect = [&](const QJsonObject& obj) {
+            for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+                if (it.value().isObject()) {
+                    stack.append(it.key());
+                    collect(it.value().toObject());
+                    stack.removeLast();
+                } else {
+                    const QString groupPath = stack.join(QLatin1Char('.'));
+                    produced.insert(groupPath + QLatin1Char('/') + it.key());
+                }
+            }
+        };
+        // Skip reserved root keys and non-schema top-level groups.
+        const QSet<QString> skipRoots = {
+            QStringLiteral("_version"), QStringLiteral("PerScreen"),
+            QStringLiteral("General"),  QStringLiteral("TilingQuickLayoutSlots"),
+            QStringLiteral("Updates"),  QStringLiteral("WindowTracking"),
+        };
+        for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
+            if (skipRoots.contains(it.key())) {
+                continue;
+            }
+            if (it.value().isObject()) {
+                stack.append(it.key());
+                collect(it.value().toObject());
+                stack.removeLast();
+            }
+        }
+
+        // Every produced key must exist in the schema.
+        QStringList missing;
+        for (const QString& key : std::as_const(produced)) {
+            if (!declared.contains(key)) {
+                missing.append(key);
+            }
+        }
+        if (!missing.isEmpty()) {
+            missing.sort();
+            QFAIL(qPrintable(QStringLiteral("Migration produces keys that aren't declared in buildSettingsSchema() "
+                                            "— schema/migration drift:\n  ")
+                             + missing.join(QStringLiteral("\n  "))));
+        }
     }
 
     void testMigratedConfigReadableByBackend()

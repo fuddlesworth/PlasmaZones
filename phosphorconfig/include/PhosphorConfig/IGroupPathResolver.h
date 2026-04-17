@@ -46,9 +46,8 @@ public:
     /// Enumerate every external group name currently represented in the
     /// backing JSON document under this resolver's reserved keys. Results
     /// are appended to IBackend::groupList() output.
-    virtual QStringList enumerate(const QJsonObject& root) const
+    virtual QStringList enumerate(const QJsonObject& /*root*/) const
     {
-        Q_UNUSED(root);
         return {};
     }
 

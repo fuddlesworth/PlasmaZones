@@ -230,11 +230,11 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
             // Root-level INI key (ungrouped). Route RenderingBackend to its own group.
             if (flatKey == renderingKey) {
                 QJsonObject rendering = root.value(renderingGroup).toObject();
-                rendering[flatKey] = convertValue(value);
+                rendering[flatKey] = convertValue(flatKey, value);
                 root[renderingGroup] = rendering;
             } else {
                 QJsonObject general = root.value(generalGroup).toObject();
-                general[flatKey] = convertValue(value);
+                general[flatKey] = convertValue(flatKey, value);
                 root[generalGroup] = general;
             }
             continue;
@@ -248,7 +248,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
         // as "General/RenderingBackend". Route it to the Rendering group either way.
         if (groupPart == generalGroup && keyPart == renderingKey) {
             QJsonObject rendering = root.value(renderingGroup).toObject();
-            rendering[keyPart] = convertValue(value);
+            rendering[keyPart] = convertValue(keyPart, value);
             root[renderingGroup] = rendering;
             continue;
         }
@@ -264,14 +264,14 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
             QJsonObject perScreen = root.value(PerScreenKeyStr).toObject();
             QJsonObject cat = perScreen.value(category).toObject();
             QJsonObject screen = cat.value(screenId).toObject();
-            screen[keyPart] = convertValue(value);
+            screen[keyPart] = convertValue(keyPart, value);
             cat[screenId] = screen;
             perScreen[category] = cat;
             root[PerScreenKeyStr] = perScreen;
         } else {
             // Regular group: Group/Key
             QJsonObject groupObj = root.value(groupPart).toObject();
-            groupObj[keyPart] = convertValue(value);
+            groupObj[keyPart] = convertValue(keyPart, value);
             root[groupPart] = groupObj;
         }
     }
@@ -279,7 +279,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
     return root;
 }
 
-QJsonValue ConfigMigration::convertValue(const QVariant& value)
+QJsonValue ConfigMigration::convertValue(const QString& keyName, const QVariant& value)
 {
     const QString s = value.toString();
 
@@ -291,7 +291,10 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
     // Type detection priority (order matters):
     //   1. Boolean strings ("true"/"false")
     //   2. JSON arrays/objects (trigger lists, per-algorithm settings)
-    //   3. Comma-separated integers 0-255 → color hex (r,g,b or r,g,b,a)
+    //   3. Comma-separated integers 0-255 on a color-shaped key → hex
+    //      (content heuristic alone is ambiguous — a layout-order list like
+    //      "1,2,3" also matches, so gate on the key name to avoid false
+    //      positives)
     //   4. Plain integers
     //   5. Doubles (only if contains '.' to avoid "0" → 0.0)
     //   6. Fallback: keep as string
@@ -319,10 +322,16 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
     }
 
     // Color in r,g,b or r,g,b,a format → convert to hex.
-    // Assumption: no PlasmaZones config value is a comma-separated list of integers
-    // in the 0-255 range that isn't a color. If one is added, this heuristic would
-    // need a key-based allowlist to avoid false positives.
-    if (s.contains(QLatin1Char(','))) {
+    //
+    // The old code applied this conversion to ANY comma-separated list of
+    // 3–4 ints in 0..255, which corrupts settings whose wire format happens
+    // to match — e.g. a layout-order like "1,2,3". Require the key to look
+    // like a color key (ends with "Color") before converting.
+    //
+    // Every v1 color key in the PZ config follows this convention:
+    //   HighlightColor / InactiveColor / BorderColor / LabelFontColor /
+    //   AutotileBorderColor / AutotileInactiveBorderColor.
+    if (keyName.endsWith(QLatin1String("Color")) && s.contains(QLatin1Char(','))) {
         const QStringList parts = s.split(QLatin1Char(','));
         if (parts.size() >= 3 && parts.size() <= 4) {
             bool allNumeric = true;
@@ -342,7 +351,12 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
                 return QJsonValue(c.name(QColor::HexArgb));
             }
         }
-        // Not a color — might be a comma-separated list, keep as string
+    }
+
+    // Any other comma-containing value is kept verbatim — comma-separated
+    // lists (layout order, exclusion apps, locked screens) round-trip as
+    // strings and get parsed by their respective setters.
+    if (s.contains(QLatin1Char(','))) {
         return QJsonValue(s);
     }
 

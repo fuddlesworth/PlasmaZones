@@ -42,6 +42,12 @@ public:
     /// Non-matching colon-containing names (e.g. Assignment:*) return false.
     static bool isPerScreenPrefix(const QString& groupName);
 
+    /// Returns true for bare-prefix names ("ZoneSelector:" with no screen
+    /// id). Such names are neither valid per-screen groups nor regular
+    /// dot-path groups; toJsonPath claims them with an empty path so the
+    /// backend refuses the operation.
+    static bool isMalformedPerScreen(const QString& groupName);
+
     /// Map a prefix (e.g. "AutotileScreen") to its JSON category key
     /// (e.g. "Autotile"). ZoneSelector maps to itself.
     static QString prefixToCategory(const QString& prefix);
