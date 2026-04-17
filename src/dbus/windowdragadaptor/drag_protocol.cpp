@@ -128,9 +128,10 @@ DragPolicy WindowDragAdaptor::beginDrag(const QString& windowId, int frameX, int
                          << "bypass=" << effectivePolicy.bypassReason << "stream=" << effectivePolicy.streamDragMoved
                          << "immediateFloat=" << effectivePolicy.immediateFloatOnStart;
 
-    // Stash bypass reason so the matching endDrag can dispatch to the
-    // right branch without re-computing policy.
-    m_currentDragBypassReason = effectivePolicy.bypassReason;
+    // Stash the full policy so the matching endDrag can dispatch on
+    // bypassReason without re-computing, and updateDragCursor has a
+    // previous-policy reference to compare cross-VS candidates against.
+    m_currentDragPolicy = effectivePolicy;
 
     if (effectivePolicy.bypassReason != DragBypassReason::None) {
         // Bypass path — record the id so the matching endDrag can find us,
@@ -286,7 +287,7 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
         qCInfo(lcDbusWindow) << "endDrag: pending snap drag never activated" << windowId << "wasSnapped=" << wasSnapped
                              << "cancelled=" << cancelled;
         clearPendingSnapDragState();
-        m_currentDragBypassReason = DragBypassReason::None;
+        m_currentDragPolicy = {};
         if (!cancelled && wasSnapped && m_windowTracking) {
             m_windowTracking->notifyDragOutUnsnap(windowId);
         }
@@ -300,8 +301,8 @@ DragOutcome WindowDragAdaptor::endDrag(const QString& windowId, int cursorX, int
         return outcome;
     }
 
-    const DragBypassReason bypassReason = m_currentDragBypassReason;
-    m_currentDragBypassReason = DragBypassReason::None; // next drag starts fresh
+    const DragBypassReason bypassReason = m_currentDragPolicy.bypassReason;
+    m_currentDragPolicy = {}; // next drag starts fresh
     // m_dragReorderActive lives for one drag only. Reset here (before the
     // various early-return branches below) so no branch has to remember.
     m_dragReorderActive = false;
@@ -459,15 +460,11 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // effect-side detection loop in the dragMoved lambda that used the
     // stale m_autotileScreens cache to decide when to flip.
     //
-    // Known gap (docs/drag-policy-snap-path-followup.md): the comparator
-    // below flips on bypass-reason changes and autotile screen-to-screen
-    // changes, but NOT on snap-to-snap transitions where the two snap
-    // screens have different per-screen settings (e.g. one has
-    // snappingEnabled=true and the other false). Expanding `DragPolicy`
-    // with a full operator== and comparing the whole struct here is the
-    // tracked fix — see the followup doc for options and an acceptance
-    // test. Kept out of PR #330's scope to keep the PhosphorLayer
-    // migration focused.
+    // Full-struct comparison via DragPolicy::operator== catches every
+    // policy-relevant transition: bypass-reason flips, autotile→autotile
+    // cross-VS (distinct screenIds), and any future per-screen field added
+    // to the struct (snap behavior, zone-selector corner, etc.) without
+    // touching this site.
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     const QString cursorScreenId = resolved.screenId;
     if (!cursorScreenId.isEmpty()) {
@@ -475,11 +472,10 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
         const QString curActivity = m_layoutManager ? m_layoutManager->currentActivity() : QString();
         const DragPolicy candidate =
             computeDragPolicy(m_settings, m_autotileEngine, windowId, cursorScreenId, curDesktop, curActivity);
-        if (candidate.bypassReason != m_currentDragBypassReason
-            || (candidate.bypassReason == DragBypassReason::AutotileScreen && candidate.screenId != cursorScreenId)) {
-            qCInfo(lcDbusWindow) << "updateDragCursor: policy flip" << m_currentDragBypassReason << "->"
+        if (candidate != m_currentDragPolicy) {
+            qCInfo(lcDbusWindow) << "updateDragCursor: policy flip" << m_currentDragPolicy.bypassReason << "->"
                                  << candidate.bypassReason << "on" << cursorScreenId;
-            m_currentDragBypassReason = candidate.bypassReason;
+            m_currentDragPolicy = candidate;
             Q_EMIT dragPolicyChanged(windowId, candidate);
             // After the flip, fall through: if we're now on the snap path
             // we still want to call legacy dragMoved below for overlay

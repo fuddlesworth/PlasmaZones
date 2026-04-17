@@ -388,6 +388,13 @@ struct DragPolicy
     /// the invariant violation. Call at every unmarshal site on the effect
     /// side to catch garbled policies before they perturb drag state.
     QString validationError() const;
+
+    /// Full structural equality. Used by WindowDragAdaptor::updateDragCursor
+    /// to detect per-screen policy changes during a drag — any field that
+    /// participates in routing (bypass reason, screen id, the behavior
+    /// flags) is compared, so future fields are picked up automatically
+    /// without touching the comparator.
+    bool operator==(const DragPolicy&) const = default;
 };
 
 /// Drag outcome — daemon-authoritative decision about what to apply at drag
