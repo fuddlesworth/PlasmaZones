@@ -18,6 +18,7 @@
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/zonedetector.h"
 #include "../core/windowregistry.h"
@@ -94,13 +95,17 @@ Daemon::Daemon(QObject* parent)
         m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
     });
 
-    // Build the manual-layout PhosphorLayout::ILayoutSource over our layout
-    // manager. Construction here (rather than later in init()) because the
-    // source is a thin wrapper — no I/O, no signal hookup — and consumers
-    // can ask for layoutSource() any time after Daemon is constructed.
-    // Population happens lazily on first availableLayouts() call when the
-    // layout manager has finished loading from disk.
-    m_layoutSource = std::make_unique<PhosphorZones::ZonesLayoutSource>(m_layoutManager.get());
+    // Build the layout sources here (rather than later in init()) because they
+    // are thin wrappers — no I/O, no signal hookup — and consumers can ask for
+    // layoutSource() any time after Daemon is constructed.  Population happens
+    // lazily on first availableLayouts() call: the layout manager has loaded
+    // from disk by then, and the algorithm registry is populated by the
+    // ScriptedAlgorithmLoader during init().
+    m_zonesLayoutSource = std::make_unique<PhosphorZones::ZonesLayoutSource>(m_layoutManager.get());
+    m_autotileLayoutSource = std::make_unique<PhosphorTiles::AutotileLayoutSource>(AlgorithmRegistry::instance());
+    m_layoutSource = std::make_unique<PhosphorLayout::CompositeLayoutSource>();
+    m_layoutSource->addSource(m_zonesLayoutSource.get());
+    m_layoutSource->addSource(m_autotileLayoutSource.get());
 }
 
 Daemon::~Daemon()

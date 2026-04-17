@@ -19,6 +19,7 @@
 #include "../core/logging.h"
 #include "undo/UndoController.h"
 
+#include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <memory>
@@ -888,6 +889,11 @@ private:
     // gallery, layout-import preview thumbnails, etc.).
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
+    // Autotile previews come from the in-process AlgorithmRegistry singleton
+    // (populated by ScriptedAlgorithmLoader) — same wrapping pattern as
+    // m_localLayoutSource so the editor renders manual + autotile previews
+    // through one uniform path.  Source borrows the registry pointer.
+    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

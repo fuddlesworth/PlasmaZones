@@ -125,6 +125,7 @@ SettingsController::SettingsController(QObject* parent)
     , m_screenHelper(&m_settings, this)
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
+    , m_localAutotileSource(std::make_unique<PhosphorTiles::AutotileLayoutSource>(AlgorithmRegistry::instance()))
 {
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
@@ -761,20 +762,41 @@ void SettingsController::loadLayoutsAsync()
 QVariantList SettingsController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (!m_localLayoutSource) {
-        return list;
+    if (m_localLayoutSource) {
+        const auto manualPreviews = m_localLayoutSource->availableLayouts();
+        list.reserve(list.size() + manualPreviews.size());
+        for (const auto& preview : manualPreviews) {
+            list.append(layoutPreviewToQmlMap(preview));
+        }
     }
-    const auto previews = m_localLayoutSource->availableLayouts();
-    list.reserve(previews.size());
-    for (const auto& preview : previews) {
-        list.append(layoutPreviewToQmlMap(preview));
+    if (m_localAutotileSource) {
+        const auto autotilePreviews = m_localAutotileSource->availableLayouts();
+        list.reserve(list.size() + autotilePreviews.size());
+        for (const auto& preview : autotilePreviews) {
+            list.append(layoutPreviewToQmlMap(preview));
+        }
     }
     return list;
 }
 
 QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount) const
 {
-    if (!m_localLayoutSource || id.isEmpty()) {
+    if (id.isEmpty()) {
+        return {};
+    }
+    // Autotile previews carry an `autotile:<algorithmId>` id — route those
+    // to the algorithm source; everything else is a manual layout UUID.
+    if (id.startsWith(QLatin1String("autotile:"))) {
+        if (!m_localAutotileSource) {
+            return {};
+        }
+        const auto preview = m_localAutotileSource->previewAt(id, windowCount);
+        if (preview.id.isEmpty()) {
+            return {};
+        }
+        return layoutPreviewToQmlMap(preview);
+    }
+    if (!m_localLayoutSource) {
         return {};
     }
     const auto preview = m_localLayoutSource->previewAt(id, windowCount);

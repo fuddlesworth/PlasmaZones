@@ -17,6 +17,8 @@
 #include "../autotile/AutotileEngine.h"
 
 #include <PhosphorConfig/IBackend.h>
+#include <PhosphorLayoutApi/CompositeLayoutSource.h>
+#include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 namespace PlasmaZones {
@@ -90,16 +92,15 @@ public:
     }
 
     /**
-     * @brief Layout-preview source over the daemon's manual layouts.
+     * @brief Unified layout-preview source (manual zones + autotile algorithms).
      *
-     * Wraps m_layoutManager in the PhosphorLayout::ILayoutSource contract
-     * (LayoutPreview + availableLayouts/previewAt). Daemon-internal
-     * consumers that just want to render previews — overlay layout
-     * picker, snap-assist preview thumbnails, future D-Bus query
-     * methods — should hit this rather than reaching for raw
-     * Layout* pointers, so they can later swap to a unified source
-     * that also covers autotile algorithm previews from a future
-     * phosphor-tile-algo library without changing the consumer code.
+     * Returns a composite that aggregates PhosphorZones::ZonesLayoutSource
+     * (over m_layoutManager) and PhosphorTiles::AutotileLayoutSource (over
+     * the in-process AlgorithmRegistry singleton).  Daemon-internal
+     * consumers — overlay layout picker, snap-assist preview thumbnails,
+     * the layout adaptor's D-Bus surface — see one ILayoutSource* and
+     * branch on `LayoutPreview::isAutotile` rather than on which
+     * concrete provider produced an entry.
      */
     PhosphorLayout::ILayoutSource* layoutSource() const
     {
@@ -347,10 +348,16 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
-    // ZonesLayoutSource wraps m_layoutManager for the
-    // PhosphorLayout::ILayoutSource contract — see layoutSource() doc.
-    // Constructed in Daemon's body ctor after m_layoutManager is ready.
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_layoutSource;
+    // The two concrete layout sources composed behind layoutSource(): manual
+    // layouts via ZonesLayoutSource (over m_layoutManager) and autotile
+    // algorithm previews via AutotileLayoutSource (over the in-process
+    // AlgorithmRegistry singleton).  Owned separately because the composite
+    // borrows their pointers and we need their lifetimes pinned to Daemon.
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_zonesLayoutSource;
+    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_autotileLayoutSource;
+    // Composite that aggregates m_zonesLayoutSource + m_autotileLayoutSource
+    // behind one PhosphorLayout::ILayoutSource — see layoutSource() doc.
+    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_layoutSource;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<ZoneDetector> m_zoneDetector;

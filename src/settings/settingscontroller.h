@@ -18,6 +18,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/modifierutils.h"
 
+#include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QHash>
@@ -871,6 +872,11 @@ private:
     // PhosphorLayout::ILayoutSource contract.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
+    // Autotile previews come from the in-process AlgorithmRegistry singleton
+    // (populated by ScriptedAlgorithmLoader) — same wrapping pattern as
+    // m_localLayoutSource so settings renders manual + autotile previews
+    // through one uniform path with no D-Bus round-trip.
+    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;
