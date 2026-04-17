@@ -73,6 +73,14 @@ public:
 
     ~Impl()
     {
+        // Stop the debounce timer eagerly. QTimer's dtor stops itself, but the
+        // stop happens during member destruction — AFTER this body runs and
+        // AFTER the compositor-lost unsubscribe below. Stopping up-front makes
+        // the teardown order explicit: no new fireSync() can start between
+        // unsubscribe and member destruction, even if a nested event loop (e.g.
+        // inside a consumer's aboutToQuit slot) pumps events mid-teardown.
+        m_debounceTimer.stop();
+
         // Unsubscribe before destruction so the broadcaster doesn't invoke a
         // stale lambda capturing our (now-destroyed) QPointer<Self> after
         // aboutToQuit fires. Without this, a transport outliving its

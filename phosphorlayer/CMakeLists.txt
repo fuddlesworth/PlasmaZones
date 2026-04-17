@@ -111,14 +111,32 @@ generate_export_header(PhosphorLayer
     EXPORT_MACRO_NAME PHOSPHORLAYER_EXPORT
 )
 
+# KDE_INSTALL_INCLUDEDIR (set below in the install block via GNUInstallDirs
+# when not inherited from ECM) decides where our headers actually land.
+# Resolve it here so the INSTALL_INTERFACE matches — consumers that set
+# CMAKE_INSTALL_INCLUDEDIR to a non-default value (or build via ECM where
+# KDE_INSTALL_INCLUDEDIR is already populated) get a consistent export.
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+
 target_include_directories(PhosphorLayer
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+
+# C++20 as a PUBLIC feature: CMAKE_CXX_STANDARD is only set by the
+# `if(NOT PROJECT_VERSION)` block above, i.e. only when PhosphorLayer is the
+# top-level project. When built as a subdirectory of PlasmaZones (or any
+# other parent), consumers inherit whatever standard the parent set. Declare
+# the requirement on the target so find_package(PhosphorLayer) consumers get
+# the right compile-feature propagation regardless of build configuration.
+target_compile_features(PhosphorLayer PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorLayer
     PUBLIC

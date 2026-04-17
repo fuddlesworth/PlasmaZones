@@ -67,9 +67,13 @@ public:
         , m_pathSafe(isSafeStorePath(m_path))
     {
         if (!m_pathSafe) {
+            // save() / remove() both short-circuit on !m_pathSafe, so neither
+            // in-memory state nor disk gets written — the store is inert, not
+            // "in-memory-only". Keep the refusal loud so tests and consumers
+            // can detect that their path was rejected.
             qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: refusing unsafe path" << m_path
                                        << "(traversal segment or symlink in path/parent) — "
-                                       << "store will behave as in-memory-only";
+                                       << "save()/remove() will fail and load()/has() will return empty";
             m_root = {};
             return;
         }
@@ -181,6 +185,13 @@ bool JsonSurfaceStore::has(const QString& key) const
 
 void JsonSurfaceStore::remove(const QString& key)
 {
+    // Mirror save()'s strict-persistence rule: on an unsafe path we refuse to
+    // touch in-memory state. Mutating m_root without a disk flush would leave
+    // subsequent has()/load() reporting data that never persisted — the same
+    // "surprise the caller" failure mode save()'s comment warns about.
+    if (!m_impl->m_pathSafe) {
+        return;
+    }
     if (!m_impl->m_root.contains(key)) {
         return;
     }

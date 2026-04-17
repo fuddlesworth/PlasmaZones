@@ -76,8 +76,12 @@ public:
         // entry, modal that must capture every keystroke), so mirror the
         // attach-time warning on the handle path: a consumer that swapped
         // transports or upgraded to a wlr-layer-shell compositor at runtime
-        // must not silently lose focus capture.
-        if (k == KeyboardInteractivity::Exclusive) {
+        // must not silently lose focus capture. Latched so a consumer that
+        // re-asserts Exclusive on every mouse move (snap assist does this)
+        // does not spam the log — one warning per handle lifetime is enough
+        // to flag the downgrade.
+        if (k == KeyboardInteractivity::Exclusive && !m_warnedKeyboardExclusive) {
+            m_warnedKeyboardExclusive = true;
             qCWarning(lcPhosphorLayer)
                 << "XdgToplevelTransport::setKeyboardInteractivity: exclusive keyboard REQUESTED but xdg_toplevel"
                 << "is always OnDemand — focus may leak to other windows.";
@@ -92,6 +96,7 @@ public:
 private:
     QPointer<QQuickWindow> m_window;
     mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
+    bool m_warnedKeyboardExclusive = false; ///< Latched true after first Exclusive-keyboard warning
 };
 
 // ── Transport ──────────────────────────────────────────────────────────
