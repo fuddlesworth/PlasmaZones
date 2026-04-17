@@ -3,12 +3,12 @@
 
 #include "PerScreenConfigResolver.h"
 #include "AutotileEngine.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "AutotileConfig.h"
-#include "TilingAlgorithm.h"
-#include "TilingState.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
-#include "autotile/AutotileConstants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 
 namespace PlasmaZones {

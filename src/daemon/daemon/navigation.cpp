@@ -16,7 +16,7 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "shared/virtualscreenid.h"
 #include "../../autotile/AutotileEngine.h"
-#include "../../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../../snap/SnapEngine.h"
 #include "../../core/iwindowengine.h"
 #include "../modetracker.h"

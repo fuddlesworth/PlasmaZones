@@ -22,7 +22,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QUuid>
-#include "../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../autotile/AutotileConfig.h"
 
 namespace PlasmaZones {

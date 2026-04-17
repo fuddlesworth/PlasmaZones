@@ -11,8 +11,8 @@
 #include "../../core/constants.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualscreen.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>

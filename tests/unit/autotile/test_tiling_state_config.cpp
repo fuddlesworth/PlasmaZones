@@ -4,7 +4,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
 

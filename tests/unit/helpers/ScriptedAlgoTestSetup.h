@@ -12,8 +12,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 #include "XdgEnvGuard.h"
 

@@ -10,8 +10,8 @@
 #include "../core/constants.h"
 #include "../core/layoututils.h"
 #include "../core/unifiedlayoutentry.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/layoutmanager.h"

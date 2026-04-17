@@ -3,9 +3,9 @@
 
 #include "SettingsBridge.h"
 #include "AutotileEngine.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "AutotileConfig.h"
-#include "TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "config/settings.h"
 #include "core/constants.h"
 #include "core/logging.h"

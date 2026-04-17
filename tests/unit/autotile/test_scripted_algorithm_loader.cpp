@@ -9,9 +9,9 @@
 #include <QFile>
 #include <QSignalSpy>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 #include "../helpers/ScriptTestHelpers.h"
 #include "../helpers/XdgEnvGuard.h"

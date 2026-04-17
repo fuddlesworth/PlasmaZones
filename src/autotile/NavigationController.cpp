@@ -4,9 +4,9 @@
 #include "NavigationController.h"
 #include "AutotileEngine.h"
 #include "AutotileConfig.h"
-#include "TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
-#include "autotile/AutotileConstants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/utils.h"

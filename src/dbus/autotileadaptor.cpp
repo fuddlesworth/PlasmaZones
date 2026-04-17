@@ -3,9 +3,9 @@
 
 #include "autotileadaptor.h"
 
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "autotile/AutotileEngine.h"
-#include "autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
 
 #include "core/logging.h"
 #include "core/screenmanager.h"

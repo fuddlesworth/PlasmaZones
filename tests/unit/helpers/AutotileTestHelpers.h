@@ -8,8 +8,8 @@
 #include <QStringList>
 
 #include "autotile/AutotileEngine.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingState.h>
 
 namespace PlasmaZones::TestHelpers {
 

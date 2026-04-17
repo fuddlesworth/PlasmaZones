@@ -7,7 +7,7 @@
 #include <QJsonArray>
 #include <QScopedPointer>
 
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
 

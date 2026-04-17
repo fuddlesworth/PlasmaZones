@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "AutotileConfig.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
-#include "autotile/AutotileConstants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 #include <QRegularExpression>
 #include <QtMath>

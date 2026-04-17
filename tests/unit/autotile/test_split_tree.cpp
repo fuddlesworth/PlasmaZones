@@ -6,10 +6,10 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/SplitTree.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"

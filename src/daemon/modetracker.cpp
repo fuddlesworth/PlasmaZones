@@ -3,7 +3,7 @@
 
 #include "modetracker.h"
 
-#include "../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"

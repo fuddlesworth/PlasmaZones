@@ -5,7 +5,7 @@
 // Part of GeometryUtils namespace — split from geometryutils.cpp for SRP.
 
 #include "../geometryutils.h"
-#include "autotile/AutotileConstants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "../constants.h"
 #include <QRect>
 #include <QSize>

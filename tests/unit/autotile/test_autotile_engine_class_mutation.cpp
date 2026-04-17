@@ -23,7 +23,7 @@
 #include <QTest>
 
 #include "autotile/AutotileEngine.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/windowregistry.h"
 
 using namespace PlasmaZones;

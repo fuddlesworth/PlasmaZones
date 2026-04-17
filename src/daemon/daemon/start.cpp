@@ -27,9 +27,9 @@
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
 #include "../../autotile/AutotileEngine.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
-#include "../../autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../../snap/SnapEngine.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/zonedetector.h"

@@ -24,8 +24,8 @@
 #include <QJsonObject>
 #include "../../dbus/windowdragadaptor.h"
 #include "../../autotile/AutotileEngine.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include "../../snap/SnapEngine.h"
 #include "../config/settings.h"
 #include <QGuiApplication>

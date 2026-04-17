@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
 
 #include <QRect>
 #include <QVector>

@@ -7,8 +7,8 @@
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 using namespace PlasmaZones;

@@ -49,8 +49,8 @@
 #include "../dbus/controladaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/autotilenavigationadapter.h"
-#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
-#include "../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
 

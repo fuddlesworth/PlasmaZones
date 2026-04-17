@@ -11,7 +11,7 @@
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>

@@ -13,19 +13,19 @@
 
 // Project headers
 #include "AutotileEngine.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/geometryutils.h"
 #include "core/utils.h"
 #include "AutotileConfig.h"
 #include "NavigationController.h"
 #include "PerScreenConfigResolver.h"
 #include "SettingsBridge.h"
-#include "TilingAlgorithm.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include "config/settings.h"
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on TilingAlgorithm
-#include "TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
-#include "autotile/AutotileConstants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "core/layout.h"
 #include "core/layoutmanager.h"
 #include "core/logging.h"

@@ -5,9 +5,9 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"

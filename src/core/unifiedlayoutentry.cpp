@@ -9,8 +9,8 @@
 #include "layoututils.h"
 #include "pz_i18n.h"
 #include "utils.h"
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 
 #include <algorithm>
 

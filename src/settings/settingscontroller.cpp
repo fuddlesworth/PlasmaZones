@@ -34,11 +34,11 @@ static void sortMergedLayoutList(QVariantList& list)
 #include "../core/virtualscreen.h"
 #include "dbusutils.h"
 
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
-#include "../autotile/TilingState.h"
-#include "../autotile/algorithms/ScriptedAlgorithm.h"
-#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"

@@ -19,8 +19,8 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AutotileConfig.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <QGuiApplication>
 #include <memory>
 #include <QScreen>

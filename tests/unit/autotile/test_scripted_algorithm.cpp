@@ -6,9 +6,9 @@
 #include <QElapsedTimer>
 #include <QFile>
 
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
-#include "autotile/algorithms/ScriptedAlgorithm.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
 

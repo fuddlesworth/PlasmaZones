@@ -7,8 +7,8 @@
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 
 #include "../helpers/AutotileTestHelpers.h"
 #include "../helpers/ScriptedAlgoTestSetup.h"
