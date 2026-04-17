@@ -3,7 +3,7 @@
 
 /**
  * @file test_zone_detector_overlap.cpp
- * @brief Unit tests for ZoneDetector with overlapping zones (sub-zones on background zones)
+ * @brief Unit tests for PhosphorZones::ZoneDetector with overlapping zones (sub-zones on background zones)
  *
  * Regression tests for the bug where spanning adjacent sub-zones (e.g. 7 & 9)
  * incorrectly pulled in a larger background zone (e.g. zone 2), making the
@@ -32,9 +32,9 @@ private Q_SLOTS:
     void init()
     {
         m_settings = new StubSettings(nullptr);
-        m_detector = new ZoneDetector(nullptr);
+        m_detector = new PhosphorZones::ZoneDetector(nullptr);
         m_detector->setAdjacentThreshold(m_settings->adjacentThreshold());
-        m_layout = new Layout(QStringLiteral("OverlapTest"), nullptr);
+        m_layout = new PhosphorZones::Layout(QStringLiteral("OverlapTest"), nullptr);
     }
 
     void cleanup()
@@ -54,7 +54,7 @@ private Q_SLOTS:
 
     void testDetectMultiZone_subZonesOnBackground_excludesBackground()
     {
-        // Layout on 1000x1000 screen:
+        // PhosphorZones::Layout on 1000x1000 screen:
         //   bgZone (background): full area (0,0)-(1000,1000)
         //   subLeft:  (0,0)-(490,300) — left sub-zone
         //   subRight: (510,0)-(1000,300) — right sub-zone
@@ -62,15 +62,15 @@ private Q_SLOTS:
         //
         // Cursor at (500, 150): in gap, inside bgZone, within threshold of both sub-zones
 
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* subLeft = new Zone(m_layout);
+        auto* subLeft = new PhosphorZones::Zone(m_layout);
         subLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 0.3));
         m_layout->addZone(subLeft);
 
-        auto* subRight = new Zone(m_layout);
+        auto* subRight = new PhosphorZones::Zone(m_layout);
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
@@ -78,7 +78,7 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 150);
-        ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
 
         QVERIFY2(result.isMultiZone, "Should detect multi-zone at sub-zone border");
 
@@ -102,23 +102,23 @@ private Q_SLOTS:
     void testExpandPaintedZones_subZonesOnBackground_excludesBackground()
     {
         // Sub-zones cover 30% height, background covers 100% — ratio < 0.5
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* subLeft = new Zone(m_layout);
+        auto* subLeft = new PhosphorZones::Zone(m_layout);
         subLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 0.3));
         m_layout->addZone(subLeft);
 
-        auto* subRight = new Zone(m_layout);
+        auto* subRight = new PhosphorZones::Zone(m_layout);
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
         LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
-        QVector<Zone*> painted = {subLeft, subRight};
-        QVector<Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
+        QVector<PhosphorZones::Zone*> painted = {subLeft, subRight};
+        QVector<PhosphorZones::Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
 
         QVERIFY2(!expanded.contains(bgZone), "expandPaintedZonesToRect should NOT pull in large background zone");
         QCOMPARE(expanded.size(), 2);
@@ -130,23 +130,23 @@ private Q_SLOTS:
 
     void testExpandPaintedZones_gapFilling_stillWorks()
     {
-        auto* z1 = new Zone(m_layout);
+        auto* z1 = new PhosphorZones::Zone(m_layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.33, 1.0));
         m_layout->addZone(z1);
 
-        auto* z2 = new Zone(m_layout);
+        auto* z2 = new PhosphorZones::Zone(m_layout);
         z2->setRelativeGeometry(QRectF(0.33, 0.0, 0.34, 1.0));
         m_layout->addZone(z2);
 
-        auto* z3 = new Zone(m_layout);
+        auto* z3 = new PhosphorZones::Zone(m_layout);
         z3->setRelativeGeometry(QRectF(0.67, 0.0, 0.33, 1.0));
         m_layout->addZone(z3);
 
         LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 900, 900));
         m_detector->setLayout(m_layout);
 
-        QVector<Zone*> painted = {z1, z3};
-        QVector<Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
+        QVector<PhosphorZones::Zone*> painted = {z1, z3};
+        QVector<PhosphorZones::Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
 
         QCOMPARE(expanded.size(), 3);
         QVERIFY(expanded.contains(z1));
@@ -164,23 +164,23 @@ private Q_SLOTS:
         // bgZone: full screen (1.0 x 1.0)
         // subLeft / subRight: each 50% width, 50% height → bounding rect = 100% width, 50% height
         // Intersection ratio of bgZone = (W * 0.5H) / (W * H) = 0.5 exactly
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* subLeft = new Zone(m_layout);
+        auto* subLeft = new PhosphorZones::Zone(m_layout);
         subLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 0.5));
         m_layout->addZone(subLeft);
 
-        auto* subRight = new Zone(m_layout);
+        auto* subRight = new PhosphorZones::Zone(m_layout);
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.5));
         m_layout->addZone(subRight);
 
         LayoutComputeService::recalculateSync(m_layout, QRectF(0, 0, 1000, 1000));
         m_detector->setLayout(m_layout);
 
-        QVector<Zone*> painted = {subLeft, subRight};
-        QVector<Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
+        QVector<PhosphorZones::Zone*> painted = {subLeft, subRight};
+        QVector<PhosphorZones::Zone*> expanded = m_detector->expandPaintedZonesToRect(painted);
 
         QVERIFY2(!expanded.contains(bgZone),
                  "Background zone at exactly 50% overlap ratio must be excluded (strict >)");
@@ -195,26 +195,26 @@ private Q_SLOTS:
 
     void testDetectZone_cursorNearBackgroundCenter_selectsBackground()
     {
-        // Layout: 4 quadrant sub-zones on top of a full-screen background.
+        // PhosphorZones::Layout: 4 quadrant sub-zones on top of a full-screen background.
         // Cursor at center (500, 500) — equidistant from all quadrant centers
         // but exactly at the background zone's center.
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* topLeft = new Zone(m_layout);
+        auto* topLeft = new PhosphorZones::Zone(m_layout);
         topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
         m_layout->addZone(topLeft);
 
-        auto* topRight = new Zone(m_layout);
+        auto* topRight = new PhosphorZones::Zone(m_layout);
         topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
         m_layout->addZone(topRight);
 
-        auto* bottomLeft = new Zone(m_layout);
+        auto* bottomLeft = new PhosphorZones::Zone(m_layout);
         bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomLeft);
 
-        auto* bottomRight = new Zone(m_layout);
+        auto* bottomRight = new PhosphorZones::Zone(m_layout);
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
@@ -222,7 +222,7 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         // Cursor at dead center of screen — background zone center
-        ZoneDetectionResult result = m_detector->detectZone(QPointF(500, 500));
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectZone(QPointF(500, 500));
         QVERIFY2(result.primaryZone == bgZone,
                  "Cursor at center of screen should select background zone, not a quadrant");
     }
@@ -231,23 +231,23 @@ private Q_SLOTS:
     {
         // Same layout as above, but cursor at (250, 250) — center of topLeft.
         // Should still select topLeft, not background.
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* topLeft = new Zone(m_layout);
+        auto* topLeft = new PhosphorZones::Zone(m_layout);
         topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
         m_layout->addZone(topLeft);
 
-        auto* topRight = new Zone(m_layout);
+        auto* topRight = new PhosphorZones::Zone(m_layout);
         topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
         m_layout->addZone(topRight);
 
-        auto* bottomLeft = new Zone(m_layout);
+        auto* bottomLeft = new PhosphorZones::Zone(m_layout);
         bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomLeft);
 
-        auto* bottomRight = new Zone(m_layout);
+        auto* bottomRight = new PhosphorZones::Zone(m_layout);
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
@@ -255,39 +255,39 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         // Cursor at center of top-left quadrant
-        ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 250));
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 250));
         QVERIFY2(result.primaryZone == topLeft, "Cursor at center of top-left quadrant should select that quadrant");
     }
 
     void testDetectZone_halfZones_cursorNearHalfCenter_selectsHalf()
     {
-        // Layout from discussion #258: quadrants + vertical halves + fullscreen.
+        // PhosphorZones::Layout from discussion #258: quadrants + vertical halves + fullscreen.
         // Cursor at (250, 500) — center of leftHalf zone.
-        auto* fullscreen = new Zone(m_layout);
+        auto* fullscreen = new PhosphorZones::Zone(m_layout);
         fullscreen->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(fullscreen);
 
-        auto* leftHalf = new Zone(m_layout);
+        auto* leftHalf = new PhosphorZones::Zone(m_layout);
         leftHalf->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 1.0));
         m_layout->addZone(leftHalf);
 
-        auto* rightHalf = new Zone(m_layout);
+        auto* rightHalf = new PhosphorZones::Zone(m_layout);
         rightHalf->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 1.0));
         m_layout->addZone(rightHalf);
 
-        auto* topLeft = new Zone(m_layout);
+        auto* topLeft = new PhosphorZones::Zone(m_layout);
         topLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.5, 0.5));
         m_layout->addZone(topLeft);
 
-        auto* bottomLeft = new Zone(m_layout);
+        auto* bottomLeft = new PhosphorZones::Zone(m_layout);
         bottomLeft->setRelativeGeometry(QRectF(0.0, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomLeft);
 
-        auto* topRight = new Zone(m_layout);
+        auto* topRight = new PhosphorZones::Zone(m_layout);
         topRight->setRelativeGeometry(QRectF(0.5, 0.0, 0.5, 0.5));
         m_layout->addZone(topRight);
 
-        auto* bottomRight = new Zone(m_layout);
+        auto* bottomRight = new PhosphorZones::Zone(m_layout);
         bottomRight->setRelativeGeometry(QRectF(0.5, 0.5, 0.5, 0.5));
         m_layout->addZone(bottomRight);
 
@@ -295,11 +295,11 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         // Cursor at center of left-half zone (250, 500)
-        ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 500));
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectZone(QPointF(250, 500));
         QVERIFY2(result.primaryZone == leftHalf, "Cursor at center of left-half zone should select it, not a quadrant");
 
         // Cursor at center of screen (500, 500) — fullscreen zone center
-        ZoneDetectionResult result2 = m_detector->detectZone(QPointF(500, 500));
+        PhosphorZones::ZoneDetectionResult result2 = m_detector->detectZone(QPointF(500, 500));
         QVERIFY2(result2.primaryZone == fullscreen, "Cursor at center of screen should select fullscreen zone");
     }
 
@@ -313,15 +313,15 @@ private Q_SLOTS:
         // Same layout as testDetectMultiZone_subZonesOnBackground_excludesBackground
         // but repeated here to ensure the #258 center-distance change in detectZone
         // does not affect the multi-zone span path.
-        auto* bgZone = new Zone(m_layout);
+        auto* bgZone = new PhosphorZones::Zone(m_layout);
         bgZone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         m_layout->addZone(bgZone);
 
-        auto* subLeft = new Zone(m_layout);
+        auto* subLeft = new PhosphorZones::Zone(m_layout);
         subLeft->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 0.3));
         m_layout->addZone(subLeft);
 
-        auto* subRight = new Zone(m_layout);
+        auto* subRight = new PhosphorZones::Zone(m_layout);
         subRight->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 0.3));
         m_layout->addZone(subRight);
 
@@ -329,7 +329,7 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 150);
-        ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
 
         QVERIFY2(result.isMultiZone, "Should detect multi-zone at sub-zone border");
         QVERIFY2(!result.adjacentZones.contains(bgZone), "Background must still be excluded from span (#211 fix)");
@@ -341,11 +341,11 @@ private Q_SLOTS:
 
     void testDetectMultiZone_nonOverlapping_worksNormally()
     {
-        auto* z1 = new Zone(m_layout);
+        auto* z1 = new PhosphorZones::Zone(m_layout);
         z1->setRelativeGeometry(QRectF(0.0, 0.0, 0.49, 1.0));
         m_layout->addZone(z1);
 
-        auto* z2 = new Zone(m_layout);
+        auto* z2 = new PhosphorZones::Zone(m_layout);
         z2->setRelativeGeometry(QRectF(0.51, 0.0, 0.49, 1.0));
         m_layout->addZone(z2);
 
@@ -353,7 +353,7 @@ private Q_SLOTS:
         m_detector->setLayout(m_layout);
 
         QPointF cursorInGap(500, 500);
-        ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
+        PhosphorZones::ZoneDetectionResult result = m_detector->detectMultiZone(cursorInGap);
 
         QVERIFY2(result.isMultiZone, "Should detect multi-zone between adjacent zones");
         QCOMPARE(result.adjacentZones.size(), 2);
@@ -361,8 +361,8 @@ private Q_SLOTS:
 
 private:
     StubSettings* m_settings = nullptr;
-    ZoneDetector* m_detector = nullptr;
-    Layout* m_layout = nullptr;
+    PhosphorZones::ZoneDetector* m_detector = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 QTEST_MAIN(TestZoneDetectorOverlap)

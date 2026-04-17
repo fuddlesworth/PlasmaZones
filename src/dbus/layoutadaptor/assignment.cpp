@@ -64,7 +64,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     }
 
     // For manual layouts, validate UUID and verify layout exists
-    Layout* layout = nullptr;
+    PhosphorZones::Layout* layout = nullptr;
     if (!LayoutId::isAutotile(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
@@ -118,7 +118,8 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     // immediately (same as assignLayoutToScreen). KCM Save uses this path.
     QScreen* primary = Utils::primaryScreen();
     if (primary) {
-        Layout* primaryLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(primary));
+        PhosphorZones::Layout* primaryLayout =
+            m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(primary));
         if (primaryLayout) {
             m_layoutManager->setActiveLayout(primaryLayout);
         }
@@ -219,7 +220,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -274,7 +275,7 @@ QString LayoutAdaptor::getScreenStates()
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
         // Snapping layout — use resolved layout (includes default fallback)
-        Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        PhosphorZones::Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (resolvedLayout) {
             obj[QLatin1String("layoutId")] = resolvedLayout->id().toString();
             obj[QLatin1String("layoutName")] = resolvedLayout->name();
@@ -472,7 +473,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -562,7 +563,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 

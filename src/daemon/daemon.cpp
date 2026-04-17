@@ -71,7 +71,7 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
-    , m_zoneDetector(std::make_unique<ZoneDetector>(nullptr))
+    , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_screenManager(std::make_unique<ScreenManager>(nullptr))
@@ -87,7 +87,7 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
 
-    // Wire ZoneDetector's adjacency threshold to the settings value. The
+    // Wire PhosphorZones::ZoneDetector's adjacency threshold to the settings value. The
     // detector no longer holds an ISettings pointer (it takes just the int)
     // so we mirror the setting here and re-push on change.
     m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
@@ -189,7 +189,7 @@ bool Daemon::init()
     // Recalculate zone geometries for ALL layouts so that fixed-mode zones
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
-        for (Layout* layout : m_layoutManager->layouts()) {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
         }
     }
@@ -208,7 +208,7 @@ bool Daemon::init()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
         if (layout) {
             // Recalculate zone geometries asynchronously using primary screen geometry.
             // Active layout is global; recalculating per-screen overwrites each
@@ -229,7 +229,7 @@ bool Daemon::init()
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
-            [this](const QString& screenId, int /*virtualDesktop*/, Layout* layout) {
+            [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                 if (!layout) {
                     return;
                 }
@@ -312,7 +312,7 @@ bool Daemon::init()
         updateLayoutFilter();
 
         // Resnap after autotile disabled: restore windows to their pre-autotile
-        // zone positions. Zone assignments are preserved during autotile (onLayoutChanged
+        // zone positions. PhosphorZones::Zone assignments are preserved during autotile (onLayoutChanged
         // skips autotile screens) so resnap uses original snap assignments.
         if (autotileToggled && !autotileNow && m_windowTrackingAdaptor) {
             m_suppressResnapOsd = 1;
@@ -350,7 +350,7 @@ bool Daemon::init()
     m_overlayAdaptor =
         new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
 
-    // Zone detection adaptor - zone detection queries
+    // PhosphorZones::Zone detection adaptor - zone detection queries
     m_zoneDetectionAdaptor =
         new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
 
@@ -378,7 +378,7 @@ bool Daemon::init()
     m_windowDragAdaptor = new WindowDragAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
                                                 m_settings.get(), m_windowTrackingAdaptor, this);
 
-    // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
+    // PhosphorZones::Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
     // Give the window drag adaptor access to the shortcut backend for
@@ -550,63 +550,63 @@ bool Daemon::init()
     // save completes (all setAssignmentEntry + notifyReload finished), so all
     // assignments and settings are fully committed. Separated from settingsChanged
     // handler to avoid feedback loops with autotile/snapping transitions.
-    connect(m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
-            [this](const QStringList& changedScreenIdsList) {
-                const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
-                if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
-                    return;
+    connect(
+        m_layoutAdaptor, &LayoutAdaptor::assignmentChangesApplied, this,
+        [this](const QStringList& changedScreenIdsList) {
+            const QSet<QString> changedScreenIds(changedScreenIdsList.begin(), changedScreenIdsList.end());
+            if (!m_snapEngine || !m_windowTrackingAdaptor || !m_screenManager || !m_layoutManager)
+                return;
 
-                const int desktop = currentDesktop();
-                const QString activity = currentActivity();
+            const int desktop = currentDesktop();
+            const QString activity = currentActivity();
 
-                // Collect autotile screens and per-screen OSD data in one pass
-                QSet<QString> autotileScreens;
-                struct ScreenOsd
-                {
-                    QString screenId;
-                    bool isAutotile;
-                    QString algoId;
-                };
-                QVector<ScreenOsd> osdEntries;
-                const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
-                for (const QString& screenId : effectiveIds) {
-                    const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                    if (LayoutId::isAutotile(assignmentId)) {
-                        autotileScreens.insert(screenId);
-                    }
-                    // Only show OSD for screens that actually changed
-                    if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
-                        if (autotileScreens.contains(screenId)) {
-                            osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
-                        } else {
-                            osdEntries.append({screenId, false, {}});
-                        }
-                    }
+            // Collect autotile screens and per-screen OSD data in one pass
+            QSet<QString> autotileScreens;
+            struct ScreenOsd
+            {
+                QString screenId;
+                bool isAutotile;
+                QString algoId;
+            };
+            QVector<ScreenOsd> osdEntries;
+            const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
+            for (const QString& screenId : effectiveIds) {
+                const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
+                if (LayoutId::isAutotile(assignmentId)) {
+                    autotileScreens.insert(screenId);
                 }
-
-                // Resnap only the snapping-mode screens whose assignments actually changed.
-                // changedScreenIds scopes the resnap to avoid spurious geometry-set on
-                // screens whose layout didn't change (prevents flicker on unrelated VS).
-                m_suppressResnapOsd = osdEntries.size();
-                m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens,
-                                                                                      changedScreenIds);
-                m_snapEngine->resnapToNewLayout();
-
-                // Show OSD for changed screens — use locked OSD variant when context is locked
-                for (const auto& osd : std::as_const(osdEntries)) {
-                    int mode = osd.isAutotile ? 1 : 0;
-                    if (isCurrentContextLockedForMode(osd.screenId, mode)) {
-                        showLockedPreviewOsd(osd.screenId);
-                    } else if (osd.isAutotile) {
-                        if (!osd.algoId.isEmpty())
-                            showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                // Only show OSD for screens that actually changed
+                if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
+                    if (autotileScreens.contains(screenId)) {
+                        osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
                     } else {
-                        Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
-                        if (layout)
-                            showLayoutOsd(layout, osd.screenId);
+                        osdEntries.append({screenId, false, {}});
                     }
                 }
-            });
+            }
+
+            // Resnap only the snapping-mode screens whose assignments actually changed.
+            // changedScreenIds scopes the resnap to avoid spurious geometry-set on
+            // screens whose layout didn't change (prevents flicker on unrelated VS).
+            m_suppressResnapOsd = osdEntries.size();
+            m_windowTrackingAdaptor->service()->populateResnapBufferForAllScreens(autotileScreens, changedScreenIds);
+            m_snapEngine->resnapToNewLayout();
+
+            // Show OSD for changed screens — use locked OSD variant when context is locked
+            for (const auto& osd : std::as_const(osdEntries)) {
+                int mode = osd.isAutotile ? 1 : 0;
+                if (isCurrentContextLockedForMode(osd.screenId, mode)) {
+                    showLockedPreviewOsd(osd.screenId);
+                } else if (osd.isAutotile) {
+                    if (!osd.algoId.isEmpty())
+                        showLayoutOsdForAlgorithm(osd.algoId, osd.algoId, osd.screenId);
+                } else {
+                    PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(osd.screenId, desktop, activity);
+                    if (layout)
+                        showLayoutOsd(layout, osd.screenId);
+                }
+            }
+        });
 
     // Register D-Bus service and object with error handling and retry logic
     auto bus = QDBusConnection::sessionBus();

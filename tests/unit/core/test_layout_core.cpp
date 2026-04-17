@@ -3,7 +3,7 @@
 
 /**
  * @file test_layout_core.cpp
- * @brief Unit tests for Layout dirty tracking, batch modify, per-side gaps, copy constructor
+ * @brief Unit tests for PhosphorZones::Layout dirty tracking, batch modify, per-side gaps, copy constructor
  */
 
 #include <QTest>
@@ -32,13 +32,13 @@ private Q_SLOTS:
     {
         // A freshly constructed layout is NOT dirty -- it has never been modified.
         // LayoutManager::addLayout() calls markDirty() explicitly when adding.
-        Layout layout(QStringLiteral("Fresh"));
+        PhosphorZones::Layout layout(QStringLiteral("Fresh"));
         QVERIFY(!layout.isDirty());
     }
 
     void testLayout_dirtyTracking_clearDirtyAfterSave()
     {
-        Layout layout(QStringLiteral("Test"));
+        PhosphorZones::Layout layout(QStringLiteral("Test"));
         layout.setName(QStringLiteral("Changed"));
         QVERIFY(layout.isDirty());
 
@@ -48,7 +48,7 @@ private Q_SLOTS:
 
     void testLayout_dirtyTracking_setterMarksDirty()
     {
-        Layout layout(QStringLiteral("Test"));
+        PhosphorZones::Layout layout(QStringLiteral("Test"));
         layout.clearDirty();
         QVERIFY(!layout.isDirty());
 
@@ -78,8 +78,8 @@ private Q_SLOTS:
 
     void testLayout_batchModify_defersLayoutModifiedSignal()
     {
-        Layout layout(QStringLiteral("Test"));
-        QSignalSpy modifiedSpy(&layout, &Layout::layoutModified);
+        PhosphorZones::Layout layout(QStringLiteral("Test"));
+        QSignalSpy modifiedSpy(&layout, &PhosphorZones::Layout::layoutModified);
 
         layout.beginBatchModify();
 
@@ -96,8 +96,8 @@ private Q_SLOTS:
 
     void testLayout_batchModify_nestedDepth()
     {
-        Layout layout(QStringLiteral("Test"));
-        QSignalSpy modifiedSpy(&layout, &Layout::layoutModified);
+        PhosphorZones::Layout layout(QStringLiteral("Test"));
+        QSignalSpy modifiedSpy(&layout, &PhosphorZones::Layout::layoutModified);
 
         layout.beginBatchModify();
         layout.beginBatchModify();
@@ -118,7 +118,7 @@ private Q_SLOTS:
 
     void testLayout_perSideOuterGap_sentinel_minus1_isDefault()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         QCOMPARE(layout.outerGapTop(), -1);
         QCOMPARE(layout.outerGapBottom(), -1);
         QCOMPARE(layout.outerGapLeft(), -1);
@@ -128,7 +128,7 @@ private Q_SLOTS:
 
     void testLayout_perSideOuterGap_setter_clampsBelow_minus1()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setOuterGapTop(-5);
         QCOMPARE(layout.outerGapTop(), -1);
 
@@ -150,7 +150,7 @@ private Q_SLOTS:
 
     void testLayout_hasPerSideOuterGapOverride_allNegativeOneMeansFalse()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setUsePerSideOuterGap(true);
         QVERIFY(!layout.hasPerSideOuterGapOverride());
 
@@ -164,13 +164,13 @@ private Q_SLOTS:
 
     void testLayout_copyConstructor_deepCopiesZones()
     {
-        Layout original(QStringLiteral("Original"));
-        auto* zone = new Zone();
+        PhosphorZones::Layout original(QStringLiteral("Original"));
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 0.5, 1));
         zone->setName(QStringLiteral("Zone1"));
         original.addZone(zone);
 
-        Layout copy(original);
+        PhosphorZones::Layout copy(original);
         QCOMPARE(copy.zoneCount(), 1);
         QCOMPARE(copy.zone(0)->name(), QStringLiteral("Zone1"));
 
@@ -183,8 +183,8 @@ private Q_SLOTS:
 
     void testLayout_copyConstructor_newId()
     {
-        Layout original(QStringLiteral("Original"));
-        Layout copy(original);
+        PhosphorZones::Layout original(QStringLiteral("Original"));
+        PhosphorZones::Layout copy(original);
 
         QVERIFY(copy.id() != original.id());
         QVERIFY(!copy.id().isNull());
@@ -192,10 +192,10 @@ private Q_SLOTS:
 
     void testLayout_copyConstructor_noSourcePath()
     {
-        Layout original(QStringLiteral("Original"));
+        PhosphorZones::Layout original(QStringLiteral("Original"));
         original.setSourcePath(QStringLiteral("/usr/share/plasmazones/layouts/test.json"));
 
-        Layout copy(original);
+        PhosphorZones::Layout copy(original);
 
         QVERIFY(copy.sourcePath().isEmpty());
     }
@@ -250,7 +250,7 @@ private Q_SLOTS:
 
     void testLayout_aspectRatioClass_defaultIsAny()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         QCOMPARE(layout.aspectRatioClass(), AspectRatioClass::Any);
         QCOMPARE(layout.minAspectRatio(), 0.0);
         QCOMPARE(layout.maxAspectRatio(), 0.0);
@@ -258,7 +258,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_anyMatchesAll()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         // Any matches everything
         QVERIFY(layout.matchesAspectRatio(0.5)); // portrait
         QVERIFY(layout.matchesAspectRatio(1.78)); // standard
@@ -268,7 +268,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_classMatching()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setAspectRatioClass(AspectRatioClass::Ultrawide);
 
         QVERIFY(!layout.matchesAspectRatio(1.78)); // standard — no match
@@ -279,7 +279,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_explicitBoundsOverrideClass()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setAspectRatioClass(AspectRatioClass::Ultrawide);
         layout.setMinAspectRatio(2.0);
         layout.setMaxAspectRatio(3.0);
@@ -294,7 +294,7 @@ private Q_SLOTS:
 
     void testLayout_aspectRatio_serialization_roundtrip()
     {
-        Layout original(QStringLiteral("Test"));
+        PhosphorZones::Layout original(QStringLiteral("Test"));
         original.setAspectRatioClass(AspectRatioClass::Ultrawide);
         original.setMinAspectRatio(1.9);
         original.setMaxAspectRatio(2.8);
@@ -305,7 +305,7 @@ private Q_SLOTS:
         QCOMPARE(json[QStringLiteral("minAspectRatio")].toDouble(), 1.9);
         QCOMPARE(json[QStringLiteral("maxAspectRatio")].toDouble(), 2.8);
 
-        auto* restored = Layout::fromJson(json);
+        auto* restored = PhosphorZones::Layout::fromJson(json);
         QCOMPARE(restored->aspectRatioClass(), AspectRatioClass::Ultrawide);
         QCOMPARE(restored->minAspectRatio(), 1.9);
         QCOMPARE(restored->maxAspectRatio(), 2.8);
@@ -323,7 +323,7 @@ private Q_SLOTS:
         json[QStringLiteral("showZoneNumbers")] = true;
         json[QStringLiteral("zones")] = QJsonArray();
 
-        auto* layout = Layout::fromJson(json);
+        auto* layout = PhosphorZones::Layout::fromJson(json);
         QCOMPARE(layout->aspectRatioClass(), AspectRatioClass::Any);
         QCOMPARE(layout->minAspectRatio(), 0.0);
         QCOMPARE(layout->maxAspectRatio(), 0.0);
@@ -362,7 +362,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_onlyMinBoundSet()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setMinAspectRatio(2.0);
         // No max set — should match anything >= 2.0
         QVERIFY(!layout.matchesAspectRatio(1.78)); // below min
@@ -373,7 +373,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_onlyMaxBoundSet()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setMaxAspectRatio(1.0);
         // No min set — should match anything <= 1.0
         QVERIFY(layout.matchesAspectRatio(0.56)); // below max
@@ -383,7 +383,7 @@ private Q_SLOTS:
 
     void testLayout_matchesAspectRatio_epsilonBoundaries()
     {
-        Layout layout;
+        PhosphorZones::Layout layout;
         layout.setMinAspectRatio(2.0);
         layout.setMaxAspectRatio(3.0);
 
@@ -393,12 +393,12 @@ private Q_SLOTS:
 
     void testLayout_copyConstructor_copiesAspectRatio()
     {
-        Layout original(QStringLiteral("Original"));
+        PhosphorZones::Layout original(QStringLiteral("Original"));
         original.setAspectRatioClass(AspectRatioClass::Portrait);
         original.setMinAspectRatio(0.3);
         original.setMaxAspectRatio(0.9);
 
-        Layout copy(original);
+        PhosphorZones::Layout copy(original);
         QCOMPARE(copy.aspectRatioClass(), AspectRatioClass::Portrait);
         QCOMPARE(copy.minAspectRatio(), 0.3);
         QCOMPARE(copy.maxAspectRatio(), 0.9);

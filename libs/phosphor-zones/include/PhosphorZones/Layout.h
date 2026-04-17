@@ -16,7 +16,7 @@
 #include <QJsonObject>
 #include <memory>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 /**
  * @brief App-to-zone auto-snap rule
@@ -444,13 +444,18 @@ Q_SIGNALS:
     void zoneRemoved(Zone* zone);
     void layoutModified();
 
-private:
-    friend class LayoutComputeService;
-
-    // Only callable via LayoutComputeService (sync or async worker path).
-    // Direct calls bypass the service's coalescing and threading contract.
+public:
+    /// Recalculate every zone's absolute geometry against @p screenGeometry.
+    ///
+    /// The PlasmaZones application enforces its own "only LayoutComputeService
+    /// calls this" coalescing discipline via its type system — that
+    /// restriction is an application-layer concern, not a library one, so
+    /// the method is public here.  Direct callers bypass the service's
+    /// coalescing / threading contract and should only do so when they know
+    /// they're running on the main thread with no pending compute requests.
     void recalculateZoneGeometries(const QRectF& screenGeometry);
 
+private:
     void emitModifiedIfNotBatched();
 
     QUuid m_id;
@@ -502,6 +507,6 @@ private:
     int m_batchModifyDepth = 0;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones
 
-Q_DECLARE_METATYPE(PlasmaZones::LayoutCategory)
+Q_DECLARE_METATYPE(PhosphorZones::LayoutCategory)

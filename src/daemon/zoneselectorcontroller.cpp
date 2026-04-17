@@ -95,11 +95,11 @@ QVariantList ZoneSelectorController::layouts() const
         screenId = m_screenId;
         aspectRatio = Utils::screenAspectRatio(m_screen);
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
         m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
-        LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
-    return LayoutUtils::toVariantList(entries);
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
+    return PhosphorZones::LayoutUtils::toVariantList(entries);
 }
 
 void ZoneSelectorController::setActiveLayoutId(const QString& layoutId)
@@ -176,13 +176,13 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
 
     m_layoutManager = layoutManager;
 
-    // Connect new manager using LayoutManager (concrete) - ILayoutManager has no signals
+    // Connect new manager using LayoutManager (concrete) - PhosphorZones::ILayoutManager has no signals
     if (m_layoutManager) {
         connect(m_layoutManager, &LayoutManager::layoutsChanged, this, &ZoneSelectorController::onLayoutsChanged);
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
             // Use screen-specific layout if available, fall back to global active layout
             // Pass current virtual desktop for per-desktop layout lookup
-            Layout* effectiveLayout = nullptr;
+            PhosphorZones::Layout* effectiveLayout = nullptr;
             if (m_screen) {
                 effectiveLayout =
                     m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
@@ -198,11 +198,11 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
         // Only update when the popup is actually visible (during drag) to avoid
         // excessive updates during startup or layout switching when popup is hidden
         connect(m_layoutManager, &LayoutManager::layoutAssigned, this,
-                [this](const QString& screenId, int /*virtualDesktop*/, Layout* layout) {
+                [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                     // Only update if:
                     // 1. We're currently dragging (popup may be visible)
                     // 2. This assignment is for our screen
-                    // 3. Layout is valid
+                    // 3. PhosphorZones::Layout is valid
                     // This prevents cascading updates during startup
                     if (m_isDragging && m_screen && m_screenId == screenId && layout) {
                         setActiveLayoutId(layout->id().toString());
@@ -228,7 +228,8 @@ void ZoneSelectorController::setScreen(QScreen* screen)
 
     // Update active layout ID for this screen and current desktop
     if (m_screen && m_layoutManager) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+        PhosphorZones::Layout* screenLayout =
+            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
         if (screenLayout) {
             setActiveLayoutId(screenLayout->id().toString());
         } else if (auto* def = m_layoutManager->defaultLayout()) {
@@ -244,7 +245,7 @@ void ZoneSelectorController::setCurrentVirtualDesktop(int desktop)
         m_currentVirtualDesktop = desktop;
         // Update active layout ID when desktop changes
         if (m_screen && m_layoutManager) {
-            Layout* screenLayout =
+            PhosphorZones::Layout* screenLayout =
                 m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 setActiveLayoutId(screenLayout->id().toString());
@@ -359,16 +360,16 @@ void ZoneSelectorController::toggle()
 void ZoneSelectorController::selectLayout(const QString& layoutId)
 {
     if (isScreenLocked()) {
-        qCInfo(lcOverlay) << "Layout selection blocked (screen locked):" << layoutId;
+        qCInfo(lcOverlay) << "PhosphorZones::Layout selection blocked (screen locked):" << layoutId;
         return;
     }
 
-    qCInfo(lcOverlay) << "Layout selected=" << layoutId;
+    qCInfo(lcOverlay) << "PhosphorZones::Layout selected=" << layoutId;
 
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);
 
-    // Layout application is handled by whoever connects to layoutSelected().
+    // PhosphorZones::Layout application is handled by whoever connects to layoutSelected().
     // The primary path is QML zoneSelected → OverlayService::onZoneSelected →
     // manualLayoutSelected → daemon handler, which routes through the unified
     // layout pipeline (per-screen assignments, mode tracking, resnap).

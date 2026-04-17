@@ -18,7 +18,7 @@
 #include <QRectF>
 #include <QVector>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 class Zone;
 class Layout;
@@ -76,6 +76,6 @@ Q_SIGNALS:
     void highlightsCleared();
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones
 
-Q_DECLARE_METATYPE(PlasmaZones::ZoneDetectionResult)
+Q_DECLARE_METATYPE(PhosphorZones::ZoneDetectionResult)

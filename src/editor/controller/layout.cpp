@@ -287,7 +287,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
 }
 
 // ---------------------------------------------------------------------------
-// Group 2 - Layout lifecycle
+// Group 2 - PhosphorZones::Layout lifecycle
 // ---------------------------------------------------------------------------
 
 /**
@@ -299,7 +299,7 @@ void EditorController::setTargetScreenDirect(const QString& screenName)
 void EditorController::createNewLayout()
 {
     m_layoutId = QUuid::createUuid().toString();
-    m_layoutName = PzI18n::tr("New Layout");
+    m_layoutName = PzI18n::tr("New PhosphorZones::Layout");
     if (m_zoneManager) {
         m_zoneManager->clearAllZones();
     }
@@ -348,12 +348,12 @@ void EditorController::createNewLayout()
 void EditorController::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout ID cannot be empty"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("PhosphorZones::Layout ID cannot be empty"));
         return;
     }
 
     if (!m_layoutService) {
-        Q_EMIT layoutLoadFailed(PzI18n::tr("Layout service not initialized"));
+        Q_EMIT layoutLoadFailed(PzI18n::tr("PhosphorZones::Layout service not initialized"));
         return;
     }
 
@@ -368,7 +368,7 @@ void EditorController::loadLayout(const QString& layoutId)
     if (m_localLayoutManager) {
         const QUuid uuid = QUuid::fromString(layoutId);
         if (!uuid.isNull()) {
-            if (Layout* layout = m_localLayoutManager->layoutById(uuid)) {
+            if (PhosphorZones::Layout* layout = m_localLayoutManager->layoutById(uuid)) {
                 jsonLayout = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
             }
         }
@@ -419,7 +419,7 @@ void EditorController::loadLayout(const QString& layoutId)
             : 0;
         zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = geoMode;
 
-        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)
+        if (geoMode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)
             && zoneObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometry))) {
             QJsonObject fixedGeo = zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::FixedGeometry)].toObject();
             zone[::PhosphorZones::ZoneJsonKeys::FixedX] =
@@ -488,7 +488,8 @@ void EditorController::loadLayout(const QString& layoutId)
     }
 
     // Load visibility filtering allow-lists
-    LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+    PhosphorZones::LayoutUtils::deserializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
+                                                      m_allowedActivities);
 
     // Query available context info from daemon via D-Bus
     // Clear first so stale data is not shown if daemon is unavailable
@@ -572,7 +573,7 @@ void EditorController::loadLayout(const QString& layoutId)
     if (layoutObj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey))) {
         QJsonValue arVal = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)];
         if (arVal.isString()) {
-            // Canonical format from Layout::toJson() — string like "ultrawide"
+            // Canonical format from PhosphorZones::Layout::toJson() — string like "ultrawide"
             m_aspectRatioClass = static_cast<int>(ScreenClassification::fromString(arVal.toString()));
         } else {
             // Int format (from editor save round-trip before daemon persists)
@@ -697,7 +698,7 @@ void EditorController::saveLayout()
 
         // Write geometry mode and fixed geometry when Fixed
         int geoMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
-        if (geoMode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+        if (geoMode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)) {
             zoneObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::GeometryMode)] = geoMode;
             QJsonObject fixedGeo;
             fixedGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] =
@@ -795,13 +796,14 @@ void EditorController::saveLayout()
     }
 
     // Include aspect ratio class (only if not Any) — serialize as int for updateLayout D-Bus,
-    // which converts to the canonical string format via Layout::setAspectRatioClassInt()
+    // which converts to the canonical string format via PhosphorZones::Layout::setAspectRatioClassInt()
     if (m_aspectRatioClass != 0) {
         layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)] = m_aspectRatioClass;
     }
 
     // Include visibility filtering allow-lists (only if non-empty)
-    LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt, m_allowedActivities);
+    PhosphorZones::LayoutUtils::serializeAllowLists(layoutObj, m_allowedScreens, m_allowedDesktopsInt,
+                                                    m_allowedActivities);
 
     QJsonDocument doc(layoutObj);
     QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
@@ -831,7 +833,7 @@ void EditorController::saveLayout()
     }
 
     // Note: We intentionally do NOT assign the layout to a screen here.
-    // Layout assignment should be a separate, explicit user action.
+    // PhosphorZones::Layout assignment should be a separate, explicit user action.
     // This prevents saving a layout from inadvertently changing the active layout.
 
     Q_EMIT hasUnsavedChangesChanged();

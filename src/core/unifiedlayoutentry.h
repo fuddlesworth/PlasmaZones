@@ -25,11 +25,14 @@
 #include <QVariantMap>
 #include <QVector>
 
+namespace PhosphorZones {
+class ILayoutManager;
+class Layout;
+}
+
 namespace PlasmaZones {
 
-class ILayoutManager;
 class IOrderingSettings;
-class Layout;
 
 /**
  * @brief Entry in the unified layout list (manual and autotile layouts)
@@ -42,11 +45,11 @@ class Layout;
  */
 struct PLASMAZONES_EXPORT UnifiedLayoutEntry
 {
-    QString id; ///< Layout UUID or autotile prefixed ID (e.g. "autotile:master-stack")
+    QString id; ///< PhosphorZones::Layout UUID or autotile prefixed ID (e.g. "autotile:master-stack")
     QString name; ///< Display name for UI
     QString description; ///< Optional description
     int zoneCount = 0; ///< Number of zones for manual layouts, or algorithm's defaultMaxWindows for autotile
-    QVariantList zones; ///< Zone data for preview rendering
+    QVariantList zones; ///< PhosphorZones::Zone data for preview rendering
     QVariantList previewZones; ///< Preview zones (used for autotile algorithm previews)
     bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
     bool isAutotile = false; ///< True if this entry represents an autotile algorithm
@@ -98,17 +101,22 @@ struct PLASMAZONES_EXPORT UnifiedLayoutEntry
 /**
  * @brief Picker-composition functions for unified layout lists.
  *
- * These live in the LayoutUtils namespace for historical reasons (consumers
+ * These live in the PhosphorZones::LayoutUtils namespace for historical reasons (consumers
  * used to include a single layoututils.h). The namespace is shared with
  * the pure-layout helpers in layoututils.h; include whichever header you
  * need.
  */
-namespace LayoutUtils {
+} // namespace PlasmaZones
+
+namespace PhosphorZones::LayoutUtils {
+
+using ::PlasmaZones::IOrderingSettings;
+using ::PlasmaZones::UnifiedLayoutEntry;
 
 /**
  * @brief Build list of all available layouts (manual, and optionally autotile)
  */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
+PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
                                                                       bool includeAutotile = false,
                                                                       const QStringList& customOrder = {});
 
@@ -126,7 +134,7 @@ PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutMan
  * indicates whether the layout matches the current screen's aspect ratio.
  */
 PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
-buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
+buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
                        const QString& activity, bool includeManual = true, bool includeAutotile = true,
                        qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
                        const QStringList& customOrder = {});
@@ -165,6 +173,4 @@ PLASMAZONES_EXPORT int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entrie
 PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
                                                         const QString& layoutId);
 
-} // namespace LayoutUtils
-
-} // namespace PlasmaZones
+} // namespace PhosphorZones::LayoutUtils

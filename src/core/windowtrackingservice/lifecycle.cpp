@@ -43,11 +43,11 @@ static QRect clampToRect(const QRect& geometry, const QRect& bounds)
 } // anonymous namespace
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone–Layout Validation Helpers
+// PhosphorZones::Zone–PhosphorZones::Layout Validation Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Returns true if ANY of the given zone IDs exists in the layout.
-static bool anyZoneExistsInLayout(const QStringList& zoneIds, Layout* layout)
+static bool anyZoneExistsInLayout(const QStringList& zoneIds, PhosphorZones::Layout* layout)
 {
     if (!layout)
         return false;
@@ -60,7 +60,7 @@ static bool anyZoneExistsInLayout(const QStringList& zoneIds, Layout* layout)
 }
 
 /// Returns true if ALL of the given zone IDs exist in the layout.
-static bool allZonesExistInLayout(const QStringList& zoneIds, Layout* layout)
+static bool allZonesExistInLayout(const QStringList& zoneIds, PhosphorZones::Layout* layout)
 {
     if (!layout)
         return false;
@@ -137,11 +137,11 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // them, so we must fall through to center-point resolution.
         QStringList candidates;
         for (const QString& vsId : virtualScreenIds) {
-            Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+            PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
             if (!vsLayout) {
                 continue;
             }
-            Zone* zone = vsLayout->zoneById(*uuidOpt);
+            PhosphorZones::Zone* zone = vsLayout->zoneById(*uuidOpt);
             if (zone) {
                 candidates.append(vsId);
             }
@@ -165,12 +165,12 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // This path is only used when migrating from a physical screen ID
         // (first-time VS setup), where zone coords are relative to the physical
         // screen and center-point resolution is correct.
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
+        PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(physicalScreenId);
         if (!layout) {
             return virtualScreenIds.first();
         }
 
-        Zone* zone = layout->zoneById(*uuidOpt);
+        PhosphorZones::Zone* zone = layout->zoneById(*uuidOpt);
         if (!zone) {
             return virtualScreenIds.first();
         }
@@ -262,7 +262,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         QString targetVs = virtualScreenIds.first(); // default
         if (!m_lastUsedZoneId.isEmpty() && m_layoutManager) {
             for (const QString& vsId : virtualScreenIds) {
-                Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
+                PhosphorZones::Layout* vsLayout = m_layoutManager->resolveLayoutForScreen(vsId);
                 if (vsLayout) {
                     auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
                     if (uuidOpt && vsLayout->zoneById(*uuidOpt)) {
@@ -358,7 +358,8 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     // screen's layout, so remove any assignments referencing invalid zone IDs.
     // Floating windows are preserved — their float state should survive VS removal
     // even if their zone assignments are invalid in the physical layout.
-    Layout* physLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
+    PhosphorZones::Layout* physLayout =
+        m_layoutManager ? m_layoutManager->resolveLayoutForScreen(physicalScreenId) : nullptr;
     if (physLayout) {
         QStringList windowsToRemove;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
@@ -432,7 +433,8 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             // Save the layout ID to ensure we only restore if the same layout is active
             // This prevents restoring windows to wrong zones when layouts have been changed
             // Use resolveLayoutForScreen() for proper multi-screen support
-            Layout* contextLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(screenId) : nullptr;
+            PhosphorZones::Layout* contextLayout =
+                m_layoutManager ? m_layoutManager->resolveLayoutForScreen(screenId) : nullptr;
             if (contextLayout) {
                 entry.layoutId = contextLayout->id().toString();
             }
@@ -440,7 +442,7 @@ void WindowTrackingService::windowClosed(const QString& windowId)
             // Save zone numbers for fallback when zone UUIDs get regenerated on layout edit
             QList<int> zoneNumbers;
             for (const QString& zId : zoneIds) {
-                Zone* z = findZoneById(zId);
+                PhosphorZones::Zone* z = findZoneById(zId);
                 if (z)
                     zoneNumbers.append(z->zoneNumber());
             }
@@ -503,7 +505,7 @@ void WindowTrackingService::onLayoutChanged()
     // screens, individual screens may have per-screen layouts via resolveLayoutForScreen().
     // The per-window loop below (~line 718) already resolves layouts per-screen, so a
     // null global layout does not mean "no layouts anywhere".
-    Layout* newLayout = m_layoutManager->activeLayout();
+    PhosphorZones::Layout* newLayout = m_layoutManager->activeLayout();
 
     // Before removing stale assignments, capture (window, zonePosition) for resnap-to-new-layout.
     // When user presses the shortcut, we map zone N -> zone N (with cycling when layout has fewer zones).
@@ -516,7 +518,7 @@ void WindowTrackingService::onLayoutChanged()
     //
     // Only replace m_resnapBuffer when we capture at least one window. If user does A->B->C (snapped
     // on A, B has no windows), prev=B yields nothing - we keep the buffer from A->B so resnap on C works.
-    Layout* prevLayout = m_layoutManager->previousLayout();
+    PhosphorZones::Layout* prevLayout = m_layoutManager->previousLayout();
     if (!prevLayout) {
         qCInfo(lcCore) << "onLayoutChanged: no previous layout (first launch), skipping resnap buffer";
         return;
@@ -533,7 +535,7 @@ void WindowTrackingService::onLayoutChanged()
 
         // Cache per-screen position maps for screens with per-screen layouts
         // Key: layout pointer (avoids rebuilding for screens sharing the same layout)
-        QHash<Layout*, QHash<QString, int>> perLayoutPositionMaps;
+        QHash<PhosphorZones::Layout*, QHash<QString, int>> perLayoutPositionMaps;
 
         // Dedup: full windowId for live assignments (supports multi-instance apps),
         // appId for pending entries (avoids double-counting live + pending for same window)
@@ -556,7 +558,7 @@ void WindowTrackingService::onLayoutChanged()
             const QHash<QString, int>* posMap = &globalZoneIdToPosition;
             int prevZoneCount = globalPrevZoneCount;
             if (!screenId.isEmpty() && m_layoutManager) {
-                Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenId);
+                PhosphorZones::Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(screenId);
                 if (screenLayout && screenLayout != prevLayout) {
                     auto cacheIt = perLayoutPositionMaps.constFind(screenLayout);
                     if (cacheIt == perLayoutPositionMaps.constEnd()) {
@@ -616,9 +618,9 @@ void WindowTrackingService::onLayoutChanged()
         // Resolve the effective new layout for a given screen. Per-screen
         // assignments take precedence; windows with no screen (or screens
         // without an explicit assignment) fall back to the active layout.
-        auto resolveNewLayoutForScreen = [&](const QString& screenId) -> Layout* {
+        auto resolveNewLayoutForScreen = [&](const QString& screenId) -> PhosphorZones::Layout* {
             if (!screenId.isEmpty()) {
-                Layout* perScreen = m_layoutManager->resolveLayoutForScreen(screenId);
+                PhosphorZones::Layout* perScreen = m_layoutManager->resolveLayoutForScreen(screenId);
                 if (perScreen)
                     return perScreen;
             }
@@ -630,7 +632,7 @@ void WindowTrackingService::onLayoutChanged()
             // 1. Live assignments (windows we've tracked via windowSnapped)
             for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
                 QString windowScreen = m_windowScreenAssignments.value(it.key());
-                Layout* effectiveLayout = resolveNewLayoutForScreen(windowScreen);
+                PhosphorZones::Layout* effectiveLayout = resolveNewLayoutForScreen(windowScreen);
                 if (anyZoneExistsInLayout(it.value(), effectiveLayout)) {
                     continue;
                 }
@@ -640,7 +642,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments (session-restored windows)
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
                 for (const PendingRestore& entry : it.value()) {
-                    Layout* effectiveLayout = resolveNewLayoutForScreen(entry.screenId);
+                    PhosphorZones::Layout* effectiveLayout = resolveNewLayoutForScreen(entry.screenId);
                     if (anyZoneExistsInLayout(entry.zoneIds, effectiveLayout)) {
                         continue;
                     }
@@ -660,7 +662,7 @@ void WindowTrackingService::onLayoutChanged()
             // 1. Live assignments — check each window against its own screen's layout
             for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
                 const QString windowScreen = m_windowScreenAssignments.value(it.key());
-                Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+                PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
                 if (!anyZoneExistsInLayout(it.value(), effectiveLayout)) {
                     continue;
                 }
@@ -670,7 +672,7 @@ void WindowTrackingService::onLayoutChanged()
             // 2. Pending assignments — check against each entry's screen's layout
             for (auto it = m_pendingRestoreQueues.constBegin(); it != m_pendingRestoreQueues.constEnd(); ++it) {
                 for (const PendingRestore& entry : it.value()) {
-                    Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(entry.screenId);
+                    PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(entry.screenId);
                     if (!anyZoneExistsInLayout(entry.zoneIds, effectiveLayout)) {
                         continue;
                     }
@@ -689,7 +691,7 @@ void WindowTrackingService::onLayoutChanged()
             m_resnapBuffer = std::move(newBuffer);
             qCInfo(lcCore) << "Resnap buffer:" << m_resnapBuffer.size() << "windows (zone position -> window)";
             for (const ResnapEntry& e : m_resnapBuffer) {
-                qCDebug(lcCore) << "Zone" << e.zonePosition << "<-" << e.windowId;
+                qCDebug(lcCore) << "PhosphorZones::Zone" << e.zonePosition << "<-" << e.windowId;
             }
         }
     }
@@ -734,7 +736,7 @@ void WindowTrackingService::onLayoutChanged()
             continue;
         }
 
-        Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
+        PhosphorZones::Layout* effectiveLayout = m_layoutManager->resolveLayoutForScreen(windowScreen);
         if (!effectiveLayout) {
             toRemove.append(it.key());
             continue;
@@ -875,7 +877,7 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
     if (m_lastUsedZoneId.isEmpty() || !m_layoutManager) {
         return;
     }
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(targetScreen);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(targetScreen);
     if (layout) {
         auto uuidOpt = Utils::parseUuid(m_lastUsedZoneId);
         if (uuidOpt && layout->zoneById(*uuidOpt)) {
@@ -923,7 +925,7 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
     return physId;
 }
 
-Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
+PhosphorZones::Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
 {
     auto uuidOpt = Utils::parseUuid(zoneId);
     if (!uuidOpt) {
@@ -936,8 +938,8 @@ Zone* WindowTrackingService::findZoneById(const QString& zoneId) const
 WindowTrackingService::ZoneLookupResult WindowTrackingService::findZoneInAllLayouts(const QUuid& zoneUuid) const
 {
     // Search all layouts, not just the active one, to support per-screen layouts
-    for (Layout* layout : m_layoutManager->layouts()) {
-        Zone* zone = layout->zoneById(zoneUuid);
+    for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
+        PhosphorZones::Zone* zone = layout->zoneById(zoneUuid);
         if (zone) {
             return {zone, layout};
         }

@@ -91,7 +91,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     // request arrives, the layout may have been switched and the zone IDs are no
     // longer valid. Verify that at least one requested zone exists in the current
     // layout for the target screen.
-    Layout* currentLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* currentLayout = resolveScreenLayout(screenId);
     if (currentLayout) {
         bool anyValid = false;
         for (const auto& z : emptyZones) {
@@ -181,7 +181,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenWidth"), screenGeom.width());
     writeQmlProperty(m_snapAssistWindow, QStringLiteral("screenHeight"), screenGeom.height());
 
-    // Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
+    // PhosphorZones::Zone appearance defaults (used when zone.useCustomColors is false) - match main overlay
     writeColorSettings(m_snapAssistWindow, m_settings);
     if (m_settings) {
         writeQmlProperty(m_snapAssistWindow, QStringLiteral("borderWidth"), m_settings->borderWidth());
@@ -401,7 +401,7 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Picker Overlay
+// PhosphorZones::Layout Picker Overlay
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void OverlayService::showLayoutPicker(const QString& screenId)
@@ -456,7 +456,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     // Determine active layout ID
     QString activeId;
     if (m_layoutManager) {
-        Layout* activeLayout = resolveScreenLayout(resolvedId);
+        PhosphorZones::Layout* activeLayout = resolveScreenLayout(resolvedId);
         if (activeLayout) {
             activeId = activeLayout->id().toString();
         }
@@ -618,7 +618,7 @@ void OverlayService::destroyLayoutPickerWindow()
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)
 {
-    qCInfo(lcOverlay) << "Layout picker selected=" << layoutId;
+    qCInfo(lcOverlay) << "PhosphorZones::Layout picker selected=" << layoutId;
     hideLayoutPicker();
     Q_EMIT layoutPickerSelected(layoutId);
 }

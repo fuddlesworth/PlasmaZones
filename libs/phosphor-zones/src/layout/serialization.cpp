@@ -11,7 +11,7 @@
 #include <PhosphorZones/Zone.h>
 #include <QJsonArray>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 QVariantList Layout::appRulesVariant() const
 {
@@ -268,4 +268,4 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     return layout;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

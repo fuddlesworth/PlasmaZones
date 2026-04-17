@@ -72,7 +72,8 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
     return occupiedZoneIds;
 }
 
-QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter) const
+QString WindowTrackingService::findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId,
+                                                     int desktopFilter) const
 {
     if (!layout) {
         return QString();
@@ -81,10 +82,10 @@ QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QStri
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Sort by zone number so "first empty" is the lowest-numbered empty zone
-    QVector<Zone*> sortedZones = layout->zones();
+    QVector<PhosphorZones::Zone*> sortedZones = layout->zones();
     sortZonesByNumber(sortedZones);
 
-    for (Zone* zone : sortedZones) {
+    for (PhosphorZones::Zone* zone : sortedZones) {
         if (!occupiedZoneIds.contains(zone->id())) {
             return zone->id().toString();
         }
@@ -94,14 +95,14 @@ QString WindowTrackingService::findEmptyZoneInLayout(Layout* layout, const QStri
 
 QString WindowTrackingService::findEmptyZone(const QString& screenId) const
 {
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     return findEmptyZoneInLayout(layout, screenId, desktopFilter);
 }
 
 EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) const
 {
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return {};
     }
@@ -119,9 +120,10 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings, [&occupied](const Zone* z) {
-        return !occupied.contains(z->id());
-    });
+    return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings,
+                                             [&occupied](const PhosphorZones::Zone* z) {
+                                                 return !occupied.contains(z->id());
+                                             });
 }
 
 QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& screenId) const
@@ -210,13 +212,13 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         const QString& screenId = screenIt.key();
 
         // Get the layout assigned to THIS screen (not the global active layout)
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+        PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout || layout->zoneCount() < 2) {
             continue;
         }
 
         // Get zones sorted by zone number
-        QVector<Zone*> zones = layout->zones();
+        QVector<PhosphorZones::Zone*> zones = layout->zones();
         sortZonesByNumber(zones);
 
         // Build zone ID -> index map (with and without braces for format-agnostic matching)
@@ -268,8 +270,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
             int targetIdx =
                 clockwise ? (currentIdx + 1) % zones.size() : (currentIdx - 1 + zones.size()) % zones.size();
 
-            Zone* sourceZone = zones[currentIdx];
-            Zone* targetZone = zones[targetIdx];
+            PhosphorZones::Zone* sourceZone = zones[currentIdx];
+            PhosphorZones::Zone* targetZone = zones[targetIdx];
             QRect geo = GeometryUtils::getZoneGeometryForScreen(targetZone, screen, screenId, layout, m_settings);
 
             if (geo.isValid()) {

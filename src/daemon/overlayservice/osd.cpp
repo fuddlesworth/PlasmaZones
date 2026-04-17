@@ -132,17 +132,17 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     return true;
 }
 
-void OverlayService::showLayoutOsd(Layout* layout, const QString& screenId)
+void OverlayService::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
 {
     showLayoutOsdImpl(layout, screenId, false);
 }
 
-void OverlayService::showLockedLayoutOsd(Layout* layout, const QString& screenId)
+void OverlayService::showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
 {
     showLayoutOsdImpl(layout, screenId, true);
 }
 
-void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked)
+void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked)
 {
     if (!layout) {
         qCDebug(lcOverlay) << "No layout provided for OSD";
@@ -169,18 +169,20 @@ void OverlayService::showLayoutOsdImpl(Layout* layout, const QString& screenId, 
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
                      ScreenClassification::toString(layout->aspectRatioClass()));
-    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(LayoutCategory::Manual));
+    writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
     writeAutotileMetadata(window, false, false);
     writeQmlProperty(window, QStringLiteral("zones"),
-                     layout->zones().isEmpty() ? QVariantList()
-                                               : LayoutUtils::zonesToVariantList(layout, ZoneField::Full));
+                     layout->zones().isEmpty()
+                         ? QVariantList()
+                         : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full));
     writeFontProperties(window, m_settings);
 
     qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked" : "PhosphorZones::Layout") << "OSD: layout=" << layout->name()
+                      << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -207,13 +209,13 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
     writeQmlProperty(window, QStringLiteral("layoutId"), id);
     writeQmlProperty(window, QStringLiteral("layoutName"), name);
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
-    // Resolve aspectRatioClass from Layout* if available
+    // Resolve aspectRatioClass from PhosphorZones::Layout* if available
     qreal layoutAR = aspectRatio;
     {
         QString arClass = QStringLiteral("any");
         auto uuidOpt = Utils::parseUuid(id);
         if (uuidOpt && m_layoutManager) {
-            Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+            PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
                 arClass = ScreenClassification::toString(layout->aspectRatioClass());
                 layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
@@ -229,7 +231,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
+    qCInfo(lcOverlay) << "PhosphorZones::Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
@@ -322,7 +324,8 @@ void OverlayService::warmUpLayoutOsd()
         }
     }
     m_layoutOsdWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
+    qCInfo(lcOverlay) << "Pre-warmed PhosphorZones::Layout OSD windows for" << effectiveIds.size()
+                      << "effective screens";
 
     ensureOsdScreenAddedConnected();
 }
@@ -432,7 +435,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
                                                QStringLiteral("master_count"), QStringLiteral("retile"),
                                                QStringLiteral("swap_vs"),      QStringLiteral("rotate_vs")};
     const bool needsLayout = !noLayoutActions.contains(action);
-    Layout* screenLayout = resolveScreenLayout(effectiveId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(effectiveId);
     if ((needsLayout && !screenLayout) || (screenLayout && screenLayout->zones().isEmpty() && needsLayout)) {
         qCDebug(lcOverlay) << "No layout or zones for navigation OSD: screen=" << effectiveId
                            << "layout=" << (screenLayout ? screenLayout->name() : QStringLiteral("null"))
@@ -502,9 +505,10 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     }
     writeQmlProperty(window, QStringLiteral("highlightedZoneIds"), highlightedZoneIds);
 
-    // Use shared LayoutUtils with minimal fields for zone number lookup
+    // Use shared PhosphorZones::LayoutUtils with minimal fields for zone number lookup
     // (only need zoneId and zoneNumber, not name/appearance)
-    QVariantList zonesList = LayoutUtils::zonesToVariantList(screenLayout, ZoneField::Minimal);
+    QVariantList zonesList =
+        PhosphorZones::LayoutUtils::zonesToVariantList(screenLayout, PhosphorZones::ZoneField::Minimal);
     writeQmlProperty(window, QStringLiteral("zones"), zonesList);
 
     // Ensure the window is on the correct Wayland output (must come before sizing —

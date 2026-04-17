@@ -146,7 +146,7 @@ private Q_SLOTS:
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/5);
 
         QVERIFY2(!zones[0].intersects(zones[3]),
-                 qPrintable(QStringLiteral("Zone A overlaps D: A=(%1,%2,%3,%4) D=(%5,%6,%7,%8)")
+                 qPrintable(QStringLiteral("PhosphorZones::Zone A overlaps D: A=(%1,%2,%3,%4) D=(%5,%6,%7,%8)")
                                 .arg(zones[0].x())
                                 .arg(zones[0].y())
                                 .arg(zones[0].width())
@@ -168,7 +168,7 @@ private Q_SLOTS:
         GeometryUtils::enforceWindowMinSizes(zones, minSizes, /*gapThreshold=*/10, /*innerGap=*/8);
 
         QVERIFY2(zones[0].width() >= 400,
-                 qPrintable(QStringLiteral("Zone[0] width=%1, expected >= 400").arg(zones[0].width())));
+                 qPrintable(QStringLiteral("PhosphorZones::Zone[0] width=%1, expected >= 400").arg(zones[0].width())));
 
         int gap = zones[1].left() - (zones[0].left() + zones[0].width());
         QVERIFY2(gap >= 6 && gap <= 10, qPrintable(QStringLiteral("Gap=%1, expected ~8px (6-10)").arg(gap)));

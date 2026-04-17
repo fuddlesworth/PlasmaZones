@@ -7,7 +7,7 @@
 #include <QObject>
 #include <QVector>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 class Zone;
 
@@ -51,4 +51,4 @@ private:
     QVector<Zone*> m_highlightedZones;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

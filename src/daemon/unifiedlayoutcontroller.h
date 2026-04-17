@@ -8,19 +8,22 @@
 #include <QPointer>
 #include <QString>
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
 class LayoutManager;
 class Settings;
-class Layout;
 
 /**
  * @brief Controller for unified layout management (manual layouts)
  *
  * Handles:
  * - Quick layout switching (Meta+1-9)
- * - Layout cycling (Meta+[/])
+ * - PhosphorZones::Layout cycling (Meta+[/])
  * - ID-based layout tracking
  *
  * Usage:
@@ -44,7 +47,7 @@ public:
     ~UnifiedLayoutController() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout access
+    // PhosphorZones::Layout access
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -61,13 +64,13 @@ public:
     QVector<UnifiedLayoutEntry> layouts() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout application
+    // PhosphorZones::Layout application
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * @brief Apply layout by number (1-based, for Meta+1-9 shortcuts)
      *
-     * @param number Layout number (1 = first layout)
+     * @param number PhosphorZones::Layout number (1 = first layout)
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutByNumber(int number);
@@ -75,7 +78,7 @@ public:
     /**
      * @brief Apply layout by ID
      *
-     * @param layoutId Layout UUID
+     * @param layoutId PhosphorZones::Layout UUID
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutById(const QString& layoutId);
@@ -89,7 +92,7 @@ public:
     Q_INVOKABLE bool applyLayoutByIndex(int index);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout cycling
+    // PhosphorZones::Layout cycling
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -160,7 +163,7 @@ Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
      */
-    void layoutApplied(Layout* layout);
+    void layoutApplied(PhosphorZones::Layout* layout);
 
     /**
      * @brief Emitted when an autotile algorithm is applied

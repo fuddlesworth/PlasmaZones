@@ -119,7 +119,7 @@ private Q_SLOTS:
         QCOMPARE(settings.labelFontWeight(), ConfigDefaults::labelFontWeight());
         QVERIFY(qFuzzyCompare(settings.labelFontSizeScale(), ConfigDefaults::labelFontSizeScale()));
 
-        // Zone geometry defaults
+        // PhosphorZones::Zone geometry defaults
         QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePadding());
         QCOMPARE(settings.outerGap(), ConfigDefaults::outerGap());
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThreshold());
@@ -131,7 +131,7 @@ private Q_SLOTS:
         QCOMPARE(settings.restoreOriginalSizeOnUnsnap(), ConfigDefaults::restoreOriginalSizeOnUnsnap());
         QCOMPARE(settings.excludeTransientWindows(), ConfigDefaults::excludeTransientWindows());
 
-        // Zone selector defaults
+        // PhosphorZones::Zone selector defaults
         QCOMPARE(settings.zoneSelectorEnabled(), ConfigDefaults::zoneSelectorEnabled());
         QCOMPARE(settings.zoneSelectorTriggerDistance(), ConfigDefaults::triggerDistance());
         QCOMPARE(settings.zoneSelectorGridColumns(), ConfigDefaults::gridColumns());

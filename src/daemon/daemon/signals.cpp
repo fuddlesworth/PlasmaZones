@@ -237,7 +237,7 @@ void Daemon::initializeAutotile()
                 // Fallback when snappingLayout is empty (fresh install) or stale
                 // (layout was deleted). Use the active layout or first available layout.
                 if (!applied) {
-                    Layout* fallback = m_layoutManager->activeLayout();
+                    PhosphorZones::Layout* fallback = m_layoutManager->activeLayout();
                     if (!fallback && !m_layoutManager->layouts().isEmpty()) {
                         fallback = m_layoutManager->layouts().first();
                     }
@@ -330,7 +330,7 @@ void Daemon::initializeAutotile()
                         windowOrder.append(windowId);
                     }
 
-                    Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(resnapScreenId);
+                    PhosphorZones::Layout* screenLayout = m_layoutManager->resolveLayoutForScreen(resnapScreenId);
                     int zoneCount = screenLayout ? screenLayout->zoneCount() : 0;
                     for (int i = 0; i < std::min(static_cast<int>(windowOrder.size()), zoneCount); ++i) {
                         resnappedWindows.insert(windowOrder.at(i));
@@ -407,7 +407,7 @@ void Daemon::connectLayoutSignals()
     // Set initial layout filter
     updateLayoutFilter();
 
-    // Pre-warm Layout OSD QML windows unconditionally.
+    // Pre-warm PhosphorZones::Layout OSD QML windows unconditionally.
     // First-time QML compilation of LayoutOsd.qml (~100-300ms) would otherwise
     // block the event loop during the first layout switch (manual or autotile),
     // causing perceptible lag.  Deferred so daemon init completes first.
@@ -432,7 +432,7 @@ void Daemon::connectLayoutSignals()
     // steals the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
     connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
-            [this](const QString& screenId, int virtualDesktop, Layout* /*layout*/) {
+            [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
                 updateAutotileScreens();
                 updateLayoutFilter();
 
@@ -454,21 +454,22 @@ void Daemon::connectLayoutSignals()
             });
 
     // Connect unified layout controller signals for OSD display
-    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this, [this](Layout* layout) {
-        // Dismiss snap assist — it's stale once the layout changes
-        if (m_overlayService->isSnapAssistVisible()) {
-            m_overlayService->hideSnapAssist();
-        }
-        // Defer OSD display (same rationale as autotileApplied — first-time QML
-        // compilation of LayoutOsd.qml blocks the event loop ~100-300ms).
-        // Capture layout ID (not raw pointer) to avoid use-after-free if the
-        // layout is ever replaced between now and next event loop pass.
-        if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
-            QUuid layoutId = layout->id();
-            QString screenId = m_unifiedLayoutController->currentScreenName();
-            showLayoutOsdDeferred(layoutId, screenId);
-        }
-    });
+    connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::layoutApplied, this,
+            [this](PhosphorZones::Layout* layout) {
+                // Dismiss snap assist — it's stale once the layout changes
+                if (m_overlayService->isSnapAssistVisible()) {
+                    m_overlayService->hideSnapAssist();
+                }
+                // Defer OSD display (same rationale as autotileApplied — first-time QML
+                // compilation of LayoutOsd.qml blocks the event loop ~100-300ms).
+                // Capture layout ID (not raw pointer) to avoid use-after-free if the
+                // layout is ever replaced between now and next event loop pass.
+                if (m_settings && m_settings->showOsdOnLayoutSwitch()) {
+                    QUuid layoutId = layout->id();
+                    QString screenId = m_unifiedLayoutController->currentScreenName();
+                    showLayoutOsdDeferred(layoutId, screenId);
+                }
+            });
 
     connect(m_unifiedLayoutController.get(), &UnifiedLayoutController::autotileApplied, this,
             [this](const QString& algorithmName, int windowCount) {
@@ -513,7 +514,7 @@ void Daemon::connectLayoutSignals()
                 if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
                     return;
                 }
-                qCInfo(lcDaemon) << "Zone selector: manual layout selected, layout=" << layoutId
+                qCInfo(lcDaemon) << "PhosphorZones::Zone selector: manual layout selected, layout=" << layoutId
                                  << "screen=" << screenId;
                 resnapIfManualMode();
             });
@@ -679,7 +680,7 @@ void Daemon::syncAutotileFloatState(const QString& windowId, bool floating, cons
     }
     // NOTE: Do NOT call unsnapForFloat() here — it destroys the window's
     // zone assignment from manual mode, making it "not snapped" when
-    // returning to manual mode. Zone assignments are preserved so
+    // returning to manual mode. PhosphorZones::Zone assignments are preserved so
     // switching back to manual restores the snapped state.
 
     // Restore geometry: applyGeometryForFloat prefers pre-snap (the window's

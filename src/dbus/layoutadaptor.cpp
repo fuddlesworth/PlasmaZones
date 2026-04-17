@@ -59,7 +59,7 @@ void LayoutAdaptor::connectLayoutManagerSignals()
     connect(m_layoutManager, &LayoutManager::layoutAssigned, this, &LayoutAdaptor::onLayoutAssigned);
 }
 
-void LayoutAdaptor::onActiveLayoutChanged(Layout* layout)
+void LayoutAdaptor::onActiveLayoutChanged(PhosphorZones::Layout* layout)
 {
     m_cachedActiveLayoutId = QUuid();
     m_cachedActiveLayoutJson.clear();
@@ -76,7 +76,7 @@ void LayoutAdaptor::onLayoutsChanged()
     Q_EMIT layoutListChanged();
 }
 
-void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout)
+void LayoutAdaptor::onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout)
 {
     // Don't echo back to the KCM during setAssignmentEntry — the KCM initiated the
     // change and will reload from KConfig. The daemon's internal layoutAssigned signal
@@ -140,7 +140,7 @@ std::optional<QUuid> LayoutAdaptor::parseAndValidateUuid(const QString& id, cons
     return DbusHelpers::parseAndValidateUuid(id, operation, lcDbusLayout);
 }
 
-Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
+PhosphorZones::Layout* LayoutAdaptor::getValidatedLayout(const QString& id, const QString& operation)
 {
     auto uuidOpt = parseAndValidateUuid(id, operation);
     if (!uuidOpt) {
@@ -180,7 +180,7 @@ std::optional<QJsonObject> LayoutAdaptor::parseJsonObject(const QString& jsonStr
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Queries
+// PhosphorZones::Layout Queries
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString LayoutAdaptor::getActiveLayout()
@@ -206,15 +206,15 @@ QStringList LayoutAdaptor::getLayoutList()
 {
     QStringList result;
 
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, /*includeAutotile=*/true,
-        LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true));
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true));
     for (const auto& entry : entries) {
-        QJsonObject json = LayoutUtils::toJson(entry);
+        QJsonObject json = PhosphorZones::LayoutUtils::toJson(entry);
 
         auto uuidOpt = Utils::parseUuid(entry.id);
         if (uuidOpt) {
-            Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+            PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
                 json[::PhosphorZones::ZoneJsonKeys::IsSystem] = layout->isSystemLayout();
                 json[::PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
@@ -230,8 +230,8 @@ QStringList LayoutAdaptor::getLayoutList()
                 }
 
                 // Include allow-lists so KCM can show the filter badge
-                LayoutUtils::serializeAllowLists(json, layout->allowedScreens(), layout->allowedDesktops(),
-                                                 layout->allowedActivities());
+                PhosphorZones::LayoutUtils::serializeAllowLists(json, layout->allowedScreens(),
+                                                                layout->allowedDesktops(), layout->allowedActivities());
             }
         }
 
@@ -260,7 +260,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
         entry.previewZones = PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo);
         entry.zones = entry.previewZones;
         entry.zoneCount = PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo);
-        QJsonObject json = LayoutUtils::toJson(entry);
+        QJsonObject json = PhosphorZones::LayoutUtils::toJson(entry);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
         for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
@@ -281,7 +281,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
 
     auto* layout = m_layoutManager->layoutById(uuid);
     if (!layout) {
-        qCWarning(lcDbusLayout) << "Layout not found:" << id;
+        qCWarning(lcDbusLayout) << "PhosphorZones::Layout not found:" << id;
         return QString();
     }
 
@@ -386,7 +386,7 @@ void LayoutAdaptor::setLayoutAspectRatioClass(const QString& layoutId, int aspec
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Management
+// PhosphorZones::Layout Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void LayoutAdaptor::setActiveLayout(const QString& id)
@@ -410,7 +410,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         return QString();
     }
 
-    Layout* layout = LayoutFactory::create(type, m_layoutManager);
+    PhosphorZones::Layout* layout = LayoutFactory::create(type, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout of type:" << type;
         return QString();
@@ -475,7 +475,7 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Quick Layout Slots
+// Quick PhosphorZones::Layout Slots
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString LayoutAdaptor::getQuickLayoutSlot(int slotNumber)
@@ -576,7 +576,7 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Source-agnostic Layout Preview (PhosphorLayout::ILayoutSource bridge)
+// Source-agnostic PhosphorZones::Layout Preview (PhosphorLayout::ILayoutSource bridge)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 namespace {
@@ -674,7 +674,7 @@ QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Screen Layout Lock
+// Screen PhosphorZones::Layout Lock
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void LayoutAdaptor::toggleScreenLock(const QString& screenId)

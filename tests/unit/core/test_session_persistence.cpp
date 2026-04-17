@@ -414,7 +414,7 @@ private Q_SLOTS:
 
     void testScenario_neverSnappedWindowGetsAutoSnapped()
     {
-        // BUG: Firefox snapped to Zone A, Konsole never snapped.
+        // BUG: Firefox snapped to PhosphorZones::Zone A, Konsole never snapped.
         // After relog, new Konsole incorrectly matches Firefox's pending zone
         // because different app class -> no collision here (passes correctly).
         QString firefox = QStringLiteral("org.mozilla.firefox|11111");
@@ -442,7 +442,7 @@ private Q_SLOTS:
 
     void testScenario_wrongWindowGetsRestoredAmongMultipleSameClass()
     {
-        // BUG: Konsole #1 snapped to Zone A, Konsole #2 not snapped.
+        // BUG: Konsole #1 snapped to PhosphorZones::Zone A, Konsole #2 not snapped.
         // After relog, new instance incorrectly matches because of
         // identity collision - can't distinguish which Konsole was snapped.
         QString konsole1 = QStringLiteral("org.kde.konsole|11111"); // Snapped

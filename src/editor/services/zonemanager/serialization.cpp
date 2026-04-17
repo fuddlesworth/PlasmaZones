@@ -30,7 +30,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
         || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Y)
         || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Width)
         || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Height)) {
-        qCWarning(lcEditorZone) << "Zone data: invalid, missing required fields";
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone data: invalid, missing required fields";
         return QString();
     }
 
@@ -210,7 +210,7 @@ void ZoneManager::setZoneData(const QString& zoneId, const QVariantMap& zoneData
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for setZoneData:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for setZoneData:" << zoneId;
         return;
     }
 

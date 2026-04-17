@@ -217,7 +217,7 @@ void Daemon::handleAutotileDisabled()
         const QString activity = currentActivity();
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
 
-        Layout* fallbackLayout = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* fallbackLayout = m_layoutManager->activeLayout();
         if (!fallbackLayout && !m_layoutManager->layouts().isEmpty()) {
             fallbackLayout = m_layoutManager->layouts().first();
         }
@@ -226,7 +226,7 @@ void Daemon::handleAutotileDisabled()
             QSignalBlocker blocker(m_layoutManager.get());
             for (const QString& screenId : effectiveIds) {
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
-                Layout* existing =
+                PhosphorZones::Layout* existing =
                     existingSnapId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(existingSnapId));
                 if (existing) {
                     continue; // Per-screen snap layout already valid — don't overwrite.
@@ -498,7 +498,7 @@ void Daemon::processPendingGeometryUpdates()
     using PendingKey = QPair<QString, QUuid>;
     auto pending = std::make_shared<QSet<PendingKey>>();
 
-    auto requestFor = [this, pending](Layout* layout, const QString& screenId, const QRectF& geom) {
+    auto requestFor = [this, pending](PhosphorZones::Layout* layout, const QString& screenId, const QRectF& geom) {
         if (!layout) {
             return;
         }
@@ -508,7 +508,7 @@ void Daemon::processPendingGeometryUpdates()
     };
 
     for (const QString& screenId : screenIds) {
-        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
             requestFor(layout, screenId, GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
@@ -518,7 +518,7 @@ void Daemon::processPendingGeometryUpdates()
     // Also recalculate layouts not currently assigned to any screen
     // to prevent stale geometries when the user switches layouts.
     // Use primary screen geometry as fallback reference.
-    const QVector<Layout*> allLayouts = m_layoutManager->layouts();
+    const QVector<PhosphorZones::Layout*> allLayouts = m_layoutManager->layouts();
     for (auto* layout : allLayouts) {
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
@@ -543,22 +543,23 @@ void Daemon::processPendingGeometryUpdates()
     // keys not in `pending` are ignored, so a concurrent async caller
     // cannot drain our barrier prematurely. We key off the signal's
     // `layoutId` (not `layout->id()`), so the barrier still drains when
-    // a tracked Layout is destroyed mid-compute — LayoutComputeService
+    // a tracked PhosphorZones::Layout is destroyed mid-compute — LayoutComputeService
     // emits with layout==nullptr in that case.
     auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
-                    [this, pending, conn](const QString& screenId, const QUuid& layoutId, Layout* /*layout*/) {
-                        const PendingKey key{screenId, layoutId};
-                        if (!pending->remove(key)) {
-                            return; // not one of ours
-                        }
-                        if (pending->isEmpty()) {
-                            QObject::disconnect(*conn);
-                            m_overlayService->updateGeometries();
-                            m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-                            m_reapplyGeometriesTimer.start();
-                        }
-                    });
+    *conn = connect(
+        m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+        [this, pending, conn](const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* /*layout*/) {
+            const PendingKey key{screenId, layoutId};
+            if (!pending->remove(key)) {
+                return; // not one of ours
+            }
+            if (pending->isEmpty()) {
+                QObject::disconnect(*conn);
+                m_overlayService->updateGeometries();
+                m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+                m_reapplyGeometriesTimer.start();
+            }
+        });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.

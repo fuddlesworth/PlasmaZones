@@ -435,8 +435,8 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
         return moveResult(false, QStringLiteral("no_active_layout"), QString(), QRect(), QString(), screenId);
     }
 
-    Zone* targetZone = nullptr;
-    for (Zone* zone : layout->zones()) {
+    PhosphorZones::Zone* targetZone = nullptr;
+    for (PhosphorZones::Zone* zone : layout->zones()) {
         if (zone->zoneNumber() == zoneNumber) {
             targetZone = zone;
             break;

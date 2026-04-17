@@ -221,7 +221,7 @@ private:
 
 private Q_SLOTS:
 
-    // --- Layout mismatch ---
+    // --- PhosphorZones::Layout mismatch ---
 
     void testRestore_layoutMismatch_shouldNotRestore()
     {

@@ -60,7 +60,7 @@ static bool solveAxisBoundaries(QVector<QRect>& zones,
         int colStart = boundaries.indexOf(lo);
         int colEnd = boundaries.indexOf(hi);
         if (colStart < 0 || colEnd < 0 || colEnd != colStart + 1) {
-            // Zone spans multiple columns or doesn't align -- irregular layout
+            // PhosphorZones::Zone spans multiple columns or doesn't align -- irregular layout
             return false;
         }
         zoneColumn[i] = colStart;

@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Macros for setter patterns
@@ -568,4 +568,4 @@ void Layout::renumberZones()
     }
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

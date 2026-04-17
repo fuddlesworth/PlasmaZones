@@ -98,7 +98,7 @@ void Daemon::connectScreenSignals()
         const QString activity =
             m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
         for (const QString& sid : vsIds) {
-            Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+            PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
                 LayoutComputeService::recalculateSync(screenLayout,
                                                       GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
@@ -118,7 +118,7 @@ void Daemon::connectScreenSignals()
 
         // Clean stale entries from layout visibility restrictions
         // Check both screen ID (new) and connector name (legacy)
-        for (Layout* layout : m_layoutManager->layouts()) {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
             if (allowed.isEmpty())
                 continue;
@@ -445,7 +445,7 @@ void Daemon::connectShortcutSignals()
         handleSnapAll();
     });
 
-    // Layout picker shortcut (interactive layout browser + resnap)
+    // PhosphorZones::Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.
     connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
         if (!m_unifiedLayoutController) {
@@ -507,7 +507,7 @@ void Daemon::connectShortcutSignals()
         }
 
         if (wasLocked) {
-            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 showLayoutOsd(layout, screenId);
             }
@@ -628,7 +628,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
     for (const QString& sid : affectedScreenIds) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             LayoutComputeService::recalculateSync(screenLayout,
                                                   GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
@@ -699,7 +699,7 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             LayoutComputeService::recalculateSync(screenLayout,
                                                   GeometryUtils::effectiveScreenGeometry(screenLayout, sid));

@@ -13,7 +13,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 class Layout;
 class Zone;
@@ -89,4 +89,4 @@ PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields z
 
 } // namespace LayoutUtils
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

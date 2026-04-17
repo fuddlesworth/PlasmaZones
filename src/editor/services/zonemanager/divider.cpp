@@ -15,7 +15,7 @@ QVariantList ZoneManager::getZonesSharingEdge(const QString& zoneId, qreal edgeX
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCDebug(lcEditorZone) << "Zone not found:" << zoneId;
+        qCDebug(lcEditorZone) << "PhosphorZones::Zone not found:" << zoneId;
         return result;
     }
 

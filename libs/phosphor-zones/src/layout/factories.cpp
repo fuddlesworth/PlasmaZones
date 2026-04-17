@@ -8,7 +8,7 @@
 #include <PhosphorZones/ZoneDefaults.h>
 #include <PhosphorZones/Zone.h>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 Layout* Layout::createColumnsLayout(int columns, QObject* parent)
 {
@@ -141,4 +141,4 @@ Layout* Layout::createFocusLayout(QObject* parent)
     return layout;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

@@ -22,7 +22,7 @@ using namespace PlasmaZones;
  * @brief Unit tests for ZoneShaderItem
  *
  * Tests cover:
- * - Zone data parsing and snapshot consistency (setZones / getZoneDataSnapshot)
+ * - PhosphorZones::Zone data parsing and snapshot consistency (setZones / getZoneDataSnapshot)
  * - Hovered zone index highlight-only update path
  * - Shader source status transitions
  * - Custom color / param application via setShaderParams
@@ -73,7 +73,7 @@ private Q_SLOTS:
 
         ZoneDataSnapshot snapshot = item.getZoneDataSnapshot();
 
-        // Zone count must match input
+        // PhosphorZones::Zone count must match input
         QCOMPARE(snapshot.zoneCount, 4);
         // Rects, fill colors, border colors must all have matching sizes
         QCOMPARE(snapshot.rects.size(), 4);
@@ -109,7 +109,7 @@ private Q_SLOTS:
             QCOMPARE(after.rects[i].height, before.rects[i].height);
         }
 
-        // Zone 2 (index 2) should now be highlighted
+        // PhosphorZones::Zone 2 (index 2) should now be highlighted
         QVERIFY(after.rects[2].highlighted);
 
         // Version should have incremented by exactly 1 (lightweight update, not full reparse)

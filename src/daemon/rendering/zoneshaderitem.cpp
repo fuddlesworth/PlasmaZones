@@ -73,7 +73,7 @@ void ZoneShaderItem::setUniformExtension(std::shared_ptr<PhosphorShell::IUniform
 }
 
 // ============================================================================
-// Zone Data Parsing
+// PhosphorZones::Zone Data Parsing
 // ============================================================================
 
 void ZoneShaderItem::parseZoneData()
@@ -205,7 +205,7 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
 }
 
 // ============================================================================
-// Thread-Safe Zone Data Accessors
+// Thread-Safe PhosphorZones::Zone Data Accessors
 // ============================================================================
 
 ZoneDataSnapshot ZoneShaderItem::getZoneDataSnapshot() const

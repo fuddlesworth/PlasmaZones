@@ -22,10 +22,13 @@
 
 class QScreen;
 
+namespace PhosphorZones {
+class Layout;
+class Zone;
+}
+
 namespace PlasmaZones {
 
-class Zone;
-class Layout;
 class ISettings;
 
 /**
@@ -50,11 +53,11 @@ public:
     virtual void hide() = 0;
     virtual void toggle() = 0;
 
-    virtual void updateLayout(Layout* layout) = 0;
+    virtual void updateLayout(PhosphorZones::Layout* layout) = 0;
     virtual void updateSettings(ISettings* settings) = 0;
     virtual void updateGeometries() = 0;
 
-    // Zone highlighting for overlay display
+    // PhosphorZones::Zone highlighting for overlay display
     virtual void highlightZone(const QString& zoneId) = 0;
     virtual void highlightZones(const QStringList& zoneIds) = 0;
     virtual void clearHighlight() = 0;
@@ -74,7 +77,7 @@ public:
     // the labels-texture build path is hash-cached on unchanged inputs.
     virtual void refreshFromIdle() = 0;
 
-    // Zone selector methods
+    // PhosphorZones::Zone selector methods
     virtual bool isZoneSelectorVisible() const = 0;
     virtual void showZoneSelector(const QString& targetScreenId = QString()) = 0;
     virtual void hideZoneSelector() = 0;
@@ -87,7 +90,7 @@ public:
     // Filtered layout count (matches what the zone selector actually displays)
     virtual int visibleLayoutCount(const QString& screenId) const = 0;
 
-    // Zone selector selection tracking
+    // PhosphorZones::Zone selector selection tracking
     virtual bool hasSelectedZone() const = 0;
     virtual QString selectedLayoutId() const = 0;
     virtual int selectedZoneIndex() const = 0;
@@ -112,8 +115,8 @@ public:
 
 Q_SIGNALS:
     void visibilityChanged(bool visible);
-    void zoneActivated(Zone* zone);
-    void multiZoneActivated(const QVector<Zone*>& zones);
+    void zoneActivated(PhosphorZones::Zone* zone);
+    void multiZoneActivated(const QVector<PhosphorZones::Zone*>& zones);
     void zoneSelectorVisibilityChanged(bool visible);
     void zoneSelectorZoneSelected(int zoneIndex);
 

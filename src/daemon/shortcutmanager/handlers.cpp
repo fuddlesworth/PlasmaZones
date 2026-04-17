@@ -95,7 +95,7 @@ DIRECTION_HANDLER(MoveWindow, moveWindowRequested, Right, Right)
 DIRECTION_HANDLER(MoveWindow, moveWindowRequested, Up, Up)
 DIRECTION_HANDLER(MoveWindow, moveWindowRequested, Down, Down)
 
-// Focus Zone directional handlers
+// Focus PhosphorZones::Zone directional handlers
 DIRECTION_HANDLER(FocusZone, focusZoneRequested, Left, Left)
 DIRECTION_HANDLER(FocusZone, focusZoneRequested, Right, Right)
 DIRECTION_HANDLER(FocusZone, focusZoneRequested, Up, Up)
@@ -155,7 +155,7 @@ void ShortcutManager::onRotateVirtualScreensCounterclockwise()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Snap to Zone Slot Handlers
+// Snap to PhosphorZones::Zone Slot Handlers
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void ShortcutManager::onSnapToZone(int zoneNumber)
@@ -210,7 +210,7 @@ void ShortcutManager::onSnapAllWindows()
 
 void ShortcutManager::onLayoutPicker()
 {
-    qCInfo(lcShortcuts) << "Layout picker triggered";
+    qCInfo(lcShortcuts) << "PhosphorZones::Layout picker triggered";
     Q_EMIT layoutPickerRequested();
 }
 
@@ -262,7 +262,7 @@ DIRECTION_UPDATE(MoveWindow, Right, m_moveWindowRightAction, moveWindowRightShor
 DIRECTION_UPDATE(MoveWindow, Up, m_moveWindowUpAction, moveWindowUpShortcut)
 DIRECTION_UPDATE(MoveWindow, Down, m_moveWindowDownAction, moveWindowDownShortcut)
 
-// Focus Zone directional updates
+// Focus PhosphorZones::Zone directional updates
 DIRECTION_UPDATE(FocusZone, Left, m_focusZoneLeftAction, focusZoneLeftShortcut)
 DIRECTION_UPDATE(FocusZone, Right, m_focusZoneRightAction, focusZoneRightShortcut)
 DIRECTION_UPDATE(FocusZone, Up, m_focusZoneUpAction, focusZoneUpShortcut)
@@ -296,7 +296,7 @@ DIRECTION_UPDATE(SwapVirtualScreen, Right, m_swapVirtualScreenRightAction, swapV
 DIRECTION_UPDATE(SwapVirtualScreen, Up, m_swapVirtualScreenUpAction, swapVirtualScreenUpShortcut)
 DIRECTION_UPDATE(SwapVirtualScreen, Down, m_swapVirtualScreenDownAction, swapVirtualScreenDownShortcut)
 
-// Snap to Zone update
+// Snap to PhosphorZones::Zone update
 void ShortcutManager::updateSnapToZoneShortcut(int index)
 {
     if (m_registrationInProgress) {
@@ -342,7 +342,7 @@ void ShortcutManager::updateCycleWindowBackwardShortcut()
     UPDATE_SHORTCUT(m_cycleWindowBackwardAction, cycleWindowBackwardShortcut);
 }
 
-// Resnap / Snap All / Layout Picker updates
+// Resnap / Snap All / PhosphorZones::Layout Picker updates
 void ShortcutManager::updateResnapToNewLayoutShortcut()
 {
     UPDATE_SHORTCUT(m_resnapToNewLayoutAction, resnapToNewLayoutShortcut);

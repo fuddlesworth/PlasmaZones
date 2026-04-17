@@ -16,11 +16,14 @@
 #include <functional>
 #include <memory>
 
+namespace PhosphorZones {
+class IZoneDetector;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
 class ISettings;
-class IZoneDetector;
 class LayoutManager;
 class SnapNavigationTargetResolver;
 class VirtualDesktopManager;
@@ -47,8 +50,9 @@ class PLASMAZONES_EXPORT SnapEngine : public QObject, public IEngineLifecycle
     Q_OBJECT
 
 public:
-    explicit SnapEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker, IZoneDetector* zoneDetector,
-                        ISettings* settings, VirtualDesktopManager* vdm, QObject* parent = nullptr);
+    explicit SnapEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
+                        QObject* parent = nullptr);
     ~SnapEngine() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -171,7 +175,7 @@ public:
     void setAutotileEngine(AutotileEngine* engine);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone detection adaptor (for daemon-driven navigation)
+    // PhosphorZones::Zone detection adaptor (for daemon-driven navigation)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -232,7 +236,7 @@ public:
     void swapFocusedInDirection(const QString& direction, const NavigationContext& ctx);
 
     /// Move the focused window to the layout zone with @p zoneNumber
-    /// (1-based) on ctx.screenId. Zone numbers outside [1,9] are rejected.
+    /// (1-based) on ctx.screenId. PhosphorZones::Zone numbers outside [1,9] are rejected.
     void moveFocusedToPosition(int zoneNumber, const NavigationContext& ctx);
 
     /// Move the focused window to the first empty zone on ctx.screenId.
@@ -324,7 +328,7 @@ Q_SIGNALS:
 private:
     LayoutManager* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
-    IZoneDetector* m_zoneDetector = nullptr;
+    PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     ISettings* m_settings = nullptr;
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QPointer<AutotileEngine> m_autotileEngine;

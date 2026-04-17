@@ -248,7 +248,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                     bool locked = isAnyModeLocked(m_settings, cursorScreenId, curDesktop, curActivity);
                     if (locked) {
                         // Only allow zone selection from the active layout
-                        Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
+                        PhosphorZones::Layout* activeLayout = m_layoutManager->resolveLayoutForScreen(cursorScreenId);
                         if (activeLayout && layoutId != activeLayout->id().toString()) {
                             continue; // Skip this non-active layout entirely
                         }
@@ -461,10 +461,10 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
-        Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
+        PhosphorZones::Layout* selectedLayout = m_layoutManager->layoutById(QUuid::fromString(m_selectedLayoutId));
         if (selectedLayout && m_selectedZoneIndex >= 0
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
-            Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
+            PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
                 QRect result =
                     GeometryUtils::getZoneGeometryForScreen(zone, physScreen, screenId, selectedLayout, m_settings);
@@ -529,10 +529,12 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     // Route to the correct signal based on whether this is an autotile algorithm or manual layout
     if (LayoutId::isAutotile(layoutId)) {
         const QString algoId = LayoutId::extractAlgorithmId(layoutId);
-        qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenId;
+        qCInfo(lcOverlay) << "PhosphorZones::Zone selector: autotile algorithm selected, algoId=" << algoId
+                          << "screen=" << screenId;
         Q_EMIT autotileLayoutSelected(algoId, screenId);
     } else {
-        qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenId;
+        qCInfo(lcOverlay) << "PhosphorZones::Zone selector: layout selected, layoutId=" << layoutId
+                          << "screen=" << screenId;
         Q_EMIT manualLayoutSelected(layoutId, screenId);
     }
 }

@@ -18,12 +18,12 @@ namespace TestHelpers {
  * Uses JsonKeys constants from core/constants.h for all key names.
  * Shared across test_zone_shader_item.cpp and test_overlay_helpers.cpp.
  *
- * @param id Zone identifier (optional, omitted from map if empty)
+ * @param id PhosphorZones::Zone identifier (optional, omitted from map if empty)
  * @param x X coordinate in pixels
  * @param y Y coordinate in pixels
  * @param w Width in pixels
  * @param h Height in pixels
- * @param zoneNumber Zone number label (default 0)
+ * @param zoneNumber PhosphorZones::Zone number label (default 0)
  * @param highlighted Whether the zone is highlighted (default false)
  * @return QVariantMap representing the zone
  */

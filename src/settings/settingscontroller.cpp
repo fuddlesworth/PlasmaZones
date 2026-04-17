@@ -259,7 +259,7 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
 
-    // Layout load timer (debounce)
+    // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
@@ -675,7 +675,7 @@ void SettingsController::endExternalEdit()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
+// PhosphorZones::Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SettingsController::scheduleLayoutLoad()
@@ -700,7 +700,7 @@ void SettingsController::loadLayoutsAsync()
         m_localLayoutManager->loadLayouts();
     }
 
-    // Step 1: instant paint from the in-process ZonesLayoutSource so the
+    // Step 1: instant paint from the in-process PhosphorZones::ZonesLayoutSource so the
     // layouts page renders manual previews before D-Bus has even round-
     // tripped — and continues to work entirely if the daemon isn't
     // running. Autotile algorithm entries land later via the async D-Bus
@@ -810,7 +810,7 @@ QVariantMap SettingsController::localLayoutPreview(const QString& id, int window
 
 void SettingsController::createNewLayout()
 {
-    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(QStringLiteral("New PhosphorZones::Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -818,7 +818,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = QStringLiteral("New Layout");
+        sanitizedName = QStringLiteral("New PhosphorZones::Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -2655,7 +2655,7 @@ void SettingsController::openLayoutFile(const QString& layoutId)
 {
     if (layoutId.isEmpty())
         return;
-    // Layout files use UUID without braces as the filename
+    // PhosphorZones::Layout files use UUID without braces as the filename
     const QUuid uuid(layoutId);
     if (uuid.isNull()) {
         qCDebug(lcCore) << "openLayoutFile: not a valid UUID layout ID:" << layoutId;
@@ -2667,7 +2667,7 @@ void SettingsController::openLayoutFile(const QString& layoutId)
     const QString located =
         QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
     if (located.isEmpty()) {
-        qCWarning(lcCore) << "Layout file not found:" << filename;
+        qCWarning(lcCore) << "PhosphorZones::Layout file not found:" << filename;
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(located));
@@ -3308,7 +3308,7 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
         QJsonObject pzLayout;
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
+            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported PhosphorZones::Layout"));
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
@@ -3345,7 +3345,8 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
             QJsonObject pzZone;
             pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
             pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+                QStringLiteral("PhosphorZones::Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;

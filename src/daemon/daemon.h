@@ -21,13 +21,16 @@
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
+namespace PhosphorZones {
+class Layout;
+class ZoneDetector;
+}
+
 namespace PlasmaZones {
 
 enum class DisabledReason;
-class Layout;
 class LayoutManager;
 class LayoutComputeService;
-class ZoneDetector;
 class Settings;
 class OverlayService;
 class ScreenManager;
@@ -88,7 +91,7 @@ public:
     {
         return m_layoutManager.get();
     }
-    ZoneDetector* zoneDetector() const
+    PhosphorZones::ZoneDetector* zoneDetector() const
     {
         return m_zoneDetector.get();
     }
@@ -143,7 +146,7 @@ public:
     Q_INVOKABLE bool isOverlayVisible() const;
 
     // OSD notifications
-    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
@@ -260,7 +263,7 @@ private:
      * @brief Restore pre-tile geometry for autotile-only windows
      *
      * Iterates m_lastAutotileOrders and calls applyGeometryForFloat for each
-     * window that has no zone assignment (never manually snapped). Zone-snapped
+     * window that has no zone assignment (never manually snapped). PhosphorZones::Zone-snapped
      * windows are already handled by resnapCurrentAssignments.
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
@@ -355,7 +358,7 @@ private:
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
     // The two concrete layout sources composed behind layoutSource(): manual
-    // layouts via ZonesLayoutSource (over m_layoutManager) and autotile
+    // layouts via PhosphorZones::ZonesLayoutSource (over m_layoutManager) and autotile
     // algorithm previews via AutotileLayoutSource (over the in-process
     // PhosphorTiles::AlgorithmRegistry singleton).  Owned separately because the composite
     // borrows their pointers and we need their lifetimes pinned to Daemon.
@@ -366,7 +369,7 @@ private:
     std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_layoutSource;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
-    std::unique_ptr<ZoneDetector> m_zoneDetector;
+    std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
@@ -383,7 +386,7 @@ private:
     LayoutAdaptor* m_layoutAdaptor = nullptr;
     SettingsAdaptor* m_settingsAdaptor = nullptr;
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
-    ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // Zone detection queries
+    ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling

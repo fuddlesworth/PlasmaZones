@@ -65,7 +65,7 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
 
     const auto layouts = m_layoutManager->layouts();
     if (layouts.size() > layoutCountBefore) {
-        Layout* newLayout = layouts.last();
+        PhosphorZones::Layout* newLayout = layouts.last();
         qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
         return newLayout->id().toString();
     }
@@ -90,7 +90,7 @@ void LayoutAdaptor::exportLayout(const QString& layoutId, const QString& filePat
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout Update (Editor Support)
+// PhosphorZones::Layout Update (Editor Support)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 bool LayoutAdaptor::updateLayout(const QString& layoutJson)
@@ -209,7 +209,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
         QStringList screens;
         QList<int> desktops;
         QStringList activities;
-        LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
+        PhosphorZones::LayoutUtils::deserializeAllowLists(obj, screens, desktops, activities);
         layout->setAllowedScreens(screens);
         layout->setAllowedDesktops(desktops);
         layout->setAllowedActivities(activities);
@@ -217,7 +217,8 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
 
     // Update app-to-zone rules
     if (obj.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
-        layout->setAppRules(AppRule::fromJsonArray(obj[::PhosphorZones::ZoneJsonKeys::AppRules].toArray()));
+        layout->setAppRules(
+            PhosphorZones::AppRule::fromJsonArray(obj[::PhosphorZones::ZoneJsonKeys::AppRules].toArray()));
     }
 
     // Clear existing zones and add new ones
@@ -226,7 +227,7 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     const auto zonesArray = obj[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneVal : zonesArray) {
         QJsonObject zoneObj = zoneVal.toObject();
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
 
         zone->setName(zoneObj[::PhosphorZones::ZoneJsonKeys::Name].toString());
         zone->setZoneNumber(zoneObj[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt());
@@ -299,7 +300,7 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
         return QString();
     }
 
-    auto* layout = Layout::fromJson(*objOpt, m_layoutManager);
+    auto* layout = PhosphorZones::Layout::fromJson(*objOpt, m_layoutManager);
     if (!layout) {
         qCWarning(lcDbusLayout) << "Failed to create layout from JSON";
         return QString();

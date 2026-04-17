@@ -50,14 +50,15 @@ void LayoutComputeService::setLayoutManager(LayoutManager* manager)
     }
     // Evict tracked entries when layouts disappear, so the hash doesn't
     // accumulate dangling QPointers over long-running sessions.
-    connect(manager, &LayoutManager::layoutRemoved, this, [this](Layout* layout) {
+    connect(manager, &LayoutManager::layoutRemoved, this, [this](PhosphorZones::Layout* layout) {
         if (layout) {
             onLayoutRemoved(layout->id());
         }
     });
 }
 
-bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry)
+bool LayoutComputeService::requestRecalculate(PhosphorZones::Layout* layout, const QString& screenId,
+                                              const QRectF& screenGeometry)
 {
     if (!layout || !screenGeometry.isValid()) {
         return false;
@@ -71,12 +72,12 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     if (screenGeometry == layout->lastRecalcGeometry()) {
         const QString sid = screenId;
         const QUuid lid = layout->id();
-        QPointer<Layout> lp(layout);
+        QPointer<PhosphorZones::Layout> lp(layout);
         QMetaObject::invokeMethod(
             this,
             [this, sid, lid, lp]() {
                 // Always fire so barriers keyed on (screenId, layoutId)
-                // drain even if the Layout was destroyed on this tick.
+                // drain even if the PhosphorZones::Layout was destroyed on this tick.
                 Q_EMIT geometriesComputed(sid, lid, lp.data());
             },
             Qt::QueuedConnection);
@@ -95,7 +96,7 @@ bool LayoutComputeService::requestRecalculate(Layout* layout, const QString& scr
     return true;
 }
 
-void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenGeometry)
+void LayoutComputeService::recalculateSync(PhosphorZones::Layout* layout, const QRectF& screenGeometry)
 {
     if (!layout) {
         return;
@@ -103,7 +104,7 @@ void LayoutComputeService::recalculateSync(Layout* layout, const QRectF& screenG
     layout->recalculateZoneGeometries(screenGeometry);
 }
 
-LayoutSnapshot LayoutComputeService::buildSnapshot(Layout* layout, const QString& screenId,
+LayoutSnapshot LayoutComputeService::buildSnapshot(PhosphorZones::Layout* layout, const QString& screenId,
                                                    const QRectF& screenGeometry)
 {
     LayoutSnapshot snapshot;
@@ -136,7 +137,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
 
     // Find the live layout. QPointer catches destruction between request
     // and result (layout removed, session swap, etc.) — a dangling raw
-    // Layout* here would be a use-after-free. Even in the destroyed case
+    // PhosphorZones::Layout* here would be a use-after-free. Even in the destroyed case
     // we still emit geometriesComputed(…, nullptr) so completion barriers
     // keyed on (screenId, layoutId) drain exactly once per request.
     auto layoutIt = m_trackedLayouts.constFind(result.layoutId);
@@ -145,7 +146,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
         Q_EMIT geometriesComputed(result.screenId, result.layoutId, nullptr);
         return;
     }
-    Layout* layout = layoutIt->data();
+    PhosphorZones::Layout* layout = layoutIt->data();
 
     // Race guard: if a sync caller (recalculateSync) already computed for
     // this exact screen geometry while the async result was in flight, skip
@@ -160,7 +161,7 @@ void LayoutComputeService::applyResult(const LayoutComputeResult& result)
     // Batch-apply: update all zone geometries with a single layoutModified signal at end
     layout->beginBatchModify();
     for (const auto& computed : result.zones) {
-        Zone* zone = layout->zoneById(computed.zoneId);
+        PhosphorZones::Zone* zone = layout->zoneById(computed.zoneId);
         if (zone) {
             zone->setGeometry(computed.absoluteGeometry);
         }

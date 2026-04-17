@@ -34,10 +34,10 @@
 
 namespace PlasmaZones {
 
-// ZoneGeometryMode lives in libs/phosphor-zones — `PhosphorZones::Zone.h`
+// PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones — `PhosphorZones::Zone.h`
 // declares it inside `namespace PlasmaZones` so it's visible to existing
 // callers via the same name.  No alias needed here — the header transitively
-// reaches Zone.h via core/zone.h shim.
+// reaches PhosphorZones::Zone.h via core/zone.h shim.
 
 /**
  * @brief Default values for zone appearance and core module constants
@@ -45,7 +45,7 @@ namespace PlasmaZones {
  * These defaults are used by core module files that can't depend on config.
  * For user-configurable settings, see ConfigDefaults.
  *
- * Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
+ * PhosphorZones::Layout ratio constants (PriorityGridMainRatio, FocusSideRatio, etc.) are
  * structural constants for built-in layouts.
  */
 namespace Defaults {
@@ -53,7 +53,7 @@ namespace Defaults {
 inline constexpr int FallbackScreenWidth = 1920;
 inline constexpr int FallbackScreenHeight = 1080;
 
-// Zone-presentation defaults + layout-factory ratios live in
+// PhosphorZones::Zone-presentation defaults + layout-factory ratios live in
 // `PhosphorZones::ZoneDefaults` (libs/phosphor-zones).  All in-tree
 // callers reference them qualified directly — no using-alias here.
 
@@ -84,7 +84,7 @@ namespace ScreenClassification = ::PhosphorLayout::ScreenClassification;
  * @brief Editor-specific constants
  */
 namespace EditorConstants {
-// Zone size constraints (relative coordinates 0.0-1.0)
+// PhosphorZones::Zone size constraints (relative coordinates 0.0-1.0)
 constexpr qreal MinZoneSize = 0.05; // 5% minimum zone size
 constexpr qreal MaxZoneSize = 1.0; // 100% maximum zone size
 
@@ -95,7 +95,7 @@ constexpr int MinFixedZoneSize = 50; // Minimum fixed zone dimension in pixels
 constexpr qreal EdgeThreshold = 0.02; // 2% threshold for snapping to zone edges
 constexpr qreal DefaultSnapInterval = 0.1; // 10% default grid snap interval
 
-// Zone duplication offset
+// PhosphorZones::Zone duplication offset
 constexpr qreal DuplicateOffset = 0.02; // 2% offset when duplicating zones
 constexpr int DuplicateOffsetPixels = 20; // 20px offset when duplicating fixed zones
 
@@ -120,7 +120,7 @@ inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
  * @brief JSON keys for serialization
  */
 namespace JsonKeys {
-// Zone & layout wire-format keys live in `PhosphorZones::ZoneJsonKeys`
+// PhosphorZones::Zone & layout wire-format keys live in `PhosphorZones::ZoneJsonKeys`
 // (libs/phosphor-zones).  All in-tree callers reference them qualified
 // directly — no using-aliases here.
 //
@@ -149,7 +149,7 @@ inline constexpr QLatin1String RefreshRate{"refreshRate"};
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
 
-// Zone assignment serialization keys
+// PhosphorZones::Zone assignment serialization keys
 inline constexpr QLatin1String WindowId{"windowId"};
 inline constexpr QLatin1String SourceZoneId{"sourceZoneId"};
 inline constexpr QLatin1String TargetZoneId{"targetZoneId"};
@@ -207,7 +207,7 @@ constexpr int MaxBars = 256;
 /**
  * @brief Synthetic zone ID prefix used by the zone selector overlay
  *
- * Zone IDs starting with this prefix are transient selector entries,
+ * PhosphorZones::Zone IDs starting with this prefix are transient selector entries,
  * not real zone UUIDs. They must be excluded from persistence and
  * occupancy checks.
  */
@@ -248,7 +248,7 @@ inline constexpr QLatin1String Interface{"org.plasmazones.EditorController"};
 }
 
 /**
- * @brief Layout ID utilities for autotile algorithm layouts
+ * @brief PhosphorZones::Layout ID utilities for autotile algorithm layouts
  *
  * Autotile layouts use prefixed IDs: "autotile:algorithm-id"
  * Manual layouts use UUID strings.

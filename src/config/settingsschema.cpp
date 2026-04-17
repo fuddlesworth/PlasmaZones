@@ -314,7 +314,7 @@ void appendPerformanceSchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Zone Geometry (Snapping.Gaps) ──────────────────────────────────────────
+// ─── PhosphorZones::Zone Geometry (Snapping.Gaps) ──────────────────────────────────────────
 // Inner/outer gaps (uniform + per-side), adjacency threshold.
 
 void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
@@ -548,7 +548,7 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
     };
 }
 
-// ─── Zone Selector ──────────────────────────────────────────────────────────
+// ─── PhosphorZones::Zone Selector ──────────────────────────────────────────────────────────
 // Pops up at the edge of the screen during drag to let users pick which zone
 // to snap to. Toggle + trigger distance + preview geometry + grid config +
 // three enum-ints (Position, LayoutMode, SizeMode).

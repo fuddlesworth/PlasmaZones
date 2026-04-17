@@ -24,6 +24,10 @@
 
 #include <QHashFunctions>
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
 /**
@@ -75,7 +79,6 @@ struct PendingAutotileRestore
 constexpr int MaxPendingRestoresPerApp = 16;
 
 class AutotileConfig;
-class Layout;
 class LayoutManager;
 class NavigationController;
 class PerScreenConfigResolver;
@@ -735,7 +738,7 @@ public:
     Q_INVOKABLE void unfloatWindow(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone-ordered window transitions (snapping ↔ autotile)
+    // PhosphorZones::Zone-ordered window transitions (snapping ↔ autotile)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -1057,7 +1060,7 @@ private Q_SLOTS:
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);
     void onScreenGeometryChanged(const QString& screenId);
-    void onLayoutChanged(Layout* layout);
+    void onLayoutChanged(PhosphorZones::Layout* layout);
 
 private:
     void connectSignals();

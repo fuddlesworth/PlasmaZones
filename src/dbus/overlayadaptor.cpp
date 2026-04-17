@@ -15,8 +15,8 @@
 
 namespace PlasmaZones {
 
-OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector, ILayoutManager* layoutManager,
-                               ISettings* settings, QObject* parent)
+OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                               PhosphorZones::ILayoutManager* layoutManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
@@ -31,11 +31,11 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector
     connect(m_overlayService, &IOverlayService::visibilityChanged, this, &OverlayAdaptor::overlayVisibilityChanged);
 
     // Connect to interface signals (DIP)
-    connect(m_zoneDetector, &IZoneDetector::zoneHighlighted, this, [this](Zone* zone) {
+    connect(m_zoneDetector, &PhosphorZones::IZoneDetector::zoneHighlighted, this, [this](PhosphorZones::Zone* zone) {
         Q_EMIT zoneHighlightChanged(zone ? zone->id().toString() : QString());
     });
 
-    connect(m_zoneDetector, &IZoneDetector::highlightsCleared, this, [this]() {
+    connect(m_zoneDetector, &PhosphorZones::IZoneDetector::highlightsCleared, this, [this]() {
         Q_EMIT zoneHighlightChanged(QString());
     });
 
@@ -84,7 +84,7 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
         return;
     }
 
-    QVector<Zone*> zones;
+    QVector<PhosphorZones::Zone*> zones;
     for (const auto& id : zoneIds) {
         auto uuidOpt = Utils::parseUuid(id);
         if (uuidOpt) {

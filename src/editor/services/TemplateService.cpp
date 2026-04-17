@@ -49,8 +49,8 @@ QVariantList GridTemplateStrategy::createZones(int columns, int rows)
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < columns; ++c) {
             int currentNum = zoneNumber++;
-            zones.append(createZoneForTemplate(QStringLiteral("Zone %1").arg(currentNum), currentNum, c * cellWidth,
-                                               r * cellHeight, cellWidth, cellHeight));
+            zones.append(createZoneForTemplate(QStringLiteral("PhosphorZones::Zone %1").arg(currentNum), currentNum,
+                                               c * cellWidth, r * cellHeight, cellWidth, cellHeight));
         }
     }
     return zones;

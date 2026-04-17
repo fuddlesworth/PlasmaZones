@@ -51,7 +51,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     }
 
     // Helper: given a match and a resolved screen name, build the SnapResult
-    auto buildResult = [&](const AppRuleMatch& match, const QString& resolvedScreen) -> SnapResult {
+    auto buildResult = [&](const PhosphorZones::AppRuleMatch& match, const QString& resolvedScreen) -> SnapResult {
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
@@ -65,12 +65,12 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         }
 
         // Get the layout for the effective screen to find the zone
-        Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(effectiveScreen);
+        PhosphorZones::Layout* targetLayout = m_layoutManager->resolveLayoutForScreen(effectiveScreen);
         if (!targetLayout) {
             return SnapResult::noSnap();
         }
 
-        Zone* zone = targetLayout->zoneByNumber(match.zoneNumber);
+        PhosphorZones::Zone* zone = targetLayout->zoneByNumber(match.zoneNumber);
         if (!zone) {
             return SnapResult::noSnap();
         }
@@ -94,9 +94,9 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     };
 
     // Phase 1: Check the current screen's layout first (preserves existing behavior)
-    Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
+    PhosphorZones::Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(windowScreenName);
     if (currentLayout) {
-        AppRuleMatch match = currentLayout->matchAppRule(windowClass);
+        PhosphorZones::AppRuleMatch match = currentLayout->matchAppRule(windowClass);
         if (match.matched()) {
             SnapResult result = buildResult(match, windowScreenName);
             if (result.isValid()) {
@@ -136,13 +136,13 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
             continue;
         }
 
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+        PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!layout || checkedLayouts.contains(layout->id())) {
             continue;
         }
         checkedLayouts.insert(layout->id());
 
-        AppRuleMatch match = layout->matchAppRule(windowClass);
+        PhosphorZones::AppRuleMatch match = layout->matchAppRule(windowClass);
         if (match.matched() && !match.targetScreen.isEmpty()) {
             SnapResult result = buildResult(match, screenId);
             if (result.isValid()) {
@@ -240,7 +240,7 @@ SnapResult WindowTrackingService::calculateSnapToEmptyZone(const QString& window
     }
 
     // Check layout has autoAssign enabled
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(windowScreenId);
     if (!layout) {
         qCDebug(lcCore) << "snapToEmptyZone: no layout for screen" << windowScreenId;
         return SnapResult::noSnap();
@@ -367,7 +367,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
         int savedDesktop = entry.virtualDesktop;
 
         // Get the layout for the saved screen/desktop context (not just activeLayout)
-        Layout* currentLayout =
+        PhosphorZones::Layout* currentLayout =
             m_layoutManager->layoutForScreen(savedScreen, savedDesktop, m_layoutManager->currentActivity());
         if (!currentLayout) {
             // Fallback to active layout if no screen-specific assignment
@@ -405,16 +405,17 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     // Calculate geometry (use combined geometry for multi-zone)
     QRect geo = resolveZoneGeometry(zoneIds, savedScreen);
 
-    // Zone-number fallback: zone UUIDs may have changed after layout edit.
+    // PhosphorZones::Zone-number fallback: zone UUIDs may have changed after layout edit.
     // Re-resolve layout for this screen and look up by zone number instead.
     if (!geo.isValid() && !savedLayoutId.isEmpty()) {
         QList<int> savedNumbers = entry.zoneNumbers;
         if (!savedNumbers.isEmpty()) {
-            Layout* fallbackLayout = m_layoutManager ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
+            PhosphorZones::Layout* fallbackLayout =
+                m_layoutManager ? m_layoutManager->resolveLayoutForScreen(savedScreen) : nullptr;
             if (fallbackLayout) {
                 QStringList fallbackIds;
                 for (int num : savedNumbers) {
-                    Zone* z = fallbackLayout->zoneByNumber(num);
+                    PhosphorZones::Zone* z = fallbackLayout->zoneByNumber(num);
                     if (z)
                         fallbackIds.append(z->id().toString());
                 }
@@ -427,8 +428,8 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                             qCWarning(lcCore) << "zone-number fallback:" << appId << "partial match, requested"
                                               << savedNumbers.size() << "zones, matched" << fallbackIds.size();
                         }
-                        qCInfo(lcCore) << "Zone-number fallback for" << appId << "numbers:" << savedNumbers << "->"
-                                       << fallbackIds;
+                        qCInfo(lcCore) << "PhosphorZones::Zone-number fallback for" << appId
+                                       << "numbers:" << savedNumbers << "->" << fallbackIds;
                     }
                 }
             }

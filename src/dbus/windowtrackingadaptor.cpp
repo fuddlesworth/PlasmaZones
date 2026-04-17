@@ -26,7 +26,7 @@
 
 namespace PlasmaZones {
 
-WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
+WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
                                              QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -643,7 +643,7 @@ QString WindowTrackingAdaptor::getLastUsedZoneId()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Geometry Queries - Delegate to Service
+// PhosphorZones::Zone Geometry Queries - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString WindowTrackingAdaptor::findEmptyZone()

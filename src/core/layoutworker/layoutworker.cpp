@@ -24,10 +24,10 @@ void LayoutWorker::computeGeometries(const LayoutSnapshot& snapshot, uint64_t ge
     for (const auto& zone : snapshot.zones) {
         ComputedZoneGeometry computed;
         computed.zoneId = zone.id;
-        // Shared pure helper: same math Zone::calculateAbsoluteGeometry uses
+        // Shared pure helper: same math PhosphorZones::Zone::calculateAbsoluteGeometry uses
         // on the main thread. Keeps the two paths byte-identical.
-        computed.absoluteGeometry = Zone::computeAbsoluteGeometry(zone.geometryMode, zone.relativeGeometry,
-                                                                  zone.fixedGeometry, snapshot.screenGeometry);
+        computed.absoluteGeometry = PhosphorZones::Zone::computeAbsoluteGeometry(
+            zone.geometryMode, zone.relativeGeometry, zone.fixedGeometry, snapshot.screenGeometry);
         result.zones.append(computed);
     }
 

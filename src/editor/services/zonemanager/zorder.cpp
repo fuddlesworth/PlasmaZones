@@ -10,14 +10,14 @@
 using namespace PlasmaZones;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Zone structural operations
+// PhosphorZones::Zone structural operations
 // ═══════════════════════════════════════════════════════════════════════════
 
 QString ZoneManager::duplicateZone(const QString& zoneId)
 {
     auto zoneOpt = getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "Zone not found for duplication:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for duplication:" << zoneId;
         return QString();
     }
 
@@ -33,7 +33,8 @@ QString ZoneManager::duplicateZone(const QString& zoneId)
         qreal fy = qMax(0.0, fixedGeo.y() + EditorConstants::DuplicateOffsetPixels);
 
         QVariantMap duplicate = createZone(copyName, zoneNumber, 0, 0, 0.25, 0.25);
-        duplicate[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
+        duplicate[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+            static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
         duplicate[::PhosphorZones::ZoneJsonKeys::FixedX] = fx;
         duplicate[::PhosphorZones::ZoneJsonKeys::FixedY] = fy;
         duplicate[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo.width();
@@ -64,7 +65,7 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 {
     auto zoneOpt = getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "Zone not found for split:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for split:" << zoneId;
         return QString();
     }
 
@@ -98,8 +99,9 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
 
         // Create new zone in pixel space
         int zoneNumber = m_zones.size() + 1;
-        QVariantMap newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
-        newZone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(ZoneGeometryMode::Fixed);
+        QVariantMap newZone =
+            createZone(QStringLiteral("PhosphorZones::Zone %1").arg(zoneNumber), zoneNumber, 0, 0, 0.25, 0.25);
+        newZone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
         if (horizontal) {
             newZone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();
             newZone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo.y() + splitDim;
@@ -148,15 +150,15 @@ QString ZoneManager::splitZone(const QString& zoneId, bool horizontal)
         original[::PhosphorZones::ZoneJsonKeys::Height] = newH;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x(), geom.y() + newH,
-                             geom.width(), newH);
+        newZone = createZone(QStringLiteral("PhosphorZones::Zone %1").arg(zoneNumber), zoneNumber, geom.x(),
+                             geom.y() + newH, geom.width(), newH);
     } else {
         qreal newW = geom.width() / 2.0;
         original[::PhosphorZones::ZoneJsonKeys::Width] = newW;
         m_zones[index] = original;
         emitZoneSignal(SignalType::GeometryChanged, zoneId, false);
-        newZone = createZone(QStringLiteral("Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW, geom.y(), newW,
-                             geom.height());
+        newZone = createZone(QStringLiteral("PhosphorZones::Zone %1").arg(zoneNumber), zoneNumber, geom.x() + newW,
+                             geom.y(), newW, geom.height());
     }
 
     QString newZoneId = newZone[::PhosphorZones::ZoneJsonKeys::Id].toString();
@@ -180,7 +182,7 @@ void ZoneManager::bringToFront(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for bring to front:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for bring to front:" << zoneId;
         return;
     }
 
@@ -206,7 +208,7 @@ void ZoneManager::sendToBack(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for send to back:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for send to back:" << zoneId;
         return;
     }
 
@@ -232,7 +234,7 @@ void ZoneManager::bringForward(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for bring forward:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for bring forward:" << zoneId;
         return;
     }
 
@@ -264,7 +266,7 @@ void ZoneManager::sendBackward(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for send backward:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for send backward:" << zoneId;
         return;
     }
 

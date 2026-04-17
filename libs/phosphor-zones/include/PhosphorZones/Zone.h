@@ -12,7 +12,7 @@
 #include <QColor>
 #include <QJsonObject>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 /**
  * @brief Geometry mode for individual zones.
@@ -272,4 +272,4 @@ private:
     QRectF m_fixedGeometry; // Absolute pixel coords relative to screen origin
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

@@ -40,48 +40,48 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsBridge = StubSettings;
 
 // =========================================================================
-// Stub Zone Detector
+// Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorBridge : public IZoneDetector
+class StubZoneDetectorBridge : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorBridge(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
-    {
-        return nullptr;
-    }
-    void setLayout(Layout*) override
-    {
-    }
-    ZoneDetectionResult detectZone(const QPointF&) const override
-    {
-        return {};
-    }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
-    {
-        return {};
-    }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Layout* layout() const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    void setLayout(PhosphorZones::Layout*) override
     {
-        return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    {
+        return {};
+    }
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
+    {
+        return nullptr;
+    }
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
+    {
+        return nullptr;
+    }
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
+    {
+        return {};
+    }
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -113,8 +113,8 @@ private Q_SLOTS:
         m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_wtaParent);
 
         // Create a test layout so getFullState has data
-        auto* layout = new Layout(QStringLiteral("TestLayout"), m_layoutManager);
-        auto* zone = new Zone(layout);
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), m_layoutManager);
+        auto* zone = new PhosphorZones::Zone(layout);
         zone->setRelativeGeometry(QRectF(0.0, 0.0, 1.0, 1.0));
         zone->setZoneNumber(1);
         layout->addZone(zone);

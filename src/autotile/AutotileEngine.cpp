@@ -236,7 +236,7 @@ void AutotileEngine::connectSignals()
                 });
     }
 
-    // Layout changes — intentionally NOT connected.
+    // PhosphorZones::Layout changes — intentionally NOT connected.
     // Autotile screens are managed by per-screen assignments, not the global
     // active layout. Retile is triggered by setAutotileScreens() and
     // onScreenGeometryChanged() instead.
@@ -898,7 +898,7 @@ AutotileConfig* AutotileEngine::config() const noexcept
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone-ordered window transitions
+// PhosphorZones::Zone-ordered window transitions
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void AutotileEngine::setInitialWindowOrder(const QString& screenId, const QStringList& rawWindowIds)
@@ -1964,7 +1964,7 @@ void AutotileEngine::onScreenGeometryChanged(const QString& screenId)
     retileAfterOperation(screenId, true);
 }
 
-void AutotileEngine::onLayoutChanged(Layout* layout)
+void AutotileEngine::onLayoutChanged(PhosphorZones::Layout* layout)
 {
     Q_UNUSED(layout)
     // Autotile screens are managed by per-screen assignments, not the global

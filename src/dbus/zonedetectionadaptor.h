@@ -9,17 +9,20 @@
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace PhosphorZones {
+class ILayoutManager;
+class IZoneDetector;
+}
+
 namespace PlasmaZones {
 
-class IZoneDetector;
-class ILayoutManager;
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for zone detection operations
  *
  * Provides D-Bus interface: org.plasmazones.ZoneDetection
- *  Zone detection queries
+ *  PhosphorZones::Zone detection queries
  *
  * Uses interface types for loose coupling
  */
@@ -29,19 +32,19 @@ class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
 
 public:
-    explicit ZoneDetectionAdaptor(IZoneDetector* detector, ILayoutManager* layoutManager, ISettings* settings,
-                                  QObject* parent = nullptr);
+    explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::ILayoutManager* layoutManager,
+                                  ISettings* settings, QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
 
 public Q_SLOTS:
-    // Zone detection for cursor position
+    // PhosphorZones::Zone detection for cursor position
     QString detectZoneAtPosition(int x, int y);
     QStringList detectMultiZoneAtPosition(int x, int y);
     PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
     PlasmaZones::ZoneGeometryRect getZoneGeometryForScreen(const QString& zoneId, const QString& screenId);
     QStringList getZonesForScreen(const QString& screenId);
 
-    // Zone navigation - get adjacent zone in a direction
+    // PhosphorZones::Zone navigation - get adjacent zone in a direction
     // direction: "left", "right", "up", "down"
     QString getAdjacentZone(const QString& currentZoneId, const QString& direction,
                             const QString& screenId = QString());
@@ -57,7 +60,7 @@ public Q_SLOTS:
      *   - down: bottommost zone (largest y + height)
      *
      * @param direction Direction string ("left", "right", "up", "down")
-     * @return Zone ID of the edge zone, or empty string if no zones available
+     * @return PhosphorZones::Zone ID of the edge zone, or empty string if no zones available
      */
     QString getFirstZoneInDirection(const QString& direction, const QString& screenId = QString());
 
@@ -100,8 +103,8 @@ Q_SIGNALS:
     void zoneDetected(const QString& zoneId, const PlasmaZones::ZoneGeometryRect& geometry);
 
 private:
-    IZoneDetector* m_zoneDetector; // Interface type (DIP)
-    ILayoutManager* m_layoutManager; // Interface type (DIP)
+    PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
+    PhosphorZones::ILayoutManager* m_layoutManager; // Interface type (DIP)
     ISettings* m_settings; // For zonePadding setting
 };
 

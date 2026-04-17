@@ -9,7 +9,7 @@
 #include <QColor>
 #include <QJsonArray>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 namespace LayoutUtils {
 
@@ -187,4 +187,4 @@ void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<
 
 } // namespace LayoutUtils
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

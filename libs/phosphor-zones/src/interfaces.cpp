@@ -4,7 +4,7 @@
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/IZoneDetector.h>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 // Out-of-line virtual destructors anchor each interface's vtable in this
 // translation unit. Without it every consumer .cpp that includes one of
@@ -19,4 +19,4 @@ ILayoutManager::~ILayoutManager() = default;
 
 IZoneDetector::~IZoneDetector() = default;
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

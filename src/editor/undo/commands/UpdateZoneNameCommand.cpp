@@ -11,7 +11,7 @@ using namespace PlasmaZones;
 UpdateZoneNameCommand::UpdateZoneNameCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                              const QString& oldName, const QString& newName, const QString& text,
                                              QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Rename Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Rename PhosphorZones::Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldName(oldName)
     , m_newName(newName)

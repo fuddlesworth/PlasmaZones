@@ -338,7 +338,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Zone-ordered window transition tests
+    // PhosphorZones::Zone-ordered window transition tests
     // =========================================================================
 
     void testSetInitialWindowOrder_preSeededInsertion()

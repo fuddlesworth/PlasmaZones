@@ -24,7 +24,7 @@ void EditorController::syncSelectionSignals()
 
 /**
  * @brief Selects the next zone in the zone list
- * @return Zone ID of the newly selected zone, or empty string if no zones
+ * @return PhosphorZones::Zone ID of the newly selected zone, or empty string if no zones
  */
 QString EditorController::selectNextZone()
 {
@@ -54,7 +54,7 @@ QString EditorController::selectNextZone()
 
 /**
  * @brief Selects the previous zone in the zone list
- * @return Zone ID of the newly selected zone, or empty string if no zones
+ * @return PhosphorZones::Zone ID of the newly selected zone, or empty string if no zones
  */
 QString EditorController::selectPreviousZone()
 {
@@ -420,7 +420,7 @@ QStringList EditorController::selectZonesInRect(qreal x, qreal y, qreal width, q
             continue;
         }
 
-        // Zone bounds
+        // PhosphorZones::Zone bounds
         const qreal zoneX = zone.value(QString(::PhosphorZones::ZoneJsonKeys::X)).toDouble();
         const qreal zoneY = zone.value(QString(::PhosphorZones::ZoneJsonKeys::Y)).toDouble();
         const qreal zoneRight = zoneX + zone.value(QString(::PhosphorZones::ZoneJsonKeys::Width)).toDouble();

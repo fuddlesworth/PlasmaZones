@@ -136,7 +136,7 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
     if (!screenLayout) {
         return false;
     }

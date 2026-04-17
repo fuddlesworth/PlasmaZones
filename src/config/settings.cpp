@@ -639,7 +639,7 @@ PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplay
 PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
                  minimumZoneDisplaySizePxChanged)
 
-// ── Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
+// ── PhosphorZones::Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
@@ -1003,7 +1003,7 @@ PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, 
 PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
 PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
-// ── Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
+// ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
 

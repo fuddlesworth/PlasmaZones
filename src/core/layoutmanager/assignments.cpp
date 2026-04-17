@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Layout assignment management (per-screen, per-desktop, per-activity).
+// PhosphorZones::Layout assignment management (per-screen, per-desktop, per-activity).
 // Part of LayoutManager — split from layoutmanager.cpp for SRP.
 
 #include "../layoutmanager.h"
@@ -89,7 +89,8 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
 
 } // anonymous namespace
 
-void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity, Layout* layout)
+void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
+                                 PhosphorZones::Layout* layout)
 {
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
@@ -149,7 +150,7 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
                       << "tiling=" << entry.tilingAlgorithm;
 
     // Resolve layout for signal emission
-    Layout* layout = nullptr;
+    PhosphorZones::Layout* layout = nullptr;
     if (entry.mode == AssignmentEntry::Snapping && !entry.snappingLayout.isEmpty()) {
         layout = layoutById(QUuid::fromString(entry.snappingLayout));
     }
@@ -161,23 +162,24 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
 // same fallback cascade, implemented once in walkCascade() above. Each method
 // supplies a visitor that decides whether to accept or cascade past each entry.
 
-Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
+PhosphorZones::Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop,
+                                                      const QString& activity) const
 {
     auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
-                              [this](const AssignmentEntry& entry) -> std::optional<Layout*> {
+                              [this](const AssignmentEntry& entry) -> std::optional<PhosphorZones::Layout*> {
                                   if (entry.mode == AssignmentEntry::Autotile)
                                       return std::nullopt;
                                   if (entry.snappingLayout.isEmpty())
                                       return std::nullopt;
-                                  Layout* layout = layoutById(QUuid::fromString(entry.snappingLayout));
-                                  return layout ? std::optional<Layout*>(layout) : std::nullopt;
+                                  PhosphorZones::Layout* layout = layoutById(QUuid::fromString(entry.snappingLayout));
+                                  return layout ? std::optional<PhosphorZones::Layout*>(layout) : std::nullopt;
                               });
     if (result)
         return *result;
 
     // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
     if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
-        if (Layout* L = layoutById(QUuid::fromString(m_settings->defaultLayoutId()))) {
+        if (PhosphorZones::Layout* L = layoutById(QUuid::fromString(m_settings->defaultLayoutId()))) {
             return L;
         }
     }

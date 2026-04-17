@@ -9,7 +9,7 @@
 // contract without pulling zone/layout/overlay interfaces. ISettings is
 // explicitly PZ-owned and is NOT a candidate for the phosphor-zones
 // extraction — zones that need a tuning value should take it directly
-// (see ZoneDetector::setAdjacentThreshold for the pattern).
+// (see PhosphorZones::ZoneDetector::setAdjacentThreshold for the pattern).
 
 #include "plasmazones_export.h"
 #include "enums.h"
@@ -321,7 +321,7 @@ Q_SIGNALS:
     void swapWindowUpShortcutChanged();
     void swapWindowDownShortcutChanged();
 
-    // Snap to Zone by Number Shortcuts
+    // Snap to PhosphorZones::Zone by Number Shortcuts
     void snapToZone1ShortcutChanged();
     void snapToZone2ShortcutChanged();
     void snapToZone3ShortcutChanged();
@@ -336,20 +336,20 @@ Q_SIGNALS:
     void rotateWindowsClockwiseShortcutChanged();
     void rotateWindowsCounterclockwiseShortcutChanged();
 
-    // Cycle Windows in Zone Shortcuts
+    // Cycle Windows in PhosphorZones::Zone Shortcuts
     void cycleWindowForwardShortcutChanged();
     void cycleWindowBackwardShortcutChanged();
 
-    // Resnap to New Layout Shortcut
+    // Resnap to New PhosphorZones::Layout Shortcut
     void resnapToNewLayoutShortcutChanged();
 
     // Snap All Windows Shortcut
     void snapAllWindowsShortcutChanged();
 
-    // Layout Picker Shortcut
+    // PhosphorZones::Layout Picker Shortcut
     void layoutPickerShortcutChanged();
 
-    // Toggle Layout Lock Shortcut
+    // Toggle PhosphorZones::Layout Lock Shortcut
     void toggleLayoutLockShortcutChanged();
 
     // Virtual Screen Swap / Rotate Shortcuts

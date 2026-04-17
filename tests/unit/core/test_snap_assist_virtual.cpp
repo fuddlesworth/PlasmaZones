@@ -68,7 +68,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
@@ -164,7 +164,8 @@ private Q_SLOTS:
 
         QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(vsId);
         QUuid expectedZoneUuid = m_testLayout->zones().at(0)->id();
-        QVERIFY2(occupied.contains(expectedZoneUuid), "Zone should be occupied when querying same virtual screen");
+        QVERIFY2(occupied.contains(expectedZoneUuid),
+                 "PhosphorZones::Zone should be occupied when querying same virtual screen");
     }
 
     void testBuildOccupiedZoneSet_differentVirtualScreen_excludesWindow()
@@ -178,7 +179,8 @@ private Q_SLOTS:
 
         QSet<QUuid> occupied = m_service->buildOccupiedZoneSet(vs1);
         QUuid zoneUuid = m_testLayout->zones().at(0)->id();
-        QVERIFY2(!occupied.contains(zoneUuid), "Zone should NOT be occupied when querying different virtual screen");
+        QVERIFY2(!occupied.contains(zoneUuid),
+                 "PhosphorZones::Zone should NOT be occupied when querying different virtual screen");
     }
 
     void testBuildOccupiedZoneSet_physicalQueryVirtualWindow_excludesWindow()
@@ -467,11 +469,12 @@ private Q_SLOTS:
         QSet<QUuid> occupiedOnVs1 = m_service->buildOccupiedZoneSet(vs1);
         QUuid zone0Uuid = m_testLayout->zones().at(0)->id();
         QVERIFY2(!occupiedOnVs1.contains(zone0Uuid),
-                 "Zone snapped on vs:0 must NOT appear occupied when querying vs:1");
+                 "PhosphorZones::Zone snapped on vs:0 must NOT appear occupied when querying vs:1");
 
         // Sanity: querying vs:0 SHOULD contain zone 0
         QSet<QUuid> occupiedOnVs0 = m_service->buildOccupiedZoneSet(vs0);
-        QVERIFY2(occupiedOnVs0.contains(zone0Uuid), "Zone snapped on vs:0 must appear occupied when querying vs:0");
+        QVERIFY2(occupiedOnVs0.contains(zone0Uuid),
+                 "PhosphorZones::Zone snapped on vs:0 must appear occupied when querying vs:0");
     }
 
 private:
@@ -480,7 +483,7 @@ private:
     StubSettingsSnapAssist* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

@@ -13,7 +13,7 @@ UpdateGapOverrideCommand::UpdateGapOverrideCommand(QPointer<EditorController> ed
                                                    int oldValue, int newValue, const QString& text,
                                                    QUndoCommand* parent)
     : QUndoCommand(text.isEmpty()
-                       ? (type == GapType::ZonePadding ? PzI18n::tr("Change Zone Padding", "@action")
+                       ? (type == GapType::ZonePadding ? PzI18n::tr("Change PhosphorZones::Zone Padding", "@action")
                                                        : (type == GapType::UsePerSideOuterGap
                                                               ? PzI18n::tr("Toggle Per-Side Edge Gap", "@action")
                                                               : (type == GapType::OverlayDisplayMode

@@ -137,8 +137,10 @@ private Q_SLOTS:
 
         // All zones must have positive dimensions
         for (const QRect& zone : zones) {
-            QVERIFY2(zone.width() > 0, qPrintable(QStringLiteral("Zone width was %1").arg(zone.width())));
-            QVERIFY2(zone.height() > 0, qPrintable(QStringLiteral("Zone height was %1").arg(zone.height())));
+            QVERIFY2(zone.width() > 0,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone width was %1").arg(zone.width())));
+            QVERIFY2(zone.height() > 0,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone height was %1").arg(zone.height())));
         }
 
         QVERIFY(allWithinBounds(zones, tinyScreen));
@@ -222,7 +224,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // 6. Zone dimensions positive — comprehensive check
+    // 6. PhosphorZones::Zone dimensions positive — comprehensive check
     // =========================================================================
 
     void testAllZonesPositiveDimensions_variousCounts()

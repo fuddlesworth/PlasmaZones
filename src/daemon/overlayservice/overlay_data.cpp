@@ -83,7 +83,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     for (const QVariant& zoneVar : patched) {
         const QVariantMap z = zoneVar.toMap();
         mix(::qHash(z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt()));
-        // Zone rects in the overlay use qreal; hash the full bit pattern so
+        // PhosphorZones::Zone rects in the overlay use qreal; hash the full bit pattern so
         // sub-pixel geometry changes still produce a distinct key.
         const double fields[4] = {
             z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X)).toDouble(),
@@ -104,7 +104,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
 } // namespace
 
 void OverlayService::updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
-                                                  Layout* screenLayout)
+                                                  PhosphorZones::Layout* screenLayout)
 {
     Q_UNUSED(screen)
     if (!window) {
@@ -196,7 +196,7 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
 
     // Get the layout for this specific screen, fall back to global active layout
     // Per-screen assignments take priority so each monitor shows its own layout
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (!screenLayout) {
         return zonesList;
@@ -217,7 +217,8 @@ QVariantList OverlayService::buildZonesList(const QString& screenId, QScreen* ph
     return zonesList;
 }
 
-QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout) const
+QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
+                                             PhosphorZones::Layout* layout) const
 {
     // Physical screen overload: delegates to screenId overload.
     // Defensive check: if virtual screens are configured for this physical screen,
@@ -226,8 +227,9 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     const QString physId = Utils::screenIdentifier(screen);
     auto* mgr = ScreenManager::instance();
     if (mgr && mgr->hasVirtualScreens(physId)) {
-        qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
-                             << "has virtual screens configured — caller should use QString overload.";
+        qCWarning(lcOverlay)
+            << "zoneToVariantMap(PhosphorZones::Zone*, QScreen*, PhosphorZones::Layout*): physical screen" << physId
+            << "has virtual screens configured — caller should use QString overload.";
     }
 
     const QPoint screenCenter = screen->geometry().center();
@@ -238,14 +240,14 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, QScreen* screen, Layout
     return zoneToVariantMap(zone, screenId, screen, overlayGeom, layout);
 }
 
-QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen,
-                                             const QRect& overlayGeometry, Layout* layout) const
+QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
+                                             const QRect& overlayGeometry, PhosphorZones::Layout* layout) const
 {
     QVariantMap map;
 
     // Null check to prevent SIGSEGV
     if (!zone) {
-        qCWarning(lcOverlay) << "Zone is null";
+        qCWarning(lcOverlay) << "PhosphorZones::Zone is null";
         return map;
     }
 
@@ -377,7 +379,7 @@ void OverlayService::updateZonesForAllWindows()
         writeQmlProperty(window, QStringLiteral("highlightedCount"), highlightedCount);
 
         if (useShaderForScreen(screenId)) {
-            Layout* screenLayout = resolveScreenLayout(screenId);
+            PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
             updateLabelsTextureForWindow(window, patched, physScreen, screenLayout);
         }
     }

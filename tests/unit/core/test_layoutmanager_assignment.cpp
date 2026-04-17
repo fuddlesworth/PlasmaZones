@@ -34,10 +34,10 @@ class TestLayoutManagerAssignment : public QObject
     Q_OBJECT
 
 private:
-    Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
+    PhosphorZones::Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, parent);
-        auto* zone = new Zone();
+        auto* layout = new PhosphorZones::Layout(name, parent);
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);
         return layout;
@@ -86,7 +86,7 @@ private Q_SLOTS:
         // Desktop 1 has no explicit entry — cascades to display default
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1)->name(), QStringLiteral("ScreenSpecific"));
 
-        Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
+        PhosphorZones::Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
         QVERIFY(fallback != nullptr);
         QCOMPARE(fallback->name(), QStringLiteral("Default"));
     }

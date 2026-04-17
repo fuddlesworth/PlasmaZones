@@ -10,7 +10,7 @@
 
 namespace PhosphorZones {
 
-PhosphorLayout::LayoutPreview previewFromLayout(PlasmaZones::Layout* layout)
+PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!layout) {
@@ -38,7 +38,7 @@ PhosphorLayout::LayoutPreview previewFromLayout(PlasmaZones::Layout* layout)
     const auto zones = layout->zones();
     preview.zones.reserve(zones.size());
     preview.zoneNumbers.reserve(zones.size());
-    for (PlasmaZones::Zone* zone : zones) {
+    for (PhosphorZones::Zone* zone : zones) {
         if (!zone) {
             continue;
         }
@@ -51,7 +51,7 @@ PhosphorLayout::LayoutPreview previewFromLayout(PlasmaZones::Layout* layout)
 
 // ─── ZonesLayoutSource ──────────────────────────────────────────────────────
 
-ZonesLayoutSource::ZonesLayoutSource(PlasmaZones::ILayoutManager* manager)
+ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutManager* manager)
     : m_manager(manager)
 {
 }
@@ -67,7 +67,7 @@ QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() con
 
     const auto layouts = m_manager->layouts();
     result.reserve(layouts.size());
-    for (PlasmaZones::Layout* layout : layouts) {
+    for (PhosphorZones::Layout* layout : layouts) {
         if (!layout) {
             continue;
         }
@@ -86,7 +86,7 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
     if (uuid.isNull()) {
         return {};
     }
-    PlasmaZones::Layout* layout = m_manager->layoutById(uuid);
+    PhosphorZones::Layout* layout = m_manager->layoutById(uuid);
     return layout ? previewFromLayout(layout) : PhosphorLayout::LayoutPreview{};
 }
 

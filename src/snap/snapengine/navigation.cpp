@@ -40,7 +40,7 @@ void SnapEngine::resnapToNewLayout()
     QVector<ZoneAssignmentEntry> resnapEntries = m_windowTracker->calculateResnapFromPreviousLayout();
 
     if (resnapEntries.isEmpty()) {
-        Layout* layout = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* layout = m_layoutManager->activeLayout();
         if (!layout) {
             qCWarning(lcCore) << "resnapToNewLayout: no active layout";
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),

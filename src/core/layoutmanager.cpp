@@ -17,7 +17,7 @@ namespace PlasmaZones {
 
 LayoutManager::LayoutManager(QObject* parent)
     : QObject(parent)
-    , ILayoutManager()
+    , PhosphorZones::ILayoutManager()
     , m_ownedBackend(createAssignmentsBackend())
     , m_configBackend(m_ownedBackend.get())
 {
@@ -29,7 +29,7 @@ LayoutManager::LayoutManager(QObject* parent)
 
 LayoutManager::LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent)
     : QObject(parent)
-    , ILayoutManager()
+    , PhosphorZones::ILayoutManager()
     , m_configBackend(backend)
 {
     m_layoutDirectory =
@@ -56,7 +56,7 @@ void LayoutManager::setLayoutDirectory(const QString& directory)
     }
 }
 
-Layout* LayoutManager::layout(int index) const
+PhosphorZones::Layout* LayoutManager::layout(int index) const
 {
     if (index >= 0 && index < m_layouts.size()) {
         return m_layouts.at(index);
@@ -66,7 +66,7 @@ Layout* LayoutManager::layout(int index) const
 
 // Template helper for lookup methods
 template<typename Predicate>
-static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
+static PhosphorZones::Layout* findLayout(const QVector<PhosphorZones::Layout*>& layouts, Predicate pred)
 {
     auto it = std::find_if(layouts.begin(), layouts.end(), pred);
     return it != layouts.end() ? *it : nullptr;
@@ -75,7 +75,7 @@ static Layout* findLayout(const QVector<Layout*>& layouts, Predicate pred)
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
 void LayoutManager::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
-    Layout* layout = LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    PhosphorZones::Layout* layout = LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
@@ -87,7 +87,7 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QString& layoutId, const QS
         return true;
     }
     if (LayoutId::isAutotile(layoutId)) {
-        return false; // Autotile IDs are valid without Layout* lookup
+        return false; // Autotile IDs are valid without PhosphorZones::Layout* lookup
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
         qCWarning(lcLayout) << "Skipping non-existent layout for" << context << ":" << layoutId;
@@ -96,10 +96,10 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QString& layoutId, const QS
     return false;
 }
 
-Layout* LayoutManager::defaultLayout() const
+PhosphorZones::Layout* LayoutManager::defaultLayout() const
 {
     if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
-        if (Layout* layout = layoutById(QUuid(m_settings->defaultLayoutId()))) {
+        if (PhosphorZones::Layout* layout = layoutById(QUuid(m_settings->defaultLayoutId()))) {
             return layout;
         }
     }
@@ -109,7 +109,7 @@ Layout* LayoutManager::defaultLayout() const
 // Helper for layout cycling
 // direction: -1 for previous, +1 for next
 // Filters out hidden layouts and respects visibility allow-lists
-Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
+PhosphorZones::Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
 {
     if (m_layouts.isEmpty()) {
         return nullptr;
@@ -122,8 +122,8 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
     }
 
     // Build filtered list of visible layouts for current context
-    QVector<Layout*> visible;
-    for (Layout* l : m_layouts) {
+    QVector<PhosphorZones::Layout*> visible;
+    for (PhosphorZones::Layout* l : m_layouts) {
         if (!l || l->hiddenFromSelector()) {
             continue;
         }
@@ -150,7 +150,7 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
     }
 
     // Use per-screen layout as reference for cycling so each screen cycles independently
-    Layout* currentLayout = nullptr;
+    PhosphorZones::Layout* currentLayout = nullptr;
     if (!resolvedScreenId.isEmpty()) {
         currentLayout = layoutForScreen(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
     }
@@ -171,7 +171,7 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
 
     // Wrap around: +size ensures positive modulo for direction=-1
     int newIndex = (currentIndex + direction + visible.size()) % visible.size();
-    Layout* newLayout = visible.at(newIndex);
+    PhosphorZones::Layout* newLayout = visible.at(newIndex);
 
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
@@ -196,28 +196,28 @@ Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, int direction)
     return newLayout;
 }
 
-Layout* LayoutManager::layoutById(const QUuid& id) const
+PhosphorZones::Layout* LayoutManager::layoutById(const QUuid& id) const
 {
-    return findLayout(m_layouts, [&id](const Layout* l) {
+    return findLayout(m_layouts, [&id](const PhosphorZones::Layout* l) {
         return l->id() == id;
     });
 }
 
-Layout* LayoutManager::layoutByName(const QString& name) const
+PhosphorZones::Layout* LayoutManager::layoutByName(const QString& name) const
 {
-    return findLayout(m_layouts, [&name](const Layout* l) {
+    return findLayout(m_layouts, [&name](const PhosphorZones::Layout* l) {
         return l->name() == name;
     });
 }
 
-void LayoutManager::addLayout(Layout* layout)
+void LayoutManager::addLayout(PhosphorZones::Layout* layout)
 {
     if (layout && !m_layouts.contains(layout)) {
         layout->setParent(this);
         m_layouts.append(layout);
 
         // Connect to save on modification (per-layout copy-on-write)
-        connect(layout, &Layout::layoutModified, this, [this, layout]() {
+        connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
             saveLayout(layout);
         });
 
@@ -230,7 +230,7 @@ void LayoutManager::addLayout(Layout* layout)
     }
 }
 
-void LayoutManager::removeLayout(Layout* layout)
+void LayoutManager::removeLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || layout->isSystemLayout() || !m_layouts.contains(layout)) {
         return;
@@ -262,7 +262,7 @@ void LayoutManager::removeLayout(Layout* layout)
     // Uses the stored system path — no filesystem scanning needed.
     // NOTE: restoreSystemLayout() emits layoutAdded but not layoutsChanged;
     // the caller (this method) emits layoutsChanged below.
-    Layout* restored = restoreSystemLayout(layoutId, systemPath);
+    PhosphorZones::Layout* restored = restoreSystemLayout(layoutId, systemPath);
 
     if (restored) {
         // System layout restored — assignments and shortcuts stay valid (same UUID).
@@ -301,13 +301,13 @@ void LayoutManager::removeLayoutById(const QUuid& id)
     removeLayout(layoutById(id));
 }
 
-Layout* LayoutManager::duplicateLayout(Layout* source)
+PhosphorZones::Layout* LayoutManager::duplicateLayout(PhosphorZones::Layout* source)
 {
     if (!source) {
         return nullptr;
     }
 
-    auto newLayout = new Layout(*source);
+    auto newLayout = new PhosphorZones::Layout(*source);
     newLayout->setName(source->name() + QStringLiteral(" (Copy)"));
     // Note: Copy constructor already leaves sourcePath empty, making it a user layout
 
@@ -322,7 +322,7 @@ Layout* LayoutManager::duplicateLayout(Layout* source)
     return newLayout;
 }
 
-void LayoutManager::setActiveLayout(Layout* layout)
+void LayoutManager::setActiveLayout(PhosphorZones::Layout* layout)
 {
     if (m_activeLayout != layout && (layout == nullptr || m_layouts.contains(layout))) {
         // Capture current as previous before changing (on first run, use layout as both)
@@ -342,7 +342,7 @@ void LayoutManager::setActiveLayoutById(const QUuid& id)
     setActiveLayout(layoutById(id));
 }
 
-Layout* LayoutManager::layoutForShortcut(int number) const
+PhosphorZones::Layout* LayoutManager::layoutForShortcut(int number) const
 {
     if (m_quickLayoutShortcuts.contains(number)) {
         const QString& id = m_quickLayoutShortcuts[number];
@@ -408,7 +408,7 @@ void LayoutManager::setQuickLayoutSlot(int number, const QString& layoutId)
         m_quickLayoutShortcuts.remove(number);
         qCInfo(lcLayout) << "Cleared quick layout slot" << number;
     } else {
-        // Verify layout exists (skip for autotile IDs — they don't have Layout*)
+        // Verify layout exists (skip for autotile IDs — they don't have PhosphorZones::Layout*)
         if (!LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
             qCWarning(lcLayout) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
@@ -475,18 +475,18 @@ void LayoutManager::createBuiltInLayouts()
     }
 
     // Create standard templates
-    addLayout(Layout::createColumnsLayout(2, this));
-    addLayout(Layout::createColumnsLayout(3, this));
-    addLayout(Layout::createRowsLayout(2, this));
-    addLayout(Layout::createGridLayout(2, 2, this));
-    addLayout(Layout::createGridLayout(3, 2, this));
-    addLayout(Layout::createPriorityGridLayout(this));
-    addLayout(Layout::createFocusLayout(this));
+    addLayout(PhosphorZones::Layout::createColumnsLayout(2, this));
+    addLayout(PhosphorZones::Layout::createColumnsLayout(3, this));
+    addLayout(PhosphorZones::Layout::createRowsLayout(2, this));
+    addLayout(PhosphorZones::Layout::createGridLayout(2, 2, this));
+    addLayout(PhosphorZones::Layout::createGridLayout(3, 2, this));
+    addLayout(PhosphorZones::Layout::createPriorityGridLayout(this));
+    addLayout(PhosphorZones::Layout::createFocusLayout(this));
 }
 
-QVector<Layout*> LayoutManager::builtInLayouts() const
+QVector<PhosphorZones::Layout*> LayoutManager::builtInLayouts() const
 {
-    QVector<Layout*> result;
+    QVector<PhosphorZones::Layout*> result;
     for (auto* layout : m_layouts) {
         if (layout->isSystemLayout()) {
             result.append(layout);

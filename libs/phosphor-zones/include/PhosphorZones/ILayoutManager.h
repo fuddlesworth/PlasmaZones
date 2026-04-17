@@ -19,7 +19,7 @@
 #include <QUuid>
 #include <QVector>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 class Layout;
 
@@ -121,4 +121,4 @@ public:
     virtual void exportLayout(Layout* layout, const QString& filePath) = 0;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

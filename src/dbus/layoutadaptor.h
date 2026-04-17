@@ -17,19 +17,22 @@ namespace PhosphorLayout {
 class ILayoutSource;
 }
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
 class LayoutManager; // Concrete type needed for signal connections
 class VirtualDesktopManager;
 class ActivityManager;
-class Layout;
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for layout management operations
  *
  * Provides D-Bus interface: org.plasmazones.LayoutManager
- *  Layout CRUD and assignment operations
+ *  PhosphorZones::Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {
@@ -57,7 +60,7 @@ public:
     void setLayoutSource(PhosphorLayout::ILayoutSource* source);
 
 public Q_SLOTS:
-    // Layout queries
+    // PhosphorZones::Layout queries
     QString getActiveLayout();
     QStringList getLayoutList();
     QString getLayout(const QString& id);
@@ -86,7 +89,7 @@ public Q_SLOTS:
      */
     QString getLayoutPreview(const QString& id, int windowCount);
 
-    // Layout management
+    // PhosphorZones::Layout management
     void setActiveLayout(const QString& id);
     void applyQuickLayout(int number, const QString& screenId);
     QString createLayout(const QString& name, const QString& type);
@@ -311,9 +314,9 @@ Q_SIGNALS:
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals
     // (LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
-    void onActiveLayoutChanged(Layout* layout);
+    void onActiveLayoutChanged(PhosphorZones::Layout* layout);
     void onLayoutsChanged();
-    void onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout);
+    void onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout);
 
 public:
     void invalidateCache();
@@ -347,11 +350,11 @@ private:
      * @brief Get layout by ID string with full validation
      * @param id UUID string
      * @param operation Description for error logging
-     * @return Layout pointer or nullptr on failure (logs warning)
+     * @return PhosphorZones::Layout pointer or nullptr on failure (logs warning)
      *
      * Consolidates parseUuid + layoutById + error logging.
      */
-    Layout* getValidatedLayout(const QString& id, const QString& operation);
+    PhosphorZones::Layout* getValidatedLayout(const QString& id, const QString& operation);
 
     /**
      * @brief Validate that a required string parameter is not empty
@@ -386,7 +389,7 @@ private:
 
     /**
      * @brief Drop any cached JSON for @p uuid so the next getLayout call
-     * re-serializes from the live Layout. Also clears the active-layout
+     * re-serializes from the live PhosphorZones::Layout. Also clears the active-layout
      * cache slot when the modified layout happens to be the active one,
      * otherwise getActiveLayout would keep serving the stale entry.
      * Centralizes cache invalidation for all per-layout mutation paths.

@@ -9,7 +9,7 @@
 #include <cmath>
 #include <limits>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 ZoneDetector::ZoneDetector(QObject* parent)
     : IZoneDetector(parent)
@@ -432,4 +432,4 @@ qreal ZoneDetector::distanceToZoneEdge(const QPointF& point, Zone* zone) const
     return zone->distanceToPoint(point);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

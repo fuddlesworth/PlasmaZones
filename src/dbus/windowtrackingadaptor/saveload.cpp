@@ -698,14 +698,14 @@ void WindowTrackingAdaptor::loadState()
     // default (1) — the real desktop hasn't been set yet (done in Daemon::start()).
     // If activeLayoutChanged fires, onLayoutChanged() runs stale-assignment removal
     // using resolveLayoutForScreen() with the wrong desktop, which falls back to
-    // defaultLayout() instead of the restored layout. Zone assignments from the
+    // defaultLayout() instead of the restored layout. PhosphorZones::Zone assignments from the
     // saved layout get purged because those zones don't exist in defaultLayout().
     // This is a state restoration, not a real layout switch — no signal needed.
     QString savedActiveLayoutId = readVal(ConfigKeys::activeLayoutIdKey(), QString());
     if (!savedActiveLayoutId.isEmpty() && m_layoutManager) {
         auto savedUuid = Utils::parseUuid(savedActiveLayoutId);
         if (savedUuid) {
-            Layout* savedLayout = m_layoutManager->layoutById(*savedUuid);
+            PhosphorZones::Layout* savedLayout = m_layoutManager->layoutById(*savedUuid);
             if (savedLayout && savedLayout != m_layoutManager->activeLayout()) {
                 qCInfo(lcDbusWindow) << "Restoring active layout from previous session:" << savedLayout->name();
                 QSignalBlocker blocker(m_layoutManager);

@@ -145,8 +145,10 @@ private Q_SLOTS:
             cascade()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
-            QVERIFY2(zone.x() >= 100, qPrintable(QStringLiteral("Zone x (%1) should be >= 100").arg(zone.x())));
-            QVERIFY2(zone.y() >= 200, qPrintable(QStringLiteral("Zone y (%1) should be >= 200").arg(zone.y())));
+            QVERIFY2(zone.x() >= 100,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone x (%1) should be >= 100").arg(zone.x())));
+            QVERIFY2(zone.y() >= 200,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone y (%1) should be >= 200").arg(zone.y())));
         }
     }
 
@@ -209,8 +211,10 @@ private Q_SLOTS:
             stair()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
-            QVERIFY2(zone.x() >= 100, qPrintable(QStringLiteral("Zone x (%1) should be >= 100").arg(zone.x())));
-            QVERIFY2(zone.y() >= 200, qPrintable(QStringLiteral("Zone y (%1) should be >= 200").arg(zone.y())));
+            QVERIFY2(zone.x() >= 100,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone x (%1) should be >= 100").arg(zone.x())));
+            QVERIFY2(zone.y() >= 200,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone y (%1) should be >= 200").arg(zone.y())));
         }
     }
 
@@ -280,8 +284,10 @@ private Q_SLOTS:
             spread()->calculateZones(makeParams(3, offsetScreen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
-            QVERIFY2(zone.x() >= 100, qPrintable(QStringLiteral("Zone x (%1) should be >= 100").arg(zone.x())));
-            QVERIFY2(zone.y() >= 200, qPrintable(QStringLiteral("Zone y (%1) should be >= 200").arg(zone.y())));
+            QVERIFY2(zone.x() >= 100,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone x (%1) should be >= 100").arg(zone.x())));
+            QVERIFY2(zone.y() >= 200,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone y (%1) should be >= 200").arg(zone.y())));
         }
     }
     // =========================================================================

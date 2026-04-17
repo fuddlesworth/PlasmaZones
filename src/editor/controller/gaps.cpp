@@ -561,7 +561,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
 
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for geometry mode toggle:" << zoneId;
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for geometry mode toggle:" << zoneId;
         return;
     }
 
@@ -666,7 +666,7 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     zone[::PhosphorZones::ZoneJsonKeys::Width] = relativeGeo.width();
     zone[::PhosphorZones::ZoneJsonKeys::Height] = relativeGeo.height();
 
-    if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
+    if (mode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed)) {
         // Switching to Fixed: compute and set fixed pixel coords
         if (fixedGeo.isValid()) {
             zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();

@@ -61,12 +61,12 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
         const QString& screenId = screenIt.key();
 
         // Get the layout assigned to this screen (not the global active layout)
-        Layout* newLayout = m_layoutManager->resolveLayoutForScreen(screenId);
+        PhosphorZones::Layout* newLayout = m_layoutManager->resolveLayoutForScreen(screenId);
         if (!newLayout || newLayout->zoneCount() == 0) {
             continue;
         }
 
-        QVector<Zone*> newZones = newLayout->zones();
+        QVector<PhosphorZones::Zone*> newZones = newLayout->zones();
         sortZonesByNumber(newZones);
         const int newZoneCount = newZones.size();
 
@@ -80,7 +80,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
                 for (int pos : entry->allZonePositions) {
                     if (pos > newZoneCount)
                         continue; // skip positions beyond new layout
-                    Zone* z = newZones.value(pos - 1, nullptr);
+                    PhosphorZones::Zone* z = newZones.value(pos - 1, nullptr);
                     if (z)
                         targetZoneIds.append(z->id().toString());
                 }
@@ -109,7 +109,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateResnapFromPreviousL
                     tryAppendRestore(entry);
                     continue;
                 }
-                Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
+                PhosphorZones::Zone* targetZone = newZones.value(entry->zonePosition - 1, nullptr);
                 if (!targetZone) {
                     continue;
                 }
@@ -153,7 +153,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
 
     // Build a global zoneId → (layoutId, position) map from all layouts
     QHash<QString, int> globalZoneIdToPosition;
-    for (Layout* layout : m_layoutManager->layouts()) {
+    for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
         QHash<QString, int> layoutMap = buildZonePositionMap(layout);
         for (auto it = layoutMap.constBegin(); it != layoutMap.constEnd(); ++it) {
             globalZoneIdToPosition[it.key()] = it.value();
@@ -306,13 +306,13 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
         return result;
     }
 
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout || layout->zoneCount() == 0) {
         qCWarning(lcCore) << "calculateResnapFromAutotileOrder: no layout for screen" << screenId;
         return result;
     }
 
-    QVector<Zone*> zones = layout->zones();
+    QVector<PhosphorZones::Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
     const int zoneCount = zones.size();
@@ -327,8 +327,8 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
     }
 
     // Build a lookup from zone ID → zone pointer for original-zone restoration
-    QHash<QString, Zone*> zoneById;
-    for (Zone* z : zones) {
+    QHash<QString, PhosphorZones::Zone*> zoneById;
+    for (PhosphorZones::Zone* z : zones) {
         zoneById[z->id().toString()] = z;
     }
 
@@ -354,7 +354,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
         QStringList validZoneIds;
         QList<int> validZoneIndices;
         for (const QString& zid : savedZones) {
-            Zone* z = zoneById.value(zid);
+            PhosphorZones::Zone* z = zoneById.value(zid);
             if (!z)
                 continue;
             int idx = zones.indexOf(z);
@@ -404,7 +404,7 @@ WindowTrackingService::calculateResnapFromAutotileOrder(const QStringList& autot
         if (zoneIdx < 0)
             break; // No more zones available
 
-        Zone* targetZone = zones.at(zoneIdx);
+        PhosphorZones::Zone* targetZone = zones.at(zoneIdx);
         QRect geo = zoneGeometry(targetZone->id().toString(), screenId);
 
         if (geo.isValid()) {
@@ -429,15 +429,15 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     }
 
     // Get the current layout to resolve zone numbers
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout || layout->zoneCount() == 0) {
         return {};
     }
 
     // Build zone UUID → zone number lookup (both formats for robustness)
-    const QVector<Zone*> zones = layout->zones();
+    const QVector<PhosphorZones::Zone*> zones = layout->zones();
     QHash<QString, int> zoneNumberMap;
-    for (Zone* zone : zones) {
+    for (PhosphorZones::Zone* zone : zones) {
         zoneNumberMap[zone->id().toString()] = zone->zoneNumber();
     }
 
@@ -493,12 +493,12 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
 {
     QVector<ZoneAssignmentEntry> result;
 
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout || layout->zoneCount() == 0) {
         return result;
     }
 
-    QVector<Zone*> zones = layout->zones();
+    QVector<PhosphorZones::Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
 
     // Filter occupancy by the current virtual desktop so windows parked on other
@@ -517,8 +517,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
 
     for (const QString& windowId : windowIds) {
         // Find the first unoccupied zone
-        Zone* targetZone = nullptr;
-        for (Zone* zone : zones) {
+        PhosphorZones::Zone* targetZone = nullptr;
+        for (PhosphorZones::Zone* zone : zones) {
             if (!batchOccupied.contains(zone->id())) {
                 targetZone = zone;
                 break;
@@ -613,7 +613,8 @@ QHash<QString, WindowTrackingService::PendingRestoreTarget> WindowTrackingServic
         // async resolveWindowRestore then rejects (orphaned window at zone position
         // with no zone assignment).
         if (!entry.layoutId.isEmpty() && m_layoutManager) {
-            Layout* currentLayout = m_layoutManager->layoutForScreen(screenId, entry.virtualDesktop, currentActivity);
+            PhosphorZones::Layout* currentLayout =
+                m_layoutManager->layoutForScreen(screenId, entry.virtualDesktop, currentActivity);
             if (!currentLayout) {
                 currentLayout = m_layoutManager->activeLayout();
             }

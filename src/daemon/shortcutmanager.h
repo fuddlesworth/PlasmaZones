@@ -87,7 +87,7 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when quick layout shortcut is triggered
-     * @param number Layout number (1-9)
+     * @param number PhosphorZones::Layout number (1-9)
      */
     void quickLayoutRequested(int number);
 
@@ -127,7 +127,7 @@ Q_SIGNALS:
 
     /**
      * @brief Emitted when snap to zone by number is requested
-     * @param zoneNumber Zone number (1-9)
+     * @param zoneNumber PhosphorZones::Zone number (1-9)
      */
     void snapToZoneRequested(int zoneNumber);
 
@@ -270,7 +270,7 @@ private Q_SLOTS:
     void updateRotateVirtualScreensClockwiseShortcut();
     void updateRotateVirtualScreensCounterclockwiseShortcut();
 
-    // Snap to Zone by Number
+    // Snap to PhosphorZones::Zone by Number
     void onSnapToZone(int zoneNumber);
     void updateSnapToZoneShortcut(int index);
 
@@ -280,13 +280,13 @@ private Q_SLOTS:
     void updateRotateWindowsClockwiseShortcut();
     void updateRotateWindowsCounterclockwiseShortcut();
 
-    // Cycle Windows in Zone
+    // Cycle Windows in PhosphorZones::Zone
     void onCycleWindowForward();
     void onCycleWindowBackward();
     void updateCycleWindowForwardShortcut();
     void updateCycleWindowBackwardShortcut();
 
-    // Resnap to New Layout
+    // Resnap to New PhosphorZones::Layout
     void onResnapToNewLayout();
     void updateResnapToNewLayoutShortcut();
 
@@ -294,11 +294,11 @@ private Q_SLOTS:
     void onSnapAllWindows();
     void updateSnapAllWindowsShortcut();
 
-    // Layout Picker
+    // PhosphorZones::Layout Picker
     void onLayoutPicker();
     void updateLayoutPickerShortcut();
 
-    // Toggle Layout Lock
+    // Toggle PhosphorZones::Layout Lock
     void onToggleLayoutLock();
     void updateToggleLayoutLockShortcut();
 
@@ -377,27 +377,27 @@ private:
     QAction* m_rotateVirtualScreensClockwiseAction = nullptr;
     QAction* m_rotateVirtualScreensCounterclockwiseAction = nullptr;
 
-    // Snap to Zone by Number actions
+    // Snap to PhosphorZones::Zone by Number actions
     QVector<QAction*> m_snapToZoneActions;
 
     // Rotate Windows actions
     QAction* m_rotateWindowsClockwiseAction = nullptr;
     QAction* m_rotateWindowsCounterclockwiseAction = nullptr;
 
-    // Cycle Windows in Zone actions
+    // Cycle Windows in PhosphorZones::Zone actions
     QAction* m_cycleWindowForwardAction = nullptr;
     QAction* m_cycleWindowBackwardAction = nullptr;
 
-    // Resnap to New Layout action
+    // Resnap to New PhosphorZones::Layout action
     QAction* m_resnapToNewLayoutAction = nullptr;
 
     // Snap All Windows action
     QAction* m_snapAllWindowsAction = nullptr;
 
-    // Layout Picker action
+    // PhosphorZones::Layout Picker action
     QAction* m_layoutPickerAction = nullptr;
 
-    // Toggle Layout Lock action
+    // Toggle PhosphorZones::Layout Lock action
     QAction* m_toggleLayoutLockAction = nullptr;
 
     // Autotile actions

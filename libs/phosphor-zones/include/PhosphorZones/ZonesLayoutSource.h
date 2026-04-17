@@ -8,7 +8,7 @@
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 class ILayoutManager;
 class Layout;
 }
@@ -21,7 +21,7 @@ namespace PhosphorZones {
 /// have a fixed shape, so the @c windowCount param from ILayoutSource is
 /// ignored here. Provided as a free function so consumers that already
 /// hold a Layout* can build a preview without going through ILayoutSource.
-PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PlasmaZones::Layout* layout);
+PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout);
 
 /// ILayoutSource adapter wrapping an ILayoutManager.
 ///
@@ -38,7 +38,7 @@ class PHOSPHORZONES_EXPORT ZonesLayoutSource : public PhosphorLayout::ILayoutSou
 public:
     /// Construct over a borrowed layout manager. Caller owns @p manager
     /// and must keep it alive for the source's lifetime.
-    explicit ZonesLayoutSource(PlasmaZones::ILayoutManager* manager);
+    explicit ZonesLayoutSource(PhosphorZones::ILayoutManager* manager);
     ~ZonesLayoutSource() override;
 
     QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override;
@@ -50,7 +50,7 @@ public:
                                             const QSize& canvas = {}) const override;
 
 private:
-    PlasmaZones::ILayoutManager* m_manager;
+    PhosphorZones::ILayoutManager* m_manager;
 };
 
 } // namespace PhosphorZones

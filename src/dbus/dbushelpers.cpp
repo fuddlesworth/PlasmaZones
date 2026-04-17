@@ -32,7 +32,7 @@ QString resolveScreenId(const QString& screenId)
     return VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
 }
 
-QRectF resolveScreenGeometry(Layout* layout, const QString& screenId)
+QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
 {
     auto* mgr = ScreenManager::instance();
     if (mgr) {

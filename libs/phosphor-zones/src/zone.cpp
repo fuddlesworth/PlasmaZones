@@ -7,7 +7,7 @@
 #include <QJsonArray>
 #include <cmath>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Macros for setter patterns
@@ -312,4 +312,4 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
     return zone;
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

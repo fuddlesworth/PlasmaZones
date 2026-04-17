@@ -143,7 +143,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
     }
 }
 
-Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
+PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId)
 {
     // Resolve effective (virtual-aware) screen ID
     auto resolved = resolveScreenAt(QPointF(x, y));
@@ -319,7 +319,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 
     // Find zone at cursor position using layout's smallest-area heuristic
     // (zone geometry already recalculated to absolute coords by prepareHandlerContext)
-    Zone* foundZone = layout->zoneAtPoint(QPointF(x, y));
+    PhosphorZones::Zone* foundZone = layout->zoneAtPoint(QPointF(x, y));
 
     // Accumulate painted zones (never remove during a paint drag)
     if (foundZone) {
@@ -328,7 +328,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
 
     // Build zone list from painted zones, then expand using same raycast algorithm as editor
     if (!m_paintedZoneIds.isEmpty()) {
-        QVector<Zone*> paintedZones;
+        QVector<PhosphorZones::Zone*> paintedZones;
         for (auto* zone : layout->zones()) {
             if (m_paintedZoneIds.contains(zone->id())) {
                 paintedZones.append(zone);
@@ -339,7 +339,7 @@ void WindowDragAdaptor::handleZoneSpanModifier(int x, int y)
             // Use same raycasting/intersection algorithm as detectMultiZone and editor:
             // expand to include all zones that intersect the bounding rect of painted zones
             m_zoneDetector->setLayout(layout);
-            QVector<Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
+            QVector<PhosphorZones::Zone*> zonesToSnap = m_zoneDetector->expandPaintedZonesToRect(paintedZones);
 
             if (zonesToSnap.isEmpty()) {
                 return;
@@ -384,7 +384,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
     QPointF cursorPos(static_cast<qreal>(x), static_cast<qreal>(y));
 
     // Call detectMultiZone instead of detectZone
-    ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
+    PhosphorZones::ZoneDetectionResult result = m_zoneDetector->detectMultiZone(cursorPos);
 
     if (result.isMultiZone && result.primaryZone) {
         // Multi-zone detected
@@ -393,7 +393,7 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
 
         // Collect zone IDs from adjacent zones
         newAdjacentZoneIds.append(result.primaryZone->id());
-        for (Zone* zone : result.adjacentZones) {
+        for (PhosphorZones::Zone* zone : result.adjacentZones) {
             if (zone && zone->id() != result.primaryZone->id()) {
                 newAdjacentZoneIds.append(zone->id());
             }
@@ -406,9 +406,9 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_isMultiZoneMode = true;
 
             // Build de-duplicated zone list for geometry and highlighting
-            QVector<Zone*> zonesToHighlight;
+            QVector<PhosphorZones::Zone*> zonesToHighlight;
             zonesToHighlight.append(result.primaryZone);
-            for (Zone* zone : result.adjacentZones) {
+            for (PhosphorZones::Zone* zone : result.adjacentZones) {
                 if (zone && zone != result.primaryZone) {
                     zonesToHighlight.append(zone);
                 }

@@ -39,46 +39,46 @@
 using namespace PlasmaZones;
 using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 
-class StubZoneDetectorRegIntegration : public IZoneDetector
+class StubZoneDetectorRegIntegration : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorRegIntegration(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -86,14 +86,14 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
-static Layout* createTestLayout(int zoneCount, QObject* parent)
+static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
+    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
         const qreal x = static_cast<qreal>(i) / zoneCount;
         const qreal w = 1.0 / zoneCount;
         zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
@@ -123,7 +123,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
         m_screenId = QStringLiteral("DP-1");
@@ -241,7 +241,7 @@ private:
     StubZoneDetectorRegIntegration* m_zoneDetector = nullptr;
     WindowRegistry* m_registry = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;
 };

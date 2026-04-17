@@ -52,7 +52,7 @@ class SettingsController : public QObject
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
 
-    // Layout management
+    // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
 
     // Screen management
@@ -226,7 +226,7 @@ public:
     }
     Q_INVOKABLE void markWhatsNewSeen();
 
-    // Layout accessors
+    // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
         return m_layouts;
@@ -237,7 +237,7 @@ public:
     // Settings runs in its own process, separate from the daemon. The legacy
     // path fetches the layout list over D-Bus (getLayoutList) which only
     // works while the daemon is running. The methods below load the SAME
-    // on-disk layouts via an in-process LayoutManager + ZonesLayoutSource,
+    // on-disk layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource,
     // so QML preview-rendering paths can render layouts even when the
     // daemon isn't up (early settings launch, daemon crashed, etc.).
     //
@@ -282,7 +282,7 @@ public:
         return m_currentActivity;
     }
 
-    // Layout CRUD (D-Bus to daemon)
+    // PhosphorZones::Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
     Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
     Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
@@ -861,14 +861,14 @@ private:
     bool m_saving = false;
     bool m_loading = false;
 
-    // Layout state
+    // PhosphorZones::Layout state
     QVariantList m_layouts;
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // LayoutManager opens its own assignments backend + scans the standard
-    // layouts directory; ZonesLayoutSource wraps it in the
+    // layouts directory; PhosphorZones::ZonesLayoutSource wraps it in the
     // PhosphorLayout::ILayoutSource contract.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;

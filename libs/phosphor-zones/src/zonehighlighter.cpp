@@ -4,7 +4,7 @@
 #include <PhosphorZones/ZoneHighlighter.h>
 #include <PhosphorZones/Zone.h>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 ZoneHighlighter::ZoneHighlighter(QObject* parent)
     : QObject(parent)
@@ -49,4 +49,4 @@ void ZoneHighlighter::clearHighlights()
     Q_EMIT highlightsCleared();
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

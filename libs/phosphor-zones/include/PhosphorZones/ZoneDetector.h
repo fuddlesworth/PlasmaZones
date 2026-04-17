@@ -12,11 +12,11 @@
 #include <QVector>
 #include <memory>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 class ZoneHighlighter;
-} // namespace PlasmaZones
+} // namespace PhosphorZones
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 // ZoneDetectionResult is defined in interfaces.h
 
@@ -108,6 +108,6 @@ private:
     std::unique_ptr<class ZoneHighlighter> m_highlighter;
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones
 
 // Q_DECLARE_METATYPE is in interfaces.h

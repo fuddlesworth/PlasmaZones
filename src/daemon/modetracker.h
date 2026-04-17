@@ -72,7 +72,7 @@ public:
     bool isAnyScreenAutotile(int desktop = -1, const QString& activity = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout tracking (reads from AssignmentEntry for current context)
+    // PhosphorZones::Layout tracking (reads from AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
     QString lastManualLayoutId() const;

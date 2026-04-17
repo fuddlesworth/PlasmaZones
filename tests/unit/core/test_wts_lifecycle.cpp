@@ -9,7 +9,7 @@
  * 1. Window close -> pending zone persistence (P0 crash/data-loss)
  * 2. Pre-snap geometry stable ID migration on close
  * 3. Pre-float zone conversion on close
- * 4. Layout change -> stale assignment removal and resnap buffer
+ * 4. PhosphorZones::Layout change -> stale assignment removal and resnap buffer
  * 5. State change signal emission
  *
  * WIRE FORMAT NOTE: These tests construct WTS without a WindowRegistry, so
@@ -71,7 +71,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
@@ -92,7 +92,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Window Close -> Pending Zone Persistence
+    // P0: Window Close -> Pending PhosphorZones::Zone Persistence
     // =====================================================================
 
     void testWindowClosed_persistsZoneToPending()
@@ -198,7 +198,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Layout Change
+    // P0: PhosphorZones::Layout Change
     // =====================================================================
 
     void testOnLayoutChanged_staleAssignmentsRemoved()
@@ -208,7 +208,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
-        Layout* newLayout = createTestLayout(2, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->assignLayout(screen, m_layoutManager->currentVirtualDesktop(), QString(), newLayout);
         m_layoutManager->setActiveLayout(newLayout);
@@ -226,7 +226,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
 
-        Layout* newLayout = createTestLayout(3, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
@@ -246,7 +246,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
         m_service->setWindowFloating(windowId, true);
 
-        Layout* newLayout = createTestLayout(3, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
@@ -263,7 +263,7 @@ private:
     StubSettingsLifecycle* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

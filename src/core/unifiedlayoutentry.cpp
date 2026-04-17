@@ -27,7 +27,16 @@ QString UnifiedLayoutEntry::algorithmId() const
     return LayoutId::extractAlgorithmId(id);
 }
 
-namespace LayoutUtils {
+} // namespace PlasmaZones
+
+namespace PhosphorZones::LayoutUtils {
+
+using ::PlasmaZones::AspectRatioClass;
+using ::PlasmaZones::IOrderingSettings;
+using ::PlasmaZones::UnifiedLayoutEntry;
+namespace LayoutId = ::PlasmaZones::LayoutId;
+namespace ScreenClassification = ::PlasmaZones::ScreenClassification;
+namespace Utils = ::PlasmaZones::Utils;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Unified layout list building
@@ -64,7 +73,7 @@ static void setAspectRatioSection(UnifiedLayoutEntry& entry)
     }
 }
 
-static UnifiedLayoutEntry entryFromLayout(Layout* layout)
+static UnifiedLayoutEntry entryFromLayout(PhosphorZones::Layout* layout)
 {
     UnifiedLayoutEntry entry;
     entry.id = layout->id().toString();
@@ -166,14 +175,14 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
     return order;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, bool includeAutotile,
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, bool includeAutotile,
                                                    const QStringList& customOrder)
 {
     QVector<UnifiedLayoutEntry> list;
 
     if (layoutManager) {
         const auto layouts = layoutManager->layouts();
-        for (Layout* layout : layouts) {
+        for (PhosphorZones::Layout* layout : layouts) {
             if (!layout) {
                 continue;
             }
@@ -190,9 +199,9 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
     return list;
 }
 
-QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId,
-                                                   int virtualDesktop, const QString& activity, bool includeManual,
-                                                   bool includeAutotile, qreal screenAspectRatio,
+QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+                                                   const QString& screenId, int virtualDesktop, const QString& activity,
+                                                   bool includeManual, bool includeAutotile, qreal screenAspectRatio,
                                                    bool filterByAspectRatio, const QStringList& customOrder)
 {
     QVector<UnifiedLayoutEntry> list;
@@ -209,11 +218,11 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
 
     // Track the active layout so we can guarantee it appears in the list
     // (prevents empty selector / broken cycling when active layout is hidden)
-    Layout* activeLayout = layoutManager->activeLayout();
+    PhosphorZones::Layout* activeLayout = layoutManager->activeLayout();
 
     if (includeManual) {
         const auto layouts = layoutManager->layouts();
-        for (Layout* layout : layouts) {
+        for (PhosphorZones::Layout* layout : layouts) {
             if (!layout) {
                 continue;
             }
@@ -282,7 +291,8 @@ QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
     map[Description] = entry.description;
     map[ZoneCount] = entry.zoneCount;
     map[Zones] = entry.zones;
-    map[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
+    map[Category] = static_cast<int>(entry.isAutotile ? PhosphorZones::LayoutCategory::Autotile
+                                                      : PhosphorZones::LayoutCategory::Manual);
     map[AutoAssign] = entry.autoAssign;
     map[QLatin1String("isAutotile")] = entry.isAutotile;
     map[IsSystem] = entry.isSystemEntry();
@@ -336,7 +346,8 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
     json[Description] = entry.description;
     json[ZoneCount] = entry.zoneCount;
     json[IsSystem] = entry.isSystemEntry();
-    json[Category] = static_cast<int>(entry.isAutotile ? LayoutCategory::Autotile : LayoutCategory::Manual);
+    json[Category] = static_cast<int>(entry.isAutotile ? PhosphorZones::LayoutCategory::Autotile
+                                                       : PhosphorZones::LayoutCategory::Manual);
     json[QLatin1String("isAutotile")] = entry.isAutotile;
     if (entry.aspectRatioClass != 0) {
         json[AspectRatioClassKey] =
@@ -365,7 +376,7 @@ QJsonObject toJson(const UnifiedLayoutEntry& entry)
         json[QLatin1String("supportsCustomParams")] = entry.supportsCustomParams;
     }
 
-    // hiddenFromSelector is added by callers that have access to the Layout*
+    // hiddenFromSelector is added by callers that have access to the PhosphorZones::Layout*
 
     // Convert zones to JSON array
     QJsonArray zonesArray;
@@ -409,6 +420,4 @@ const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
     return nullptr;
 }
 
-} // namespace LayoutUtils
-
-} // namespace PlasmaZones
+} // namespace PhosphorZones::LayoutUtils

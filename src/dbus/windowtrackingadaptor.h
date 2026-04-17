@@ -22,6 +22,12 @@
 
 #include <PhosphorConfig/IBackend.h>
 
+namespace PhosphorZones {
+class IZoneDetector;
+class Layout;
+class Zone;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
@@ -29,9 +35,6 @@ class ScreenModeRouter;
 class SnapNavigationTargetResolver;
 class LayoutManager; // Concrete type needed for signal connections
 class PersistenceWorker;
-class Layout;
-class Zone;
-class IZoneDetector;
 class ISettings;
 class SnapEngine;
 class VirtualDesktopManager;
@@ -49,8 +52,9 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowTracking")
 
 public:
-    explicit WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
-                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
+    explicit WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
+                                   ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
+                                   QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
     /**
@@ -396,7 +400,7 @@ public Q_SLOTS:
 
     /**
      * Get the last zone a window was snapped to
-     * @return Zone ID of last used zone, or empty string if none
+     * @return PhosphorZones::Zone ID of last used zone, or empty string if none
      */
     QString getLastUsedZoneId();
 
@@ -543,7 +547,7 @@ public Q_SLOTS:
 
     /**
      * @brief Snap the focused window to a zone by its number (daemon-driven)
-     * @param zoneNumber Zone number (1-9)
+     * @param zoneNumber PhosphorZones::Zone number (1-9)
      * @param screenId Screen to resolve layout for (empty = active layout)
      * @note Computes geometry internally, emits applyGeometryRequested
      */
@@ -683,20 +687,20 @@ public Q_SLOTS:
 
     /**
      * @brief Find the first empty zone in the current layout
-     * @return Zone ID of first empty zone, or empty string if all occupied
+     * @return PhosphorZones::Zone ID of first empty zone, or empty string if all occupied
      */
     QString findEmptyZone();
 
     /**
      * @brief Get geometry for a specific zone ID (uses primary screen)
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
     PlasmaZones::ZoneGeometryRect getZoneGeometry(const QString& zoneId);
 
     /**
      * @brief Get geometry for a specific zone ID on a specific screen
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @param screenId Screen ID (empty = primary screen)
      * @return ZoneGeometryRect with x, y, width, height (all zero if not found)
      */
@@ -865,7 +869,7 @@ Q_SIGNALS:
      * @brief Request to move a specific window to a zone (e.g. from Snap Assist selection)
      * @param windowId Window identifier to move
      * @param zoneId Target zone UUID
-     * @param x, y, width, height Zone geometry
+     * @param x, y, width, height PhosphorZones::Zone geometry
      */
     void moveSpecificWindowToZoneRequested(const QString& windowId, const QString& zoneId, int x, int y, int width,
                                            int height);
@@ -877,7 +881,7 @@ Q_SIGNALS:
      * @param y Top edge of target geometry
      * @param width Width of target geometry
      * @param height Height of target geometry
-     * @param zoneId Zone to snap to (empty for float restore - do not call windowSnapped)
+     * @param zoneId PhosphorZones::Zone to snap to (empty for float restore - do not call windowSnapped)
      * @param screenId Screen for OSD placement
      * @param sizeOnly When true, only width/height are meaningful (x/y ignored, window stays at current position)
      */
@@ -988,7 +992,7 @@ private:
 
     /**
      * @brief Detect which screen a zone is on by finding where its center falls
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @return Screen name, or empty string if not determinable
      */
     QString detectScreenForZone(const QString& zoneId) const;
@@ -1119,7 +1123,7 @@ private:
      * @brief Try to emit pendingRestoresAvailable if conditions are met
      *
      * Conditions required:
-     * 1. Layout is available with pending restores
+     * 1. PhosphorZones::Layout is available with pending restores
      * 2. Panel geometry has been received by ScreenManager
      *
      * This prevents windows from restoring with incorrect geometry

@@ -23,7 +23,7 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
             m_cacheValid = false;
         });
 
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
             if (layout) {
                 QString newId = layout->id().toString();
                 if (m_currentLayoutId != newId) {
@@ -49,11 +49,11 @@ QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
-        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
+        m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
             m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
-            LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
+            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 
         m_cacheValid = true;
     }
@@ -69,7 +69,7 @@ bool UnifiedLayoutController::applyLayoutByNumber(int number)
 bool UnifiedLayoutController::applyLayoutById(const QString& layoutId)
 {
     const auto list = layouts();
-    const UnifiedLayoutEntry* entry = LayoutUtils::findLayout(list, layoutId);
+    const UnifiedLayoutEntry* entry = PhosphorZones::LayoutUtils::findLayout(list, layoutId);
     if (!entry) {
         qCWarning(lcDaemon) << "applyLayoutById: layout not found:" << layoutId;
         return false;
@@ -151,7 +151,7 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
         if (m_layoutManager && !screenId.isEmpty()) {
-            Layout* screenLayout =
+            PhosphorZones::Layout* screenLayout =
                 m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
@@ -221,7 +221,7 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
     // updateAutotileScreens() will remove the screen from autotile set.
     auto uuidOpt = Utils::parseUuid(entry.id);
     if (uuidOpt && m_layoutManager) {
-        Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+        PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
                 // Write to the current context (screen, desktop, activity).
@@ -251,7 +251,7 @@ void UnifiedLayoutController::setCurrentLayoutId(const QString& layoutId)
 int UnifiedLayoutController::findCurrentIndex() const
 {
     const auto list = layouts();
-    return LayoutUtils::findLayoutIndex(list, m_currentLayoutId);
+    return PhosphorZones::LayoutUtils::findLayoutIndex(list, m_currentLayoutId);
 }
 
 } // namespace PlasmaZones

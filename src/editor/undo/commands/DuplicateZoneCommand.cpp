@@ -12,7 +12,8 @@ using namespace PlasmaZones;
 DuplicateZoneCommand::DuplicateZoneCommand(QPointer<ZoneManager> zoneManager, const QString& sourceZoneId,
                                            const QString& duplicatedZoneId, const QVariantMap& duplicatedZoneData,
                                            const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Duplicate Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Duplicate PhosphorZones::Zone", "@action") : text,
+                      parent)
     , m_sourceZoneId(sourceZoneId)
     , m_duplicatedZoneId(duplicatedZoneId)
     , m_duplicatedZoneData(duplicatedZoneData)
@@ -37,13 +38,13 @@ void DuplicateZoneCommand::redo()
     // QUndoStack automatically calls redo() when pushing, so we need to be idempotent
     QVariantMap existingZone = m_zoneManager->getZoneById(m_duplicatedZoneId);
     if (!existingZone.isEmpty()) {
-        // Zone already exists - this means the operation was already performed
+        // PhosphorZones::Zone already exists - this means the operation was already performed
         // QUndoStack calls redo() when pushing, but we've already done the operation
         // So we should do nothing (idempotent) - don't overwrite the zone's current state
         // The zone might have been modified by subsequent operations (e.g., move)
         return;
     }
 
-    // Zone doesn't exist - restore it (this happens when redoing after an undo)
+    // PhosphorZones::Zone doesn't exist - restore it (this happens when redoing after an undo)
     m_zoneManager->addZoneFromMap(m_duplicatedZoneData, true);
 }

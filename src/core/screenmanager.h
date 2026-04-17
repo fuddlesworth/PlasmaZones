@@ -16,9 +16,12 @@
 class QWindow;
 class QDBusServiceWatcher;
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
-class Layout;
 class OverlayService;
 
 /**

@@ -253,7 +253,7 @@ inline bool isAnyModeLocked(ISettings* settings, const QString& screenId, int de
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone selector helpers shared across overlayservice_selector*.cpp TUs
+// PhosphorZones::Zone selector helpers shared across overlayservice_selector*.cpp TUs
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Recursive QML item search by objectName

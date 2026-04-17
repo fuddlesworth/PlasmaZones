@@ -44,7 +44,7 @@ private Q_SLOTS:
     // =========================================================================
 
     /**
-     * The clampInt validator wired into the Zone padding KeyDef must coerce
+     * The clampInt validator wired into the PhosphorZones::Zone padding KeyDef must coerce
      * a hand-written 999 into the schema max, so the reader sees the
      * canonical default instead of the raw invalid value.
      *
