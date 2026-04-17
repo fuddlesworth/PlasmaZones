@@ -2,85 +2,68 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "configmigration.h"
-#include "configbackend_json.h"
-#include "configbackend_qsettings.h"
+
+#include "configbackends.h"
 #include "configdefaults.h"
-#include "iconfigbackend.h"
+#include "perscreenresolver.h"
+
+#include <PhosphorConfig/MigrationRunner.h>
+#include <PhosphorConfig/Schema.h>
+
 #include <QColor>
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLatin1String>
+#include <QLockFile>
 #include <array>
 #include <atomic>
 
 namespace PlasmaZones {
 
-// ── Migration step registry ─────────────────────────────────────────────────
-// To add a new version: implement migrateVxToVy(), append here, bump ConfigSchemaVersion.
+// ─── PhosphorConfig schema synthesis ────────────────────────────────────────
+// A minimal schema with only the migration chain populated. PZ's migration
+// runner only needs the version, the version key, and the migration steps —
+// group/key declarations belong to the Settings layer (future work).
 
-static constexpr auto s_migrationSteps = std::to_array<MigrationStep>({
-    {1, &ConfigMigration::migrateV1ToV2},
-    // {2, &ConfigMigration::migrateV2ToV3},
-});
+namespace {
+PhosphorConfig::Schema makeMigrationSchema()
+{
+    PhosphorConfig::Schema s;
+    s.version = ConfigSchemaVersion;
+    s.versionKey = ConfigKeys::versionKey();
+    s.migrations = {
+        {1, &ConfigMigration::migrateV1ToV2},
+        // {2, &ConfigMigration::migrateV2ToV3},
+    };
+    return s;
+}
+} // namespace
 
 std::span<const MigrationStep> ConfigMigration::migrationSteps()
 {
-    return s_migrationSteps;
+    // Kept for callers/tests that want a flat list of PZ-native steps. Built
+    // once lazily; the underlying function pointers never change at runtime.
+    static const std::array<MigrationStep, 1> s_steps{{
+        {1, &ConfigMigration::migrateV1ToV2},
+    }};
+    return {s_steps.data(), s_steps.size()};
 }
 
-// ── Migration chain runner ──────────────────────────────────────────────────
+// ── Migration chain runner (delegates to PhosphorConfig::MigrationRunner) ──
 
 void ConfigMigration::runMigrationChainInMemory(QJsonObject& root)
 {
-    int version = root.value(ConfigKeys::versionKey()).toInt(1);
-    if (version < 1) {
-        version = 1;
-    }
-    for (const auto& step : s_migrationSteps) {
-        if (version == step.fromVersion) {
-            qInfo("ConfigMigration: running schema migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
-            step.migrate(root);
-            version = root.value(ConfigKeys::versionKey()).toInt();
-            if (version != step.fromVersion + 1) {
-                qCritical("ConfigMigration: migration step v%d did not bump _version correctly (got %d)",
-                          step.fromVersion, version);
-                break;
-            }
-        }
-    }
+    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    PhosphorConfig::MigrationRunner(schema).runInMemory(root);
 }
 
 bool ConfigMigration::runMigrationChain(const QString& jsonPath)
 {
-    QFile f(jsonPath);
-    if (!f.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("ConfigMigration: failed to open %s for schema migration", qPrintable(jsonPath));
-        return false;
-    }
-    QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
-    f.close();
-    if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-        qWarning("ConfigMigration: invalid JSON in %s during schema migration", qPrintable(jsonPath));
-        return false;
-    }
-
-    QJsonObject root = doc.object();
-    const int oldVersion = root.value(ConfigKeys::versionKey()).toInt(1);
-    runMigrationChainInMemory(root);
-    const int newVersion = root.value(ConfigKeys::versionKey()).toInt();
-
-    if (newVersion == oldVersion) {
-        return true; // Nothing to do
-    }
-
-    if (!JsonConfigBackend::writeJsonAtomically(jsonPath, root)) {
-        qWarning("ConfigMigration: failed to write migrated config to %s", qPrintable(jsonPath));
-        return false;
-    }
-    qInfo("ConfigMigration: schema migration v%d → v%d complete", oldVersion, newVersion);
-    return true;
+    const PhosphorConfig::Schema schema = makeMigrationSchema();
+    return PhosphorConfig::MigrationRunner(schema).runOnFile(jsonPath);
 }
 
 // ── ensureJsonConfig ────────────────────────────────────────────────────────
@@ -108,6 +91,38 @@ bool ConfigMigration::ensureJsonConfig()
         return true;
     }
 
+    // Cross-process migration lock: PZ starts multiple processes (daemon,
+    // settings, editor) in parallel at session start, each of which calls
+    // ensureJsonConfig in its own ctor path. Without this lock, two
+    // concurrent starts can race the read-migrate-write sequence of
+    // migrateIniToJson / runMigrationChain — the later writer silently
+    // overwrites the earlier migration's output.
+    //
+    // QLockFile is an advisory flock-style lock that cleans up automatically
+    // when the owning process exits (including crashes, via stale-lock
+    // detection). 5-second stale window covers the real-world migration
+    // cost; a genuinely hung peer won't starve us forever.
+    //
+    // QLockFile requires the lock file's parent directory to exist —
+    // ensureJsonConfigImpl below also needs the directory for any write it
+    // performs, so create it up front. Silently fail the mkpath and let
+    // tryLock report the lock-creation failure as the primary error.
+    const QString jsonPath = ConfigDefaults::configFilePath();
+    QDir().mkpath(QFileInfo(jsonPath).absolutePath());
+    QLockFile lock(jsonPath + QStringLiteral(".migrate.lock"));
+    lock.setStaleLockTime(5000);
+    if (!lock.tryLock(5000)) {
+        // Couldn't acquire the lock within the timeout. The peer may have
+        // completed successfully (in which case our next call will see
+        // the current schema version and return early) — fall through and
+        // let ensureJsonConfigImpl re-check the on-disk state.
+        qWarning("ConfigMigration: could not acquire migration lock within 5s — proceeding without lock");
+    }
+
+    // Re-check the migrated flag after acquiring the lock. Another process
+    // may have just released it after stamping the current schema version;
+    // re-reading the file lets us short-circuit without paying the parse
+    // cost again.
     const bool ok = ensureJsonConfigImpl();
     if (ok) {
         s_migrated.store(true, std::memory_order_release);
@@ -120,9 +135,16 @@ bool ConfigMigration::ensureJsonConfigImpl()
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
         QFile f(jsonPath);
+        bool whitespaceOnly = false;
+        bool corrupt = false;
         if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             const QByteArray data = f.readAll();
-            if (!data.trimmed().isEmpty()) {
+            if (data.trimmed().isEmpty()) {
+                // Truncated / zero-byte files aren't corruption — treat them
+                // like a fresh install (proceed to the INI / fresh-install
+                // logic below) instead of archiving the empty file.
+                whitespaceOnly = true;
+            } else {
                 QJsonParseError err;
                 QJsonDocument doc = QJsonDocument::fromJson(data, &err);
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
@@ -132,23 +154,50 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     }
                     return true; // Already at current version
                 }
+                corrupt = true;
             }
+        } else {
+            // Open failed — log and treat as fresh-install fall-through.
+            qWarning("ConfigMigration: could not open %s for reading: %s", qPrintable(jsonPath),
+                     qPrintable(f.errorString()));
+            return false;
         }
-        // Corrupt or empty JSON — check if INI backup exists for re-migration.
-        const QString iniPath = ConfigDefaults::legacyConfigFilePath();
-        if (!QFile::exists(iniPath)) {
+
+        // Real parse-error corruption — always back up to .corrupt.bak before
+        // removing. Whether or not an INI exists to re-migrate from, the user
+        // may want to recover hand-made edits from the corrupt JSON (a parse
+        // error can be one stray character in an otherwise valid file).
+        // Asymmetric "rename if no INI, silent rm if INI exists" was a trap.
+        if (corrupt) {
             const QString corruptBak = jsonPath + QStringLiteral(".corrupt.bak");
-            if (QFile::exists(corruptBak)) {
-                QFile::remove(corruptBak);
+            if (QFile::exists(corruptBak) && !QFile::remove(corruptBak)) {
+                qWarning("ConfigMigration: failed to remove old %s — leaving corrupt JSON in place",
+                         qPrintable(corruptBak));
+                return false;
             }
-            QFile::rename(jsonPath, corruptBak);
-            qWarning(
-                "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
-                "using defaults",
-                qPrintable(corruptBak));
-            return true;
+            if (!QFile::rename(jsonPath, corruptBak)) {
+                qWarning("ConfigMigration: failed to rename corrupt JSON to %s — leaving it in place",
+                         qPrintable(corruptBak));
+                return false;
+            }
+            const QString iniPath = ConfigDefaults::legacyConfigFilePath();
+            if (!QFile::exists(iniPath)) {
+                qWarning(
+                    "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
+                    "using defaults",
+                    qPrintable(corruptBak));
+                return true;
+            }
+            qWarning("ConfigMigration: corrupt JSON config moved to %s — re-migrating from INI",
+                     qPrintable(corruptBak));
+            // Fall through to the INI migration path below.
+        } else if (whitespaceOnly) {
+            // Drop the empty file so the INI-or-fresh-install path below is clean.
+            if (!QFile::remove(jsonPath)) {
+                qWarning("ConfigMigration: failed to remove empty JSON %s", qPrintable(jsonPath));
+                return false;
+            }
         }
-        QFile::remove(jsonPath);
     }
 
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();
@@ -184,7 +233,7 @@ void ConfigMigration::resetMigrationGuardForTesting()
 
 bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& jsonPath)
 {
-    const QMap<QString, QVariant> flatMap = QSettingsConfigBackend::readConfigFromDisk(iniPath);
+    const QMap<QString, QVariant> flatMap = PhosphorConfig::QSettingsBackend::readConfigFromDisk(iniPath);
     if (flatMap.isEmpty()) {
         qInfo("ConfigMigration: old config is empty — writing minimal JSON to complete migration");
     }
@@ -194,7 +243,7 @@ bool ConfigMigration::migrateIniToJson(const QString& iniPath, const QString& js
     root[ConfigKeys::versionKey()] = 1;
     runMigrationChainInMemory(root);
 
-    return JsonConfigBackend::writeJsonAtomically(jsonPath, root);
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(jsonPath, root);
 }
 
 QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap)
@@ -205,7 +254,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
     const QString generalGroup = ConfigDefaults::generalGroup();
     // Hardcoded v1 key name — the INI file uses "RenderingBackend"
     const QString renderingKey = QStringLiteral("RenderingBackend");
-    const QLatin1String PerScreenKeyStr(PerScreenKey);
+    const QString PerScreenKeyStr = PerScreenPathResolver::perScreenKey();
 
     for (auto it = flatMap.constBegin(); it != flatMap.constEnd(); ++it) {
         const QString& flatKey = it.key();
@@ -216,11 +265,11 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
             // Root-level INI key (ungrouped). Route RenderingBackend to its own group.
             if (flatKey == renderingKey) {
                 QJsonObject rendering = root.value(renderingGroup).toObject();
-                rendering[flatKey] = convertValue(value);
+                rendering[flatKey] = convertValue(flatKey, value);
                 root[renderingGroup] = rendering;
             } else {
                 QJsonObject general = root.value(generalGroup).toObject();
-                general[flatKey] = convertValue(value);
+                general[flatKey] = convertValue(flatKey, value);
                 root[generalGroup] = general;
             }
             continue;
@@ -234,30 +283,30 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
         // as "General/RenderingBackend". Route it to the Rendering group either way.
         if (groupPart == generalGroup && keyPart == renderingKey) {
             QJsonObject rendering = root.value(renderingGroup).toObject();
-            rendering[keyPart] = convertValue(value);
+            rendering[keyPart] = convertValue(keyPart, value);
             root[renderingGroup] = rendering;
             continue;
         }
 
         // Check for known per-screen group patterns: ZoneSelector:*, AutotileScreen:*, SnappingScreen:*
         // Other colon-containing groups (e.g., Assignment:ScreenId:Desktop:1) are regular groups.
-        if (isPerScreenPrefix(groupPart)) {
+        if (PerScreenPathResolver::isPerScreenPrefix(groupPart)) {
             const int colonIdx = groupPart.indexOf(QLatin1Char(':'));
             const QString prefix = groupPart.left(colonIdx);
             const QString screenId = groupPart.mid(colonIdx + 1);
-            const QString category = prefixToCategory(prefix);
+            const QString category = PerScreenPathResolver::prefixToCategory(prefix);
 
             QJsonObject perScreen = root.value(PerScreenKeyStr).toObject();
             QJsonObject cat = perScreen.value(category).toObject();
             QJsonObject screen = cat.value(screenId).toObject();
-            screen[keyPart] = convertValue(value);
+            screen[keyPart] = convertValue(keyPart, value);
             cat[screenId] = screen;
             perScreen[category] = cat;
             root[PerScreenKeyStr] = perScreen;
         } else {
             // Regular group: Group/Key
             QJsonObject groupObj = root.value(groupPart).toObject();
-            groupObj[keyPart] = convertValue(value);
+            groupObj[keyPart] = convertValue(keyPart, value);
             root[groupPart] = groupObj;
         }
     }
@@ -265,7 +314,7 @@ QJsonObject ConfigMigration::iniMapToJson(const QMap<QString, QVariant>& flatMap
     return root;
 }
 
-QJsonValue ConfigMigration::convertValue(const QVariant& value)
+QJsonValue ConfigMigration::convertValue(const QString& keyName, const QVariant& value)
 {
     const QString s = value.toString();
 
@@ -277,7 +326,10 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
     // Type detection priority (order matters):
     //   1. Boolean strings ("true"/"false")
     //   2. JSON arrays/objects (trigger lists, per-algorithm settings)
-    //   3. Comma-separated integers 0-255 → color hex (r,g,b or r,g,b,a)
+    //   3. Comma-separated integers 0-255 on a color-shaped key → hex
+    //      (content heuristic alone is ambiguous — a layout-order list like
+    //      "1,2,3" also matches, so gate on the key name to avoid false
+    //      positives)
     //   4. Plain integers
     //   5. Doubles (only if contains '.' to avoid "0" → 0.0)
     //   6. Fallback: keep as string
@@ -305,10 +357,16 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
     }
 
     // Color in r,g,b or r,g,b,a format → convert to hex.
-    // Assumption: no PlasmaZones config value is a comma-separated list of integers
-    // in the 0-255 range that isn't a color. If one is added, this heuristic would
-    // need a key-based allowlist to avoid false positives.
-    if (s.contains(QLatin1Char(','))) {
+    //
+    // The old code applied this conversion to ANY comma-separated list of
+    // 3–4 ints in 0..255, which corrupts settings whose wire format happens
+    // to match — e.g. a layout-order like "1,2,3". Require the key to look
+    // like a color key (ends with "Color") before converting.
+    //
+    // Every v1 color key in the PZ config follows this convention:
+    //   HighlightColor / InactiveColor / BorderColor / LabelFontColor /
+    //   AutotileBorderColor / AutotileInactiveBorderColor.
+    if (keyName.endsWith(QLatin1String("Color")) && s.contains(QLatin1Char(','))) {
         const QStringList parts = s.split(QLatin1Char(','));
         if (parts.size() >= 3 && parts.size() <= 4) {
             bool allNumeric = true;
@@ -328,7 +386,12 @@ QJsonValue ConfigMigration::convertValue(const QVariant& value)
                 return QJsonValue(c.name(QColor::HexArgb));
             }
         }
-        // Not a color — might be a comma-separated list, keep as string
+    }
+
+    // Any other comma-containing value is kept verbatim — comma-separated
+    // lists (layout order, exclusion apps, locked screens) round-trip as
+    // strings and get parsed by their respective setters.
+    if (s.contains(QLatin1Char(','))) {
         return QJsonValue(s);
     }
 
@@ -734,15 +797,27 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // In v2, session state lives in its own file to avoid write contention
     // between user preferences (config.json) and high-frequency window
     // tracking saves (session.json).
+    //
+    // Atomicity: only mutate `root` after the side-effect write succeeds.
+    // If the out-of-tree write fails, leaving the keys in `root` lets
+    // `config.json` retain the data so the next startup's migration can
+    // retry. A partial commit here would silently lose session state.
+    bool allSideEffectsSucceeded = true;
+
     const QString wtGroup = ConfigKeys::windowTrackingGroup();
     if (root.contains(wtGroup)) {
         QJsonObject sessionRoot;
         sessionRoot[wtGroup] = root.value(wtGroup);
         const QString sessionPath = ConfigDefaults::sessionFilePath();
-        if (!JsonConfigBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
-            qWarning("ConfigMigration: failed to write session state to %s", qPrintable(sessionPath));
+        if (PhosphorConfig::JsonBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
+            root.remove(wtGroup);
+        } else {
+            qWarning(
+                "ConfigMigration: failed to write session state to %s — "
+                "aborting migration so the next run can retry",
+                qPrintable(sessionPath));
+            allSideEffectsSucceeded = false;
         }
-        root.remove(wtGroup);
     }
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
@@ -773,21 +848,51 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         if (root.contains(modeTrackingKey)) {
             keysToRemove.append(modeTrackingKey);
         }
+
+        bool assignmentsWritten = true;
         if (!assignRoot.isEmpty()) {
             const QString assignPath = ConfigDefaults::assignmentsFilePath();
-            if (!JsonConfigBackend::writeJsonAtomically(assignPath, assignRoot)) {
-                qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
+            if (!PhosphorConfig::JsonBackend::writeJsonAtomically(assignPath, assignRoot)) {
+                qWarning(
+                    "ConfigMigration: failed to write assignments to %s — "
+                    "aborting migration so the next run can retry",
+                    qPrintable(assignPath));
+                assignmentsWritten = false;
+                allSideEffectsSucceeded = false;
             }
         }
-        for (const QString& key : keysToRemove) {
-            root.remove(key);
+        // Only strip from root if the external file is committed (or there
+        // was nothing to extract). ModeTracking is safe to drop unconditionally
+        // — it's ephemeral and consumed in-memory only.
+        if (assignmentsWritten) {
+            for (const QString& key : keysToRemove) {
+                root.remove(key);
+            }
+        } else if (root.contains(modeTrackingKey)) {
+            // Still safe to drop ModeTracking even if assignments write failed.
+            root.remove(modeTrackingKey);
         }
     }
 
     // ── Bump version ────────────────────────────────────────────────────────
     // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
     // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.
-    root[ConfigKeys::versionKey()] = 2;
+    //
+    // Skip the bump when any side-effect write failed. MigrationRunner
+    // detects the unbumped version, aborts the chain with a critical log,
+    // and config.json is left untouched so the next startup retries.
+    //
+    // Note: the in-memory @p root has already been mutated extensively
+    // above (v1 groups removed, dot-path hierarchy rebuilt) by the time
+    // we get here. On a side-effect failure these mutations are silently
+    // discarded by the caller — MigrationRunner::runOnFile sees that the
+    // version key didn't advance and skips the disk write entirely, and
+    // Store::Store's in-memory migration path likewise compares before vs.
+    // after and skips the file rewrite. The on-disk file is therefore left
+    // at v1 with the original layout, ready for the next startup to retry.
+    if (allSideEffectsSucceeded) {
+        root[ConfigKeys::versionKey()] = 2;
+    }
 }
 
 } // namespace PlasmaZones

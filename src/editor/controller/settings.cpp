@@ -11,7 +11,7 @@
 #include "pz_i18n.h"
 #include "../../config/configdefaults.h"
 #include "../../config/configmigration.h"
-#include "../../config/iconfigbackend.h"
+#include "../../config/configbackends.h"
 #include <QRegularExpression>
 
 namespace PlasmaZones {

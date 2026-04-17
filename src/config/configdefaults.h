@@ -35,6 +35,17 @@ public:
     // Activation Settings
     // ═══════════════════════════════════════════════════════════════════════════
 
+    // Single source of truth for the per-action trigger cap. Consumed by
+    // Settings::MaxTriggersPerAction (public API), the canonicalTriggerList
+    // validator in settingsschema.cpp (schema-side cap), and any caller that
+    // needs the limit. Keeping the constant here — reachable from both
+    // settings.h and settingsschema.cpp without either depending on the
+    // other — avoids the drift that motivated the original static_assert.
+    static constexpr int maxTriggersPerAction()
+    {
+        return 4;
+    }
+
     // Build a single-entry trigger list with the given modifier and mouse
     // button. Shared by the default accessors below so the canonical
     // {modifier, mouseButton} shape lives in one place.
@@ -1032,6 +1043,14 @@ public:
     static double editorSnapInterval()
     {
         return 0.1;
+    }
+    static double editorSnapIntervalMin()
+    {
+        return 0.01;
+    }
+    static double editorSnapIntervalMax()
+    {
+        return 1.0;
     }
     static int editorSnapOverrideModifier()
     {

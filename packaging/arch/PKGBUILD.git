@@ -69,13 +69,13 @@ package() {
         "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
 
     # License files — GPL-3.0-or-later (main) + LGPL-2.1-or-later
-    # (the three Phosphor* libraries).
+    # (the four Phosphor* libraries).
     install -Dm644 "$pkgname/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 "$pkgname/COPYING.LESSER" \
         "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
 
-    # Package ships libPhosphorShell.so*, libPhosphorRendering.so*, and
-    # libPhosphorLayer.so* plus their CMake config and headers (installed by
-    # `cmake --install` above).
+    # Package ships libPhosphorConfig.so*, libPhosphorShell.so*,
+    # libPhosphorRendering.so*, and libPhosphorLayer.so* plus their CMake
+    # config and headers (installed by `cmake --install` above).
 }

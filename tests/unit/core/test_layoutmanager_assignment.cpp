@@ -14,7 +14,7 @@
 #include <QJsonObject>
 #include <QScopedPointer>
 #include <QUuid>
-#include "config/configbackend_json.h"
+#include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include <memory>
 #include <vector>

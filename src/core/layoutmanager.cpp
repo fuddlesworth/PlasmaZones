@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutmanager.h"
-#include "../config/iconfigbackend.h"
+#include "../config/configbackends.h"
 #include "constants.h"
 #include "logging.h"
 #include "utils.h"
@@ -27,7 +27,7 @@ LayoutManager::LayoutManager(QObject* parent)
     ensureLayoutDirectory();
 }
 
-LayoutManager::LayoutManager(IConfigBackend* backend, QObject* parent)
+LayoutManager::LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent)
     : QObject(parent)
     , ILayoutManager()
     , m_configBackend(backend)

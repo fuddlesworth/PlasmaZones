@@ -7,8 +7,7 @@
 #include "zonedetectionadaptor.h"
 #include "../autotile/AutotileEngine.h"
 #include "../snap/SnapEngine.h"
-#include "../config/iconfigbackend.h"
-#include "../config/configbackend_json.h"
+#include "../config/configbackends.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include "../core/layout.h"
@@ -106,7 +105,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZone
                     }
                     return;
                 }
-                // Success: intentionally NOT calling JsonConfigBackend::clearDirty()
+                // Success: intentionally NOT calling PhosphorConfig::JsonBackend::clearDirty()
                 // here. The backend's own m_dirty flag tracks in-memory mutations
                 // since the last inline sync(); a successful async write of an
                 // earlier snapshot does not mean the current in-memory state

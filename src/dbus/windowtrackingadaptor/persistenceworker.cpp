@@ -3,7 +3,7 @@
 
 #include "persistenceworker.h"
 
-#include "../../config/configbackend_json.h"
+#include "../../config/configbackends.h"
 #include "../../core/logging.h"
 
 #include <QThread>
@@ -16,11 +16,11 @@ namespace PlasmaZones {
 
 void PersistenceIO::processWrite(const QString& filePath, const QJsonObject& root)
 {
-    // Reuse JsonConfigBackend's existing atomic-write helper instead of
+    // Reuse PhosphorConfig::JsonBackend's existing atomic-write helper instead of
     // duplicating the QSaveFile/QDir/QJsonDocument dance. Keeping one
     // implementation means format/permission changes only need to land
     // in one place.
-    const bool ok = JsonConfigBackend::writeJsonAtomically(filePath, root);
+    const bool ok = PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, root);
     if (!ok) {
         qCWarning(lcDbusWindow) << "PersistenceIO: atomic write failed for" << filePath;
     }
@@ -61,7 +61,7 @@ void PersistenceWorker::enqueueWrite(const QString& filePath, const QJsonObject&
 
 bool PersistenceWorker::writeSync(const QString& filePath, const QJsonObject& root)
 {
-    return JsonConfigBackend::writeJsonAtomically(filePath, root);
+    return PhosphorConfig::JsonBackend::writeJsonAtomically(filePath, root);
 }
 
 } // namespace PlasmaZones

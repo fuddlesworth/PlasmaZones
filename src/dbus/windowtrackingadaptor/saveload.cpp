@@ -4,7 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
 #include "persistenceworker.h"
-#include "../../config/configbackend_json.h"
+#include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include "../../core/virtualscreen.h"
 #include "../../core/layoutmanager.h"
@@ -15,7 +15,6 @@
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
-#include "../../config/iconfigbackend.h"
 #include "../../config/configkeys.h"
 #include <QTimer>
 
@@ -262,7 +261,7 @@ void WindowTrackingAdaptor::saveState()
     // hand-off point: the worker processes requestWrite signals in queued
     // order, so dequeueing from the head in writeCompleted correctly
     // matches masks to completions even with multiple writes in flight.
-    auto* jsonBackend = dynamic_cast<JsonConfigBackend*>(m_sessionBackend.get());
+    auto* jsonBackend = dynamic_cast<PhosphorConfig::JsonBackend*>(m_sessionBackend.get());
     if (jsonBackend && m_persistenceWorker) {
         m_pendingWriteMasks.enqueue(dirty);
         m_persistenceWorker->enqueueWrite(jsonBackend->filePath(), jsonBackend->jsonRootSnapshot());
@@ -270,8 +269,8 @@ void WindowTrackingAdaptor::saveState()
         // Fallback synchronous path.
         //
         // This branch is only reachable when m_sessionBackend is not a
-        // JsonConfigBackend — i.e. tests that wire a memory-only backend.
-        // The production daemon always uses JsonConfigBackend, so the
+        // PhosphorConfig::JsonBackend — i.e. tests that wire a memory-only backend.
+        // The production daemon always uses PhosphorConfig::JsonBackend, so the
         // async/retry path above is the only one exercised outside of
         // the test harness.
         //
@@ -325,7 +324,7 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
 
 void WindowTrackingAdaptor::loadState()
 {
-    // Read config via the IConfigBackend group API (readString/readInt).
+    // Read config via the PhosphorConfig::IBackend group API (readString/readInt).
     // This correctly handles values stored as native JSON objects/arrays
     // (e.g. PendingRestoreQueues, PreTileGeometries) — the group's readString()
     // serializes them back to compact JSON strings.
