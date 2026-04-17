@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TilingState.h"
+#include "AutotileConstants.h"
 #include "SplitTree.h"
 #include "config/configdefaults.h"
-#include "core/constants.h"
 #include "core/logging.h"
 #include <QJsonArray>
 

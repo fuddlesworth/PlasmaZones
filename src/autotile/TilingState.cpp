@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TilingState.h"
+#include "AutotileConstants.h"
 #include "SplitTree.h"
-#include "core/constants.h"
 #include <QtMath>
 #include <algorithm>
 

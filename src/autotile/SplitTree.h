@@ -5,8 +5,8 @@
 
 #include "plasmazones_export.h"
 
+#include "AutotileConstants.h"
 #include "config/configdefaults.h"
-#include "core/constants.h"
 
 #include <QJsonObject>
 #include <QRect>

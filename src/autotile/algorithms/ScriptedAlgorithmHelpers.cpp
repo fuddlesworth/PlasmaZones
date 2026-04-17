@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ScriptedAlgorithmHelpers.h"
-#include "core/constants.h"
+#include "../AutotileConstants.h"
 #include "core/logging.h"
 #include <QJSValue>
 #include <QRegularExpression>

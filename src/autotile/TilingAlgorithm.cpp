@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "TilingAlgorithm.h"
+#include "AutotileConstants.h"
 #include "TilingState.h"
 #include "config/configdefaults.h"
-#include "core/constants.h"
 #include <algorithm>
 
 namespace PlasmaZones {

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "AlgorithmRegistry.h"
+#include "AutotileConstants.h"
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
-#include "core/constants.h"
 #include "core/logging.h"
 
 #include <QCoreApplication>

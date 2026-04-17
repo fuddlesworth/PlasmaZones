@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "core/constants.h"
+#include "AutotileConstants.h"
 #include <QHash>
 #include <QLatin1String>
 #include <QList>

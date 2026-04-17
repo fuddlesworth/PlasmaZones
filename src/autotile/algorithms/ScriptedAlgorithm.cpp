@@ -7,7 +7,7 @@
 #include "ScriptedAlgorithmSandbox.h"
 #include "../SplitTree.h"
 #include "../TilingState.h"
-#include "core/constants.h"
+#include "../AutotileConstants.h"
 #include "core/logging.h"
 #include "pz_i18n.h"
 #include <QCoreApplication>

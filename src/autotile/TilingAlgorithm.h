@@ -4,6 +4,11 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "AutotileConstants.h"
+// EdgeGaps lives in core/constants.h.  It's a shared per-side gap struct used
+// by both manual-layout (PhosphorZones::Layout) and tiling-algorithm code, so
+// its eventual home is libs/phosphor-layout-api.  See follow-up decoupling
+// commit before the libs/phosphor-tiles extraction.
 #include "core/constants.h"
 #include <QObject>
 #include <QRect>
