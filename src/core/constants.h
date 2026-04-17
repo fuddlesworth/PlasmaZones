@@ -361,9 +361,8 @@ inline QString makeAutotileId(const QString& algorithmId)
 }
 }
 
-// EdgeGaps now lives in PhosphorLayoutApi (shared between manual layout and
-// tiling).  Aliased here so existing PlasmaZones::EdgeGaps callers compile
-// without changes.
-using EdgeGaps = ::PhosphorLayout::EdgeGaps;
+// EdgeGaps lives in libs/phosphor-layout-api as `PhosphorLayout::EdgeGaps`.
+// All PlasmaZones-side callers now reference it qualified directly — no
+// `using EdgeGaps = ...` alias here.
 
 } // namespace PlasmaZones

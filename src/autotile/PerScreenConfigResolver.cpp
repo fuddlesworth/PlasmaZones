@@ -161,7 +161,7 @@ int PerScreenConfigResolver::effectiveOuterGap(const QString& screenId) const
     return m_engine->config()->outerGap;
 }
 
-EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) const
+::PhosphorLayout::EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) const
 {
     // Check per-screen per-side overrides first
     auto topOv = perScreenOverride(screenId, QStringLiteral("OuterGapTop"));
@@ -173,24 +173,25 @@ EdgeGaps PerScreenConfigResolver::effectiveOuterGaps(const QString& screenId) co
     if (topOv || bottomOv || leftOv || rightOv) {
         // Use per-screen uniform gap as base, then per-side overrides on top
         const int base = effectiveOuterGap(screenId);
-        return EdgeGaps{topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
-                        bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
-                        leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
-                        rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base};
+        return ::PhosphorLayout::EdgeGaps{
+            topOv ? qBound(AutotileDefaults::MinGap, topOv->toInt(), AutotileDefaults::MaxGap) : base,
+            bottomOv ? qBound(AutotileDefaults::MinGap, bottomOv->toInt(), AutotileDefaults::MaxGap) : base,
+            leftOv ? qBound(AutotileDefaults::MinGap, leftOv->toInt(), AutotileDefaults::MaxGap) : base,
+            rightOv ? qBound(AutotileDefaults::MinGap, rightOv->toInt(), AutotileDefaults::MaxGap) : base};
     }
 
     // Check per-screen uniform outer gap
     if (auto v = perScreenOverride(screenId, QStringLiteral("OuterGap"))) {
         const int gap = qBound(AutotileDefaults::MinGap, v->toInt(), AutotileDefaults::MaxGap);
-        return EdgeGaps::uniform(gap);
+        return ::PhosphorLayout::EdgeGaps::uniform(gap);
     }
 
     // Fall back to global config
     const AutotileConfig* cfg = m_engine->config();
     if (cfg->usePerSideOuterGap) {
-        return EdgeGaps{cfg->outerGapTop, cfg->outerGapBottom, cfg->outerGapLeft, cfg->outerGapRight};
+        return ::PhosphorLayout::EdgeGaps{cfg->outerGapTop, cfg->outerGapBottom, cfg->outerGapLeft, cfg->outerGapRight};
     }
-    return EdgeGaps::uniform(cfg->outerGap);
+    return ::PhosphorLayout::EdgeGaps::uniform(cfg->outerGap);
 }
 
 bool PerScreenConfigResolver::effectiveSmartGaps(const QString& screenId) const

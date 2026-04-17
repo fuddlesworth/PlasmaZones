@@ -1033,7 +1033,7 @@ int AutotileEngine::effectiveOuterGap(const QString& screenId) const
     return m_configResolver->effectiveOuterGap(screenId);
 }
 
-EdgeGaps AutotileEngine::effectiveOuterGaps(const QString& screenId) const
+::PhosphorLayout::EdgeGaps AutotileEngine::effectiveOuterGaps(const QString& screenId) const
 {
     return m_configResolver->effectiveOuterGaps(screenId);
 }
@@ -2250,7 +2250,8 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     // the fragile post-processing step that previously guessed adjacency.
     const bool skipGaps = effectiveSmartGaps(screenId) && windowCount == 1;
     const int innerGap = skipGaps ? 0 : effectiveInnerGap(screenId);
-    EdgeGaps outerGaps = skipGaps ? EdgeGaps::uniform(0) : effectiveOuterGaps(screenId);
+    ::PhosphorLayout::EdgeGaps outerGaps =
+        skipGaps ? ::PhosphorLayout::EdgeGaps::uniform(0) : effectiveOuterGaps(screenId);
 
     // Build minSizes vector for the algorithm (when respectMinimumSize is enabled)
     // Only include the first windowCount windows (capped by maxWindows above)

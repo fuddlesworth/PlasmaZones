@@ -453,7 +453,7 @@ public:
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
     int effectiveOuterGap(const QString& screenId) const;
-    EdgeGaps effectiveOuterGaps(const QString& screenId) const;
+    ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;

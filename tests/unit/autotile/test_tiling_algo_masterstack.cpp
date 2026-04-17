@@ -42,7 +42,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setMasterCount(1);
-        auto zones = ms()->calculateZones(makeParams(8, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(8, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 8);
         int totalStackHeight = 0;
         for (int i = 1; i < 8; ++i) {
@@ -65,7 +66,8 @@ private Q_SLOTS:
     void testMasterStack_oneWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = ms()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -74,7 +76,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = ms()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].width(), static_cast<int>(ScreenWidth * 0.6));
@@ -92,7 +95,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
-        auto zones = ms()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QCOMPARE(zones[0].width(), ScreenWidth / 2);
         QCOMPARE(zones[0].height(), ScreenHeight);
@@ -113,7 +117,8 @@ private Q_SLOTS:
         }
         state.setMasterCount(2);
         state.setSplitRatio(0.6);
-        auto zones = ms()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         int masterWidth = static_cast<int>(ScreenWidth * 0.6);
         QCOMPARE(zones[0].width(), masterWidth);
@@ -136,7 +141,8 @@ private Q_SLOTS:
             state.addWindow(QStringLiteral("window%1").arg(i));
         }
         state.setMasterCount(5);
-        auto zones = ms()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            ms()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QCOMPARE(zone.width(), ScreenWidth);
@@ -149,7 +155,8 @@ private Q_SLOTS:
     void testMasterStack_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(ms()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(ms()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 };
 

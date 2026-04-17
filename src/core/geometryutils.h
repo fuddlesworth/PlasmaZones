@@ -53,7 +53,8 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  *        back to Utils::screenIdentifier(screen) (physical ID, all edges outer).
  * @return Geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap, const EdgeGaps& outerGaps,
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, QScreen* screen, int innerGap,
+                                                  const ::PhosphorLayout::EdgeGaps& outerGaps,
                                                   bool useAvailableGeometry = true, const QString& screenId = {});
 
 /**
@@ -79,8 +80,8 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Zone* zone, const QRect& screenGeometry,
                                                   const QRect& availableGeometry, int innerGap,
-                                                  const EdgeGaps& outerGaps, bool useAvailableGeometry = true,
-                                                  const QString& screenId = {});
+                                                  const ::PhosphorLayout::EdgeGaps& outerGaps,
+                                                  bool useAvailableGeometry = true, const QString& screenId = {});
 
 /**
  * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
@@ -151,7 +152,8 @@ PLASMAZONES_EXPORT QRect snapToRect(const QRectF& rf);
  * Resolution cascade: per-screen per-side → per-screen uniform → layout per-side →
  * layout uniform → global per-side → global uniform → default
  */
-PLASMAZONES_EXPORT EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings, const QString& screenId = {});
+PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(Layout* layout, ISettings* settings,
+                                                                    const QString& screenId = {});
 
 /**
  * @brief Get the effective screen geometry for a layout

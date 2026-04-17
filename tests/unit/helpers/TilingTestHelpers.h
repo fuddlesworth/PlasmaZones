@@ -14,7 +14,7 @@ namespace PlasmaZones::TestHelpers {
  * @brief Construct TilingParams with named fields (avoids -Wmissing-field-initializers).
  */
 inline TilingParams makeParams(int count, const QRect& screen, const TilingState* state, int gap = 0,
-                               EdgeGaps outerGaps = {}, QVector<QSize> minSizes = {})
+                               ::PhosphorLayout::EdgeGaps outerGaps = {}, QVector<QSize> minSizes = {})
 {
     TilingParams p;
     p.windowCount = count;

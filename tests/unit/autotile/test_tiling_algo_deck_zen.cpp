@@ -81,46 +81,57 @@ private Q_SLOTS:
     void testDeck_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(deck()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(deck()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testHDeck_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(hDeck()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(hDeck()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testZen_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(zen()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(zen()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testFocusSidebar_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(
-            focusSidebar()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(focusSidebar()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testFloatingCenter_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
         QVERIFY(floatingCenter()
-                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)))
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
     }
 
     void testPaper_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(paper()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(paper()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testTatami_zeroWindows()
     {
         TilingState state(QStringLiteral("test"));
-        QVERIFY(tatami()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        QVERIFY(tatami()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     // =========================================================================
@@ -130,7 +141,8 @@ private Q_SLOTS:
     void testDeck_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = deck()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            deck()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -138,7 +150,8 @@ private Q_SLOTS:
     void testHDeck_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = hDeck()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            hDeck()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -146,7 +159,8 @@ private Q_SLOTS:
     void testZen_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = zen()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            zen()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -154,7 +168,8 @@ private Q_SLOTS:
     void testFocusSidebar_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = focusSidebar()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = focusSidebar()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -162,7 +177,8 @@ private Q_SLOTS:
     void testFloatingCenter_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = floatingCenter()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = floatingCenter()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -170,7 +186,8 @@ private Q_SLOTS:
     void testPaper_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = paper()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            paper()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -178,7 +195,8 @@ private Q_SLOTS:
     void testTatami_singleWindow()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -200,7 +218,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
-        auto zones = deck()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            deck()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
         for (const QRect& zone : zones) {
@@ -218,7 +237,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
-        auto zones = deck()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            deck()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -238,7 +258,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
-        auto zones = hDeck()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            hDeck()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
         // Focused window (first) should be taller than trailing peek zones
@@ -264,7 +285,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = zen()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            zen()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
         // All zones should have same width (centered column)
@@ -289,7 +311,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = zen()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            zen()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -312,7 +335,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
-        auto zones = focusSidebar()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = focusSidebar()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -330,7 +354,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
-        auto zones = focusSidebar()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = focusSidebar()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -340,7 +365,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
-        auto zones = focusSidebar()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = focusSidebar()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -363,7 +389,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.65);
-        auto zones = floatingCenter()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = floatingCenter()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
         // Center zone (index 0) should be inside the screen, not touching edges
@@ -376,7 +403,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.65);
-        auto zones = floatingCenter()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = floatingCenter()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -389,7 +417,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.65);
-        auto zones = floatingCenter()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = floatingCenter()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -410,7 +439,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.8);
-        auto zones = paper()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            paper()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
         // All pages should have the same width (or very close due to rounding)
@@ -431,7 +461,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.8);
-        auto zones = paper()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            paper()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -451,7 +482,8 @@ private Q_SLOTS:
     void testTatami_twoWindows()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -461,7 +493,8 @@ private Q_SLOTS:
     void testTatami_threeWindows()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -470,7 +503,8 @@ private Q_SLOTS:
     void testTatami_fourWindows()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -479,7 +513,8 @@ private Q_SLOTS:
     void testTatami_fiveWindows()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -488,7 +523,8 @@ private Q_SLOTS:
     void testTatami_withGaps()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -503,7 +539,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
         QRect tiny(0, 0, 50, 50);
-        auto zones = deck()->calculateZones(makeParams(3, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = deck()->calculateZones(makeParams(3, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(allWithinBounds(zones, tiny));
     }
@@ -513,7 +549,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
         QRect tiny(0, 0, 50, 50);
-        auto zones = hDeck()->calculateZones(makeParams(3, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = hDeck()->calculateZones(makeParams(3, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(allWithinBounds(zones, tiny));
     }
@@ -523,7 +559,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
         QRect tiny(0, 0, 50, 50);
-        auto zones = zen()->calculateZones(makeParams(3, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = zen()->calculateZones(makeParams(3, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -536,7 +572,8 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
         QRect narrow(0, 0, 100, 30);
-        auto zones = focusSidebar()->calculateZones(makeParams(3, narrow, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            focusSidebar()->calculateZones(makeParams(3, narrow, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -548,7 +585,7 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         QRect tiny(0, 0, 50, 50);
-        auto zones = tatami()->calculateZones(makeParams(4, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(makeParams(4, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -561,7 +598,7 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.8);
         QRect tiny(0, 0, 30, 100);
-        auto zones = paper()->calculateZones(makeParams(3, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = paper()->calculateZones(makeParams(3, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(allWithinBounds(zones, tiny));
     }
@@ -571,7 +608,8 @@ private Q_SLOTS:
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.65);
         QRect tiny(0, 0, 50, 50);
-        auto zones = floatingCenter()->calculateZones(makeParams(3, tiny, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            floatingCenter()->calculateZones(makeParams(3, tiny, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -587,7 +625,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
-        auto zones = deck()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            deck()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -596,7 +635,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones = zen()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            zen()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -605,7 +645,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.7);
-        auto zones = focusSidebar()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = focusSidebar()->calculateZones(
+            makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -613,7 +654,8 @@ private Q_SLOTS:
     void testTatami_largeCount()
     {
         TilingState state(QStringLiteral("test"));
-        auto zones = tatami()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = tatami()->calculateZones(
+            makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -622,7 +664,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.8);
-        auto zones = paper()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = paper()->calculateZones(
+            makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -631,8 +674,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.65);
-        auto zones =
-            floatingCenter()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = floatingCenter()->calculateZones(
+            makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }
@@ -641,7 +684,8 @@ private Q_SLOTS:
     {
         TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.75);
-        auto zones = hDeck()->calculateZones(makeParams(20, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = hDeck()->calculateZones(
+            makeParams(20, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 20);
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
     }

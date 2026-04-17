@@ -286,7 +286,7 @@ private Q_SLOTS:
         overrides[QStringLiteral("OuterGapBottom")] = 5;
         engine.applyPerScreenConfig(screen, overrides);
 
-        EdgeGaps gaps = engine.effectiveOuterGaps(screen);
+        ::PhosphorLayout::EdgeGaps gaps = engine.effectiveOuterGaps(screen);
         QCOMPARE(gaps.top, 20);
         QCOMPARE(gaps.bottom, 5);
         // Left and right fall back to the global uniform outer gap (10),

@@ -410,7 +410,8 @@ private Q_SLOTS:
         tree->insertAtEnd(QStringLiteral("win3"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -429,7 +430,8 @@ private Q_SLOTS:
         state.addWindow(QStringLiteral("win3"));
 
         // No split tree set — should fall back to stateless dwindle
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
 
         for (const QRect& zone : zones) {
@@ -452,7 +454,8 @@ private Q_SLOTS:
         tree->insertAtEnd(QStringLiteral("win2"));
         state.setSplitTree(std::move(tree));
 
-        auto zones = algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones =
+            algo->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
     }
 
