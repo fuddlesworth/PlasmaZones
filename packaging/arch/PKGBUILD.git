@@ -76,7 +76,7 @@ package() {
         "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
 
     # Package ships libPhosphorLayoutApi.so*, libPhosphorZones.so*,
-    # libPhosphorConfig.so*, libPhosphorShell.so*, libPhosphorRendering.so*,
-    # and libPhosphorLayer.so* plus their CMake config and headers
-    # (installed by `cmake --install` above).
+    # libPhosphorTiles.so*, libPhosphorConfig.so*, libPhosphorShell.so*,
+    # libPhosphorRendering.so*, and libPhosphorLayer.so* plus their CMake
+    # config and headers (installed by `cmake --install` above).
 }
