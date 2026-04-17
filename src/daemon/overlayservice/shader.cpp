@@ -10,6 +10,10 @@
 #include "../../core/utils.h"
 #include "../../core/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
+#include "pz_roles.h"
+
+#include <PhosphorLayer/ILayerShellTransport.h>
+#include <PhosphorLayer/Surface.h>
 #include <QQuickWindow>
 #include <QScreen>
 #include <QQmlEngine>
@@ -22,9 +26,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <PhosphorShell/LayerSurface.h>
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
@@ -331,19 +332,23 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewScreenId = screenId;
 
-    auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-    if (!layerSurface) {
-        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
+    auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr;
+    if (!handle) {
+        qCWarning(lcOverlay) << "showShaderPreview: no transport handle for preview surface"
                              << "— layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
         createShaderPreviewWindow(screen, screenId);
-        if (!m_shaderPreviewWindow) {
+        if (!m_shaderPreviewSurface || !m_shaderPreviewWindow) {
+            // Belt-and-braces: createShaderPreviewWindow sets both fields
+            // atomically, but a future refactor that split them could leave
+            // a non-null surface with a null window — `setWidth` on a null
+            // window would crash. Guard both.
             return;
         }
-        layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-        if (!layerSurface) {
-            qCWarning(lcOverlay) << "showShaderPreview: recreated window still has no LayerSurface — aborting";
+        handle = m_shaderPreviewSurface->transport();
+        if (!handle) {
+            qCWarning(lcOverlay) << "showShaderPreview: recreated surface still has no transport — aborting";
             return;
         }
     }
@@ -351,13 +356,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     {
         // For virtual screens, margins are relative to the physical screen origin,
         // not the virtual screen origin (LayerShell positions within the physical output).
-        const QRect physGeom = screen->geometry();
-        const int marginLeft = x - physGeom.x();
-        const int marginTop = y - physGeom.y();
-        // Batch anchors + margins into a single propertiesChanged() emission
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+        const auto placement = layerPlacementAt(QPoint(x, y), screen->geometry());
+        handle->setAnchors(placement.anchors);
+        handle->setMargins(placement.margins);
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -406,12 +407,10 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             // Size only — position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
-            if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
-                // Margins are relative to the physical screen origin (LayerShell)
-                const QRect physGeom = screen->geometry();
-                const int marginLeft = x - physGeom.x();
-                const int marginTop = y - physGeom.y();
-                layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+            if (auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr) {
+                // Margins are relative to the physical screen origin (LayerShell).
+                // Anchors were baked in at attach; only margins mutate here.
+                handle->setMargins(layerPlacementAt(QPoint(x, y), screen->geometry()).margins);
             }
         }
     }
@@ -441,7 +440,7 @@ void OverlayService::hideShaderPreview()
 
 void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& screenId)
 {
-    if (m_shaderPreviewWindow) {
+    if (m_shaderPreviewSurface) {
         return;
     }
 
@@ -451,40 +450,35 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
     placeholder.fill(Qt::transparent);
     QVariantMap initProps;
     initProps.insert(QStringLiteral("labelsTexture"), QVariant::fromValue(placeholder));
+    initProps.insert(QStringLiteral("isShaderOverlay"), true);
 
-    auto* window = createQmlWindow(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen,
-                                   "shader preview overlay", initProps);
-    if (!window) {
-        qCWarning(lcOverlay) << "Failed to create shader preview overlay window";
-        return;
-    }
-
-    window->setProperty("isShaderOverlay", true);
-
+    // Unique-per-instance scope to avoid compositor-side rate limiting when the
+    // editor rapidly opens/closes the Shader Settings dialog.
     const QString scopeId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
-    if (!configureLayerSurface(
-            window, screen, LayerSurface::LayerOverlay, LayerSurface::KeyboardInteractivityNone,
-            QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration))) {
-        qCWarning(lcOverlay) << "Failed to configure layer surface for shader preview on" << scopeId;
-        window->deleteLater();
+    const auto role = PzRoles::ShaderPreview.withScopePrefix(
+        QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
+
+    auto* surface = createLayerSurface(QUrl(QStringLiteral("qrc:/ui/RenderNodeOverlay.qml")), screen, role,
+                                       "shader preview overlay", initProps);
+    if (!surface) {
         return;
     }
 
-    m_shaderPreviewWindow = window;
+    m_shaderPreviewSurface = surface;
+    m_shaderPreviewWindow = surface->window();
     m_shaderPreviewScreen = screen;
-    window->setVisible(false);
+    // Surface starts in State::Hidden (warmed) — caller flips visible later.
 }
 
 void OverlayService::destroyShaderPreviewWindow()
 {
-    if (m_shaderPreviewWindow) {
-        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're destroying
-        if (m_shaderPreviewScreen) {
+    if (m_shaderPreviewSurface) {
+        // Disconnect so no signals (e.g. geometryChanged) are delivered to a window we're tearing down.
+        if (m_shaderPreviewScreen && m_shaderPreviewWindow) {
             disconnect(m_shaderPreviewScreen, nullptr, m_shaderPreviewWindow, nullptr);
         }
-        m_shaderPreviewWindow->close();
-        m_shaderPreviewWindow->destroy();
-        m_shaderPreviewWindow->deleteLater();
+        m_shaderPreviewSurface->deleteLater();
+        m_shaderPreviewSurface = nullptr;
         m_shaderPreviewWindow = nullptr;
     }
     m_shaderPreviewScreen = nullptr;

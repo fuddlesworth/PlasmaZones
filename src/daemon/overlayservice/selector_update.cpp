@@ -17,9 +17,6 @@
 #include <QQuickWindow>
 #include <QQuickItem>
 #include <QQmlEngine>
-#include <PhosphorShell/LayerSurface.h>
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
@@ -97,25 +94,18 @@ void applyZoneSelectorLayout(QQuickWindow* window, const ZoneSelectorLayout& lay
     writeQmlProperty(window, QStringLiteral("barHeight"), layout.barHeight);
 }
 
-// Set the zone selector window size for the computed layout.
-// Positioning is handled by layer surface anchors + margins (set in updateZoneSelectorWindow),
-// NOT by setX()/setY() — those are no-ops on layer surfaces since the compositor controls placement.
-// We only set width/height here, which the QPA plugin forwards via zwlr_layer_surface_v1_set_size.
-void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, const ZoneSelectorLayout& layout,
-                               ZoneSelectorPosition pos)
+// Size the zone selector window to fill the entire (virtual) screen.
+// With AnchorAll the compositor sizes the surface to the full output;
+// the QML root uses internal anchors (selectorPosition state) to position
+// the visible bar in the chosen corner of the transparent window.
+void applyZoneSelectorGeometry(QQuickWindow* window, const QRect& screenGeom, const ZoneSelectorLayout& /*layout*/,
+                               ZoneSelectorPosition /*pos*/)
 {
     if (!window || !screenGeom.isValid()) {
         return;
     }
-
-    if (pos == ZoneSelectorPosition::Center) {
-        // Fill the entire screen; QML "center" state positions the container in the middle
-        window->setWidth(screenGeom.width());
-        window->setHeight(screenGeom.height());
-    } else {
-        window->setWidth(layout.barWidth);
-        window->setHeight(layout.barHeight);
-    }
+    window->setWidth(screenGeom.width());
+    window->setHeight(screenGeom.height());
 }
 
 } // namespace
@@ -205,110 +195,10 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Update computed properties that depend on layout and settings
     updateZoneSelectorComputedProperties(window, screen, screenId, config, m_settings, layout);
 
-    if (auto* layerSurface = LayerSurface::find(window)) {
-        const int screenW = screenGeom.width();
-        const int screenH = screenGeom.height();
-        const int hMargin = std::max(0, (screenW - layout.barWidth) / 2);
-        const int vMargin = std::max(0, (screenH - layout.barHeight) / 2);
-
-        // Virtual screen offsets: margins are relative to PHYSICAL screen edges.
-        // For virtual screens, add the offset from each physical edge.
-        // setX/setY in applyZoneSelectorGeometry provides position hints for mapFromGlobal;
-        // margins are what the compositor actually uses for rendering on Wayland.
-        const QRect physGeom = screen->geometry();
-        const int vsLeftOff = screenGeom.x() - physGeom.x();
-        const int vsTopOff = screenGeom.y() - physGeom.y();
-        const int vsRightOff = physGeom.right() - screenGeom.right();
-        const int vsBottomOff = physGeom.bottom() - screenGeom.bottom();
-
-        // exclusiveZone(-1) ignores panel geometry; the popup renders at absolute screen
-        // coordinates over any panels, so hover coordinates match (no offset mismatch).
-
-        // Anchors use the shared helper (single source of truth for position→anchors mapping)
-        LayerSurface::Anchors anchors = getAnchorsForPosition(pos);
-
-        // Margins are position-specific: center the bar within the anchored region.
-        // Virtual screen offsets are added to confine positioning within the virtual
-        // screen region of the physical monitor.
-        QMargins margins;
-        switch (pos) {
-        case ZoneSelectorPosition::TopLeft:
-            margins = QMargins(vsLeftOff + 0, vsTopOff + 0, vsRightOff + screenW - layout.barWidth,
-                               vsBottomOff + screenH - layout.barHeight);
-            break;
-        case ZoneSelectorPosition::Top:
-            margins = QMargins(vsLeftOff + hMargin, vsTopOff + 0, vsRightOff + hMargin,
-                               vsBottomOff + std::max(0, screenH - layout.barHeight));
-            break;
-        case ZoneSelectorPosition::TopRight:
-            margins = QMargins(vsLeftOff + screenW - layout.barWidth, vsTopOff + 0, vsRightOff + 0,
-                               vsBottomOff + screenH - layout.barHeight);
-            break;
-        case ZoneSelectorPosition::Left:
-            margins = QMargins(vsLeftOff + 0, vsTopOff + vMargin, vsRightOff + 0, vsBottomOff + vMargin);
-            break;
-        case ZoneSelectorPosition::Right:
-            margins = QMargins(vsLeftOff + screenW - layout.barWidth, vsTopOff + vMargin, vsRightOff + 0,
-                               vsBottomOff + vMargin);
-            break;
-        case ZoneSelectorPosition::BottomLeft:
-            margins = QMargins(vsLeftOff + 0, vsTopOff + screenH - layout.barHeight,
-                               vsRightOff + screenW - layout.barWidth, vsBottomOff + 0);
-            break;
-        case ZoneSelectorPosition::Bottom:
-            margins = QMargins(vsLeftOff + hMargin, vsTopOff + std::max(0, screenH - layout.barHeight),
-                               vsRightOff + hMargin, vsBottomOff + 0);
-            break;
-        case ZoneSelectorPosition::BottomRight:
-            margins = QMargins(vsLeftOff + screenW - layout.barWidth, vsTopOff + screenH - layout.barHeight,
-                               vsRightOff + 0, vsBottomOff + 0);
-            break;
-        case ZoneSelectorPosition::Center:
-            margins = QMargins(vsLeftOff, vsTopOff, vsRightOff, vsBottomOff);
-            break;
-        default:
-            // Default to Top margins (matches getAnchorsForPosition default)
-            margins = QMargins(vsLeftOff + hMargin, vsTopOff + 0, vsRightOff + hMargin,
-                               vsBottomOff + std::max(0, screenH - layout.barHeight));
-            break;
-        }
-        // Clamp individual margin components to prevent underflow on narrow virtual screens
-        margins = QMargins(qMax(0, margins.left()), qMax(0, margins.top()), qMax(0, margins.right()),
-                           qMax(0, margins.bottom()));
-        // Clamp margins to prevent negative window dimensions
-        int totalHMargin = margins.left() + margins.right();
-        if (totalHMargin >= physGeom.width()) {
-            // Fall back to centering within the virtual screen
-            margins.setLeft(vsLeftOff);
-            margins.setRight(vsRightOff);
-        }
-        int totalVMargin = margins.top() + margins.bottom();
-        if (totalVMargin >= physGeom.height()) {
-            margins.setTop(vsTopOff);
-            margins.setBottom(vsBottomOff);
-        }
-
-        // Guard against unusably narrow/short popup on very small virtual screens.
-        // If the available dimension after margins is below MinUsablePopupSize,
-        // fall back to filling the virtual screen area for that axis.
-        constexpr int MinUsablePopupSize = 200;
-        const int availableWidth = physGeom.width() - margins.left() - margins.right();
-        if (availableWidth < MinUsablePopupSize) {
-            margins.setLeft(vsLeftOff);
-            margins.setRight(vsRightOff);
-        }
-        const int availableHeight = physGeom.height() - margins.top() - margins.bottom();
-        if (availableHeight < MinUsablePopupSize) {
-            margins.setTop(vsTopOff);
-            margins.setBottom(vsBottomOff);
-        }
-
-        // Batch anchors + margins into a single propertiesChanged() emission
-        // to avoid a one-frame glitch with new anchors but old margins.
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(anchors);
-        layerSurface->setMargins(margins);
-    }
+    // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
+    // selectorPosition state anchors the inner container to the requested
+    // corner of the full-screen transparent surface. Anchors/margins are
+    // baked at attach time (AnchorAll) and never mutated afterwards.
     applyZoneSelectorGeometry(window, screenGeom, layout, pos);
 
     // Keep stored geometry in sync so hit-testing uses the current value

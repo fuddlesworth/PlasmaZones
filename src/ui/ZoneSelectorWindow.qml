@@ -14,8 +14,10 @@ import org.plasmazones.common as QFZCommon
  * Styled similar to KZones for consistent KDE UX
  */
 Window {
-    // Whether ScrollView is needed
-    // Border radius in pixels
+    // Do NOT requestActivate() — this surface is created with
+    // KeyboardInteractivity::None (PzRoles::ZoneSelector) so the
+    // compositor cannot grant it focus anyway. The call is a no-op
+    // at best and may log warnings on strict compositors.
 
     id: root
 
@@ -26,6 +28,11 @@ Window {
     // Selected zone tracking
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
+    // Minimum on-screen pixel size for a hit-testable zone. MUST stay
+    // equal to the C++ hit-test clamp in overlayservice/selector.cpp
+    // (updateSelectorPosition); the two values together define the
+    // visual-vs-logical agreement contract.
+    property int minZoneSize: 8
     // Cursor position (updated from C++ during drag)
     property int cursorX: -1
     property int cursorY: -1
@@ -88,10 +95,17 @@ Window {
     property int scaledBorderWidth: 1
     property int scaledBorderRadius: 2
     property bool locked: false
-    // Appearance properties - unified with ZoneOverlay/ZoneItem for consistent look
-    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.7)
-    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.9)
+    // Appearance properties - unified with ZoneOverlay/ZoneItem for consistent look.
+    // These values are visible only in the brief window between componentComplete
+    // and the first writeColorSettings() from C++ (PlasmaZones::OverlayService).
+    // They use the same numeric alphas as ConfigDefaults so a regression that
+    // skips the C++ property push doesn't flash a jarringly different colour.
+    readonly property real _fallbackHighlightAlpha: 0.7
+    readonly property real _fallbackInactiveAlpha: 0.4
+    readonly property real _fallbackBorderAlpha: 0.9
+    property color highlightColor: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, _fallbackHighlightAlpha)
+    property color inactiveColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackInactiveAlpha)
+    property color borderColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, _fallbackBorderAlpha)
     property string fontFamily: ""
     property real fontSizeScale: 1
     property int fontWeight: Font.Bold
@@ -120,9 +134,29 @@ Window {
         }
     }
 
+    function show() {
+        showAnimation.stop();
+        hideAnimation.stop();
+        contentWrapper.opacity = 0;
+        root.visible = true;
+        showAnimation.start();
+    }
+
+    function hide() {
+        showAnimation.stop();
+        // Reset cursor state so autoScrollTimer doesn't tick on stale
+        // coordinates between hide and the next show().
+        root.cursorX = -1;
+        root.cursorY = -1;
+        if (root.visible)
+            hideAnimation.start();
+
+    }
+
     // Window configuration for overlay - QPA layer-shell plugin handles layering on Wayland
     flags: Qt.FramelessWindowHint | Qt.Tool
     color: "transparent"
+    visible: false
 
     // Animation constants
     QtObject {
@@ -130,6 +164,37 @@ Window {
 
         readonly property int shortDuration: 150
         readonly property int normalDuration: 200
+    }
+
+    ParallelAnimation {
+        id: showAnimation
+
+        NumberAnimation {
+            target: contentWrapper
+            property: "opacity"
+            from: 0
+            to: 1
+            duration: animationConstants.shortDuration
+            easing.type: Easing.OutCubic
+        }
+
+    }
+
+    SequentialAnimation {
+        id: hideAnimation
+
+        NumberAnimation {
+            target: contentWrapper
+            property: "opacity"
+            to: 0
+            duration: animationConstants.shortDuration
+            easing.type: Easing.InCubic
+        }
+
+        ScriptAction {
+            script: root.visible = false
+        }
+
     }
 
     // Auto-scroll constants for drag-based scrolling.
@@ -189,339 +254,363 @@ Window {
         }
     }
 
-    // Main container - uses States for proper anchor management
-    // Conditional anchors with undefined don't reliably unset in QML
-    QFZCommon.PopupFrame {
-        // Scroll fade indicators — show gradient edges when content overflows
+    // Content wrapper for opacity animation — mirrors LayoutPickerOverlay
+    // pattern. Wrapping in an Item lets the show animation fade the visible
+    // tree from 0→1 without animating root.opacity (which would emit Wayland
+    // setOpacity warnings on layer-shell surfaces).
+    Item {
+        id: contentWrapper
 
-        id: container
+        anchors.fill: parent
+        opacity: 0
 
-        objectName: "zoneSelectorContainer"
-        width: root.containerWidth
-        height: root.containerHeight
-        backgroundColor: root.backgroundColor
-        textColor: root.textColor
-        containerRadius: root.containerRadius
-        // State based on selectorPosition (0-8 grid)
-        // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 4=Center, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
-        state: {
-            switch (selectorPosition) {
-            case 0:
-                return "topLeft";
-            case 1:
-                return "top";
-            case 2:
-                return "topRight";
-            case 3:
-                return "left";
-            case 4:
-                return "center";
-            case 5:
-                return "right";
-            case 6:
-                return "bottomLeft";
-            case 7:
-                return "bottom";
-            case 8:
-                return "bottomRight";
-            default:
-                return "top";
+        // Main container - uses States for proper anchor management
+        // Conditional anchors with undefined don't reliably unset in QML
+        QFZCommon.PopupFrame {
+            // Scroll fade indicators — show gradient edges when content overflows
+
+            id: container
+
+            objectName: "zoneSelectorContainer"
+            width: root.containerWidth
+            height: root.containerHeight
+            backgroundColor: root.backgroundColor
+            textColor: root.textColor
+            containerRadius: root.containerRadius
+            // State based on selectorPosition (0-8 grid)
+            // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 4=Center, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
+            state: {
+                switch (root.selectorPosition) {
+                case 0:
+                    return "topLeft";
+                case 1:
+                    return "top";
+                case 2:
+                    return "topRight";
+                case 3:
+                    return "left";
+                case 4:
+                    return "center";
+                case 5:
+                    return "right";
+                case 6:
+                    return "bottomLeft";
+                case 7:
+                    return "bottom";
+                case 8:
+                    return "bottomRight";
+                default:
+                    return "top";
+                }
             }
-        }
-        states: [
-            State {
-                name: "topLeft"
+            states: [
+                State {
+                    name: "topLeft"
 
-                AnchorChanges {
-                    target: container
-                    anchors.top: parent.top
-                    anchors.bottom: undefined
-                    anchors.left: parent.left
-                    anchors.right: undefined
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: undefined
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                        anchors.leftMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "top"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                    }
+
+                },
+                State {
+                    name: "topRight"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: parent.top
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.topMargin: root.containerTopMargin
+                        anchors.rightMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "left"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.leftMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "center"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                },
+                State {
+                    name: "right"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: undefined
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.rightMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "bottomLeft"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                        anchors.leftMargin: root.containerSideMargin
+                    }
+
+                },
+                State {
+                    name: "bottom"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: undefined
+                        anchors.right: undefined
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: parent.horizontalCenter
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                    }
+
+                },
+                State {
+                    name: "bottomRight"
+
+                    AnchorChanges {
+                        target: container
+                        anchors.top: undefined
+                        anchors.bottom: parent.bottom
+                        anchors.left: undefined
+                        anchors.right: parent.right
+                        anchors.verticalCenter: undefined
+                        anchors.horizontalCenter: undefined
+                    }
+
+                    PropertyChanges {
+                        target: container
+                        anchors.bottomMargin: root.containerTopMargin
+                        anchors.rightMargin: root.containerSideMargin
+                    }
+
                 }
+            ]
 
-                PropertyChanges {
-                    target: container
-                    anchors.topMargin: root.containerTopMargin
-                    anchors.leftMargin: root.containerSideMargin
-                }
+            // ScrollView wrapper for overflow handling
+            ScrollView {
+                id: scrollView
 
-            },
-            State {
-                name: "top"
+                anchors.centerIn: parent
+                width: root.contentWidth
+                height: root.contentHeight
+                clip: root.needsScrolling || root.needsHorizontalScrolling
+                contentWidth: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
+                contentHeight: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
+                // Only show scrollbars when needed
+                ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+                ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
 
-                AnchorChanges {
-                    target: container
-                    anchors.top: parent.top
-                    anchors.bottom: undefined
-                    anchors.left: undefined
-                    anchors.right: undefined
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
+                // Layout previews grid
+                GridLayout {
+                    id: contentGrid
 
-                PropertyChanges {
-                    target: container
-                    anchors.topMargin: root.containerTopMargin
-                }
+                    objectName: "zoneSelectorContentGrid"
+                    width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
+                    height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
+                    columns: root.layoutColumns
+                    rowSpacing: root.indicatorSpacing
+                    columnSpacing: root.indicatorSpacing
 
-            },
-            State {
-                name: "topRight"
+                    Repeater {
+                        model: root.layouts
 
-                AnchorChanges {
-                    target: container
-                    anchors.top: parent.top
-                    anchors.bottom: undefined
-                    anchors.left: undefined
-                    anchors.right: parent.right
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: undefined
-                }
+                        delegate: Item {
+                            id: indicator
 
-                PropertyChanges {
-                    target: container
-                    anchors.topMargin: root.containerTopMargin
-                    anchors.rightMargin: root.containerSideMargin
-                }
+                            required property var modelData
+                            required property int index
+                            property string layoutId: modelData.id || ""
+                            property bool isActive: layoutId === root.activeLayoutId
+                            property bool hasSelectedZone: root.selectedLayoutId === layoutId
 
-            },
-            State {
-                name: "left"
+                            width: root.indicatorWidth + root.cardSidePadding * 2
+                            height: root.indicatorHeight + root.labelSpace + root.cardPadding
+                            Layout.preferredWidth: width
+                            Layout.preferredHeight: height
 
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: undefined
-                    anchors.left: parent.left
-                    anchors.right: undefined
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: undefined
-                }
-
-                PropertyChanges {
-                    target: container
-                    anchors.leftMargin: root.containerSideMargin
-                }
-
-            },
-            State {
-                name: "center"
-
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: undefined
-                    anchors.left: undefined
-                    anchors.right: undefined
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-            },
-            State {
-                name: "right"
-
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: undefined
-                    anchors.left: undefined
-                    anchors.right: parent.right
-                    anchors.verticalCenter: parent.verticalCenter
-                    anchors.horizontalCenter: undefined
-                }
-
-                PropertyChanges {
-                    target: container
-                    anchors.rightMargin: root.containerSideMargin
-                }
-
-            },
-            State {
-                name: "bottomLeft"
-
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: undefined
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: undefined
-                }
-
-                PropertyChanges {
-                    target: container
-                    anchors.bottomMargin: root.containerTopMargin
-                    anchors.leftMargin: root.containerSideMargin
-                }
-
-            },
-            State {
-                name: "bottom"
-
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: parent.bottom
-                    anchors.left: undefined
-                    anchors.right: undefined
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: parent.horizontalCenter
-                }
-
-                PropertyChanges {
-                    target: container
-                    anchors.bottomMargin: root.containerTopMargin
-                }
-
-            },
-            State {
-                name: "bottomRight"
-
-                AnchorChanges {
-                    target: container
-                    anchors.top: undefined
-                    anchors.bottom: parent.bottom
-                    anchors.left: undefined
-                    anchors.right: parent.right
-                    anchors.verticalCenter: undefined
-                    anchors.horizontalCenter: undefined
-                }
-
-                PropertyChanges {
-                    target: container
-                    anchors.bottomMargin: root.containerTopMargin
-                    anchors.rightMargin: root.containerSideMargin
-                }
-
-            }
-        ]
-
-        // ScrollView wrapper for overflow handling
-        ScrollView {
-            id: scrollView
-
-            anchors.centerIn: parent
-            width: root.contentWidth
-            height: root.contentHeight
-            clip: root.needsScrolling || root.needsHorizontalScrolling
-            contentWidth: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
-            contentHeight: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-            // Only show scrollbars when needed
-            ScrollBar.vertical.policy: root.needsScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-            ScrollBar.horizontal.policy: root.needsHorizontalScrolling ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
-
-            // Layout previews grid
-            GridLayout {
-                id: contentGrid
-
-                objectName: "zoneSelectorContentGrid"
-                width: root.needsHorizontalScrolling ? root.scrollContentWidth : root.contentWidth
-                height: root.needsScrolling ? root.scrollContentHeight : root.contentHeight
-                columns: root.layoutColumns
-                rowSpacing: root.indicatorSpacing
-                columnSpacing: root.indicatorSpacing
-
-                Repeater {
-                    model: root.layouts
-
-                    delegate: Item {
-                        id: indicator
-
-                        required property var modelData
-                        required property int index
-                        property string layoutId: modelData.id || ""
-                        property bool isActive: layoutId === root.activeLayoutId
-                        property bool hasSelectedZone: root.selectedLayoutId === layoutId
-
-                        width: root.indicatorWidth + root.cardSidePadding * 2
-                        height: root.indicatorHeight + root.labelSpace + root.cardPadding
-                        Layout.preferredWidth: width
-                        Layout.preferredHeight: height
-
-                        QFZCommon.LayoutCard {
-                            anchors.fill: parent
-                            layoutData: indicator.modelData
-                            isActive: indicator.isActive
-                            isSelected: indicator.hasSelectedZone
-                            previewWidth: root.indicatorWidth
-                            previewHeight: root.indicatorHeight
-                            // Zone selector features
-                            showIndicatorBar: true
-                            showCardBackground: true
-                            interactive: !(root.locked && !indicator.isActive)
-                            selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
-                            // Zone appearance
-                            zonePadding: root.scaledPadding
-                            edgeGap: root.scaledPadding
-                            minZoneSize: 8
-                            zoneHighlightColor: root.highlightColor
-                            zoneInactiveColor: root.inactiveColor
-                            zoneBorderColor: root.borderColor
-                            inactiveOpacity: root.inactiveOpacity
-                            activeOpacity: root.activeOpacity
-                            hoverScale: 1.05
-                            // Theme
-                            highlightColor: root.highlightColor
-                            textColor: root.textColor
-                            backgroundColor: root.backgroundColor
-                            // Font
-                            fontFamily: root.fontFamily
-                            fontSizeScale: root.fontSizeScale
-                            fontWeight: root.fontWeight
-                            fontItalic: root.fontItalic
-                            fontUnderline: root.fontUnderline
-                            fontStrikeout: root.fontStrikeout
-                            // Animation
-                            animationDuration: animationConstants.normalDuration
-                            shortAnimationDuration: animationConstants.shortDuration
-                            labelTopMargin: root.labelTopMargin
-                            onZoneHovered: function(zoneIndex) {
-                                // Block zone interaction on locked non-active layouts
-                                if (root.locked && !indicator.isActive)
-                                    return ;
-
-                                root.selectedLayoutId = indicator.layoutId;
-                                root.selectedZoneIndex = zoneIndex;
-                                var zones = indicator.modelData.zones || [];
-                                var zone = zones[zoneIndex];
-                                var relGeo = zone ? (zone.relativeGeometry || {
-                                }) : {
-                                };
-                                root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
-                            }
-                        }
-
-                        // Lock overlay for non-active layouts — absorbs all mouse events
-                        Rectangle {
-                            anchors.fill: parent
-                            visible: root.locked && !indicator.isActive
-                            z: 100
-                            color: Qt.rgba(0, 0, 0, 0.5)
-                            radius: Kirigami.Units.largeSpacing
-
-                            Kirigami.Icon {
-                                anchors.centerIn: parent
-                                source: "object-locked"
-                                width: Math.min(parent.width, parent.height) * 0.3
-                                height: width
-                                color: Kirigami.Theme.highlightedTextColor
-                            }
-
-                            MouseArea {
+                            QFZCommon.LayoutCard {
                                 anchors.fill: parent
-                                hoverEnabled: true
-                                cursorShape: Qt.ForbiddenCursor
-                                onClicked: function(mouse) {
-                                    mouse.accepted = true;
+                                layoutData: indicator.modelData
+                                isActive: indicator.isActive
+                                isSelected: indicator.hasSelectedZone
+                                previewWidth: root.indicatorWidth
+                                previewHeight: root.indicatorHeight
+                                // Zone selector features
+                                showIndicatorBar: true
+                                showCardBackground: true
+                                interactive: !(root.locked && !indicator.isActive)
+                                selectedZoneIndex: indicator.hasSelectedZone ? root.selectedZoneIndex : -1
+                                // Zone appearance
+                                zonePadding: root.scaledPadding
+                                edgeGap: root.scaledPadding
+                                minZoneSize: root.minZoneSize
+                                zoneHighlightColor: root.highlightColor
+                                zoneInactiveColor: root.inactiveColor
+                                zoneBorderColor: root.borderColor
+                                inactiveOpacity: root.inactiveOpacity
+                                activeOpacity: root.activeOpacity
+                                hoverScale: 1.05
+                                // Theme
+                                highlightColor: root.highlightColor
+                                textColor: root.textColor
+                                backgroundColor: root.backgroundColor
+                                // Font
+                                fontFamily: root.fontFamily
+                                fontSizeScale: root.fontSizeScale
+                                fontWeight: root.fontWeight
+                                fontItalic: root.fontItalic
+                                fontUnderline: root.fontUnderline
+                                fontStrikeout: root.fontStrikeout
+                                // Animation
+                                animationDuration: animationConstants.normalDuration
+                                shortAnimationDuration: animationConstants.shortDuration
+                                labelTopMargin: root.labelTopMargin
+                                onZoneHovered: function(zoneIndex) {
+                                    // Block zone interaction on locked non-active layouts
+                                    if (root.locked && !indicator.isActive)
+                                        return ;
+
+                                    // Guard: don't re-emit when nothing changed.
+                                    // C++ writes selectedLayoutId/selectedZoneIndex
+                                    // back via property bindings when it hit-tests;
+                                    // without this guard the round-trip would loop
+                                    // through zoneSelected → C++ slot → property
+                                    // write → onZoneHovered fires again.
+                                    if (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === zoneIndex)
+                                        return ;
+
+                                    root.selectedLayoutId = indicator.layoutId;
+                                    root.selectedZoneIndex = zoneIndex;
+                                    var zones = indicator.modelData.zones || [];
+                                    var zone = zones[zoneIndex];
+                                    var relGeo = zone ? (zone.relativeGeometry || {
+                                    }) : {
+                                    };
+                                    root.zoneSelected(indicator.layoutId, root.selectedZoneIndex, relGeo);
                                 }
-                                onPressed: function(mouse) {
-                                    mouse.accepted = true;
+                            }
+
+                            // Lock overlay for non-active layouts — absorbs all mouse events
+                            Rectangle {
+                                anchors.fill: parent
+                                visible: root.locked && !indicator.isActive
+                                z: 100
+                                // Theme-derived scrim rather than raw black so
+                                // light themes get a sensible dim colour too.
+                                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
+                                radius: Kirigami.Units.largeSpacing
+
+                                Kirigami.Icon {
+                                    anchors.centerIn: parent
+                                    source: "object-locked"
+                                    width: Math.min(parent.width, parent.height) * 0.3
+                                    height: width
+                                    color: Kirigami.Theme.highlightedTextColor
                                 }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.ForbiddenCursor
+                                    Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
+                                    onClicked: function(mouse) {
+                                        mouse.accepted = true;
+                                    }
+                                    onPressed: function(mouse) {
+                                        mouse.accepted = true;
+                                    }
+                                }
+
                             }
 
                         }
@@ -532,114 +621,114 @@ Window {
 
             }
 
-        }
+            // Top fade: visible when scrolled down (more content above)
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.left: scrollView.left
+                anchors.right: scrollView.right
+                height: root.indicatorSpacing
+                visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
+                z: 10
 
-        // Top fade: visible when scrolled down (more content above)
-        Rectangle {
-            anchors.top: scrollView.top
-            anchors.left: scrollView.left
-            anchors.right: scrollView.right
-            height: root.indicatorSpacing
-            visible: root.needsScrolling && scrollView.ScrollBar.vertical.position > autoScrollConstants.scrollThreshold
-            z: 10
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: root.fadeColor
+                    }
 
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: root.fadeColor
-                }
+                    GradientStop {
+                        position: 1
+                        color: "transparent"
+                    }
 
-                GradientStop {
-                    position: 1
-                    color: "transparent"
-                }
-
-            }
-
-        }
-
-        // Bottom fade: visible when more content below
-        Rectangle {
-            anchors.bottom: scrollView.bottom
-            anchors.left: scrollView.left
-            anchors.right: scrollView.right
-            height: root.indicatorSpacing
-            visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1 - autoScrollConstants.scrollThreshold)
-            z: 10
-
-            gradient: Gradient {
-                GradientStop {
-                    position: 0
-                    color: "transparent"
-                }
-
-                GradientStop {
-                    position: 1
-                    color: root.fadeColor
                 }
 
             }
 
-        }
+            // Bottom fade: visible when more content below
+            Rectangle {
+                anchors.bottom: scrollView.bottom
+                anchors.left: scrollView.left
+                anchors.right: scrollView.right
+                height: root.indicatorSpacing
+                visible: root.needsScrolling && (scrollView.ScrollBar.vertical.position + scrollView.ScrollBar.vertical.size) < (1 - autoScrollConstants.scrollThreshold)
+                z: 10
 
-        // Left fade: visible when scrolled right (more content to the left)
-        Rectangle {
-            anchors.top: scrollView.top
-            anchors.bottom: scrollView.bottom
-            anchors.left: scrollView.left
-            width: root.indicatorSpacing
-            visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
-            z: 10
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0
+                        color: "transparent"
+                    }
 
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
+                    GradientStop {
+                        position: 1
+                        color: root.fadeColor
+                    }
 
-                GradientStop {
-                    position: 0
-                    color: root.fadeColor
-                }
-
-                GradientStop {
-                    position: 1
-                    color: "transparent"
-                }
-
-            }
-
-        }
-
-        // Right fade: visible when more content to the right
-        Rectangle {
-            anchors.top: scrollView.top
-            anchors.bottom: scrollView.bottom
-            anchors.right: scrollView.right
-            width: root.indicatorSpacing
-            visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1 - autoScrollConstants.scrollThreshold)
-            z: 10
-
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-
-                GradientStop {
-                    position: 0
-                    color: "transparent"
-                }
-
-                GradientStop {
-                    position: 1
-                    color: root.fadeColor
                 }
 
             }
 
-        }
+            // Left fade: visible when scrolled right (more content to the left)
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.bottom: scrollView.bottom
+                anchors.left: scrollView.left
+                width: root.indicatorSpacing
+                visible: root.needsHorizontalScrolling && scrollView.ScrollBar.horizontal.position > autoScrollConstants.scrollThreshold
+                z: 10
 
-        // Empty state
-        Label {
-            anchors.centerIn: parent
-            text: i18n("No layouts available")
-            color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.5)
-            visible: root.layouts.length === 0
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+
+                    GradientStop {
+                        position: 0
+                        color: root.fadeColor
+                    }
+
+                    GradientStop {
+                        position: 1
+                        color: "transparent"
+                    }
+
+                }
+
+            }
+
+            // Right fade: visible when more content to the right
+            Rectangle {
+                anchors.top: scrollView.top
+                anchors.bottom: scrollView.bottom
+                anchors.right: scrollView.right
+                width: root.indicatorSpacing
+                visible: root.needsHorizontalScrolling && (scrollView.ScrollBar.horizontal.position + scrollView.ScrollBar.horizontal.size) < (1 - autoScrollConstants.scrollThreshold)
+                z: 10
+
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+
+                    GradientStop {
+                        position: 0
+                        color: "transparent"
+                    }
+
+                    GradientStop {
+                        position: 1
+                        color: root.fadeColor
+                    }
+
+                }
+
+            }
+
+            // Empty state
+            Label {
+                anchors.centerIn: parent
+                text: i18nc("@info zone selector empty state", "No layouts available")
+                color: Kirigami.Theme.disabledTextColor
+                visible: root.layouts.length === 0
+            }
+
         }
 
     }
