@@ -16,7 +16,7 @@ Version:        0.0.0
 Release:        1%{?dist}
 Summary:        Window tiling and autotiling for KDE Plasma
 
-License:        GPL-3.0-or-later
+License:        GPL-3.0-or-later AND LGPL-2.1-or-later
 URL:            https://github.com/fuddlesworth/PlasmaZones
 Source0:        %{url}/archive/refs/tags/v%{version}/%{name}-%{version}.tar.gz
 
