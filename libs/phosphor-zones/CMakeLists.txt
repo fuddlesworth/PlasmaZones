@@ -12,11 +12,10 @@
 # zones (that's phosphor-snap, future work). It also does NOT include
 # autotile algorithms (phosphor-tile-algo, future work).
 #
-# CURRENT STATE: one remaining cross-layer dep — `<window_id.h>` from
-# `src/compositor-common/` (used by `layout.cpp` for app-rule composite-id
-# parsing).  The carve-out plan is `libs/phosphor-identity/` which will
-# own composite window-id parsing + the AppIdResolver contract; both
-# the KWin effect and this library will depend on it.
+# Self-contained: depends only on Qt6 + PhosphorLayoutApi (PUBLIC) and
+# PhosphorIdentity (PRIVATE — used by Layout::matchAppRule for
+# composite window-id parsing; the dep doesn't leak through any public
+# PhosphorZones header).
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -99,13 +98,6 @@ target_include_directories(PhosphorZones
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
-    PRIVATE
-        # Last remaining PlasmaZones-internal cross-layer include —
-        # libs/phosphor-zones/src/layout.cpp uses <window_id.h> for the
-        # composite-window-id parser shared with the KWin effect.  That
-        # carve-out into libs/phosphor-identity is the next library
-        # extraction; at that point this entry goes away.
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/compositor-common>
 )
 
 target_compile_features(PhosphorZones PUBLIC cxx_std_20)
@@ -115,6 +107,11 @@ target_link_libraries(PhosphorZones
         Qt6::Core
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
+    PRIVATE
+        # Layout::matchAppRule uses PhosphorIdentity::WindowIdUtils for
+        # composite window-id parsing; PRIVATE because the dep doesn't
+        # leak through any public PhosphorZones header.
+        PhosphorIdentity::PhosphorIdentity
 )
 
 set_target_properties(PhosphorZones PROPERTIES

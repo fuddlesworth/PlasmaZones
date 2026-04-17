@@ -133,8 +133,8 @@ stdenv.mkDerivation {
     homepage = "https://github.com/fuddlesworth/PlasmaZones";
     changelog = "https://github.com/fuddlesworth/PlasmaZones/blob/main/CHANGELOG.md";
     # PlasmaZones is GPL-3.0+; bundled PhosphorLayoutApi, PhosphorZones,
-    # PhosphorTiles, PhosphorConfig, PhosphorShell, PhosphorRendering, and
-    # PhosphorLayer libraries are LGPL-2.1+
+    # PhosphorIdentity, PhosphorTiles, PhosphorConfig, PhosphorShell,
+    # PhosphorRendering, and PhosphorLayer libraries are LGPL-2.1+
     license = with lib.licenses; [ gpl3Plus lgpl21Plus ];
     platforms = lib.platforms.linux;
     mainProgram = "plasmazonesd";

@@ -308,6 +308,7 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # config so they stay individually extractable via `git subtree split`
 # when they graduate to standalone repos. Add new libraries to libs/
 # following the same phosphor-<name> convention.
+add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
 add_subdirectory(libs/phosphor-zones)       # manual zone-layout primitives (Zone, Layout, ZoneDetector)
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)

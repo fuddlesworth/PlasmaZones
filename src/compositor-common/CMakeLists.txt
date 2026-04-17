@@ -23,7 +23,9 @@ add_library(plasmazones_compositor_common STATIC
     trigger_parser.h
     screen_id.cpp
     screen_id.h
-    window_id.cpp
+    # window_id moved to libs/phosphor-identity — backward-compat shim
+    # `window_id.h` in this directory forwards to <PhosphorIdentity/WindowId.h>
+    # so the KWin effect's existing `#include "window_id.h"` keeps working.
     window_id.h
     autotile_state.h
     compositor_bridge.h
@@ -44,6 +46,7 @@ target_link_libraries(plasmazones_compositor_common PUBLIC
     Qt6::Core
     Qt6::Gui
     Qt6::DBus
+    PhosphorIdentity::PhosphorIdentity
 )
 
 # C++20 required for std::chrono features
