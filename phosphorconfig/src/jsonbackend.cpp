@@ -78,9 +78,9 @@ QJsonObject navigatePath(const QJsonObject& root, const QStringList& segments)
     return chain.last();
 }
 
-/// Variant of writeAtPath that takes a pre-built chain — lets callers that
-/// already walked the path (e.g. for an equality-skip check) avoid the
-/// second traversal.
+/// Write @p leaf into @p root along the segmented path. Takes a pre-built
+/// chain of intermediate objects so the caller's equality-skip check (which
+/// already walked the path) doesn't pay for a second traversal.
 void writeAtPathWithChain(QJsonObject& root, const QStringList& segments, const QList<QJsonObject>& chain,
                           const QJsonObject& leaf)
 {
@@ -94,14 +94,6 @@ void writeAtPathWithChain(QJsonObject& root, const QStringList& segments, const 
         current = parent;
     }
     root[segments[0]] = current;
-}
-
-void writeAtPath(QJsonObject& root, const QStringList& segments, const QJsonObject& leaf)
-{
-    if (segments.isEmpty()) {
-        return;
-    }
-    writeAtPathWithChain(root, segments, buildDotPathChain(root, segments), leaf);
 }
 
 void removeAtPath(QJsonObject& root, const QStringList& segments)
@@ -416,38 +408,40 @@ void JsonGroup::writeString(const QString& key, const QString& value)
         return;
     }
     QJsonObject obj = groupObject();
-    // A string that parses as JSON array/object is stored as native JSON so
-    // consumers that round-trip complex values via strings don't double-escape.
-    // Callers that need to persist free-form text that might coincidentally
-    // parse as JSON must use @c writeStringRaw (exposed as a per-key flag
-    // via @c KeyDef::verbatimStringStorage at the Store layer).
-    if (!value.isEmpty() && (value.front() == QLatin1Char('[') || value.front() == QLatin1Char('{'))) {
-        QJsonParseError err;
-        QJsonDocument doc = QJsonDocument::fromJson(value.toUtf8(), &err);
-        if (err.error == QJsonParseError::NoError) {
-            if (doc.isArray()) {
-                obj[key] = doc.array();
-            } else if (doc.isObject()) {
-                obj[key] = doc.object();
-            } else {
-                obj[key] = value;
-            }
-            setGroupObject(obj);
-            return;
-        }
-    }
     obj[key] = value;
     setGroupObject(obj);
 }
 
 void JsonGroup::writeStringRaw(const QString& key, const QString& value)
 {
-    if (refuseWrite("writeStringRaw")) {
+    // writeString is now always verbatim; this alias stays for source
+    // compatibility with callers that historically opted out of the
+    // (now-removed) JSON-shape reinterpretation heuristic.
+    writeString(key, value);
+}
+
+void JsonGroup::writeJson(const QString& key, const QJsonValue& value)
+{
+    if (refuseWrite("writeJson")) {
         return;
     }
+    // Store the QJsonValue natively — no string round-trip. Callers that need
+    // structure-preserving storage (e.g. @c Store::write for QVariantList /
+    // QVariantMap, trigger lists, per-algorithm settings) reach through here
+    // instead of relying on data-dependent shape inference in writeString.
     QJsonObject obj = groupObject();
     obj[key] = value;
     setGroupObject(obj);
+}
+
+QJsonValue JsonGroup::readJson(const QString& key, const QJsonValue& defaultValue) const
+{
+    const QJsonObject obj = groupObject();
+    const auto it = obj.constFind(key);
+    if (it == obj.constEnd()) {
+        return defaultValue;
+    }
+    return it.value();
 }
 
 void JsonGroup::writeInt(const QString& key, int value)

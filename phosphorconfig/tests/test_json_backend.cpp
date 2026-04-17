@@ -230,15 +230,57 @@ private Q_SLOTS:
 #endif
     }
 
-    void writeStringRaw_bypassesJsonReshape()
+    void writeString_storesVerbatim()
     {
+        // writeString is always verbatim — no content-dependent reshape.
+        // A string that happens to look like a JSON array survives the
+        // round-trip as the literal text. Structured data takes a different
+        // code path (writeJson) that stores natively.
         JsonBackend b(m_path);
         auto g = b.group(QStringLiteral("G"));
-        // Value that would normally be reinterpreted as a JSON array.
         const QString jsonLike = QStringLiteral("[1,2,3]");
-        g->writeStringRaw(QStringLiteral("raw"), jsonLike);
-        // Re-read — should come back as the original string, not "1,2,3".
+        g->writeString(QStringLiteral("raw"), jsonLike);
         QCOMPARE(g->readString(QStringLiteral("raw")), jsonLike);
+    }
+
+    void writeJson_storesNativeArray()
+    {
+        JsonBackend b(m_path);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QJsonArray arr;
+            arr.append(1);
+            arr.append(2);
+            arr.append(3);
+            g->writeJson(QStringLiteral("structured"), arr);
+        }
+        b.sync();
+
+        // The value must be stored as a native JSON array on disk, not as
+        // a quoted JSON string. External readers inspecting the file should
+        // see the structure directly.
+        QFile f(m_path);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        const QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+        const QJsonValue stored = root.value(QStringLiteral("G")).toObject().value(QStringLiteral("structured"));
+        QVERIFY(stored.isArray());
+        QCOMPARE(stored.toArray().size(), 3);
+    }
+
+    void readJson_roundTripsNativeValue()
+    {
+        JsonBackend b(m_path);
+        {
+            auto g = b.group(QStringLiteral("G"));
+            QJsonObject obj;
+            obj[QLatin1String("k")] = QStringLiteral("v");
+            g->writeJson(QStringLiteral("structured"), obj);
+        }
+
+        auto g = b.group(QStringLiteral("G"));
+        const QJsonValue got = g->readJson(QStringLiteral("structured"));
+        QVERIFY(got.isObject());
+        QCOMPARE(got.toObject().value(QStringLiteral("k")).toString(), QStringLiteral("v"));
     }
 
     void sync_returnsFalseOnInvalidPath()

@@ -141,41 +141,51 @@ private Q_SLOTS:
     // JSON native types — trigger list round-trip
     // =========================================================================
 
-    void testWriteStringWithJsonArray_storesNative()
+    void testWriteJsonArray_storesNative()
     {
+        // writeJson persists the value as a native JSON array on disk so
+        // external tools (migration scripts, text editors) see the structure
+        // without a string-unescape step. writeString is always verbatim,
+        // so callers that want native storage must route through writeJson.
         IsolatedConfigGuard guard;
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        const QString jsonStr = QStringLiteral("[{\"modifier\":2,\"mouseButton\":0}]");
+        QJsonArray arr;
+        QJsonObject entry;
+        entry[QLatin1String("modifier")] = 2;
+        entry[QLatin1String("mouseButton")] = 0;
+        arr.append(entry);
         {
             auto g = backend->group(QStringLiteral("Activation"));
-            g->writeString(QStringLiteral("Triggers"), jsonStr);
+            g->writeJson(QStringLiteral("Triggers"), arr);
         }
-        // readString should return compact JSON
         {
             auto g = backend->group(QStringLiteral("Activation"));
-            QString read = g->readString(QStringLiteral("Triggers"));
-            // Parse both to compare structure (formatting may differ)
-            QJsonDocument expected = QJsonDocument::fromJson(jsonStr.toUtf8());
-            QJsonDocument actual = QJsonDocument::fromJson(read.toUtf8());
-            QCOMPARE(actual, expected);
+            const QJsonValue got = g->readJson(QStringLiteral("Triggers"));
+            QVERIFY(got.isArray());
+            QCOMPARE(got.toArray().size(), 1);
+            QCOMPARE(got.toArray().at(0).toObject().value(QLatin1String("modifier")).toInt(), 2);
         }
     }
 
-    void testWriteStringWithJsonObject_storesNative()
+    void testWriteJsonObject_storesNative()
     {
         IsolatedConfigGuard guard;
         auto backend = PlasmaZones::createDefaultConfigBackend();
-        const QString jsonStr = QStringLiteral("{\"bsp\":{\"splitRatio\":0.5}}");
+        QJsonObject obj;
+        QJsonObject bsp;
+        bsp[QLatin1String("splitRatio")] = 0.5;
+        obj[QLatin1String("bsp")] = bsp;
         {
             auto g = backend->group(QStringLiteral("Autotiling"));
-            g->writeString(QStringLiteral("PerAlgorithm"), jsonStr);
+            g->writeJson(QStringLiteral("PerAlgorithm"), obj);
         }
         {
             auto g = backend->group(QStringLiteral("Autotiling"));
-            QString read = g->readString(QStringLiteral("PerAlgorithm"));
-            QJsonDocument expected = QJsonDocument::fromJson(jsonStr.toUtf8());
-            QJsonDocument actual = QJsonDocument::fromJson(read.toUtf8());
-            QCOMPARE(actual, expected);
+            const QJsonValue got = g->readJson(QStringLiteral("PerAlgorithm"));
+            QVERIFY(got.isObject());
+            QCOMPARE(
+                got.toObject().value(QLatin1String("bsp")).toObject().value(QLatin1String("splitRatio")).toDouble(),
+                0.5);
         }
     }
 

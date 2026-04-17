@@ -263,15 +263,19 @@ private Q_SLOTS:
         QVERIFY(!store.readVariant(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")).isValid());
     }
 
-    void verbatimStringStorage_preservesJsonLookingText()
+    void stringStorage_preservesJsonLookingText()
     {
+        // writeString is always verbatim in the current IBackend contract
+        // (no content-dependent JSON-shape reinterpretation). Strings that
+        // happen to parse as JSON must still round-trip as strings; the
+        // structured-native path is reserved for QVariantList/QVariantMap
+        // values, which the Store routes through writeJson.
         Schema s;
         s.version = 1;
         KeyDef def;
         def.key = QStringLiteral("Raw");
         def.defaultValue = QString();
         def.expectedType = QMetaType::QString;
-        def.verbatimStringStorage = true;
         s.groups[QStringLiteral("G")] = {def};
 
         JsonBackend backend(m_path);
@@ -283,9 +287,34 @@ private Q_SLOTS:
 
         const QString actualJson = QStringLiteral("[1,2,3]");
         store.write(QStringLiteral("G"), QStringLiteral("Raw"), actualJson);
-        // With verbatimStringStorage=true the value must round-trip as a
-        // string, not be re-shaped into a native JSON array.
+        // Valid JSON must ALSO round-trip as the literal string — the old
+        // data-dependent reshape is gone.
         QCOMPARE(store.read<QString>(QStringLiteral("G"), QStringLiteral("Raw")), actualJson);
+    }
+
+    void variantList_roundTripsAsNativeJson()
+    {
+        Schema s;
+        s.version = 1;
+        KeyDef def;
+        def.key = QStringLiteral("Items");
+        def.defaultValue = QVariant(QVariantList{});
+        def.expectedType = QMetaType::QVariantList;
+        s.groups[QStringLiteral("G")] = {def};
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        QVariantList value;
+        value.append(1);
+        value.append(2);
+        value.append(QStringLiteral("three"));
+        store.write(QStringLiteral("G"), QStringLiteral("Items"), value);
+
+        const QVariantList got = store.readVariant(QStringLiteral("G"), QStringLiteral("Items")).toList();
+        QCOMPARE(got.size(), 3);
+        QCOMPARE(got.at(0).toInt(), 1);
+        QCOMPARE(got.at(2).toString(), QStringLiteral("three"));
     }
 
     void write_int64_fallsBackToStringWhenOutOfRange()

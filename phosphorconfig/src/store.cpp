@@ -41,16 +41,8 @@ public:
 
 namespace {
 
-void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool verbatimString)
+void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
 {
-    auto writeStringDispatch = [&](const QString& s) {
-        if (verbatimString) {
-            g.writeStringRaw(key, s);
-        } else {
-            g.writeString(key, s);
-        }
-    };
-
     // Narrowing guard for 64-bit integer types: if the value doesn't fit in
     // a 32-bit int, persist as a string so the value survives the round-trip
     // instead of being silently truncated. IGroup has no writeInt64 today;
@@ -61,7 +53,7 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool v
         } else {
             qWarning("PhosphorConfig::Store: int64 value %lld for key '%s' does not fit in int — storing as string",
                      static_cast<long long>(v), qPrintable(key));
-            writeStringDispatch(QString::number(v));
+            g.writeString(key, QString::number(v));
         }
     };
     auto writeUint64 = [&](qulonglong v) {
@@ -70,7 +62,7 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool v
         } else {
             qWarning("PhosphorConfig::Store: uint64 value %llu for key '%s' does not fit in int — storing as string",
                      static_cast<unsigned long long>(v), qPrintable(key));
-            writeStringDispatch(QString::number(v));
+            g.writeString(key, QString::number(v));
         }
     };
 
@@ -101,26 +93,22 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool v
         g.writeColor(key, value.value<QColor>());
         break;
     case QMetaType::QString:
-        writeStringDispatch(value.toString());
+        g.writeString(key, value.toString());
         break;
     case QMetaType::QVariantList:
-    case QMetaType::QVariantMap: {
-        // Round-trip complex values as compact JSON strings. Backends treat
-        // "looks like JSON" on write as native JSON, so this survives a
-        // save/load cycle as structured data. Always uses the shape-aware
-        // writeString — verbatim storage of structured values makes no
-        // sense and the caller can't have opted in meaningfully anyway.
-        const QJsonDocument doc = value.typeId() == QMetaType::QVariantList
-            ? QJsonDocument(QJsonArray::fromVariantList(value.toList()))
-            : QJsonDocument(QJsonObject::fromVariantMap(value.toMap()));
-        g.writeString(key, QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+        // Native-JSON write: the backend (JsonBackend) stores the array
+        // directly in the JSON document, no string round-trip. QSettings-
+        // backed storage falls back to the stringified default impl.
+        g.writeJson(key, QJsonArray::fromVariantList(value.toList()));
         break;
-    }
+    case QMetaType::QVariantMap:
+        g.writeJson(key, QJsonObject::fromVariantMap(value.toMap()));
+        break;
     default:
         // Fall back to string representation. Consumers that need other
         // exact types should add an expectedType to KeyDef and we can
         // extend the dispatch.
-        writeStringDispatch(value.toString());
+        g.writeString(key, value.toString());
         break;
     }
 }
@@ -148,6 +136,39 @@ QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defa
         return QVariant(g.readDouble(key, defaultValue.toDouble()));
     case QMetaType::QColor:
         return QVariant::fromValue(g.readColor(key, defaultValue.value<QColor>()));
+    case QMetaType::QVariantList: {
+        const QJsonValue v = g.readJson(key);
+        if (v.isArray()) {
+            return QVariant(v.toArray().toVariantList());
+        }
+        // Legacy-string fallback: data written before the native-JSON path
+        // landed (e.g. from a custom pre-refactor migration) may still sit
+        // on disk as a JSON-encoded string. Try to parse before giving up.
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isArray()) {
+                return QVariant(doc.array().toVariantList());
+            }
+        }
+        return defaultValue;
+    }
+    case QMetaType::QVariantMap: {
+        const QJsonValue v = g.readJson(key);
+        if (v.isObject()) {
+            return QVariant(v.toObject().toVariantMap());
+        }
+        const QString raw = g.readString(key);
+        if (!raw.isEmpty()) {
+            QJsonParseError err;
+            const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+            if (err.error == QJsonParseError::NoError && doc.isObject()) {
+                return QVariant(doc.object().toVariantMap());
+            }
+        }
+        return defaultValue;
+    }
     case QMetaType::QString:
     default:
         return QVariant(g.readString(key, defaultValue.toString()));
@@ -289,7 +310,6 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
                  qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
     }
-    const bool verbatimString = def->verbatimStringStorage;
     {
         auto g = d->backend->group(group);
         // Skip the write (and the changed() emission) when the on-disk value
@@ -304,7 +324,7 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
                 return;
             }
         }
-        writeVariantTo(*g, key, coerced, verbatimString);
+        writeVariantTo(*g, key, coerced);
     }
     Q_EMIT changed(group, key);
 }
@@ -322,7 +342,7 @@ void Store::reset(const QString& group, const QString& key)
         // the backend on otherwise-idempotent reset() calls.
         return;
     }
-    writeVariantTo(*g, key, def->defaultValue, def->verbatimStringStorage);
+    writeVariantTo(*g, key, def->defaultValue);
     Q_EMIT changed(group, key);
 }
 
@@ -342,7 +362,7 @@ void Store::resetGroup(const QString& group)
         if (!g->hasKey(def.key)) {
             continue;
         }
-        writeVariantTo(*g, def.key, def.defaultValue, def.verbatimStringStorage);
+        writeVariantTo(*g, def.key, def.defaultValue);
         Q_EMIT changed(group, def.key);
     }
 }

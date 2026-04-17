@@ -6,6 +6,11 @@
 #include <phosphorconfig_export.h>
 
 #include <QColor>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonParseError>
+#include <QJsonValue>
 #include <QString>
 #include <QStringList>
 
@@ -39,34 +44,84 @@ public:
     virtual double readDouble(const QString& key, double defaultValue = 0.0) const = 0;
     virtual QColor readColor(const QString& key, const QColor& defaultValue = {}) const = 0;
 
-    /// Write a string.
+    /// Write a string. Stored verbatim — no content-dependent reinterpretation.
     ///
-    /// IMPORTANT: some backends (notably @c JsonBackend) treat a string that
-    /// starts with @c '[' or @c '{' AND parses as valid JSON as structured
-    /// data, and store it as a native JSON array/object rather than as a
-    /// string. This is useful for callers that round-trip complex values via
-    /// compact-JSON strings (the Store layer uses this for @c QVariantList /
-    /// @c QVariantMap round-trip), but silently reshapes any user-supplied
-    /// free-form text that happens to match the pattern. Use @c writeStringRaw
-    /// for any free-form text where the wire format must be preserved
-    /// verbatim. At the Schema layer, set @c KeyDef::verbatimStringStorage
-    /// to route @c Store::write through @c writeStringRaw automatically.
+    /// Callers that need to persist structured data (array/object) should go
+    /// through @c writeJson, which preserves the native JSON type where the
+    /// backend supports it (JsonBackend stores as a native array/object;
+    /// QSettingsBackend stringifies).
     virtual void writeString(const QString& key, const QString& value) = 0;
     virtual void writeInt(const QString& key, int value) = 0;
     virtual void writeBool(const QString& key, bool value) = 0;
     virtual void writeDouble(const QString& key, double value) = 0;
     virtual void writeColor(const QString& key, const QColor& value) = 0;
 
-    /// Write a string verbatim without any JSON-shape reinterpretation.
+    /// Write a structured JSON value (array/object/scalar) natively where
+    /// supported, or as a compact-JSON string for backends without a native
+    /// representation.
     ///
-    /// @c writeString in the bundled JsonBackend treats a value starting with
-    /// @c '[' or @c '{' that parses as JSON as structured data, storing it as
-    /// a native JSON array/object. That is intentional for callers that
-    /// round-trip complex values via strings, but surprising for callers that
-    /// need to persist user-supplied free-form text that might coincidentally
-    /// parse as JSON. @c writeStringRaw bypasses the heuristic and always
-    /// stores the value as a JSON string. Backends that have no reinterpretation
-    /// may simply forward to @c writeString — the default implementation does.
+    /// The default implementation serializes to a compact JSON string and
+    /// forwards to @c writeString. JsonBackend overrides this to keep the
+    /// value as a native JSON node on disk, which lets external tools (or
+    /// migration code) see the structure directly.
+    virtual void writeJson(const QString& key, const QJsonValue& value)
+    {
+        if (value.isString()) {
+            writeString(key, value.toString());
+            return;
+        }
+        // QJsonDocument only accepts arrays/objects at the root, so wrap
+        // scalars through a QJsonArray and unwrap back to their compact form.
+        QJsonDocument doc;
+        if (value.isArray()) {
+            doc.setArray(value.toArray());
+        } else if (value.isObject()) {
+            doc.setObject(value.toObject());
+        } else {
+            // Null/bool/double: represent as compact JSON via a one-element
+            // array and strip the brackets. The resulting string round-trips
+            // through @c readJson because QJsonDocument::fromJson accepts
+            // bare scalars when wrapped in a container.
+            QJsonArray wrapped;
+            wrapped.append(value);
+            const QByteArray raw = QJsonDocument(wrapped).toJson(QJsonDocument::Compact);
+            // Strip leading '[' and trailing ']'.
+            writeString(key, QString::fromUtf8(raw.mid(1, raw.size() - 2)));
+            return;
+        }
+        writeString(key, QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+    }
+
+    /// Read a structured JSON value. Returns @c defaultValue when the key
+    /// is absent or unparseable.
+    ///
+    /// The default implementation calls @c readString and parses the result.
+    /// JsonBackend overrides to return the native JSON node directly without
+    /// a string round-trip.
+    virtual QJsonValue readJson(const QString& key, const QJsonValue& defaultValue = {}) const
+    {
+        const QString raw = readString(key);
+        if (raw.isEmpty()) {
+            return defaultValue;
+        }
+        // Wrap so QJsonDocument::fromJson accepts bare scalars.
+        const QByteArray wrapped = QByteArray("[") + raw.toUtf8() + QByteArray("]");
+        QJsonParseError err;
+        const QJsonDocument doc = QJsonDocument::fromJson(wrapped, &err);
+        if (err.error != QJsonParseError::NoError) {
+            return defaultValue;
+        }
+        const QJsonArray arr = doc.array();
+        if (arr.size() != 1) {
+            return defaultValue;
+        }
+        return arr.at(0);
+    }
+
+    /// Deprecated alias for @c writeString. Historically bypassed a now-removed
+    /// JSON-shape reinterpretation heuristic; kept as a forwarder so existing
+    /// callers (and the per-KeyDef @c verbatimStringStorage opt-in) compile
+    /// unchanged. New code should use @c writeString directly.
     virtual void writeStringRaw(const QString& key, const QString& value)
     {
         writeString(key, value);

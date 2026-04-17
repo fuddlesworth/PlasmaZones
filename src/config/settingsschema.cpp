@@ -5,6 +5,7 @@
 
 #include "configdefaults.h"
 #include "configmigration.h"
+#include "../autotile/AutotileConfig.h"
 #include "../core/enums.h"
 
 #include <QtGlobal>
@@ -91,6 +92,51 @@ QVariant canonicalCommaList(const QVariant& v)
     parts.removeAll(QString());
     parts.removeDuplicates();
     return QVariant(parts.join(QLatin1Char(',')));
+}
+
+/// Canonicalize a trigger list: cap size, coerce each entry to a
+/// {modifier:int, mouseButton:int} QVariantMap. Runs on every read and
+/// every write so the flush loop enforces the cap even when the setter
+/// path is bypassed (e.g. a hand-edited config file carrying 12 entries).
+///
+/// Mirrors @c Settings::MaxTriggersPerAction — kept inline to avoid a
+/// settings.h dependency from the schema translation unit. If this
+/// constant ever diverges from the one in @c settings.h the cap would
+/// silently drift; a static_assert in settings.cpp pins them together.
+constexpr int kSchemaMaxTriggersPerAction = 4;
+
+QVariant canonicalTriggerList(const QVariant& v)
+{
+    const QVariantList raw = v.toList();
+    QVariantList out;
+    out.reserve(qMin(raw.size(), kSchemaMaxTriggersPerAction));
+    for (const QVariant& entry : raw) {
+        if (out.size() >= kSchemaMaxTriggersPerAction) {
+            break;
+        }
+        // Skip non-map entries instead of coercing them to zero-valued
+        // triggers — matches the legacy reader's "drop malformed" behaviour
+        // so a corrupt config with a string element can't smuggle a
+        // {modifier:0, mouseButton:0} phantom trigger in.
+        if (entry.typeId() != QMetaType::QVariantMap) {
+            continue;
+        }
+        const QVariantMap src = entry.toMap();
+        QVariantMap canon;
+        canon[ConfigKeys::triggerModifierField()] = src.value(ConfigKeys::triggerModifierField(), 0).toInt();
+        canon[ConfigKeys::triggerMouseButtonField()] = src.value(ConfigKeys::triggerMouseButtonField(), 0).toInt();
+        out.append(canon);
+    }
+    return QVariant(out);
+}
+
+/// Canonicalize a per-algorithm settings map: round-trip through
+/// @c AutotileConfig so each algorithm's settings are validated against
+/// its schema and unknown keys are dropped. Idempotent:
+/// @c perAlgoToVariantMap(perAlgoFromVariantMap(x)) == perAlgoToVariantMap(perAlgoFromVariantMap(it)).
+QVariant sanitizePerAlgorithmSettings(const QVariant& v)
+{
+    return QVariant(AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(v.toMap())));
 }
 } // namespace
 
@@ -556,7 +602,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
     // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
     // sub-groups each get their own Schema entry below (or already migrated).
     schema.groups[CD::snappingBehaviorGroup()] = {
-        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::triggersKey(), CD::dragActivationTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
     };
     schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
@@ -566,7 +612,7 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(0, static_cast<int>(DragModifier::CtrlAltMeta))},
-        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
     };
 }
 
@@ -593,7 +639,7 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
         {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
-        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::triggersKey(), CD::snapAssistTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
     };
 }
 
@@ -633,7 +679,7 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
-        {CD::perAlgorithmSettingsKey(), QString(), QMetaType::QString},
+        {CD::perAlgorithmSettingsKey(), QVariantMap{}, QMetaType::QVariantMap, {}, sanitizePerAlgorithmSettings},
     };
 
     schema.groups[CD::tilingBehaviorGroup()] = {
@@ -665,7 +711,7 @@ void appendAutotilingSchema(PhosphorConfig::Schema& schema)
              {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
              static_cast<int>(AutotileOverflowBehavior::Float))},
         {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
-        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::triggersKey(), CD::autotileDragInsertTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
         {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
     };
 

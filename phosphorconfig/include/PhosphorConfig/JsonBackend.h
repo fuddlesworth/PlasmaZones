@@ -41,6 +41,8 @@ public:
     void writeBool(const QString& key, bool value) override;
     void writeDouble(const QString& key, double value) override;
     void writeColor(const QString& key, const QColor& value) override;
+    void writeJson(const QString& key, const QJsonValue& value) override;
+    QJsonValue readJson(const QString& key, const QJsonValue& defaultValue = {}) const override;
     void writeStringRaw(const QString& key, const QString& value) override;
 
     bool hasKey(const QString& key) const override;

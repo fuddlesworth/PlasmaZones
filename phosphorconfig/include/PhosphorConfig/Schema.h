@@ -58,12 +58,11 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     /// `changed()` on every save even when no user change occurred.
     std::function<QVariant(const QVariant& value)> validator;
 
-    /// When true, string writes for this key bypass the JsonBackend
-    /// JSON-shape reinterpretation heuristic — the value is stored verbatim
-    /// as a JSON string even if it happens to start with '[' or '{' and
-    /// parse as JSON. Use for user-supplied free-form text that must survive
-    /// round-trip unchanged. Ignored for non-string writes and for backends
-    /// that don't apply the heuristic (e.g. QSettingsBackend).
+    /// Deprecated. writeString is now always verbatim — no JSON-shape
+    /// reinterpretation. Structured data (QVariantList / QVariantMap) is
+    /// routed through @c IGroup::writeJson, which stores natively in
+    /// backends that support it. This flag is retained so pre-existing
+    /// schemas still compile; it has no effect at runtime.
     bool verbatimStringStorage = false;
 };
 

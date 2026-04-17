@@ -317,6 +317,12 @@ void Settings::save()
     // happened to mutate. Keys that haven't been written yet fall back to
     // the schema default via Store::readVariant, and the write path runs
     // the validator so clamped/normalized values land as the canonical form.
+    //
+    // INVARIANT: this loop iterates schema-declared keys only. Any key
+    // present in the backing store but NOT in the schema is ignored here
+    // and purged separately by @c purgeStaleKeys. @c Store::write rejects
+    // writes to undeclared keys with a warning, so looping over
+    // @c groupList() keys instead would fail closed but noisily.
     const auto& schema = m_store->schema();
     for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
         for (const auto& def : it.value()) {
@@ -1070,43 +1076,18 @@ PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, 
 
 // ── Activation + Behavior (PhosphorConfig::Store-backed) ────────────────────
 
-namespace {
-QVariantList readTriggerList(PhosphorConfig::Store* store, const QString& group, const QString& key,
-                             const QVariantList& fallback)
-{
-    const QString json = store->read<QString>(group, key);
-    if (json.isEmpty()) {
-        return fallback;
-    }
-    QJsonParseError err;
-    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
-    if (err.error != QJsonParseError::NoError || !doc.isArray()) {
-        return fallback;
-    }
-    QVariantList out;
-    for (const QJsonValue& v : doc.array()) {
-        if (v.isObject()) {
-            out.append(v.toObject().toVariantMap());
-        }
-    }
-    return out;
-}
-
-void writeTriggerList(PhosphorConfig::Store* store, const QString& group, const QString& key,
-                      const QVariantList& triggers)
-{
-    QJsonArray arr;
-    for (const QVariant& t : triggers) {
-        const QVariantMap map = t.toMap();
-        QJsonObject obj;
-        obj[ConfigDefaults::triggerModifierField()] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
-        obj[ConfigDefaults::triggerMouseButtonField()] =
-            map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
-        arr.append(obj);
-    }
-    store->write(group, key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
-}
-} // namespace
+// The trigger list schema declares @c QVariantList with the
+// @c canonicalTriggerList validator that caps at @c MaxTriggersPerAction
+// and coerces each entry to {modifier:int, mouseButton:int}. Settings
+// reads via @c Store::readVariant(...).toList() and writes via
+// @c Store::write — the Store routes structured values through
+// @c IGroup::writeJson so they land on disk as native JSON arrays.
+//
+// The schema-side cap is pinned against Settings::MaxTriggersPerAction so
+// a future change to the Settings constant surfaces as a compile error
+// rather than a silent drift between the setter and the validator.
+static_assert(Settings::MaxTriggersPerAction == 4,
+              "MaxTriggersPerAction changed — update kSchemaMaxTriggersPerAction in settingsschema.cpp to match");
 
 PZ_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
@@ -1115,16 +1096,17 @@ PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKe
 
 QVariantList Settings::dragActivationTriggers() const
 {
-    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                           ConfigDefaults::dragActivationTriggers());
+    return m_store->readVariant(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
 }
 void Settings::setDragActivationTriggers(const QVariantList& triggers)
 {
+    // The schema validator (canonicalTriggerList) also caps, but do it here
+    // too so the equality check compares apples-to-apples with the read path.
     const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
     if (dragActivationTriggers() == capped) {
         return;
     }
-    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
+    m_store->write(ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT dragActivationTriggersChanged();
     Q_EMIT settingsChanged();
 }
@@ -1163,8 +1145,7 @@ void Settings::setZoneSpanModifier(DragModifier modifier)
         trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
         triggers = {trigger};
     }
-    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(),
-                     triggers);
+    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(), triggers);
 
     Q_EMIT zoneSpanModifierChanged();
     Q_EMIT zoneSpanTriggersChanged();
@@ -1179,13 +1160,29 @@ void Settings::setZoneSpanModifierInt(int modifier)
 
 QVariantList Settings::zoneSpanTriggers() const
 {
-    QVariantList fallback;
-    QVariantMap trigger;
-    trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(zoneSpanModifier());
-    trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-    fallback.append(trigger);
-    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
-                           ConfigDefaults::triggersKey(), fallback);
+    // When Triggers is absent on disk, synthesize a single-entry list from
+    // the actual ZoneSpanModifier value instead of returning the schema's
+    // static default. That keeps the two settings in sync when only one was
+    // explicitly persisted — e.g. a hand-edited config that sets
+    // ZoneSpanModifier but leaves Triggers untouched should report the
+    // edited modifier through zoneSpanTriggers(), not the compiled default.
+    //
+    // hasKey and zoneSpanModifier() both open a JsonGroup — JsonBackend
+    // enforces a single active group at a time, so sample the modifier
+    // BEFORE grabbing the hasKey group.
+    bool hasTriggers = false;
+    {
+        auto g = m_configBackend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
+        hasTriggers = g->hasKey(ConfigDefaults::triggersKey());
+    }
+    if (!hasTriggers) {
+        QVariantMap trigger;
+        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(zoneSpanModifier());
+        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+        return {trigger};
+    }
+    return m_store->readVariant(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey())
+        .toList();
 }
 void Settings::setZoneSpanTriggers(const QVariantList& triggers)
 {
@@ -1193,8 +1190,7 @@ void Settings::setZoneSpanTriggers(const QVariantList& triggers)
     if (zoneSpanTriggers() == capped) {
         return;
     }
-    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(),
-                     capped);
+    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(), capped);
 
     // Sync legacy modifier member from first trigger with a non-zero modifier.
     DragModifier synced = DragModifier::Disabled;
@@ -1286,8 +1282,8 @@ PZ_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabled
 
 QVariantList Settings::snapAssistTriggers() const
 {
-    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorSnapAssistGroup(),
-                           ConfigDefaults::triggersKey(), ConfigDefaults::snapAssistTriggers());
+    return m_store->readVariant(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey())
+        .toList();
 }
 void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 {
@@ -1295,8 +1291,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
     if (snapAssistTriggers() == capped) {
         return;
     }
-    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(),
-                     capped);
+    m_store->write(ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT snapAssistTriggersChanged();
     Q_EMIT settingsChanged();
 }
@@ -1339,24 +1334,25 @@ PZ_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, aut
 
 QVariantMap Settings::autotilePerAlgorithmSettings() const
 {
-    const QString raw =
-        m_store->read<QString>(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey());
-    if (raw.isEmpty()) {
-        return {};
-    }
-    const QJsonObject obj = QJsonDocument::fromJson(raw.toUtf8()).object();
-    return AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(obj.toVariantMap()));
+    // Schema declares this key as QVariantMap with sanitizePerAlgorithmSettings
+    // as the validator, so read/write both pass through
+    // AutotileConfig::perAlgo{From,To}VariantMap without duplicating the logic
+    // here. The Store routes the map through IGroup::writeJson → native
+    // JSON object on disk.
+    return m_store->readVariant(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey())
+        .toMap();
 }
 void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
 {
+    // Pre-sanitize so the equality check compares against the canonicalised
+    // form (the schema validator would canonicalise on both sides anyway,
+    // but avoiding the redundant write keeps the settingsChanged signal
+    // from firing when a caller writes a semantically equal unsorted map).
     const QVariantMap sanitized = AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(value));
     if (autotilePerAlgorithmSettings() == sanitized) {
         return;
     }
-    const QString json = sanitized.isEmpty()
-        ? QString()
-        : QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(sanitized)).toJson(QJsonDocument::Compact));
-    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey(), json);
+    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey(), sanitized);
     Q_EMIT autotilePerAlgorithmSettingsChanged();
     Q_EMIT settingsChanged();
 }
@@ -1588,8 +1584,7 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
 
 QVariantList Settings::autotileDragInsertTriggers() const
 {
-    return readTriggerList(m_store.get(), ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(),
-                           ConfigDefaults::autotileDragInsertTriggers());
+    return m_store->readVariant(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey()).toList();
 }
 void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
@@ -1597,7 +1592,7 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
     if (autotileDragInsertTriggers() == capped) {
         return;
     }
-    writeTriggerList(m_store.get(), ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
     Q_EMIT autotileDragInsertTriggersChanged();
     Q_EMIT settingsChanged();
 }
