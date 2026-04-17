@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ScriptedAlgorithmJsBuiltins.h"
-#include "core/logging.h"
+#include <PhosphorTiles/ScriptedAlgorithmJsBuiltins.h>
+#include "tileslogging.h"
 #include <QFile>
 #include <QString>
 #include <QTextStream>
@@ -23,12 +23,12 @@ static QString loadBuiltinJs(const QString& name)
 {
     QFile file(QStringLiteral(":/builtins/") + name);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qCCritical(lcAutotile) << "Failed to load builtin JS resource:" << name;
+        qCCritical(PhosphorTiles::lcTilesLib) << "Failed to load builtin JS resource:" << name;
         return QString();
     }
     const QString content = QTextStream(&file).readAll();
     if (content.isEmpty()) {
-        qCCritical(lcAutotile) << "Builtin JS resource is empty:" << name;
+        qCCritical(PhosphorTiles::lcTilesLib) << "Builtin JS resource is empty:" << name;
     }
     Q_ASSERT_X(!content.isEmpty(), "loadBuiltinJs", qPrintable(QStringLiteral("Missing QRC resource: ") + name));
     return content;

@@ -52,18 +52,37 @@ endif()
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# NOTE: This is the initial scaffold commit.  The public-API headers and
-# implementation .cpp files (TilingAlgorithm, AlgorithmRegistry, SplitTree,
-# TilingState, ScriptedAlgorithm*, AutotileLayoutSource) land via `git mv`
-# in the next commit so file history is preserved.  For now the library
-# carries only the local logging category and the umbrella include.
 set(phosphortiles_public_HDRS
     include/PhosphorTiles/PhosphorTiles.h
+    include/PhosphorTiles/AutotileConstants.h
+    include/PhosphorTiles/TilingAlgorithm.h
+    include/PhosphorTiles/TilingState.h
+    include/PhosphorTiles/SplitTree.h
+    include/PhosphorTiles/AlgorithmRegistry.h
+    include/PhosphorTiles/ScriptedAlgorithm.h
+    include/PhosphorTiles/ScriptedAlgorithmHelpers.h
+    include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
+    include/PhosphorTiles/ScriptedAlgorithmLoader.h
+    include/PhosphorTiles/ScriptedAlgorithmSandbox.h
 )
 
 set(phosphortiles_SRCS
+    src/algorithmregistry.cpp
+    src/tilingalgorithm.cpp
+    src/tilingstate.cpp
+    src/tilingstateserialization.cpp
+    src/splittree.cpp
+    src/splittreerebuild.cpp
+    src/splittreeserializer.cpp
+    src/scriptedalgorithm.cpp
+    src/scriptedalgorithmhelpers.cpp
+    src/scriptedalgorithmjsbuiltins.cpp
+    src/scriptedalgorithmloader.cpp
+    src/scriptedalgorithmsandbox.cpp
     src/tileslogging.h
     src/tileslogging.cpp
+    # Builtin JS helpers compiled into the binary as Qt resources.
+    src/builtins.qrc
 )
 
 add_library(PhosphorTiles SHARED

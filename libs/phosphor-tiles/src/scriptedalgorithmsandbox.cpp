@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ScriptedAlgorithmSandbox.h"
-#include "core/logging.h"
+#include <PhosphorTiles/ScriptedAlgorithmSandbox.h>
+#include "tileslogging.h"
 #include <QJSEngine>
 #include <QJSValue>
 #include <QString>
@@ -23,8 +23,8 @@ bool hardenSandbox(QJSEngine* engine)
         if (result.isError()) {
             // Non-critical: logged at debug level to avoid spamming on engines
             // that lack async syntax (V4 SyntaxError on async function is expected)
-            qCDebug(lcAutotile) << "ScriptedAlgorithm: sandbox hardening skipped for" << context << ":"
-                                << result.toString();
+            qCDebug(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm: sandbox hardening skipped for" << context << ":" << result.toString();
         }
     };
 
@@ -33,8 +33,8 @@ bool hardenSandbox(QJSEngine* engine)
     auto criticalEval = [engine](const QString& code, const QString& context) -> bool {
         QJSValue result = engine->evaluate(code);
         if (result.isError()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: CRITICAL sandbox hardening failed for" << context << ":"
-                                  << result.toString();
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm: CRITICAL sandbox hardening failed for" << context << ":" << result.toString();
             return false;
         }
         return true;
@@ -107,8 +107,9 @@ bool hardenSandbox(QJSEngine* engine)
         if (afResult.isError()) {
             const QString errorName = afResult.property(QStringLiteral("name")).toString();
             if (errorName != QLatin1String("SyntaxError")) {
-                qCWarning(lcAutotile) << "ScriptedAlgorithm: CRITICAL sandbox hardening failed for"
-                                      << "AsyncFunction constructor lockdown" << ":" << afResult.toString();
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "ScriptedAlgorithm: CRITICAL sandbox hardening failed for"
+                    << "AsyncFunction constructor lockdown" << ":" << afResult.toString();
                 return false;
             }
             // SyntaxError: engine lacks async support, AsyncFunction is unreachable — safe.
@@ -132,8 +133,8 @@ bool hardenSandbox(QJSEngine* engine)
                                             "Object.freeze(Map.prototype);"
                                             "Object.freeze(Set.prototype);"));
         if (freezeResult.isError()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: prototype freeze failed — sandbox compromised:"
-                                  << freezeResult.toString();
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm: prototype freeze failed — sandbox compromised:" << freezeResult.toString();
             return false;
         }
     }

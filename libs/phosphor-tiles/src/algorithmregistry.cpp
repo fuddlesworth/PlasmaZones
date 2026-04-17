@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "AlgorithmRegistry.h"
-#include "AutotileConstants.h"
-#include "TilingAlgorithm.h"
-#include "TilingState.h"
-#include "core/logging.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include "tileslogging.h"
 
 #include <QCoreApplication>
 #include <QDebug>
@@ -109,8 +109,9 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // to prevent double-free issues. Don't delete - it's still owned under the original ID.
     const QString existingId = findAlgorithmId(algorithm);
     if (!existingId.isEmpty() && existingId != id) {
-        qCWarning(lcAutotile) << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as"
-                              << existingId << "- cannot register as" << id;
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
+            << "- cannot register as" << id;
         // Note: NOT deleting because it's still registered under existingId
         return;
     }
@@ -217,8 +218,8 @@ QList<TilingAlgorithm*> AlgorithmRegistry::allAlgorithms() const
         if (auto* algo = m_algorithms.value(id)) {
             result.append(algo);
         } else {
-            qCWarning(lcAutotile) << "Algorithm ID in registration order not found in map:" << id
-                                  << "- possible registration/unregistration bug";
+            qCWarning(PhosphorTiles::lcTilesLib) << "Algorithm ID in registration order not found in map:" << id
+                                                 << "- possible registration/unregistration bug";
         }
     }
 

@@ -5,6 +5,7 @@
 // Part of GeometryUtils namespace — split from geometryutils.cpp for SRP.
 
 #include "../geometryutils.h"
+#include "autotile/AutotileConstants.h"
 #include "../constants.h"
 #include "../logging.h"
 #include <algorithm>

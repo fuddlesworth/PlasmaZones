@@ -20,12 +20,13 @@
 // PlasmaZones internals.  Re-aliased into namespace PlasmaZones below.
 #include <PhosphorLayoutApi/EdgeGaps.h>
 
-// Algorithm-layer constants live in their own header so the autotile
-// primitives can move into libs/phosphor-tiles/ without dragging
-// PlasmaZones-internal headers along.  Re-included here so any consumer
-// that includes "core/constants.h" continues to see the autotile
-// namespaces without source changes.
-#include "../autotile/AutotileConstants.h"
+// NOTE: AutotileJsonKeys / AutotileDefaults previously lived inline here and
+// were re-exported from <PhosphorTiles/AutotileConstants.h> via a transitive
+// include.  That transitive chain forced every PlasmaZones consumer (including
+// libraries like PhosphorZones that have no use for autotile symbols) to
+// resolve the PhosphorTiles include path.  Consumers that genuinely need the
+// autotile namespaces now include `<PhosphorTiles/AutotileConstants.h>` (or
+// the legacy shim `autotile/AutotileConstants.h`) directly.
 
 namespace PlasmaZones {
 

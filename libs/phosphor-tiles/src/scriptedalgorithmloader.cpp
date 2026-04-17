@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ScriptedAlgorithmLoader.h"
-#include "../AlgorithmRegistry.h"
-#include "ScriptedAlgorithm.h"
-#include "core/logging.h"
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include "tileslogging.h"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -90,15 +90,15 @@ void ScriptedAlgorithmLoader::watchDirectory(const QString& dirPath)
         m_watcher->addPath(file);
     }
 
-    qCInfo(lcAutotile) << "Watching algorithm directory:" << dirPath
-                       << "paths=" << m_watcher->files().size() + m_watcher->directories().size();
+    qCInfo(PhosphorTiles::lcTilesLib) << "Watching algorithm directory:" << dirPath
+                                      << "paths=" << m_watcher->files().size() + m_watcher->directories().size();
 }
 
 void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
 {
     const QString dirPath = userAlgorithmDir();
     if (dirPath.isEmpty()) {
-        qCWarning(lcAutotile) << "Cannot determine user data directory; skipping algorithm dir creation";
+        qCWarning(PhosphorTiles::lcTilesLib) << "Cannot determine user data directory; skipping algorithm dir creation";
         return;
     }
     QDir dir(dirPath);
@@ -107,9 +107,9 @@ void ScriptedAlgorithmLoader::ensureUserDirectoryExists()
             // Restrict user algorithm directory to owner-only access (0700)
             QFile::setPermissions(dir.absolutePath(),
                                   QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-            qCInfo(lcAutotile) << "Created user algorithm directory:" << dir.absolutePath();
+            qCInfo(PhosphorTiles::lcTilesLib) << "Created user algorithm directory:" << dir.absolutePath();
         } else {
-            qCWarning(lcAutotile) << "Failed to create user algorithm directory:" << dir.absolutePath();
+            qCWarning(PhosphorTiles::lcTilesLib) << "Failed to create user algorithm directory:" << dir.absolutePath();
         }
     }
 }
@@ -153,7 +153,7 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     for (auto it = oldScriptIdToPath.constBegin(); it != oldScriptIdToPath.constEnd(); ++it) {
         if (!newScriptIds.contains(it.key())) {
             registry->unregisterAlgorithm(it.key());
-            qCInfo(lcAutotile) << "Unregistered stale scripted algorithm:" << it.key();
+            qCInfo(PhosphorTiles::lcTilesLib) << "Unregistered stale scripted algorithm:" << it.key();
             changed = true;
         }
     }
@@ -170,7 +170,8 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
         }
     }
 
-    qCInfo(lcAutotile) << "Scripted algorithms loaded:" << m_scriptIdToPath.size() << "changed=" << changed;
+    qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size()
+                                      << "changed=" << changed;
     // Always emit — the signal is cheap (listeners just refresh their model)
     // and content-only edits (same IDs/paths but different script body) would
     // otherwise be missed by the old change-detection logic.
@@ -187,7 +188,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         static const QRegularExpression validIdRe(QStringLiteral("^[a-zA-Z0-9_-]+$"));
         const QString baseName = QFileInfo(fullPath).completeBaseName();
         if (!validIdRe.match(baseName).hasMatch()) {
-            qCWarning(lcAutotile) << "Skipping script with invalid filename:" << fullPath;
+            qCWarning(PhosphorTiles::lcTilesLib) << "Skipping script with invalid filename:" << fullPath;
             continue;
         }
         // Create with nullptr parent so the registry takes full ownership
@@ -195,7 +196,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // we delete it explicitly below.
         auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
         if (!algo->isValid()) {
-            qCWarning(lcAutotile) << "Invalid scripted algorithm, skipping:" << fullPath;
+            qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
             continue;
         }
@@ -214,10 +215,11 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         // to prevent silent replacement of a bundled algorithm.
         if (registry->hasAlgorithm(scriptId)) {
             if (isUserDir) {
-                qCWarning(lcAutotile) << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
             } else {
-                qCWarning(lcAutotile) << "Duplicate system script for algorithm:" << scriptId << "from=" << fullPath
-                                      << "— skipping (first registration wins)";
+                qCWarning(PhosphorTiles::lcTilesLib) << "Duplicate system script for algorithm:" << scriptId
+                                                     << "from=" << fullPath << "— skipping (first registration wins)";
                 // Defensive: ensure scriptId is tracked so the stale-removal pass
                 // in scanAndRegister() does not unregister it. In normal operation
                 // the first directory scan already populated m_scriptIdToPath, so
@@ -235,8 +237,8 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         registry->registerAlgorithm(scriptId, algo);
         m_scriptIdToPath[scriptId] = fullPath;
 
-        qCInfo(lcAutotile) << "Registered scripted algorithm:" << scriptId << "from=" << fullPath
-                           << "user=" << isUserDir;
+        qCInfo(PhosphorTiles::lcTilesLib)
+            << "Registered scripted algorithm:" << scriptId << "from=" << fullPath << "user=" << isUserDir;
     }
 }
 
@@ -258,13 +260,13 @@ void ScriptedAlgorithmLoader::setupFileWatcher()
 
 void ScriptedAlgorithmLoader::onDirectoryChanged(const QString& path)
 {
-    qCInfo(lcAutotile) << "Algorithm directory change detected:" << path;
+    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm directory change detected:" << path;
     scheduleRefresh();
 }
 
 void ScriptedAlgorithmLoader::onFileChanged(const QString& path)
 {
-    qCInfo(lcAutotile) << "Algorithm file change detected:" << path;
+    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm file change detected:" << path;
 
     // QFileSystemWatcher drops the watch after atomic rename (new inode).
     // Re-add the path if the file still exists so future edits are caught.
@@ -290,7 +292,7 @@ void ScriptedAlgorithmLoader::scheduleRefresh()
 
 void ScriptedAlgorithmLoader::performDebouncedRefresh()
 {
-    qCInfo(lcAutotile) << "Algorithm directory changed, refreshing...";
+    qCInfo(PhosphorTiles::lcTilesLib) << "Algorithm directory changed, refreshing...";
     // scanAndRegister() emits algorithmsChanged() internally when changed,
     // so we do NOT re-emit here to avoid double signal emission.
     scanAndRegister();
@@ -343,15 +345,15 @@ QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, in
         dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks | QDir::Readable);
     for (const QString& file : files) {
         if (result.size() >= maxFiles) {
-            qCWarning(lcAutotile) << "Reached max file limit (" << maxFiles << ") for directory:" << dirPath
-                                  << "— skipping remaining files";
+            qCWarning(PhosphorTiles::lcTilesLib) << "Reached max file limit (" << maxFiles
+                                                 << ") for directory:" << dirPath << "— skipping remaining files";
             break;
         }
         const QString fullPath = QFileInfo(dirObj.filePath(file)).canonicalFilePath();
         if (fullPath.isEmpty())
             continue;
         if (!fullPath.startsWith(canonicalDir + QLatin1Char('/'))) {
-            qCWarning(lcAutotile) << "Script path escaped directory:" << fullPath;
+            qCWarning(PhosphorTiles::lcTilesLib) << "Script path escaped directory:" << fullPath;
             continue;
         }
         result.append(fullPath);

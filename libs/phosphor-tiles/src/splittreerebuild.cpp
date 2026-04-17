@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "SplitTree.h"
-#include "AutotileConstants.h"
-#include "core/logging.h"
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include "tileslogging.h"
 
 #include <QSet>
 
@@ -60,8 +60,8 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
     // insertAtEndRaw builds a right-leaning chain where N leaves = height N,
     // so N must not exceed MaxRuntimeTreeDepth (recursive traversals bail at depth > MaxRuntimeTreeDepth).
     if (uniqueWindows.size() > MaxRuntimeTreeDepth) {
-        qCWarning(lcAutotile) << "rebuildFromOrder: truncating" << uniqueWindows.size() << "windows to"
-                              << MaxRuntimeTreeDepth;
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "rebuildFromOrder: truncating" << uniqueWindows.size() << "windows to" << MaxRuntimeTreeDepth;
         uniqueWindows.resize(MaxRuntimeTreeDepth);
     }
 
@@ -86,11 +86,13 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
 
     // Restore ratios if leaf count matches
     if (oldLeafCount != leafCount()) {
-        qCDebug(lcAutotile) << "rebuildFromOrder: leaf count changed from" << oldLeafCount << "to" << leafCount()
-                            << "-- skipping ratio restoration, defaultRatio=" << defaultSplitRatio;
+        qCDebug(PhosphorTiles::lcTilesLib)
+            << "rebuildFromOrder: leaf count changed from" << oldLeafCount << "to" << leafCount()
+            << "-- skipping ratio restoration, defaultRatio=" << defaultSplitRatio;
     } else {
         applyInternalNodeParams(m_root.get(), oldRatios, oldDirections, 0);
-        qCDebug(lcAutotile) << "rebuildFromOrder: restored" << oldRatios.size() << "ratios:" << oldRatios;
+        qCDebug(PhosphorTiles::lcTilesLib)
+            << "rebuildFromOrder: restored" << oldRatios.size() << "ratios:" << oldRatios;
     }
 }
 

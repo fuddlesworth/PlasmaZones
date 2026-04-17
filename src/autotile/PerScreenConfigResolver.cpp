@@ -8,6 +8,7 @@
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
 #include "core/constants.h"
+#include "autotile/AutotileConstants.h"
 #include "core/logging.h"
 
 namespace PlasmaZones {

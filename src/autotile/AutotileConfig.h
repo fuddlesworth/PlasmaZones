@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include "autotile/AutotileConstants.h"
 #include "config/configdefaults.h"
 #include "core/enums.h"
 #include <QColor>

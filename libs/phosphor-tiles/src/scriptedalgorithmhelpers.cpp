@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ScriptedAlgorithmHelpers.h"
-#include "../AutotileConstants.h"
-#include "core/logging.h"
+#include <PhosphorTiles/ScriptedAlgorithmHelpers.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include "tileslogging.h"
 #include <QJSValue>
 #include <QRegularExpression>
 #include <QStringView>
@@ -21,22 +21,23 @@ QVector<QRect> jsArrayToRects(const QJSValue& result, const QString& scriptId, i
         return rects;
     const int effectiveLength = std::min(length, maxZones);
     if (length > maxZones)
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: script returned" << length << "zones, truncating to" << maxZones
-                              << "script=" << scriptId;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: script returned" << length << "zones, truncating to"
+                                             << maxZones << "script=" << scriptId;
     rects.reserve(effectiveLength);
 
     for (int i = 0; i < effectiveLength; ++i) {
         const QJSValue elem = result.property(static_cast<quint32>(i));
         // Validate that each element is an object before extracting properties
         if (!elem.isObject()) {
-            qCWarning(lcAutotile) << "Skipping non-object zone element at index" << i;
+            qCWarning(PhosphorTiles::lcTilesLib) << "Skipping non-object zone element at index" << i;
             continue;
         }
         // Skip zones with missing width/height (e.g. script returned partial objects)
         const QJSValue wProp = elem.property(QStringLiteral("width"));
         const QJSValue hProp = elem.property(QStringLiteral("height"));
         if (wProp.isUndefined() || hProp.isUndefined()) {
-            qCWarning(lcAutotile) << "Skipping zone with missing width/height at index" << i << "script=" << scriptId;
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "Skipping zone with missing width/height at index" << i << "script=" << scriptId;
             continue;
         }
         // Clamp x and y to non-negative to prevent off-screen zones
@@ -63,8 +64,9 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
         const QRect& zone = zones[i];
         const QRect bounded = zone.intersected(area);
         if (bounded.isEmpty()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: zone" << i << "outside area, using full area as fallback"
-                                  << "zone=" << zone << "area=" << area << "script=" << scriptId;
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm: zone" << i << "outside area, using full area as fallback"
+                << "zone=" << zone << "area=" << area << "script=" << scriptId;
             clamped.append(area);
             continue;
         }
@@ -148,11 +150,12 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
         } else if (key == QLatin1String("builtinId")) {
             static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));
             if (value.startsWith(QLatin1String("script:"))) {
-                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @builtinId must not start with 'script:'"
-                                      << "value=" << value << "in" << filePath;
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "ScriptedAlgorithm::parseMetadata: @builtinId must not start with 'script:'"
+                    << "value=" << value << "in" << filePath;
             } else if (!builtinIdRe.match(value).hasMatch()) {
-                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: invalid @builtinId" << value << "in"
-                                      << filePath;
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "ScriptedAlgorithm::parseMetadata: invalid @builtinId" << value << "in" << filePath;
             } else {
                 meta.builtinId = value.left(64);
             }
@@ -178,8 +181,9 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 param.maxValue = pm.captured(4).toDouble();
                 param.description = pm.captured(5).left(200).toHtmlEscaped();
                 if (param.minValue > param.maxValue) {
-                    qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param number min" << param.minValue
-                                          << "> max" << param.maxValue << "for" << param.name << "in" << filePath;
+                    qCWarning(PhosphorTiles::lcTilesLib)
+                        << "ScriptedAlgorithm::parseMetadata: @param number min" << param.minValue << "> max"
+                        << param.maxValue << "for" << param.name << "in" << filePath;
                     std::swap(param.minValue, param.maxValue);
                 }
                 meta.customParams.append(param);
@@ -207,23 +211,26 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 }
                 param.description = pm.captured(4).left(200).toHtmlEscaped();
                 if (param.enumOptions.isEmpty()) {
-                    qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for"
-                                          << param.name << "in" << filePath;
+                    qCWarning(PhosphorTiles::lcTilesLib)
+                        << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for" << param.name
+                        << "in" << filePath;
                 } else {
                     if (!param.enumOptions.contains(param.defaultValue.toString())) {
-                        qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: @param enum default"
-                                              << param.defaultValue.toString() << "not in options list for"
-                                              << param.name << "in" << filePath << "— falling back to first option";
+                        qCWarning(PhosphorTiles::lcTilesLib)
+                            << "ScriptedAlgorithm::parseMetadata: @param enum default" << param.defaultValue.toString()
+                            << "not in options list for" << param.name << "in" << filePath
+                            << "— falling back to first option";
                         param.defaultValue = param.enumOptions.first();
                     }
                     meta.customParams.append(param);
                 }
             } else {
-                qCWarning(lcAutotile) << "ScriptedAlgorithm::parseMetadata: malformed @param" << value << "in"
-                                      << filePath;
+                qCWarning(PhosphorTiles::lcTilesLib)
+                    << "ScriptedAlgorithm::parseMetadata: malformed @param" << value << "in" << filePath;
             }
         } else if (key != QLatin1String("icon")) {
-            qCDebug(lcAutotile) << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
+            qCDebug(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm::parseMetadata: unknown metadata key" << key << "in" << filePath;
         }
     }
     return meta;

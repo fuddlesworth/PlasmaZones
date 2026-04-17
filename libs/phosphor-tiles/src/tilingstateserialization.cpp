@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "TilingState.h"
-#include "AutotileConstants.h"
-#include "SplitTree.h"
-#include "core/logging.h"
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/SplitTree.h>
+#include "tileslogging.h"
 #include <QJsonArray>
 
 namespace PlasmaZones {
@@ -101,7 +101,7 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
             // removed from the tree — so we must compare against tiledWindowCount().
             const QStringList leafIds = state->m_splitTree->leafOrder();
             if (leafIds.size() != state->tiledWindowCount()) {
-                qCWarning(lcAutotile) << "SplitTree leaf count mismatch, discarding tree";
+                qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree leaf count mismatch, discarding tree";
                 state->m_splitTree.reset();
             } else {
                 const QStringList tiledWins = state->tiledWindows();
@@ -117,7 +117,8 @@ TilingState* TilingState::fromJson(const QJsonObject& json, QObject* parent)
                     seen.insert(id);
                 }
                 if (!valid) {
-                    qCWarning(lcAutotile) << "SplitTree leaf IDs invalid (missing or duplicate), discarding tree";
+                    qCWarning(PhosphorTiles::lcTilesLib)
+                        << "SplitTree leaf IDs invalid (missing or duplicate), discarding tree";
                     state->m_splitTree.reset();
                 }
             }

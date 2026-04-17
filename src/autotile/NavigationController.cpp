@@ -6,6 +6,7 @@
 #include "AutotileConfig.h"
 #include "TilingState.h"
 #include "core/constants.h"
+#include "autotile/AutotileConstants.h"
 #include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/utils.h"

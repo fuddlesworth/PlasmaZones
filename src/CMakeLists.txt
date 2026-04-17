@@ -156,17 +156,9 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor.h
     dbus/snapadaptor.cpp
     dbus/snapadaptor.h
-    autotile/TilingAlgorithm.cpp
-    autotile/TilingAlgorithm.h
-    autotile/TilingState.cpp
-    autotile/TilingStateSerialization.cpp
-    autotile/TilingState.h
-    autotile/SplitTree.cpp
-    autotile/SplitTreeRebuild.cpp
-    autotile/SplitTreeSerializer.cpp
-    autotile/SplitTree.h
-    autotile/AlgorithmRegistry.cpp
-    autotile/AlgorithmRegistry.h
+    # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
+    # machinery moved to libs/phosphor-tiles/ — shim headers in autotile/ keep
+    # `#include "autotile/AlgorithmRegistry.h"` etc. working for in-tree consumers.
     autotile/AutotileConfig.cpp
     autotile/AutotileConfig.h
     autotile/AutotileEngine.cpp
@@ -181,18 +173,7 @@ set(plasmazones_core_SRCS
     autotile/SettingsBridge.h
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
-    autotile/algorithms/ScriptedAlgorithm.cpp
-    autotile/algorithms/ScriptedAlgorithm.h
-    autotile/algorithms/ScriptedAlgorithmHelpers.cpp
-    autotile/algorithms/ScriptedAlgorithmHelpers.h
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
-    autotile/algorithms/ScriptedAlgorithmLoader.cpp
-    # Builtin JS helpers compiled into the binary as Qt resources
-    autotile/algorithms/builtins.qrc
-    autotile/algorithms/ScriptedAlgorithmLoader.h
-    autotile/algorithms/ScriptedAlgorithmSandbox.cpp
-    autotile/algorithms/ScriptedAlgorithmSandbox.h
+    # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapnavigationadapter.cpp
@@ -241,6 +222,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorShell::PhosphorShell
+        PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones
     PRIVATE
         Wayland::Client

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "SplitTree.h"
-#include "AutotileConstants.h"
-#include "core/logging.h"
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include "tileslogging.h"
 
 #include <QJsonObject>
 #include <QLatin1String>
@@ -54,7 +54,7 @@ QJsonObject SplitTree::nodeToJson(const SplitNode* node, int depth)
     }
 
     if (depth >= MaxDeserializationDepth) {
-        qCWarning(lcAutotile) << "SplitTree::nodeToJson: max depth exceeded, truncating";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::nodeToJson: max depth exceeded, truncating";
         return json;
     }
 
@@ -78,12 +78,12 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
     }
 
     if (depth >= MaxDeserializationDepth) {
-        qCWarning(lcAutotile) << "SplitTree::fromJson: max depth exceeded, truncating";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::fromJson: max depth exceeded, truncating";
         return nullptr;
     }
 
     if (++nodeCount > MaxDeserializationNodes) {
-        qCWarning(lcAutotile) << "SplitTree::fromJson: max node count exceeded, truncating";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::fromJson: max node count exceeded, truncating";
         return nullptr;
     }
 
@@ -99,19 +99,19 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
         node->second =
             nodeFromJson(json[QLatin1String("second")].toObject(), node.get(), depth + 1, nodeCount, seenIds);
         if (!node->first || !node->second) {
-            qCWarning(lcAutotile) << "SplitTree::fromJson: invalid internal node (missing child)";
+            qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::fromJson: invalid internal node (missing child)";
             return nullptr;
         }
     } else {
         // Leaf node
         node->windowId = json[QLatin1String("windowId")].toString();
         if (node->windowId.isEmpty()) {
-            qCWarning(lcAutotile) << "SplitTree::fromJson: leaf with empty windowId, skipping";
+            qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::fromJson: leaf with empty windowId, skipping";
             return nullptr;
         }
         if (seenIds.contains(node->windowId)) {
-            qCWarning(lcAutotile) << "SplitTree::fromJson: duplicate windowId detected, rejecting tree"
-                                  << "windowId=" << node->windowId;
+            qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::fromJson: duplicate windowId detected, rejecting tree"
+                                                 << "windowId=" << node->windowId;
             return nullptr;
         }
         seenIds.insert(node->windowId);

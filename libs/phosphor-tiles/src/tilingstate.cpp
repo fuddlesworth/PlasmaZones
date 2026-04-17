@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "TilingState.h"
-#include "AutotileConstants.h"
-#include "SplitTree.h"
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/SplitTree.h>
 #include <QtMath>
 #include <algorithm>
 

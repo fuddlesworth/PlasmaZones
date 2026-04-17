@@ -4,6 +4,7 @@
 #include "AutotileConfig.h"
 #include "AlgorithmRegistry.h"
 #include "core/constants.h"
+#include "autotile/AutotileConstants.h"
 #include "core/logging.h"
 #include <QRegularExpression>
 #include <QtMath>

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "TilingAlgorithm.h"
-#include "AutotileConstants.h"
-#include "TilingState.h"
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include <PhosphorTiles/TilingState.h>
 #include <algorithm>
 
 namespace PlasmaZones {

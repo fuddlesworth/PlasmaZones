@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "SplitTree.h"
-#include "AutotileConstants.h"
-#include "core/logging.h"
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include "tileslogging.h"
 
 #include <algorithm>
 
@@ -15,7 +15,7 @@ namespace {
 bool hasValidChildren(const SplitNode* node)
 {
     if (!node->first || !node->second) {
-        qCWarning(lcAutotile) << "Corrupt internal node: missing child";
+        qCWarning(PhosphorTiles::lcTilesLib) << "Corrupt internal node: missing child";
         return false;
     }
     return true;
@@ -136,12 +136,12 @@ void SplitTree::splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio)
 SplitTree::InsertReady SplitTree::prepareInsert(const QString& windowId)
 {
     if (windowId.isEmpty()) {
-        qCWarning(lcAutotile) << "SplitTree: empty windowId rejected";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree: empty windowId rejected";
         return InsertReady::Rejected;
     }
 
     if (leafForWindow(windowId)) {
-        qCWarning(lcAutotile) << "SplitTree: duplicate insert rejected" << windowId;
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree: duplicate insert rejected" << windowId;
         return InsertReady::Rejected;
     }
 
@@ -153,7 +153,7 @@ SplitTree::InsertReady SplitTree::prepareInsert(const QString& windowId)
 
     // Depth guard — always check, regardless of tree size
     if (treeHeight() >= MaxRuntimeTreeDepth) {
-        qCWarning(lcAutotile) << "SplitTree: max depth reached, rejecting insert";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree: max depth reached, rejecting insert";
         return InsertReady::Rejected;
     }
 
@@ -168,8 +168,8 @@ void SplitTree::insertAtFocused(const QString& windowId, const QString& focusedW
 
     SplitNode* focused = focusedWindowId.isEmpty() ? nullptr : findLeaf(m_root.get(), focusedWindowId);
     if (!focused) {
-        qCDebug(lcAutotile) << "insertAtFocused: focused window not found, falling back to insertAtEnd"
-                            << "windowId=" << focusedWindowId;
+        qCDebug(PhosphorTiles::lcTilesLib) << "insertAtFocused: focused window not found, falling back to insertAtEnd"
+                                           << "windowId=" << focusedWindowId;
         insertAtEndImpl(windowId, initialRatio);
         return;
     }
@@ -190,7 +190,7 @@ void SplitTree::insertAtEndImpl(const QString& windowId, qreal initialRatio)
 {
     SplitNode* rm = rightmostLeaf(m_root.get());
     if (!rm) {
-        qCWarning(lcAutotile) << "insertAtEndImpl: no rightmost leaf found (corrupt tree?)";
+        qCWarning(PhosphorTiles::lcTilesLib) << "insertAtEndImpl: no rightmost leaf found (corrupt tree?)";
         return;
     }
 
@@ -203,7 +203,7 @@ void SplitTree::insertAtEndImpl(const QString& windowId, qreal initialRatio)
 void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
 {
     if (leafForWindow(windowId)) {
-        qCWarning(lcAutotile) << "insertAtEndRaw: duplicate windowId" << windowId << "- skipping";
+        qCWarning(PhosphorTiles::lcTilesLib) << "insertAtEndRaw: duplicate windowId" << windowId << "- skipping";
         return;
     }
 
@@ -220,7 +220,7 @@ void SplitTree::insertAtEndRaw(const QString& windowId, qreal initialRatio)
 
     SplitNode* rm = rightmostLeaf(m_root.get());
     if (!rm) {
-        qCWarning(lcAutotile) << "insertAtEndRaw: no rightmost leaf found (corrupt tree?)";
+        qCWarning(PhosphorTiles::lcTilesLib) << "insertAtEndRaw: no rightmost leaf found (corrupt tree?)";
         return;
     }
 
@@ -251,7 +251,7 @@ void SplitTree::remove(const QString& windowId)
 {
     SplitNode* leaf = findLeaf(m_root.get(), windowId);
     if (!leaf) {
-        qCWarning(lcAutotile) << "remove: window not found" << "windowId=" << windowId;
+        qCWarning(PhosphorTiles::lcTilesLib) << "remove: window not found" << "windowId=" << windowId;
         return;
     }
 
@@ -275,8 +275,8 @@ void SplitTree::remove(const QString& windowId)
     if (!sibling) {
         // Half-constructed node (only one child) — tree is corrupt.
         // Remove the parent entirely to recover gracefully.
-        qCWarning(lcAutotile) << "SplitTree::remove: half-constructed node detected (missing sibling),"
-                              << "recovering by removing parent node";
+        qCWarning(PhosphorTiles::lcTilesLib) << "SplitTree::remove: half-constructed node detected (missing sibling),"
+                                             << "recovering by removing parent node";
         if (parent->parent) {
             auto& parentRef = (parent->parent->first.get() == parent) ? parent->parent->first : parent->parent->second;
             parentRef.reset();
@@ -317,8 +317,8 @@ void SplitTree::swap(const QString& windowId1, const QString& windowId2)
     SplitNode* leaf2 = findLeaf(m_root.get(), windowId2);
 
     if (!leaf1 || !leaf2) {
-        qCWarning(lcAutotile) << "swap: one or both windows not found"
-                              << "id1=" << windowId1 << "id2=" << windowId2;
+        qCWarning(PhosphorTiles::lcTilesLib) << "swap: one or both windows not found"
+                                             << "id1=" << windowId1 << "id2=" << windowId2;
         return;
     }
 
@@ -329,12 +329,12 @@ void SplitTree::resizeSplit(const QString& windowId, qreal newRatio)
 {
     SplitNode* leaf = findLeaf(m_root.get(), windowId);
     if (!leaf) {
-        qCWarning(lcAutotile) << "resizeSplit: window not found" << "windowId=" << windowId;
+        qCWarning(PhosphorTiles::lcTilesLib) << "resizeSplit: window not found" << "windowId=" << windowId;
         return;
     }
 
     if (!leaf->parent) {
-        qCDebug(lcAutotile) << "resizeSplit: leaf is root, no parent split to resize";
+        qCDebug(PhosphorTiles::lcTilesLib) << "resizeSplit: leaf is root, no parent split to resize";
         return;
     }
 

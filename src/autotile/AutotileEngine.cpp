@@ -25,6 +25,7 @@
 // DwindleMemoryAlgorithm.h no longer needed — prepareTilingState() is virtual on TilingAlgorithm
 #include "TilingState.h"
 #include "core/constants.h"
+#include "autotile/AutotileConstants.h"
 #include "core/layout.h"
 #include "core/layoutmanager.h"
 #include "core/logging.h"

@@ -1,15 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "ScriptedAlgorithm.h"
-#include "ScriptedAlgorithmHelpers.h"
-#include "ScriptedAlgorithmJsBuiltins.h"
-#include "ScriptedAlgorithmSandbox.h"
-#include "../SplitTree.h"
-#include "../TilingState.h"
-#include "../AutotileConstants.h"
-#include "core/logging.h"
-#include "pz_i18n.h"
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmHelpers.h>
+#include <PhosphorTiles/ScriptedAlgorithmJsBuiltins.h>
+#include <PhosphorTiles/ScriptedAlgorithmSandbox.h>
+#include <PhosphorTiles/SplitTree.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AutotileConstants.h>
+#include "tileslogging.h"
 #include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -104,7 +103,7 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     // Runtime guard — Q_ASSERT vanishes in release builds but QJSEngine corruption
     // from off-thread construction is silent and catastrophic.
     if (QCoreApplication::instance() && QThread::currentThread() != QCoreApplication::instance()->thread()) {
-        qCCritical(lcAutotile) << "ScriptedAlgorithm must be constructed on the main thread";
+        qCCritical(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm must be constructed on the main thread";
         return;
     }
     m_watchdog->engine = m_engine;
@@ -245,15 +244,15 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
 
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: failed to open file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: failed to open file=" << filePath;
         return false;
     }
 
     // Reject scripts larger than 1 MB to prevent resource exhaustion
     static constexpr qint64 MaxScriptSizeBytes = 1024 * 1024; // 1 MB
     if (file.size() > MaxScriptSizeBytes) {
-        qCWarning(lcAutotile) << "Script file too large:" << filePath << file.size() << "bytes (max"
-                              << MaxScriptSizeBytes << ")";
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "Script file too large:" << filePath << file.size() << "bytes (max" << MaxScriptSizeBytes << ")";
         return false;
     }
 
@@ -261,7 +260,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     file.close();
 
     if (source.isEmpty()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: empty script file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: empty script file=" << filePath;
         return false;
     }
 
@@ -274,7 +273,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // globals via freezeGlobal() — those calls are no-ops until the helpers exist,
     // so we re-freeze them after injection below.
     if (!hardenSandbox(m_engine)) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: sandbox hardening failed, file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: sandbox hardening failed, file=" << filePath;
         return false;
     }
 
@@ -290,7 +289,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     const QJSValue constResult4 = m_engine->evaluate(
         QStringLiteral("var MAX_TREE_DEPTH = %1;").arg(MaxRuntimeTreeDepth), QStringLiteral("builtin:constants"));
     if (constResult1.isError() || constResult2.isError() || constResult3.isError() || constResult4.isError()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
         return false;
     }
 
@@ -306,7 +305,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QJSValue r = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
         if (r.isError()) {
-            qCWarning(lcAutotile) << "Failed to early-freeze constant:" << name << r.toString();
+            qCWarning(PhosphorTiles::lcTilesLib) << "Failed to early-freeze constant:" << name << r.toString();
             return false;
         }
     }
@@ -316,13 +315,14 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // frozenGlobals[] array below — a missing entry is a sandbox escape.
     auto injectBuiltin = [this, &filePath](const QString& source, const QString& label) -> bool {
         if (source.isEmpty()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: empty builtin source for" << label << "file=" << filePath;
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "ScriptedAlgorithm: empty builtin source for" << label << "file=" << filePath;
             return false;
         }
         const QJSValue result = m_engine->evaluate(source, label);
         if (result.isError()) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: builtin injection failed for" << label
-                                  << "error=" << result.toString() << "file=" << filePath;
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: builtin injection failed for" << label
+                                                 << "error=" << result.toString() << "file=" << filePath;
             return false;
         }
         return true;
@@ -430,12 +430,13 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         QJSValue freezeResult = m_engine->evaluate(
             QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
         if (freezeResult.isError()) {
-            qCWarning(lcAutotile) << "Failed to freeze global:" << name << freezeResult.toString();
+            qCWarning(PhosphorTiles::lcTilesLib) << "Failed to freeze global:" << name << freezeResult.toString();
             freezeFailed = true;
         }
     }
     if (freezeFailed) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: aborting load — global freeze failed, file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "ScriptedAlgorithm: aborting load — global freeze failed, file=" << filePath;
         return false;
     }
 
@@ -467,20 +468,21 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
 
     // Check structured timeout flag instead of parsing error message strings
     if (m_lastCallTimedOut) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: script timed out during evaluate, file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "ScriptedAlgorithm: script timed out during evaluate, file=" << filePath;
         return false;
     }
     if (result.isError()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: evaluation error file=" << filePath
-                              << "line=" << result.property(QStringLiteral("lineNumber")).toInt()
-                              << "message=" << result.toString();
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "ScriptedAlgorithm: evaluation error file=" << filePath
+            << "line=" << result.property(QStringLiteral("lineNumber")).toInt() << "message=" << result.toString();
         return false;
     }
 
     // Look up the required calculateZones function
     m_calculateZonesFn = m_engine->globalObject().property(QStringLiteral("calculateZones"));
     if (!m_calculateZonesFn.isCallable()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: no callable calculateZones() file=" << filePath;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: no callable calculateZones() file=" << filePath;
         return false;
     }
 
@@ -510,7 +512,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
             return jsFn.call();
         });
         if (m_lastCallTimedOut) {
-            qCWarning(lcAutotile) << "ScriptedAlgorithm: JS override timed out, using default";
+            qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: JS override timed out, using default";
             return fallback;
         }
         if (!r.isError() && detail::jsValueHasType<T>(r))
@@ -530,7 +532,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     m_cachedCenterLayout = guardedCacheJsValue(m_jsCenterLayout, m_cachedCenterLayout);
     m_cachedValuesLoaded = true;
 
-    qCInfo(lcAutotile) << "ScriptedAlgorithm: loaded script=" << m_scriptId << "file=" << filePath;
+    qCInfo(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: loaded script=" << m_scriptId << "file=" << filePath;
     return true;
 }
 
@@ -541,13 +543,14 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 {
     // Runtime thread guard — QJSEngine is not thread-safe
     if (QThread::currentThread() != thread()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm::calculateZones called from wrong thread";
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm::calculateZones called from wrong thread";
         return {};
     }
 
     // Re-entrancy guard — QJSEngine state is not re-entrant
     if (m_evaluating) {
-        qCWarning(lcAutotile) << "Re-entrant calculateZones call on" << m_scriptId << "— returning empty";
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "Re-entrant calculateZones call on" << m_scriptId << "— returning empty";
         return {};
     }
     ReentrancyGuard guard(m_evaluating);
@@ -667,17 +670,18 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
 
     // Check structured timeout flag instead of parsing error message strings
     if (m_lastCallTimedOut) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: script timed out, script=" << m_scriptId;
+        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: script timed out, script=" << m_scriptId;
         return {};
     }
     if (result.isError()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: calculateZones() error script=" << m_scriptId
-                              << "message=" << result.toString();
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "ScriptedAlgorithm: calculateZones() error script=" << m_scriptId << "message=" << result.toString();
         return {};
     }
 
     if (!result.isArray()) {
-        qCWarning(lcAutotile) << "ScriptedAlgorithm: calculateZones() did not return array script=" << m_scriptId;
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "ScriptedAlgorithm: calculateZones() did not return array script=" << m_scriptId;
         return {};
     }
 
@@ -705,7 +709,7 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth)
     const QJSValue freezeFn =
         m_engine->globalObject().property(QStringLiteral("Object")).property(QStringLiteral("freeze"));
     if (!freezeFn.isCallable()) {
-        qCWarning(lcAutotile) << "Object.freeze not callable — tree will be mutable to JS scripts";
+        qCWarning(PhosphorTiles::lcTilesLib) << "Object.freeze not callable — tree will be mutable to JS scripts";
     }
     int nodeCount = 0;
     return splitNodeToJSValueImpl(node, freezeFn, depth, nodeCount);
@@ -765,7 +769,10 @@ QString ScriptedAlgorithm::name() const
         }
         return fallback;
     }
-    return PzI18n::tr("Scripted");
+    // Library-side defaults — translation responsibility lives with the
+    // application that consumes the library (it can substitute its own
+    // localised label via Q_PROPERTY / display-name override).
+    return QStringLiteral("Scripted");
 }
 
 QString ScriptedAlgorithm::description() const
@@ -773,7 +780,7 @@ QString ScriptedAlgorithm::description() const
     if (!m_metadata.description.isEmpty()) {
         return m_metadata.description;
     }
-    return PzI18n::tr("User-provided scripted tiling algorithm");
+    return QStringLiteral("User-provided scripted tiling algorithm");
 }
 
 int ScriptedAlgorithm::masterZoneIndex() const

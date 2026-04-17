@@ -15,6 +15,9 @@
 #include "../core/enums.h"
 #include "configkeys.h"
 #include "plasmazones_export.h"
+// AutotileDefaults lives in PhosphorTiles — config layer delegates to it for
+// the user-facing default accessors.
+#include <PhosphorTiles/AutotileConstants.h>
 
 namespace PlasmaZones {
 
