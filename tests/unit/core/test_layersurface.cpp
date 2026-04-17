@@ -4,7 +4,7 @@
 #include <PhosphorShell/LayerSurface.h>
 
 // Full definition needed for tests that directly construct LayerShellIntegration.
-#include "../../../phosphorshell/src/qpa/layershellintegration.h"
+#include "../../../libs/phosphor-shell/src/qpa/layershellintegration.h"
 
 #include <QTest>
 #include <QSignalSpy>

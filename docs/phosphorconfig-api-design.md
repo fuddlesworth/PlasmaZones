@@ -293,7 +293,7 @@ per-screen groups without duplicating the convention.
 
 ## Testing
 
-The library ships three test suites under `phosphorconfig/tests/`:
+The library ships three test suites under `libs/phosphor-config/tests/`:
 
 - `test_json_backend.cpp` — atomic writes, dot-path round-trips,
   permissions preservation, native-JSON storage, key-list shape,

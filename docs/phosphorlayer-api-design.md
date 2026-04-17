@@ -535,7 +535,7 @@ Coverage targets:
 ## Migration Path: PlasmaZones OverlayService
 
 Phase 1 — library lands (no PZ change):
-- `phosphorlayer/` builds and exports targets
+- `libs/phosphor-layer/` builds and exports targets
 - Unit tests pass
 
 Phase 2 — one-at-a-time consumer migration:
@@ -630,7 +630,7 @@ Destroy + recreate is the honest model.
 ## Directory Layout
 
 ```
-phosphorlayer/
+libs/phosphor-layer/
 ├── CMakeLists.txt
 ├── PhosphorLayerConfig.cmake.in
 ├── include/

@@ -417,7 +417,7 @@ Both are valid — the GPU doesn't care about the block name, only the layout.
 ## CMake Target
 
 ```cmake
-# phosphorrendering/CMakeLists.txt
+# libs/phosphor-rendering/CMakeLists.txt
 set(PHOSPHORRENDERING_VERSION "0.1.0")
 
 add_library(PhosphorRendering SHARED
@@ -457,7 +457,7 @@ target_link_libraries(plasmazones_rendering PRIVATE
 ## Directory Structure
 
 ```
-phosphorrendering/
+libs/phosphor-rendering/
 ├── CMakeLists.txt
 ├── include/
 │   └── PhosphorRendering/
@@ -482,7 +482,7 @@ phosphorrendering/
 
 ## Migration Path
 
-### Phase 2a: Create phosphorrendering/ with ShaderCompiler
+### Phase 2a: Create libs/phosphor-rendering/ with ShaderCompiler
 - Mechanical extraction of detail:: namespace → ShaderCompiler
 - Buffer-pass logic moved with ShaderNodeRhi (kept inline rather than split into a
   separate BufferPassManager class — the original split-out plan was abandoned

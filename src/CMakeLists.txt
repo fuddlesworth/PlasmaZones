@@ -332,7 +332,7 @@ install(TARGETS plasmazones_core
 # ═══════════════════════════════════════════════════════════════════════════════
 # Layer Shell Qt Plugin — now provided by PhosphorShell library
 # ═══════════════════════════════════════════════════════════════════════════════
-# The QPA plugin (phosphorshell-qpa) is built and installed by phosphorshell/CMakeLists.txt.
+# The QPA plugin (phosphorshell-qpa) is built and installed by libs/phosphor-shell/CMakeLists.txt.
 # PlasmaZones::registerLayerShellPlugin() forwards to PhosphorShell::registerLayerShellPlugin()
 # which sets QT_WAYLAND_SHELL_INTEGRATION=phosphorshell.
 

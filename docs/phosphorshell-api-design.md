@@ -496,7 +496,7 @@ PhosphorShell ships these include files, available to all shaders:
 ## CMake Target
 
 ```cmake
-# phosphorshell/CMakeLists.txt
+# libs/phosphor-shell/CMakeLists.txt
 project(PhosphorShell VERSION 0.1.0 LANGUAGES C CXX)
 
 add_library(PhosphorShell SHARED
@@ -550,28 +550,28 @@ target_link_libraries(plasmazones PRIVATE PhosphorShell::PhosphorShell)
 ## Migration Path
 
 ### Phase 1: Extract Layer Surface (mechanical move)
-- Move `src/core/layersurface.*` → `phosphorshell/src/`
-- Move `src/core/qpa/*` → `phosphorshell/src/qpa/`
-- Move `src/core/protocols/*.xml` → `phosphorshell/protocols/`
+- Move `src/core/layersurface.*` → `libs/phosphor-shell/src/`
+- Move `src/core/qpa/*` → `libs/phosphor-shell/src/qpa/`
+- Move `src/core/protocols/*.xml` → `libs/phosphor-shell/protocols/`
 - Rename namespace `PlasmaZones` → `PhosphorShell` in moved files
 - Rename `_pz_*` dynamic properties → `_ps_*`
 - Rename export macro `PLASMAZONES_EXPORT` → `PHOSPHORSHELL_EXPORT`
 - PlasmaZones `#include <PhosphorShell/LayerSurface>` — no behavior change
 
 ### Phase 2: Extract Shader Pipeline (requires generalization)
-- Move `ShaderRegistry`, `ShaderIncludeResolver`, `ShaderUtils` → `phosphorshell/src/`
+- Move `ShaderRegistry`, `ShaderIncludeResolver`, `ShaderUtils` → `libs/phosphor-shell/src/`
 - Remove singleton pattern from ShaderRegistry → `addSearchPath()` API
-- Move rendering base types → `phosphorshell/src/`
+- Move rendering base types → `libs/phosphor-shell/src/`
 - Create `IUniformExtension` interface
 - Split `ZoneShaderUniforms` into `BaseUniforms` (library) + zone extension (PlasmaZones)
-- Move `ZoneShaderNodeRhi` → `phosphorshell/src/rendernode_rhi.*` (generalized)
+- Move `ZoneShaderNodeRhi` → `libs/phosphor-shell/src/rendernode_rhi.*` (generalized)
 - Create `PhosphorShell::ShaderEffect` (base QQuickItem without zone properties)
 - PlasmaZones' `ZoneShaderItem` becomes a thin subclass that adds zone Q_PROPERTYs
   and creates a `ZoneUniformExtension`
 
 ### Phase 3: Extract Support Code
-- Move `IWallpaperProvider` + implementations → `phosphorshell/src/`
-- Move `data/shaders/*.glsl` (include files only) → `phosphorshell/shaders/`
+- Move `IWallpaperProvider` + implementations → `libs/phosphor-shell/src/`
+- Move `data/shaders/*.glsl` (include files only) → `libs/phosphor-shell/shaders/`
 - Themed shader directories stay in PlasmaZones `data/shaders/`
 
 ---

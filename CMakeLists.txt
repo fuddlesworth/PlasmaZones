@@ -303,17 +303,15 @@ configure_file(
 )
 include_directories("${CMAKE_BINARY_DIR}/generated")
 
-# PhosphorConfig library (schema-driven configuration + migration runner)
-add_subdirectory(phosphorconfig)
-
-# PhosphorShell library (layer-shell + shader pipeline)
-add_subdirectory(phosphorshell)
-
-# PhosphorRendering library (GPU shader rendering via Qt RHI)
-add_subdirectory(phosphorrendering)
-
-# PhosphorLayer library (wlr-layer-shell surface lifecycle management)
-add_subdirectory(phosphorlayer)
+# Phosphor* libraries live under libs/ to keep the top-level tree tidy.
+# Each ships its own CMakeLists, project() metadata, and find_package
+# config so they stay individually extractable via `git subtree split`
+# when they graduate to standalone repos. Add new libraries to libs/
+# following the same phosphor-<name> convention.
+add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner
+add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
+add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
+add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 
 # Source directories
 add_subdirectory(src)
