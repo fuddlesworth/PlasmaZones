@@ -18,6 +18,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QClipboard>
+#include <QDBusConnection>
 #include <QGuiApplication>
 
 namespace PlasmaZones {
@@ -37,6 +38,26 @@ EditorController::EditorController(QObject* parent)
     // LayoutManager installs a QFileSystemWatcher so subsequent disk
     // changes (daemon writes, settings creates, hand edits) auto-reload.
     m_localLayoutManager->loadLayouts();
+
+    // Subscribe to the daemon's layout-change D-Bus signals and force
+    // a local-source reload when any fire. Belt-and-suspenders alongside
+    // the QFileSystemWatcher: Qt's QFSW has known misses on cross-process
+    // atomic-rename writes (the daemon writes via QSaveFile, which
+    // creates a new inode the watcher may not bind to in time). Tying
+    // the local reload to the daemon's signal stream guarantees the
+    // editor's preview surface stays in sync with the daemon's view
+    // regardless of which file-event path fires first. When the daemon
+    // isn't running, none of these signals fire — the QFSW path covers
+    // single-process editor + manual hand-edits.
+    auto bus = QDBusConnection::sessionBus();
+    const QString svc = QString::fromLatin1(DBus::ServiceName);
+    const QString path = QString::fromLatin1(DBus::ObjectPath);
+    const QString iface = QString::fromLatin1(DBus::Interface::LayoutManager);
+    for (const auto& sig :
+         {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
+          QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {
+        bus.connect(svc, path, iface, sig, this, SLOT(reloadLocalLayouts()));
+    }
 
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
@@ -175,6 +196,16 @@ QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCo
         return {};
     }
     return layoutPreviewToQmlMap(preview);
+}
+
+void EditorController::reloadLocalLayouts()
+{
+    // Slot wired to the daemon's layout-mutation signals — see ctor for
+    // the connect block + rationale. Cheap on no-op (LayoutManager
+    // diff-checks file mtimes / hashes internally).
+    if (m_localLayoutManager) {
+        m_localLayoutManager->loadLayouts();
+    }
 }
 QString EditorController::selectedZoneId() const
 {

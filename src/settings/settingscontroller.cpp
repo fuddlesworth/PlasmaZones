@@ -682,6 +682,21 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
+    // Force-reload the in-process LayoutManager from disk before reading.
+    // The LayoutManager's QFileSystemWatcher catches most disk changes,
+    // but Qt's QFSW has known misses on cross-process atomic-rename
+    // writes (the daemon writes layouts via QSaveFile, which creates a
+    // new inode the watcher may not bind to in time). Belt-and-suspenders:
+    // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
+    // / layoutDeleted / layoutChanged / layoutPropertyChanged /
+    // layoutListChanged — see the connect block in the ctor) ALSO forces
+    // an explicit reload here, so the local-source preview path stays
+    // strictly in sync with the daemon's view regardless of which file-
+    // event path fires first.
+    if (m_localLayoutManager) {
+        m_localLayoutManager->loadLayouts();
+    }
+
     // Step 1: instant paint from the in-process ZonesLayoutSource so the
     // layouts page renders manual previews before D-Bus has even round-
     // tripped — and continues to work entirely if the daemon isn't
