@@ -187,7 +187,14 @@ inline QRect resolveScreenGeometry(const QString& screenId)
 // Write shader properties (shaderSource, bufferShaderPath, bufferShaderPaths,
 // bufferFeedback, bufferScale, bufferWrap, shaderParams) from ShaderInfo to a QML window.
 // Replaces 3 occurrences of the shader-info-to-window property push pattern.
-inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::ShaderInfo& info, const QVariantMap& params)
+//
+// @p vsGeom / @p physGeom identify the target screen. When they differ (i.e.
+// the overlay covers a virtual screen that is a sub-rect of the physical
+// screen), the wallpaper is cropped to the VS's portion so each VS samples
+// its own slice of the physical monitor's wallpaper instead of each getting
+// an aspect-centered full wallpaper. Pass empty rects for full-screen overlays.
+inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::ShaderInfo& info, const QVariantMap& params,
+                                    const QRect& vsGeom = QRect(), const QRect& physGeom = QRect())
 {
     if (!window) {
         return;
@@ -213,7 +220,7 @@ inline void applyShaderInfoToWindow(QObject* window, const ShaderRegistry::Shade
     // Desktop wallpaper subscription
     writeQmlProperty(window, QStringLiteral("useWallpaper"), info.useWallpaper);
     if (info.useWallpaper) {
-        const QImage wp = ShaderRegistry::loadWallpaperImage();
+        const QImage wp = ShaderRegistry::loadWallpaperImage(vsGeom, physGeom);
         if (!wp.isNull()) {
             writeQmlProperty(window, QStringLiteral("wallpaperTexture"), QVariant::fromValue(wp));
         }
