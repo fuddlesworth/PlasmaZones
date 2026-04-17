@@ -43,27 +43,27 @@ const SurfaceFactory::Deps& SurfaceFactory::deps() const noexcept
     return m_impl->m_deps;
 }
 
-Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
+std::optional<SurfaceDeps> SurfaceFactory::validateAndPrepareDeps(SurfaceConfig& cfg)
 {
     const auto debug = cfg.effectiveDebugName();
 
     if (!m_impl->m_deps.transport || !m_impl->m_deps.transport->isSupported()) {
-        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: transport not available — refusing to create"
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory: transport not available — refusing to create"
                                    << "debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
     if (!m_impl->m_deps.screens) {
-        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: no screen provider — refusing to create"
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory: no screen provider — refusing to create"
                                    << "debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
 
     const bool hasUrl = !cfg.contentUrl.isEmpty();
     const bool hasItem = cfg.contentItem != nullptr;
     if (hasUrl == hasItem) {
-        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: exactly one of contentUrl / contentItem must be set"
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory: exactly one of contentUrl / contentItem must be set"
                                    << "hasUrl=" << hasUrl << "hasItem=" << hasItem << "debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
 
     // Engine ownership is tri-state (None / Self / Provider). sharedEngine
@@ -74,17 +74,17 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
     // that inconsistent state.
     if (cfg.sharedEngine && m_impl->m_deps.engineProvider) {
         qCWarning(lcPhosphorLayer)
-            << "SurfaceFactory::create: SurfaceConfig::sharedEngine and SurfaceFactory::Deps::engineProvider"
+            << "SurfaceFactory: SurfaceConfig::sharedEngine and SurfaceFactory::Deps::engineProvider"
             << "are mutually exclusive. Pick one: pass sharedEngine for caller-owned sharing, or an engineProvider"
             << "for provider-managed lifecycle — not both. debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
 
     if (!cfg.role.isValid()) {
-        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: Role is invalid (empty scopePrefix or"
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory: Role is invalid (empty scopePrefix or"
                                    << "semantically-conflicting layer/exclusiveZone) — refusing to create"
                                    << "debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
 
     // If the caller did not pin a specific screen, fall back to the screen
@@ -95,17 +95,17 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
     if (!cfg.screen) {
         cfg.screen = m_impl->m_deps.screens->primary();
         if (!cfg.screen) {
-            qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: cfg.screen is null and provider has no primary"
+            qCWarning(lcPhosphorLayer) << "SurfaceFactory: cfg.screen is null and provider has no primary"
                                        << "debugName=" << debug;
-            return nullptr;
+            return std::nullopt;
         }
     } else if (!m_impl->m_deps.screens->screens().contains(cfg.screen)) {
         // Stale QScreen* (disconnected monitor, or mock from a different
         // provider). Fail loudly rather than let the transport attach to
         // an orphan.
-        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: cfg.screen is not in the provider's screen list"
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory: cfg.screen is not in the provider's screen list"
                                    << "— disconnected or foreign screen. debugName=" << debug;
-        return nullptr;
+        return std::nullopt;
     }
 
     SurfaceDeps sdeps;
@@ -114,7 +114,16 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
     sdeps.screenProvider = m_impl->m_deps.screens;
     sdeps.loggingCategory =
         m_impl->m_deps.loggingCategory.isEmpty() ? QStringLiteral("phosphorlayer") : m_impl->m_deps.loggingCategory;
-    return new Surface(std::move(cfg), std::move(sdeps), parent ? parent : this);
+    return sdeps;
+}
+
+Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
+{
+    // Delegate to the templated path so both entry points share a single
+    // validation implementation. createAs<Surface> is the full factory
+    // contract; this non-template overload exists for ABI stability and
+    // ergonomic parity with the original single-entry API.
+    return createAs<Surface>(std::move(cfg), parent);
 }
 
 } // namespace PhosphorLayer

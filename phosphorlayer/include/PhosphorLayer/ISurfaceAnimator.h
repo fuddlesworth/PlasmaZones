@@ -5,6 +5,8 @@
 
 #include <PhosphorLayer/phosphorlayer_export.h>
 
+#include <QtGlobal>
+
 #include <functional>
 
 QT_BEGIN_NAMESPACE
@@ -52,7 +54,9 @@ public:
     /// invoke synchronously for no-op animators.
     using CompletionCallback = std::function<void()>;
 
+    ISurfaceAnimator() = default;
     virtual ~ISurfaceAnimator() = default;
+    Q_DISABLE_COPY_MOVE(ISurfaceAnimator)
 
     /**
      * @brief Begin a show transition for @p surface.

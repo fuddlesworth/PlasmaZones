@@ -200,4 +200,9 @@ void XdgToplevelTransport::removeCompositorLostCallback(CompositorLostCookie coo
     m_impl->m_broadcaster.removeCallback(cookie);
 }
 
+void XdgToplevelTransport::simulateCompositorLost()
+{
+    m_impl->m_broadcaster.fire();
+}
+
 } // namespace PhosphorLayer

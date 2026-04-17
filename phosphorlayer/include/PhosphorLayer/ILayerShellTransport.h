@@ -10,6 +10,7 @@
 #include <QObject>
 #include <QSize>
 #include <QString>
+#include <QtGlobal>
 
 #include <functional>
 #include <memory>
@@ -51,7 +52,9 @@ struct TransportAttachArgs
 class PHOSPHORLAYER_EXPORT ITransportHandle
 {
 public:
+    ITransportHandle() = default;
     virtual ~ITransportHandle() = default;
+    Q_DISABLE_COPY_MOVE(ITransportHandle)
 
     /// Window this handle controls.
     virtual QQuickWindow* window() const = 0;
@@ -93,7 +96,9 @@ public:
 class PHOSPHORLAYER_EXPORT ILayerShellTransport
 {
 public:
+    ILayerShellTransport() = default;
     virtual ~ILayerShellTransport() = default;
+    Q_DISABLE_COPY_MOVE(ILayerShellTransport)
 
     /// True if the compositor advertises wlr-layer-shell. Surfaces fail
     /// construction with a logged reason when this returns false.

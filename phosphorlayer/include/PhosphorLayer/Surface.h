@@ -137,11 +137,55 @@ Q_SIGNALS:
     /// Emitted once when transitioning to State::Failed. `reason` is a
     /// human-readable diagnostic (QML compile error, transport rejection,
     /// etc.). Surface remains in Failed thereafter.
+    ///
+    /// ## Safe to delete the Surface from this slot
+    /// The library defers this signal via `Qt::QueuedConnection` so consumer
+    /// slots that call `delete surface` do not re-enter library code on a
+    /// dead `this`. For non-failure `stateChanged` emissions the consumer
+    /// must prefer `deleteLater()` over `delete`.
     void failed(const QString& reason);
 
+    /// Emitted when the QScreen the Surface was attached to is removed from
+    /// the IScreenProvider's list. The Surface stays in its current state
+    /// (Shown/Hidden); consumers decide whether to destroy+rebuild or wait
+    /// for the screen to come back. `m_config.screen` is nulled inside the
+    /// library so the next attach falls back to the provider's primary.
+    void screenLost();
+
+public:
+    /**
+     * @brief Opaque construction token — only SurfaceFactory can create
+     * instances of it.
+     *
+     * Required as the first parameter of Surface's constructor so direct
+     * construction (`new Surface(...)`) is impossible without going through
+     * `SurfaceFactory::create` / `createAs<T>`, which are the only paths
+     * that run the factory-wide validation (role well-formedness, screen
+     * fallback, `sharedEngine`+`engineProvider` mutual exclusion).
+     *
+     * Subclasses wishing to be constructible via `SurfaceFactory::createAs<T>`
+     * accept a `CtorToken` as the first argument of their own constructor
+     * and forward it to the base. Consumer code cannot instantiate a
+     * CtorToken directly (private ctor, only friended to SurfaceFactory),
+     * so subclasses cannot bypass the factory even by exposing a public
+     * constructor of their own.
+     */
+    class CtorToken
+    {
+        friend class SurfaceFactory;
+        CtorToken() = default;
+    };
+
+protected:
+    /// Protected so subclasses can forward a CtorToken through their own
+    /// constructor. Still unreachable to consumers — CtorToken is
+    /// SurfaceFactory-only-constructible.
+    Surface(CtorToken, SurfaceConfig cfg, SurfaceDeps deps, QObject* parent);
+
 private:
+    Q_DISABLE_COPY_MOVE(Surface)
+
     friend class SurfaceFactory;
-    Surface(SurfaceConfig cfg, SurfaceDeps deps, QObject* parent);
 
     class Impl;
     std::unique_ptr<Impl> m_impl;

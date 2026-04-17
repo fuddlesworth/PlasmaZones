@@ -19,28 +19,32 @@ namespace {
 /**
  * True if @p path is safe to use as a surface-store target. Rejects:
  *   - empty paths
- *   - paths containing ".." segments (directory traversal defence)
- *   - paths whose existing target OR whose direct parent directory is a
- *     symlink (prevents a malicious symlink from redirecting writes to
- *     e.g. ~/.bashrc or /etc)
+ *   - paths containing any literal ".." segment, even if the path would
+ *     cleanPath-collapse to a harmless-looking string — the author wrote
+ *     `..`, so they intended traversal
+ *   - paths whose existing target is a symlink
+ *   - paths whose direct parent directory is a symlink (prevents a
+ *     malicious symlink from redirecting writes to e.g. ~/.bashrc)
  *
  * A non-existent target whose parent is a real directory is fine — that
- * is the "first run" case.
+ * is the "first run" case. Deeper symlinks in the ancestor chain are
+ * accepted because they are legitimate on systems where home dirs live
+ * under symlinked mount points (e.g. `/home` → `/var/home` on Silverblue).
  */
 bool isSafeStorePath(const QString& path)
 {
     if (path.isEmpty()) {
         return false;
     }
-    // Reject traversal. QDir::cleanPath collapses ".." but we want to
-    // refuse even well-formed ones because the caller chose the path —
-    // if they wrote ".." in it, they intended to escape the parent.
-    // Catches internal "/../" segments, trailing "/..", leading "../",
-    // and a bare "..".
-    const auto normalized = QDir::cleanPath(path);
-    if (normalized == QLatin1String("..") || normalized.startsWith(QLatin1String("../"))
-        || normalized.contains(QLatin1String("/../")) || normalized.endsWith(QLatin1String("/.."))) {
-        return false;
+    // Split on '/' and reject any literal `..` segment. cleanPath collapses
+    // `foo/bar/../..` to `.` so a naive `contains("..")` check on the
+    // normalised output misses it; looking at raw segments catches every
+    // escape regardless of collapsing.
+    const auto segments = path.split(QLatin1Char('/'));
+    for (const auto& seg : segments) {
+        if (seg == QLatin1String("..")) {
+            return false;
+        }
     }
     const QFileInfo info(path);
     if (info.isSymLink()) {

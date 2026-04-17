@@ -10,7 +10,18 @@ include(CMakeFindDependencyMacro)
 # headers with a confusing template / missing-symbol error rather than
 # a clean find_package rejection at configure time.
 find_dependency(Qt6 6.6 COMPONENTS Core Gui Qml Quick)
-find_dependency(PhosphorShell)
+
+# PhosphorShell dependency is baked at library-build time via the
+# PHOSPHORLAYER_WITH_PHOSPHORSHELL option. When OFF the .so has no
+# PhosphorShell symbols and consumers must NOT be forced to install it.
+set(PhosphorLayer_WITH_PHOSPHORSHELL @PHOSPHORLAYER_WITH_PHOSPHORSHELL@)
+if(PhosphorLayer_WITH_PHOSPHORSHELL)
+    # PhosphorShell and PhosphorLayer ship together in this tree, so a
+    # version pin would chase the meta-version through every bump. Leave
+    # unpinned but document that consumers mixing a system-installed
+    # PhosphorShell with an in-tree PhosphorLayer need to verify ABI.
+    find_dependency(PhosphorShell)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorLayerTargets.cmake")
 

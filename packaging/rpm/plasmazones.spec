@@ -176,14 +176,15 @@ echo ""
 # Layer-shell QPA plugin (PhosphorShell)
 %{_libdir}/qt6/plugins/wayland-shell-integration/phosphorshell-qpa.so
 
-# PhosphorShell development headers and CMake config
+# PhosphorShell development headers, CMake config, and runtime data
+# (bundled shaders + wayland protocol XMLs installed to _datadir/phosphorshell/).
 %{_includedir}/PhosphorShell/
 %{_libdir}/cmake/PhosphorShell/
+%{_datadir}/phosphorshell/
 
 # PhosphorRendering development headers and CMake config
 %{_includedir}/PhosphorRendering/
 %{_libdir}/cmake/PhosphorRendering/
-%{_datadir}/phosphorshell/
 
 # PhosphorLayer development headers and CMake config
 %{_includedir}/PhosphorLayer/

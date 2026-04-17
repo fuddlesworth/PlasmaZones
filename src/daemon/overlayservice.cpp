@@ -379,10 +379,13 @@ OverlayService::~OverlayService()
     // window deleteLater, the window's destruction posts further deleteLater
     // for QML-owned children, and those children's dtors may post yet more.
     // Alternate sendPostedEvents(DeferredDelete) + processEvents in a bounded
-    // loop — a handful of passes is far more than any realistic teardown
-    // chain needs, but cheap if the queue settles sooner (remaining passes
-    // become no-ops).
-    constexpr int kDrainPasses = 8;
+    // loop. 8 passes was the empirically-observed maximum depth during worst-
+    // case teardown (shader overlay with nested QML components); doubled to
+    // 16 for safety margin so a deeper chain (e.g. someone adds a nested
+    // Repeater) does not silently leak deferred-deletes into engine teardown.
+    // Remaining passes are no-ops once the queue settles, so the extra
+    // iterations cost nothing.
+    constexpr int kDrainPasses = 16;
     for (int i = 0; i < kDrainPasses; ++i) {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
         QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);

@@ -50,7 +50,9 @@ Q_SIGNALS:
 class PHOSPHORLAYER_EXPORT IScreenProvider
 {
 public:
+    IScreenProvider() = default;
     virtual ~IScreenProvider() = default;
+    Q_DISABLE_COPY_MOVE(IScreenProvider)
 
     /// Full list of screens the surfaces should be aware of.
     virtual QList<QScreen*> screens() const = 0;

@@ -102,6 +102,14 @@ public:
         if (m_window) {
             // QPointer auto-nulls if the window was already destroyed externally
             // (e.g. consumer called ->deleteLater() before ~Surface).
+            //
+            // Reparent to null before deleteLater. Window-root QML adopted via
+            // beginCreate is JS-parented to the engine's root context; deleteLater
+            // on the engine (below, EngineOwnership::Self) would then delete the
+            // window a second time when the engine tears down its object graph.
+            // Explicit reparent-to-null breaks that implicit tree edge so our
+            // deleteLater is the only delete path.
+            m_window->setParent(nullptr);
             m_window->deleteLater();
         }
 
@@ -152,6 +160,11 @@ public:
 
     QPointer<QQmlEngine> m_engine;
     EngineOwnership m_engineOwnership = EngineOwnership::None;
+    /// Child QQmlContext used ONLY for the shared-engine + contextProperties
+    /// combination, to keep per-surface overrides from leaking onto the
+    /// shared rootContext. Parented to m_q so teardown is automatic; lifetime
+    /// matches the Surface. Null on the owned/provider-engine path.
+    std::unique_ptr<QQmlContext> m_childContext;
     // QPointer: survives external destruction (e.g. a consumer that mistakenly
     // deleteLater()s the window directly instead of the Surface). Prevents UB
     // on ~Impl when the window is already gone.
@@ -256,6 +269,14 @@ private:
             qCWarning(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName()
                                        << "attached screen was removed — reassigning to primary on next attach";
             m_config.screen = nullptr;
+            // Notify the consumer: if the Surface is Shown, its compositor-side
+            // handle now points at a phantom output. Consumers have two valid
+            // responses — destroy+rebuild, or wait for the screen to come back.
+            // The library cannot pick either for them (destroy-during-signal is
+            // unsafe without consumer cooperation), so surface the event.
+            if (m_state == State::Shown || m_state == State::Hidden) {
+                Q_EMIT m_q->screenLost();
+            }
         }
     }
 
@@ -365,10 +386,35 @@ private:
 
     void applyContextProperties()
     {
+        if (m_config.contextProperties.isEmpty()) {
+            return;
+        }
+        // Per-surface properties must NOT leak onto a shared engine's root
+        // context. Install them on a child context parented to m_q so
+        // destruction is automatic and sibling surfaces see an unpolluted
+        // root. The child context is used by instantiateFromComponent() /
+        // ensureContent() — see childContextOrRoot().
+        if (m_config.sharedEngine) {
+            if (!m_childContext) {
+                m_childContext = std::make_unique<QQmlContext>(m_engine->rootContext(), m_q);
+            }
+            for (auto it = m_config.contextProperties.begin(); it != m_config.contextProperties.end(); ++it) {
+                m_childContext->setContextProperty(it.key(), it.value());
+            }
+            return;
+        }
+        // Owned or provider engine: root context is effectively per-surface
+        // (or, for provider-shared, the consumer opted in at IQmlEngineProvider
+        // level and is responsible for isolation). Writing to root is fine.
         auto* ctx = m_engine->rootContext();
         for (auto it = m_config.contextProperties.begin(); it != m_config.contextProperties.end(); ++it) {
             ctx->setContextProperty(it.key(), it.value());
         }
+    }
+
+    QQmlContext* childContextOrRoot()
+    {
+        return m_childContext ? m_childContext.get() : m_engine->rootContext();
     }
 
     bool ensureContent()
@@ -388,7 +434,19 @@ private:
                 return false;
             }
             if (m_component->isLoading()) {
-                QObject::connect(m_component.get(), &QQmlComponent::statusChanged, m_q, [this] {
+                // QPointer capture: if the Surface is destroyed while the
+                // component is still loading (rare but possible for qrc paths
+                // under bundled resources), the lambda body must not
+                // dereference a dead `this`. The receiver-based auto-
+                // disconnect protects against the connection firing after
+                // ~QObject, but the lambda can still race with ~Impl in the
+                // narrow window where consumer code synchronously deletes
+                // the Surface from inside a statusChanged slot elsewhere.
+                QPointer<Surface> self = m_q;
+                QObject::connect(m_component.get(), &QQmlComponent::statusChanged, m_q, [this, self] {
+                    if (!self) {
+                        return;
+                    }
                     onComponentStatus();
                 });
                 return true; // stays in Warming; drive() resumes on ready
@@ -404,11 +462,19 @@ private:
         if (!m_component || m_component->isLoading()) {
             return;
         }
+        // Latch self — failWith() defers its signals via QueuedConnection, but
+        // instantiateFromComponent() emits stateChanged(Hidden) synchronously
+        // via transitionTo(). A consumer slot on stateChanged that deletes
+        // the Surface would leave us touching `this` on return. Bail if gone.
+        QPointer<Surface> self = m_q;
         if (m_component->isError()) {
             failWith(m_component->errorString());
             return;
         }
         if (!instantiateFromComponent()) {
+            return;
+        }
+        if (!self) {
             return;
         }
         // Content ready — resume whatever intent was latched.
@@ -439,7 +505,7 @@ private:
         //    stays stuck. Setting screen geometry guarantees a valid
         //    initial commit; consumers that want a different size call
         //    setGeometry/setWidth/setHeight before show().
-        auto* ctx = m_engine->rootContext();
+        auto* ctx = childContextOrRoot();
         QObject* root = m_component->beginCreate(ctx);
         if (!root) {
             failWith(m_component->errorString().isEmpty()
@@ -448,13 +514,18 @@ private:
             return false;
         }
 
+        // Claim ownership BEFORE any binding runs. setInitialProperties
+        // evaluates QML bindings that may trigger JS GC; without CppOwnership
+        // in place the root is JS-owned and could be collected under us
+        // between `beginCreate` and our later `m_window = win` / setParent.
+        QQmlEngine::setObjectOwnership(root, QQmlEngine::CppOwnership);
+
         if (!m_config.windowProperties.isEmpty()) {
             m_component->setInitialProperties(root, m_config.windowProperties);
         }
 
         if (auto* win = qobject_cast<QQuickWindow*>(root)) {
             m_window = win;
-            QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
 
             // Dynamic-property writes (setProperty) for anything
             // windowProperties contains that is NOT declared via QML
@@ -588,11 +659,29 @@ private:
     {
         m_failureReason = reason;
         qCWarning(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName() << "failed:" << reason;
-        if (m_state != State::Failed) {
-            m_state = State::Failed;
-            Q_EMIT m_q->stateChanged(State::Failed);
-            Q_EMIT m_q->failed(reason);
+        if (m_state == State::Failed) {
+            return;
         }
+        m_state = State::Failed;
+        // Defer both failure signals so consumer slots that `delete surface`
+        // as a teardown pattern never re-enter library code on a dead `this`.
+        // drive() / instantiateFromComponent() / ensureContent() continue
+        // touching m_component / m_window / m_handle after calling failWith;
+        // synchronous emit + synchronous delete would make every such access
+        // UAF. QueuedConnection posts a DeferredInvoke to m_q's thread, which
+        // runs after the current call stack unwinds — by which point we've
+        // either returned to the consumer's event loop or been explicitly
+        // torn down via ~Surface.
+        QMetaObject::invokeMethod(
+            m_q,
+            [q = m_q, reason]() {
+                if (!q) {
+                    return;
+                }
+                Q_EMIT q->stateChanged(State::Failed);
+                Q_EMIT q->failed(reason);
+            },
+            Qt::QueuedConnection);
     }
 };
 
@@ -600,7 +689,7 @@ private:
 // Surface — thin façade over Impl
 // ══════════════════════════════════════════════════════════════════════
 
-Surface::Surface(SurfaceConfig cfg, SurfaceDeps deps, QObject* parent)
+Surface::Surface(CtorToken, SurfaceConfig cfg, SurfaceDeps deps, QObject* parent)
     : QObject(parent)
     , m_impl(std::make_unique<Impl>(this, std::move(cfg), std::move(deps)))
 {

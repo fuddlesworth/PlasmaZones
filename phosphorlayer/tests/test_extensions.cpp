@@ -104,50 +104,32 @@ private Q_SLOTS:
         // Anti-regression for the path-traversal defence: the original
         // isSafeStorePath rejected internal "../" but a symlinked parent
         // directory can still route the "canonical" path outside the app
-        // data area. Reject paths whose realpath escapes the intended
-        // prefix.
-        //
-        // Construct: tempRoot / legitDir (real) + tempRoot / linkToLegit
-        // pointing at an absolute path OUTSIDE tempRoot. Asking JsonSurface-
-        // Store to write at `linkToLegit/foo.json` is effectively "write
-        // to whatever the symlink points at". A secure implementation
-        // realpath-resolves the parent and checks it stays in the app
-        // prefix; a naive one writes to the target.
-        //
-        // We don't check the implementation's exact semantics here — the
-        // store may legitimately accept this as "user knows what they're
-        // doing". But we DO assert no traversal via a "../" segment in
-        // the resolved path reaches our probe file outside the temp dir,
-        // which would indicate a bypass of the existing check.
+        // data area. The documented defence (ccbf6990) is "reject paths
+        // whose direct parent is a symlink" — so this test asserts
+        // rejection, not tolerated acceptance.
         QTemporaryDir outside;
         QVERIFY(outside.isValid());
-        const QString probePath = outside.filePath(QStringLiteral("probe.json"));
 
         QTemporaryDir inside;
         QVERIFY(inside.isValid());
         const QString linkPath = inside.filePath(QStringLiteral("escape"));
 
-        // Create a symlink pointing outside. If symlinks aren't supported
-        // (unusual on Linux tmpfs but possible), skip the test rather than
-        // fail spuriously.
         if (!QFile::link(outside.path(), linkPath)) {
             QSKIP("filesystem does not support symlinks");
         }
 
+        // linkPath is a symlink; asking to write at `linkPath/probe.json`
+        // places the direct parent of the target = linkPath = a symlink.
+        // isSafeStorePath must reject this and the store must behave as
+        // in-memory-only: save returns false, has returns false, no file
+        // is created at the symlink target.
         const QString storePath = linkPath + QStringLiteral("/probe.json");
         JsonSurfaceStore s(storePath);
-        const bool saved = s.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 99}});
-
-        if (saved) {
-            // If the implementation accepts the symlink path, the file
-            // MUST still land inside `outside` (the symlink's target) —
-            // NOT escape further. We verify by checking `probePath` exists.
-            QVERIFY2(QFile::exists(probePath), "save() returned true but the file did not land at the symlink target");
-        } else {
-            // Rejection is also acceptable — the implementation may
-            // conservatively refuse symlinked parents.
-            QVERIFY(!s.has(QStringLiteral("k")));
-        }
+        QVERIFY2(!s.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 99}}),
+                 "save() accepted a path whose direct parent is a symlink — traversal defence regression");
+        QVERIFY(!s.has(QStringLiteral("k")));
+        QVERIFY2(!QFile::exists(outside.filePath(QStringLiteral("probe.json"))),
+                 "save() did not write but the target file exists — implementation wrote in error");
     }
 
     void jsonStore_corruptFileRecoversOnNextSave()
@@ -247,9 +229,11 @@ private Q_SLOTS:
         // callbacks registered AFTER the broadcaster has already fired must
         // invoke immediately so a late consumer still sees the event.
         //
-        // We can't exit the app in a unit test, but aboutToQuit is a plain
-        // Qt signal — invoke it via QMetaObject to trigger the transport's
-        // internal hook without tearing down QCoreApplication.
+        // simulateCompositorLost() is the public test hook — preferred over
+        // emitting aboutToQuit on qGuiApp because that would globally fire
+        // the signal for every connected slot (including Qt internals) and
+        // couples the test to an implementation detail of how the transport
+        // hooks into app shutdown.
         XdgToplevelTransport t;
         int runs = 0;
         const auto cookie = t.addCompositorLostCallback([&] {
@@ -258,7 +242,7 @@ private Q_SLOTS:
         QVERIFY(cookie != 0);
         QCOMPARE(runs, 0);
 
-        QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
+        t.simulateCompositorLost();
         QCOMPARE(runs, 1);
 
         // Late registrant fires synchronously.

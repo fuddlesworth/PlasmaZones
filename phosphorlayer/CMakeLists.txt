@@ -25,6 +25,17 @@ endif()
 include(GenerateExportHeader)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Build options
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# PhosphorShellTransport wraps PhosphorShell's wlr-layer-shell integration.
+# Disable for minimal builds that only need XdgToplevelTransport (GNOME/
+# Mutter, nested sessions, environments without wlr-layer-shell). When OFF,
+# PhosphorShell is not a build-time dependency and the corresponding header
+# / source are excluded entirely.
+option(PHOSPHORLAYER_WITH_PHOSPHORSHELL "Build PhosphorShellTransport (requires PhosphorShell)" ON)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -34,14 +45,16 @@ include(GenerateExportHeader)
 # (QWindow::visibility semantics, Q_DECLARE_FLAGS underlying-type handling)
 # that silently misbehave on older versions rather than failing to compile.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
-# PhosphorShell provides the default ILayerShellTransport implementation.
-# Listed as PUBLIC dep so downstream consumers using PhosphorShellTransport
-# get PhosphorShell headers on their include path transitively.
-find_package(PhosphorShell CONFIG QUIET)
-if(NOT PhosphorShell_FOUND)
-    # In-tree build: PhosphorShell was added via add_subdirectory() before us.
-    if(NOT TARGET PhosphorShell::PhosphorShell)
-        message(FATAL_ERROR "PhosphorLayer requires PhosphorShell (target PhosphorShell::PhosphorShell not found)")
+if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
+    # PhosphorShell provides the default ILayerShellTransport implementation.
+    # Listed as PUBLIC dep so downstream consumers using PhosphorShellTransport
+    # get PhosphorShell headers on their include path transitively.
+    find_package(PhosphorShell CONFIG QUIET)
+    if(NOT PhosphorShell_FOUND)
+        # In-tree build: PhosphorShell was added via add_subdirectory() before us.
+        if(NOT TARGET PhosphorShell::PhosphorShell)
+            message(FATAL_ERROR "PhosphorLayer: PHOSPHORLAYER_WITH_PHOSPHORSHELL=ON but PhosphorShell::PhosphorShell not found. Either install PhosphorShell, add it via add_subdirectory() before PhosphorLayer, or build with -DPHOSPHORLAYER_WITH_PHOSPHORSHELL=OFF for the xdg_toplevel-only path.")
+        endif()
     endif()
 endif()
 
@@ -55,7 +68,6 @@ set(phosphorlayer_SRCS
     src/surfacefactory.cpp
     src/topologycoordinator.cpp
     src/defaults/defaultscreenprovider.cpp
-    src/defaults/phosphorshelltransport.cpp
     src/defaults/xdgtopleveltransport.cpp
     src/defaults/jsonsurfacestore.cpp
 )
@@ -74,11 +86,15 @@ set(phosphorlayer_public_HDRS
     include/PhosphorLayer/ISurfaceStore.h
     include/PhosphorLayer/ISurfaceAnimator.h
     include/PhosphorLayer/defaults/DefaultScreenProvider.h
-    include/PhosphorLayer/defaults/PhosphorShellTransport.h
     include/PhosphorLayer/defaults/XdgToplevelTransport.h
     include/PhosphorLayer/defaults/JsonSurfaceStore.h
     include/PhosphorLayer/defaults/NoOpSurfaceAnimator.h
 )
+
+if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
+    list(APPEND phosphorlayer_SRCS src/defaults/phosphorshelltransport.cpp)
+    list(APPEND phosphorlayer_public_HDRS include/PhosphorLayer/defaults/PhosphorShellTransport.h)
+endif()
 
 add_library(PhosphorLayer SHARED
     ${phosphorlayer_public_HDRS}
@@ -110,8 +126,17 @@ target_link_libraries(PhosphorLayer
         Qt6::Gui
         Qt6::Qml
         Qt6::Quick
-        PhosphorShell::PhosphorShell
 )
+
+if(PHOSPHORLAYER_WITH_PHOSPHORSHELL)
+    # PUBLIC so consumers using PhosphorShellTransport transitively get the
+    # PhosphorShell include path + link. The transport's implementation file
+    # is the only TU that needs PhosphorShell; the public header forward-
+    # declares PhosphorShell::LayerSurface so consumers that don't construct
+    # a PhosphorShellTransport don't pay the include cost.
+    target_link_libraries(PhosphorLayer PUBLIC PhosphorShell::PhosphorShell)
+    target_compile_definitions(PhosphorLayer PUBLIC PHOSPHORLAYER_WITH_PHOSPHORSHELL=1)
+endif()
 
 set_target_properties(PhosphorLayer PROPERTIES
     VERSION ${PHOSPHORLAYER_VERSION}
@@ -158,6 +183,18 @@ install(DIRECTORY include/PhosphorLayer/defaults/
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults
     FILES_MATCHING PATTERN "*.h"
 )
+
+if(NOT PHOSPHORLAYER_WITH_PHOSPHORSHELL)
+    # The DIRECTORY install above would have shipped PhosphorShellTransport.h
+    # even though its implementation was excluded from the library. Remove it
+    # from the install manifest after the fact — the header unconditionally
+    # pulls PhosphorShell symbols, so shipping it in a minimal build would
+    # break any consumer that #includes it expecting the target to resolve.
+    install(CODE "
+        file(REMOVE
+            \"\${CMAKE_INSTALL_PREFIX}/${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer/defaults/PhosphorShellTransport.h\")
+    ")
+endif()
 
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/PhosphorLayer/phosphorlayer_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorLayer

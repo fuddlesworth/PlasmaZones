@@ -7,6 +7,7 @@
 
 #include "internal.h"
 
+#include <QCoreApplication>
 #include <QMap>
 #include <QPointer>
 #include <QTimer>
@@ -44,15 +45,25 @@ public:
         }
 
         if (m_transport) {
-            // Callback runs on Wayland dispatch context; hop to GUI thread.
+            // Callback runs on the Wayland dispatch thread (not the GUI
+            // thread). Marshal unconditionally to qApp — QPointer is NOT
+            // thread-safe for reads concurrent with GUI-thread destruction,
+            // so testing it here would race. Liveness check happens in the
+            // GUI-thread lambda under QPointer's documented single-thread
+            // invariant. The removeCompositorLostCallback in ~Impl severs
+            // the subscription before ~TopologyCoordinator returns, so any
+            // already-queued invocation with a stale raw pointer is safe
+            // because `qp` is re-captured here by value and the auto-null
+            // happens on ~QObject (GUI thread), which cannot race with a
+            // callback that has already transitioned to GUI-thread context.
             QPointer<TopologyCoordinator> qp = m_q;
-            m_compositorLostCookie = m_transport->addCompositorLostCallback([qp] {
-                if (!qp) {
-                    return;
-                }
+            m_compositorLostCookie = m_transport->addCompositorLostCallback([qp]() mutable {
                 QMetaObject::invokeMethod(
-                    qp.data(),
-                    [qp] {
+                    qApp,
+                    [qp]() {
+                        if (!qp) {
+                            return;
+                        }
                         Q_EMIT qp->compositorRestarted();
                     },
                     Qt::QueuedConnection);

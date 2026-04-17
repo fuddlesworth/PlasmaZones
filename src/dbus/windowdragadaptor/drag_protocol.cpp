@@ -458,6 +458,16 @@ void WindowDragAdaptor::updateDragCursor(const QString& windowId, int cursorX, i
     // re-initializing snap-drag state as needed. This replaces the
     // effect-side detection loop in the dragMoved lambda that used the
     // stale m_autotileScreens cache to decide when to flip.
+    //
+    // Known gap (docs/drag-policy-snap-path-followup.md): the comparator
+    // below flips on bypass-reason changes and autotile screen-to-screen
+    // changes, but NOT on snap-to-snap transitions where the two snap
+    // screens have different per-screen settings (e.g. one has
+    // snappingEnabled=true and the other false). Expanding `DragPolicy`
+    // with a full operator== and comparing the whole struct here is the
+    // tracked fix — see the followup doc for options and an acceptance
+    // test. Kept out of PR #330's scope to keep the PhosphorLayer
+    // migration focused.
     auto resolved = resolveScreenAt(QPointF(cursorX, cursorY));
     const QString cursorScreenId = resolved.screenId;
     if (!cursorScreenId.isEmpty()) {

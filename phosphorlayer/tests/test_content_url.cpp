@@ -99,7 +99,8 @@ private Q_SLOTS:
         if (surface->state() != Surface::State::Failed) {
             QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Failed, 2000);
         }
-        QCOMPARE(failSpy.count(), 1);
+        // `failed` is deferred via QueuedConnection — pump the loop.
+        QTRY_COMPARE(failSpy.count(), 1);
     }
 
     void rootObjectMustBeQuickItem()
@@ -123,7 +124,7 @@ private Q_SLOTS:
         if (surface->state() != Surface::State::Failed) {
             QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Failed, 2000);
         }
-        QCOMPARE(failSpy.count(), 1);
+        QTRY_COMPARE(failSpy.count(), 1);
         QVERIFY(failSpy.at(0).at(0).toString().contains(QStringLiteral("QQuickItem")));
     }
 
@@ -180,6 +181,65 @@ private Q_SLOTS:
             QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Shown, 2000);
         }
         QCOMPARE(surface->window()->property("injected").toString(), QStringLiteral("from-config"));
+    }
+
+    void rejectedAttachOnContentUrlTransitionsToFailed()
+    {
+        // Complementary to the existing contentItem rejectedAttach test.
+        // Covers the async-load path: QML loads successfully, then the
+        // transport rejects attach(). Surface must end in Failed and emit
+        // `failed` exactly once. Without this case, a regression that
+        // split the rejection handling between the sync-ready and async-
+        // ready branches would only be caught on the contentItem side.
+        const QUrl url = writeQml(u"valid-rejected.qml", u"import QtQuick 2.15\nItem { width: 1; height: 1 }\n");
+
+        MockTransport t;
+        t.rejectNextAttach();
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        SurfaceConfig cfg;
+        cfg.role = Roles::CenteredModal;
+        cfg.contentUrl = url;
+        cfg.screen = s.primary();
+
+        auto* surface = f.create(std::move(cfg));
+        QSignalSpy failSpy(surface, &Surface::failed);
+        surface->show();
+        QTRY_COMPARE_WITH_TIMEOUT(surface->state(), Surface::State::Failed, 2000);
+        // failed() is deferred via QueuedConnection; QTRY pumps the event
+        // loop so by the time state == Failed the signal has landed.
+        QTRY_COMPARE(failSpy.count(), 1);
+    }
+
+    void screenRemovedWhileWarming()
+    {
+        // Async load path + screen removal mid-Warming. The Surface has
+        // no observable "stuck in Warming" failure mode — we verify that
+        // it eventually reaches Shown or Failed, never wedges in Warming.
+        const QUrl url = writeQml(u"warm-race.qml", u"import QtQuick 2.15\nItem { width: 10; height: 10 }\n");
+
+        MockTransport t;
+        MockScreenProvider s;
+        QScreen* primary = s.primary();
+        QVERIFY(primary);
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        SurfaceConfig cfg;
+        cfg.role = Roles::CenteredModal;
+        cfg.contentUrl = url;
+        cfg.screen = primary;
+
+        auto* surface = f.create(std::move(cfg));
+        surface->show();
+        // Drop the primary while the QML component loads. setScreens
+        // triggers screensChanged; the Surface's notifier slot nulls
+        // m_config.screen but does NOT advance state.
+        s.setScreens({});
+        // Restore the primary so finishAttach (when load completes) can
+        // resolve a real target via its fallback path.
+        s.setScreens({primary});
+
+        QTRY_VERIFY_WITH_TIMEOUT(
+            surface->state() == Surface::State::Shown || surface->state() == Surface::State::Failed, 2000);
     }
 
     void contextPropertiesAreVisibleToQml()

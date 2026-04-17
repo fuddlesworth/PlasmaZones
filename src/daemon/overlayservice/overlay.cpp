@@ -554,6 +554,25 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     if (donor == m_screenStates.end() || !donor->overlayWindow) {
         return false;
     }
+
+    // Rekey is only valid when the surface's protocol-level placement
+    // (anchors, in particular) does not have to change. wlr-layer-shell
+    // advertises v2+ `set_anchor` as mutable, but several compositors
+    // (weston, some mutter forks) silently ignore post-attach anchor
+    // changes and the surface stays pinned to its original anchors. A
+    // physical→virtual (or VS→VS with different anchor set) flip requires
+    // AnchorAll → Top|Left — if that anchor change no-ops on the donor
+    // compositor, the overlay keeps rendering across the wrong region.
+    // Bail out and let the caller destroy+recreate when the anchor set
+    // would have to change.
+    const bool wasVS = VirtualScreenId::isVirtual(oldKey);
+    const bool willBeVS = VirtualScreenId::isVirtual(newKey);
+    if (wasVS != willBeVS) {
+        qCInfo(lcOverlay) << "rekeyOverlayState: refusing flavor flip rekey" << oldKey << "->" << newKey
+                          << "(anchors would change; some compositors ignore post-attach set_anchor)";
+        return false;
+    }
+
     // If a stale (empty) entry already exists under newKey, drop it so the
     // move lands cleanly. It has no live window — if it did the caller
     // should not have selected this donor.
@@ -697,22 +716,33 @@ void OverlayService::destroyOverlayWindow(QScreen* screen)
 void OverlayService::destroyOverlayWindow(const QString& screenId)
 {
     auto it = m_screenStates.find(screenId);
-    if (it != m_screenStates.end()) {
-        // Disconnect the stored geometryChanged connection specifically,
-        // rather than disconnecting all signals from the screen to a receiver.
-        // The connection targets `this` (not `window`), so the old blanket
-        // disconnect(screen, nullptr, window, nullptr) missed it entirely.
-        QObject::disconnect(it->overlayGeomConnection);
-        if (it->overlaySurface) {
-            it->overlaySurface->deleteLater();
-            it->overlaySurface = nullptr;
-            it->overlayWindow = nullptr;
-        }
-        it->overlayPhysScreen = nullptr;
-        it->overlayGeometry = QRect();
-        it->overlayGeomConnection = {};
-        // Fresh QQuickWindow on next createOverlayWindow needs a fresh cache.
-        it->labelsTextureHash = 0;
+    if (it == m_screenStates.end()) {
+        return;
+    }
+    // Disconnect the stored geometryChanged connection specifically,
+    // rather than disconnecting all signals from the screen to a receiver.
+    // The connection targets `this` (not `window`), so the old blanket
+    // disconnect(screen, nullptr, window, nullptr) missed it entirely.
+    QObject::disconnect(it->overlayGeomConnection);
+    if (it->overlaySurface) {
+        it->overlaySurface->deleteLater();
+        it->overlaySurface = nullptr;
+        it->overlayWindow = nullptr;
+    }
+    it->overlayPhysScreen = nullptr;
+    it->overlayGeometry = QRect();
+    it->overlayGeomConnection = {};
+    // Fresh QQuickWindow on next createOverlayWindow needs a fresh cache.
+    it->labelsTextureHash = 0;
+
+    // Erase the entry entirely if nothing else is keeping it alive. Per-screen
+    // state carries four surface pointers (overlay, zone selector, layout OSD,
+    // navigation OSD); only the overlay is cleared here. If the others are all
+    // null too, the entry is an empty husk that accumulates under hide()+show()
+    // cycles. destroyAllWindowsForPhysicalScreen already erases, but hide()
+    // used to leave husks behind — drop them here symmetrically.
+    if (!it->overlaySurface && !it->zoneSelectorSurface && !it->layoutOsdSurface && !it->navigationOsdSurface) {
+        m_screenStates.erase(it);
     }
 }
 

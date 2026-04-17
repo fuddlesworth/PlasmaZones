@@ -114,8 +114,11 @@ private Q_SLOTS:
         QSignalSpy failSpy(surface, &Surface::failed);
 
         surface->show();
+        // state() is synchronous (m_state is written inside failWith); the
+        // `failed` signal itself is deferred via QueuedConnection so consumer
+        // slots can `delete surface` without re-entry. QTRY pumps the loop.
         QCOMPARE(surface->state(), Surface::State::Failed);
-        QCOMPARE(failSpy.count(), 1);
+        QTRY_COMPARE(failSpy.count(), 1);
         QVERIFY(failSpy.at(0).at(0).toString().contains(QStringLiteral("attach")));
     }
 
@@ -298,10 +301,11 @@ private Q_SLOTS:
     void compositorLostDoesNotCrashShownSurface()
     {
         // A Surface in Shown state must tolerate a compositor-lost pulse
-        // without crashing. The library doesn't auto-recreate the surface
-        // (that's the consumer's job via TopologyCoordinator), but the
-        // transport's lost-callback must fire cleanly and the Surface must
-        // remain in a usable state for explicit teardown.
+        // without crashing. The library contract (documented on Surface.h)
+        // is "state is preserved; recovery is the consumer's job via
+        // TopologyCoordinator" — so Shown stays Shown, not Failed. The
+        // previous OR-assertion tolerated both outcomes and would have
+        // masked a regression that silently transitioned to Failed.
         MockTransport t;
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
@@ -310,47 +314,59 @@ private Q_SLOTS:
         QCOMPARE(surface->state(), Surface::State::Shown);
 
         t.simulateCompositorLost();
-        // State is preserved (library leaves recovery to the consumer);
-        // the crucial assertion is that no UAF/crash happened.
-        QVERIFY(surface->state() == Surface::State::Shown || surface->state() == Surface::State::Failed);
+        QCOMPARE(surface->state(), Surface::State::Shown);
     }
 
     void screenRemovalNullsStaleScreenReference()
     {
-        // Anti-regression for the stale-QScreen* hazard (review L3): after
-        // a screensChanged removing the bound screen, the next re-attach
-        // must NOT pass the now-dangling QScreen* to the transport. The
-        // Surface subscribes to the notifier and nulls m_config.screen so
-        // finishAttach falls back to primary.
+        // Anti-regression for the stale-QScreen* hazard (review L3).
+        //
+        // Three observable contracts:
+        //   1. When the attached screen is removed from the provider, the
+        //      Surface emits `screenLost` exactly once (so consumers can
+        //      decide to destroy+rebuild). State is preserved — the library
+        //      does not auto-transition to Failed.
+        //   2. Nulling is idempotent: a second setScreens({}) with the
+        //      screen already removed does NOT re-emit screenLost.
+        //   3. The factory's own fallback kicks in on subsequent create()
+        //      calls with a null cfg.screen: it routes to the provider's
+        //      current primary rather than propagating a stale pointer.
         MockTransport t;
         MockScreenProvider s;
         SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
 
-        // Fake a secondary screen by listing the primary twice (offscreen
-        // QPA gives us only one QScreen*, but the mock accepts duplicates
-        // for test purposes — see MockScreenProvider::setScreens).
         QScreen* primary = s.primary();
         QVERIFY(primary);
 
-        auto cfg = buildConfig(primary);
-        auto* surface = f.create(std::move(cfg));
+        auto* surface = f.create(buildConfig(primary));
+        QSignalSpy lostSpy(surface, &Surface::screenLost);
+
         surface->warmUp();
         QCOMPARE(surface->state(), Surface::State::Hidden);
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        QCOMPARE(t.m_attachRecords.first().args.screen, primary);
 
-        // Simulate removing the only screen: provider now reports empty.
+        // Remove the only screen. Library emits screenLost and nulls the
+        // internal config.screen so the next re-attach won't pass the
+        // dangling pointer.
         s.setScreens({});
-        // Surface should have nulled its m_config.screen internally. We
-        // can't observe m_config.screen directly, but we CAN observe that
-        // a subsequent call path (which we can't trigger from outside)
-        // would fall back to primary. The public-observable effect is:
-        // no crash from the screensChanged signal hitting a null provider-
-        // primary, and the surface stays in Hidden.
+        QCOMPARE(lostSpy.count(), 1);
         QCOMPARE(surface->state(), Surface::State::Hidden);
 
-        // Restore a screen and verify normal operation resumes.
+        // Re-emitting setScreens({}) with no screen to lose: no new signal.
+        s.setScreens({});
+        QCOMPARE(lostSpy.count(), 1);
+
+        // Restore a screen. Build a fresh surface and verify the factory
+        // routes through the provider's current primary.
         s.setScreens({primary});
-        surface->show();
-        QCOMPARE(surface->state(), Surface::State::Shown);
+        t.m_attachRecords.clear();
+        auto* surface2 = f.create(buildConfig(/*screen=*/nullptr));
+        QVERIFY(surface2);
+        surface2->warmUp();
+        QCOMPARE(surface2->state(), Surface::State::Hidden);
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        QCOMPARE(t.m_attachRecords.first().args.screen, primary);
     }
 };
 

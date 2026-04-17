@@ -7,6 +7,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QtGlobal>
 
 namespace PhosphorLayer {
 
@@ -30,7 +31,9 @@ namespace PhosphorLayer {
 class PHOSPHORLAYER_EXPORT ISurfaceStore
 {
 public:
+    ISurfaceStore() = default;
     virtual ~ISurfaceStore() = default;
+    Q_DISABLE_COPY_MOVE(ISurfaceStore)
 
     /// Persist @p data under @p key. Overwrites any existing entry.
     /// Returns false on I/O failure (the implementation logs the reason).

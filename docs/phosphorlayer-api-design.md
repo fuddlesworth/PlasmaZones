@@ -285,20 +285,34 @@ Per-screen surface bookkeeping for affinities that imply multiple surfaces
 template <typename SurfaceT = Surface>
 class ScreenSurfaceRegistry {
 public:
+    // Per-screen builder. Receives the target screen; returns a new Surface
+    // (or subclass) bound to it. Nullptr return is permitted — the registry
+    // skips that screen without logging.
+    using Builder = std::function<SurfaceT*(QScreen*)>;
+
     ScreenSurfaceRegistry(SurfaceFactory* factory, IScreenProvider* screens);
 
     // Create one SurfaceT per screen reported by the provider.
     // Returns the current set. Safe to call repeatedly — idempotent against
-    // the provider's current screen list.
-    std::vector<SurfaceT*> createForAllScreens(SurfaceConfig tpl);
+    // the provider's current screen list. SurfaceConfig is move-only so we
+    // take a Builder rather than a single template config; the Builder is
+    // also the natural place to inject per-screen context properties.
+    QList<SurfaceT*> createForAllScreens(Builder builder);
 
-    // Diff-based sync: destroys surfaces for removed screens, creates surfaces
-    // for added screens. Wired up by TopologyCoordinator on `screensChanged`.
-    void syncToScreens();
+    // Diff-based sync: destroys surfaces for removed screens, calls @p
+    // builder for added screens. No signals emitted — consumers listen to
+    // their surfaces directly.
+    void syncToScreens(Builder builder);
+
+    // Register an externally-constructed surface. Registry becomes the
+    // owner-of-record: clear() will deleteLater() adopted entries. QPointer
+    // + DeferredDelete coalescing keeps this safe when the surface is also
+    // reachable through a parent-QObject that's about to destroy it.
+    void adoptSurface(QScreen* screen, SurfaceT* surface);
 
     SurfaceT* surfaceForScreen(QScreen* s) const;
-    std::vector<SurfaceT*> surfaces() const;
-    void clear();                           // Destroys all surfaces
+    QList<SurfaceT*> surfaces() const;
+    void clear();                           // Destroys owned surfaces only
 };
 ```
 
@@ -313,24 +327,30 @@ restart. Drives recreations via the registry.
 class PHOSPHORLAYER_EXPORT TopologyCoordinator : public QObject {
     Q_OBJECT
 public:
-    struct Config {
+    using SyncCallback = std::function<void()>;
+    using CallbackId = quint64;
+
+    struct TopologyConfig {
         int debounceMs = 200;               // Qt emits screensChanged repeatedly
         bool debugLogDiffs = false;
     };
     TopologyCoordinator(IScreenProvider* screens,
                         ILayerShellTransport* transport,
-                        Config cfg = {},
+                        TopologyConfig cfg = {},
                         QObject* parent = nullptr);
 
-    // Attach a registry — the coordinator will keep its screen set in sync.
-    // Multiple registries may be attached (e.g., overlays + panels).
-    template <typename SurfaceT>
-    void attach(ScreenSurfaceRegistry<SurfaceT>* reg);
-    void detach(auto* reg);
+    // Register a callback that fires on each debounced topology change.
+    // The coordinator deliberately does NOT hold pointers to ScreenSurface-
+    // Registry instances — consumers wire the sync call themselves through
+    // a callback so they can also update non-registry state at the same
+    // transition point. Returns an opaque id; pass to detachSyncCallback
+    // to remove. Callbacks fire in registration order.
+    [[nodiscard]] CallbackId attachSyncCallback(SyncCallback cb);
+    void detachSyncCallback(CallbackId id);
 
 Q_SIGNALS:
     void screensChanging();                 // Debounce fired; recreation imminent
-    void screensChanged();                  // All registries synced
+    void screensChanged();                  // All callbacks have run
     void compositorRestarted();             // Transport signalled global removal
 };
 ```
@@ -342,17 +362,28 @@ Q_SIGNALS:
 ### IScreenProvider
 
 ```cpp
+// Separate QObject so IScreenProvider itself can be multiple-inherited
+// into a non-QObject domain class without Qt's single-QObject-parent rule.
+class PHOSPHORLAYER_EXPORT ScreenProviderNotifier : public QObject {
+    Q_OBJECT
+public:
+    explicit ScreenProviderNotifier(QObject* parent = nullptr);
+Q_SIGNALS:
+    void screensChanged();  // Screen list or geometry changed
+    void focusChanged();    // focused() would now return a different screen
+};
+
 class PHOSPHORLAYER_EXPORT IScreenProvider {
 public:
     virtual ~IScreenProvider() = default;
     virtual QList<QScreen*> screens() const = 0;
     virtual QScreen* primary() const = 0;
-    virtual QScreen* focused() const = 0;   // Screen containing cursor / last-focused
-    virtual QObject* notifier() = 0;        // emits void changed()
+    virtual QScreen* focused() const = 0;              // Screen containing cursor / last-focused
+    virtual ScreenProviderNotifier* notifier() const = 0;
 };
 
 // Default implementation — backed by QGuiApplication
-class PHOSPHORLAYER_EXPORT DefaultScreenProvider : public QObject, public IScreenProvider { /* ... */ };
+class PHOSPHORLAYER_EXPORT DefaultScreenProvider : public IScreenProvider { /* ... */ };
 ```
 
 PlasmaZones injects a virtual-screen-aware provider; standalone consumers use
@@ -371,12 +402,24 @@ public:
     // Returns a handle the surface uses to apply mutable properties later.
     virtual std::unique_ptr<ITransportHandle> attach(QQuickWindow* win,
                                                      const TransportAttachArgs& args) = 0;
-    // Global-removed callback (compositor restart detection)
-    virtual void addCompositorLostCallback(std::function<void()> cb) = 0;
+    // Compositor-lost callback (global removal / compositor restart).
+    // Returns an opaque cookie; pass to removeCompositorLostCallback to
+    // unsubscribe. 0 is reserved for "registration refused" and is safe
+    // to pass to remove. Long-lived transports without unsubscribe leak
+    // dead entries for the process lifetime — always remove on consumer
+    // destruction.
+    using CompositorLostCallback = std::function<void()>;
+    using CompositorLostCookie = quint64;
+    [[nodiscard]] virtual CompositorLostCookie
+        addCompositorLostCallback(CompositorLostCallback cb) = 0;
+    virtual void removeCompositorLostCallback(CompositorLostCookie cookie) = 0;
 };
 
-// Default implementation — wraps PhosphorShell::LayerSurface
+// Default implementations:
+//   PhosphorShellTransport — wraps PhosphorShell::LayerSurface (wlr-layer-shell)
+//   XdgToplevelTransport   — fallback for compositors without wlr-layer-shell
 class PHOSPHORLAYER_EXPORT PhosphorShellTransport : public ILayerShellTransport { /* ... */ };
+class PHOSPHORLAYER_EXPORT XdgToplevelTransport  : public ILayerShellTransport { /* ... */ };
 ```
 
 ### IQmlEngineProvider (optional)
@@ -412,20 +455,36 @@ auto topology  = std::make_unique<TopologyCoordinator>(screens.get(),
 // One surface per screen for a notification daemon
 auto notifReg = std::make_unique<ScreenSurfaceRegistry<>>(factory.get(),
                                                           screens.get());
-topology->attach(notifReg.get());
-notifReg->createForAllScreens({
-    .role = Roles::CornerToast.withMargins({0, 40, 40, 0}),
-    .contentUrl = QUrl(u"qrc:/MyApp/NotificationItem.qml"_s),
-    .contextProperties = {{u"notificationController"_s,
-                           QVariant::fromValue(m_ctrl)}},
+// Wire the coordinator's debounced-topology callback into the registry's
+// diff-based sync. The coordinator has no direct knowledge of registries;
+// consumers compose the two with a small lambda so non-registry state
+// can piggy-back on the same transition point.
+topology->attachSyncCallback([&] {
+    notifReg->syncToScreens([&](QScreen* s) {
+        auto cfg = SurfaceConfig{};
+        cfg.role = Roles::CornerToast.withMargins({0, 40, 40, 0});
+        cfg.contentUrl = QUrl(u"qrc:/MyApp/NotificationItem.qml"_s);
+        cfg.screen = s;
+        cfg.contextProperties = {{u"notificationController"_s,
+                                  QVariant::fromValue(m_ctrl)}};
+        return factory->create(std::move(cfg));
+    });
+});
+// Prime the initial set without waiting for the first topology change.
+notifReg->createForAllScreens([&](QScreen* s) {
+    SurfaceConfig cfg;
+    cfg.role = Roles::CornerToast.withMargins({0, 40, 40, 0});
+    cfg.contentUrl = QUrl(u"qrc:/MyApp/NotificationItem.qml"_s);
+    cfg.screen = s;
+    return factory->create(std::move(cfg));
 });
 
 // Singleton modal
-auto modal = factory->create({
-    .role = Roles::CenteredModal,
-    .contentUrl = QUrl(u"qrc:/MyApp/SettingsDialog.qml"_s),
-    .debugName = u"settings-modal"_s,
-});
+SurfaceConfig modalCfg;
+modalCfg.role = Roles::CenteredModal;
+modalCfg.contentUrl = QUrl(u"qrc:/MyApp/SettingsDialog.qml"_s);
+modalCfg.debugName = u"settings-modal"_s;
+auto* modal = factory->create(std::move(modalCfg));
 modal->show();
 ```
 
@@ -592,18 +651,24 @@ phosphorlayer/
 │       ├── IScreenProvider.h
 │       ├── ILayerShellTransport.h
 │       ├── IQmlEngineProvider.h
+│       ├── ISurfaceStore.h
+│       ├── ISurfaceAnimator.h
 │       └── defaults/
 │           ├── DefaultScreenProvider.h
-│           └── PhosphorShellTransport.h
+│           ├── PhosphorShellTransport.h
+│           ├── XdgToplevelTransport.h
+│           ├── JsonSurfaceStore.h
+│           └── NoOpSurfaceAnimator.h
 ├── src/
 │   ├── role.cpp
-│   ├── surface.cpp
-│   ├── surfacestatemachine.cpp
+│   ├── surface.cpp              (state machine lives inside Surface::Impl)
 │   ├── surfacefactory.cpp
 │   ├── topologycoordinator.cpp
 │   ├── defaults/
 │   │   ├── defaultscreenprovider.cpp
-│   │   └── phosphorshelltransport.cpp
+│   │   ├── phosphorshelltransport.cpp
+│   │   ├── xdgtopleveltransport.cpp
+│   │   └── jsonsurfacestore.cpp
 │   └── internal.h
 └── tests/
     ├── CMakeLists.txt
@@ -611,10 +676,13 @@ phosphorlayer/
     │   ├── mocktransport.h
     │   └── mockscreenprovider.h
     ├── test_role.cpp
-    ├── test_surface_state_machine.cpp
+    ├── test_surface.cpp
     ├── test_factory.cpp
     ├── test_registry.cpp
-    └── test_topology.cpp
+    ├── test_topology.cpp
+    ├── test_content_url.cpp
+    ├── test_default_screen_provider.cpp
+    └── test_extensions.cpp
 ```
 
 ---

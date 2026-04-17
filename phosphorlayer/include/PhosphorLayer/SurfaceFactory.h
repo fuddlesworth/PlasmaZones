@@ -3,18 +3,21 @@
 
 #pragma once
 
+#include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
 #include <PhosphorLayer/phosphorlayer_export.h>
 
 #include <QObject>
 #include <QString>
 
+#include <optional>
+#include <type_traits>
+
 namespace PhosphorLayer {
 
 class ILayerShellTransport;
 class IQmlEngineProvider;
 class IScreenProvider;
-class Surface;
 
 /**
  * @brief Stateless constructor for Surfaces.
@@ -70,10 +73,60 @@ public:
      * - `deps.transport->isSupported()` is false
      * - Both `cfg.contentUrl` and `cfg.contentItem` set (or both empty)
      * - `cfg.screen == nullptr` and the screen provider has no primary
+     * - `cfg.sharedEngine` and `engineProvider` both set (mutually exclusive)
+     * - `cfg.role.isValid()` returns false
      */
     [[nodiscard]] Surface* create(SurfaceConfig cfg, QObject* parent = nullptr);
 
+    /**
+     * @brief Create a Surface subclass from a config.
+     *
+     * Same validation as @ref create() but instantiates @p T instead of
+     * Surface itself. @p T must derive from Surface and expose a
+     * constructor with the signature
+     * `T(Surface::CtorToken, SurfaceConfig, SurfaceDeps, QObject*)`
+     * — forwarding its `CtorToken` argument to the Surface base is the
+     * entire required pattern. The CtorToken is factory-only-constructible,
+     * so consumers cannot bypass this validation via direct `new T(...)`
+     * even when T exposes a public constructor.
+     *
+     * Example:
+     * @code
+     *     class PzOverlaySurface : public PhosphorLayer::Surface {
+     *     public:
+     *         PzOverlaySurface(Surface::CtorToken tok,
+     *                          SurfaceConfig cfg, SurfaceDeps deps,
+     *                          QObject* parent)
+     *             : Surface(tok, std::move(cfg), std::move(deps), parent) {}
+     *     };
+     *
+     *     auto* s = factory.createAs<PzOverlaySurface>(std::move(cfg));
+     * @endcode
+     */
+    template<typename T>
+    [[nodiscard]] T* createAs(SurfaceConfig cfg, QObject* parent = nullptr)
+    {
+        static_assert(std::is_base_of_v<Surface, T>, "T must derive from PhosphorLayer::Surface");
+        auto sdeps = validateAndPrepareDeps(cfg);
+        if (!sdeps) {
+            return nullptr;
+        }
+        return new T(Surface::CtorToken{}, std::move(cfg), std::move(*sdeps), parent ? parent : this);
+    }
+
     const Deps& deps() const noexcept;
+
+    /**
+     * @brief Run the factory's validation and produce a SurfaceDeps ready
+     * for Surface construction. Returns `std::nullopt` on any failure (all
+     * failures logged via qCWarning).
+     *
+     * Exposed publicly because the `createAs<T>` template above must call
+     * it at the instantiation site. Consumers should prefer `create()` /
+     * `createAs<T>()` over this method directly — they handle the
+     * new-expression and parent-ownership wiring for you.
+     */
+    [[nodiscard]] std::optional<SurfaceDeps> validateAndPrepareDeps(SurfaceConfig& cfg);
 
 private:
     class Impl;

@@ -323,6 +323,14 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
 void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom)
 {
+    // Callers reach here via showZoneSelector's per-screen loop where physScreen
+    // is validated, but handleScreenAdded / setupForScreen paths can pass null
+    // under racy screen-disconnect orderings. Guard explicitly — every `->`
+    // below would otherwise deref null. Mirrors createOverlayWindow's pattern.
+    if (!physScreen) {
+        qCWarning(lcOverlay) << "createZoneSelectorWindow: null physScreen for screen=" << screenId;
+        return;
+    }
     if (m_screenStates.contains(screenId) && m_screenStates[screenId].zoneSelectorSurface) {
         return;
     }

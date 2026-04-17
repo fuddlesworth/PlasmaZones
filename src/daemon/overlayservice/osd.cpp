@@ -48,9 +48,22 @@ void centerLayerWindowOnScreen(PhosphorLayer::ITransportHandle* handle, const QR
         qCWarning(lcOverlay) << "centerLayerWindowOnScreen: no transport handle — surface was not warmed";
         return;
     }
-    // Compute center position within the target area, expressed as margins from physical screen edges
-    const int targetCenterX = (targetGeom.x() - physScreenGeom.x()) + qMax(0, (targetGeom.width() - osdWidth) / 2);
-    const int targetCenterY = (targetGeom.y() - physScreenGeom.y()) + qMax(0, (targetGeom.height() - osdHeight) / 2);
+    // Position OSD within the VS sub-region AND clamp it to never bleed past
+    // the VS's edges. Naive centering computes `(vsOffset + (vsW - osd) / 2)`
+    // but, for an OSD wider than the VS (e.g. a long navigation label on a
+    // narrow half-screen VS), that value can push the right edge of the OSD
+    // into the neighbouring VS. The qMin clamps cap the centre position at
+    // "rightmost column where the OSD still fits entirely inside the VS";
+    // the qMax floors cover the pathological case where the OSD is wider
+    // than the VS itself (fall back to VS-aligned left edge).
+    const int vsOffsetX = targetGeom.x() - physScreenGeom.x();
+    const int vsOffsetY = targetGeom.y() - physScreenGeom.y();
+    const int idealCenterX = vsOffsetX + qMax(0, (targetGeom.width() - osdWidth) / 2);
+    const int idealCenterY = vsOffsetY + qMax(0, (targetGeom.height() - osdHeight) / 2);
+    const int maxCenterX = qMax(vsOffsetX, vsOffsetX + targetGeom.width() - osdWidth);
+    const int maxCenterY = qMax(vsOffsetY, vsOffsetY + targetGeom.height() - osdHeight);
+    const int targetCenterX = qMin(idealCenterX, maxCenterX);
+    const int targetCenterY = qMin(idealCenterY, maxCenterY);
     const int rightMargin = qMax(0, physScreenGeom.width() - targetCenterX - osdWidth);
     const int bottomMargin = qMax(0, physScreenGeom.height() - targetCenterY - osdHeight);
 

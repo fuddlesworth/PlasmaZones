@@ -100,9 +100,16 @@ public:
     /// Register an externally-created Surface under @p screen.
     /// Useful when a consumer subclasses Surface and constructs it itself.
     ///
+    /// **Ownership:** the registry becomes the owner-of-record for the
+    /// adopted surface. `clear()` / `syncToScreens` will schedule
+    /// `deleteLater()` on the stored pointer. QPointer's auto-nulling +
+    /// Qt's DeferredDelete coalescing make this safe even when the surface
+    /// is ALSO reachable through a parent QObject that's about to destroy
+    /// it — the second delete-event becomes a no-op.
+    ///
     /// If @p screen already has a registered surface, the prior surface is
-    /// scheduled for deletion via `deleteLater()` unless it is the same
-    /// object as @p surface (re-adopt is an idempotent no-op).
+    /// scheduled for deletion unless it is the same object as @p surface
+    /// (re-adopt is an idempotent no-op).
     void adoptSurface(QScreen* screen, SurfaceT* surface);
 
     SurfaceT* surfaceForScreen(QScreen* screen) const;
@@ -144,8 +151,6 @@ QList<SurfaceT*> ScreenSurfaceRegistry<SurfaceT>::createForAllScreens(Builder bu
             // Stale QPointer (surface externally destroyed) — prune so the
             // builder replaces it cleanly and surfaceForScreen() stops
             // reporting null for a key that looks like it's present.
-            // Matches adoptSurface's "prior entry is removed before insert"
-            // semantics.
             m_entries.erase(it);
         }
         SurfaceT* surface = builder ? builder(s) : nullptr;
@@ -169,9 +174,14 @@ void ScreenSurfaceRegistry<SurfaceT>::syncToScreens(Builder builder)
     // Single pass: remove entries for (a) removed screens and (b) screens
     // whose QPointer auto-nulled because the surface was destroyed
     // externally. Without the null-sweep the map accumulates dangling
-    // entries under pathological consumer behaviour (consumer deletes the
-    // surface without notifying the registry) and surfaceForScreen() keeps
-    // reporting null for a key that looks like it's present.
+    // entries under pathological consumer behaviour and surfaceForScreen()
+    // keeps reporting null for a key that looks present.
+    //
+    // Safety for deleteLater: QPointer auto-nulls on external destruction
+    // before the outer-parent's ~QObject finishes, and Qt coalesces
+    // DeferredDelete events, so calling deleteLater on a surface whose
+    // parent is also about to destroy it is a no-op rather than a
+    // double-free.
     for (auto it = m_entries.begin(); it != m_entries.end();) {
         if (!currentSet.contains(it.key())) {
             if (SurfaceT* s = it.value().data()) {
@@ -210,10 +220,9 @@ void ScreenSurfaceRegistry<SurfaceT>::clear()
 template<typename SurfaceT>
 void ScreenSurfaceRegistry<SurfaceT>::adoptSurface(QScreen* screen, SurfaceT* surface)
 {
-    // Replace any prior entry — the registry is the owner-of-record, so
-    // dropping the QPointer without deleteLater() would orphan the prior
-    // surface (clear() only iterates current entries). Re-adopting the
-    // same pointer is idempotent.
+    // Registry becomes the owner-of-record. Prior entries are scheduled for
+    // deleteLater so the QHash::insert below doesn't silently displace and
+    // leak. Re-adopting the same pointer is idempotent.
     const auto existing = m_entries.constFind(screen);
     if (existing != m_entries.constEnd()) {
         if (SurfaceT* prior = existing.value().data()) {

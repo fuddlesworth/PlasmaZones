@@ -577,6 +577,17 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     connect(window, SIGNAL(layoutSelected(QString)), this, SLOT(onLayoutPickerSelected(QString)));
     connect(window, SIGNAL(dismissed()), this, SLOT(hideLayoutPicker()));
 
+    // Belt-and-braces visibleChanged cleanup — mirrors the snap-assist
+    // pattern (line ~348 above) so if QML ever sets visible=false without
+    // emitting dismissed(), we still tear down instead of leaking the
+    // Surface + Vulkan swapchain. Without this, a future QML refactor that
+    // forgets the dismissed() emit silently leaks.
+    connect(window, &QWindow::visibleChanged, this, [this](bool visible) {
+        if (!visible && m_layoutPickerWindow) {
+            QTimer::singleShot(0, this, &OverlayService::hideLayoutPicker);
+        }
+    });
+
     // Install event filter for reliable Escape key handling on Wayland
     window->installEventFilter(this);
 

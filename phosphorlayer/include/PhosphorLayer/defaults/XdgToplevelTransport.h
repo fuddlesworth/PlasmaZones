@@ -49,6 +49,18 @@ public:
     [[nodiscard]] CompositorLostCookie addCompositorLostCallback(CompositorLostCallback cb) override;
     void removeCompositorLostCallback(CompositorLostCookie cookie) override;
 
+    /**
+     * @brief Fire every registered compositor-lost callback.
+     *
+     * Exposed primarily for tests that want to exercise consumer teardown
+     * paths without tearing down QGuiApplication. Consumers may also use
+     * this to inject a synthetic compositor-lost event (e.g. when a
+     * higher-level transport wrapper detects a logical disconnect that
+     * xdg_toplevel itself does not surface). Idempotent: once fired, the
+     * broadcaster stays fired and subsequent calls are no-ops.
+     */
+    void simulateCompositorLost();
+
 private:
     class Impl;
     std::unique_ptr<Impl> m_impl;

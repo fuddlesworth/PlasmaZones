@@ -5,6 +5,8 @@
 
 #include <PhosphorLayer/phosphorlayer_export.h>
 
+#include <QtGlobal>
+
 QT_BEGIN_NAMESPACE
 class QQmlEngine;
 QT_END_NAMESPACE
@@ -29,7 +31,9 @@ struct SurfaceConfig;
 class PHOSPHORLAYER_EXPORT IQmlEngineProvider
 {
 public:
+    IQmlEngineProvider() = default;
     virtual ~IQmlEngineProvider() = default;
+    Q_DISABLE_COPY_MOVE(IQmlEngineProvider)
 
     /**
      * @brief Return the engine for a surface being constructed.

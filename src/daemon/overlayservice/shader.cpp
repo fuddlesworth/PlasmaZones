@@ -339,7 +339,11 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
         createShaderPreviewWindow(screen, screenId);
-        if (!m_shaderPreviewSurface) {
+        if (!m_shaderPreviewSurface || !m_shaderPreviewWindow) {
+            // Belt-and-braces: createShaderPreviewWindow sets both fields
+            // atomically, but a future refactor that split them could leave
+            // a non-null surface with a null window — `setWidth` on a null
+            // window would crash. Guard both.
             return;
         }
         handle = m_shaderPreviewSurface->transport();
