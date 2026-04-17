@@ -264,14 +264,14 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
         m_originalGeometry = QRect();
         m_snapCancelled = false;
         m_wasSnapped = false;
-        m_currentDragBypassReason = DragBypassReason::None;
+        m_currentDragPolicy = {};
     }
 
     // Drop pending snap-drag state if this window was the pending target
     // (beginDrag ran but activation was never held before close).
     if (windowId == m_pendingSnapDragWindowId) {
         clearPendingSnapDragState();
-        m_currentDragBypassReason = DragBypassReason::None;
+        m_currentDragPolicy = {};
     }
 
     // Delegate tracking cleanup to WindowTrackingAdaptor

@@ -315,11 +315,21 @@ private:
 
     // Current drag state
     QString m_draggedWindowId;
-    // Bypass reason returned from the last beginDrag call.
-    // Read in endDrag to decide which branch to take — autotile bypass
-    // gets a synthesized ApplyFloat outcome, context/snap disabled gets NoOp,
-    // and snap path delegates to the legacy dragStopped. Reset to None by endDrag.
-    DragBypassReason m_currentDragBypassReason = DragBypassReason::None;
+    // Policy returned from the last beginDrag call, updated in place by
+    // updateDragCursor when the cursor crosses a screen whose policy
+    // differs. Read in endDrag (via bypassReason) to decide which branch
+    // to take — autotile bypass gets a synthesized ApplyFloat outcome,
+    // context/snap disabled gets NoOp, snap path delegates to the legacy
+    // dragStopped. Reset to default by endDrag / handleWindowClosed so
+    // the next drag starts clean.
+    //
+    // Storing the full policy (not just bypassReason) lets the cross-VS
+    // comparator in updateDragCursor re-emit dragPolicyChanged on any
+    // policy-relevant field change, including same-bypass-reason
+    // variations like autotile→autotile cross-VS or (future) per-screen
+    // snap-behavior differences. operator== on DragPolicy is a defaulted
+    // structural compare, so new fields are picked up automatically.
+    DragPolicy m_currentDragPolicy;
     QRect m_originalGeometry;
 
     // Pending snap-path drag awaiting first activation. Populated by

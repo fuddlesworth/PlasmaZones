@@ -327,6 +327,67 @@ private Q_SLOTS:
         QVERIFY(p.captureGeometry);
         QVERIFY(p.validationError().isEmpty());
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Structural equality contract. DragPolicy::operator== (defaulted) is
+    // the cross-VS flip trigger inside WindowDragAdaptor::updateDragCursor
+    // — any field that differs between the in-force policy and a freshly
+    // computed one must flip the comparator so dragPolicyChanged fires.
+    //
+    // This is the acceptance case the followup doc (removed alongside this
+    // test) referenced: the comparator must not be blind to same-bypass-
+    // reason transitions where another policy field differs.
+    // ─────────────────────────────────────────────────────────────────────
+    void operatorEquals_flipsOnAnyFieldChange()
+    {
+        DragPolicy base;
+        base.streamDragMoved = true;
+        base.showOverlay = true;
+        base.grabKeyboard = true;
+        base.captureGeometry = true;
+        base.immediateFloatOnStart = false;
+        base.screenId = QStringLiteral("DP-1");
+        base.bypassReason = DragBypassReason::None;
+
+        DragPolicy same = base;
+        QVERIFY(same == base);
+
+        // Cross-screen transition within the same bypass category — the
+        // exact case the old bypassReason-only comparator missed. With
+        // full-struct ==, screenId diff trips the flip.
+        DragPolicy diffScreen = base;
+        diffScreen.screenId = QStringLiteral("DP-2");
+        QVERIFY(!(diffScreen == base));
+
+        // Bypass-reason change still flips (regression guard).
+        DragPolicy diffReason = base;
+        diffReason.bypassReason = DragBypassReason::AutotileScreen;
+        QVERIFY(!(diffReason == base));
+
+        // Every routing flag participates — these cases exist so a future
+        // refactor that replaces `= default` with a hand-written operator==
+        // can't silently drop a field. If you add a field to DragPolicy, add
+        // a case here too.
+        DragPolicy diffOverlay = base;
+        diffOverlay.showOverlay = false;
+        QVERIFY(!(diffOverlay == base));
+
+        DragPolicy diffStream = base;
+        diffStream.streamDragMoved = false;
+        QVERIFY(!(diffStream == base));
+
+        DragPolicy diffKeyboard = base;
+        diffKeyboard.grabKeyboard = false;
+        QVERIFY(!(diffKeyboard == base));
+
+        DragPolicy diffCapture = base;
+        diffCapture.captureGeometry = false;
+        QVERIFY(!(diffCapture == base));
+
+        DragPolicy diffImmediateFloat = base;
+        diffImmediateFloat.immediateFloatOnStart = true;
+        QVERIFY(!(diffImmediateFloat == base));
+    }
 };
 
 QTEST_MAIN(TestDragPolicy)
