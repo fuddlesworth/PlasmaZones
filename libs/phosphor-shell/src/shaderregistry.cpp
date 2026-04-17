@@ -829,6 +829,58 @@ QImage ShaderRegistry::loadWallpaperImage()
     return s_cachedWallpaperImage;
 }
 
+QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& physGeom)
+{
+    QImage full = loadWallpaperImage();
+    if (full.isNull() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
+        return full;
+    }
+    // Only crop when the sub-region is strictly inside the physical screen.
+    const QRect clamped = subGeom.intersected(physGeom);
+    if (!clamped.isValid() || clamped == physGeom) {
+        return full;
+    }
+
+    // "Cover" placement of the wallpaper on the physical screen:
+    // aspect-correct fill centered, overflow cropped. This matches the math
+    // in shaders/wallpaper.glsl::wallpaperUv so the cropped image sampled with
+    // aspect == subGeom reproduces the same portion of the wallpaper that
+    // would appear in subGeom if the full physical screen were drawn.
+    const qreal wpW = full.width();
+    const qreal wpH = full.height();
+    const qreal physW = physGeom.width();
+    const qreal physH = physGeom.height();
+    const qreal wpAspect = wpW / qMax<qreal>(wpH, 1.0);
+    const qreal physAspect = physW / qMax<qreal>(physH, 1.0);
+
+    qreal coverX, coverY, coverW, coverH;
+    if (wpAspect > physAspect) {
+        coverH = wpH;
+        coverW = wpH * physAspect;
+        coverX = (wpW - coverW) * 0.5;
+        coverY = 0.0;
+    } else {
+        coverW = wpW;
+        coverH = wpW / qMax<qreal>(physAspect, 1e-6);
+        coverX = 0.0;
+        coverY = (wpH - coverH) * 0.5;
+    }
+
+    const qreal fracX = (clamped.x() - physGeom.x()) / physW;
+    const qreal fracY = (clamped.y() - physGeom.y()) / physH;
+    const qreal fracW = clamped.width() / physW;
+    const qreal fracH = clamped.height() / physH;
+
+    const QRect cropRect(qRound(coverX + fracX * coverW), qRound(coverY + fracY * coverH),
+                         qMax(1, qRound(fracW * coverW)), qMax(1, qRound(fracH * coverH)));
+
+    const QRect safe = cropRect.intersected(full.rect());
+    if (!safe.isValid() || safe.width() < 1 || safe.height() < 1) {
+        return full;
+    }
+    return full.copy(safe);
+}
+
 void ShaderRegistry::invalidateWallpaperCache()
 {
     QMutexLocker lock(&s_wallpaperCacheMutex);

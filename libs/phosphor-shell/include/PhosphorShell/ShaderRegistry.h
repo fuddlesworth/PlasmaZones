@@ -131,6 +131,20 @@ public:
 
     static QString wallpaperPath();
     static QImage loadWallpaperImage();
+
+    /// Return the wallpaper image cropped to the portion that a sub-region
+    /// (@p subGeom) occupies on a physical screen (@p physGeom), assuming
+    /// "cover" scaling (aspect-correct fill, centered, overflow cropped) —
+    /// the same placement model the `wallpaperUv` GLSL helper uses.
+    ///
+    /// Returns the full (uncropped) wallpaper when either rect is invalid
+    /// or when @p subGeom covers all of @p physGeom.
+    ///
+    /// Virtual screens that share a physical monitor need this so each VS
+    /// samples the wallpaper portion it occupies on the monitor, instead of
+    /// each getting the center-cropped wallpaper as if it were a full screen.
+    static QImage loadWallpaperImage(const QRect& subGeom, const QRect& physGeom);
+
     static void invalidateWallpaperCache();
 
 Q_SIGNALS:
