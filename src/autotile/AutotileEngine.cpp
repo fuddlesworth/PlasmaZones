@@ -26,14 +26,14 @@
 #include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 #include <PhosphorTiles/AutotileConstants.h>
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/screenmanager.h"
 #include "core/virtualscreen.h"
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 

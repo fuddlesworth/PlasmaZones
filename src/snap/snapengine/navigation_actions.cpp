@@ -27,7 +27,7 @@
 
 #include "../../config/settings.h"
 #include "../../core/interfaces.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
 #include "../../core/screenmanager.h"

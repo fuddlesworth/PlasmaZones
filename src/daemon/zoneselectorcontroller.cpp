@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "zoneselectorcontroller.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
-#include "../core/layoututils.h"
+#include <PhosphorZones/LayoutUtils.h>
 #include "../core/unifiedlayoutentry.h"
 #include "../core/utils.h"
 #include "../core/assignmententry.h"

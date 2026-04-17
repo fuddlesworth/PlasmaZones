@@ -7,8 +7,8 @@
 #include "../undo/UndoController.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../../core/constants.h"
-#include "../../core/layout.h"
-#include "../../core/layoututils.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"

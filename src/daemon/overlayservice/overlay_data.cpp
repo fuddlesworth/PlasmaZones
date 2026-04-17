@@ -4,9 +4,9 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"

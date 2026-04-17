@@ -32,7 +32,7 @@
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../../snap/SnapEngine.h"
 #include "../../core/shaderregistry.h"
-#include "../../core/zonedetector.h"
+#include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
 #include "../config/settings.h"

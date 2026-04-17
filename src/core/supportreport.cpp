@@ -5,8 +5,8 @@
 #include "logging.h"
 #include "screenmanager.h"
 #include "layoutmanager.h"
-#include "layout.h"
-#include "zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "../config/configdefaults.h"
 #include "../autotile/AutotileEngine.h"

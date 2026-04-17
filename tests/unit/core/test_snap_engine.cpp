@@ -15,8 +15,8 @@ using namespace PlasmaZones;
 // Minimal stubs for WTS constructor assertions
 // =========================================================================
 
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"

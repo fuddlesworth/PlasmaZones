@@ -5,8 +5,8 @@
 
 #include "plasmazones_export.h"
 #include "../core/interfaces.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/utils.h"
 #include "../core/logging.h"
 #include <QRectF>

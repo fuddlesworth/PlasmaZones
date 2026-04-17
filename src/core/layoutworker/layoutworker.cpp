@@ -3,7 +3,7 @@
 
 #include "layoutworker.h"
 
-#include "../zone.h"
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 

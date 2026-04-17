@@ -6,7 +6,7 @@
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "../core/geometryutils.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include <QGuiApplication>
 #include <QScreen>
 

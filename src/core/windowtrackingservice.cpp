@@ -4,10 +4,10 @@
 #include "windowtrackingservice.h"
 #include "constants.h"
 #include "interfaces.h"
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 #include "screenmanager.h"
 #include "virtualscreen.h"
-#include "zone.h"
+#include <PhosphorZones/Zone.h>
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
 #include "utils.h"

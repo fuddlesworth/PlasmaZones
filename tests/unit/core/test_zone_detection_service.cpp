@@ -16,8 +16,8 @@
 #include <QVector>
 #include <QScopedPointer>
 
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"

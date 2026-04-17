@@ -6,7 +6,7 @@
 #include "../cavaservice.h"
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"

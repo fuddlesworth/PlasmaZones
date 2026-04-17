@@ -13,8 +13,8 @@
 #include <QJsonDocument>
 
 #include "core/constants.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
 

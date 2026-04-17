@@ -30,8 +30,8 @@
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"

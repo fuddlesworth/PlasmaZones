@@ -6,10 +6,10 @@
 #include "cavaservice.h"
 #include "windowthumbnailservice.h"
 
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/layoutmanager.h"
-#include "../core/zone.h"
-#include "../core/layoututils.h"
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../core/unifiedlayoutentry.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"

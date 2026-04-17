@@ -5,8 +5,8 @@
 
 #include "constants.h"
 #include "interfaces.h"
-#include "layout.h"
-#include "layoututils.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "pz_i18n.h"
 #include "utils.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>

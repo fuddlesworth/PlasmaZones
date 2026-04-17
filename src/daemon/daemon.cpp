@@ -20,7 +20,7 @@
 #include "../core/layoutmanager.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
-#include "../core/zonedetector.h"
+#include <PhosphorZones/ZoneDetector.h>
 #include "../core/windowregistry.h"
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"

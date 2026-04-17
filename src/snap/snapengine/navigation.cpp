@@ -3,13 +3,13 @@
 
 #include "../SnapEngine.h"
 #include "core/geometryutils.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/types.h"
 #include "core/utils.h"
 #include "core/windowtrackingservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 

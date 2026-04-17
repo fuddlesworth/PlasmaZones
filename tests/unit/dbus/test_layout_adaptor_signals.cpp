@@ -21,9 +21,9 @@
 #include <QSignalSpy>
 
 #include "dbus/layoutadaptor.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;

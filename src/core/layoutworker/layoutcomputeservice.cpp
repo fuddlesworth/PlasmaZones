@@ -3,9 +3,9 @@
 
 #include "layoutcomputeservice.h"
 #include "layoutworker.h"
-#include "../layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../layoutmanager.h"
-#include "../zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../logging.h"
 
 #include <QThread>

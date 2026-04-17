@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "layoutfactory.h"
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 
 namespace PlasmaZones {
 

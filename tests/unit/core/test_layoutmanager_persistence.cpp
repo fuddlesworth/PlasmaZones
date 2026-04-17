@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "core/layoutmanager.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 

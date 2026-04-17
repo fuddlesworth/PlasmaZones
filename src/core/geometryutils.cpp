@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "geometryutils.h"
-#include "zone.h"
+#include <PhosphorZones/Zone.h>
 #include <geometry_helpers.h>
 #include "logging.h"
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 #include "layoutworker/layoutcomputeservice.h"
 #include "interfaces.h"
 #include "constants.h"

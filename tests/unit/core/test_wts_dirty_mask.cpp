@@ -31,11 +31,11 @@
 #include <QSignalSpy>
 #include <QRect>
 
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"

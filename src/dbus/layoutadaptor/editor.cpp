@@ -3,11 +3,11 @@
 
 #include "../layoutadaptor.h"
 #include "../../core/interfaces.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutfactory.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
-#include "../../core/layoututils.h"
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"

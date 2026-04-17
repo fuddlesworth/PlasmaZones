@@ -35,9 +35,9 @@
 
 #include "dbus/settingsadaptor.h"
 #include "dbus/layoutadaptor.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 

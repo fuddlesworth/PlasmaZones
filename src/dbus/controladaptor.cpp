@@ -5,8 +5,8 @@
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"

@@ -4,11 +4,11 @@
 #include "layoutadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/layoutfactory.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
-#include "../core/layoututils.h"
+#include <PhosphorZones/LayoutUtils.h>
 #include "../core/unifiedlayoutentry.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>

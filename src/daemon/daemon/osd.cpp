@@ -11,7 +11,7 @@
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/zonedetector.h"
+#include <PhosphorZones/ZoneDetector.h>
 #include "../../autotile/AutotileEngine.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "helpers.h"

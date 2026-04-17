@@ -12,9 +12,9 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutworker/layoutcomputeservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
 

@@ -29,10 +29,11 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
-    core/ilayoutmanager.h
+    # ilayoutmanager / izonedetector shims removed — consumers include
+    # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
+    # directly.
     core/ioverlayservice.h
     core/isettings.h
-    core/izonedetector.h
     core/inavigationactions.h
     core/iwindowengine.h
     core/settings_interfaces.h
@@ -62,8 +63,8 @@ set(plasmazones_core_SRCS
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    # zone, layout, layoututils, zonedetector, zonehighlighter moved to libs/phosphor-zones/
-    # (shim headers in core/ keep `#include "core/zone.h"` etc. working)
+    # zone, layout, layoututils, zonedetector, zonehighlighter live in
+    # libs/phosphor-zones/ — consumers include <PhosphorZones/...> directly.
     core/layoutmanager.cpp
     core/layoutmanager/persistence.cpp
     core/layoutmanager/assignments.cpp

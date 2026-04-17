@@ -6,8 +6,8 @@
 
 #include "../windowtrackingservice.h"
 #include "../interfaces.h"
-#include "../layout.h"
-#include "../zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
 #include "../virtualscreen.h"

@@ -4,8 +4,8 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
-#include "../../core/layoututils.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/utils.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualscreen.h"

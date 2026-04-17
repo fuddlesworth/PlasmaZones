@@ -10,7 +10,7 @@
 #include "../config/configbackends.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"

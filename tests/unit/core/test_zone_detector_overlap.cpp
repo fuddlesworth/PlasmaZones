@@ -16,10 +16,10 @@
 #include <QVector>
 #include <QScopedPointer>
 
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutworker/layoutcomputeservice.h"
-#include "core/zone.h"
-#include "core/zonedetector.h"
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneDetector.h>
 #include "../helpers/StubSettings.h"
 
 using namespace PlasmaZones;

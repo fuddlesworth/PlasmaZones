@@ -12,7 +12,7 @@
 // without touching every consumer; new code should prefer the narrower
 // header matching the interface it actually uses.
 
-#include "ilayoutmanager.h"
+#include <PhosphorZones/ILayoutManager.h>
 #include "ioverlayservice.h"
 #include "isettings.h"
-#include "izonedetector.h"
+#include <PhosphorZones/IZoneDetector.h>
