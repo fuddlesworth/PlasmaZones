@@ -565,7 +565,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
         return;
     }
 
-    int oldMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    int oldMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
     int newMode = (oldMode == 0) ? 1 : 0; // Toggle between Relative(0) and Fixed(1)
 
     QSize screenSize = targetScreenSize();
@@ -576,7 +576,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
 
     // Current fixed geometry (may not exist)
     QRectF oldFixedGeo;
-    if (zone.contains(JsonKeys::FixedX)) {
+    if (zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
         oldFixedGeo = m_zoneManager->extractFixedGeometry(zone);
     }
 
@@ -658,35 +658,35 @@ void EditorController::applyZoneGeometryMode(const QString& zoneId, int mode, co
     }
 
     // Update geometry mode
-    zone[JsonKeys::GeometryMode] = mode;
+    zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = mode;
 
     // Update relative geometry
-    zone[JsonKeys::X] = relativeGeo.x();
-    zone[JsonKeys::Y] = relativeGeo.y();
-    zone[JsonKeys::Width] = relativeGeo.width();
-    zone[JsonKeys::Height] = relativeGeo.height();
+    zone[::PhosphorZones::ZoneJsonKeys::X] = relativeGeo.x();
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = relativeGeo.y();
+    zone[::PhosphorZones::ZoneJsonKeys::Width] = relativeGeo.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Height] = relativeGeo.height();
 
     if (mode == static_cast<int>(ZoneGeometryMode::Fixed)) {
         // Switching to Fixed: compute and set fixed pixel coords
         if (fixedGeo.isValid()) {
-            zone[JsonKeys::FixedX] = fixedGeo.x();
-            zone[JsonKeys::FixedY] = fixedGeo.y();
-            zone[JsonKeys::FixedWidth] = fixedGeo.width();
-            zone[JsonKeys::FixedHeight] = fixedGeo.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fixedGeo.x();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = fixedGeo.y();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fixedGeo.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fixedGeo.height();
         } else {
             // Compute from relative + screen size
             QSizeF ss = m_zoneManager->effectiveScreenSizeF();
-            zone[JsonKeys::FixedX] = relativeGeo.x() * ss.width();
-            zone[JsonKeys::FixedY] = relativeGeo.y() * ss.height();
-            zone[JsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
-            zone[JsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = relativeGeo.x() * ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = relativeGeo.y() * ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = relativeGeo.width() * ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = relativeGeo.height() * ss.height();
         }
     } else {
         // Switching to Relative: remove stale fixed keys
-        zone.remove(QString::fromLatin1(JsonKeys::FixedX));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedY));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedWidth));
-        zone.remove(QString::fromLatin1(JsonKeys::FixedHeight));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedX));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedY));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedWidth));
+        zone.remove(QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::FixedHeight));
     }
 
     // setZoneData emits ZoneManager::zonesChanged, which is connected to

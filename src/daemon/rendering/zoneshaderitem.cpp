@@ -100,10 +100,10 @@ void ZoneShaderItem::parseZoneData()
         ZoneRect rect;
 
         // Extract pixel coordinates and normalize to 0-1 using iResolution
-        const float px = z.value(QLatin1String(JsonKeys::X), 0).toFloat();
-        const float py = z.value(QLatin1String(JsonKeys::Y), 0).toFloat();
-        const float pw = z.value(QLatin1String(JsonKeys::Width), 0).toFloat();
-        const float ph = z.value(QLatin1String(JsonKeys::Height), 0).toFloat();
+        const float px = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X), 0).toFloat();
+        const float py = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Y), 0).toFloat();
+        const float pw = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Width), 0).toFloat();
+        const float ph = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Height), 0).toFloat();
 
         rect.x = px / resW;
         rect.y = py / resH;
@@ -111,8 +111,8 @@ void ZoneShaderItem::parseZoneData()
         rect.height = ph / resH;
 
         // Extract zone number and highlighted state (zone selector or hover override)
-        rect.zoneNumber = z.value(QLatin1String(JsonKeys::ZoneNumber), 0).toInt();
-        rect.highlighted = z.value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
+        rect.zoneNumber = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber), 0).toInt();
+        rect.highlighted = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted), false).toBool()
             || (m_hoveredZoneIndex >= 0 && index == m_hoveredZoneIndex);
 
         // Extract shader border properties (stored in snapshot for thread-safe access).
@@ -180,7 +180,7 @@ void ZoneShaderItem::updateHoveredHighlightOnly()
     int highlightedCount = 0;
     for (int i = 0; i < count; ++i) {
         const bool fromZone = (i < m_zones.size())
-            ? m_zones[i].toMap().value(QLatin1String(JsonKeys::IsHighlighted), false).toBool()
+            ? m_zones[i].toMap().value(QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted), false).toBool()
             : false;
         const bool hovered = (m_hoveredZoneIndex >= 0 && i == m_hoveredZoneIndex);
         highlights[i] = fromZone || hovered;

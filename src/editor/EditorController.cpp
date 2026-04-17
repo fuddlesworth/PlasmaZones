@@ -469,10 +469,10 @@ QVariantMap EditorController::snapGeometry(qreal x, qreal y, qreal width, qreal 
     if (!m_snappingService || !m_zoneManager) {
         // Fallback: return unsnapped geometry
         QVariantMap result;
-        result[JsonKeys::X] = x;
-        result[JsonKeys::Y] = y;
-        result[JsonKeys::Width] = width;
-        result[JsonKeys::Height] = height;
+        result[::PhosphorZones::ZoneJsonKeys::X] = x;
+        result[::PhosphorZones::ZoneJsonKeys::Y] = y;
+        result[::PhosphorZones::ZoneJsonKeys::Width] = width;
+        result[::PhosphorZones::ZoneJsonKeys::Height] = height;
         return result;
     }
 
@@ -487,10 +487,10 @@ QVariantMap EditorController::snapGeometrySelective(qreal x, qreal y, qreal widt
     if (!m_snappingService || !m_zoneManager) {
         // Fallback: return unsnapped geometry
         QVariantMap result;
-        result[JsonKeys::X] = x;
-        result[JsonKeys::Y] = y;
-        result[JsonKeys::Width] = width;
-        result[JsonKeys::Height] = height;
+        result[::PhosphorZones::ZoneJsonKeys::X] = x;
+        result[::PhosphorZones::ZoneJsonKeys::Y] = y;
+        result[::PhosphorZones::ZoneJsonKeys::Width] = width;
+        result[::PhosphorZones::ZoneJsonKeys::Height] = height;
         return result;
     }
 

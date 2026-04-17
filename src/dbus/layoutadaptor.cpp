@@ -216,16 +216,17 @@ QStringList LayoutAdaptor::getLayoutList()
         if (uuidOpt) {
             Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
-                json[JsonKeys::IsSystem] = layout->isSystemLayout();
-                json[JsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
-                json[JsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
+                json[::PhosphorZones::ZoneJsonKeys::IsSystem] = layout->isSystemLayout();
+                json[::PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
+                json[::PhosphorZones::ZoneJsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
                 if (layout->defaultOrder() != 999) {
-                    json[JsonKeys::DefaultOrder] = layout->defaultOrder();
+                    json[::PhosphorZones::ZoneJsonKeys::DefaultOrder] = layout->defaultOrder();
                 }
 
                 // Include aspect ratio class so KCM can show the AR badge
                 if (layout->aspectRatioClass() != AspectRatioClass::Any) {
-                    json[JsonKeys::AspectRatioClassKey] = ScreenClassification::toString(layout->aspectRatioClass());
+                    json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey] =
+                        ScreenClassification::toString(layout->aspectRatioClass());
                 }
 
                 // Include allow-lists so KCM can show the filter badge

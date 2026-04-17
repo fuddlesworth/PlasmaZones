@@ -32,14 +32,14 @@ inline QVariantMap makeZone(const QString& id, float x, float y, float w, float 
 {
     QVariantMap z;
     if (!id.isEmpty()) {
-        z.insert(JsonKeys::Id, id);
+        z.insert(::PhosphorZones::ZoneJsonKeys::Id, id);
     }
-    z.insert(JsonKeys::X, x);
-    z.insert(JsonKeys::Y, y);
-    z.insert(JsonKeys::Width, w);
-    z.insert(JsonKeys::Height, h);
-    z.insert(JsonKeys::ZoneNumber, zoneNumber);
-    z.insert(JsonKeys::IsHighlighted, highlighted);
+    z.insert(::PhosphorZones::ZoneJsonKeys::X, x);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Y, y);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Width, w);
+    z.insert(::PhosphorZones::ZoneJsonKeys::Height, h);
+    z.insert(::PhosphorZones::ZoneJsonKeys::ZoneNumber, zoneNumber);
+    z.insert(::PhosphorZones::ZoneJsonKeys::IsHighlighted, highlighted);
     return z;
 }
 

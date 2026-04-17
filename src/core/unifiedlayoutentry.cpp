@@ -274,7 +274,7 @@ QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager
 
 QVariantMap toVariantMap(const UnifiedLayoutEntry& entry)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     QVariantMap map;
 
     map[Id] = entry.id;
@@ -328,7 +328,7 @@ QVariantList toVariantList(const QVector<UnifiedLayoutEntry>& entries)
 
 QJsonObject toJson(const UnifiedLayoutEntry& entry)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     QJsonObject json;
 
     json[Id] = entry.id;

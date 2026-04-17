@@ -64,11 +64,11 @@ QList<ScreenInfo> fetchScreens()
 
                     if (jsonObj.contains(JsonKeys::Geometry)) {
                         QJsonObject geom = jsonObj[JsonKeys::Geometry].toObject();
-                        info.width = geom[JsonKeys::Width].toInt();
-                        info.height = geom[JsonKeys::Height].toInt();
+                        info.width = geom[::PhosphorZones::ZoneJsonKeys::Width].toInt();
+                        info.height = geom[::PhosphorZones::ZoneJsonKeys::Height].toInt();
                     }
-                    if (jsonObj.contains(JsonKeys::Name))
-                        info.connectorName = jsonObj[JsonKeys::Name].toString();
+                    if (jsonObj.contains(::PhosphorZones::ZoneJsonKeys::Name))
+                        info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
                         info.isVirtualScreen = true;
                         info.virtualIndex = VirtualScreenId::extractIndex(screenName);

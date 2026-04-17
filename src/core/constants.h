@@ -120,78 +120,11 @@ inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
  * @brief JSON keys for serialization
  */
 namespace JsonKeys {
-// Zone & layout wire-format keys live in libs/phosphor-zones —
-// `PhosphorZones::ZoneJsonKeys`.  Re-exported here so existing
-// PlasmaZones::JsonKeys::* callers compile unchanged.
-using ::PhosphorZones::ZoneJsonKeys::Appearance;
-using ::PhosphorZones::ZoneJsonKeys::Id;
-using ::PhosphorZones::ZoneJsonKeys::Name;
-using ::PhosphorZones::ZoneJsonKeys::RelativeGeometry;
-using ::PhosphorZones::ZoneJsonKeys::ZoneId;
-using ::PhosphorZones::ZoneJsonKeys::ZoneNumber;
-
-using ::PhosphorZones::ZoneJsonKeys::Height;
-using ::PhosphorZones::ZoneJsonKeys::Width;
-using ::PhosphorZones::ZoneJsonKeys::X;
-using ::PhosphorZones::ZoneJsonKeys::Y;
-using ::PhosphorZones::ZoneJsonKeys::ZOrder;
-
-using ::PhosphorZones::ZoneJsonKeys::ActiveOpacity;
-using ::PhosphorZones::ZoneJsonKeys::BorderColor;
-using ::PhosphorZones::ZoneJsonKeys::BorderRadius;
-using ::PhosphorZones::ZoneJsonKeys::BorderWidth;
-using ::PhosphorZones::ZoneJsonKeys::HighlightColor;
-using ::PhosphorZones::ZoneJsonKeys::InactiveColor;
-using ::PhosphorZones::ZoneJsonKeys::InactiveOpacity;
-using ::PhosphorZones::ZoneJsonKeys::IsHighlighted;
-using ::PhosphorZones::ZoneJsonKeys::UseCustomColors;
-
-using ::PhosphorZones::ZoneJsonKeys::Category;
-using ::PhosphorZones::ZoneJsonKeys::DefaultOrder;
-using ::PhosphorZones::ZoneJsonKeys::Description;
-using ::PhosphorZones::ZoneJsonKeys::HasSystemOrigin;
-using ::PhosphorZones::ZoneJsonKeys::IsBuiltIn;
-using ::PhosphorZones::ZoneJsonKeys::IsSystem;
-using ::PhosphorZones::ZoneJsonKeys::OuterGap;
-using ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode;
-using ::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers;
-using ::PhosphorZones::ZoneJsonKeys::SystemSourcePath;
-using ::PhosphorZones::ZoneJsonKeys::ZoneCount;
-using ::PhosphorZones::ZoneJsonKeys::ZonePadding;
-using ::PhosphorZones::ZoneJsonKeys::Zones;
-
-using ::PhosphorZones::ZoneJsonKeys::ShaderId;
-using ::PhosphorZones::ZoneJsonKeys::ShaderParams;
-
-using ::PhosphorZones::ZoneJsonKeys::AllowedActivities;
-using ::PhosphorZones::ZoneJsonKeys::AllowedDesktops;
-using ::PhosphorZones::ZoneJsonKeys::AllowedScreens;
-using ::PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
-
-using ::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey;
-using ::PhosphorZones::ZoneJsonKeys::MaxAspectRatio;
-using ::PhosphorZones::ZoneJsonKeys::MinAspectRatio;
-
-using ::PhosphorZones::ZoneJsonKeys::AppRules;
-using ::PhosphorZones::ZoneJsonKeys::AutoAssign;
-using ::PhosphorZones::ZoneJsonKeys::Pattern;
-using ::PhosphorZones::ZoneJsonKeys::TargetScreen;
-
-using ::PhosphorZones::ZoneJsonKeys::FixedGeometry;
-using ::PhosphorZones::ZoneJsonKeys::FixedHeight;
-using ::PhosphorZones::ZoneJsonKeys::FixedWidth;
-using ::PhosphorZones::ZoneJsonKeys::FixedX;
-using ::PhosphorZones::ZoneJsonKeys::FixedY;
-using ::PhosphorZones::ZoneJsonKeys::GeometryMode;
-using ::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry;
-
-using ::PhosphorZones::ZoneJsonKeys::OuterGapBottom;
-using ::PhosphorZones::ZoneJsonKeys::OuterGapLeft;
-using ::PhosphorZones::ZoneJsonKeys::OuterGapRight;
-using ::PhosphorZones::ZoneJsonKeys::OuterGapTop;
-using ::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap;
-
-// PlasmaZones-side JSON keys that aren't part of the zone/layout file
+// Zone & layout wire-format keys live in `PhosphorZones::ZoneJsonKeys`
+// (libs/phosphor-zones).  All in-tree callers reference them qualified
+// directly — no using-aliases here.
+//
+// PlasmaZones-side JSON keys below aren't part of the zone/layout file
 // format proper — assignment runtime state, screen-info enumeration,
 // virtual-screen configuration, pywal colour ingestion.
 

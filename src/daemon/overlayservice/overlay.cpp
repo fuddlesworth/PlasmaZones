@@ -811,7 +811,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
     bool anyZoneUsesPreview = false;
     for (const QVariant& z : std::as_const(patched)) {
-        if (z.toMap().value(JsonKeys::OverlayDisplayMode).toInt() == 1) {
+        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt() == 1) {
             anyZoneUsesPreview = true;
             break;
         }

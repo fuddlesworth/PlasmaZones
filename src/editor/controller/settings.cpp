@@ -79,14 +79,14 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
     QVariantList zones = m_zoneManager->zones();
     for (const QVariant& zoneVar : zones) {
         QVariantMap zone = zoneVar.toMap();
-        QString otherZoneId = zone[JsonKeys::Id].toString();
+        QString otherZoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
         // Skip the zone being updated
         if (otherZoneId == zoneId) {
             continue;
         }
 
-        int otherNumber = zone[JsonKeys::ZoneNumber].toInt();
+        int otherNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (otherNumber == number) {
             return PzI18n::tr("Zone number %1 is already in use").arg(number);
         }

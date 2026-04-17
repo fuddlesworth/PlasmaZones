@@ -17,7 +17,7 @@ namespace {
 QVariantMap createZoneForTemplate(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
     QVariantMap zone;
-    using namespace PlasmaZones::JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     zone[Id] = QUuid::createUuid().toString();
     zone[Name] = name;
     zone[ZoneNumber] = number;

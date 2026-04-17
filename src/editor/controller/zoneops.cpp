@@ -57,8 +57,9 @@ bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qr
         return false;
     }
 
-    QRectF oldGeometry(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
-                       zone[JsonKeys::Height].toReal());
+    QRectF oldGeometry(zone[::PhosphorZones::ZoneJsonKeys::X].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
+                       zone[::PhosphorZones::ZoneJsonKeys::Width].toReal(),
+                       zone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
 
     // Perform operation
     bool result = m_zoneManager->expandToFillSpace(zoneId, mouseX, mouseY);
@@ -72,8 +73,10 @@ bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qr
         return false;
     }
 
-    QRectF newGeometry(updatedZone[JsonKeys::X].toReal(), updatedZone[JsonKeys::Y].toReal(),
-                       updatedZone[JsonKeys::Width].toReal(), updatedZone[JsonKeys::Height].toReal());
+    QRectF newGeometry(updatedZone[::PhosphorZones::ZoneJsonKeys::X].toReal(),
+                       updatedZone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
+                       updatedZone[::PhosphorZones::ZoneJsonKeys::Width].toReal(),
+                       updatedZone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
 
     // Create and push command
     auto* command =
@@ -206,11 +209,11 @@ QString EditorController::duplicateZone(const QString& zoneId)
     }
 
     // Calculate duplicate zone data (offset position, new ID will be generated in redo())
-    qreal x = sourceZoneData[JsonKeys::X].toDouble();
-    qreal y = sourceZoneData[JsonKeys::Y].toDouble();
-    qreal width = sourceZoneData[JsonKeys::Width].toDouble();
-    qreal height = sourceZoneData[JsonKeys::Height].toDouble();
-    QString sourceName = sourceZoneData[JsonKeys::Name].toString();
+    qreal x = sourceZoneData[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal y = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal width = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal height = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+    QString sourceName = sourceZoneData[::PhosphorZones::ZoneJsonKeys::Name].toString();
 
     // Calculate offset position
     qreal newX = x + EditorConstants::DuplicateOffset;
@@ -220,10 +223,10 @@ QString EditorController::duplicateZone(const QString& zoneId)
 
     // Create duplicate zone data (new ID will be generated in redo())
     QVariantMap duplicatedZoneData = sourceZoneData;
-    duplicatedZoneData[JsonKeys::Id] = QString(); // Empty ID - will be generated in redo()
-    duplicatedZoneData[JsonKeys::X] = newX;
-    duplicatedZoneData[JsonKeys::Y] = newY;
-    duplicatedZoneData[JsonKeys::Name] = QString(sourceName + QStringLiteral(" (Copy)"));
+    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Id] = QString(); // Empty ID - will be generated in redo()
+    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::X] = newX;
+    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Y] = newY;
+    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Name] = QString(sourceName + QStringLiteral(" (Copy)"));
 
     // Create command (redo() will perform the operation)
     // We need to get the new zone ID after redo() is called, so we'll use a temporary approach
@@ -244,7 +247,7 @@ QString EditorController::duplicateZone(const QString& zoneId)
     }
 
     // Update the zone data with the actual ID
-    duplicatedZoneData[JsonKeys::Id] = newZoneId;
+    duplicatedZoneData[::PhosphorZones::ZoneJsonKeys::Id] = newZoneId;
 
     // Create and push command (redo() will be called automatically, but zone already exists)
     auto* command = new DuplicateZoneCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, newZoneId,
@@ -298,18 +301,18 @@ void EditorController::applyTemplate(const QString& templateType, int columns, i
     for (QVariant& zoneVar : zones) {
         QVariantMap zone = zoneVar.toMap();
         // Only update if using the old hardcoded defaults
-        QString currentHighlight = zone[JsonKeys::HighlightColor].toString();
-        QString currentInactive = zone[JsonKeys::InactiveColor].toString();
-        QString currentBorder = zone[JsonKeys::BorderColor].toString();
+        QString currentHighlight = zone[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
+        QString currentInactive = zone[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString();
+        QString currentBorder = zone[::PhosphorZones::ZoneJsonKeys::BorderColor].toString();
 
         if (currentHighlight == QLatin1String(EditorConstants::DefaultHighlightColor)) {
-            zone[JsonKeys::HighlightColor] = defaultHighlight;
+            zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] = defaultHighlight;
         }
         if (currentInactive == QLatin1String(EditorConstants::DefaultInactiveColor)) {
-            zone[JsonKeys::InactiveColor] = defaultInactive;
+            zone[::PhosphorZones::ZoneJsonKeys::InactiveColor] = defaultInactive;
         }
         if (currentBorder == QLatin1String(EditorConstants::DefaultBorderColor)) {
-            zone[JsonKeys::BorderColor] = defaultBorder;
+            zone[::PhosphorZones::ZoneJsonKeys::BorderColor] = defaultBorder;
         }
         zoneVar = zone;
     }

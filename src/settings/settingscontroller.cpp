@@ -3304,16 +3304,16 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
 
         // Build PlasmaZones layout JSON
         QJsonObject pzLayout;
-        pzLayout[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-        pzLayout[QLatin1String(JsonKeys::Name)] =
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
             kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
-        pzLayout[QLatin1String(JsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(JsonKeys::IsBuiltIn)] = false;
-        pzLayout[QLatin1String(JsonKeys::ShowZoneNumbers)] = true;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
 
         int padding = kzLayout[QStringLiteral("padding")].toInt(0);
         if (padding > 0) {
-            pzLayout[QLatin1String(JsonKeys::ZonePadding)] = padding;
+            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = padding;
         }
 
         // Convert zones — skip layouts with no zones
@@ -3341,16 +3341,16 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
             int zoneNum = pzZones.size() + 1;
 
             QJsonObject pzZone;
-            pzZone[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-            pzZone[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(JsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
-            relGeo[QLatin1String(JsonKeys::X)] = x;
-            relGeo[QLatin1String(JsonKeys::Y)] = y;
-            relGeo[QLatin1String(JsonKeys::Width)] = w;
-            relGeo[QLatin1String(JsonKeys::Height)] = h;
-            pzZone[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = y;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = w;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = h;
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
 
             pzZones.append(pzZone);
 
@@ -3361,15 +3361,15 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
                 if (appClass.isEmpty())
                     continue;
                 QJsonObject rule;
-                rule[QLatin1String(JsonKeys::Pattern)] = appClass;
-                rule[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
+                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::Pattern)] = appClass;
+                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
                 appRules.append(rule);
             }
         }
 
-        pzLayout[QLatin1String(JsonKeys::Zones)] = pzZones;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pzZones;
         if (!appRules.isEmpty()) {
-            pzLayout[QLatin1String(JsonKeys::AppRules)] = appRules;
+            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
         }
 
         // Send to daemon via createLayoutFromJson D-Bus method
@@ -3418,10 +3418,10 @@ QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalS
                 QJsonObject regionObj = screenObj.value(QLatin1String("region")).toObject();
                 QVariantMap screen;
                 screen[QStringLiteral("displayName")] = screenObj.value(QLatin1String("displayName")).toString();
-                screen[QStringLiteral("x")] = regionObj.value(JsonKeys::X).toDouble();
-                screen[QStringLiteral("y")] = regionObj.value(JsonKeys::Y).toDouble();
-                screen[QStringLiteral("width")] = regionObj.value(JsonKeys::Width).toDouble();
-                screen[QStringLiteral("height")] = regionObj.value(JsonKeys::Height).toDouble();
+                screen[QStringLiteral("x")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::X).toDouble();
+                screen[QStringLiteral("y")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble();
+                screen[QStringLiteral("width")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble();
+                screen[QStringLiteral("height")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble();
                 screen[QStringLiteral("index")] = screenObj.value(QLatin1String("index")).toInt();
                 result.append(screen);
             }
@@ -3447,10 +3447,10 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
         QJsonObject screenObj;
         screenObj[QLatin1String("index")] = def.index;
         screenObj[QLatin1String("displayName")] = def.displayName;
-        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, def.region.x()},
-                                                         {JsonKeys::Y, def.region.y()},
-                                                         {JsonKeys::Width, def.region.width()},
-                                                         {JsonKeys::Height, def.region.height()}};
+        screenObj[QLatin1String("region")] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, def.region.x()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Y, def.region.y()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
         screensArr.append(screenObj);
     }
     root[QLatin1String("screens")] = screensArr;

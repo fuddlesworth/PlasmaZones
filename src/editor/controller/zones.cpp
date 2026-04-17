@@ -36,10 +36,10 @@ QString EditorController::addZone(qreal x, qreal y, qreal width, qreal height)
     // Apply snapping using SnappingService
     QVariantList allZones = m_zoneManager->zones();
     QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones);
-    x = snapped[JsonKeys::X].toDouble();
-    y = snapped[JsonKeys::Y].toDouble();
-    width = snapped[JsonKeys::Width].toDouble();
-    height = snapped[JsonKeys::Height].toDouble();
+    x = snapped[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    y = snapped[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    width = snapped[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    height = snapped[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     // Minimum size check
     width = qMax(EditorConstants::MinZoneSize, width);
@@ -107,7 +107,7 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         return;
     }
 
-    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
+    int geoMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
     bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
 
     if (isFixed) {
@@ -130,12 +130,14 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
 
     QRectF oldGeometry;
     if (isFixed) {
-        oldGeometry =
-            QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(), zone.value(JsonKeys::FixedY, 0.0).toReal(),
-                   zone.value(JsonKeys::FixedWidth, 0.0).toReal(), zone.value(JsonKeys::FixedHeight, 0.0).toReal());
+        oldGeometry = QRectF(zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 0.0).toReal());
     } else {
-        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
-                             zone[JsonKeys::Height].toReal());
+        oldGeometry = QRectF(
+            zone[::PhosphorZones::ZoneJsonKeys::X].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
+            zone[::PhosphorZones::ZoneJsonKeys::Width].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
     }
 
     if (isFixed) {
@@ -149,10 +151,10 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         if (!skipSnapping) {
             QVariantList allZones = m_zoneManager->zones();
             QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
-            x = snapped[JsonKeys::X].toDouble();
-            y = snapped[JsonKeys::Y].toDouble();
-            width = snapped[JsonKeys::Width].toDouble();
-            height = snapped[JsonKeys::Height].toDouble();
+            x = snapped[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            y = snapped[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            width = snapped[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            height = snapped[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
         }
 
         // Minimum size
@@ -211,7 +213,7 @@ void EditorController::updateZoneName(const QString& zoneId, const QString& name
         return;
     }
 
-    QString oldName = zone[JsonKeys::Name].toString();
+    QString oldName = zone[::PhosphorZones::ZoneJsonKeys::Name].toString();
 
     // Create and push command
     auto* command = new UpdateZoneNameCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldName, name, QString());
@@ -247,7 +249,7 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
         return;
     }
 
-    int oldNumber = zone[JsonKeys::ZoneNumber].toInt();
+    int oldNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
 
     // Create and push command
     auto* command =

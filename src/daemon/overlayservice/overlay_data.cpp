@@ -82,14 +82,14 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
     mix(::qHash(static_cast<uint>(lfs.fontStrikeout)));
     for (const QVariant& zoneVar : patched) {
         const QVariantMap z = zoneVar.toMap();
-        mix(::qHash(z.value(QLatin1String(JsonKeys::ZoneNumber)).toInt()));
+        mix(::qHash(z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt()));
         // Zone rects in the overlay use qreal; hash the full bit pattern so
         // sub-pixel geometry changes still produce a distinct key.
         const double fields[4] = {
-            z.value(QLatin1String(JsonKeys::X)).toDouble(),
-            z.value(QLatin1String(JsonKeys::Y)).toDouble(),
-            z.value(QLatin1String(JsonKeys::Width)).toDouble(),
-            z.value(QLatin1String(JsonKeys::Height)).toDouble(),
+            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X)).toDouble(),
+            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)).toDouble(),
+            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)).toDouble(),
+            z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)).toDouble(),
         };
         for (double f : fields) {
             quint64 bits = 0;
@@ -261,30 +261,30 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
     QRectF overlayGeom = isVirtual ? GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry)
                                    : GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
 
-    map[JsonKeys::Id] = zone->id().toString(); // Include zone ID for stable selection
-    map[JsonKeys::X] = overlayGeom.x();
-    map[JsonKeys::Y] = overlayGeom.y();
-    map[JsonKeys::Width] = overlayGeom.width();
-    map[JsonKeys::Height] = overlayGeom.height();
-    map[JsonKeys::ZoneNumber] = zone->zoneNumber();
-    map[JsonKeys::Name] = zone->name();
-    map[JsonKeys::IsHighlighted] = zone->isHighlighted();
+    map[::PhosphorZones::ZoneJsonKeys::Id] = zone->id().toString(); // Include zone ID for stable selection
+    map[::PhosphorZones::ZoneJsonKeys::X] = overlayGeom.x();
+    map[::PhosphorZones::ZoneJsonKeys::Y] = overlayGeom.y();
+    map[::PhosphorZones::ZoneJsonKeys::Width] = overlayGeom.width();
+    map[::PhosphorZones::ZoneJsonKeys::Height] = overlayGeom.height();
+    map[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = zone->zoneNumber();
+    map[::PhosphorZones::ZoneJsonKeys::Name] = zone->name();
+    map[::PhosphorZones::ZoneJsonKeys::IsHighlighted] = zone->isHighlighted();
 
     // Always include useCustomColors flag so QML can check it
-    map[JsonKeys::UseCustomColors] = zone->useCustomColors();
+    map[::PhosphorZones::ZoneJsonKeys::UseCustomColors] = zone->useCustomColors();
 
     // Always include zone colors as hex strings (ARGB format) so QML can use them
     // when useCustomColors is true. QML expects color strings, not QColor objects.
     // This allows QML to always have access to zone colors and decide whether to use them.
-    map[JsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
-    map[JsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
-    map[JsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
+    map[::PhosphorZones::ZoneJsonKeys::HighlightColor] = zone->highlightColor().name(QColor::HexArgb);
+    map[::PhosphorZones::ZoneJsonKeys::InactiveColor] = zone->inactiveColor().name(QColor::HexArgb);
+    map[::PhosphorZones::ZoneJsonKeys::BorderColor] = zone->borderColor().name(QColor::HexArgb);
 
     // Always include appearance properties so QML can use them when useCustomColors is true
-    map[JsonKeys::ActiveOpacity] = zone->activeOpacity();
-    map[JsonKeys::InactiveOpacity] = zone->inactiveOpacity();
-    map[JsonKeys::BorderWidth] = zone->borderWidth();
-    map[JsonKeys::BorderRadius] = zone->borderRadius();
+    map[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] = zone->activeOpacity();
+    map[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] = zone->inactiveOpacity();
+    map[::PhosphorZones::ZoneJsonKeys::BorderWidth] = zone->borderWidth();
+    map[::PhosphorZones::ZoneJsonKeys::BorderRadius] = zone->borderRadius();
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Overlay display mode cascade: zone → layout → global
@@ -297,16 +297,16 @@ QVariantMap OverlayService::zoneToVariantMap(Zone* zone, const QString& screenId
     } else if (m_settings) {
         resolvedDisplayMode = static_cast<int>(m_settings->overlayDisplayMode());
     }
-    map[JsonKeys::OverlayDisplayMode] = resolvedDisplayMode;
+    map[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] = resolvedDisplayMode;
 
     // Relative geometry for LayoutPreview rendering (miniature zone thumbnail)
     const QRectF relGeo = zone->relativeGeometry();
     QVariantMap relGeoMap;
-    relGeoMap[JsonKeys::X] = relGeo.x();
-    relGeoMap[JsonKeys::Y] = relGeo.y();
-    relGeoMap[JsonKeys::Width] = relGeo.width();
-    relGeoMap[JsonKeys::Height] = relGeo.height();
-    map[JsonKeys::RelativeGeometry] = relGeoMap;
+    relGeoMap[::PhosphorZones::ZoneJsonKeys::X] = relGeo.x();
+    relGeoMap[::PhosphorZones::ZoneJsonKeys::Y] = relGeo.y();
+    relGeoMap[::PhosphorZones::ZoneJsonKeys::Width] = relGeo.width();
+    relGeoMap[::PhosphorZones::ZoneJsonKeys::Height] = relGeo.height();
+    map[::PhosphorZones::ZoneJsonKeys::RelativeGeometry] = relGeoMap;
 
     // ═══════════════════════════════════════════════════════════════════════════════
     // Shader-specific data (ZoneDataProvider texture)

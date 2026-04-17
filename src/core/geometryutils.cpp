@@ -407,16 +407,18 @@ QRectF effectiveScreenGeometry(Layout* layout, const QString& screenId)
 
 QRectF extractZoneGeometry(const QVariantMap& zone)
 {
-    return QRectF(zone.value(JsonKeys::X).toDouble(), zone.value(JsonKeys::Y).toDouble(),
-                  zone.value(JsonKeys::Width).toDouble(), zone.value(JsonKeys::Height).toDouble());
+    return QRectF(zone.value(::PhosphorZones::ZoneJsonKeys::X).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble());
 }
 
 void setZoneGeometry(QVariantMap& zone, const QRectF& rect)
 {
-    zone[JsonKeys::X] = rect.x();
-    zone[JsonKeys::Y] = rect.y();
-    zone[JsonKeys::Width] = rect.width();
-    zone[JsonKeys::Height] = rect.height();
+    zone[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
+    zone[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
 }
 
 /// Iterates empty zones and builds EmptyZoneEntry values for the typed D-Bus result.
@@ -525,10 +527,10 @@ EmptyZoneList buildEmptyZoneList(Layout* layout, const QString& screenId, QScree
 QString rectToJson(const QRect& rect)
 {
     QJsonObject obj;
-    obj[JsonKeys::X] = rect.x();
-    obj[JsonKeys::Y] = rect.y();
-    obj[JsonKeys::Width] = rect.width();
-    obj[JsonKeys::Height] = rect.height();
+    obj[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
+    obj[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
+    obj[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
+    obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
 }
 
@@ -549,10 +551,10 @@ QString serializeZoneAssignments(const QVector<ZoneAssignmentEntry>& entries)
                 zoneIdsArr.append(zid);
             obj[JsonKeys::TargetZoneIds] = zoneIdsArr;
         }
-        obj[JsonKeys::X] = entry.targetGeometry.x();
-        obj[JsonKeys::Y] = entry.targetGeometry.y();
-        obj[JsonKeys::Width] = entry.targetGeometry.width();
-        obj[JsonKeys::Height] = entry.targetGeometry.height();
+        obj[::PhosphorZones::ZoneJsonKeys::X] = entry.targetGeometry.x();
+        obj[::PhosphorZones::ZoneJsonKeys::Y] = entry.targetGeometry.y();
+        obj[::PhosphorZones::ZoneJsonKeys::Width] = entry.targetGeometry.width();
+        obj[::PhosphorZones::ZoneJsonKeys::Height] = entry.targetGeometry.height();
         array.append(obj);
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
