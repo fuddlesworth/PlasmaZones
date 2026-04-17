@@ -686,97 +686,259 @@ void Settings::reset()
     qCInfo(lcConfig) << "Settings reset to defaults";
 }
 
-// ── Editor setters ────────────────────────────────────────────────────────────
+// ── Shortcuts (PhosphorConfig::Store-backed) ────────────────────────────────
+// Every shortcut is a flat string; schema registers them without validators.
+// Change-detection goes through the PZ_STORE_SET_STRING macro.
 
-void Settings::setEditorDuplicateShortcut(const QString& shortcut)
-{
-    if (m_editorDuplicateShortcut != shortcut) {
-        m_editorDuplicateShortcut = shortcut;
-        Q_EMIT editorDuplicateShortcutChanged();
+// Global shortcuts — meta actions, zone navigation, snap-to-zone numbered,
+// layout rotation, virtual-screen swap/rotate.
+PZ_STORE_GET(QString, openEditorShortcut, shortcutsGlobalGroup, openEditorKey, QString)
+PZ_STORE_SET_STRING(setOpenEditorShortcut, shortcutsGlobalGroup, openEditorKey, openEditorShortcutChanged)
+PZ_STORE_GET(QString, openSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, QString)
+PZ_STORE_SET_STRING(setOpenSettingsShortcut, shortcutsGlobalGroup, openSettingsKey, openSettingsShortcutChanged)
+PZ_STORE_GET(QString, previousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, QString)
+PZ_STORE_SET_STRING(setPreviousLayoutShortcut, shortcutsGlobalGroup, previousLayoutKey, previousLayoutShortcutChanged)
+PZ_STORE_GET(QString, nextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, QString)
+PZ_STORE_SET_STRING(setNextLayoutShortcut, shortcutsGlobalGroup, nextLayoutKey, nextLayoutShortcutChanged)
+
+// quickLayoutN and snapToZoneN arrays — dispatch to per-index key.
+// Each wrapper reads/writes the same store using ConfigDefaults::quickLayoutKey(n).
+
+#define PZ_QUICK_LAYOUT(N)                                                                                             \
+    QString Settings::quickLayout##N##Shortcut() const                                                                 \
+    {                                                                                                                  \
+        return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::quickLayoutKey(N));      \
+    }                                                                                                                  \
+    void Settings::setQuickLayout##N##Shortcut(const QString& shortcut)                                                \
+    {                                                                                                                  \
+        setQuickLayoutShortcut(N - 1, shortcut);                                                                       \
     }
+
+PZ_QUICK_LAYOUT(1)
+PZ_QUICK_LAYOUT(2)
+PZ_QUICK_LAYOUT(3)
+PZ_QUICK_LAYOUT(4)
+PZ_QUICK_LAYOUT(5)
+PZ_QUICK_LAYOUT(6)
+PZ_QUICK_LAYOUT(7)
+PZ_QUICK_LAYOUT(8)
+PZ_QUICK_LAYOUT(9)
+#undef PZ_QUICK_LAYOUT
+
+QString Settings::quickLayoutShortcut(int index) const
+{
+    if (index < 0 || index >= 9) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::quickLayoutKey(index + 1));
 }
 
-void Settings::setEditorSplitHorizontalShortcut(const QString& shortcut)
+void Settings::setQuickLayoutShortcut(int index, const QString& shortcut)
 {
-    if (m_editorSplitHorizontalShortcut != shortcut) {
-        m_editorSplitHorizontalShortcut = shortcut;
-        Q_EMIT editorSplitHorizontalShortcutChanged();
+    if (index < 0 || index >= 9) {
+        return;
     }
+    const QString key = ConfigDefaults::quickLayoutKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+
+    static constexpr ShortcutSignalFn signals[9] = {
+        &Settings::quickLayout1ShortcutChanged, &Settings::quickLayout2ShortcutChanged,
+        &Settings::quickLayout3ShortcutChanged, &Settings::quickLayout4ShortcutChanged,
+        &Settings::quickLayout5ShortcutChanged, &Settings::quickLayout6ShortcutChanged,
+        &Settings::quickLayout7ShortcutChanged, &Settings::quickLayout8ShortcutChanged,
+        &Settings::quickLayout9ShortcutChanged,
+    };
+    Q_EMIT(this->*signals[index])();
+    Q_EMIT settingsChanged();
 }
 
-void Settings::setEditorSplitVerticalShortcut(const QString& shortcut)
-{
-    if (m_editorSplitVerticalShortcut != shortcut) {
-        m_editorSplitVerticalShortcut = shortcut;
-        Q_EMIT editorSplitVerticalShortcutChanged();
+// Navigation shortcuts.
+PZ_STORE_GET(QString, moveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, QString)
+PZ_STORE_SET_STRING(setMoveWindowLeftShortcut, shortcutsGlobalGroup, moveWindowLeftKey, moveWindowLeftShortcutChanged)
+PZ_STORE_GET(QString, moveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey, QString)
+PZ_STORE_SET_STRING(setMoveWindowRightShortcut, shortcutsGlobalGroup, moveWindowRightKey,
+                    moveWindowRightShortcutChanged)
+PZ_STORE_GET(QString, moveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, QString)
+PZ_STORE_SET_STRING(setMoveWindowUpShortcut, shortcutsGlobalGroup, moveWindowUpKey, moveWindowUpShortcutChanged)
+PZ_STORE_GET(QString, moveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, QString)
+PZ_STORE_SET_STRING(setMoveWindowDownShortcut, shortcutsGlobalGroup, moveWindowDownKey, moveWindowDownShortcutChanged)
+PZ_STORE_GET(QString, focusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, QString)
+PZ_STORE_SET_STRING(setFocusZoneLeftShortcut, shortcutsGlobalGroup, focusZoneLeftKey, focusZoneLeftShortcutChanged)
+PZ_STORE_GET(QString, focusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, QString)
+PZ_STORE_SET_STRING(setFocusZoneRightShortcut, shortcutsGlobalGroup, focusZoneRightKey, focusZoneRightShortcutChanged)
+PZ_STORE_GET(QString, focusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, QString)
+PZ_STORE_SET_STRING(setFocusZoneUpShortcut, shortcutsGlobalGroup, focusZoneUpKey, focusZoneUpShortcutChanged)
+PZ_STORE_GET(QString, focusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, QString)
+PZ_STORE_SET_STRING(setFocusZoneDownShortcut, shortcutsGlobalGroup, focusZoneDownKey, focusZoneDownShortcutChanged)
+PZ_STORE_GET(QString, pushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey, QString)
+PZ_STORE_SET_STRING(setPushToEmptyZoneShortcut, shortcutsGlobalGroup, pushToEmptyZoneKey,
+                    pushToEmptyZoneShortcutChanged)
+PZ_STORE_GET(QString, restoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey, QString)
+PZ_STORE_SET_STRING(setRestoreWindowSizeShortcut, shortcutsGlobalGroup, restoreWindowSizeKey,
+                    restoreWindowSizeShortcutChanged)
+PZ_STORE_GET(QString, toggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey, QString)
+PZ_STORE_SET_STRING(setToggleWindowFloatShortcut, shortcutsGlobalGroup, toggleWindowFloatKey,
+                    toggleWindowFloatShortcutChanged)
+PZ_STORE_GET(QString, swapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, QString)
+PZ_STORE_SET_STRING(setSwapWindowLeftShortcut, shortcutsGlobalGroup, swapWindowLeftKey, swapWindowLeftShortcutChanged)
+PZ_STORE_GET(QString, swapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey, QString)
+PZ_STORE_SET_STRING(setSwapWindowRightShortcut, shortcutsGlobalGroup, swapWindowRightKey,
+                    swapWindowRightShortcutChanged)
+PZ_STORE_GET(QString, swapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, QString)
+PZ_STORE_SET_STRING(setSwapWindowUpShortcut, shortcutsGlobalGroup, swapWindowUpKey, swapWindowUpShortcutChanged)
+PZ_STORE_GET(QString, swapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, QString)
+PZ_STORE_SET_STRING(setSwapWindowDownShortcut, shortcutsGlobalGroup, swapWindowDownKey, swapWindowDownShortcutChanged)
+
+// snapToZone1..9 — same dispatch pattern as quickLayout.
+#define PZ_SNAP_TO_ZONE(N)                                                                                             \
+    QString Settings::snapToZone##N##Shortcut() const                                                                  \
+    {                                                                                                                  \
+        return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(N));       \
+    }                                                                                                                  \
+    void Settings::setSnapToZone##N##Shortcut(const QString& shortcut)                                                 \
+    {                                                                                                                  \
+        setSnapToZoneShortcut(N - 1, shortcut);                                                                        \
     }
+
+PZ_SNAP_TO_ZONE(1)
+PZ_SNAP_TO_ZONE(2)
+PZ_SNAP_TO_ZONE(3)
+PZ_SNAP_TO_ZONE(4)
+PZ_SNAP_TO_ZONE(5)
+PZ_SNAP_TO_ZONE(6)
+PZ_SNAP_TO_ZONE(7)
+PZ_SNAP_TO_ZONE(8)
+PZ_SNAP_TO_ZONE(9)
+#undef PZ_SNAP_TO_ZONE
+
+QString Settings::snapToZoneShortcut(int index) const
+{
+    if (index < 0 || index >= 9) {
+        return {};
+    }
+    return m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), ConfigDefaults::snapToZoneKey(index + 1));
 }
 
-void Settings::setEditorFillShortcut(const QString& shortcut)
+void Settings::setSnapToZoneShortcut(int index, const QString& shortcut)
 {
-    if (m_editorFillShortcut != shortcut) {
-        m_editorFillShortcut = shortcut;
-        Q_EMIT editorFillShortcutChanged();
+    if (index < 0 || index >= 9) {
+        return;
     }
+    const QString key = ConfigDefaults::snapToZoneKey(index + 1);
+    if (m_store->read<QString>(ConfigDefaults::shortcutsGlobalGroup(), key) == shortcut) {
+        return;
+    }
+    m_store->write(ConfigDefaults::shortcutsGlobalGroup(), key, shortcut);
+    static constexpr ShortcutSignalFn signals[9] = {
+        &Settings::snapToZone1ShortcutChanged, &Settings::snapToZone2ShortcutChanged,
+        &Settings::snapToZone3ShortcutChanged, &Settings::snapToZone4ShortcutChanged,
+        &Settings::snapToZone5ShortcutChanged, &Settings::snapToZone6ShortcutChanged,
+        &Settings::snapToZone7ShortcutChanged, &Settings::snapToZone8ShortcutChanged,
+        &Settings::snapToZone9ShortcutChanged,
+    };
+    Q_EMIT(this->*signals[index])();
+    Q_EMIT settingsChanged();
 }
 
-void Settings::setEditorGridSnappingEnabled(bool enabled)
-{
-    if (m_editorGridSnappingEnabled != enabled) {
-        m_editorGridSnappingEnabled = enabled;
-        Q_EMIT editorGridSnappingEnabledChanged();
-    }
-}
+PZ_STORE_GET(QString, rotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey, QString)
+PZ_STORE_SET_STRING(setRotateWindowsClockwiseShortcut, shortcutsGlobalGroup, rotateWindowsClockwiseKey,
+                    rotateWindowsClockwiseShortcutChanged)
+PZ_STORE_GET(QString, rotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+             QString)
+PZ_STORE_SET_STRING(setRotateWindowsCounterclockwiseShortcut, shortcutsGlobalGroup, rotateWindowsCounterclockwiseKey,
+                    rotateWindowsCounterclockwiseShortcutChanged)
+PZ_STORE_GET(QString, cycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey, QString)
+PZ_STORE_SET_STRING(setCycleWindowForwardShortcut, shortcutsGlobalGroup, cycleWindowForwardKey,
+                    cycleWindowForwardShortcutChanged)
+PZ_STORE_GET(QString, cycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey, QString)
+PZ_STORE_SET_STRING(setCycleWindowBackwardShortcut, shortcutsGlobalGroup, cycleWindowBackwardKey,
+                    cycleWindowBackwardShortcutChanged)
+PZ_STORE_GET(QString, resnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey, QString)
+PZ_STORE_SET_STRING(setResnapToNewLayoutShortcut, shortcutsGlobalGroup, resnapToNewLayoutKey,
+                    resnapToNewLayoutShortcutChanged)
+PZ_STORE_GET(QString, snapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, QString)
+PZ_STORE_SET_STRING(setSnapAllWindowsShortcut, shortcutsGlobalGroup, snapAllWindowsKey, snapAllWindowsShortcutChanged)
+PZ_STORE_GET(QString, layoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, QString)
+PZ_STORE_SET_STRING(setLayoutPickerShortcut, shortcutsGlobalGroup, layoutPickerKey, layoutPickerShortcutChanged)
+PZ_STORE_GET(QString, toggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey, QString)
+PZ_STORE_SET_STRING(setToggleLayoutLockShortcut, shortcutsGlobalGroup, toggleLayoutLockKey,
+                    toggleLayoutLockShortcutChanged)
+PZ_STORE_GET(QString, swapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey, QString)
+PZ_STORE_SET_STRING(setSwapVirtualScreenLeftShortcut, shortcutsGlobalGroup, swapVirtualScreenLeftKey,
+                    swapVirtualScreenLeftShortcutChanged)
+PZ_STORE_GET(QString, swapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey, QString)
+PZ_STORE_SET_STRING(setSwapVirtualScreenRightShortcut, shortcutsGlobalGroup, swapVirtualScreenRightKey,
+                    swapVirtualScreenRightShortcutChanged)
+PZ_STORE_GET(QString, swapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey, QString)
+PZ_STORE_SET_STRING(setSwapVirtualScreenUpShortcut, shortcutsGlobalGroup, swapVirtualScreenUpKey,
+                    swapVirtualScreenUpShortcutChanged)
+PZ_STORE_GET(QString, swapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey, QString)
+PZ_STORE_SET_STRING(setSwapVirtualScreenDownShortcut, shortcutsGlobalGroup, swapVirtualScreenDownKey,
+                    swapVirtualScreenDownShortcutChanged)
+PZ_STORE_GET(QString, rotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+             QString)
+PZ_STORE_SET_STRING(setRotateVirtualScreensClockwiseShortcut, shortcutsGlobalGroup, rotateVirtualScreensClockwiseKey,
+                    rotateVirtualScreensClockwiseShortcutChanged)
+PZ_STORE_GET(QString, rotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+             rotateVirtualScreensCounterclockwiseKey, QString)
+PZ_STORE_SET_STRING(setRotateVirtualScreensCounterclockwiseShortcut, shortcutsGlobalGroup,
+                    rotateVirtualScreensCounterclockwiseKey, rotateVirtualScreensCounterclockwiseShortcutChanged)
 
-void Settings::setEditorEdgeSnappingEnabled(bool enabled)
-{
-    if (m_editorEdgeSnappingEnabled != enabled) {
-        m_editorEdgeSnappingEnabled = enabled;
-        Q_EMIT editorEdgeSnappingEnabledChanged();
-    }
-}
+// Tiling shortcuts.
+PZ_STORE_GET(QString, autotileToggleShortcut, shortcutsTilingGroup, toggleKey, QString)
+PZ_STORE_SET_STRING(setAutotileToggleShortcut, shortcutsTilingGroup, toggleKey, autotileToggleShortcutChanged)
+PZ_STORE_GET(QString, autotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey, QString)
+PZ_STORE_SET_STRING(setAutotileFocusMasterShortcut, shortcutsTilingGroup, focusMasterKey,
+                    autotileFocusMasterShortcutChanged)
+PZ_STORE_GET(QString, autotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey, QString)
+PZ_STORE_SET_STRING(setAutotileSwapMasterShortcut, shortcutsTilingGroup, swapMasterKey,
+                    autotileSwapMasterShortcutChanged)
+PZ_STORE_GET(QString, autotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey, QString)
+PZ_STORE_SET_STRING(setAutotileIncMasterRatioShortcut, shortcutsTilingGroup, incMasterRatioKey,
+                    autotileIncMasterRatioShortcutChanged)
+PZ_STORE_GET(QString, autotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey, QString)
+PZ_STORE_SET_STRING(setAutotileDecMasterRatioShortcut, shortcutsTilingGroup, decMasterRatioKey,
+                    autotileDecMasterRatioShortcutChanged)
+PZ_STORE_GET(QString, autotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey, QString)
+PZ_STORE_SET_STRING(setAutotileIncMasterCountShortcut, shortcutsTilingGroup, incMasterCountKey,
+                    autotileIncMasterCountShortcutChanged)
+PZ_STORE_GET(QString, autotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey, QString)
+PZ_STORE_SET_STRING(setAutotileDecMasterCountShortcut, shortcutsTilingGroup, decMasterCountKey,
+                    autotileDecMasterCountShortcutChanged)
+PZ_STORE_GET(QString, autotileRetileShortcut, shortcutsTilingGroup, retileKey, QString)
+PZ_STORE_SET_STRING(setAutotileRetileShortcut, shortcutsTilingGroup, retileKey, autotileRetileShortcutChanged)
 
-void Settings::setEditorSnapIntervalX(qreal interval)
-{
-    interval = qBound(0.01, interval, 1.0);
-    if (!qFuzzyCompare(m_editorSnapIntervalX, interval)) {
-        m_editorSnapIntervalX = interval;
-        Q_EMIT editorSnapIntervalXChanged();
-    }
-}
+// Editor shortcuts.
+PZ_STORE_GET(QString, editorDuplicateShortcut, editorShortcutsGroup, duplicateKey, QString)
+PZ_STORE_SET_STRING(setEditorDuplicateShortcut, editorShortcutsGroup, duplicateKey, editorDuplicateShortcutChanged)
+PZ_STORE_GET(QString, editorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey, QString)
+PZ_STORE_SET_STRING(setEditorSplitHorizontalShortcut, editorShortcutsGroup, splitHorizontalKey,
+                    editorSplitHorizontalShortcutChanged)
+PZ_STORE_GET(QString, editorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey, QString)
+PZ_STORE_SET_STRING(setEditorSplitVerticalShortcut, editorShortcutsGroup, splitVerticalKey,
+                    editorSplitVerticalShortcutChanged)
+PZ_STORE_GET(QString, editorFillShortcut, editorShortcutsGroup, fillKey, QString)
+PZ_STORE_SET_STRING(setEditorFillShortcut, editorShortcutsGroup, fillKey, editorFillShortcutChanged)
 
-void Settings::setEditorSnapIntervalY(qreal interval)
-{
-    interval = qBound(0.01, interval, 1.0);
-    if (!qFuzzyCompare(m_editorSnapIntervalY, interval)) {
-        m_editorSnapIntervalY = interval;
-        Q_EMIT editorSnapIntervalYChanged();
-    }
-}
-
-void Settings::setEditorSnapOverrideModifier(int mod)
-{
-    if (m_editorSnapOverrideModifier != mod) {
-        m_editorSnapOverrideModifier = mod;
-        Q_EMIT editorSnapOverrideModifierChanged();
-    }
-}
-
-void Settings::setFillOnDropEnabled(bool enabled)
-{
-    if (m_fillOnDropEnabled != enabled) {
-        m_fillOnDropEnabled = enabled;
-        Q_EMIT fillOnDropEnabledChanged();
-    }
-}
-
-void Settings::setFillOnDropModifier(int mod)
-{
-    if (m_fillOnDropModifier != mod) {
-        m_fillOnDropModifier = mod;
-        Q_EMIT fillOnDropModifierChanged();
-    }
-}
+// Editor snapping + fill-on-drop toggles.
+PZ_STORE_GET(bool, editorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, bool)
+PZ_STORE_SET_BOOL(setEditorGridSnappingEnabled, editorSnappingGroup, gridEnabledKey, editorGridSnappingEnabledChanged)
+PZ_STORE_GET(bool, editorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, bool)
+PZ_STORE_SET_BOOL(setEditorEdgeSnappingEnabled, editorSnappingGroup, edgeEnabledKey, editorEdgeSnappingEnabledChanged)
+PZ_STORE_GET(qreal, editorSnapIntervalX, editorSnappingGroup, intervalXKey, double)
+PZ_STORE_SET_DOUBLE(setEditorSnapIntervalX, editorSnappingGroup, intervalXKey, editorSnapIntervalXChanged)
+PZ_STORE_GET(qreal, editorSnapIntervalY, editorSnappingGroup, intervalYKey, double)
+PZ_STORE_SET_DOUBLE(setEditorSnapIntervalY, editorSnappingGroup, intervalYKey, editorSnapIntervalYChanged)
+PZ_STORE_GET(int, editorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey, int)
+PZ_STORE_SET_INT(setEditorSnapOverrideModifier, editorSnappingGroup, overrideModifierKey,
+                 editorSnapOverrideModifierChanged)
+PZ_STORE_GET(bool, fillOnDropEnabled, editorFillOnDropGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setFillOnDropEnabled, editorFillOnDropGroup, enabledKey, fillOnDropEnabledChanged)
+PZ_STORE_GET(int, fillOnDropModifier, editorFillOnDropGroup, modifierKey, int)
+PZ_STORE_SET_INT(setFillOnDropModifier, editorFillOnDropGroup, modifierKey, fillOnDropModifierChanged)
 
 // ── TilingQuickLayoutSlots helpers ───────────────────────────────────────────
 

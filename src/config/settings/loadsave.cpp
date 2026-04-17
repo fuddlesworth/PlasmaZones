@@ -212,86 +212,9 @@ void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::loadShortcutConfig(PhosphorConfig::IBackend* backend)
 {
-    auto shortcuts = backend->group(ConfigDefaults::shortcutsGlobalGroup());
-    m_openEditorShortcut = shortcuts->readString(ConfigDefaults::openEditorKey(), ConfigDefaults::openEditorShortcut());
-    m_openSettingsShortcut =
-        shortcuts->readString(ConfigDefaults::openSettingsKey(), ConfigDefaults::openSettingsShortcut());
-    m_previousLayoutShortcut =
-        shortcuts->readString(ConfigDefaults::previousLayoutKey(), ConfigDefaults::previousLayoutShortcut());
-    m_nextLayoutShortcut = shortcuts->readString(ConfigDefaults::nextLayoutKey(), ConfigDefaults::nextLayoutShortcut());
-    const QString quickLayoutDefaults[9] = {
-        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-        ConfigDefaults::quickLayout9Shortcut()};
-    loadIndexedShortcuts(*shortcuts, ConfigDefaults::quickLayoutKeyPattern(), m_quickLayoutShortcuts,
-                         quickLayoutDefaults);
-    m_moveWindowLeftShortcut =
-        shortcuts->readString(ConfigDefaults::moveWindowLeftKey(), ConfigDefaults::moveWindowLeftShortcut());
-    m_moveWindowRightShortcut =
-        shortcuts->readString(ConfigDefaults::moveWindowRightKey(), ConfigDefaults::moveWindowRightShortcut());
-    m_moveWindowUpShortcut =
-        shortcuts->readString(ConfigDefaults::moveWindowUpKey(), ConfigDefaults::moveWindowUpShortcut());
-    m_moveWindowDownShortcut =
-        shortcuts->readString(ConfigDefaults::moveWindowDownKey(), ConfigDefaults::moveWindowDownShortcut());
-    m_focusZoneLeftShortcut =
-        shortcuts->readString(ConfigDefaults::focusZoneLeftKey(), ConfigDefaults::focusZoneLeftShortcut());
-    m_focusZoneRightShortcut =
-        shortcuts->readString(ConfigDefaults::focusZoneRightKey(), ConfigDefaults::focusZoneRightShortcut());
-    m_focusZoneUpShortcut =
-        shortcuts->readString(ConfigDefaults::focusZoneUpKey(), ConfigDefaults::focusZoneUpShortcut());
-    m_focusZoneDownShortcut =
-        shortcuts->readString(ConfigDefaults::focusZoneDownKey(), ConfigDefaults::focusZoneDownShortcut());
-    m_pushToEmptyZoneShortcut =
-        shortcuts->readString(ConfigDefaults::pushToEmptyZoneKey(), ConfigDefaults::pushToEmptyZoneShortcut());
-    m_restoreWindowSizeShortcut =
-        shortcuts->readString(ConfigDefaults::restoreWindowSizeKey(), ConfigDefaults::restoreWindowSizeShortcut());
-    m_toggleWindowFloatShortcut =
-        shortcuts->readString(ConfigDefaults::toggleWindowFloatKey(), ConfigDefaults::toggleWindowFloatShortcut());
-    m_swapWindowLeftShortcut =
-        shortcuts->readString(ConfigDefaults::swapWindowLeftKey(), ConfigDefaults::swapWindowLeftShortcut());
-    m_swapWindowRightShortcut =
-        shortcuts->readString(ConfigDefaults::swapWindowRightKey(), ConfigDefaults::swapWindowRightShortcut());
-    m_swapWindowUpShortcut =
-        shortcuts->readString(ConfigDefaults::swapWindowUpKey(), ConfigDefaults::swapWindowUpShortcut());
-    m_swapWindowDownShortcut =
-        shortcuts->readString(ConfigDefaults::swapWindowDownKey(), ConfigDefaults::swapWindowDownShortcut());
-    const QString snapToZoneDefaults[9] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-                                           ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-                                           ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-                                           ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-                                           ConfigDefaults::snapToZone9Shortcut()};
-    loadIndexedShortcuts(*shortcuts, ConfigDefaults::snapToZoneKeyPattern(), m_snapToZoneShortcuts, snapToZoneDefaults);
-    m_rotateWindowsClockwiseShortcut = shortcuts->readString(ConfigDefaults::rotateWindowsClockwiseKey(),
-                                                             ConfigDefaults::rotateWindowsClockwiseShortcut());
-    m_rotateWindowsCounterclockwiseShortcut = shortcuts->readString(
-        ConfigDefaults::rotateWindowsCounterclockwiseKey(), ConfigDefaults::rotateWindowsCounterclockwiseShortcut());
-    m_cycleWindowForwardShortcut =
-        shortcuts->readString(ConfigDefaults::cycleWindowForwardKey(), ConfigDefaults::cycleWindowForwardShortcut());
-    m_cycleWindowBackwardShortcut =
-        shortcuts->readString(ConfigDefaults::cycleWindowBackwardKey(), ConfigDefaults::cycleWindowBackwardShortcut());
-    m_resnapToNewLayoutShortcut =
-        shortcuts->readString(ConfigDefaults::resnapToNewLayoutKey(), ConfigDefaults::resnapToNewLayoutShortcut());
-    m_snapAllWindowsShortcut =
-        shortcuts->readString(ConfigDefaults::snapAllWindowsKey(), ConfigDefaults::snapAllWindowsShortcut());
-    m_layoutPickerShortcut =
-        shortcuts->readString(ConfigDefaults::layoutPickerKey(), ConfigDefaults::layoutPickerShortcut());
-    m_toggleLayoutLockShortcut =
-        shortcuts->readString(ConfigDefaults::toggleLayoutLockKey(), ConfigDefaults::toggleLayoutLockShortcut());
-    m_swapVirtualScreenLeftShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenLeftKey(),
-                                                            ConfigDefaults::swapVirtualScreenLeftShortcut());
-    m_swapVirtualScreenRightShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenRightKey(),
-                                                             ConfigDefaults::swapVirtualScreenRightShortcut());
-    m_swapVirtualScreenUpShortcut =
-        shortcuts->readString(ConfigDefaults::swapVirtualScreenUpKey(), ConfigDefaults::swapVirtualScreenUpShortcut());
-    m_swapVirtualScreenDownShortcut = shortcuts->readString(ConfigDefaults::swapVirtualScreenDownKey(),
-                                                            ConfigDefaults::swapVirtualScreenDownShortcut());
-    m_rotateVirtualScreensClockwiseShortcut = shortcuts->readString(
-        ConfigDefaults::rotateVirtualScreensClockwiseKey(), ConfigDefaults::rotateVirtualScreensClockwiseShortcut());
-    m_rotateVirtualScreensCounterclockwiseShortcut =
-        shortcuts->readString(ConfigDefaults::rotateVirtualScreensCounterclockwiseKey(),
-                              ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut());
+    Q_UNUSED(backend);
+    // Global shortcuts are backed by PhosphorConfig::Store — getters read
+    // through the store on demand.
 }
 
 void Settings::loadAutotilingConfig(PhosphorConfig::IBackend* backend)
@@ -477,135 +400,24 @@ void Settings::loadAutotilingConfig(PhosphorConfig::IBackend* backend)
     // load here. Getters read through the store on demand with the schema's
     // clamp validators applied.
 
-    // Tiling Shortcuts
-    {
-        auto tilingShortcuts = backend->group(ConfigDefaults::shortcutsTilingGroup());
-        m_autotileToggleShortcut =
-            tilingShortcuts->readString(ConfigDefaults::toggleKey(), ConfigDefaults::autotileToggleShortcut());
-        m_autotileFocusMasterShortcut = tilingShortcuts->readString(ConfigDefaults::focusMasterKey(),
-                                                                    ConfigDefaults::autotileFocusMasterShortcut());
-        m_autotileSwapMasterShortcut =
-            tilingShortcuts->readString(ConfigDefaults::swapMasterKey(), ConfigDefaults::autotileSwapMasterShortcut());
-        m_autotileIncMasterRatioShortcut = tilingShortcuts->readString(
-            ConfigDefaults::incMasterRatioKey(), ConfigDefaults::autotileIncMasterRatioShortcut());
-        m_autotileDecMasterRatioShortcut = tilingShortcuts->readString(
-            ConfigDefaults::decMasterRatioKey(), ConfigDefaults::autotileDecMasterRatioShortcut());
-        m_autotileIncMasterCountShortcut = tilingShortcuts->readString(
-            ConfigDefaults::incMasterCountKey(), ConfigDefaults::autotileIncMasterCountShortcut());
-        m_autotileDecMasterCountShortcut = tilingShortcuts->readString(
-            ConfigDefaults::decMasterCountKey(), ConfigDefaults::autotileDecMasterCountShortcut());
-        m_autotileRetileShortcut =
-            tilingShortcuts->readString(ConfigDefaults::retileKey(), ConfigDefaults::autotileRetileShortcut());
-    }
+    // Tiling shortcuts are backed by PhosphorConfig::Store.
 }
 
 void Settings::loadEditorConfig(PhosphorConfig::IBackend* backend)
 {
-    // Capture old values for post-load change-guarded signal emission
-    const QString oldDuplicate = m_editorDuplicateShortcut;
-    const QString oldSplitH = m_editorSplitHorizontalShortcut;
-    const QString oldSplitV = m_editorSplitVerticalShortcut;
-    const QString oldFill = m_editorFillShortcut;
-    const bool oldGridEnabled = m_editorGridSnappingEnabled;
-    const bool oldEdgeEnabled = m_editorEdgeSnappingEnabled;
-    const qreal oldIntervalX = m_editorSnapIntervalX;
-    const qreal oldIntervalY = m_editorSnapIntervalY;
-    const int oldOverrideMod = m_editorSnapOverrideModifier;
-    const bool oldFillOnDropEnabled = m_fillOnDropEnabled;
-    const int oldFillOnDropMod = m_fillOnDropModifier;
-
-    {
-        auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
-        m_editorDuplicateShortcut =
-            shortcuts->readString(ConfigDefaults::duplicateKey(), ConfigDefaults::editorDuplicateShortcut());
-        m_editorSplitHorizontalShortcut = shortcuts->readString(ConfigDefaults::splitHorizontalKey(),
-                                                                ConfigDefaults::editorSplitHorizontalShortcut());
-        m_editorSplitVerticalShortcut =
-            shortcuts->readString(ConfigDefaults::splitVerticalKey(), ConfigDefaults::editorSplitVerticalShortcut());
-        m_editorFillShortcut = shortcuts->readString(ConfigDefaults::fillKey(), ConfigDefaults::editorFillShortcut());
-    }
-    {
-        auto snapping = backend->group(ConfigDefaults::editorSnappingGroup());
-        m_editorGridSnappingEnabled =
-            snapping->readBool(ConfigDefaults::gridEnabledKey(), ConfigDefaults::editorGridSnappingEnabled());
-        m_editorEdgeSnappingEnabled =
-            snapping->readBool(ConfigDefaults::edgeEnabledKey(), ConfigDefaults::editorEdgeSnappingEnabled());
-
-        m_editorSnapIntervalX = qBound(
-            0.01, snapping->readDouble(ConfigDefaults::intervalXKey(), ConfigDefaults::editorSnapInterval()), 1.0);
-        m_editorSnapIntervalY = qBound(
-            0.01, snapping->readDouble(ConfigDefaults::intervalYKey(), ConfigDefaults::editorSnapInterval()), 1.0);
-
-        {
-            const int rawSnapMod =
-                snapping->readInt(ConfigDefaults::overrideModifierKey(), ConfigDefaults::editorSnapOverrideModifier());
-            constexpr int validModifiers = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-            m_editorSnapOverrideModifier = (rawSnapMod == Qt::NoModifier || (rawSnapMod & validModifiers) == rawSnapMod)
-                ? rawSnapMod
-                : ConfigDefaults::editorSnapOverrideModifier();
-        }
-    }
-    {
-        auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
-        m_fillOnDropEnabled = fillOnDrop->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::fillOnDropEnabled());
-        {
-            const int rawFillMod =
-                fillOnDrop->readInt(ConfigDefaults::modifierKey(), ConfigDefaults::fillOnDropModifier());
-            constexpr int validModifiers = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
-            m_fillOnDropModifier = (rawFillMod == Qt::NoModifier || (rawFillMod & validModifiers) == rawFillMod)
-                ? rawFillMod
-                : ConfigDefaults::fillOnDropModifier();
-        }
-    }
-
-    if (m_editorDuplicateShortcut != oldDuplicate)
-        Q_EMIT editorDuplicateShortcutChanged();
-    if (m_editorSplitHorizontalShortcut != oldSplitH)
-        Q_EMIT editorSplitHorizontalShortcutChanged();
-    if (m_editorSplitVerticalShortcut != oldSplitV)
-        Q_EMIT editorSplitVerticalShortcutChanged();
-    if (m_editorFillShortcut != oldFill)
-        Q_EMIT editorFillShortcutChanged();
-    if (m_editorGridSnappingEnabled != oldGridEnabled)
-        Q_EMIT editorGridSnappingEnabledChanged();
-    if (m_editorEdgeSnappingEnabled != oldEdgeEnabled)
-        Q_EMIT editorEdgeSnappingEnabledChanged();
-    if (!qFuzzyCompare(m_editorSnapIntervalX, oldIntervalX))
-        Q_EMIT editorSnapIntervalXChanged();
-    if (!qFuzzyCompare(m_editorSnapIntervalY, oldIntervalY))
-        Q_EMIT editorSnapIntervalYChanged();
-    if (m_editorSnapOverrideModifier != oldOverrideMod)
-        Q_EMIT editorSnapOverrideModifierChanged();
-    if (m_fillOnDropEnabled != oldFillOnDropEnabled)
-        Q_EMIT fillOnDropEnabledChanged();
-    if (m_fillOnDropModifier != oldFillOnDropMod)
-        Q_EMIT fillOnDropModifierChanged();
+    Q_UNUSED(backend);
+    // Editor settings (Shortcuts + Snapping + FillOnDrop) are backed by
+    // PhosphorConfig::Store. Post-load NOTIFY fan-out is handled by the
+    // generic Q_PROPERTY re-emit loop in load() — no group-specific logic
+    // needed here.
 }
 
 // ── save() helpers ───────────────────────────────────────────────────────────
 
 void Settings::saveEditorConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto shortcuts = backend->group(ConfigDefaults::editorShortcutsGroup());
-        shortcuts->writeString(ConfigDefaults::duplicateKey(), m_editorDuplicateShortcut);
-        shortcuts->writeString(ConfigDefaults::splitHorizontalKey(), m_editorSplitHorizontalShortcut);
-        shortcuts->writeString(ConfigDefaults::splitVerticalKey(), m_editorSplitVerticalShortcut);
-        shortcuts->writeString(ConfigDefaults::fillKey(), m_editorFillShortcut);
-    }
-    {
-        auto snapping = backend->group(ConfigDefaults::editorSnappingGroup());
-        snapping->writeBool(ConfigDefaults::gridEnabledKey(), m_editorGridSnappingEnabled);
-        snapping->writeBool(ConfigDefaults::edgeEnabledKey(), m_editorEdgeSnappingEnabled);
-        snapping->writeDouble(ConfigDefaults::intervalXKey(), m_editorSnapIntervalX);
-        snapping->writeDouble(ConfigDefaults::intervalYKey(), m_editorSnapIntervalY);
-        snapping->writeInt(ConfigDefaults::overrideModifierKey(), m_editorSnapOverrideModifier);
-    }
-    {
-        auto fillOnDrop = backend->group(ConfigDefaults::editorFillOnDropGroup());
-        fillOnDrop->writeBool(ConfigDefaults::enabledKey(), m_fillOnDropEnabled);
-        fillOnDrop->writeInt(ConfigDefaults::modifierKey(), m_fillOnDropModifier);
-    }
+    Q_UNUSED(backend);
+    // Editor settings are backed by PhosphorConfig::Store.
 }
 
 void Settings::saveActivationConfig(PhosphorConfig::IBackend* backend)
@@ -703,47 +515,8 @@ void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveShortcutConfig(PhosphorConfig::IBackend* backend)
 {
-    auto shortcuts = backend->group(ConfigDefaults::shortcutsGlobalGroup());
-    shortcuts->writeString(ConfigDefaults::openEditorKey(), m_openEditorShortcut);
-    shortcuts->writeString(ConfigDefaults::openSettingsKey(), m_openSettingsShortcut);
-    shortcuts->writeString(ConfigDefaults::previousLayoutKey(), m_previousLayoutShortcut);
-    shortcuts->writeString(ConfigDefaults::nextLayoutKey(), m_nextLayoutShortcut);
-    for (int i = 0; i < 9; ++i) {
-        shortcuts->writeString(ConfigDefaults::quickLayoutKey(i + 1), m_quickLayoutShortcuts[i]);
-    }
-    shortcuts->writeString(ConfigDefaults::moveWindowLeftKey(), m_moveWindowLeftShortcut);
-    shortcuts->writeString(ConfigDefaults::moveWindowRightKey(), m_moveWindowRightShortcut);
-    shortcuts->writeString(ConfigDefaults::moveWindowUpKey(), m_moveWindowUpShortcut);
-    shortcuts->writeString(ConfigDefaults::moveWindowDownKey(), m_moveWindowDownShortcut);
-    shortcuts->writeString(ConfigDefaults::focusZoneLeftKey(), m_focusZoneLeftShortcut);
-    shortcuts->writeString(ConfigDefaults::focusZoneRightKey(), m_focusZoneRightShortcut);
-    shortcuts->writeString(ConfigDefaults::focusZoneUpKey(), m_focusZoneUpShortcut);
-    shortcuts->writeString(ConfigDefaults::focusZoneDownKey(), m_focusZoneDownShortcut);
-    shortcuts->writeString(ConfigDefaults::pushToEmptyZoneKey(), m_pushToEmptyZoneShortcut);
-    shortcuts->writeString(ConfigDefaults::restoreWindowSizeKey(), m_restoreWindowSizeShortcut);
-    shortcuts->writeString(ConfigDefaults::toggleWindowFloatKey(), m_toggleWindowFloatShortcut);
-    shortcuts->writeString(ConfigDefaults::swapWindowLeftKey(), m_swapWindowLeftShortcut);
-    shortcuts->writeString(ConfigDefaults::swapWindowRightKey(), m_swapWindowRightShortcut);
-    shortcuts->writeString(ConfigDefaults::swapWindowUpKey(), m_swapWindowUpShortcut);
-    shortcuts->writeString(ConfigDefaults::swapWindowDownKey(), m_swapWindowDownShortcut);
-    for (int i = 0; i < 9; ++i) {
-        shortcuts->writeString(ConfigDefaults::snapToZoneKey(i + 1), m_snapToZoneShortcuts[i]);
-    }
-    shortcuts->writeString(ConfigDefaults::rotateWindowsClockwiseKey(), m_rotateWindowsClockwiseShortcut);
-    shortcuts->writeString(ConfigDefaults::rotateWindowsCounterclockwiseKey(), m_rotateWindowsCounterclockwiseShortcut);
-    shortcuts->writeString(ConfigDefaults::cycleWindowForwardKey(), m_cycleWindowForwardShortcut);
-    shortcuts->writeString(ConfigDefaults::cycleWindowBackwardKey(), m_cycleWindowBackwardShortcut);
-    shortcuts->writeString(ConfigDefaults::resnapToNewLayoutKey(), m_resnapToNewLayoutShortcut);
-    shortcuts->writeString(ConfigDefaults::snapAllWindowsKey(), m_snapAllWindowsShortcut);
-    shortcuts->writeString(ConfigDefaults::layoutPickerKey(), m_layoutPickerShortcut);
-    shortcuts->writeString(ConfigDefaults::toggleLayoutLockKey(), m_toggleLayoutLockShortcut);
-    shortcuts->writeString(ConfigDefaults::swapVirtualScreenLeftKey(), m_swapVirtualScreenLeftShortcut);
-    shortcuts->writeString(ConfigDefaults::swapVirtualScreenRightKey(), m_swapVirtualScreenRightShortcut);
-    shortcuts->writeString(ConfigDefaults::swapVirtualScreenUpKey(), m_swapVirtualScreenUpShortcut);
-    shortcuts->writeString(ConfigDefaults::swapVirtualScreenDownKey(), m_swapVirtualScreenDownShortcut);
-    shortcuts->writeString(ConfigDefaults::rotateVirtualScreensClockwiseKey(), m_rotateVirtualScreensClockwiseShortcut);
-    shortcuts->writeString(ConfigDefaults::rotateVirtualScreensCounterclockwiseKey(),
-                           m_rotateVirtualScreensCounterclockwiseShortcut);
+    Q_UNUSED(backend);
+    // Global shortcuts are backed by PhosphorConfig::Store.
 }
 
 void Settings::saveAutotilingConfig(PhosphorConfig::IBackend* backend)
@@ -817,17 +590,7 @@ void Settings::saveAutotilingConfig(PhosphorConfig::IBackend* backend)
     // Animation settings are backed by PhosphorConfig::Store — persisted
     // by setters directly, no save pass needed here.
 
-    {
-        auto tilingShortcuts = backend->group(ConfigDefaults::shortcutsTilingGroup());
-        tilingShortcuts->writeString(ConfigDefaults::toggleKey(), m_autotileToggleShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::focusMasterKey(), m_autotileFocusMasterShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::swapMasterKey(), m_autotileSwapMasterShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::incMasterRatioKey(), m_autotileIncMasterRatioShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::decMasterRatioKey(), m_autotileDecMasterRatioShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::incMasterCountKey(), m_autotileIncMasterCountShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::decMasterCountKey(), m_autotileDecMasterCountShortcut);
-        tilingShortcuts->writeString(ConfigDefaults::retileKey(), m_autotileRetileShortcut);
-    }
+    // Tiling shortcuts are backed by PhosphorConfig::Store.
 }
 
 // ── Virtual screen config load/save ──────────────────────────────────────────

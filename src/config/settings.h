@@ -913,53 +913,22 @@ public:
     }
     void setAutotileDragInsertToggle(bool enable) override;
 
-    // Autotile Shortcuts
-    QString autotileToggleShortcut() const
-    {
-        return m_autotileToggleShortcut;
-    }
+    // Autotile Shortcuts — PhosphorConfig::Store-backed.
+    QString autotileToggleShortcut() const;
     void setAutotileToggleShortcut(const QString& shortcut);
-
-    QString autotileFocusMasterShortcut() const
-    {
-        return m_autotileFocusMasterShortcut;
-    }
+    QString autotileFocusMasterShortcut() const;
     void setAutotileFocusMasterShortcut(const QString& shortcut);
-
-    QString autotileSwapMasterShortcut() const
-    {
-        return m_autotileSwapMasterShortcut;
-    }
+    QString autotileSwapMasterShortcut() const;
     void setAutotileSwapMasterShortcut(const QString& shortcut);
-
-    QString autotileIncMasterRatioShortcut() const
-    {
-        return m_autotileIncMasterRatioShortcut;
-    }
+    QString autotileIncMasterRatioShortcut() const;
     void setAutotileIncMasterRatioShortcut(const QString& shortcut);
-
-    QString autotileDecMasterRatioShortcut() const
-    {
-        return m_autotileDecMasterRatioShortcut;
-    }
+    QString autotileDecMasterRatioShortcut() const;
     void setAutotileDecMasterRatioShortcut(const QString& shortcut);
-
-    QString autotileIncMasterCountShortcut() const
-    {
-        return m_autotileIncMasterCountShortcut;
-    }
+    QString autotileIncMasterCountShortcut() const;
     void setAutotileIncMasterCountShortcut(const QString& shortcut);
-
-    QString autotileDecMasterCountShortcut() const
-    {
-        return m_autotileDecMasterCountShortcut;
-    }
+    QString autotileDecMasterCountShortcut() const;
     void setAutotileDecMasterCountShortcut(const QString& shortcut);
-
-    QString autotileRetileShortcut() const
-    {
-        return m_autotileRetileShortcut;
-    }
+    QString autotileRetileShortcut() const;
     void setAutotileRetileShortcut(const QString& shortcut);
 
     // Animation Settings (applies to both snapping and autotiling geometry
@@ -1106,345 +1075,150 @@ public:
     int audioSpectrumBarCount() const override;
     void setAudioSpectrumBarCount(int count) override;
 
-    // Global Shortcuts (for KGlobalAccel)
-    QString openEditorShortcut() const
-    {
-        return m_openEditorShortcut;
-    }
+    // Global Shortcuts (for KGlobalAccel) — PhosphorConfig::Store-backed.
+    QString openEditorShortcut() const;
     void setOpenEditorShortcut(const QString& shortcut);
-    QString openSettingsShortcut() const
-    {
-        return m_openSettingsShortcut;
-    }
+    QString openSettingsShortcut() const;
     void setOpenSettingsShortcut(const QString& shortcut);
-    QString previousLayoutShortcut() const
-    {
-        return m_previousLayoutShortcut;
-    }
+    QString previousLayoutShortcut() const;
     void setPreviousLayoutShortcut(const QString& shortcut);
-    QString nextLayoutShortcut() const
-    {
-        return m_nextLayoutShortcut;
-    }
+    QString nextLayoutShortcut() const;
     void setNextLayoutShortcut(const QString& shortcut);
-    QString quickLayout1Shortcut() const
-    {
-        return m_quickLayoutShortcuts[0];
-    }
+    QString quickLayout1Shortcut() const;
     void setQuickLayout1Shortcut(const QString& shortcut);
-    QString quickLayout2Shortcut() const
-    {
-        return m_quickLayoutShortcuts[1];
-    }
+    QString quickLayout2Shortcut() const;
     void setQuickLayout2Shortcut(const QString& shortcut);
-    QString quickLayout3Shortcut() const
-    {
-        return m_quickLayoutShortcuts[2];
-    }
+    QString quickLayout3Shortcut() const;
     void setQuickLayout3Shortcut(const QString& shortcut);
-    QString quickLayout4Shortcut() const
-    {
-        return m_quickLayoutShortcuts[3];
-    }
+    QString quickLayout4Shortcut() const;
     void setQuickLayout4Shortcut(const QString& shortcut);
-    QString quickLayout5Shortcut() const
-    {
-        return m_quickLayoutShortcuts[4];
-    }
+    QString quickLayout5Shortcut() const;
     void setQuickLayout5Shortcut(const QString& shortcut);
-    QString quickLayout6Shortcut() const
-    {
-        return m_quickLayoutShortcuts[5];
-    }
+    QString quickLayout6Shortcut() const;
     void setQuickLayout6Shortcut(const QString& shortcut);
-    QString quickLayout7Shortcut() const
-    {
-        return m_quickLayoutShortcuts[6];
-    }
+    QString quickLayout7Shortcut() const;
     void setQuickLayout7Shortcut(const QString& shortcut);
-    QString quickLayout8Shortcut() const
-    {
-        return m_quickLayoutShortcuts[7];
-    }
+    QString quickLayout8Shortcut() const;
     void setQuickLayout8Shortcut(const QString& shortcut);
-    QString quickLayout9Shortcut() const
-    {
-        return m_quickLayoutShortcuts[8];
-    }
+    QString quickLayout9Shortcut() const;
     void setQuickLayout9Shortcut(const QString& shortcut);
-
-    // Helper to get quick layout shortcut by index (0-8)
+    // Helper accessors by 0-based index.
     QString quickLayoutShortcut(int index) const;
     void setQuickLayoutShortcut(int index, const QString& shortcut);
 
     // Keyboard Navigation Shortcuts
-    QString moveWindowLeftShortcut() const
-    {
-        return m_moveWindowLeftShortcut;
-    }
+    QString moveWindowLeftShortcut() const;
     void setMoveWindowLeftShortcut(const QString& shortcut);
-    QString moveWindowRightShortcut() const
-    {
-        return m_moveWindowRightShortcut;
-    }
+    QString moveWindowRightShortcut() const;
     void setMoveWindowRightShortcut(const QString& shortcut);
-    QString moveWindowUpShortcut() const
-    {
-        return m_moveWindowUpShortcut;
-    }
+    QString moveWindowUpShortcut() const;
     void setMoveWindowUpShortcut(const QString& shortcut);
-    QString moveWindowDownShortcut() const
-    {
-        return m_moveWindowDownShortcut;
-    }
+    QString moveWindowDownShortcut() const;
     void setMoveWindowDownShortcut(const QString& shortcut);
-    QString focusZoneLeftShortcut() const
-    {
-        return m_focusZoneLeftShortcut;
-    }
+    QString focusZoneLeftShortcut() const;
     void setFocusZoneLeftShortcut(const QString& shortcut);
-    QString focusZoneRightShortcut() const
-    {
-        return m_focusZoneRightShortcut;
-    }
+    QString focusZoneRightShortcut() const;
     void setFocusZoneRightShortcut(const QString& shortcut);
-    QString focusZoneUpShortcut() const
-    {
-        return m_focusZoneUpShortcut;
-    }
+    QString focusZoneUpShortcut() const;
     void setFocusZoneUpShortcut(const QString& shortcut);
-    QString focusZoneDownShortcut() const
-    {
-        return m_focusZoneDownShortcut;
-    }
+    QString focusZoneDownShortcut() const;
     void setFocusZoneDownShortcut(const QString& shortcut);
-    QString pushToEmptyZoneShortcut() const
-    {
-        return m_pushToEmptyZoneShortcut;
-    }
+    QString pushToEmptyZoneShortcut() const;
     void setPushToEmptyZoneShortcut(const QString& shortcut);
-    QString restoreWindowSizeShortcut() const
-    {
-        return m_restoreWindowSizeShortcut;
-    }
+    QString restoreWindowSizeShortcut() const;
     void setRestoreWindowSizeShortcut(const QString& shortcut);
-    QString toggleWindowFloatShortcut() const
-    {
-        return m_toggleWindowFloatShortcut;
-    }
+    QString toggleWindowFloatShortcut() const;
     void setToggleWindowFloatShortcut(const QString& shortcut);
 
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    QString swapWindowLeftShortcut() const
-    {
-        return m_swapWindowLeftShortcut;
-    }
+    QString swapWindowLeftShortcut() const;
     void setSwapWindowLeftShortcut(const QString& shortcut);
-    QString swapWindowRightShortcut() const
-    {
-        return m_swapWindowRightShortcut;
-    }
+    QString swapWindowRightShortcut() const;
     void setSwapWindowRightShortcut(const QString& shortcut);
-    QString swapWindowUpShortcut() const
-    {
-        return m_swapWindowUpShortcut;
-    }
+    QString swapWindowUpShortcut() const;
     void setSwapWindowUpShortcut(const QString& shortcut);
-    QString swapWindowDownShortcut() const
-    {
-        return m_swapWindowDownShortcut;
-    }
+    QString swapWindowDownShortcut() const;
     void setSwapWindowDownShortcut(const QString& shortcut);
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
-    QString snapToZone1Shortcut() const
-    {
-        return m_snapToZoneShortcuts[0];
-    }
+    QString snapToZone1Shortcut() const;
     void setSnapToZone1Shortcut(const QString& shortcut);
-    QString snapToZone2Shortcut() const
-    {
-        return m_snapToZoneShortcuts[1];
-    }
+    QString snapToZone2Shortcut() const;
     void setSnapToZone2Shortcut(const QString& shortcut);
-    QString snapToZone3Shortcut() const
-    {
-        return m_snapToZoneShortcuts[2];
-    }
+    QString snapToZone3Shortcut() const;
     void setSnapToZone3Shortcut(const QString& shortcut);
-    QString snapToZone4Shortcut() const
-    {
-        return m_snapToZoneShortcuts[3];
-    }
+    QString snapToZone4Shortcut() const;
     void setSnapToZone4Shortcut(const QString& shortcut);
-    QString snapToZone5Shortcut() const
-    {
-        return m_snapToZoneShortcuts[4];
-    }
+    QString snapToZone5Shortcut() const;
     void setSnapToZone5Shortcut(const QString& shortcut);
-    QString snapToZone6Shortcut() const
-    {
-        return m_snapToZoneShortcuts[5];
-    }
+    QString snapToZone6Shortcut() const;
     void setSnapToZone6Shortcut(const QString& shortcut);
-    QString snapToZone7Shortcut() const
-    {
-        return m_snapToZoneShortcuts[6];
-    }
+    QString snapToZone7Shortcut() const;
     void setSnapToZone7Shortcut(const QString& shortcut);
-    QString snapToZone8Shortcut() const
-    {
-        return m_snapToZoneShortcuts[7];
-    }
+    QString snapToZone8Shortcut() const;
     void setSnapToZone8Shortcut(const QString& shortcut);
-    QString snapToZone9Shortcut() const
-    {
-        return m_snapToZoneShortcuts[8];
-    }
+    QString snapToZone9Shortcut() const;
     void setSnapToZone9Shortcut(const QString& shortcut);
-
-    // Helper to get snap-to-zone shortcut by index (0-8)
     QString snapToZoneShortcut(int index) const;
     void setSnapToZoneShortcut(int index, const QString& shortcut);
 
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    QString rotateWindowsClockwiseShortcut() const
-    {
-        return m_rotateWindowsClockwiseShortcut;
-    }
+    QString rotateWindowsClockwiseShortcut() const;
     void setRotateWindowsClockwiseShortcut(const QString& shortcut);
-    QString rotateWindowsCounterclockwiseShortcut() const
-    {
-        return m_rotateWindowsCounterclockwiseShortcut;
-    }
+    QString rotateWindowsCounterclockwiseShortcut() const;
     void setRotateWindowsCounterclockwiseShortcut(const QString& shortcut);
-
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    QString cycleWindowForwardShortcut() const
-    {
-        return m_cycleWindowForwardShortcut;
-    }
+    QString cycleWindowForwardShortcut() const;
     void setCycleWindowForwardShortcut(const QString& shortcut);
-    QString cycleWindowBackwardShortcut() const
-    {
-        return m_cycleWindowBackwardShortcut;
-    }
+    QString cycleWindowBackwardShortcut() const;
     void setCycleWindowBackwardShortcut(const QString& shortcut);
-    QString resnapToNewLayoutShortcut() const
-    {
-        return m_resnapToNewLayoutShortcut;
-    }
+    QString resnapToNewLayoutShortcut() const;
     void setResnapToNewLayoutShortcut(const QString& shortcut);
-
-    QString snapAllWindowsShortcut() const
-    {
-        return m_snapAllWindowsShortcut;
-    }
+    QString snapAllWindowsShortcut() const;
     void setSnapAllWindowsShortcut(const QString& shortcut);
-
-    QString layoutPickerShortcut() const
-    {
-        return m_layoutPickerShortcut;
-    }
+    QString layoutPickerShortcut() const;
     void setLayoutPickerShortcut(const QString& shortcut);
-
-    QString toggleLayoutLockShortcut() const
-    {
-        return m_toggleLayoutLockShortcut;
-    }
+    QString toggleLayoutLockShortcut() const;
     void setToggleLayoutLockShortcut(const QString& shortcut);
 
-    // Virtual Screen Swap / Rotate Shortcuts
-    QString swapVirtualScreenLeftShortcut() const
-    {
-        return m_swapVirtualScreenLeftShortcut;
-    }
+    QString swapVirtualScreenLeftShortcut() const;
     void setSwapVirtualScreenLeftShortcut(const QString& shortcut);
-    QString swapVirtualScreenRightShortcut() const
-    {
-        return m_swapVirtualScreenRightShortcut;
-    }
+    QString swapVirtualScreenRightShortcut() const;
     void setSwapVirtualScreenRightShortcut(const QString& shortcut);
-    QString swapVirtualScreenUpShortcut() const
-    {
-        return m_swapVirtualScreenUpShortcut;
-    }
+    QString swapVirtualScreenUpShortcut() const;
     void setSwapVirtualScreenUpShortcut(const QString& shortcut);
-    QString swapVirtualScreenDownShortcut() const
-    {
-        return m_swapVirtualScreenDownShortcut;
-    }
+    QString swapVirtualScreenDownShortcut() const;
     void setSwapVirtualScreenDownShortcut(const QString& shortcut);
-    QString rotateVirtualScreensClockwiseShortcut() const
-    {
-        return m_rotateVirtualScreensClockwiseShortcut;
-    }
+    QString rotateVirtualScreensClockwiseShortcut() const;
     void setRotateVirtualScreensClockwiseShortcut(const QString& shortcut);
-    QString rotateVirtualScreensCounterclockwiseShortcut() const
-    {
-        return m_rotateVirtualScreensCounterclockwiseShortcut;
-    }
+    QString rotateVirtualScreensCounterclockwiseShortcut() const;
     void setRotateVirtualScreensCounterclockwiseShortcut(const QString& shortcut);
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Editor Settings (shared [Editor] group in config.json)
+    // PhosphorConfig::Store-backed.
     // ═══════════════════════════════════════════════════════════════════════════
-
-    QString editorDuplicateShortcut() const
-    {
-        return m_editorDuplicateShortcut;
-    }
+    QString editorDuplicateShortcut() const;
     void setEditorDuplicateShortcut(const QString& shortcut);
-    QString editorSplitHorizontalShortcut() const
-    {
-        return m_editorSplitHorizontalShortcut;
-    }
+    QString editorSplitHorizontalShortcut() const;
     void setEditorSplitHorizontalShortcut(const QString& shortcut);
-    QString editorSplitVerticalShortcut() const
-    {
-        return m_editorSplitVerticalShortcut;
-    }
+    QString editorSplitVerticalShortcut() const;
     void setEditorSplitVerticalShortcut(const QString& shortcut);
-    QString editorFillShortcut() const
-    {
-        return m_editorFillShortcut;
-    }
+    QString editorFillShortcut() const;
     void setEditorFillShortcut(const QString& shortcut);
-    bool editorGridSnappingEnabled() const
-    {
-        return m_editorGridSnappingEnabled;
-    }
+    bool editorGridSnappingEnabled() const;
     void setEditorGridSnappingEnabled(bool enabled);
-    bool editorEdgeSnappingEnabled() const
-    {
-        return m_editorEdgeSnappingEnabled;
-    }
+    bool editorEdgeSnappingEnabled() const;
     void setEditorEdgeSnappingEnabled(bool enabled);
-    qreal editorSnapIntervalX() const
-    {
-        return m_editorSnapIntervalX;
-    }
+    qreal editorSnapIntervalX() const;
     void setEditorSnapIntervalX(qreal interval);
-    qreal editorSnapIntervalY() const
-    {
-        return m_editorSnapIntervalY;
-    }
+    qreal editorSnapIntervalY() const;
     void setEditorSnapIntervalY(qreal interval);
-    int editorSnapOverrideModifier() const
-    {
-        return m_editorSnapOverrideModifier;
-    }
+    int editorSnapOverrideModifier() const;
     void setEditorSnapOverrideModifier(int mod);
-    bool fillOnDropEnabled() const
-    {
-        return m_fillOnDropEnabled;
-    }
+    bool fillOnDropEnabled() const;
     void setFillOnDropEnabled(bool enabled);
-    int fillOnDropModifier() const
-    {
-        return m_fillOnDropModifier;
-    }
+    int fillOnDropModifier() const;
     void setFillOnDropModifier(int mod);
+
+    // Old inline accessors replaced above — kept anchors below so the second
+    // half of the replaced region can be collapsed in one edit pass.
 
     // TilingQuickLayoutSlots — read/write via the shared config backend
     QString readTilingQuickLayoutSlot(int slotNumber) const;
@@ -1531,10 +1305,10 @@ private:
      */
     static void saveTriggerList(PhosphorConfig::IGroup& group, const QString& key, const QVariantList& triggers);
 
-    /** @brief Shared dispatcher for indexed shortcut arrays (quick-layout, snap-to-zone) */
+    /// Member-function-pointer alias used by the indexed shortcut setters
+    /// (quickLayoutShortcut / snapToZoneShortcut) when fanning out to the
+    /// per-index NOTIFY signal.
     using ShortcutSignalFn = void (Settings::*)();
-    void setIndexedShortcut(QString (&arr)[9], int index, const QString& shortcut,
-                            const ShortcutSignalFn (&signals)[9]);
 
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
     void loadActivationConfig(PhosphorConfig::IBackend* backend);
@@ -1697,108 +1471,6 @@ private:
     AutotileDragBehavior m_autotileDragBehavior = AutotileDragBehavior::Float;
     AutotileOverflowBehavior m_autotileOverflowBehavior = AutotileOverflowBehavior::Float;
     QStringList m_lockedScreens;
-    // Autotile Shortcuts (defaults from ConfigDefaults, canonical source)
-    QString m_autotileToggleShortcut = ConfigDefaults::autotileToggleShortcut();
-    QString m_autotileFocusMasterShortcut = ConfigDefaults::autotileFocusMasterShortcut();
-    QString m_autotileSwapMasterShortcut = ConfigDefaults::autotileSwapMasterShortcut();
-    QString m_autotileIncMasterRatioShortcut = ConfigDefaults::autotileIncMasterRatioShortcut();
-    QString m_autotileDecMasterRatioShortcut = ConfigDefaults::autotileDecMasterRatioShortcut();
-    QString m_autotileIncMasterCountShortcut = ConfigDefaults::autotileIncMasterCountShortcut();
-    QString m_autotileDecMasterCountShortcut = ConfigDefaults::autotileDecMasterCountShortcut();
-    QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
-
-    // Rendering
-    // Rendering is stored in m_store; no cached member here.
-
-    // Shader Effects are stored in m_store; no cached members here.
-
-    // Global Shortcuts (defaults from ConfigDefaults, canonical source)
-    QString m_openEditorShortcut = ConfigDefaults::openEditorShortcut();
-    QString m_openSettingsShortcut = ConfigDefaults::openSettingsShortcut();
-    QString m_previousLayoutShortcut = ConfigDefaults::previousLayoutShortcut();
-    QString m_nextLayoutShortcut = ConfigDefaults::nextLayoutShortcut();
-    QString m_quickLayoutShortcuts[9] = {ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-                                         ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-                                         ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-                                         ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-                                         ConfigDefaults::quickLayout9Shortcut()};
-
-    // Keyboard Navigation Shortcuts
-    // Meta+Shift+Left/Right conflicts with KDE's "Window to Next/Previous Screen";
-    // we use Meta+Alt+Shift+Arrow instead.
-    QString m_moveWindowLeftShortcut = ConfigDefaults::moveWindowLeftShortcut();
-    QString m_moveWindowRightShortcut = ConfigDefaults::moveWindowRightShortcut();
-    QString m_moveWindowUpShortcut = ConfigDefaults::moveWindowUpShortcut();
-    QString m_moveWindowDownShortcut = ConfigDefaults::moveWindowDownShortcut();
-    // Meta+Arrow conflicts with KDE's Quick Tile; we use Alt+Shift+Arrow instead.
-    QString m_focusZoneLeftShortcut = ConfigDefaults::focusZoneLeftShortcut();
-    QString m_focusZoneRightShortcut = ConfigDefaults::focusZoneRightShortcut();
-    QString m_focusZoneUpShortcut = ConfigDefaults::focusZoneUpShortcut();
-    QString m_focusZoneDownShortcut = ConfigDefaults::focusZoneDownShortcut();
-    QString m_pushToEmptyZoneShortcut = ConfigDefaults::pushToEmptyZoneShortcut();
-    QString m_restoreWindowSizeShortcut = ConfigDefaults::restoreWindowSizeShortcut();
-    QString m_toggleWindowFloatShortcut = ConfigDefaults::toggleWindowFloatShortcut();
-
-    // Swap Window Shortcuts (Meta+Ctrl+Alt+Arrow)
-    // Swaps focused window with window in adjacent zone
-    // Meta+Ctrl+Arrow conflicts with KDE's virtual desktop switching;
-    // we add Alt to make Meta+Ctrl+Alt+Arrow for swap operations.
-    QString m_swapWindowLeftShortcut = ConfigDefaults::swapWindowLeftShortcut();
-    QString m_swapWindowRightShortcut = ConfigDefaults::swapWindowRightShortcut();
-    QString m_swapWindowUpShortcut = ConfigDefaults::swapWindowUpShortcut();
-    QString m_swapWindowDownShortcut = ConfigDefaults::swapWindowDownShortcut();
-
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
-    // Meta+1-9 conflicts with KDE's virtual desktop switching; we use Meta+Ctrl+1-9 instead.
-    QString m_snapToZoneShortcuts[9] = {ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-                                        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-                                        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-                                        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-                                        ConfigDefaults::snapToZone9Shortcut()};
-
-    // Rotate Windows Shortcuts (Meta+Ctrl+[ / Meta+Ctrl+])
-    // Rotates all windows in the current layout clockwise or counterclockwise
-    QString m_rotateWindowsClockwiseShortcut = ConfigDefaults::rotateWindowsClockwiseShortcut();
-    QString m_rotateWindowsCounterclockwiseShortcut = ConfigDefaults::rotateWindowsCounterclockwiseShortcut();
-
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
-    // Cycles focus between windows stacked in the same zone (monocle-style navigation)
-    QString m_cycleWindowForwardShortcut = ConfigDefaults::cycleWindowForwardShortcut();
-    QString m_cycleWindowBackwardShortcut = ConfigDefaults::cycleWindowBackwardShortcut();
-
-    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
-    QString m_resnapToNewLayoutShortcut = ConfigDefaults::resnapToNewLayoutShortcut();
-
-    // Snap All Windows (Meta+Ctrl+S — same namespace as rotate/resnap batch ops)
-    QString m_snapAllWindowsShortcut = ConfigDefaults::snapAllWindowsShortcut();
-
-    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
-    QString m_layoutPickerShortcut = ConfigDefaults::layoutPickerShortcut();
-
-    // Toggle Layout Lock (Meta+Ctrl+L)
-    QString m_toggleLayoutLockShortcut = ConfigDefaults::toggleLayoutLockShortcut();
-
-    // Virtual Screen Swap / Rotate Shortcuts
-    QString m_swapVirtualScreenLeftShortcut = ConfigDefaults::swapVirtualScreenLeftShortcut();
-    QString m_swapVirtualScreenRightShortcut = ConfigDefaults::swapVirtualScreenRightShortcut();
-    QString m_swapVirtualScreenUpShortcut = ConfigDefaults::swapVirtualScreenUpShortcut();
-    QString m_swapVirtualScreenDownShortcut = ConfigDefaults::swapVirtualScreenDownShortcut();
-    QString m_rotateVirtualScreensClockwiseShortcut = ConfigDefaults::rotateVirtualScreensClockwiseShortcut();
-    QString m_rotateVirtualScreensCounterclockwiseShortcut =
-        ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut();
-
-    // Editor Settings ([Editor] group in config.json)
-    QString m_editorDuplicateShortcut = ConfigDefaults::editorDuplicateShortcut();
-    QString m_editorSplitHorizontalShortcut = ConfigDefaults::editorSplitHorizontalShortcut();
-    QString m_editorSplitVerticalShortcut = ConfigDefaults::editorSplitVerticalShortcut();
-    QString m_editorFillShortcut = ConfigDefaults::editorFillShortcut();
-    bool m_editorGridSnappingEnabled = ConfigDefaults::editorGridSnappingEnabled();
-    bool m_editorEdgeSnappingEnabled = ConfigDefaults::editorEdgeSnappingEnabled();
-    qreal m_editorSnapIntervalX = ConfigDefaults::editorSnapInterval();
-    qreal m_editorSnapIntervalY = ConfigDefaults::editorSnapInterval();
-    int m_editorSnapOverrideModifier = ConfigDefaults::editorSnapOverrideModifier();
-    bool m_fillOnDropEnabled = ConfigDefaults::fillOnDropEnabled();
-    int m_fillOnDropModifier = ConfigDefaults::fillOnDropModifier();
 };
 
 } // namespace PlasmaZones

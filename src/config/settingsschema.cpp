@@ -23,6 +23,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendRenderingSchema(s);
     appendPerformanceSchema(s);
     appendZoneGeometrySchema(s);
+    appendShortcutsSchema(s);
+    appendEditorSchema(s);
 
     return s;
 }
@@ -278,6 +280,138 @@ void appendZoneGeometrySchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::adjacentThresholdMin(), CD::adjacentThresholdMax())},
+    };
+}
+
+// ─── Shortcuts ──────────────────────────────────────────────────────────────
+// Three sub-groups: Global (editor/settings launchers, zone navigation,
+// snap-to-zone numbered slots, layout rotation/swap, virtual-screen rotation),
+// Tiling (autotile master/ratio/count controls + retile toggle), Editor
+// (zone editor shortcuts — duplicate, split, fill). All QString keys, no
+// validators needed.
+
+namespace {
+// Helper: append a string KeyDef with no validator. Cuts the noise in the
+// schema below when every entry is the same shape.
+inline void addShortcut(QVector<PhosphorConfig::KeyDef>& list, const QString& key, const QString& defaultValue)
+{
+    list.append({key, defaultValue, QMetaType::QString});
+}
+} // namespace
+
+void appendShortcutsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+
+    QVector<PhosphorConfig::KeyDef> globals;
+    addShortcut(globals, CD::openEditorKey(), CD::openEditorShortcut());
+    addShortcut(globals, CD::openSettingsKey(), CD::openSettingsShortcut());
+    addShortcut(globals, CD::previousLayoutKey(), CD::previousLayoutShortcut());
+    addShortcut(globals, CD::nextLayoutKey(), CD::nextLayoutShortcut());
+    const QString quickDefaults[9] = {
+        CD::quickLayout1Shortcut(), CD::quickLayout2Shortcut(), CD::quickLayout3Shortcut(),
+        CD::quickLayout4Shortcut(), CD::quickLayout5Shortcut(), CD::quickLayout6Shortcut(),
+        CD::quickLayout7Shortcut(), CD::quickLayout8Shortcut(), CD::quickLayout9Shortcut(),
+    };
+    for (int i = 0; i < 9; ++i) {
+        addShortcut(globals, CD::quickLayoutKey(i + 1), quickDefaults[i]);
+    }
+    addShortcut(globals, CD::moveWindowLeftKey(), CD::moveWindowLeftShortcut());
+    addShortcut(globals, CD::moveWindowRightKey(), CD::moveWindowRightShortcut());
+    addShortcut(globals, CD::moveWindowUpKey(), CD::moveWindowUpShortcut());
+    addShortcut(globals, CD::moveWindowDownKey(), CD::moveWindowDownShortcut());
+    addShortcut(globals, CD::focusZoneLeftKey(), CD::focusZoneLeftShortcut());
+    addShortcut(globals, CD::focusZoneRightKey(), CD::focusZoneRightShortcut());
+    addShortcut(globals, CD::focusZoneUpKey(), CD::focusZoneUpShortcut());
+    addShortcut(globals, CD::focusZoneDownKey(), CD::focusZoneDownShortcut());
+    addShortcut(globals, CD::pushToEmptyZoneKey(), CD::pushToEmptyZoneShortcut());
+    addShortcut(globals, CD::restoreWindowSizeKey(), CD::restoreWindowSizeShortcut());
+    addShortcut(globals, CD::toggleWindowFloatKey(), CD::toggleWindowFloatShortcut());
+    addShortcut(globals, CD::swapWindowLeftKey(), CD::swapWindowLeftShortcut());
+    addShortcut(globals, CD::swapWindowRightKey(), CD::swapWindowRightShortcut());
+    addShortcut(globals, CD::swapWindowUpKey(), CD::swapWindowUpShortcut());
+    addShortcut(globals, CD::swapWindowDownKey(), CD::swapWindowDownShortcut());
+    const QString snapToZoneDefaults[9] = {
+        CD::snapToZone1Shortcut(), CD::snapToZone2Shortcut(), CD::snapToZone3Shortcut(),
+        CD::snapToZone4Shortcut(), CD::snapToZone5Shortcut(), CD::snapToZone6Shortcut(),
+        CD::snapToZone7Shortcut(), CD::snapToZone8Shortcut(), CD::snapToZone9Shortcut(),
+    };
+    for (int i = 0; i < 9; ++i) {
+        addShortcut(globals, CD::snapToZoneKey(i + 1), snapToZoneDefaults[i]);
+    }
+    addShortcut(globals, CD::rotateWindowsClockwiseKey(), CD::rotateWindowsClockwiseShortcut());
+    addShortcut(globals, CD::rotateWindowsCounterclockwiseKey(), CD::rotateWindowsCounterclockwiseShortcut());
+    addShortcut(globals, CD::cycleWindowForwardKey(), CD::cycleWindowForwardShortcut());
+    addShortcut(globals, CD::cycleWindowBackwardKey(), CD::cycleWindowBackwardShortcut());
+    addShortcut(globals, CD::resnapToNewLayoutKey(), CD::resnapToNewLayoutShortcut());
+    addShortcut(globals, CD::snapAllWindowsKey(), CD::snapAllWindowsShortcut());
+    addShortcut(globals, CD::layoutPickerKey(), CD::layoutPickerShortcut());
+    addShortcut(globals, CD::toggleLayoutLockKey(), CD::toggleLayoutLockShortcut());
+    addShortcut(globals, CD::swapVirtualScreenLeftKey(), CD::swapVirtualScreenLeftShortcut());
+    addShortcut(globals, CD::swapVirtualScreenRightKey(), CD::swapVirtualScreenRightShortcut());
+    addShortcut(globals, CD::swapVirtualScreenUpKey(), CD::swapVirtualScreenUpShortcut());
+    addShortcut(globals, CD::swapVirtualScreenDownKey(), CD::swapVirtualScreenDownShortcut());
+    addShortcut(globals, CD::rotateVirtualScreensClockwiseKey(), CD::rotateVirtualScreensClockwiseShortcut());
+    addShortcut(globals, CD::rotateVirtualScreensCounterclockwiseKey(),
+                CD::rotateVirtualScreensCounterclockwiseShortcut());
+    schema.groups[CD::shortcutsGlobalGroup()] = std::move(globals);
+
+    schema.groups[CD::shortcutsTilingGroup()] = {
+        {CD::toggleKey(), CD::autotileToggleShortcut(), QMetaType::QString},
+        {CD::focusMasterKey(), CD::autotileFocusMasterShortcut(), QMetaType::QString},
+        {CD::swapMasterKey(), CD::autotileSwapMasterShortcut(), QMetaType::QString},
+        {CD::incMasterRatioKey(), CD::autotileIncMasterRatioShortcut(), QMetaType::QString},
+        {CD::decMasterRatioKey(), CD::autotileDecMasterRatioShortcut(), QMetaType::QString},
+        {CD::incMasterCountKey(), CD::autotileIncMasterCountShortcut(), QMetaType::QString},
+        {CD::decMasterCountKey(), CD::autotileDecMasterCountShortcut(), QMetaType::QString},
+        {CD::retileKey(), CD::autotileRetileShortcut(), QMetaType::QString},
+    };
+}
+
+// ─── Editor ─────────────────────────────────────────────────────────────────
+// Three sub-groups: Shortcuts (zone editor: duplicate/split/fill), Snapping
+// (grid + edge toggles, per-axis intervals, override modifier), FillOnDrop
+// (toggle + modifier). Modifier keys use a validator that rejects
+// non-standard Qt::KeyboardModifier bits and falls back to the default —
+// matches the hand-written load path's validModifiers mask check.
+
+void appendEditorSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+
+    schema.groups[CD::editorShortcutsGroup()] = {
+        {CD::duplicateKey(), CD::editorDuplicateShortcut(), QMetaType::QString},
+        {CD::splitHorizontalKey(), CD::editorSplitHorizontalShortcut(), QMetaType::QString},
+        {CD::splitVerticalKey(), CD::editorSplitVerticalShortcut(), QMetaType::QString},
+        {CD::fillKey(), CD::editorFillShortcut(), QMetaType::QString},
+    };
+
+    auto modifierOr = [](int fallback) {
+        return [fallback](const QVariant& v) -> QVariant {
+            const int raw = v.toInt();
+            constexpr int valid = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier;
+            if (raw == Qt::NoModifier || (raw & valid) == raw) {
+                return QVariant(raw);
+            }
+            return QVariant(fallback);
+        };
+    };
+
+    schema.groups[CD::editorSnappingGroup()] = {
+        {CD::gridEnabledKey(), CD::editorGridSnappingEnabled(), QMetaType::Bool},
+        {CD::edgeEnabledKey(), CD::editorEdgeSnappingEnabled(), QMetaType::Bool},
+        {CD::intervalXKey(), CD::editorSnapInterval(), QMetaType::Double, {}, clampDouble(0.01, 1.0)},
+        {CD::intervalYKey(), CD::editorSnapInterval(), QMetaType::Double, {}, clampDouble(0.01, 1.0)},
+        {CD::overrideModifierKey(),
+         CD::editorSnapOverrideModifier(),
+         QMetaType::Int,
+         {},
+         modifierOr(CD::editorSnapOverrideModifier())},
+    };
+
+    schema.groups[CD::editorFillOnDropGroup()] = {
+        {CD::enabledKey(), CD::fillOnDropEnabled(), QMetaType::Bool},
+        {CD::modifierKey(), CD::fillOnDropModifier(), QMetaType::Int, {}, modifierOr(CD::fillOnDropModifier())},
     };
 }
 
