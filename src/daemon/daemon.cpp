@@ -70,7 +70,7 @@ Daemon::Daemon(QObject* parent)
     , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
-    , m_zoneDetector(std::make_unique<ZoneDetector>(m_settings.get(), nullptr))
+    , m_zoneDetector(std::make_unique<ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_screenManager(std::make_unique<ScreenManager>(nullptr))
@@ -85,6 +85,14 @@ Daemon::Daemon(QObject* parent)
     m_geometryUpdateTimer.setSingleShot(true);
     m_geometryUpdateTimer.setInterval(GEOMETRY_UPDATE_DEBOUNCE_MS);
     connect(&m_geometryUpdateTimer, &QTimer::timeout, this, &Daemon::processPendingGeometryUpdates);
+
+    // Wire ZoneDetector's adjacency threshold to the settings value. The
+    // detector no longer holds an ISettings pointer (it takes just the int)
+    // so we mirror the setting here and re-push on change.
+    m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
+    connect(m_settings.get(), &ISettings::adjacentThresholdChanged, this, [this]() {
+        m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
+    });
 }
 
 Daemon::~Daemon()

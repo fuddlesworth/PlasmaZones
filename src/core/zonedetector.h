@@ -6,6 +6,7 @@
 #include "zone.h"
 #include "layout.h"
 #include "interfaces.h"
+#include "constants.h"
 #include <QPointF>
 #include <QRectF>
 #include <QVector>
@@ -40,7 +41,7 @@ class PLASMAZONES_EXPORT ZoneDetector : public IZoneDetector
     Q_PROPERTY(Layout* layout READ layout WRITE setLayout NOTIFY layoutChanged)
 
 public:
-    explicit ZoneDetector(ISettings* settings, QObject* parent = nullptr);
+    explicit ZoneDetector(QObject* parent = nullptr);
     ~ZoneDetector() override; // Defined in .cpp to allow unique_ptr with forward declaration
 
     // IZoneDetector interface implementation
@@ -49,6 +50,27 @@ public:
         return m_layout;
     }
     void setLayout(Layout* layout) override;
+
+    /**
+     * @brief Set the adjacency threshold used by detectMultiZone / areZonesAdjacent.
+     *
+     * Zones whose edges are within @p px pixels of each other are treated as
+     * adjacent for multi-zone selection. The daemon typically wires this to
+     * the live Settings value (via the adjacentThresholdChanged signal) so
+     * users can tune detection sensitivity without reconstructing the
+     * detector. Fine-grained injection of the int, rather than a whole
+     * ISettings pointer, keeps ZoneDetector independent of the settings
+     * layer — prerequisite for moving it into a standalone phosphor-zones
+     * library.
+     */
+    void setAdjacentThreshold(int px)
+    {
+        m_adjacentThreshold = px;
+    }
+    int adjacentThreshold() const
+    {
+        return m_adjacentThreshold;
+    }
 
     Q_INVOKABLE ZoneDetectionResult detectZone(const QPointF& cursorPos) const override;
     Q_INVOKABLE ZoneDetectionResult detectMultiZone(const QPointF& cursorPos) const override;
@@ -80,7 +102,7 @@ private:
     Zone* resolveOverlappingZone(const QPointF& point) const;
 
     Layout* m_layout = nullptr;
-    ISettings* m_settings;
+    int m_adjacentThreshold = Defaults::AdjacentThreshold;
 
     // UI state management
     std::unique_ptr<class ZoneHighlighter> m_highlighter;

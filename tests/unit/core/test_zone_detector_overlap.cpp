@@ -32,7 +32,8 @@ private Q_SLOTS:
     void init()
     {
         m_settings = new StubSettings(nullptr);
-        m_detector = new ZoneDetector(m_settings, nullptr);
+        m_detector = new ZoneDetector(nullptr);
+        m_detector->setAdjacentThreshold(m_settings->adjacentThreshold());
         m_layout = new Layout(QStringLiteral("OverlapTest"), nullptr);
     }
 

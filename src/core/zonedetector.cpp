@@ -11,9 +11,8 @@
 
 namespace PlasmaZones {
 
-ZoneDetector::ZoneDetector(ISettings* settings, QObject* parent)
+ZoneDetector::ZoneDetector(QObject* parent)
     : IZoneDetector(parent)
-    , m_settings(settings)
     , m_highlighter(std::make_unique<ZoneHighlighter>(this))
 {
     // Forward highlighter signals for backward compatibility
@@ -263,7 +262,7 @@ ZoneDetectionResult ZoneDetector::detectMultiZone(const QPointF& cursorPos) cons
     }
 
     const auto& allZones = m_layout->zones();
-    const qreal adjacentThreshold = m_settings->adjacentThreshold();
+    const qreal adjacentThreshold = m_adjacentThreshold;
 
     // Separate overlapping zones (cursor inside) from edge-adjacent zones
     // (cursor outside but within threshold). Only edge-adjacent zones trigger multi-zone.
@@ -409,7 +408,7 @@ bool ZoneDetector::areZonesAdjacent(Zone* zone1, Zone* zone2) const
         return false;
     }
 
-    return sharesEdge(zone1->geometry(), zone2->geometry(), m_settings->adjacentThreshold(), 0.1);
+    return sharesEdge(zone1->geometry(), zone2->geometry(), m_adjacentThreshold, 0.1);
 }
 
 qreal ZoneDetector::distanceToZoneEdge(const QPointF& point, Zone* zone) const
