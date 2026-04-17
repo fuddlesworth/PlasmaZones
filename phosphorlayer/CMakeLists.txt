@@ -161,6 +161,11 @@ set_target_properties(PhosphorLayer PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # Unity builds merge multiple source files into one TU, which surfaces
+    # spurious "defined but not used" warnings on anonymous-namespace
+    # helpers that GCC can't fully track across the merge. The translation
+    # units are small enough that unity buys us nothing here.
+    UNITY_BUILD OFF
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -173,10 +178,15 @@ if(NOT DEFINED KDE_INSTALL_LIBDIR)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
+if(NOT DEFINED KDE_INSTALL_BINDIR)
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
 install(TARGETS PhosphorLayer
     EXPORT PhosphorLayerTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 # Headers (regular .h via DIRECTORY pattern, then extensionless camelcase

@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QMutexLocker>
+#include <QQuickWindow>
 
 namespace PhosphorRendering {
 

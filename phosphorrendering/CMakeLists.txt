@@ -65,14 +65,33 @@ generate_export_header(PhosphorRendering
     EXPORT_MACRO_NAME PHOSPHORRENDERING_EXPORT
 )
 
+# Resolve KDE_INSTALL_INCLUDEDIR here so INSTALL_INTERFACE can reference it.
+# Without this, a consumer that overrides CMAKE_INSTALL_INCLUDEDIR (or the
+# KDE-flavoured equivalent) gets an export that hard-codes bare `include/`
+# while install(DIRECTORY) below still writes to the overridden location —
+# find_package resolves but consumers fail to see the headers.
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+
 target_include_directories(PhosphorRendering
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
+
+# C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
+# `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorRendering
+# is the top-level project. When built as a subdirectory of PlasmaZones (or
+# any other parent) consumers inherit whatever standard the parent picked.
+# Declare the requirement on the target so find_package(PhosphorRendering)
+# consumers get the right compile-feature propagation regardless of build
+# configuration.
+target_compile_features(PhosphorRendering PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorRendering
     PUBLIC
@@ -90,6 +109,11 @@ set_target_properties(PhosphorRendering PROPERTIES
     SOVERSION 0
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
+    # Unity builds merge multiple source files into one TU, which surfaces
+    # spurious "defined but not used" warnings on anonymous-namespace
+    # helpers that GCC can't fully track across the merge. The translation
+    # units are small enough that unity buys us nothing here.
+    UNITY_BUILD OFF
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -102,10 +126,15 @@ if(NOT DEFINED KDE_INSTALL_LIBDIR)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
+if(NOT DEFINED KDE_INSTALL_BINDIR)
+    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
+endif()
+
 install(TARGETS PhosphorRendering
     EXPORT PhosphorRenderingTargets
     LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
 )
 
 # Headers (the regular .h files via DIRECTORY pattern, then the extensionless
