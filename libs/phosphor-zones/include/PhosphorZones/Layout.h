@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Zone.h>
 #include "plasmazones_export.h"
 #include <QObject>
@@ -269,11 +270,11 @@ public:
     void setShaderParams(const QVariantMap& params);
 
     // Aspect ratio classification
-    PlasmaZones::AspectRatioClass aspectRatioClass() const
+    ::PhosphorLayout::AspectRatioClass aspectRatioClass() const
     {
         return m_aspectRatioClass;
     }
-    void setAspectRatioClass(PlasmaZones::AspectRatioClass cls);
+    void setAspectRatioClass(::PhosphorLayout::AspectRatioClass cls);
     int aspectRatioClassInt() const
     {
         return static_cast<int>(m_aspectRatioClass);
@@ -482,7 +483,7 @@ private:
     QVariantMap m_shaderParams; // Shader-specific parameters
 
     // Aspect ratio classification
-    PlasmaZones::AspectRatioClass m_aspectRatioClass = PlasmaZones::AspectRatioClass::Any;
+    ::PhosphorLayout::AspectRatioClass m_aspectRatioClass = ::PhosphorLayout::AspectRatioClass::Any;
     qreal m_minAspectRatio = 0.0; // 0 = not set (use class matching)
     qreal m_maxAspectRatio = 0.0; // 0 = not set (use class matching)
 

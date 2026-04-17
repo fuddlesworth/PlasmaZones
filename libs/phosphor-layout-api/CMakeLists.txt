@@ -38,6 +38,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 set(phosphorlayoutapi_public_HDRS
     include/PhosphorLayoutApi/PhosphorLayoutApi.h
     include/PhosphorLayoutApi/AlgorithmMetadata.h
+    include/PhosphorLayoutApi/AspectRatioClass.h
     include/PhosphorLayoutApi/CompositeLayoutSource.h
     include/PhosphorLayoutApi/EdgeGaps.h
     include/PhosphorLayoutApi/LayoutPreview.h

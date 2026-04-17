@@ -7,6 +7,7 @@
 /// headers for tighter dependencies.
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/CompositeLayoutSource.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>

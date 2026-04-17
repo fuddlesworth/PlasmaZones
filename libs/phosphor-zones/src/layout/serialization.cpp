@@ -156,7 +156,7 @@ QJsonObject Layout::toJson() const
 
     // Aspect ratio classification - only serialize non-default values
     if (m_aspectRatioClass != AspectRatioClass::Any) {
-        json[JsonKeys::AspectRatioClassKey] = ScreenClassification::toString(m_aspectRatioClass);
+        json[JsonKeys::AspectRatioClassKey] = ::PhosphorLayout::ScreenClassification::toString(m_aspectRatioClass);
     }
     if (m_minAspectRatio > 0.0) {
         json[JsonKeys::MinAspectRatio] = m_minAspectRatio;
@@ -227,7 +227,8 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     layout->m_useFullScreenGeometry = json[JsonKeys::UseFullScreenGeometry].toBool(false);
 
     // Aspect ratio classification
-    layout->m_aspectRatioClass = ScreenClassification::fromString(json[JsonKeys::AspectRatioClassKey].toString());
+    layout->m_aspectRatioClass =
+        ::PhosphorLayout::ScreenClassification::fromString(json[JsonKeys::AspectRatioClassKey].toString());
     layout->m_minAspectRatio = json[JsonKeys::MinAspectRatio].toDouble(0.0);
     layout->m_maxAspectRatio = json[JsonKeys::MaxAspectRatio].toDouble(0.0);
 

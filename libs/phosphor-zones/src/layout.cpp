@@ -254,7 +254,7 @@ bool Layout::hasFixedGeometryZones() const
 }
 
 // Aspect ratio classification setters
-void Layout::setAspectRatioClass(PlasmaZones::AspectRatioClass cls)
+void Layout::setAspectRatioClass(::PhosphorLayout::AspectRatioClass cls)
 {
     if (m_aspectRatioClass != cls) {
         m_aspectRatioClass = cls;
@@ -265,10 +265,10 @@ void Layout::setAspectRatioClass(PlasmaZones::AspectRatioClass cls)
 
 void Layout::setAspectRatioClassInt(int cls)
 {
-    if (cls < 0 || cls > static_cast<int>(PlasmaZones::AspectRatioClass::Portrait)) {
-        cls = static_cast<int>(PlasmaZones::AspectRatioClass::Any);
+    if (cls < 0 || cls > static_cast<int>(::PhosphorLayout::AspectRatioClass::Portrait)) {
+        cls = static_cast<int>(::PhosphorLayout::AspectRatioClass::Any);
     }
-    setAspectRatioClass(static_cast<PlasmaZones::AspectRatioClass>(cls));
+    setAspectRatioClass(static_cast<::PhosphorLayout::AspectRatioClass>(cls));
 }
 
 void Layout::setMinAspectRatio(qreal ratio)
@@ -305,8 +305,8 @@ bool Layout::matchesAspectRatio(qreal screenAspectRatio) const
     }
 
     // Fall back to class matching
-    auto screenClass = ScreenClassification::classify(screenAspectRatio);
-    return ScreenClassification::matches(m_aspectRatioClass, screenClass);
+    auto screenClass = ::PhosphorLayout::ScreenClassification::classify(screenAspectRatio);
+    return ::PhosphorLayout::ScreenClassification::matches(m_aspectRatioClass, screenClass);
 }
 
 // Source path setter (no layoutModified - internal tracking property)
