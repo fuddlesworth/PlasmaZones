@@ -35,8 +35,11 @@ bool isSafeStorePath(const QString& path)
     // Reject traversal. QDir::cleanPath collapses ".." but we want to
     // refuse even well-formed ones because the caller chose the path —
     // if they wrote ".." in it, they intended to escape the parent.
+    // Catches internal "/../" segments, trailing "/..", leading "../",
+    // and a bare "..".
     const auto normalized = QDir::cleanPath(path);
-    if (normalized.contains(QStringLiteral("/../")) || normalized.endsWith(QStringLiteral("/.."))) {
+    if (normalized == QLatin1String("..") || normalized.startsWith(QLatin1String("../"))
+        || normalized.contains(QLatin1String("/../")) || normalized.endsWith(QLatin1String("/.."))) {
         return false;
     }
     const QFileInfo info(path);
@@ -150,6 +153,13 @@ QString JsonSurfaceStore::filePath() const
 
 bool JsonSurfaceStore::save(const QString& key, const QJsonObject& data)
 {
+    // Refuse unsafe-path stores before touching in-memory state. If we updated
+    // m_root and then flushToDisk refused, a subsequent has()/load() would
+    // report state that was never persisted — surprising to callers who only
+    // observe save()'s bool. Fail cleanly: nothing in memory, nothing on disk.
+    if (!m_impl->m_pathSafe) {
+        return false;
+    }
     m_impl->m_root.insert(key, data);
     return m_impl->flushToDisk();
 }

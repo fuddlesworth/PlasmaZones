@@ -76,6 +76,11 @@ public:
         // PhosphorShell::LayerSurface is parented to the QWindow it was
         // created on; Qt will clean it up when the window dies. Don't
         // delete it manually here or we race against Qt's destruction.
+        // Clear the QPointers defensively so any stray setter call during
+        // unwind hits a null check instead of a dangling pointer if a
+        // future PhosphorShell refactor breaks the parenting invariant.
+        m_surface.clear();
+        m_window.clear();
     }
 
     QQuickWindow* window() const override

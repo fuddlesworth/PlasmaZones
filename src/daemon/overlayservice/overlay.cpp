@@ -440,52 +440,9 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
         }
     }
 
-    // Connect to physical screen geometry changes.
-    // For physical screens: update overlay size directly from the new geometry.
-    // For virtual screens: recalculate geometry from ScreenManager since the
-    // virtual screen bounds are derived from the physical screen geometry.
-    QMetaObject::Connection geomConn;
-    {
-        QPointer<QScreen> screenPtr = physScreen;
-        const QString sid = screenId; // Capture by value for lambda
-        const bool lambdaIsVS = isVS;
-        geomConn = connect(physScreen, &QScreen::geometryChanged, this,
-                           [this, screenPtr, sid, lambdaIsVS](const QRect& newGeom) {
-                               if (!screenPtr) {
-                                   return;
-                               }
-                               auto stateIt = m_screenStates.find(sid);
-                               if (stateIt == m_screenStates.end())
-                                   return; // State was cleaned up, ignore stale geometry signal
-                               auto& st = stateIt.value();
-                               if (auto* w = st.overlayWindow) {
-                                   if (lambdaIsVS) {
-                                       // Virtual screen: recompute sub-region geometry from ScreenManager
-                                       // (virtual proportions are relative to the physical screen) and
-                                       // push new margins via the PhosphorLayer transport handle.
-                                       // Anchors (Top|Left) are fixed at attach and can't change.
-                                       const QRect vsGeom = resolveScreenGeometry(sid);
-                                       if (vsGeom.isValid() && st.overlaySurface) {
-                                           if (auto* handle = st.overlaySurface->transport()) {
-                                               handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
-                                           }
-                                           w->setWidth(vsGeom.width());
-                                           w->setHeight(vsGeom.height());
-                                           st.overlayGeometry = vsGeom;
-                                           updateOverlayWindow(sid, screenPtr);
-                                           return;
-                                       }
-                                   } else {
-                                       // Physical screen: AnchorAll auto-sizes to the screen; just
-                                       // mirror the resize to our cached state.
-                                       w->setWidth(newGeom.width());
-                                       w->setHeight(newGeom.height());
-                                       st.overlayGeometry = newGeom;
-                                       updateOverlayWindow(sid, screenPtr);
-                                   }
-                               }
-                           });
-    }
+    // Connect to physical screen geometry changes. Shared helper keeps the
+    // lambda body DRY with rekeyOverlayState's re-connect path.
+    QMetaObject::Connection geomConn = installOverlayGeometryWatcher(physScreen, screenId, isVS);
 
     if (usingShader) {
         writeQmlProperty(window, QStringLiteral("zoneDataVersion"), m_zoneDataVersion);
@@ -626,39 +583,31 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     QScreen* physScreen = rekeyed.overlayPhysScreen;
     if (physScreen) {
         const bool isVS = VirtualScreenId::isVirtual(newKey);
-        QPointer<QScreen> screenPtr = physScreen;
-        const QString sid = newKey;
-        rekeyed.overlayGeomConnection =
-            connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
-                if (!screenPtr) {
-                    return;
-                }
-                auto stateIt = m_screenStates.find(sid);
-                if (stateIt == m_screenStates.end()) {
-                    return;
-                }
-                auto& st = stateIt.value();
-                if (auto* w = st.overlayWindow) {
-                    if (isVS) {
-                        const QRect vsGeom = resolveScreenGeometry(sid);
-                        if (vsGeom.isValid() && st.overlaySurface) {
-                            if (auto* handle = st.overlaySurface->transport()) {
-                                handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
-                            }
-                            w->setWidth(vsGeom.width());
-                            w->setHeight(vsGeom.height());
-                            st.overlayGeometry = vsGeom;
-                            updateOverlayWindow(sid, screenPtr);
-                            return;
-                        }
-                    } else {
-                        w->setWidth(newGeom.width());
-                        w->setHeight(newGeom.height());
-                        st.overlayGeometry = newGeom;
-                        updateOverlayWindow(sid, screenPtr);
+
+        // Re-anchor the live layer surface to the new VS's region. The donor's
+        // anchors/margins were baked in at attach time for the old key — if the
+        // flavor flip changes the target geometry (e.g. bare-physical donor
+        // rekeyed to a sub-region VS target) the surface would otherwise keep
+        // rendering across the full monitor. wlr-layer-shell v2+ allows
+        // set_anchor / set_margin post-attach; push the corrected placement
+        // through the mutable transport handle.
+        if (rekeyed.overlaySurface) {
+            if (auto* handle = rekeyed.overlaySurface->transport()) {
+                const QRect targetVsGeom = resolveScreenGeometry(newKey);
+                const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
+                handle->setAnchors(placement.anchors);
+                handle->setMargins(placement.margins);
+                if (isVS && targetVsGeom.isValid()) {
+                    rekeyed.overlayGeometry = targetVsGeom;
+                    if (auto* w = rekeyed.overlayWindow) {
+                        w->setWidth(targetVsGeom.width());
+                        w->setHeight(targetVsGeom.height());
                     }
                 }
-            });
+            }
+        }
+
+        rekeyed.overlayGeomConnection = installOverlayGeometryWatcher(physScreen, newKey, isVS);
     }
 
     qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
@@ -691,6 +640,52 @@ void OverlayService::validateScreenStateInvariant(const QStringList& targetIds) 
 #else
     Q_UNUSED(targetIds);
 #endif
+}
+
+QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId,
+                                                                      bool isVS)
+{
+    if (!physScreen) {
+        return {};
+    }
+    QPointer<QScreen> screenPtr = physScreen;
+    const QString sid = screenId; // Capture by value — survives rekey.
+    return connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
+        if (!screenPtr) {
+            return;
+        }
+        auto stateIt = m_screenStates.find(sid);
+        if (stateIt == m_screenStates.end()) {
+            return; // State was cleaned up, ignore stale geometry signal
+        }
+        auto& st = stateIt.value();
+        if (auto* w = st.overlayWindow) {
+            if (isVS) {
+                // Virtual screen: recompute sub-region geometry from ScreenManager
+                // (virtual proportions are relative to the physical screen) and
+                // push new margins via the PhosphorLayer transport handle.
+                // Anchors (Top|Left) are fixed at attach and can't change.
+                const QRect vsGeom = resolveScreenGeometry(sid);
+                if (vsGeom.isValid() && st.overlaySurface) {
+                    if (auto* handle = st.overlaySurface->transport()) {
+                        handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
+                    }
+                    w->setWidth(vsGeom.width());
+                    w->setHeight(vsGeom.height());
+                    st.overlayGeometry = vsGeom;
+                    updateOverlayWindow(sid, screenPtr);
+                    return;
+                }
+            } else {
+                // Physical screen: AnchorAll auto-sizes to the screen; just
+                // mirror the resize to our cached state.
+                w->setWidth(newGeom.width());
+                w->setHeight(newGeom.height());
+                st.overlayGeometry = newGeom;
+                updateOverlayWindow(sid, screenPtr);
+            }
+        }
+    });
 }
 
 void OverlayService::destroyOverlayWindow(QScreen* screen)

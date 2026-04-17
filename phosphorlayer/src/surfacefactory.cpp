@@ -66,6 +66,20 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
         return nullptr;
     }
 
+    // Engine ownership is tri-state (None / Self / Provider). sharedEngine
+    // and engineProvider are documented as mutually exclusive (the former is
+    // "caller retains ownership"; the latter is "provider owns"). Mixing both
+    // produced the surface-uses-sharedEngine-but-~Impl-calls-releaseEngine
+    // footgun. Reject at the factory boundary so no Surface ever reaches
+    // that inconsistent state.
+    if (cfg.sharedEngine && m_impl->m_deps.engineProvider) {
+        qCWarning(lcPhosphorLayer)
+            << "SurfaceFactory::create: SurfaceConfig::sharedEngine and SurfaceFactory::Deps::engineProvider"
+            << "are mutually exclusive. Pick one: pass sharedEngine for caller-owned sharing, or an engineProvider"
+            << "for provider-managed lifecycle — not both. debugName=" << debug;
+        return nullptr;
+    }
+
     if (!cfg.role.isValid()) {
         qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: Role is invalid (empty scopePrefix or"
                                    << "semantically-conflicting layer/exclusiveZone) — refusing to create"

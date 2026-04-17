@@ -61,9 +61,19 @@ public:
     {
         // No xdg_toplevel equivalent — silently accepted.
     }
-    void setKeyboardInteractivity(KeyboardInteractivity) override
+    void setKeyboardInteractivity(KeyboardInteractivity k) override
     {
-        // xdg_toplevel is always OnDemand — mutator is a no-op.
+        // xdg_toplevel is always OnDemand — every setter value is a no-op on
+        // the protocol. Exclusive is security-relevant (lock screen, PIN
+        // entry, modal that must capture every keystroke), so mirror the
+        // attach-time warning on the handle path: a consumer that swapped
+        // transports or upgraded to a wlr-layer-shell compositor at runtime
+        // must not silently lose focus capture.
+        if (k == KeyboardInteractivity::Exclusive) {
+            qCWarning(lcPhosphorLayer)
+                << "XdgToplevelTransport::setKeyboardInteractivity: exclusive keyboard REQUESTED but xdg_toplevel"
+                << "is always OnDemand — focus may leak to other windows.";
+        }
     }
     void setAnchors(Anchors) override
     {

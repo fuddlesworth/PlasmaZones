@@ -63,6 +63,16 @@ bool Role::isValid() const
     if (layer == Layer::Overlay && exclusiveZone >= 0) {
         return false;
     }
+    // Margins are meaningful only when at least one edge is anchored —
+    // wlr-layer-shell ignores them on a fully unanchored surface. A role
+    // that ships default margins without any anchor is a silent consumer
+    // mistake: the compositor discards them and the consumer is left
+    // wondering why their positioning hint had no effect. (The per-instance
+    // marginsOverride escape hatch lives on SurfaceConfig, so this check
+    // only constrains the role's *default* margins.)
+    if (anchors == AnchorNone && !defaultMargins.isNull()) {
+        return false;
+    }
     return true;
 }
 

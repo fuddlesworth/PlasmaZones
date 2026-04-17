@@ -84,6 +84,11 @@ public:
         Hidden, ///< Attached but window hidden — show() is cheap
         Failed, ///< Unrecoverable (content error, transport rejected, …)
     };
+    /// Q_ENUM so QMetaEnum can stringify State values in log messages
+    /// (State::Failed → "Failed") and so Q_PROPERTY / QSignalSpy introspection
+    /// works. Not currently registered with QML — consumers that want to bind
+    /// surface state from QML should register the type themselves via
+    /// qmlRegisterUncreatableType<Surface>.
     Q_ENUM(State)
 
     ~Surface() override;

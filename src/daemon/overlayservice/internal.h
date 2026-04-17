@@ -149,6 +149,20 @@ inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& ph
             QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0)};
 }
 
+/// Resolve anchors + margins for a floating surface whose absolute top-left
+/// should land at @p topLeft within the physical screen @p physGeom. Always
+/// Top|Left-anchored with margins relative to the physical origin.
+/// Used by shader-preview paths that position the preview window at a
+/// caller-chosen absolute coordinate inside the monitor (rather than at a
+/// virtual-screen sub-region). Separate from layerPlacementForVs because the
+/// VS variant treats "topLeft == physGeom.topLeft" as "fullscreen → AnchorAll",
+/// which would drop the margins a floating preview needs.
+inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& physGeom)
+{
+    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
+            QMargins(qMax(0, topLeft.x() - physGeom.x()), qMax(0, topLeft.y() - physGeom.y()), 0, 0)};
+}
+
 /// Resolve target screen geometry for a screen ID (virtual or physical).
 /// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
 /// geometry from ScreenManager. For physical screens, falls back to QScreen::geometry().

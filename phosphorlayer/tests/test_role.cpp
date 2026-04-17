@@ -86,6 +86,32 @@ private Q_SLOTS:
         QVERIFY(custom != Roles::FullscreenOverlay);
     }
 
+    void isValidRejectsMalformedRoles()
+    {
+        // Empty scope.
+        Role bad;
+        bad.scopePrefix.clear();
+        QVERIFY(!bad.isValid());
+
+        // Overlay layer + non-negative exclusive zone (zone is ignored by
+        // the compositor for overlay, but accepting it silently is a
+        // consumer trap).
+        Role overlayWithZone = Roles::FullscreenOverlay;
+        overlayWithZone.exclusiveZone = 0;
+        QVERIFY(!overlayWithZone.isValid());
+
+        // AnchorNone + non-zero default margins: margins have no referent
+        // to offset from, so the compositor discards them. The role as a
+        // whole is malformed.
+        Role floatingWithMargins = Roles::FloatingOverlay.withMargins(QMargins(10, 10, 10, 10));
+        QVERIFY(!floatingWithMargins.isValid());
+
+        // Well-formed presets pass.
+        QVERIFY(Roles::FullscreenOverlay.isValid());
+        QVERIFY(Roles::CenteredModal.isValid());
+        QVERIFY(Roles::TopPanel.isValid());
+    }
+
     void anchorFlagsCompose()
     {
         const Anchors sides = Anchor::Left | Anchor::Right;

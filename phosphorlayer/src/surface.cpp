@@ -45,6 +45,17 @@ public:
         Hide, ///< Unmap window (attached state retained)
     };
 
+    /// Tri-state engine ownership. Distinguishes the "shared engine (caller
+    /// owns)" case from the "we created it" case from the "provider owns it"
+    /// case so the dtor can call the right cleanup path. Using a 2-state
+    /// `bool ownEngine` previously confused the shared + provider combination
+    /// and could call `releaseEngine()` on an engine the provider never issued.
+    enum class EngineOwnership : quint8 {
+        None, ///< Caller retained ownership via SurfaceConfig::sharedEngine
+        Self, ///< Constructed locally; dtor calls deleteLater()
+        Provider, ///< Obtained from IQmlEngineProvider; dtor calls releaseEngine()
+    };
+
     Impl(Surface* q, SurfaceConfig cfg, SurfaceDeps deps)
         : m_q(q)
         , m_config(std::move(cfg))
@@ -69,7 +80,7 @@ public:
         m_component.reset();
 
         QQmlEngine* engine = m_engine.data();
-        const bool ownEngine = m_engineOwned;
+        const EngineOwnership ownership = m_engineOwnership;
         IQmlEngineProvider* provider = m_deps.engineProvider;
 
         if (m_window) {
@@ -78,19 +89,29 @@ public:
             m_window->deleteLater();
         }
 
-        if (ownEngine && engine) {
-            // Same event queue as m_window — posted after, runs after. Window
-            // teardown completes before engine destruction.
-            engine->deleteLater();
-        } else if (engine && provider) {
-            // Same ordering guarantee: post a queued invocation on the engine's
-            // thread so it runs after the window's DeferredDelete event.
-            QMetaObject::invokeMethod(
-                engine,
-                [engine, provider]() {
-                    provider->releaseEngine(engine);
-                },
-                Qt::QueuedConnection);
+        switch (ownership) {
+        case EngineOwnership::Self:
+            if (engine) {
+                // Same event queue as m_window — posted after, runs after. Window
+                // teardown completes before engine destruction.
+                engine->deleteLater();
+            }
+            break;
+        case EngineOwnership::Provider:
+            if (engine && provider) {
+                // Same ordering guarantee: post a queued invocation on the engine's
+                // thread so it runs after the window's DeferredDelete event.
+                QMetaObject::invokeMethod(
+                    engine,
+                    [engine, provider]() {
+                        provider->releaseEngine(engine);
+                    },
+                    Qt::QueuedConnection);
+            }
+            break;
+        case EngineOwnership::None:
+            // sharedEngine path: caller retains ownership; we touch nothing.
+            break;
         }
         m_engine = nullptr;
     }
@@ -103,7 +124,7 @@ public:
     Intent m_intent = Intent::Idle;
 
     QPointer<QQmlEngine> m_engine;
-    bool m_engineOwned = false;
+    EngineOwnership m_engineOwnership = EngineOwnership::None;
     // QPointer: survives external destruction (e.g. a consumer that mistakenly
     // deleteLater()s the window directly instead of the Surface). Prevents UB
     // on ~Impl when the window is already gone.
@@ -217,9 +238,14 @@ private:
         if (m_engine) {
             return true;
         }
+        // sharedEngine takes precedence over engineProvider when both are set.
+        // SurfaceFactory::create rejects that combination, but keep the
+        // precedence explicit here so the dtor path (driven by
+        // m_engineOwnership) never calls releaseEngine() on an engine the
+        // provider didn't issue.
         if (m_config.sharedEngine) {
             m_engine = m_config.sharedEngine;
-            m_engineOwned = false;
+            m_engineOwnership = EngineOwnership::None;
             return true;
         }
         if (m_deps.engineProvider) {
@@ -228,14 +254,14 @@ private:
                 failWith(QStringLiteral("IQmlEngineProvider::engineForSurface returned nullptr"));
                 return false;
             }
-            m_engineOwned = false;
+            m_engineOwnership = EngineOwnership::Provider;
             return true;
         }
         // No parent: ~Impl calls deleteLater on the owned engine. Parenting
         // to m_q would create a second owner (the QObject parent-child tree
         // would also delete it on ~QObject), causing a race at teardown.
         m_engine = new QQmlEngine();
-        m_engineOwned = true;
+        m_engineOwnership = EngineOwnership::Self;
         return true;
     }
 

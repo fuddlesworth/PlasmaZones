@@ -80,6 +80,25 @@ private Q_SLOTS:
         QVERIFY(!s.has(QStringLiteral("anything")));
     }
 
+    void jsonStore_rejectsLeadingDotDot()
+    {
+        // Bug regression: the traversal check originally only caught internal
+        // "/../" segments and trailing "/..". A leading "../foo.json" passed
+        // cleanly because QDir::cleanPath collapses internal "..", but leaves
+        // a leading "../" intact. Reject all four forms now: bare "..",
+        // "../foo", "/path/../foo", "/path/..".
+        //
+        // Unsafe paths produce an in-memory-only store (save returns false,
+        // load/has return empty) so the behavior is observable from user
+        // space without needing a filesystem symlink fixture.
+        JsonSurfaceStore s(QStringLiteral("../outside.json"));
+        QVERIFY(!s.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 1}}));
+        QVERIFY(!s.has(QStringLiteral("k")));
+
+        JsonSurfaceStore bare(QStringLiteral(".."));
+        QVERIFY(!bare.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 1}}));
+    }
+
     void jsonStore_corruptFileRecoversOnNextSave()
     {
         // Anti-regression: after loading a corrupt file, save() must

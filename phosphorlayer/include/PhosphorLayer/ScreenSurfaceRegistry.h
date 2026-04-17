@@ -134,9 +134,18 @@ QList<SurfaceT*> ScreenSurfaceRegistry<SurfaceT>::createForAllScreens(Builder bu
     const auto list = m_screens->screens();
     out.reserve(list.size());
     for (QScreen* s : list) {
-        if (m_entries.contains(s) && m_entries.value(s).data()) {
-            out.append(m_entries.value(s).data());
-            continue;
+        auto it = m_entries.find(s);
+        if (it != m_entries.end()) {
+            if (SurfaceT* live = it.value().data()) {
+                out.append(live);
+                continue;
+            }
+            // Stale QPointer (surface externally destroyed) — prune so the
+            // builder replaces it cleanly and surfaceForScreen() stops
+            // reporting null for a key that looks like it's present.
+            // Matches adoptSurface's "prior entry is removed before insert"
+            // semantics.
+            m_entries.erase(it);
         }
         SurfaceT* surface = builder ? builder(s) : nullptr;
         if (surface) {

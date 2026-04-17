@@ -180,9 +180,10 @@ OverlayService::OverlayService(QObject* parent)
                 m_zoneSelectorVisible = false;
             }
 
-            // Recreate with new virtual screen config if visible
+            // Recreate with new virtual screen config if visible. Reuses
+            // mgr2 from above — the ScreenManager singleton doesn't change
+            // mid-lambda, so re-querying would just be noise.
             if (isVisible()) {
-                auto* mgr2 = ScreenManager::instance();
                 if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                     for (const QString& vsId : mgr2->virtualScreenIdsFor(physicalScreenId)) {
                         QRect vsGeom = mgr2->screenGeometry(vsId);
@@ -224,12 +225,18 @@ OverlayService::OverlayService(QObject* parent)
         connect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, onVirtualScreensChangedHandler);
     }
 
-    // Connect to system sleep/resume via logind to restart shader timer after wake
-    // This prevents large iTimeDelta jumps when system resumes from sleep
-    QDBusConnection::systemBus().connect(QStringLiteral("org.freedesktop.login1"),
-                                         QStringLiteral("/org/freedesktop/login1"),
-                                         QStringLiteral("org.freedesktop.login1.Manager"),
-                                         QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
+    // Connect to system sleep/resume via logind to restart shader timer after wake.
+    // This prevents large iTimeDelta jumps when system resumes from sleep.
+    // Track the connect result so the dtor can disconnect cleanly rather than
+    // leaving a dead entry in QDBusConnection's slot table until the session ends.
+    m_prepareForSleepConnected = QDBusConnection::systemBus().connect(
+        QStringLiteral("org.freedesktop.login1"), QStringLiteral("/org/freedesktop/login1"),
+        QStringLiteral("org.freedesktop.login1.Manager"), QStringLiteral("PrepareForSleep"), this,
+        SLOT(onPrepareForSleep(bool)));
+    if (!m_prepareForSleepConnected) {
+        qCDebug(lcOverlay) << "PrepareForSleep D-Bus signal subscription failed (logind not available?) —"
+                           << "shader-timer restart on resume will not run";
+    }
 
     // Reset shader error state on construction (fresh start after reboot)
     m_pendingShaderError.clear();
@@ -310,6 +317,18 @@ OverlayService::~OverlayService()
     // while we're destroying windows.
     if (qGuiApp) {
         disconnect(qGuiApp, nullptr, this, nullptr);
+    }
+
+    // Mirror the D-Bus PrepareForSleep connect from the constructor. Not
+    // strictly required — QDBusConnection checks receiver-alive before
+    // dispatch — but leaving a dead entry in the system bus's slot table
+    // for the rest of the session is sloppy.
+    if (m_prepareForSleepConnected) {
+        QDBusConnection::systemBus().disconnect(QStringLiteral("org.freedesktop.login1"),
+                                                QStringLiteral("/org/freedesktop/login1"),
+                                                QStringLiteral("org.freedesktop.login1.Manager"),
+                                                QStringLiteral("PrepareForSleep"), this, SLOT(onPrepareForSleep(bool)));
+        m_prepareForSleepConnected = false;
     }
 
     // Clean up all window types before engine is destroyed. The Surface owns
@@ -407,15 +426,20 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
         return nullptr;
     }
     if (st == PhosphorLayer::Surface::State::Warming) {
-        // QML is still loading asynchronously. The caller below expects a live
-        // QQuickWindow and will setProperty into it synchronously; on the async
-        // path the window doesn't exist yet. Every consumer in this file uses
-        // qrc:/ URLs which load synchronously, so Warming-on-return is a sign
-        // that someone introduced an async source path without updating the
-        // caller to listen for Surface::stateChanged. Loud log so it shows up
-        // before it becomes a hard-to-diagnose "properties silently ignored" bug.
-        qCWarning(lcOverlay) << "createLayerSurface: surface still Warming on return for" << windowType
-                             << "— window is not yet available, downstream setProperty calls will no-op";
+        // QML is still loading asynchronously. Every consumer in this file
+        // uses qrc:/ URLs which load synchronously, so Warming-on-return
+        // means someone introduced an async source path (remote URL, QML
+        // bytecode fetched from file with background imports, etc.) without
+        // updating the caller to listen for Surface::stateChanged. The
+        // callers below assume a live QQuickWindow and deref surface->window()
+        // synchronously — that would segfault. Refuse up-front so the bug
+        // manifests as a clean refusal instead of a crash.
+        qCWarning(lcOverlay)
+            << "createLayerSurface: surface still Warming on return for" << windowType
+            << "— async QML load path is not supported by the current callers. Switch to qrc:/ or refactor"
+            << "the caller to wait on Surface::stateChanged before touching surface->window().";
+        surface->deleteLater();
+        return nullptr;
     }
 
     // Pipeline cache: mirror createQmlWindow's behaviour so shader compilation

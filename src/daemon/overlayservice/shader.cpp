@@ -352,11 +352,9 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     {
         // For virtual screens, margins are relative to the physical screen origin,
         // not the virtual screen origin (LayerShell positions within the physical output).
-        const QRect physGeom = screen->geometry();
-        const int marginLeft = x - physGeom.x();
-        const int marginTop = y - physGeom.y();
-        handle->setAnchors(PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left});
-        handle->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+        const auto placement = layerPlacementAt(QPoint(x, y), screen->geometry());
+        handle->setAnchors(placement.anchors);
+        handle->setMargins(placement.margins);
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -406,11 +404,9 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
             if (auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr) {
-                // Margins are relative to the physical screen origin (LayerShell)
-                const QRect physGeom = screen->geometry();
-                const int marginLeft = x - physGeom.x();
-                const int marginTop = y - physGeom.y();
-                handle->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+                // Margins are relative to the physical screen origin (LayerShell).
+                // Anchors were baked in at attach; only margins mutate here.
+                handle->setMargins(layerPlacementAt(QPoint(x, y), screen->geometry()).margins);
             }
         }
     }

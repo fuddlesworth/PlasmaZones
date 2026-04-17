@@ -303,6 +303,13 @@ private:
     // Returns true if a rekey happened.
     bool rekeyOverlayState(const QString& oldKey, const QString& newKey);
 
+    // Install a QScreen::geometryChanged watcher that keeps the per-screen
+    // overlay window's size / stored geometry / margins in sync with the
+    // physical monitor's new bounds. Shared by createOverlayWindow and
+    // rekeyOverlayState so both call sites route through the same lambda.
+    // sid is captured by value so the watcher keeps working after a rekey.
+    QMetaObject::Connection installOverlayGeometryWatcher(QScreen* physScreen, const QString& screenId, bool isVS);
+
     // Debug-build invariant check: every m_screenStates entry either has a key
     // present in targetIds or is a distinct physical monitor from every target.
     // Catches orphan accumulation from effective-id jitter. No-op in release.
@@ -414,6 +421,12 @@ private:
     // Surface and let ~Surface tear the window down.
     PhosphorLayer::Surface* m_keepAliveSurface = nullptr;
     QPointer<QQuickWindow> m_keepAliveWindow;
+
+    // Remembered so ~OverlayService can disconnect the D-Bus PrepareForSleep
+    // subscription explicitly rather than relying on QDBusConnection's
+    // internal receiver-destroyed detection (which works, but leaves a dead
+    // entry in the connection's slot table for the rest of the session).
+    bool m_prepareForSleepConnected = false;
 
     // Track screens with failed window creation to prevent log spam
     QHash<QString, bool> m_navigationOsdCreationFailed;
