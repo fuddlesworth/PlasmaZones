@@ -3,7 +3,30 @@
 
 #include "settingscontroller.h"
 
+#include "../common/layoutpreviewtoqml.h"
+
 #include <PhosphorLayoutApi/LayoutPreview.h>
+
+namespace PlasmaZones {
+
+// File-scope helper used by both the ctor (file-watcher rebind path) and
+// loadLayoutsAsync (D-Bus refresh path). Manual layouts sort first;
+// within each category alphabetical by name.
+static void sortMergedLayoutList(QVariantList& list)
+{
+    std::sort(list.begin(), list.end(), [](const QVariant& a, const QVariant& b) {
+        const QVariantMap mapA = a.toMap();
+        const QVariantMap mapB = b.toMap();
+        const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
+        const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
+        if (aIsAutotile != bIsAutotile)
+            return !aIsAutotile;
+        return mapA.value(QStringLiteral("name")).toString().toLower()
+            < mapB.value(QStringLiteral("name")).toString().toLower();
+    });
+}
+
+} // namespace PlasmaZones
 #include "../core/constants.h"
 #include "version.h"
 #include "../core/logging.h"
@@ -110,7 +133,30 @@ SettingsController::SettingsController(QObject* parent)
     // and installs a QFileSystemWatcher so any subsequent disk changes
     // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
     m_localLayoutManager->loadLayouts();
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &SettingsController::layoutsChanged);
+    // When the file watcher detects a layout change on disk, re-bias
+    // m_layouts from the local source so QML rebinds even if the daemon
+    // isn't broadcasting D-Bus signals (or is down). The async refresh
+    // through scheduleLayoutLoad() / loadLayoutsAsync() also fires from
+    // daemon-side D-Bus signals to bring in autotile entries — these
+    // two paths converge at m_layouts.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
+        QVariantList localLayouts = localLayoutPreviews();
+        if (!localLayouts.isEmpty()) {
+            // Preserve any autotile entries already merged in by the
+            // D-Bus refresh — re-merge the local manual list with the
+            // surviving autotile slots so QML doesn't lose algorithm
+            // entries when only manual-layout files change.
+            QVariantList merged = std::move(localLayouts);
+            for (const QVariant& v : std::as_const(m_layouts)) {
+                if (v.toMap().value(QStringLiteral("isAutotile")).toBool()) {
+                    merged.append(v);
+                }
+            }
+            sortMergedLayoutList(merged);
+            m_layouts = std::move(merged);
+            Q_EMIT layoutsChanged();
+        }
+    });
 
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
@@ -636,6 +682,23 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
+    // Step 1: instant paint from the in-process ZonesLayoutSource so the
+    // layouts page renders manual previews before D-Bus has even round-
+    // tripped — and continues to work entirely if the daemon isn't
+    // running. Autotile algorithm entries land later via the async D-Bus
+    // call below (or never, in the daemon-down case — manual previews
+    // still render).
+    QVariantList localLayouts = localLayoutPreviews();
+    if (!localLayouts.isEmpty()) {
+        sortMergedLayoutList(localLayouts);
+        m_layouts = localLayouts;
+        Q_EMIT layoutsChanged();
+    }
+
+    // Step 2: async D-Bus call for the full picture (adds autotile algorithm
+    // entries the local manual-only source can't produce). On reply the
+    // full list replaces m_layouts; if the call errors we keep the local
+    // previews from Step 1 visible rather than blanking the page.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
@@ -645,33 +708,23 @@ void SettingsController::loadLayoutsAsync()
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
 
-        QVariantList newLayouts;
         QDBusPendingReply<QStringList> reply = *w;
-
-        if (!reply.isError()) {
-            const QStringList layoutJsonList = reply.value();
-            for (const QString& layoutJson : layoutJsonList) {
-                QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-                if (!doc.isNull() && doc.isObject()) {
-                    newLayouts.append(doc.object().toVariantMap());
-                }
-            }
-        } else {
-            qCWarning(lcCore) << "Failed to load layouts:" << reply.error().message();
+        if (reply.isError()) {
+            qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
+                              << "— keeping local manual-layout previews from Step 1.";
+            return;
         }
 
-        // Sort: manual layouts first, then autotile, each alphabetical
-        std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
-            const QVariantMap mapA = a.toMap();
-            const QVariantMap mapB = b.toMap();
-            const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
-            const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
-            if (aIsAutotile != bIsAutotile)
-                return !aIsAutotile;
-            return mapA.value(QStringLiteral("name")).toString().toLower()
-                < mapB.value(QStringLiteral("name")).toString().toLower();
-        });
+        QVariantList newLayouts;
+        const QStringList layoutJsonList = reply.value();
+        for (const QString& layoutJson : layoutJsonList) {
+            QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+            if (!doc.isNull() && doc.isObject()) {
+                newLayouts.append(doc.object().toVariantMap());
+            }
+        }
 
+        sortMergedLayoutList(newLayouts);
         m_layouts = newLayouts;
         Q_EMIT layoutsChanged();
 
@@ -685,50 +738,10 @@ void SettingsController::loadLayoutsAsync()
 }
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// See header doc for why these exist. The two helpers serialise the
-// LayoutPreview struct into a QML-friendly QVariantMap shape that mirrors
-// the JSON returned by LayoutAdaptor::getLayoutPreview / getLayoutPreviewList,
-// so QML can swap consumers between the two without changing its rendering
-// code.
-
-namespace {
-
-QVariantMap layoutPreviewToVariantMap(const PhosphorLayout::LayoutPreview& preview)
-{
-    QVariantMap map;
-    map[QStringLiteral("id")] = preview.id;
-    map[QStringLiteral("displayName")] = preview.displayName;
-    if (!preview.description.isEmpty()) {
-        map[QStringLiteral("description")] = preview.description;
-    }
-    map[QStringLiteral("zoneCount")] = preview.zoneCount;
-    map[QStringLiteral("isAutotile")] = preview.isAutotile;
-    map[QStringLiteral("recommended")] = preview.recommended;
-    map[QStringLiteral("autoAssign")] = preview.autoAssign;
-    map[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
-    if (preview.referenceAspectRatio > 0.0) {
-        map[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
-    }
-
-    QVariantList zones;
-    for (int i = 0; i < preview.zones.size(); ++i) {
-        const QRectF& r = preview.zones.at(i);
-        QVariantMap zoneMap;
-        zoneMap[QStringLiteral("x")] = r.x();
-        zoneMap[QStringLiteral("y")] = r.y();
-        zoneMap[QStringLiteral("width")] = r.width();
-        zoneMap[QStringLiteral("height")] = r.height();
-        if (i < preview.zoneNumbers.size()) {
-            zoneMap[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
-        }
-        zones.append(zoneMap);
-    }
-    map[QStringLiteral("zones")] = zones;
-
-    return map;
-}
-
-} // namespace
+// See header doc for why these exist. Both helpers route through the shared
+// layoutPreviewToQmlMap so settings + editor + future consumers emit the
+// same QML-compatible shape (drop-in replacement for the legacy m_layouts
+// produced by LayoutAdaptor::getLayoutList).
 
 QVariantList SettingsController::localLayoutPreviews() const
 {
@@ -739,7 +752,7 @@ QVariantList SettingsController::localLayoutPreviews() const
     const auto previews = m_localLayoutSource->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
-        list.append(layoutPreviewToVariantMap(preview));
+        list.append(layoutPreviewToQmlMap(preview));
     }
     return list;
 }
@@ -753,7 +766,7 @@ QVariantMap SettingsController::localLayoutPreview(const QString& id, int window
     if (preview.id.isEmpty()) {
         return {};
     }
-    return layoutPreviewToVariantMap(preview);
+    return layoutPreviewToQmlMap(preview);
 }
 
 void SettingsController::createNewLayout()

@@ -11,6 +11,7 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
+#include "../common/layoutpreviewtoqml.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 
@@ -146,49 +147,9 @@ QVariantList EditorController::zones() const
 }
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
-// Same shape as SettingsController's localLayoutPreviews / localLayoutPreview
-// — both processes own a private LayoutManager + ZonesLayoutSource and emit
-// the same QVariantMap representation of LayoutPreview so QML preview-
-// rendering code stays identical across the two consumers.
-
-namespace {
-
-QVariantMap layoutPreviewToVariantMap(const PhosphorLayout::LayoutPreview& preview)
-{
-    QVariantMap map;
-    map[QStringLiteral("id")] = preview.id;
-    map[QStringLiteral("displayName")] = preview.displayName;
-    if (!preview.description.isEmpty()) {
-        map[QStringLiteral("description")] = preview.description;
-    }
-    map[QStringLiteral("zoneCount")] = preview.zoneCount;
-    map[QStringLiteral("isAutotile")] = preview.isAutotile;
-    map[QStringLiteral("recommended")] = preview.recommended;
-    map[QStringLiteral("autoAssign")] = preview.autoAssign;
-    map[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
-    if (preview.referenceAspectRatio > 0.0) {
-        map[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
-    }
-
-    QVariantList zones;
-    for (int i = 0; i < preview.zones.size(); ++i) {
-        const QRectF& r = preview.zones.at(i);
-        QVariantMap zoneMap;
-        zoneMap[QStringLiteral("x")] = r.x();
-        zoneMap[QStringLiteral("y")] = r.y();
-        zoneMap[QStringLiteral("width")] = r.width();
-        zoneMap[QStringLiteral("height")] = r.height();
-        if (i < preview.zoneNumbers.size()) {
-            zoneMap[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
-        }
-        zones.append(zoneMap);
-    }
-    map[QStringLiteral("zones")] = zones;
-
-    return map;
-}
-
-} // namespace
+// Same shape as SettingsController's localLayoutPreviews — both processes
+// route through the shared layoutPreviewToQmlMap so QML preview-rendering
+// code stays identical across the two consumers.
 
 QVariantList EditorController::localLayoutPreviews() const
 {
@@ -199,7 +160,7 @@ QVariantList EditorController::localLayoutPreviews() const
     const auto previews = m_localLayoutSource->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
-        list.append(layoutPreviewToVariantMap(preview));
+        list.append(layoutPreviewToQmlMap(preview));
     }
     return list;
 }
@@ -213,7 +174,7 @@ QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCo
     if (preview.id.isEmpty()) {
         return {};
     }
-    return layoutPreviewToVariantMap(preview);
+    return layoutPreviewToQmlMap(preview);
 }
 QString EditorController::selectedZoneId() const
 {

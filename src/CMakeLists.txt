@@ -487,6 +487,8 @@ configure_file(
 set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/vulkan_support.cpp
+    common/layoutpreviewtoqml.cpp
+    common/layoutpreviewtoqml.h
     editor/EditorController.cpp
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h
