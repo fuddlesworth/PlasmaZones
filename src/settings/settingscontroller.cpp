@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingscontroller.h"
+
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include "../core/constants.h"
 #include "version.h"
 #include "../core/logging.h"
@@ -98,7 +100,18 @@ SettingsController::~SettingsController()
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
+    , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
 {
+    // Load the user's layouts immediately so localLayoutPreviews() returns
+    // a populated list on first call (before any QML query has had a
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
+    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
+    // and installs a QFileSystemWatcher so any subsequent disk changes
+    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    m_localLayoutManager->loadLayouts();
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &SettingsController::layoutsChanged);
+
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
@@ -669,6 +682,78 @@ void SettingsController::loadLayoutsAsync()
             Q_EMIT layoutAdded(id);
         }
     });
+}
+
+// ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
+// See header doc for why these exist. The two helpers serialise the
+// LayoutPreview struct into a QML-friendly QVariantMap shape that mirrors
+// the JSON returned by LayoutAdaptor::getLayoutPreview / getLayoutPreviewList,
+// so QML can swap consumers between the two without changing its rendering
+// code.
+
+namespace {
+
+QVariantMap layoutPreviewToVariantMap(const PhosphorLayout::LayoutPreview& preview)
+{
+    QVariantMap map;
+    map[QStringLiteral("id")] = preview.id;
+    map[QStringLiteral("displayName")] = preview.displayName;
+    if (!preview.description.isEmpty()) {
+        map[QStringLiteral("description")] = preview.description;
+    }
+    map[QStringLiteral("zoneCount")] = preview.zoneCount;
+    map[QStringLiteral("isAutotile")] = preview.isAutotile;
+    map[QStringLiteral("recommended")] = preview.recommended;
+    map[QStringLiteral("autoAssign")] = preview.autoAssign;
+    map[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
+    if (preview.referenceAspectRatio > 0.0) {
+        map[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
+    }
+
+    QVariantList zones;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QVariantMap zoneMap;
+        zoneMap[QStringLiteral("x")] = r.x();
+        zoneMap[QStringLiteral("y")] = r.y();
+        zoneMap[QStringLiteral("width")] = r.width();
+        zoneMap[QStringLiteral("height")] = r.height();
+        if (i < preview.zoneNumbers.size()) {
+            zoneMap[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
+        }
+        zones.append(zoneMap);
+    }
+    map[QStringLiteral("zones")] = zones;
+
+    return map;
+}
+
+} // namespace
+
+QVariantList SettingsController::localLayoutPreviews() const
+{
+    QVariantList list;
+    if (!m_localLayoutSource) {
+        return list;
+    }
+    const auto previews = m_localLayoutSource->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(layoutPreviewToVariantMap(preview));
+    }
+    return list;
+}
+
+QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount) const
+{
+    if (!m_localLayoutSource || id.isEmpty()) {
+        return {};
+    }
+    const auto preview = m_localLayoutSource->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        return {};
+    }
+    return layoutPreviewToVariantMap(preview);
 }
 
 void SettingsController::createNewLayout()

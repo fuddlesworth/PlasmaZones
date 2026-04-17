@@ -15,8 +15,13 @@
 #include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
+#include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+
+#include <PhosphorZones/ZonesLayoutSource.h>
+
+#include <memory>
 
 namespace PlasmaZones {
 
@@ -290,6 +295,20 @@ public:
         return m_availableScreenIds;
     }
     QVariantList screenModel() const;
+
+    // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
+    //
+    // The editor runs as its own process. Today its layout-list / template /
+    // import-preview QML still mostly fetches via D-Bus (DBusLayoutService),
+    // requiring a running daemon. The methods below load the SAME on-disk
+    // layouts via an in-process LayoutManager + ZonesLayoutSource so QML
+    // preview-rendering paths work even when the daemon isn't running.
+    //
+    // QVariantMap shape mirrors LayoutAdaptor::getLayoutPreview's JSON
+    // (id / displayName / zones[]{x,y,width,height,zoneNumber} / isAutotile).
+    // QML can swap consumers between the two without changing rendering code.
+    Q_INVOKABLE QVariantList localLayoutPreviews() const;
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
     int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;
@@ -856,6 +875,12 @@ private:
     SnappingService* m_snappingService = nullptr;
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
+
+    // Daemon-independent layout source — exposed via localLayoutPreviews()
+    // for QML preview rendering paths that don't need the daemon (template
+    // gallery, layout-import preview thumbnails, etc.).
+    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

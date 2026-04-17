@@ -15,7 +15,10 @@
 #include "screenhelper.h"
 #include "../core/constants.h"
 #include "../core/enums.h"
+#include "../core/layoutmanager.h"
 #include "../core/modifierutils.h"
+
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QHash>
 #include <QObject>
@@ -227,6 +230,21 @@ public:
     {
         return m_layouts;
     }
+
+    // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
+    //
+    // Settings runs in its own process, separate from the daemon. The legacy
+    // path fetches the layout list over D-Bus (getLayoutList) which only
+    // works while the daemon is running. The methods below load the SAME
+    // on-disk layouts via an in-process LayoutManager + ZonesLayoutSource,
+    // so QML preview-rendering paths can render layouts even when the
+    // daemon isn't up (early settings launch, daemon crashed, etc.).
+    //
+    // Returns the same QVariantMap shape as the D-Bus
+    // getLayoutPreviewList method on the layout adaptor — id /
+    // displayName / zones[]{x,y,width,height,zoneNumber} / isAutotile.
+    Q_INVOKABLE QVariantList localLayoutPreviews() const;
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
 
     // Screen accessors
     QVariantList screens() const
@@ -846,6 +864,13 @@ private:
     QVariantList m_layouts;
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
+
+    // Daemon-independent layout source — see localLayoutPreviews() doc.
+    // LayoutManager opens its own assignments backend + scans the standard
+    // layouts directory; ZonesLayoutSource wraps it in the
+    // PhosphorLayout::ILayoutSource contract.
+    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;

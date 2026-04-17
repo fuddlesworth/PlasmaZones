@@ -14,6 +14,8 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 
+#include <PhosphorLayoutApi/LayoutPreview.h>
+
 #include <QClipboard>
 #include <QGuiApplication>
 
@@ -26,7 +28,15 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
+    , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
 {
+    // Populate the daemon-independent layout source from disk on startup
+    // so localLayoutPreviews() returns a populated list immediately. The
+    // LayoutManager installs a QFileSystemWatcher so subsequent disk
+    // changes (daemon writes, settings creates, hand edits) auto-reload.
+    m_localLayoutManager->loadLayouts();
+
     // Connect service signals
     connect(m_layoutService, &ILayoutService::errorOccurred, this, [this](const QString& error) {
         Q_EMIT layoutLoadFailed(error);
@@ -133,6 +143,77 @@ QString EditorController::layoutName() const
 QVariantList EditorController::zones() const
 {
     return m_zoneManager ? m_zoneManager->zones() : QVariantList();
+}
+
+// ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
+// Same shape as SettingsController's localLayoutPreviews / localLayoutPreview
+// — both processes own a private LayoutManager + ZonesLayoutSource and emit
+// the same QVariantMap representation of LayoutPreview so QML preview-
+// rendering code stays identical across the two consumers.
+
+namespace {
+
+QVariantMap layoutPreviewToVariantMap(const PhosphorLayout::LayoutPreview& preview)
+{
+    QVariantMap map;
+    map[QStringLiteral("id")] = preview.id;
+    map[QStringLiteral("displayName")] = preview.displayName;
+    if (!preview.description.isEmpty()) {
+        map[QStringLiteral("description")] = preview.description;
+    }
+    map[QStringLiteral("zoneCount")] = preview.zoneCount;
+    map[QStringLiteral("isAutotile")] = preview.isAutotile;
+    map[QStringLiteral("recommended")] = preview.recommended;
+    map[QStringLiteral("autoAssign")] = preview.autoAssign;
+    map[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
+    if (preview.referenceAspectRatio > 0.0) {
+        map[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
+    }
+
+    QVariantList zones;
+    for (int i = 0; i < preview.zones.size(); ++i) {
+        const QRectF& r = preview.zones.at(i);
+        QVariantMap zoneMap;
+        zoneMap[QStringLiteral("x")] = r.x();
+        zoneMap[QStringLiteral("y")] = r.y();
+        zoneMap[QStringLiteral("width")] = r.width();
+        zoneMap[QStringLiteral("height")] = r.height();
+        if (i < preview.zoneNumbers.size()) {
+            zoneMap[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
+        }
+        zones.append(zoneMap);
+    }
+    map[QStringLiteral("zones")] = zones;
+
+    return map;
+}
+
+} // namespace
+
+QVariantList EditorController::localLayoutPreviews() const
+{
+    QVariantList list;
+    if (!m_localLayoutSource) {
+        return list;
+    }
+    const auto previews = m_localLayoutSource->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(layoutPreviewToVariantMap(preview));
+    }
+    return list;
+}
+
+QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount) const
+{
+    if (!m_localLayoutSource || id.isEmpty()) {
+        return {};
+    }
+    const auto preview = m_localLayoutSource->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        return {};
+    }
+    return layoutPreviewToVariantMap(preview);
 }
 QString EditorController::selectedZoneId() const
 {
