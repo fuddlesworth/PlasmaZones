@@ -19,6 +19,10 @@ Files: phosphorrendering/*
 Copyright: 2026 fuddlesworth
 License: LGPL-2.1-or-later
 
+Files: phosphorlayer/*
+Copyright: 2026 fuddlesworth
+License: LGPL-2.1-or-later
+
 Files: debian/*
 Copyright: 2026 fuddlesworth
 License: GPL-3.0-or-later

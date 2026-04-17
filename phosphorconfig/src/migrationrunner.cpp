@@ -44,6 +44,23 @@ MigrationRunner::MigrationRunner(const Schema& schema)
     : m_schema(schema)
     , m_orderedSteps(schema.migrations)
 {
+    // Refuse to run migrations when there's no version key to stamp. Without
+    // it, readVersion() always reports 1, stampVersion() writes to root[""]
+    // (an empty-string JSON key — silent data corruption), and every startup
+    // re-runs the same v1→v2 step forever. Stores configured with an empty
+    // versionKey deliberately skip version stamping, so migrations in the
+    // same schema are a contradiction the caller must resolve. Clearing the
+    // step list here lets the runner no-op safely instead of looping.
+    if (m_schema.versionKey.isEmpty() && !m_orderedSteps.isEmpty()) {
+        qCritical(
+            "PhosphorConfig::MigrationRunner: schema declares %lld migration step(s) but has an empty versionKey "
+            "— migrations cannot run without somewhere to stamp the target version. Schemas that need migrations "
+            "must set versionKey; schemas that intentionally skip version stamping must not declare migrations.",
+            static_cast<long long>(m_orderedSteps.size()));
+        m_orderedSteps.clear();
+        return;
+    }
+
     // Sort once at construction so registration order doesn't matter and
     // runInMemory doesn't pay the sort cost on every call. Stable sort
     // preserves the relative order of any (illegal but possible) duplicate
