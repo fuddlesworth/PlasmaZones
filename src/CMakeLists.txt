@@ -75,6 +75,8 @@ set(plasmazones_core_SRCS
     core/layoutworker/types.h
     core/layoututils.cpp
     core/layoututils.h
+    core/unifiedlayoutentry.cpp
+    core/unifiedlayoutentry.h
     core/supportreport.cpp
     core/supportreport.h
     # layersurface + shaderregistry/params moved to PhosphorShell

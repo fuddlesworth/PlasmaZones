@@ -5,6 +5,7 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
+#include "../core/unifiedlayoutentry.h"
 #include "../core/utils.h"
 #include "../core/assignmententry.h"
 #include "../core/screenmanager.h"

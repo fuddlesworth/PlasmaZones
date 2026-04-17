@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../core/layoututils.h"
+#include "../core/unifiedlayoutentry.h"
 #include <QObject>
 #include <QPointer>
 #include <QString>

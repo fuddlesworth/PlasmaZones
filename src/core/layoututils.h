@@ -6,20 +6,15 @@
 #include "plasmazones_export.h"
 #include <QFlags>
 #include <QJsonObject>
+#include <QList>
+#include <QRectF>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
-#include <QVector>
-
-// Forward declaration for autotile support
-namespace PlasmaZones {
-class AlgorithmRegistry;
-}
 
 namespace PlasmaZones {
 
-class ILayoutManager;
-class IOrderingSettings;
 class Layout;
 class Zone;
 
@@ -41,183 +36,17 @@ Q_DECLARE_FLAGS(ZoneFields, ZoneField)
 Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
 
 /**
- * @brief Entry in the unified layout list (manual and autotile layouts)
+ * @brief Zone/layout primitive utilities — pure Layout / Zone operations.
  *
- * Used for quick layout shortcuts (Meta+1-9), layout cycling (Meta+[/]),
- * zone selector display, and D-Bus layout list queries.
- *
- * When isAutotile is true, the entry represents an autotile algorithm rather
- * than a manual zone-based layout. The id will be prefixed with "autotile:".
- */
-struct PLASMAZONES_EXPORT UnifiedLayoutEntry
-{
-    QString id; ///< Layout UUID or autotile prefixed ID (e.g. "autotile:master-stack")
-    QString name; ///< Display name for UI
-    QString description; ///< Optional description
-    int zoneCount = 0; ///< Number of zones for manual layouts, or algorithm's defaultMaxWindows for autotile
-    QVariantList zones; ///< Zone data for preview rendering
-    QVariantList previewZones; ///< Preview zones (used for autotile algorithm previews)
-    bool autoAssign = false; ///< Auto-assign: new windows fill first empty zone
-    bool isAutotile = false; ///< True if this entry represents an autotile algorithm
-    int aspectRatioClass = 0; ///< AspectRatioClass enum value (0=Any, 1=Standard, etc.)
-    qreal referenceAspectRatio = 0.0; ///< For fixed-geometry layouts: the screen AR zones were designed for
-    bool recommended = true; ///< True if layout matches the current screen's aspect ratio
-    QString zoneNumberDisplay; ///< How zone numbers are displayed in previews ("all", "last", etc.)
-    bool memory = false; ///< True if algorithm maintains persistent state (SplitTree)
-    bool supportsMasterCount = false; ///< True if algorithm supports configurable master window count
-    bool supportsSplitRatio = false; ///< True if algorithm supports configurable split ratio
-    bool producesOverlappingZones = false; ///< True if algorithm can produce overlapping zones
-    bool supportsCustomParams = false; ///< True if algorithm declares @param custom parameters
-    bool isScripted = false; ///< True if algorithm is loaded from a .js script file
-    bool isUserScript = false; ///< True if script is from the user's local directory
-
-    // ── Generic section grouping (data-driven, consumed by LayoutsPage) ──
-    QString sectionKey; ///< Grouping key (e.g. "any", "standard", "built-in", "custom")
-    QString sectionLabel; ///< Display label for the section header (i18n'd)
-    int sectionOrder = 0; ///< Sort priority (lower = first)
-
-    /// Whether this autotile entry should show as a "system" (lock icon) item.
-    /// Built-in C++ algorithms are always system entries. Scripted algorithms
-    /// are system entries only if they are system-installed (not user scripts).
-    bool isSystemEntry() const
-    {
-        if (!isAutotile)
-            return false;
-        if (!isScripted)
-            return true; // Built-in C++ algorithm
-        return !isUserScript; // System-installed script = system, user script = not system
-    }
-
-    /**
-     * @brief Extract the algorithm ID from an autotile entry
-     * @return Algorithm ID (e.g. "master-stack"), or empty string if not autotile
-     */
-    QString algorithmId() const;
-
-    bool operator==(const UnifiedLayoutEntry& other) const
-    {
-        return id == other.id;
-    }
-    bool operator!=(const UnifiedLayoutEntry& other) const
-    {
-        return id != other.id;
-    }
-};
-
-/**
- * @brief Utility functions for unified layout management
- *
- * This namespace consolidates layout list building that was previously
- * duplicated in Daemon, ZoneSelectorController, LayoutAdaptor, and OverlayService.
- *
+ * This header carries only code that operates on Layout and Zone types and
+ * has no dependency on autotile, settings services, or higher-layer
+ * composition (the picker-UI aggregation that stitches manual layouts
+ * together with autotile algorithms lives in unifiedlayoutentry.h).
+ * Keeping that split lets these primitives eventually live in a standalone
+ * phosphor-zones library without dragging autotile or settings services
+ * into the dependency graph.
  */
 namespace LayoutUtils {
-
-/**
- * @brief Build list of all available layouts (manual, and optionally autotile)
- *
- * @param layoutManager Layout manager interface (can be nullptr)
- * @param includeAutotile If true, append autotile algorithm entries from AlgorithmRegistry
- * @return Vector of unified layout entries
- */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry> buildUnifiedLayoutList(ILayoutManager* layoutManager,
-                                                                      bool includeAutotile = false,
-                                                                      const QStringList& customOrder = {});
-
-/**
- * @brief Build filtered list of layouts visible in the given context
- *
- * Filters out layouts that are:
- * - hiddenFromSelector = true
- * - Not allowed on the given screen/desktop/activity (if allow lists are non-empty)
- * - Not matching the screen's aspect ratio class (if layout has an aspectRatioClass tag)
- *
- * Layouts tagged with a non-matching aspect ratio class are not removed entirely;
- * they are moved to the end of the list so the selector can show them in a
- * collapsed "Other" section. The `recommended` field in the returned entry
- * indicates whether the layout matches the current screen's aspect ratio.
- *
- * @param layoutManager Layout manager interface
- * @param screenId Current screen ID (empty = skip screen filter)
- * @param virtualDesktop Current virtual desktop (0 = skip desktop filter)
- * @param activity Current activity ID (empty = skip activity filter)
- * @param includeManual Include manual zone-based layouts (default: true)
- * @param includeAutotile Include dynamic autotile algorithm layouts (default: true)
- * @param screenAspectRatio Aspect ratio of the target screen (0 = skip AR filtering)
- * @param filterByAspectRatio When true, exclude entries where recommended is false (default: false)
- */
-PLASMAZONES_EXPORT QVector<UnifiedLayoutEntry>
-buildUnifiedLayoutList(ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
-                       const QString& activity, bool includeManual = true, bool includeAutotile = true,
-                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
-                       const QStringList& customOrder = {});
-
-/**
- * @brief Build a combined custom order list from settings
- *
- * Merges snapping layout order and tiling algorithm order based on which
- * layout types are included. Used by daemon, overlay, zone selector, and D-Bus.
- *
- * @param settings Ordering settings interface (can be nullptr)
- * @param includeManual Include snapping layout order
- * @param includeAutotile Include tiling algorithm order
- * @return Combined custom order list (empty if no custom order set)
- */
-PLASMAZONES_EXPORT QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManual,
-                                                bool includeAutotile);
-
-/**
- * @brief Convert a unified layout entry to QVariantMap for QML
- *
- * Creates a map with keys matching the zone selector's expectations:
- * - id, name, description, zoneCount, zones, category
- *
- * @param entry The unified layout entry
- * @return QVariantMap suitable for QML consumption
- */
-PLASMAZONES_EXPORT QVariantMap toVariantMap(const UnifiedLayoutEntry& entry);
-
-/**
- * @brief Convert unified layout entries to QVariantList for QML
- *
- * Convenience function that converts a full list of entries.
- *
- * @param entries Vector of unified layout entries
- * @return QVariantList suitable for QML model
- */
-PLASMAZONES_EXPORT QVariantList toVariantList(const QVector<UnifiedLayoutEntry>& entries);
-
-/**
- * @brief Convert a unified layout entry to JSON for D-Bus
- *
- * Creates a JSON object with all layout metadata suitable for
- * serialization over D-Bus.
- *
- * @param entry The unified layout entry
- * @return QJsonObject for D-Bus serialization
- */
-PLASMAZONES_EXPORT QJsonObject toJson(const UnifiedLayoutEntry& entry);
-
-/**
- * @brief Find a layout entry by ID
- *
- * Searches the unified layout list for an entry with the given ID.
- *
- * @param entries List to search
- * @param layoutId ID to find
- * @return Index of found entry, or -1 if not found
- */
-PLASMAZONES_EXPORT int findLayoutIndex(const QVector<UnifiedLayoutEntry>& entries, const QString& layoutId);
-
-/**
- * @brief Get layout entry by ID
- *
- * @param entries List to search
- * @param layoutId ID to find
- * @return Pointer to entry if found, nullptr otherwise
- */
-PLASMAZONES_EXPORT const UnifiedLayoutEntry* findLayout(const QVector<UnifiedLayoutEntry>& entries,
-                                                        const QString& layoutId);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Allow-list serialization (shared by Layout, LayoutAdaptor, EditorController)
@@ -249,6 +78,14 @@ PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringLi
  */
 PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal,
                                                    const QRectF& referenceGeometry = QRectF());
+
+/**
+ * @brief Convert a layout to a QVariantMap (metadata + zones)
+ *
+ * Used by LayoutAdaptor for D-Bus and other consumers that want the
+ * whole layout as a single map without building a UnifiedLayoutEntry.
+ */
+PLASMAZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
 
 } // namespace LayoutUtils
 

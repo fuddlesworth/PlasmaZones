@@ -10,6 +10,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/zone.h"
 #include "../core/layoututils.h"
+#include "../core/unifiedlayoutentry.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"

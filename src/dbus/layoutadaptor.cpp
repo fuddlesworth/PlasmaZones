@@ -9,6 +9,7 @@
 #include "../core/zone.h"
 #include "../core/constants.h"
 #include "../core/layoututils.h"
+#include "../core/unifiedlayoutentry.h"
 #include "../autotile/AlgorithmRegistry.h"
 #include "../autotile/TilingAlgorithm.h"
 #include "../core/virtualdesktopmanager.h"
