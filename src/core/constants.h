@@ -21,6 +21,7 @@
 // namespace PlasmaZones below.
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorZones/ZoneDefaults.h>
 
 // NOTE: AutotileJsonKeys / AutotileDefaults previously lived inline here and
 // were re-exported from <PhosphorTiles/AutotileConstants.h> via a transitive
@@ -57,23 +58,31 @@ namespace Defaults {
 inline constexpr int FallbackScreenWidth = 1920;
 inline constexpr int FallbackScreenHeight = 1080;
 
-// Alpha values for semi-transparent colors
-constexpr int HighlightAlpha = 128;
-constexpr int InactiveAlpha = 64;
-constexpr int BorderAlpha = 200;
-constexpr int OpaqueAlpha = 255;
+// Zone-presentation defaults (alpha + colors + appearance) live in
+// libs/phosphor-zones — `PhosphorZones::ZoneDefaults`.  Re-exported here so
+// existing PlasmaZones::Defaults::HighlightColor / Opacity / BorderWidth
+// callers compile unchanged.  The application config layer's user-facing
+// accessors (ConfigDefaults::*) continue to delegate downward.
+using ::PhosphorZones::ZoneDefaults::BorderAlpha;
+using ::PhosphorZones::ZoneDefaults::BorderColor;
+using ::PhosphorZones::ZoneDefaults::BorderRadius;
+using ::PhosphorZones::ZoneDefaults::BorderWidth;
+using ::PhosphorZones::ZoneDefaults::HighlightAlpha;
+using ::PhosphorZones::ZoneDefaults::HighlightColor;
+using ::PhosphorZones::ZoneDefaults::InactiveAlpha;
+using ::PhosphorZones::ZoneDefaults::InactiveColor;
+using ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+using ::PhosphorZones::ZoneDefaults::LabelFontColor;
+using ::PhosphorZones::ZoneDefaults::Opacity;
+using ::PhosphorZones::ZoneDefaults::OpaqueAlpha;
+// Layout-factory split ratios — also library-owned (PhosphorZones).
+using ::PhosphorZones::ZoneDefaults::FocusMainRatio;
+using ::PhosphorZones::ZoneDefaults::FocusSideRatio;
+using ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio;
+using ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio;
 
-// Colors
-inline const QColor HighlightColor{0, 120, 212, HighlightAlpha}; // Windows blue
-inline const QColor InactiveColor{128, 128, 128, InactiveAlpha};
-inline const QColor BorderColor{255, 255, 255, BorderAlpha};
-inline const QColor LabelFontColor{255, 255, 255, OpaqueAlpha};
-
-// Dimensions
-constexpr qreal Opacity = 0.5;
-constexpr qreal InactiveOpacity = 0.3;
-constexpr int BorderWidth = 2;
-constexpr int BorderRadius = 8;
+// PlasmaZones-side defaults that aren't part of the zone-presentation
+// surface — daemon overlay / settings / geometry constants.
 constexpr int ZonePadding = 8;
 constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
 constexpr int MaxGap = 50; // Maximum for zone padding and outer gap settings
@@ -85,12 +94,6 @@ constexpr qreal EdgeThreshold = 15.0;
 constexpr int PollIntervalMs = 50; // Window move detection polling interval (20 FPS)
 constexpr int MinimumZoneSizePx = 100; // Minimum zone size for window snapping
 constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (clipping threshold)
-
-// Layout ratios
-constexpr qreal PriorityGridMainRatio = 0.667;
-constexpr qreal PriorityGridSecondaryRatio = 0.333;
-constexpr qreal FocusSideRatio = 0.2;
-constexpr qreal FocusMainRatio = 0.6;
 }
 
 // AspectRatioClass + ScreenClassification helpers live in

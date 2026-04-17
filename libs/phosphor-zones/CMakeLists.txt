@@ -53,6 +53,7 @@ endif()
 set(phosphorzones_public_HDRS
     include/PhosphorZones/PhosphorZones.h
     include/PhosphorZones/Zone.h
+    include/PhosphorZones/ZoneDefaults.h
     include/PhosphorZones/Layout.h
     include/PhosphorZones/ZoneDetector.h
     include/PhosphorZones/ZoneHighlighter.h

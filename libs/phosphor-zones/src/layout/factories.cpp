@@ -5,6 +5,7 @@
 // Part of Layout class — split from layout.cpp for SRP.
 
 #include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZoneDefaults.h>
 #include "constants.h"
 #include <PhosphorZones/Zone.h>
 
@@ -85,23 +86,23 @@ Layout* Layout::createPriorityGridLayout(QObject* parent)
 
     // Main zone (left 2/3)
     auto mainZone = new Zone(layout);
-    mainZone->setRelativeGeometry(QRectF(0, 0, Defaults::PriorityGridMainRatio, 1.0));
+    mainZone->setRelativeGeometry(QRectF(0, 0, ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 1.0));
     mainZone->setZoneNumber(1);
     mainZone->setName(QStringLiteral("Primary"));
     layout->m_zones.append(mainZone);
 
     // Top right
     auto topRight = new Zone(layout);
-    topRight->setRelativeGeometry(
-        QRectF(Defaults::PriorityGridMainRatio, 0, Defaults::PriorityGridSecondaryRatio, 0.5));
+    topRight->setRelativeGeometry(QRectF(::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0,
+                                         ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
     topRight->setZoneNumber(2);
     topRight->setName(QStringLiteral("Secondary Top"));
     layout->m_zones.append(topRight);
 
     // Bottom right
     auto bottomRight = new Zone(layout);
-    bottomRight->setRelativeGeometry(
-        QRectF(Defaults::PriorityGridMainRatio, 0.5, Defaults::PriorityGridSecondaryRatio, 0.5));
+    bottomRight->setRelativeGeometry(QRectF(::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.5,
+                                            ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
     bottomRight->setZoneNumber(3);
     bottomRight->setName(QStringLiteral("Secondary Bottom"));
     layout->m_zones.append(bottomRight);
@@ -116,22 +117,24 @@ Layout* Layout::createFocusLayout(QObject* parent)
 
     // Left panel
     auto left = new Zone(layout);
-    left->setRelativeGeometry(QRectF(0, 0, Defaults::FocusSideRatio, 1.0));
+    left->setRelativeGeometry(QRectF(0, 0, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
     left->setZoneNumber(1);
     left->setName(QStringLiteral("Left Panel"));
     layout->m_zones.append(left);
 
     // Center (main focus)
     auto center = new Zone(layout);
-    center->setRelativeGeometry(QRectF(Defaults::FocusSideRatio, 0, Defaults::FocusMainRatio, 1.0));
+    center->setRelativeGeometry(
+        QRectF(::PhosphorZones::ZoneDefaults::FocusSideRatio, 0, ::PhosphorZones::ZoneDefaults::FocusMainRatio, 1.0));
     center->setZoneNumber(2);
     center->setName(QStringLiteral("Focus"));
     layout->m_zones.append(center);
 
     // Right panel - starts after side + main
-    constexpr qreal rightStart = Defaults::FocusSideRatio + Defaults::FocusMainRatio;
+    constexpr qreal rightStart =
+        ::PhosphorZones::ZoneDefaults::FocusSideRatio + ::PhosphorZones::ZoneDefaults::FocusMainRatio;
     auto right = new Zone(layout);
-    right->setRelativeGeometry(QRectF(rightStart, 0, Defaults::FocusSideRatio, 1.0));
+    right->setRelativeGeometry(QRectF(rightStart, 0, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
     right->setZoneNumber(3);
     right->setName(QStringLiteral("Right Panel"));
     layout->m_zones.append(right);

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneDefaults.h>
 #include "constants.h"
 #include <QJsonArray>
 #include <cmath>
@@ -297,10 +298,10 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
         zone->m_highlightColor = QColor(appearance[HighlightColor].toString());
         zone->m_inactiveColor = QColor(appearance[InactiveColor].toString());
         zone->m_borderColor = QColor(appearance[BorderColor].toString());
-        zone->m_activeOpacity = appearance[ActiveOpacity].toDouble(Defaults::Opacity);
-        zone->m_inactiveOpacity = appearance[InactiveOpacity].toDouble(Defaults::InactiveOpacity);
-        zone->m_borderWidth = appearance[BorderWidth].toInt(Defaults::BorderWidth);
-        zone->m_borderRadius = appearance[BorderRadius].toInt(Defaults::BorderRadius);
+        zone->m_activeOpacity = appearance[ActiveOpacity].toDouble(::PhosphorZones::ZoneDefaults::Opacity);
+        zone->m_inactiveOpacity = appearance[InactiveOpacity].toDouble(::PhosphorZones::ZoneDefaults::InactiveOpacity);
+        zone->m_borderWidth = appearance[BorderWidth].toInt(::PhosphorZones::ZoneDefaults::BorderWidth);
+        zone->m_borderRadius = appearance[BorderRadius].toInt(::PhosphorZones::ZoneDefaults::BorderRadius);
         // Check if useCustomColors exists in JSON, default to false if missing
         zone->m_useCustomColors = appearance.contains(UseCustomColors) ? appearance[UseCustomColors].toBool() : false;
         zone->m_overlayDisplayMode =
