@@ -18,7 +18,7 @@
 #include <QSignalSpy>
 
 #include "../../../src/config/configdefaults.h"
-#include "../../../src/config/iconfigbackend.h"
+#include "../../../src/config/configbackends.h"
 #include "../../../src/config/settings.h"
 #include "../../../src/core/virtualscreen.h"
 #include "../helpers/IsolatedConfigGuard.h"

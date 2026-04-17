@@ -16,6 +16,8 @@
 #include "../core/types.h"
 #include "../autotile/AutotileEngine.h"
 
+#include <PhosphorConfig/IBackend.h>
+
 namespace PlasmaZones {
 
 enum class DisabledReason;
@@ -42,7 +44,6 @@ class UnifiedLayoutController;
 class AutotileAdaptor;
 class AutotileEngine;
 class IEngineLifecycle;
-class IConfigBackend;
 class AutotileNavigationAdapter;
 class ScreenModeRouter;
 class SnapNavigationAdapter;
@@ -326,7 +327,7 @@ private:
      */
     void syncModeFromAssignments();
 
-    std::unique_ptr<IConfigBackend> m_configBackend;
+    std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;

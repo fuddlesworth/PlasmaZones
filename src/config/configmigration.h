@@ -16,6 +16,13 @@
 
 namespace PlasmaZones {
 
+/// Current config schema version. Written by JsonBackend::sync() (fresh
+/// installs, via the version stamp wired up in configbackends.cpp),
+/// migrateIniToJson() (INI upgrades), and migrateV1ToV2() (schema upgrades).
+/// v1: flat groups (Activation, Display, Appearance, etc.)
+/// v2: nested dot-path groups (Snapping.Behavior.ZoneSpan, Tiling.Gaps, etc.)
+inline constexpr int ConfigSchemaVersion = 2;
+
 /// A single schema migration step: transforms root JSON in-place from
 /// fromVersion to fromVersion+1, then stamps the new _version.
 struct MigrationStep
@@ -93,7 +100,11 @@ private:
 
     // INI→JSON helpers
     static QJsonObject iniMapToJson(const QMap<QString, QVariant>& flatMap);
-    static QJsonValue convertValue(const QVariant& value);
+    /// Convert an INI value to its JSON form. @p keyName is the leaf key
+    /// (without group prefix); it's used to decide whether a comma-separated
+    /// int list should be read as an r,g,b[,a] color — the content heuristic
+    /// alone can't tell a color from e.g. a comma-separated layout order.
+    static QJsonValue convertValue(const QString& keyName, const QVariant& value);
 };
 
 } // namespace PlasmaZones

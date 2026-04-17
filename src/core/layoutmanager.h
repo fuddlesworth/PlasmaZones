@@ -6,6 +6,9 @@
 #include "layout.h"
 #include "interfaces.h"
 #include "assignmententry.h"
+
+#include <PhosphorConfig/IBackend.h>
+
 #include <QHash>
 #include <QSet>
 #include <QUuid>
@@ -13,8 +16,6 @@
 #include <memory>
 
 namespace PlasmaZones {
-
-class IConfigBackend;
 
 /**
  * @brief Manages all layouts and their assignments to screens/desktops
@@ -35,7 +36,7 @@ class PLASMAZONES_EXPORT LayoutManager : public QObject, public ILayoutManager
 
 public:
     explicit LayoutManager(QObject* parent = nullptr);
-    LayoutManager(IConfigBackend* backend, QObject* parent);
+    LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent);
     ~LayoutManager();
 
     // No singleton - use dependency injection instead
@@ -254,16 +255,16 @@ private:
     void loadLayoutsFromDirectory(const QString& directory);
     Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
-    void readAssignmentGroups(IConfigBackend* backend);
-    void readQuickLayouts(IConfigBackend* backend);
+    void readAssignmentGroups(PhosphorConfig::IBackend* backend);
+    void readQuickLayouts(PhosphorConfig::IBackend* backend);
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
     ISettings* m_settings = nullptr;
-    std::unique_ptr<IConfigBackend> m_ownedBackend;
-    IConfigBackend* m_configBackend = nullptr; // always valid after construction
+    std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
+    PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
     QString m_layoutDirectory;
     QVector<Layout*> m_layouts;
     Layout* m_activeLayout = nullptr;

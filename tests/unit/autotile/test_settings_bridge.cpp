@@ -10,7 +10,7 @@
 #include "autotile/AlgorithmRegistry.h"
 #include "autotile/TilingState.h"
 #include "core/constants.h"
-#include "config/configbackend_json.h"
+#include "config/configbackends.h"
 #include "config/configdefaults.h"
 #include "config/configkeys.h"
 #include "config/settings.h"
@@ -730,7 +730,7 @@ private Q_SLOTS:
         // IsolatedConfigGuard redirects XDG_CONFIG_HOME so ConfigDefaults::configFilePath()
         // resolves inside the temp directory. Ensure the parent dir exists.
         QDir().mkpath(QFileInfo(ConfigDefaults::configFilePath()).absolutePath());
-        auto backend = std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
+        auto backend = std::make_unique<PhosphorConfig::JsonBackend>(ConfigDefaults::configFilePath());
 
         // Create engine with windows
         AutotileEngine engine(nullptr, nullptr, nullptr);
@@ -750,7 +750,7 @@ private Q_SLOTS:
         backend->sync();
 
         // Read back and deserialize into a fresh engine (simulating WTA load)
-        auto backend2 = std::make_unique<JsonConfigBackend>(ConfigDefaults::configFilePath());
+        auto backend2 = std::make_unique<PhosphorConfig::JsonBackend>(ConfigDefaults::configFilePath());
         backend2->sync();
         auto tracking2 = backend2->group(ConfigKeys::windowTrackingGroup());
         QString readBack = tracking2->readString(ConfigKeys::autotileWindowOrdersKey(), QString());

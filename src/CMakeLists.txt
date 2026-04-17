@@ -104,11 +104,12 @@ set(plasmazones_core_SRCS
     config/settings/perscreen.cpp
     config/settings.h
     config/configdefaults.cpp
-    config/iconfigbackend.h
-    config/configbackend_qsettings.h
-    config/configbackend_qsettings.cpp
-    config/configbackend_json.h
-    config/configbackend_json.cpp
+    config/configbackends.h
+    config/configbackends.cpp
+    config/perscreenresolver.h
+    config/perscreenresolver.cpp
+    config/settingsschema.h
+    config/settingsschema.cpp
     config/configmigration.h
     config/configmigration.cpp
     config/colorimporter.cpp
@@ -241,6 +242,7 @@ target_link_libraries(plasmazones_core
         Qt6::Gui
         Qt6::DBus
         plasmazones_compositor_common
+        PhosphorConfig::PhosphorConfig
         PhosphorShell::PhosphorShell
     PRIVATE
         Wayland::Client

@@ -303,6 +303,9 @@ configure_file(
 )
 include_directories("${CMAKE_BINARY_DIR}/generated")
 
+# PhosphorConfig library (schema-driven configuration + migration runner)
+add_subdirectory(phosphorconfig)
+
 # PhosphorShell library (layer-shell + shader pipeline)
 add_subdirectory(phosphorshell)
 

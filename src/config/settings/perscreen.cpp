@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../settings.h"
-#include "../iconfigbackend.h"
+#include "../configbackends.h"
 #include "../configdefaults.h"
 #include "../../core/constants.h"
 #include "../../core/logging.h"
@@ -125,9 +125,25 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     if (k == PerScreenKeys::InnerGap)
         return QVariant(
             qBound(ConfigDefaults::autotileInnerGapMin(), value.toInt(), ConfigDefaults::autotileInnerGapMax()));
-    if (k.startsWith(PerScreenKeys::OuterGap))
+    // Per-side gaps each have their own min/max — match exactly, not by prefix.
+    // A single startsWith("OuterGap") would apply the uniform-gap bounds to
+    // Top/Bottom/Left/Right, which silently clamps to the wrong range whenever
+    // those bounds diverge from the uniform ones.
+    if (k == QLatin1String("OuterGap"))
         return QVariant(
             qBound(ConfigDefaults::autotileOuterGapMin(), value.toInt(), ConfigDefaults::autotileOuterGapMax()));
+    if (k == QLatin1String("OuterGapTop"))
+        return QVariant(
+            qBound(ConfigDefaults::autotileOuterGapTopMin(), value.toInt(), ConfigDefaults::autotileOuterGapTopMax()));
+    if (k == QLatin1String("OuterGapBottom"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapBottomMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapBottomMax()));
+    if (k == QLatin1String("OuterGapLeft"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapLeftMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapLeftMax()));
+    if (k == QLatin1String("OuterGapRight"))
+        return QVariant(qBound(ConfigDefaults::autotileOuterGapRightMin(), value.toInt(),
+                               ConfigDefaults::autotileOuterGapRightMax()));
     if (k == PerScreenKeys::MaxWindows)
         return QVariant(
             qBound(ConfigDefaults::autotileMaxWindowsMin(), value.toInt(), ConfigDefaults::autotileMaxWindowsMax()));
@@ -146,7 +162,7 @@ QVariant validatePerScreenAutotileValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenAutotileEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenAutotileEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     if (key == QLatin1String(PerScreenAutotileKey::SplitRatio))
         return QVariant(group.readDouble(key, ConfigDefaults::autotileSplitRatio()));
@@ -206,7 +222,7 @@ QVariant validatePerScreenSnappingValue(const QString& key, const QVariant& valu
     return QVariant();
 }
 
-QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenSnappingEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = PerScreenSnappingKey;
     if (key == QLatin1String(K::SnapAssistEnabled))
@@ -216,7 +232,7 @@ QVariant readPerScreenSnappingEntry(IConfigGroup& group, const QString& key)
     return QVariant(group.readInt(key, 0));
 }
 
-QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
+QVariant readPerScreenZoneSelectorEntry(PhosphorConfig::IGroup& group, const QString& key)
 {
     namespace K = ZoneSelectorConfigKey;
     if (key == QLatin1String(K::PreviewLockAspect))
@@ -224,7 +240,8 @@ QVariant readPerScreenZoneSelectorEntry(IConfigGroup& group, const QString& key)
     return QVariant(group.readInt(key, 0));
 }
 
-void savePerScreenOverrides(IConfigBackend* backend, const QString& prefix, const QHash<QString, QVariantMap>& source)
+void savePerScreenOverrides(PhosphorConfig::IBackend* backend, const QString& prefix,
+                            const QHash<QString, QVariantMap>& source)
 {
     const QStringList groups = backend->groupList();
     for (const QString& groupName : groups) {
@@ -281,10 +298,10 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
     }
 }
 
-using PerScreenReadFn = QVariant (*)(IConfigGroup&, const QString&);
+using PerScreenReadFn = QVariant (*)(PhosphorConfig::IGroup&, const QString&);
 using PerScreenValidateFn = QVariant (*)(const QString&, const QVariant&);
 
-void loadPerScreenGroup(IConfigBackend* backend, const QStringList& allGroups, const QString& prefix,
+void loadPerScreenGroup(PhosphorConfig::IBackend* backend, const QStringList& allGroups, const QString& prefix,
                         const char* const* keys, size_t keyCount, PerScreenReadFn readEntry,
                         PerScreenValidateFn validate, QHash<QString, QVariantMap>& dest)
 {
@@ -344,7 +361,7 @@ static void normalizeAutotileKeys(QHash<QString, QVariantMap>& settings)
     }
 }
 
-void Settings::loadPerScreenOverrides(IConfigBackend* backend)
+void Settings::loadPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
     loadPerScreenGroup(backend, allGroups, ConfigDefaults::zoneSelectorGroupPrefix(), kPerScreenKeys,
@@ -392,7 +409,7 @@ static QHash<QString, QVariantMap> expandAutotileKeys(const QHash<QString, QVari
     return expanded;
 }
 
-void Settings::saveAllPerScreenOverrides(IConfigBackend* backend)
+void Settings::saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend)
 {
     savePerScreenOverrides(backend, ConfigDefaults::zoneSelectorGroupPrefix(), m_perScreenZoneSelectorSettings);
     // Expand short keys back to disk format before saving
@@ -447,15 +464,15 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
 {
-    ZoneSelectorConfig config = {static_cast<int>(m_zoneSelectorPosition),
-                                 static_cast<int>(m_zoneSelectorLayoutMode),
-                                 static_cast<int>(m_zoneSelectorSizeMode),
-                                 m_zoneSelectorMaxRows,
-                                 m_zoneSelectorPreviewWidth,
-                                 m_zoneSelectorPreviewHeight,
-                                 m_zoneSelectorPreviewLockAspect,
-                                 m_zoneSelectorGridColumns,
-                                 m_zoneSelectorTriggerDistance};
+    ZoneSelectorConfig config = {static_cast<int>(zoneSelectorPosition()),
+                                 static_cast<int>(zoneSelectorLayoutMode()),
+                                 static_cast<int>(zoneSelectorSizeMode()),
+                                 zoneSelectorMaxRows(),
+                                 zoneSelectorPreviewWidth(),
+                                 zoneSelectorPreviewHeight(),
+                                 zoneSelectorPreviewLockAspect(),
+                                 zoneSelectorGridColumns(),
+                                 zoneSelectorTriggerDistance()};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {

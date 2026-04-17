@@ -20,6 +20,8 @@
 #include <functional>
 #include <memory>
 
+#include <PhosphorConfig/IBackend.h>
+
 namespace PlasmaZones {
 
 class AutotileEngine;
@@ -28,7 +30,6 @@ class SnapNavigationTargetResolver;
 class LayoutManager; // Concrete type needed for signal connections
 class PersistenceWorker;
 class Layout;
-class IConfigBackend;
 class Zone;
 class IZoneDetector;
 class ISettings;
@@ -1050,7 +1051,7 @@ private:
     LayoutManager* m_layoutManager;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
-    std::unique_ptr<IConfigBackend> m_sessionBackend; // Session state (session.json)
+    std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)
 
     // Engine references for per-screen routing (set via setEngines())
     // QPointer auto-nulls on engine destruction, guarding against late D-Bus calls
@@ -1099,7 +1100,7 @@ private:
     QQueue<WindowTrackingService::DirtyMask> m_pendingWriteMasks;
 
     // One-shot warning latch for the test-only synchronous fallback path
-    // in saveState(). Production always uses JsonConfigBackend + the
+    // in saveState(). Production always uses PhosphorConfig::JsonBackend + the
     // async worker, so hitting the sync path indicates either a test
     // harness or an unexpected misconfiguration.
     bool m_syncFallbackWarned = false;
