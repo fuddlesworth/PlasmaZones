@@ -448,15 +448,15 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
 {
-    ZoneSelectorConfig config = {static_cast<int>(m_zoneSelectorPosition),
-                                 static_cast<int>(m_zoneSelectorLayoutMode),
-                                 static_cast<int>(m_zoneSelectorSizeMode),
-                                 m_zoneSelectorMaxRows,
-                                 m_zoneSelectorPreviewWidth,
-                                 m_zoneSelectorPreviewHeight,
-                                 m_zoneSelectorPreviewLockAspect,
-                                 m_zoneSelectorGridColumns,
-                                 m_zoneSelectorTriggerDistance};
+    ZoneSelectorConfig config = {static_cast<int>(zoneSelectorPosition()),
+                                 static_cast<int>(zoneSelectorLayoutMode()),
+                                 static_cast<int>(zoneSelectorSizeMode()),
+                                 zoneSelectorMaxRows(),
+                                 zoneSelectorPreviewWidth(),
+                                 zoneSelectorPreviewHeight(),
+                                 zoneSelectorPreviewLockAspect(),
+                                 zoneSelectorGridColumns(),
+                                 zoneSelectorTriggerDistance()};
 
     auto it = findPerScreenEntry(m_perScreenZoneSelectorSettings, screenIdOrName);
     if (it == m_perScreenZoneSelectorSettings.constEnd()) {

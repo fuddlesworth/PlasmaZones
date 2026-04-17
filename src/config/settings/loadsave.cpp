@@ -107,37 +107,8 @@ void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 {
-    auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
-    m_zoneSelectorEnabled = zoneSelector->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::zoneSelectorEnabled());
-    m_zoneSelectorTriggerDistance = readValidatedInt(
-        *zoneSelector, ConfigDefaults::triggerDistanceKey(), ConfigDefaults::triggerDistance(),
-        ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax(), "zone selector trigger distance");
-    int selectorPos = zoneSelector->readInt(ConfigDefaults::positionKey(), ConfigDefaults::position());
-    if (selectorPos >= 0 && selectorPos <= 8) {
-        m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(selectorPos);
-    } else {
-        m_zoneSelectorPosition = static_cast<ZoneSelectorPosition>(ConfigDefaults::position());
-    }
-    int selectorMode = zoneSelector->readInt(ConfigDefaults::layoutModeKey(), ConfigDefaults::layoutMode());
-    m_zoneSelectorLayoutMode = static_cast<ZoneSelectorLayoutMode>(
-        qBound(0, selectorMode, static_cast<int>(ZoneSelectorLayoutMode::Vertical)));
-    m_zoneSelectorPreviewWidth = readValidatedInt(*zoneSelector, ConfigDefaults::previewWidthKey(),
-                                                  ConfigDefaults::previewWidth(), ConfigDefaults::previewWidthMin(),
-                                                  ConfigDefaults::previewWidthMax(), "zone selector preview width");
-    m_zoneSelectorPreviewHeight = readValidatedInt(*zoneSelector, ConfigDefaults::previewHeightKey(),
-                                                   ConfigDefaults::previewHeight(), ConfigDefaults::previewHeightMin(),
-                                                   ConfigDefaults::previewHeightMax(), "zone selector preview height");
-    m_zoneSelectorPreviewLockAspect =
-        zoneSelector->readBool(ConfigDefaults::previewLockAspectKey(), ConfigDefaults::previewLockAspect());
-    m_zoneSelectorGridColumns = readValidatedInt(*zoneSelector, ConfigDefaults::gridColumnsKey(),
-                                                 ConfigDefaults::gridColumns(), ConfigDefaults::gridColumnsMin(),
-                                                 ConfigDefaults::gridColumnsMax(), "zone selector grid columns");
-    int sizeMode = zoneSelector->readInt(ConfigDefaults::sizeModeKey(), ConfigDefaults::sizeMode());
-    m_zoneSelectorSizeMode =
-        static_cast<ZoneSelectorSizeMode>(qBound(0, sizeMode, static_cast<int>(ZoneSelectorSizeMode::Manual)));
-    m_zoneSelectorMaxRows =
-        readValidatedInt(*zoneSelector, ConfigDefaults::maxRowsKey(), ConfigDefaults::maxRows(),
-                         ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax(), "zone selector max rows");
+    Q_UNUSED(backend);
+    // Zone selector is backed by PhosphorConfig::Store.
 }
 
 void Settings::loadShortcutConfig(PhosphorConfig::IBackend* backend)
@@ -408,17 +379,8 @@ void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)
 {
-    auto zoneSelector = backend->group(ConfigDefaults::snappingZoneSelectorGroup());
-    zoneSelector->writeBool(ConfigDefaults::enabledKey(), m_zoneSelectorEnabled);
-    zoneSelector->writeInt(ConfigDefaults::triggerDistanceKey(), m_zoneSelectorTriggerDistance);
-    zoneSelector->writeInt(ConfigDefaults::positionKey(), static_cast<int>(m_zoneSelectorPosition));
-    zoneSelector->writeInt(ConfigDefaults::layoutModeKey(), static_cast<int>(m_zoneSelectorLayoutMode));
-    zoneSelector->writeInt(ConfigDefaults::previewWidthKey(), m_zoneSelectorPreviewWidth);
-    zoneSelector->writeInt(ConfigDefaults::previewHeightKey(), m_zoneSelectorPreviewHeight);
-    zoneSelector->writeBool(ConfigDefaults::previewLockAspectKey(), m_zoneSelectorPreviewLockAspect);
-    zoneSelector->writeInt(ConfigDefaults::gridColumnsKey(), m_zoneSelectorGridColumns);
-    zoneSelector->writeInt(ConfigDefaults::sizeModeKey(), static_cast<int>(m_zoneSelectorSizeMode));
-    zoneSelector->writeInt(ConfigDefaults::maxRowsKey(), m_zoneSelectorMaxRows);
+    Q_UNUSED(backend);
+    // Zone selector is backed by PhosphorConfig::Store.
 }
 
 void Settings::saveShortcutConfig(PhosphorConfig::IBackend* backend)

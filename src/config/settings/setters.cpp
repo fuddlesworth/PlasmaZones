@@ -214,41 +214,8 @@ void Settings::setDefaultLayoutId(const QString& layoutId)
 // min width, min height) moved to settings.cpp (PhosphorConfig::Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Selector setters
+// Zone Selector setters moved to settings.cpp (PhosphorConfig::Store-backed).
 // ═══════════════════════════════════════════════════════════════════════════════
-
-SETTINGS_SETTER(bool, ZoneSelectorEnabled, m_zoneSelectorEnabled, zoneSelectorEnabledChanged)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorTriggerDistance, m_zoneSelectorTriggerDistance, zoneSelectorTriggerDistanceChanged,
-                        ConfigDefaults::triggerDistanceMin(), ConfigDefaults::triggerDistanceMax())
-SETTINGS_SETTER(ZoneSelectorPosition, ZoneSelectorPosition, m_zoneSelectorPosition, zoneSelectorPositionChanged)
-
-void Settings::setZoneSelectorPositionInt(int position)
-{
-    // Valid positions are 0-8 (3x3 grid)
-    if (position >= 0 && position <= 8) {
-        setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(position));
-    }
-}
-
-SETTINGS_SETTER(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, m_zoneSelectorLayoutMode, zoneSelectorLayoutModeChanged)
-
-SETTINGS_SETTER_ENUM_INT(ZoneSelectorLayoutMode, ZoneSelectorLayoutMode, 0,
-                         static_cast<int>(ZoneSelectorLayoutMode::Vertical))
-
-SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewWidth, m_zoneSelectorPreviewWidth, zoneSelectorPreviewWidthChanged,
-                        ConfigDefaults::previewWidthMin(), ConfigDefaults::previewWidthMax())
-SETTINGS_SETTER_CLAMPED(ZoneSelectorPreviewHeight, m_zoneSelectorPreviewHeight, zoneSelectorPreviewHeightChanged,
-                        ConfigDefaults::previewHeightMin(), ConfigDefaults::previewHeightMax())
-SETTINGS_SETTER(bool, ZoneSelectorPreviewLockAspect, m_zoneSelectorPreviewLockAspect,
-                zoneSelectorPreviewLockAspectChanged)
-SETTINGS_SETTER_CLAMPED(ZoneSelectorGridColumns, m_zoneSelectorGridColumns, zoneSelectorGridColumnsChanged,
-                        ConfigDefaults::gridColumnsMin(), ConfigDefaults::gridColumnsMax())
-SETTINGS_SETTER(ZoneSelectorSizeMode, ZoneSelectorSizeMode, m_zoneSelectorSizeMode, zoneSelectorSizeModeChanged)
-
-SETTINGS_SETTER_ENUM_INT(ZoneSelectorSizeMode, ZoneSelectorSizeMode, 0, static_cast<int>(ZoneSelectorSizeMode::Manual))
-
-SETTINGS_SETTER_CLAMPED(ZoneSelectorMaxRows, m_zoneSelectorMaxRows, zoneSelectorMaxRowsChanged,
-                        ConfigDefaults::maxRowsMin(), ConfigDefaults::maxRowsMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Autotiling setters

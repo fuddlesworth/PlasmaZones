@@ -631,71 +631,32 @@ public:
     int minimumWindowHeight() const override;
     void setMinimumWindowHeight(int height) override;
 
-    // Zone Selector
-    bool zoneSelectorEnabled() const override
-    {
-        return m_zoneSelectorEnabled;
-    }
+    // Zone Selector — PhosphorConfig::Store-backed.
+    bool zoneSelectorEnabled() const override;
     void setZoneSelectorEnabled(bool enabled) override;
-    int zoneSelectorTriggerDistance() const override
-    {
-        return m_zoneSelectorTriggerDistance;
-    }
+    int zoneSelectorTriggerDistance() const override;
     void setZoneSelectorTriggerDistance(int distance) override;
-    ZoneSelectorPosition zoneSelectorPosition() const override
-    {
-        return m_zoneSelectorPosition;
-    }
+    ZoneSelectorPosition zoneSelectorPosition() const override;
     void setZoneSelectorPosition(ZoneSelectorPosition position) override;
-    int zoneSelectorPositionInt() const
-    {
-        return static_cast<int>(m_zoneSelectorPosition);
-    }
+    int zoneSelectorPositionInt() const;
     void setZoneSelectorPositionInt(int position);
-    ZoneSelectorLayoutMode zoneSelectorLayoutMode() const override
-    {
-        return m_zoneSelectorLayoutMode;
-    }
+    ZoneSelectorLayoutMode zoneSelectorLayoutMode() const override;
     void setZoneSelectorLayoutMode(ZoneSelectorLayoutMode mode) override;
-    int zoneSelectorLayoutModeInt() const
-    {
-        return static_cast<int>(m_zoneSelectorLayoutMode);
-    }
+    int zoneSelectorLayoutModeInt() const;
     void setZoneSelectorLayoutModeInt(int mode);
-    int zoneSelectorPreviewWidth() const override
-    {
-        return m_zoneSelectorPreviewWidth;
-    }
+    int zoneSelectorPreviewWidth() const override;
     void setZoneSelectorPreviewWidth(int width) override;
-    int zoneSelectorPreviewHeight() const override
-    {
-        return m_zoneSelectorPreviewHeight;
-    }
+    int zoneSelectorPreviewHeight() const override;
     void setZoneSelectorPreviewHeight(int height) override;
-    bool zoneSelectorPreviewLockAspect() const override
-    {
-        return m_zoneSelectorPreviewLockAspect;
-    }
+    bool zoneSelectorPreviewLockAspect() const override;
     void setZoneSelectorPreviewLockAspect(bool locked) override;
-    int zoneSelectorGridColumns() const override
-    {
-        return m_zoneSelectorGridColumns;
-    }
+    int zoneSelectorGridColumns() const override;
     void setZoneSelectorGridColumns(int columns) override;
-    ZoneSelectorSizeMode zoneSelectorSizeMode() const override
-    {
-        return m_zoneSelectorSizeMode;
-    }
+    ZoneSelectorSizeMode zoneSelectorSizeMode() const override;
     void setZoneSelectorSizeMode(ZoneSelectorSizeMode mode) override;
-    int zoneSelectorSizeModeInt() const
-    {
-        return static_cast<int>(m_zoneSelectorSizeMode);
-    }
+    int zoneSelectorSizeModeInt() const;
     void setZoneSelectorSizeModeInt(int mode);
-    int zoneSelectorMaxRows() const override
-    {
-        return m_zoneSelectorMaxRows;
-    }
+    int zoneSelectorMaxRows() const override;
     void setZoneSelectorMaxRows(int rows) override;
 
     // Per-screen zone selector config (override > global fallback)
@@ -1332,16 +1293,8 @@ private:
     // Exclusions are stored in m_store; no cached members here.
 
     // Zone Selector
-    bool m_zoneSelectorEnabled = ConfigDefaults::zoneSelectorEnabled();
-    int m_zoneSelectorTriggerDistance = ConfigDefaults::triggerDistance();
-    ZoneSelectorPosition m_zoneSelectorPosition = ZoneSelectorPosition::Top;
-    ZoneSelectorLayoutMode m_zoneSelectorLayoutMode = ZoneSelectorLayoutMode::Grid;
-    ZoneSelectorSizeMode m_zoneSelectorSizeMode = ZoneSelectorSizeMode::Auto;
-    int m_zoneSelectorMaxRows = ConfigDefaults::maxRows();
-    int m_zoneSelectorPreviewWidth = ConfigDefaults::previewWidth();
-    int m_zoneSelectorPreviewHeight = ConfigDefaults::previewHeight();
-    bool m_zoneSelectorPreviewLockAspect = ConfigDefaults::previewLockAspect();
-    int m_zoneSelectorGridColumns = ConfigDefaults::gridColumns();
+    // Zone selector is stored in m_store.
+    // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
     QHash<QString, VirtualScreenConfig> m_virtualScreenConfigs;

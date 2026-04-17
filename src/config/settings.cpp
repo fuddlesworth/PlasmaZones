@@ -1020,6 +1020,113 @@ PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, 
 PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
 PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
+// ── Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
+// Three enum-ints exposed via both the typed setter and an Int adapter for
+// QML binding. Stored as int, the schema clamps the range.
+
+PZ_STORE_GET(bool, zoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setZoneSelectorEnabled, snappingZoneSelectorGroup, enabledKey, zoneSelectorEnabledChanged)
+PZ_STORE_GET(int, zoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey, int)
+PZ_STORE_SET_INT(setZoneSelectorTriggerDistance, snappingZoneSelectorGroup, triggerDistanceKey,
+                 zoneSelectorTriggerDistanceChanged)
+
+ZoneSelectorPosition Settings::zoneSelectorPosition() const
+{
+    return static_cast<ZoneSelectorPosition>(
+        m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::positionKey()));
+}
+int Settings::zoneSelectorPositionInt() const
+{
+    return static_cast<int>(zoneSelectorPosition());
+}
+void Settings::setZoneSelectorPosition(ZoneSelectorPosition value)
+{
+    const int before = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::positionKey());
+    m_store->write(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::positionKey(), static_cast<int>(value));
+    const int after = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::positionKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT zoneSelectorPositionChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setZoneSelectorPositionInt(int value)
+{
+    if (value >= 0 && value <= 8) {
+        setZoneSelectorPosition(static_cast<ZoneSelectorPosition>(value));
+    }
+}
+
+ZoneSelectorLayoutMode Settings::zoneSelectorLayoutMode() const
+{
+    return static_cast<ZoneSelectorLayoutMode>(
+        m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::layoutModeKey()));
+}
+int Settings::zoneSelectorLayoutModeInt() const
+{
+    return static_cast<int>(zoneSelectorLayoutMode());
+}
+void Settings::setZoneSelectorLayoutMode(ZoneSelectorLayoutMode value)
+{
+    const int before = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::layoutModeKey());
+    m_store->write(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::layoutModeKey(),
+                   static_cast<int>(value));
+    const int after = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::layoutModeKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT zoneSelectorLayoutModeChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setZoneSelectorLayoutModeInt(int value)
+{
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorLayoutMode::Vertical)) {
+        setZoneSelectorLayoutMode(static_cast<ZoneSelectorLayoutMode>(value));
+    }
+}
+
+PZ_STORE_GET(int, zoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey, int)
+PZ_STORE_SET_INT(setZoneSelectorPreviewWidth, snappingZoneSelectorGroup, previewWidthKey,
+                 zoneSelectorPreviewWidthChanged)
+PZ_STORE_GET(int, zoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey, int)
+PZ_STORE_SET_INT(setZoneSelectorPreviewHeight, snappingZoneSelectorGroup, previewHeightKey,
+                 zoneSelectorPreviewHeightChanged)
+PZ_STORE_GET(bool, zoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey, bool)
+PZ_STORE_SET_BOOL(setZoneSelectorPreviewLockAspect, snappingZoneSelectorGroup, previewLockAspectKey,
+                  zoneSelectorPreviewLockAspectChanged)
+PZ_STORE_GET(int, zoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, int)
+PZ_STORE_SET_INT(setZoneSelectorGridColumns, snappingZoneSelectorGroup, gridColumnsKey, zoneSelectorGridColumnsChanged)
+
+ZoneSelectorSizeMode Settings::zoneSelectorSizeMode() const
+{
+    return static_cast<ZoneSelectorSizeMode>(
+        m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::sizeModeKey()));
+}
+int Settings::zoneSelectorSizeModeInt() const
+{
+    return static_cast<int>(zoneSelectorSizeMode());
+}
+void Settings::setZoneSelectorSizeMode(ZoneSelectorSizeMode value)
+{
+    const int before = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::sizeModeKey());
+    m_store->write(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::sizeModeKey(), static_cast<int>(value));
+    const int after = m_store->read<int>(ConfigDefaults::snappingZoneSelectorGroup(), ConfigDefaults::sizeModeKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT zoneSelectorSizeModeChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setZoneSelectorSizeModeInt(int value)
+{
+    if (value >= 0 && value <= static_cast<int>(ZoneSelectorSizeMode::Manual)) {
+        setZoneSelectorSizeMode(static_cast<ZoneSelectorSizeMode>(value));
+    }
+}
+
+PZ_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
+PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
+
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()

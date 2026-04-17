@@ -27,6 +27,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendEditorSchema(s);
     appendExclusionsSchema(s);
     appendDisplaySchema(s);
+    appendZoneSelectorSchema(s);
 
     return s;
 }
@@ -477,6 +478,44 @@ void appendDisplaySchema(PhosphorConfig::Schema& schema)
                     QMetaType::Int,
                     {},
                     clampInt(CD::overlayDisplayModeMin(), CD::overlayDisplayModeMax())});
+}
+
+// ─── Zone Selector ──────────────────────────────────────────────────────────
+// Pops up at the edge of the screen during drag to let users pick which zone
+// to snap to. Toggle + trigger distance + preview geometry + grid config +
+// three enum-ints (Position, LayoutMode, SizeMode).
+
+void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::snappingZoneSelectorGroup()] = {
+        {CD::enabledKey(), CD::zoneSelectorEnabled(), QMetaType::Bool},
+        {CD::triggerDistanceKey(),
+         CD::triggerDistance(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::triggerDistanceMin(), CD::triggerDistanceMax())},
+        {CD::positionKey(), CD::position(), QMetaType::Int, {}, clampInt(0, 8)},
+        {CD::layoutModeKey(), CD::layoutMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::previewWidthKey(),
+         CD::previewWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::previewWidthMin(), CD::previewWidthMax())},
+        {CD::previewHeightKey(),
+         CD::previewHeight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::previewHeightMin(), CD::previewHeightMax())},
+        {CD::previewLockAspectKey(), CD::previewLockAspect(), QMetaType::Bool},
+        {CD::gridColumnsKey(),
+         CD::gridColumns(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
+        {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
+        {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
+    };
 }
 
 } // namespace PlasmaZones
