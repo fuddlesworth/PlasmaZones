@@ -207,6 +207,52 @@ private Q_SLOTS:
         QCOMPARE(readBack.value(QStringLiteral("k")).toInt(), 42);
     }
 
+    void concurrentGroup_writesAreRefusedOnSecondInstance()
+    {
+#ifdef QT_DEBUG
+        // Debug build: the constructor asserts — skip the live-fight check
+        // since Q_ASSERT_X aborts the test process before we can exercise it.
+        // The release-mode safety net (refuseWrite) is exercised in the
+        // RelWithDebInfo / Release package CI jobs.
+        QSKIP("Skipping re-entrancy fight in debug builds (Q_ASSERT_X aborts)");
+#else
+        JsonBackend b(m_path);
+        auto first = b.group(QStringLiteral("G"));
+        first->writeInt(QStringLiteral("k"), 1);
+
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("refusing writes on group")));
+        auto second = b.group(QStringLiteral("G"));
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("dropping writeInt")));
+        second->writeInt(QStringLiteral("k"), 42); // dropped
+        second.reset();
+        // first's value must survive the dropped write.
+        QCOMPARE(first->readInt(QStringLiteral("k"), 0), 1);
+#endif
+    }
+
+    void writeStringRaw_bypassesJsonReshape()
+    {
+        JsonBackend b(m_path);
+        auto g = b.group(QStringLiteral("G"));
+        // Value that would normally be reinterpreted as a JSON array.
+        const QString jsonLike = QStringLiteral("[1,2,3]");
+        g->writeStringRaw(QStringLiteral("raw"), jsonLike);
+        // Re-read — should come back as the original string, not "1,2,3".
+        QCOMPARE(g->readString(QStringLiteral("raw")), jsonLike);
+    }
+
+    void sync_returnsFalseOnInvalidPath()
+    {
+        // Point the backend at an unwritable parent directory.
+        JsonBackend b(QStringLiteral("/proc/1/no-write-here/config.json"));
+        auto g = b.group(QStringLiteral("G"));
+        g->writeInt(QStringLiteral("k"), 1);
+        g.reset();
+        QTest::ignoreMessage(QtWarningMsg,
+                             QRegularExpression(QStringLiteral("PhosphorConfig::JsonBackend: failed to")));
+        QVERIFY(!b.sync());
+    }
+
     void keyList_returnsScalarLeavesOnly()
     {
         JsonBackend b(m_path);

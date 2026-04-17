@@ -41,6 +41,7 @@ public:
     void writeBool(const QString& key, bool value) override;
     void writeDouble(const QString& key, double value) override;
     void writeColor(const QString& key, const QColor& value) override;
+    void writeStringRaw(const QString& key, const QString& value) override;
 
     bool hasKey(const QString& key) const override;
     void deleteKey(const QString& key) override;
@@ -49,10 +50,19 @@ public:
 private:
     QJsonObject groupObject() const;
     void setGroupObject(const QJsonObject& obj);
+    /// Returns true when writes through this group must be silently dropped
+    /// because another JsonGroup on the same backend was already alive at
+    /// construction time. See JsonGroup constructor docs.
+    bool refuseWrite(const char* op) const;
 
     QJsonObject& m_root;
     QString m_groupName;
     JsonBackend* m_backend;
+    /// Set in the constructor when the single-active-group invariant is
+    /// violated. Disabled groups still allow reads (they share the backend's
+    /// root in-memory state) but reject writes so the concurrent live group
+    /// retains sole ownership of mutations.
+    bool m_disabled = false;
 };
 
 /// Atomic-write JSON configuration backend.
@@ -81,7 +91,7 @@ public:
     // IBackend interface
     std::unique_ptr<IGroup> group(const QString& name) override;
     void reparseConfiguration() override;
-    void sync() override;
+    bool sync() override;
     void deleteGroup(const QString& name) override;
     QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
     void writeRootString(const QString& key, const QString& value) override;

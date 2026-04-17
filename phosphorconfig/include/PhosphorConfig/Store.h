@@ -91,8 +91,9 @@ public:
     /// Use @c MigrationRunner first if @p snapshot came from an older schema.
     void importFromJson(const QJsonObject& snapshot);
 
-    /// Flush the underlying backend.
-    void sync();
+    /// Flush the underlying backend. Returns the backend's sync() result —
+    /// @c true on success (or nothing to flush), @c false on an I/O error.
+    bool sync();
 
     /// Direct access for callers that still need the backend (e.g. to read
     /// an undeclared key or to call @c groupList()).

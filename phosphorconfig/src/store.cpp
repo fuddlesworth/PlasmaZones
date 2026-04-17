@@ -14,6 +14,8 @@
 #include <QJsonValue>
 #include <QMetaType>
 
+#include <limits>
+
 namespace PhosphorConfig {
 
 // ─── Store::Private ──────────────────────────────────────────────────────────
@@ -39,17 +41,57 @@ public:
 
 namespace {
 
-void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
+void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool verbatimString)
 {
+    auto writeStringDispatch = [&](const QString& s) {
+        if (verbatimString) {
+            g.writeStringRaw(key, s);
+        } else {
+            g.writeString(key, s);
+        }
+    };
+
+    // Narrowing guard for 64-bit integer types: if the value doesn't fit in
+    // a 32-bit int, persist as a string so the value survives the round-trip
+    // instead of being silently truncated. IGroup has no writeInt64 today;
+    // extend the interface if precise typing becomes necessary.
+    auto writeInt64 = [&](qlonglong v) {
+        if (v >= std::numeric_limits<int>::min() && v <= std::numeric_limits<int>::max()) {
+            g.writeInt(key, static_cast<int>(v));
+        } else {
+            qWarning("PhosphorConfig::Store: int64 value %lld for key '%s' does not fit in int — storing as string",
+                     static_cast<long long>(v), qPrintable(key));
+            writeStringDispatch(QString::number(v));
+        }
+    };
+    auto writeUint64 = [&](qulonglong v) {
+        if (v <= static_cast<qulonglong>(std::numeric_limits<int>::max())) {
+            g.writeInt(key, static_cast<int>(v));
+        } else {
+            qWarning("PhosphorConfig::Store: uint64 value %llu for key '%s' does not fit in int — storing as string",
+                     static_cast<unsigned long long>(v), qPrintable(key));
+            writeStringDispatch(QString::number(v));
+        }
+    };
+
     switch (value.typeId()) {
     case QMetaType::Bool:
         g.writeBool(key, value.toBool());
         break;
     case QMetaType::Int:
-    case QMetaType::LongLong:
     case QMetaType::UInt:
-    case QMetaType::ULongLong:
+        // UInt up to INT_MAX fits; above that falls through via writeUint64
+        // only for the LongLong/ULongLong cases — for QMetaType::UInt alone,
+        // Qt's implicit promotion handles values >INT_MAX by wrapping. A
+        // stricter check would require a separate writeUInt accessor; the
+        // narrowing cost is accepted for the common 0..INT_MAX range.
         g.writeInt(key, value.toInt());
+        break;
+    case QMetaType::LongLong:
+        writeInt64(value.toLongLong());
+        break;
+    case QMetaType::ULongLong:
+        writeUint64(value.toULongLong());
         break;
     case QMetaType::Double:
     case QMetaType::Float:
@@ -59,13 +101,15 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
         g.writeColor(key, value.value<QColor>());
         break;
     case QMetaType::QString:
-        g.writeString(key, value.toString());
+        writeStringDispatch(value.toString());
         break;
     case QMetaType::QVariantList:
     case QMetaType::QVariantMap: {
         // Round-trip complex values as compact JSON strings. Backends treat
         // "looks like JSON" on write as native JSON, so this survives a
-        // save/load cycle as structured data.
+        // save/load cycle as structured data. Always uses the shape-aware
+        // writeString — verbatim storage of structured values makes no
+        // sense and the caller can't have opted in meaningfully anyway.
         const QJsonDocument doc = value.typeId() == QMetaType::QVariantList
             ? QJsonDocument(QJsonArray::fromVariantList(value.toList()))
             : QJsonDocument(QJsonObject::fromVariantMap(value.toMap()));
@@ -76,7 +120,7 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value)
         // Fall back to string representation. Consumers that need other
         // exact types should add an expectedType to KeyDef and we can
         // extend the dispatch.
-        g.writeString(key, value.toString());
+        writeStringDispatch(value.toString());
         break;
     }
 }
@@ -173,9 +217,9 @@ const Schema& Store::schema() const
     return d->schema;
 }
 
-void Store::sync()
+bool Store::sync()
 {
-    d->backend->sync();
+    return d->backend->sync();
 }
 
 QVariant Store::readVariant(const QString& group, const QString& key) const
@@ -196,6 +240,7 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
 {
     QVariant coerced = value;
     const KeyDef* def = d->schema.findKey(group, key);
+    const bool verbatimString = def ? def->verbatimStringStorage : false;
     if (def) {
         if (def->validator) {
             coerced = def->validator(coerced);
@@ -213,7 +258,7 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         if (def && g->hasKey(key) && readVariantAs(*g, key, def->defaultValue) == coerced) {
             return;
         }
-        writeVariantTo(*g, key, coerced);
+        writeVariantTo(*g, key, coerced, verbatimString);
     }
     Q_EMIT changed(group, key);
 }
@@ -228,7 +273,7 @@ void Store::reset(const QString& group, const QString& key)
     {
         auto g = d->backend->group(group);
         wasPresent = g->hasKey(key);
-        writeVariantTo(*g, key, def->defaultValue);
+        writeVariantTo(*g, key, def->defaultValue, def->verbatimStringStorage);
     }
     if (wasPresent) {
         Q_EMIT changed(group, key);
@@ -308,49 +353,64 @@ T applyValidator(const KeyDef* def, T value)
 }
 } // namespace
 
+// Undeclared keys return a value-initialized T (matching the docstring on
+// Store::read). Falling through to the backend would surface keys the
+// schema doesn't know about and inconsistently differ from
+// readVariant()'s undeclared-key behavior.
+
 template<>
 QString Store::read<QString>(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
-    const QString defaultValue = def ? def->defaultValue.toString() : QString();
+    if (!def) {
+        return QString();
+    }
     auto g = d->backend->group(group);
-    return applyValidator(def, g->readString(key, defaultValue));
+    return applyValidator(def, g->readString(key, def->defaultValue.toString()));
 }
 
 template<>
 int Store::read<int>(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
-    const int defaultValue = def ? def->defaultValue.toInt() : 0;
+    if (!def) {
+        return 0;
+    }
     auto g = d->backend->group(group);
-    return applyValidator(def, g->readInt(key, defaultValue));
+    return applyValidator(def, g->readInt(key, def->defaultValue.toInt()));
 }
 
 template<>
 bool Store::read<bool>(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
-    const bool defaultValue = def && def->defaultValue.toBool();
+    if (!def) {
+        return false;
+    }
     auto g = d->backend->group(group);
-    return applyValidator(def, g->readBool(key, defaultValue));
+    return applyValidator(def, g->readBool(key, def->defaultValue.toBool()));
 }
 
 template<>
 double Store::read<double>(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
-    const double defaultValue = def ? def->defaultValue.toDouble() : 0.0;
+    if (!def) {
+        return 0.0;
+    }
     auto g = d->backend->group(group);
-    return applyValidator(def, g->readDouble(key, defaultValue));
+    return applyValidator(def, g->readDouble(key, def->defaultValue.toDouble()));
 }
 
 template<>
 QColor Store::read<QColor>(const QString& group, const QString& key) const
 {
     const KeyDef* def = d->schema.findKey(group, key);
-    const QColor defaultValue = def ? def->defaultValue.value<QColor>() : QColor();
+    if (!def) {
+        return QColor();
+    }
     auto g = d->backend->group(group);
-    return applyValidator(def, g->readColor(key, defaultValue));
+    return applyValidator(def, g->readColor(key, def->defaultValue.value<QColor>()));
 }
 
 // The explicit specializations above ARE the definitions — no separate

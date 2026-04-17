@@ -714,15 +714,27 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // In v2, session state lives in its own file to avoid write contention
     // between user preferences (config.json) and high-frequency window
     // tracking saves (session.json).
+    //
+    // Atomicity: only mutate `root` after the side-effect write succeeds.
+    // If the out-of-tree write fails, leaving the keys in `root` lets
+    // `config.json` retain the data so the next startup's migration can
+    // retry. A partial commit here would silently lose session state.
+    bool allSideEffectsSucceeded = true;
+
     const QString wtGroup = ConfigKeys::windowTrackingGroup();
     if (root.contains(wtGroup)) {
         QJsonObject sessionRoot;
         sessionRoot[wtGroup] = root.value(wtGroup);
         const QString sessionPath = ConfigDefaults::sessionFilePath();
-        if (!PhosphorConfig::JsonBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
-            qWarning("ConfigMigration: failed to write session state to %s", qPrintable(sessionPath));
+        if (PhosphorConfig::JsonBackend::writeJsonAtomically(sessionPath, sessionRoot)) {
+            root.remove(wtGroup);
+        } else {
+            qWarning(
+                "ConfigMigration: failed to write session state to %s — "
+                "aborting migration so the next run can retry",
+                qPrintable(sessionPath));
+            allSideEffectsSucceeded = false;
         }
-        root.remove(wtGroup);
     }
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
@@ -753,21 +765,42 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
         if (root.contains(modeTrackingKey)) {
             keysToRemove.append(modeTrackingKey);
         }
+
+        bool assignmentsWritten = true;
         if (!assignRoot.isEmpty()) {
             const QString assignPath = ConfigDefaults::assignmentsFilePath();
             if (!PhosphorConfig::JsonBackend::writeJsonAtomically(assignPath, assignRoot)) {
-                qWarning("ConfigMigration: failed to write assignments to %s", qPrintable(assignPath));
+                qWarning(
+                    "ConfigMigration: failed to write assignments to %s — "
+                    "aborting migration so the next run can retry",
+                    qPrintable(assignPath));
+                assignmentsWritten = false;
+                allSideEffectsSucceeded = false;
             }
         }
-        for (const QString& key : keysToRemove) {
-            root.remove(key);
+        // Only strip from root if the external file is committed (or there
+        // was nothing to extract). ModeTracking is safe to drop unconditionally
+        // — it's ephemeral and consumed in-memory only.
+        if (assignmentsWritten) {
+            for (const QString& key : keysToRemove) {
+                root.remove(key);
+            }
+        } else if (root.contains(modeTrackingKey)) {
+            // Still safe to drop ModeTracking even if assignments write failed.
+            root.remove(modeTrackingKey);
         }
     }
 
     // ── Bump version ────────────────────────────────────────────────────────
     // Stamp literal 2, not ConfigSchemaVersion — prevents future version bumps
     // (e.g. to 3) from making this step stamp 3 and skipping a v2→v3 migration.
-    root[ConfigKeys::versionKey()] = 2;
+    //
+    // Skip the bump when any side-effect write failed. MigrationRunner
+    // detects the unbumped version, aborts the chain with a critical log,
+    // and config.json is left untouched so the next startup retries.
+    if (allSideEffectsSucceeded) {
+        root[ConfigKeys::versionKey()] = 2;
+    }
 }
 
 } // namespace PlasmaZones

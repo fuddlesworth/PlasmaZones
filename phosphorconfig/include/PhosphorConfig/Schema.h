@@ -49,6 +49,14 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     ///   - log a warning and return defaultValue on invalid input
     /// The QVariant signature lets one validator slot cover every type.
     std::function<QVariant(const QVariant& value)> validator;
+
+    /// When true, string writes for this key bypass the JsonBackend
+    /// JSON-shape reinterpretation heuristic — the value is stored verbatim
+    /// as a JSON string even if it happens to start with '[' or '{' and
+    /// parse as JSON. Use for user-supplied free-form text that must survive
+    /// round-trip unchanged. Ignored for non-string writes and for backends
+    /// that don't apply the heuristic (e.g. QSettingsBackend).
+    bool verbatimStringStorage = false;
 };
 
 /// One step in a schema version migration chain. Transforms the root JSON

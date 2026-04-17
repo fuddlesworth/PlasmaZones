@@ -10,6 +10,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <limits>
 #include <memory>
 
 namespace PhosphorConfig::tests {
@@ -239,6 +240,72 @@ private Q_SLOTS:
         }
 
         QCOMPARE(store.readVariant(QStringLiteral("X"), QStringLiteral("N")).toInt(), 10);
+    }
+
+    void read_undeclaredKeyReturnsDefault()
+    {
+        JsonBackend backend(m_path);
+        // Seed a stored value under an undeclared key, bypassing the store.
+        {
+            auto g = backend.group(QStringLiteral("SomeGroup"));
+            g->writeInt(QStringLiteral("undeclared"), 999);
+        }
+
+        Store store(&backend, makeSchema());
+
+        // Undeclared keys must return the value-initialized default per the
+        // header docstring, not whatever the backend happens to hold.
+        QCOMPARE(store.read<int>(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")), 0);
+        QCOMPARE(store.read<QString>(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")), QString());
+        QCOMPARE(store.read<bool>(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")), false);
+        QCOMPARE(store.read<double>(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")), 0.0);
+        // readVariant's contract matches.
+        QVERIFY(!store.readVariant(QStringLiteral("SomeGroup"), QStringLiteral("undeclared")).isValid());
+    }
+
+    void verbatimStringStorage_preservesJsonLookingText()
+    {
+        Schema s;
+        s.version = 1;
+        KeyDef def;
+        def.key = QStringLiteral("Raw");
+        def.defaultValue = QString();
+        def.expectedType = QMetaType::QString;
+        def.verbatimStringStorage = true;
+        s.groups[QStringLiteral("G")] = {def};
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        const QString jsonLike = QStringLiteral("[hi]"); // starts with '[' but not valid JSON
+        store.write(QStringLiteral("G"), QStringLiteral("Raw"), jsonLike);
+        QCOMPARE(store.read<QString>(QStringLiteral("G"), QStringLiteral("Raw")), jsonLike);
+
+        const QString actualJson = QStringLiteral("[1,2,3]");
+        store.write(QStringLiteral("G"), QStringLiteral("Raw"), actualJson);
+        // With verbatimStringStorage=true the value must round-trip as a
+        // string, not be re-shaped into a native JSON array.
+        QCOMPARE(store.read<QString>(QStringLiteral("G"), QStringLiteral("Raw")), actualJson);
+    }
+
+    void write_int64_fallsBackToStringWhenOutOfRange()
+    {
+        Schema s;
+        s.version = 1;
+        s.groups[QStringLiteral("G")] = {
+            {QStringLiteral("Big"), 0, QMetaType::Int},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        const qlonglong big = static_cast<qlonglong>(std::numeric_limits<int>::max()) + 1;
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("does not fit in int")));
+        store.write(QStringLiteral("G"), QStringLiteral("Big"), QVariant::fromValue(big));
+
+        // Stored as a string — raw readString picks up the canonical form.
+        auto g = store.backend()->group(QStringLiteral("G"));
+        QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
     }
 
     void migrationChainRunsOnConstruction()

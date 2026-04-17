@@ -182,9 +182,14 @@ JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend)
 {
     const int count = m_backend->activeGroupCount();
     if (count != 0) {
-        qWarning(
-            "PhosphorConfig::JsonGroup: creating group '%s' while %d other group(s) still active — "
-            "concurrent writes to the same backend may lose data",
+        // Release-mode safety net: when NDEBUG strips the assert below, we
+        // still refuse to let this group mutate the shared root so the
+        // already-live group retains sole ownership of writes. Reads go
+        // through because they only observe the shared root, not mutate it.
+        m_disabled = true;
+        qCritical(
+            "PhosphorConfig::JsonGroup: refusing writes on group '%s' — %d other group(s) still active on this "
+            "backend. Destroy them first; this instance is read-only for the remainder of its lifetime.",
             qPrintable(m_groupName), count);
     }
     Q_ASSERT_X(count == 0, "PhosphorConfig::JsonGroup", "Another JsonGroup is still alive — destroy it first");
@@ -194,6 +199,16 @@ JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend)
 JsonGroup::~JsonGroup()
 {
     m_backend->decActiveGroupCount();
+}
+
+bool JsonGroup::refuseWrite(const char* op) const
+{
+    if (!m_disabled) {
+        return false;
+    }
+    qWarning("PhosphorConfig::JsonGroup: dropping %s on group '%s' (disabled due to single-active-group violation)", op,
+             qPrintable(m_groupName));
+    return true;
 }
 
 QJsonObject JsonGroup::groupObject() const
@@ -368,12 +383,15 @@ QColor JsonGroup::readColor(const QString& key, const QColor& defaultValue) cons
 
 void JsonGroup::writeString(const QString& key, const QString& value)
 {
+    if (refuseWrite("writeString")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     // A string that parses as JSON array/object is stored as native JSON so
     // consumers that round-trip complex values via strings don't double-escape.
-    // A user string that coincidentally parses as JSON will be reinterpreted —
-    // consumers who need to store arbitrary free-form strings that might look
-    // like JSON should use a JSON-string wrapping convention at the call site.
+    // Callers that need to persist free-form text that might coincidentally
+    // parse as JSON must use @c writeStringRaw (exposed as a per-key flag
+    // via @c KeyDef::verbatimStringStorage at the Store layer).
     if (!value.isEmpty() && (value.front() == QLatin1Char('[') || value.front() == QLatin1Char('{'))) {
         QJsonParseError err;
         QJsonDocument doc = QJsonDocument::fromJson(value.toUtf8(), &err);
@@ -393,8 +411,21 @@ void JsonGroup::writeString(const QString& key, const QString& value)
     setGroupObject(obj);
 }
 
+void JsonGroup::writeStringRaw(const QString& key, const QString& value)
+{
+    if (refuseWrite("writeStringRaw")) {
+        return;
+    }
+    QJsonObject obj = groupObject();
+    obj[key] = value;
+    setGroupObject(obj);
+}
+
 void JsonGroup::writeInt(const QString& key, int value)
 {
+    if (refuseWrite("writeInt")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     obj[key] = value;
     setGroupObject(obj);
@@ -402,6 +433,9 @@ void JsonGroup::writeInt(const QString& key, int value)
 
 void JsonGroup::writeBool(const QString& key, bool value)
 {
+    if (refuseWrite("writeBool")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     obj[key] = value;
     setGroupObject(obj);
@@ -409,6 +443,9 @@ void JsonGroup::writeBool(const QString& key, bool value)
 
 void JsonGroup::writeDouble(const QString& key, double value)
 {
+    if (refuseWrite("writeDouble")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     obj[key] = value;
     setGroupObject(obj);
@@ -416,6 +453,9 @@ void JsonGroup::writeDouble(const QString& key, double value)
 
 void JsonGroup::writeColor(const QString& key, const QColor& value)
 {
+    if (refuseWrite("writeColor")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     obj[key] = value.name(QColor::HexArgb);
     setGroupObject(obj);
@@ -428,6 +468,9 @@ bool JsonGroup::hasKey(const QString& key) const
 
 void JsonGroup::deleteKey(const QString& key)
 {
+    if (refuseWrite("deleteKey")) {
+        return;
+    }
     QJsonObject obj = groupObject();
     if (obj.contains(key)) {
         obj.remove(key);
@@ -523,21 +566,25 @@ void JsonBackend::reparseConfiguration()
     d->dirty = false;
 }
 
-void JsonBackend::sync()
+bool JsonBackend::sync()
 {
     if (!d->dirty) {
-        return;
+        return true;
     }
 
     if (!d->versionStampKey.isEmpty() && !d->root.contains(d->versionStampKey)) {
         d->root[d->versionStampKey] = d->versionStampValue;
     }
 
+    // writeJsonAtomically already logs on failure; leave dirty=true so the
+    // next sync() retries. Propagate the failure up so callers can surface
+    // a user-visible error if the flush was interactive (save dialog, etc.).
     if (!writeJsonAtomically(d->filePath, d->root)) {
-        return;
+        return false;
     }
 
     d->dirty = false;
+    return true;
 }
 
 bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject& root)

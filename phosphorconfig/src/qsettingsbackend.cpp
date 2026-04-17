@@ -113,36 +113,61 @@ QSettingsGroup::QSettingsGroup(QSettings* settings, QString groupName, QSettings
     , m_group(std::move(groupName))
     , m_backend(backend)
 {
+    // QSettings is stateful (tracks current group) — only one view may mutate
+    // it at a time. If the invariant is violated, keep the instance read-only
+    // rather than letting writes interleave with the already-active group.
+    if (!m_settings->group().isEmpty() || (m_backend && m_backend->activeGroupCount() != 0)) {
+        m_disabled = true;
+        const int count = m_backend ? m_backend->activeGroupCount() : -1;
+        qCritical(
+            "PhosphorConfig::QSettingsGroup: refusing writes on group '%s' — QSettings is already inside group "
+            "'%s' (active=%d). Destroy the prior group first; this instance is read-only.",
+            qPrintable(m_group), qPrintable(m_settings->group()), count);
+    }
     Q_ASSERT_X(m_settings->group().isEmpty(), "PhosphorConfig::QSettingsGroup",
                "Another group is still active — destroy it before creating a new one");
-    m_settings->beginGroup(m_group);
+    if (!m_disabled) {
+        m_settings->beginGroup(m_group);
+    }
     if (m_backend) {
-        const int count = m_backend->activeGroupCount();
-        if (count != 0) {
-            qWarning(
-                "PhosphorConfig::QSettingsGroup: creating group '%s' while %d other group(s) still active — "
-                "concurrent writes to the same backend may lose data",
-                qPrintable(m_group), count);
-        }
         m_backend->incActiveGroupCount();
     }
 }
 
 QSettingsGroup::~QSettingsGroup()
 {
-    m_settings->endGroup();
+    if (!m_disabled) {
+        m_settings->endGroup();
+    }
     if (m_backend) {
         m_backend->decActiveGroupCount();
     }
 }
 
+bool QSettingsGroup::refuseWrite(const char* op) const
+{
+    if (!m_disabled) {
+        return false;
+    }
+    qWarning(
+        "PhosphorConfig::QSettingsGroup: dropping %s on group '%s' (disabled due to single-active-group violation)", op,
+        qPrintable(m_group));
+    return true;
+}
+
 QString QSettingsGroup::readString(const QString& key, const QString& defaultValue) const
 {
+    if (m_disabled) {
+        return defaultValue;
+    }
     return m_settings->value(key, defaultValue).toString();
 }
 
 int QSettingsGroup::readInt(const QString& key, int defaultValue) const
 {
+    if (m_disabled) {
+        return defaultValue;
+    }
     QVariant val = m_settings->value(key);
     if (!val.isValid()) {
         return defaultValue;
@@ -154,6 +179,9 @@ int QSettingsGroup::readInt(const QString& key, int defaultValue) const
 
 bool QSettingsGroup::readBool(const QString& key, bool defaultValue) const
 {
+    if (m_disabled) {
+        return defaultValue;
+    }
     QVariant val = m_settings->value(key);
     if (!val.isValid()) {
         return defaultValue;
@@ -175,6 +203,9 @@ bool QSettingsGroup::readBool(const QString& key, bool defaultValue) const
 
 double QSettingsGroup::readDouble(const QString& key, double defaultValue) const
 {
+    if (m_disabled) {
+        return defaultValue;
+    }
     QVariant val = m_settings->value(key);
     if (!val.isValid()) {
         return defaultValue;
@@ -186,6 +217,9 @@ double QSettingsGroup::readDouble(const QString& key, double defaultValue) const
 
 QColor QSettingsGroup::readColor(const QString& key, const QColor& defaultValue) const
 {
+    if (m_disabled) {
+        return defaultValue;
+    }
     QVariant val = m_settings->value(key);
     if (!val.isValid()) {
         return defaultValue;
@@ -221,42 +255,66 @@ QColor QSettingsGroup::readColor(const QString& key, const QColor& defaultValue)
 
 void QSettingsGroup::writeString(const QString& key, const QString& value)
 {
+    if (refuseWrite("writeString")) {
+        return;
+    }
     m_settings->setValue(key, value);
 }
 
 void QSettingsGroup::writeInt(const QString& key, int value)
 {
+    if (refuseWrite("writeInt")) {
+        return;
+    }
     m_settings->setValue(key, value);
 }
 
 void QSettingsGroup::writeBool(const QString& key, bool value)
 {
+    if (refuseWrite("writeBool")) {
+        return;
+    }
     m_settings->setValue(key, value);
 }
 
 void QSettingsGroup::writeDouble(const QString& key, double value)
 {
+    if (refuseWrite("writeDouble")) {
+        return;
+    }
     m_settings->setValue(key, value);
 }
 
 void QSettingsGroup::writeColor(const QString& key, const QColor& value)
 {
+    if (refuseWrite("writeColor")) {
+        return;
+    }
     m_settings->setValue(
         key, QStringLiteral("%1,%2,%3,%4").arg(value.red()).arg(value.green()).arg(value.blue()).arg(value.alpha()));
 }
 
 bool QSettingsGroup::hasKey(const QString& key) const
 {
+    if (m_disabled) {
+        return false;
+    }
     return m_settings->contains(key);
 }
 
 void QSettingsGroup::deleteKey(const QString& key)
 {
+    if (refuseWrite("deleteKey")) {
+        return;
+    }
     m_settings->remove(key);
 }
 
 QStringList QSettingsGroup::keyList() const
 {
+    if (m_disabled) {
+        return {};
+    }
     // childKeys() returns only the scalar keys directly under the current
     // group — nested sub-groups are accessed via childGroups(). That matches
     // the JsonGroup::keyList() contract.
@@ -316,13 +374,15 @@ void QSettingsBackend::reparseConfiguration()
     m_settings = std::make_unique<QSettings>(m_filePath, kconfigIniFormat());
 }
 
-void QSettingsBackend::sync()
+bool QSettingsBackend::sync()
 {
     m_settings->sync();
     if (m_settings->status() != QSettings::NoError) {
         qWarning("PhosphorConfig::QSettingsBackend: sync() failed (status=%d) for %s",
                  static_cast<int>(m_settings->status()), qPrintable(m_filePath));
+        return false;
     }
+    return true;
 }
 
 void QSettingsBackend::deleteGroup(const QString& name)

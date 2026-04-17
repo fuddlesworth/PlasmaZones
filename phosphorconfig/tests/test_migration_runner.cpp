@@ -163,6 +163,57 @@ private Q_SLOTS:
         QCOMPARE(root.value(QStringLiteral("schema_revision")).toInt(), 2);
     }
 
+    void chain_stepsRunInVersionOrderEvenIfRegisteredOutOfOrder()
+    {
+        // Register {2, ...} before {1, ...} — a sorted chain must still
+        // apply v1→v2 before v2→v3.
+        Schema schema;
+        schema.version = 3;
+        schema.migrations = {
+            {2,
+             [](QJsonObject& root) {
+                 const QString prev = root.value(QStringLiteral("order")).toString();
+                 root[QStringLiteral("order")] = QString(prev + QLatin1Char('B'));
+                 root[QStringLiteral("_version")] = 3;
+             }},
+            {1,
+             [](QJsonObject& root) {
+                 const QString prev = root.value(QStringLiteral("order")).toString();
+                 root[QStringLiteral("order")] = QString(prev + QLatin1Char('A'));
+                 root[QStringLiteral("_version")] = 2;
+             }},
+        };
+
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        MigrationRunner(schema).runInMemory(root);
+
+        QCOMPARE(root.value(QStringLiteral("_version")).toInt(), 3);
+        QCOMPARE(root.value(QStringLiteral("order")).toString(), QStringLiteral("AB"));
+    }
+
+    void chain_abortsOnNonIntegerVersionBump()
+    {
+        // Migration stamps a string instead of an int — readVersion()
+        // consistency means the in-loop check must still detect this as an
+        // incorrect bump instead of silently accepting 0.
+        Schema schema;
+        schema.version = 2;
+        schema.migrations = {
+            {1,
+             [](QJsonObject& root) {
+                 root[QStringLiteral("_version")] = QStringLiteral("2"); // string, not int
+             }},
+        };
+
+        QJsonObject root;
+        root[QStringLiteral("_version")] = 1;
+
+        QTest::ignoreMessage(QtCriticalMsg, QRegularExpression(QStringLiteral("did not bump '_version' to 2")));
+        MigrationRunner(schema).runInMemory(root);
+    }
+
     void chain_warnsOnMissingIntermediateStep()
     {
         // schema.version=3 but only a v1→v2 step is registered. The chain

@@ -47,9 +47,18 @@ public:
     QStringList keyList() const override;
 
 private:
+    /// Returns true when writes through this group must be silently dropped
+    /// because another QSettingsGroup on the same backend was already alive
+    /// at construction time. See QSettingsGroup constructor docs.
+    bool refuseWrite(const char* op) const;
+
     QSettings* m_settings;
     QString m_group;
     QSettingsBackend* m_backend;
+    /// Set in the constructor when the single-active-group invariant is
+    /// violated. Disabled groups reject writes so a concurrent live group
+    /// retains sole ownership of mutations; reads still pass through.
+    bool m_disabled = false;
 };
 
 /// @c QSettings-backed configuration backend (INI format).
@@ -65,7 +74,7 @@ public:
     // IBackend interface
     std::unique_ptr<IGroup> group(const QString& name) override;
     void reparseConfiguration() override;
-    void sync() override;
+    bool sync() override;
     void deleteGroup(const QString& name) override;
     QString readRootString(const QString& key, const QString& defaultValue = {}) const override;
     void writeRootString(const QString& key, const QString& value) override;

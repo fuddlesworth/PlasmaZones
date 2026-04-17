@@ -46,6 +46,21 @@ public:
     virtual void writeDouble(const QString& key, double value) = 0;
     virtual void writeColor(const QString& key, const QColor& value) = 0;
 
+    /// Write a string verbatim without any JSON-shape reinterpretation.
+    ///
+    /// @c writeString in the bundled JsonBackend treats a value starting with
+    /// @c '[' or @c '{' that parses as JSON as structured data, storing it as
+    /// a native JSON array/object. That is intentional for callers that
+    /// round-trip complex values via strings, but surprising for callers that
+    /// need to persist user-supplied free-form text that might coincidentally
+    /// parse as JSON. @c writeStringRaw bypasses the heuristic and always
+    /// stores the value as a JSON string. Backends that have no reinterpretation
+    /// may simply forward to @c writeString — the default implementation does.
+    virtual void writeStringRaw(const QString& key, const QString& value)
+    {
+        writeString(key, value);
+    }
+
     // Key management.
     virtual bool hasKey(const QString& key) const = 0;
     virtual void deleteKey(const QString& key) = 0;
@@ -88,7 +103,9 @@ public:
     virtual void reparseConfiguration() = 0;
 
     /// Flush pending writes to disk. No-op when nothing is dirty.
-    virtual void sync() = 0;
+    /// Returns @c true on success (or when there was nothing to flush),
+    /// @c false on an I/O error — backends log the reason before returning.
+    virtual bool sync() = 0;
 
     /// Delete an entire group and everything inside it. Intermediate
     /// parents are pruned if they become empty (dot-path groups only).

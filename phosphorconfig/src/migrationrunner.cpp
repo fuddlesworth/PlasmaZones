@@ -10,6 +10,8 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
+#include <algorithm>
+
 namespace PhosphorConfig {
 
 // ─── Schema inline helpers ───────────────────────────────────────────────────
@@ -56,8 +58,18 @@ void MigrationRunner::stampVersion(QJsonObject& root) const
 
 void MigrationRunner::runInMemory(QJsonObject& root) const
 {
+    // Sort a local copy of the migration list by fromVersion so registration
+    // order doesn't matter. Without this, a schema that declares {2,...}
+    // before {1,...} skips the v1→v2 step entirely (the loop sees
+    // fromVersion=2 first with version=1, continues, then v1→v2 runs, but
+    // the loop's already past the v2 entry).
+    QVector<MigrationStep> ordered = m_schema.migrations;
+    std::stable_sort(ordered.begin(), ordered.end(), [](const MigrationStep& a, const MigrationStep& b) {
+        return a.fromVersion < b.fromVersion;
+    });
+
     int version = readVersion(root);
-    for (const MigrationStep& step : m_schema.migrations) {
+    for (const MigrationStep& step : ordered) {
         if (version != step.fromVersion) {
             continue;
         }
@@ -68,7 +80,10 @@ void MigrationRunner::runInMemory(QJsonObject& root) const
         }
         qInfo("PhosphorConfig::MigrationRunner: running migration v%d → v%d", step.fromVersion, step.fromVersion + 1);
         step.migrate(root);
-        const int bumped = root.value(m_schema.versionKey).toInt();
+        // Use readVersion() so a migration that stamps a string-typed value
+        // (or accidentally clears the key) is reported as a bump mismatch
+        // consistently with how the initial version is read.
+        const int bumped = readVersion(root);
         if (bumped != step.fromVersion + 1) {
             qCritical("PhosphorConfig::MigrationRunner: step v%d did not bump '%s' to %d (got %d) — aborting chain",
                       step.fromVersion, qPrintable(m_schema.versionKey), step.fromVersion + 1, bumped);
