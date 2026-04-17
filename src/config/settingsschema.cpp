@@ -611,7 +611,20 @@ void appendActivationSchema(PhosphorConfig::Schema& schema)
          CD::zoneSpanModifier(),
          QMetaType::Int,
          {},
-         clampInt(0, static_cast<int>(DragModifier::CtrlAltMeta))},
+         // DragModifier int values are contiguous but not ordered — each is a
+         // discrete named modifier combo. clampInt on an unknown value would
+         // reinterpret e.g. 99 as the highest valid enum (CtrlAltMeta),
+         // silently giving the user a much stricter capture rule than they
+         // asked for. Snap-to-default (Disabled = 0) instead so upgrade-
+         // mismatches or hand-edited configs fall back to "off" rather than
+         // a semantically-unrelated neighbour.
+         validIntOr({static_cast<int>(DragModifier::Disabled), static_cast<int>(DragModifier::Shift),
+                     static_cast<int>(DragModifier::Ctrl), static_cast<int>(DragModifier::Alt),
+                     static_cast<int>(DragModifier::Meta), static_cast<int>(DragModifier::CtrlAlt),
+                     static_cast<int>(DragModifier::CtrlShift), static_cast<int>(DragModifier::AltShift),
+                     static_cast<int>(DragModifier::AlwaysActive), static_cast<int>(DragModifier::AltMeta),
+                     static_cast<int>(DragModifier::CtrlAltMeta)},
+                    static_cast<int>(DragModifier::Disabled))},
         {CD::triggersKey(), CD::zoneSpanTriggers(), QMetaType::QVariantList, {}, canonicalTriggerList},
     };
 }

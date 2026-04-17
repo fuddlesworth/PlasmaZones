@@ -658,7 +658,20 @@ bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject
     }
 
     QJsonDocument doc(root);
-    f.write(doc.toJson(QJsonDocument::Indented));
+    const QByteArray payload = doc.toJson(QJsonDocument::Indented);
+    const qint64 written = f.write(payload);
+    if (written != payload.size()) {
+        // Disk-full / I/O error mid-write leaves QSaveFile's staging file
+        // truncated. commit() on a partial write would then seal the truncated
+        // payload over the user's last-good config. cancelWriting() tells
+        // QSaveFile to discard the staging file; the on-disk config stays
+        // untouched and the next save() retries against the same known-good
+        // state.
+        qWarning("PhosphorConfig::JsonBackend: short write to %s (%lld of %lld bytes): %s", qPrintable(filePath),
+                 static_cast<long long>(written), static_cast<long long>(payload.size()), qPrintable(f.errorString()));
+        f.cancelWriting();
+        return false;
+    }
 
     if (!f.commit()) {
         qWarning("PhosphorConfig::JsonBackend: failed to commit write to %s: %s", qPrintable(filePath),

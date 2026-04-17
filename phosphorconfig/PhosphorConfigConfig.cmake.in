@@ -1,7 +1,14 @@
+# SPDX-FileCopyrightText: 2026 fuddlesworth
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
 @PACKAGE_INIT@
 
 include(CMakeFindDependencyMacro)
-find_dependency(Qt6 COMPONENTS Core Gui)
+
+# Pin to match the minimum Qt the library is built against. Without the
+# version guard a consumer on Qt 6.5 resolves find_package(PhosphorConfig)
+# cleanly and then fails later with a cryptic missing-symbol at link time.
+find_dependency(Qt6 6.6 COMPONENTS Core Gui)
 
 include("${CMAKE_CURRENT_LIST_DIR}/PhosphorConfigTargets.cmake")
 

@@ -62,12 +62,30 @@ generate_export_header(PhosphorConfig
     EXPORT_MACRO_NAME PHOSPHORCONFIG_EXPORT
 )
 
+# Resolve KDE_INSTALL_INCLUDEDIR here so INSTALL_INTERFACE can reference it.
+# Without this, a consumer that overrides CMAKE_INSTALL_INCLUDEDIR (or the
+# KDE-flavoured equivalent) gets an export that hard-codes bare `include/`
+# while install(DIRECTORY) below still writes to the overridden location —
+# find_package resolves but fails to see the headers.
+if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
+    include(GNUInstallDirs)
+    set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
+endif()
+
 target_include_directories(PhosphorConfig
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
 )
+
+# C++20 as a PUBLIC target feature: CMAKE_CXX_STANDARD is only set by the
+# `if(NOT PROJECT_VERSION)` block above — i.e. only when PhosphorConfig is
+# the top-level project. When built as a subdirectory of PlasmaZones (or any
+# other parent) consumers inherit whatever standard the parent picked. Declare
+# the requirement on the target so find_package(PhosphorConfig) consumers get
+# the right compile-feature propagation regardless of build configuration.
+target_compile_features(PhosphorConfig PUBLIC cxx_std_20)
 
 target_link_libraries(PhosphorConfig
     PUBLIC
