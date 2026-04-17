@@ -9,6 +9,8 @@
 
 #include "internal.h"
 
+#include <QScreen>
+
 namespace PhosphorLayer {
 
 class SurfaceFactory::Impl
@@ -62,6 +64,20 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
         qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: exactly one of contentUrl / contentItem must be set"
                                    << "hasUrl=" << hasUrl << "hasItem=" << hasItem << "debugName=" << debug;
         return nullptr;
+    }
+
+    // If the caller did not pin a specific screen, fall back to the screen
+    // provider's primary. Giving nullptr to the transport lets the compositor
+    // pick (fine in principle) but makes the Surface's target non-deterministic
+    // and masks "no screens connected" at the wrong layer. Resolving here keeps
+    // the failure mode documented at the factory boundary.
+    if (!cfg.screen) {
+        cfg.screen = m_impl->m_deps.screens->primary();
+        if (!cfg.screen) {
+            qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: cfg.screen is null and provider has no primary"
+                                       << "debugName=" << debug;
+            return nullptr;
+        }
     }
 
     SurfaceDeps sdeps{

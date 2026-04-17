@@ -313,16 +313,11 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
 
     // Virtual-screen anchors + margins (wlr-layer-shell attaches output+anchors
     // immutably, so they have to be right at create time).
-    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    const auto placement = layerPlacementForVs(screenGeom, screen->geometry());
+    std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
     std::optional<QMargins> marginsOverride;
-    const QRect physGeom = screen->geometry();
-    const bool isVirtualScreen = screenGeom.isValid() && screenGeom != physGeom;
-    if (isVirtualScreen) {
-        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
-        const QRect clamped = screenGeom.intersected(physGeom);
-        marginsOverride = QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0);
-    } else {
-        anchorsOverride = PhosphorLayer::AnchorAll;
+    if (!placement.margins.isNull()) {
+        marginsOverride = placement.margins;
     }
 
     const QString scopeId = resolvedId.isEmpty() ? Utils::screenIdentifier(screen) : resolvedId;
@@ -356,6 +351,9 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
         }
     });
 
+    // windowSelected is declared in SnapAssistOverlay.qml; string-based
+    // connect is the idiomatic way to reach QML-exposed signals since they
+    // aren't addressable via Qt5-style &signal pointers.
     connect(m_snapAssistWindow, SIGNAL(windowSelected(QString, QString, QString)), this,
             SLOT(onSnapAssistWindowSelected(QString, QString, QString)));
 
@@ -544,16 +542,11 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // anchors aren't exposed via PhosphorLayer yet). Physical screen → anchor
     // all four edges; virtual screen → anchor Top+Left with margin offset so
     // the window lands in the right region.
-    std::optional<PhosphorLayer::Anchors> anchorsOverride;
+    const auto placement = layerPlacementForVs(screenGeom, screen->geometry());
+    std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
     std::optional<QMargins> marginsOverride;
-    const QRect physGeom = screen->geometry();
-    const bool isVirtualScreen = screenGeom.isValid() && screenGeom != physGeom;
-    if (isVirtualScreen) {
-        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
-        const QRect clamped = screenGeom.intersected(physGeom);
-        marginsOverride = QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0);
-    } else {
-        anchorsOverride = PhosphorLayer::AnchorAll;
+    if (!placement.margins.isNull()) {
+        marginsOverride = placement.margins;
     }
 
     // Per-instance scope disambiguator so the compositor sees each open/close

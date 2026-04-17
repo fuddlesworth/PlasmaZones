@@ -39,6 +39,13 @@ struct TopologyConfig
  * Multiple registries may be attached — e.g. a notification daemon that
  * keeps both a per-screen OSD registry and a singleton modal, where only
  * the former should respond to topology changes.
+ *
+ * @note **Status (v0.1):** not yet used by the reference consumer
+ * (PlasmaZones OverlayService, which wires screen signals directly to
+ * QGuiApplication because it also responds to a custom
+ * virtualScreensChanged signal not yet modelled here). The coordinator's
+ * public API and debounce contract are tested, but real-world behaviour
+ * under hot-plug bursts has only been exercised through MockScreenProvider.
  */
 class PHOSPHORLAYER_EXPORT TopologyCoordinator : public QObject
 {

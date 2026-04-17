@@ -373,18 +373,14 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     m_engine->rootContext()->setContextProperty(QStringLiteral("overlayService"), this);
 
     // Compute virtual-screen overrides up-front (wlr-layer-shell locks
-    // output+anchors at attach). Physical screen → AnchorAll; virtual
-    // screen → Top|Left plus clamped margins from the physical screen origin.
-    std::optional<PhosphorLayer::Anchors> anchorsOverride;
-    std::optional<QMargins> marginsOverride;
+    // output+anchors at attach).
     const QRect physScreenGeom = physScreen ? physScreen->geometry() : geometry;
     const bool isVS = VirtualScreenId::isVirtual(screenId);
-    if (isVS && geometry.isValid() && geometry != physScreenGeom) {
-        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
-        const QRect clamped = geometry.intersected(physScreenGeom);
-        marginsOverride = QMargins(clamped.x() - physScreenGeom.x(), clamped.y() - physScreenGeom.y(), 0, 0);
-    } else {
-        anchorsOverride = PhosphorLayer::AnchorAll;
+    const auto placement = layerPlacementForVs(isVS ? geometry : QRect(), physScreenGeom);
+    std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
+    std::optional<QMargins> marginsOverride;
+    if (!placement.margins.isNull()) {
+        marginsOverride = placement.margins;
     }
 
     const auto role = PzRoles::Overlay.withScopePrefix(
@@ -471,9 +467,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
                                        const QRect vsGeom = resolveScreenGeometry(sid);
                                        if (vsGeom.isValid() && st.overlaySurface) {
                                            if (auto* handle = st.overlaySurface->transport()) {
-                                               const QRect clamped = vsGeom.intersected(newGeom);
-                                               handle->setMargins(QMargins(clamped.x() - newGeom.x(),
-                                                                           clamped.y() - newGeom.y(), 0, 0));
+                                               handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
                                            }
                                            w->setWidth(vsGeom.width());
                                            w->setHeight(vsGeom.height());
@@ -649,9 +643,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
                         const QRect vsGeom = resolveScreenGeometry(sid);
                         if (vsGeom.isValid() && st.overlaySurface) {
                             if (auto* handle = st.overlaySurface->transport()) {
-                                const QRect clamped = vsGeom.intersected(newGeom);
-                                handle->setMargins(
-                                    QMargins(clamped.x() - newGeom.x(), clamped.y() - newGeom.y(), 0, 0));
+                                handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
                             }
                             w->setWidth(vsGeom.width());
                             w->setHeight(vsGeom.height());

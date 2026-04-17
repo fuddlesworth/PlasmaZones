@@ -245,6 +245,8 @@ OverlayService::OverlayService(QObject* parent)
     QTimer::singleShot(0, this, [this]() {
         QScreen* screen = Utils::primaryScreen();
         if (!screen) {
+            qCWarning(lcOverlay) << "Keep-alive surface: no primary screen at startup — "
+                                    "Wayland/Vulkan globals may churn across overlay destroy cycles";
             return;
         }
         // Keep-alive goes through PhosphorLayer like every other overlay now —
@@ -326,9 +328,18 @@ OverlayService::~OverlayService()
     }
     m_keepAliveWindow = nullptr;
 
-    // Process pending deletions before destroying the QML engine.
-    // All deleteLater() calls must complete while the engine is still valid.
-    QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    // Drain deferred-delete events. One pass is not enough: ~Surface posts
+    // window deleteLater, the window's destruction posts further deleteLater
+    // for QML-owned children, and those children's dtors may post yet more.
+    // Alternate sendPostedEvents(DeferredDelete) + processEvents in a bounded
+    // loop — a handful of passes is far more than any realistic teardown
+    // chain needs, but cheap if the queue settles sooner (remaining passes
+    // become no-ops).
+    constexpr int kDrainPasses = 8;
+    for (int i = 0; i < kDrainPasses; ++i) {
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+    }
 
     // Now m_engine (unique_ptr) will be destroyed safely
     // since all QML objects have been properly cleaned up
@@ -368,10 +379,22 @@ PhosphorLayer::Surface* OverlayService::createLayerSurface(const QUrl& qmlUrl, Q
     // setting properties on it. Mirrors the old createQmlWindow+configureLayerSurface
     // sequence where the window was live before return.
     surface->warmUp();
-    if (surface->state() == PhosphorLayer::Surface::State::Failed) {
+    const auto st = surface->state();
+    if (st == PhosphorLayer::Surface::State::Failed) {
         qCWarning(lcOverlay) << "createLayerSurface: warmUp failed for" << windowType;
         surface->deleteLater();
         return nullptr;
+    }
+    if (st == PhosphorLayer::Surface::State::Warming) {
+        // QML is still loading asynchronously. The caller below expects a live
+        // QQuickWindow and will setProperty into it synchronously; on the async
+        // path the window doesn't exist yet. Every consumer in this file uses
+        // qrc:/ URLs which load synchronously, so Warming-on-return is a sign
+        // that someone introduced an async source path without updating the
+        // caller to listen for Surface::stateChanged. Loud log so it shows up
+        // before it becomes a hard-to-diagnose "properties silently ignored" bug.
+        qCWarning(lcOverlay) << "createLayerSurface: surface still Warming on return for" << windowType
+                             << "— window is not yet available, downstream setProperty calls will no-op";
     }
 
     // Pipeline cache: mirror createQmlWindow's behaviour so shader compilation

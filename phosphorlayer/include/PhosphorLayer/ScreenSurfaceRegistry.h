@@ -39,6 +39,15 @@ class Surface;
  * Header-only: the template instantiation is trivially small and keeping
  * it inline lets consumer subclasses bind their type without generating
  * library exports for every combination.
+ *
+ * @note **Status (v0.1):** not yet used by the reference consumer
+ * (PlasmaZones OverlayService, which tracks per-screen state in its own
+ * QHash keyed by virtual-screen id). The registry is a public primitive
+ * for consumers whose per-screen state maps cleanly to physical QScreen*.
+ * Its API is covered by unit tests but has no production integration yet;
+ * treat behavioural details (QHash iteration order, pointer identity
+ * across createForAllScreens calls) as subject to change until the first
+ * real consumer lands.
  */
 template<typename SurfaceT = Surface>
 class ScreenSurfaceRegistry
@@ -89,6 +98,10 @@ public:
 
     /// Register an externally-created Surface under @p screen.
     /// Useful when a consumer subclasses Surface and constructs it itself.
+    ///
+    /// If @p screen already has a registered surface, the prior surface is
+    /// scheduled for deletion via `deleteLater()` unless it is the same
+    /// object as @p surface (re-adopt is an idempotent no-op).
     void adoptSurface(QScreen* screen, SurfaceT* surface);
 
     SurfaceT* surfaceForScreen(QScreen* screen) const;
@@ -179,6 +192,18 @@ void ScreenSurfaceRegistry<SurfaceT>::clear()
 template<typename SurfaceT>
 void ScreenSurfaceRegistry<SurfaceT>::adoptSurface(QScreen* screen, SurfaceT* surface)
 {
+    // Replace any prior entry — the registry is the owner-of-record, so
+    // dropping the QPointer without deleteLater() would orphan the prior
+    // surface (clear() only iterates current entries). Re-adopting the
+    // same pointer is idempotent.
+    const auto existing = m_entries.constFind(screen);
+    if (existing != m_entries.constEnd()) {
+        if (SurfaceT* prior = existing.value().data()) {
+            if (prior != surface) {
+                prior->deleteLater();
+            }
+        }
+    }
     m_entries.insert(screen, QPointer<SurfaceT>(surface));
 }
 

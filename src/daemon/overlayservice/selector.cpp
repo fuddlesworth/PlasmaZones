@@ -327,21 +327,18 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
         m_settings ? m_settings->resolvedZoneSelectorConfig(screenId) : defaultZoneSelectorConfig();
 
     // Confine the layer-shell surface to the (virtual) screen region. Mirrors
-    // overlay.cpp's pattern: physical screen → AnchorAll; virtual screen →
-    // Top|Left anchors with margins offsetting into the physical screen, so
-    // the compositor positions + sizes the surface to the VS sub-region.
-    // Without this, a VS selector covers the whole physical screen and the
-    // QML-internal corner anchor lands on the wrong VS.
-    std::optional<PhosphorLayer::Anchors> anchorsOverride;
-    std::optional<QMargins> marginsOverride;
-    const QRect physScreenGeom = physScreen->geometry();
+    // overlay.cpp's pattern via the shared layerPlacementForVs helper:
+    // physical screen → AnchorAll; virtual screen → Top|Left + margins
+    // offsetting into the physical screen, so the compositor positions +
+    // sizes the surface to the VS sub-region. Without this, a VS selector
+    // covers the whole physical screen and the QML-internal corner anchor
+    // lands on the wrong VS.
     const bool isVS = VirtualScreenId::isVirtual(screenId);
-    if (isVS && screenGeom.isValid() && screenGeom != physScreenGeom) {
-        anchorsOverride = PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left};
-        const QRect clamped = screenGeom.intersected(physScreenGeom);
-        marginsOverride = QMargins(clamped.x() - physScreenGeom.x(), clamped.y() - physScreenGeom.y(), 0, 0);
-    } else {
-        anchorsOverride = PhosphorLayer::AnchorAll;
+    const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
+    std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
+    std::optional<QMargins> marginsOverride;
+    if (!placement.margins.isNull()) {
+        marginsOverride = placement.margins;
     }
 
     const auto role = PzRoles::ZoneSelector.withScopePrefix(

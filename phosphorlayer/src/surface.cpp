@@ -54,19 +54,43 @@ public:
 
     ~Impl()
     {
-        // Ordered teardown: transport → window → engine. Doing this in Impl's
-        // dtor (rather than Surface's) keeps the lifetime dance local.
+        // Ordered teardown: transport → component → window → engine. The component
+        // holds a pointer into the engine and touches it in its dtor, so it must
+        // go before the engine. The window hosts QML objects whose dtors also
+        // reach into the engine, so releaseEngine() (which a per-surface provider
+        // is documented as free to implement with `delete engine`) must NOT run
+        // while the window is still alive. Posting the provider release behind
+        // the window's deleteLater via the engine's own event queue guarantees
+        // window teardown completes first on the main event loop.
         m_handle.reset();
+
+        // QQmlComponent dtor can touch the engine — drop it while the engine
+        // is still valid. Unique_ptr reset is synchronous and safe here.
+        m_component.reset();
+
+        QQmlEngine* engine = m_engine.data();
+        const bool ownEngine = m_engineOwned;
+        IQmlEngineProvider* provider = m_deps.engineProvider;
+
         if (m_window) {
             // QPointer auto-nulls if the window was already destroyed externally
-            // (e.g. consumer called ->deleteLater() before ~Surface). Skip the
-            // second deleteLater in that case.
+            // (e.g. consumer called ->deleteLater() before ~Surface).
             m_window->deleteLater();
         }
-        if (m_engineOwned && m_engine) {
-            m_engine->deleteLater();
-        } else if (m_engine && m_deps.engineProvider) {
-            m_deps.engineProvider->releaseEngine(m_engine);
+
+        if (ownEngine && engine) {
+            // Same event queue as m_window — posted after, runs after. Window
+            // teardown completes before engine destruction.
+            engine->deleteLater();
+        } else if (engine && provider) {
+            // Same ordering guarantee: post a queued invocation on the engine's
+            // thread so it runs after the window's DeferredDelete event.
+            QMetaObject::invokeMethod(
+                engine,
+                [engine, provider]() {
+                    provider->releaseEngine(engine);
+                },
+                Qt::QueuedConnection);
         }
         m_engine = nullptr;
     }
@@ -293,8 +317,9 @@ private:
 
     bool instantiateFromComponent()
     {
-        // beginCreate → attach → set non-zero size → completeCreate →
-        // setVisible(false). Both halves of this dance matter:
+        // Order: beginCreate → setInitialProperties → setGeometry →
+        // finishAttach (transport) → completeCreate → setVisible(false).
+        // The two invariants:
         //
         // 1) attach BEFORE completeCreate: Qt Wayland's createShellSurface
         //    runs synchronously inside componentComplete's auto-show, and

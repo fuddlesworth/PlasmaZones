@@ -110,6 +110,75 @@ private Q_SLOTS:
         reg.clear();
         QVERIFY(reg.surfaces().isEmpty());
     }
+
+    void adoptSurfaceRegistersWithScreen()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        ScreenSurfaceRegistry<> reg(&f, &s);
+
+        QScreen* primary = s.primary();
+        QVERIFY(primary);
+        auto* surface = f.create(makeConfig(primary));
+        QVERIFY(surface);
+
+        reg.adoptSurface(primary, surface);
+        QCOMPARE(reg.surfaceForScreen(primary), surface);
+        QCOMPARE(reg.surfaces().size(), 1);
+    }
+
+    void adoptSurfaceReplacesPriorAndDeletesIt()
+    {
+        // Bug regression: QHash::insert silently replaced the prior QPointer
+        // without deleteLater on the displaced surface, leaking it until
+        // engine teardown (or forever if the registry outlived the engine).
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        ScreenSurfaceRegistry<> reg(&f, &s);
+
+        QScreen* primary = s.primary();
+        auto* first = f.create(makeConfig(primary));
+        auto* second = f.create(makeConfig(primary));
+        QVERIFY(first);
+        QVERIFY(second);
+        QVERIFY(first != second);
+
+        QPointer<Surface> watcher(first);
+        reg.adoptSurface(primary, first);
+        reg.adoptSurface(primary, second);
+
+        QCOMPARE(reg.surfaceForScreen(primary), second);
+
+        // Drain deleteLater so the watcher nulls — proves the prior surface
+        // was handed to deleteLater() rather than silently dropped.
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+        QVERIFY(watcher.isNull());
+    }
+
+    void adoptSurfaceSameSurfaceIsIdempotent()
+    {
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        ScreenSurfaceRegistry<> reg(&f, &s);
+
+        QScreen* primary = s.primary();
+        auto* surface = f.create(makeConfig(primary));
+        QVERIFY(surface);
+
+        QPointer<Surface> watcher(surface);
+        reg.adoptSurface(primary, surface);
+        reg.adoptSurface(primary, surface);
+
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QCoreApplication::processEvents();
+        // Re-adopting the same surface must NOT schedule it for deletion.
+        QVERIFY(!watcher.isNull());
+        QCOMPARE(reg.surfaceForScreen(primary), surface);
+    }
 };
 
 QTEST_MAIN(TestRegistry)

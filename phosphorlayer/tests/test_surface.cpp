@@ -209,6 +209,63 @@ private Q_SLOTS:
         QCOMPARE(t.m_lastArgs.screen, s.primary());
         QCOMPARE(t.m_lastArgs.scope, Roles::FullscreenOverlay.scopePrefix);
     }
+
+    void engineProviderReleaseOrderingDefersAfterWindowDelete()
+    {
+        // Bug regression: when an engineProvider is injected, the previous
+        // dtor called releaseEngine() SYNCHRONOUSLY while the window's
+        // deleteLater was still queued — a provider that `delete engine` in
+        // releaseEngine would free the engine before the window's QML
+        // children had torn down. The fix marshals releaseEngine via the
+        // engine's event queue so it runs after the window's DeferredDelete.
+        struct TrackingProvider : public IQmlEngineProvider
+        {
+            QQmlEngine* engineForSurface(const SurfaceConfig&) override
+            {
+                m_engine = new QQmlEngine();
+                return m_engine;
+            }
+            void releaseEngine(QQmlEngine* e) override
+            {
+                QVERIFY(m_windowDestroyed); // window must have torn down first
+                ++m_releaseCalls;
+                m_engine = nullptr;
+                e->deleteLater();
+            }
+            QQmlEngine* m_engine = nullptr;
+            bool m_windowDestroyed = false;
+            int m_releaseCalls = 0;
+        };
+
+        MockTransport t;
+        MockScreenProvider s;
+        TrackingProvider p;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s, &p));
+        auto* surface = f.create(buildConfig(s.primary()));
+        surface->warmUp();
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+
+        QPointer<QQuickWindow> winWatch(surface->window());
+        QVERIFY(winWatch);
+        QObject::connect(winWatch.data(), &QObject::destroyed, [&p] {
+            // Window's destroyed handler fires during DeferredDelete
+            // processing — before releaseEngine runs, per the ordering
+            // contract.
+            p.m_windowDestroyed = true;
+        });
+
+        surface->deleteLater();
+        // Drain deferred delete queue — multiple passes because ~Surface
+        // posts window delete, which posts child deletes, which posts more.
+        for (int i = 0; i < 8; ++i) {
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            QCoreApplication::processEvents();
+        }
+
+        QVERIFY(p.m_windowDestroyed);
+        QCOMPARE(p.m_releaseCalls, 1);
+        QVERIFY(winWatch.isNull());
+    }
 };
 
 QTEST_MAIN(TestSurface)

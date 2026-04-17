@@ -7,9 +7,6 @@
 
 #include <PhosphorShell/LayerSurface.h>
 
-#include <QGuiApplication>
-#include <QMutex>
-#include <QMutexLocker>
 #include <QQuickWindow>
 
 namespace PhosphorLayer {
@@ -140,10 +137,8 @@ private:
 class PhosphorShellTransport::Impl
 {
 public:
-    QMutex m_cbMutex;
-    QList<CompositorLostCallback> m_callbacks;
+    CompositorLostBroadcaster m_broadcaster;
     QMetaObject::Connection m_aboutToQuitConnection;
-    bool m_firedAboutToQuit = false;
 };
 
 PhosphorShellTransport::PhosphorShellTransport()
@@ -157,20 +152,7 @@ PhosphorShellTransport::PhosphorShellTransport()
     // earlier detection (mid-session compositor crash) should subscribe
     // via PhosphorShell::LayerShellIntegration once it gains a public
     // accessor; this default covers the "clean compositor exit" case.
-    if (auto* app = qGuiApp) {
-        m_impl->m_aboutToQuitConnection = QObject::connect(app, &QGuiApplication::aboutToQuit, [impl = m_impl.get()] {
-            QMutexLocker lock(&impl->m_cbMutex);
-            if (impl->m_firedAboutToQuit) {
-                return;
-            }
-            impl->m_firedAboutToQuit = true;
-            for (const auto& cb : std::as_const(impl->m_callbacks)) {
-                if (cb) {
-                    cb();
-                }
-            }
-        });
-    }
+    m_impl->m_aboutToQuitConnection = m_impl->m_broadcaster.hookAboutToQuit();
 }
 
 PhosphorShellTransport::~PhosphorShellTransport()
@@ -218,18 +200,7 @@ std::unique_ptr<ITransportHandle> PhosphorShellTransport::attach(QQuickWindow* w
 
 void PhosphorShellTransport::addCompositorLostCallback(CompositorLostCallback cb)
 {
-    if (!cb) {
-        return;
-    }
-    QMutexLocker lock(&m_impl->m_cbMutex);
-    // If aboutToQuit already fired before the caller registered, invoke
-    // the callback immediately so late-registrants still see the event.
-    if (m_impl->m_firedAboutToQuit) {
-        lock.unlock();
-        cb();
-        return;
-    }
-    m_impl->m_callbacks.append(std::move(cb));
+    m_impl->m_broadcaster.addCallback(std::move(cb));
 }
 
 } // namespace PhosphorLayer

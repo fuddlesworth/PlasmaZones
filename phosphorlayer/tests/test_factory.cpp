@@ -76,6 +76,23 @@ private Q_SLOTS:
         QCOMPARE(f.deps().screens, &s);
         QCOMPARE(f.deps().engineProvider, nullptr);
     }
+
+    void nullScreenFallsBackToProviderPrimary()
+    {
+        // Documented failure mode: cfg.screen == nullptr resolves via the
+        // screen provider's primary(). Before the fix, a null screen
+        // trickled through to the transport with no diagnostic.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        SurfaceConfig cfg;
+        cfg.role = Roles::CenteredModal;
+        cfg.contentItem = std::make_unique<QQuickItem>();
+        cfg.screen = nullptr;
+        auto* surface = f.create(std::move(cfg));
+        QVERIFY(surface);
+        QCOMPARE(surface->config().screen, s.primary());
+    }
 };
 
 QTEST_MAIN(TestFactory)

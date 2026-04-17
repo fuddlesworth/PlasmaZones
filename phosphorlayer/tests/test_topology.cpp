@@ -97,6 +97,77 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 500);
         QCOMPARE(order, QList<int>({1, 2, 3}));
     }
+
+    void reentrantDetachDuringCallbackIsSafe()
+    {
+        // topologycoordinator.cpp:79-84 specifically handles a callback that
+        // detaches another callback (or itself) mid-fire by iterating a
+        // copied list and re-checking m_callbacks.contains() before each
+        // invocation. Verify that contract holds: detaching cb2 from inside
+        // cb1 must NOT invoke cb2, but cb3 (still registered) must still run.
+        MockTransport t;
+        MockScreenProvider s;
+        TopologyCoordinator coord(&s, &t, {20, false});
+
+        TopologyCoordinator::CallbackId id2 = 0;
+        int cb1Runs = 0, cb2Runs = 0, cb3Runs = 0;
+
+        coord.attachSyncCallback([&] {
+            ++cb1Runs;
+            coord.detachSyncCallback(id2);
+        });
+        id2 = coord.attachSyncCallback([&] {
+            ++cb2Runs;
+        });
+        coord.attachSyncCallback([&] {
+            ++cb3Runs;
+        });
+
+        s.emitScreensChanged();
+        QSignalSpy done(&coord, &TopologyCoordinator::screensChanged);
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 500);
+
+        QCOMPARE(cb1Runs, 1);
+        QCOMPARE(cb2Runs, 0); // detached mid-fire, never invoked
+        QCOMPARE(cb3Runs, 1);
+    }
+
+    void nullNotifierFromProviderDoesNotCrash()
+    {
+        // topologycoordinator.cpp has an explicit null-notifier branch
+        // (provider ships nullptr when it can't track screens). Verify the
+        // coordinator constructs and destructs cleanly in that regime.
+        struct NoNotifierProvider : public IScreenProvider
+        {
+            QList<QScreen*> screens() const override
+            {
+                return {};
+            }
+            QScreen* primary() const override
+            {
+                return nullptr;
+            }
+            QScreen* focused() const override
+            {
+                return nullptr;
+            }
+            ScreenProviderNotifier* notifier() const override
+            {
+                return nullptr;
+            }
+        };
+        NoNotifierProvider p;
+        MockTransport t;
+        TopologyCoordinator coord(&p, &t, {20, false});
+        // No signal wiring available; callbacks never fire but attaching
+        // must still work without UB.
+        int runs = 0;
+        const auto id = coord.attachSyncCallback([&] {
+            ++runs;
+        });
+        coord.detachSyncCallback(id);
+        QCOMPARE(runs, 0);
+    }
 };
 
 QTEST_MAIN(TestTopology)

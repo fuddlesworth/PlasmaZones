@@ -7,10 +7,13 @@
 
 #include <QFont>
 #include <QGuiApplication>
+#include <QMargins>
 #include <QPalette>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QScreen>
+
+#include <PhosphorLayer/Role.h>
 
 #include "overlay_helpers.h"
 #include "../../core/screenmanager.h"
@@ -113,6 +116,37 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 inline QScreen* resolveTargetScreen(const QString& screenId)
 {
     return ScreenManager::resolvePhysicalScreen(screenId);
+}
+
+/// Resolve the PhosphorLayer anchors + margins for a surface that targets
+/// @p vsGeom on a physical screen whose current geometry is @p physGeom.
+///
+/// Physical screens (vsGeom invalid or equal to physGeom) get AnchorAll +
+/// zero margins so wlr-layer-shell sizes them to the full output. Virtual
+/// screens (vsGeom is a strict sub-rect of physGeom) get Top|Left anchors
+/// plus margins pinning them to the VS's top-left corner within the
+/// physical screen's origin. This is the vocabulary wlr-layer-shell
+/// understands — it has no "position window within output" verb.
+///
+/// Extracted because four independent call sites (overlay create, overlay
+/// geometryChanged, overlay rekey, snap-assist create) previously inlined
+/// the same math. Any drift between them showed up as virtual-screen
+/// overlays landing on the wrong spot after a hot-plug.
+struct VsLayerPlacement
+{
+    PhosphorLayer::Anchors anchors;
+    QMargins margins;
+};
+
+inline VsLayerPlacement layerPlacementForVs(const QRect& vsGeom, const QRect& physGeom)
+{
+    const bool isVirtual = vsGeom.isValid() && vsGeom != physGeom;
+    if (!isVirtual) {
+        return {PhosphorLayer::AnchorAll, QMargins()};
+    }
+    const QRect clamped = vsGeom.intersected(physGeom);
+    return {PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left},
+            QMargins(clamped.x() - physGeom.x(), clamped.y() - physGeom.y(), 0, 0)};
 }
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).

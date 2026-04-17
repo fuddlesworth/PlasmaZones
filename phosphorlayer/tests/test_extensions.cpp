@@ -171,6 +171,41 @@ private Q_SLOTS:
         QCOMPARE(handle, nullptr);
     }
 
+    void xdgTransport_lateRegistrantAfterFireInvokesImmediately()
+    {
+        // Anti-regression for the symmetry-with-PhosphorShellTransport fix:
+        // callbacks registered AFTER the broadcaster has already fired must
+        // invoke immediately so a late consumer still sees the event.
+        //
+        // We can't exit the app in a unit test, but aboutToQuit is a plain
+        // Qt signal — invoke it via QMetaObject to trigger the transport's
+        // internal hook without tearing down QCoreApplication.
+        XdgToplevelTransport t;
+        int runs = 0;
+        t.addCompositorLostCallback([&] {
+            ++runs;
+        });
+        QCOMPARE(runs, 0);
+
+        QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
+        QCOMPARE(runs, 1);
+
+        // Late registrant fires synchronously.
+        int lateRuns = 0;
+        t.addCompositorLostCallback([&] {
+            ++lateRuns;
+        });
+        QCOMPARE(lateRuns, 1);
+    }
+
+    void xdgTransport_nullCallbackIsIgnored()
+    {
+        XdgToplevelTransport t;
+        t.addCompositorLostCallback(nullptr);
+        // No crash, no observable effect when fired.
+        QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
+    }
+
     // ── NoOpSurfaceAnimator ────────────────────────────────────────────
 
     void noOpAnimator_firesCompletionSynchronously()

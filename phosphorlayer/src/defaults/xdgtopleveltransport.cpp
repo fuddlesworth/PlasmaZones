@@ -6,8 +6,6 @@
 #include "../internal.h"
 
 #include <QGuiApplication>
-#include <QMutex>
-#include <QMutexLocker>
 #include <QPointer>
 #include <QQuickWindow>
 #include <QScreen>
@@ -82,16 +80,25 @@ private:
 class XdgToplevelTransport::Impl
 {
 public:
-    QMutex m_cbMutex;
-    QList<CompositorLostCallback> m_callbacks;
+    CompositorLostBroadcaster m_broadcaster;
+    QMetaObject::Connection m_aboutToQuitConnection;
 };
 
 XdgToplevelTransport::XdgToplevelTransport()
     : m_impl(std::make_unique<Impl>())
 {
+    // xdg_toplevel protocol lacks a dedicated global-removal signal, but the
+    // Wayland connection is torn down on application shutdown the same way
+    // wlr-layer-shell is. Firing on aboutToQuit covers the "clean exit" case
+    // and matches PhosphorShellTransport's behaviour so consumers can treat
+    // the two transports symmetrically.
+    m_impl->m_aboutToQuitConnection = m_impl->m_broadcaster.hookAboutToQuit();
 }
 
-XdgToplevelTransport::~XdgToplevelTransport() = default;
+XdgToplevelTransport::~XdgToplevelTransport()
+{
+    QObject::disconnect(m_impl->m_aboutToQuitConnection);
+}
 
 bool XdgToplevelTransport::isSupported() const
 {
@@ -145,14 +152,9 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
 void XdgToplevelTransport::addCompositorLostCallback(CompositorLostCallback cb)
 {
     // xdg_toplevel doesn't expose a global-removal hook the way wlr-layer-
-    // shell does. The callback will fire only on explicit shutdown — we
-    // store it for symmetry with PhosphorShellTransport but cannot
-    // proactively invoke it on compositor crash.
-    if (!cb) {
-        return;
-    }
-    QMutexLocker lock(&m_impl->m_cbMutex);
-    m_impl->m_callbacks.append(std::move(cb));
+    // shell does. The callback fires on QGuiApplication::aboutToQuit (clean
+    // exit); mid-session compositor crash is not detectable here.
+    m_impl->m_broadcaster.addCallback(std::move(cb));
 }
 
 } // namespace PhosphorLayer
