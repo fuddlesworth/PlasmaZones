@@ -34,6 +34,12 @@ namespace PhosphorLayer {
  * are all immutable per protocol).
  *
  * Exactly one of @ref contentUrl / @ref contentItem must be non-empty.
+ *
+ * @note **Pre-1.0 ABI.** SurfaceConfig is a plain aggregate exposed across
+ * the DSO boundary. Adding or reordering fields between releases is a
+ * binary-incompatible change until the library reaches 1.0 (SOVERSION 0
+ * signals this). Consumers that aggregate-init by position must rebuild
+ * against each release; use named-member init for forward compatibility.
  */
 struct PHOSPHORLAYER_EXPORT SurfaceConfig
 {
@@ -50,8 +56,9 @@ struct PHOSPHORLAYER_EXPORT SurfaceConfig
     /// containing a contentItem is move-only.
     std::unique_ptr<QQuickItem> contentItem;
 
-    /// Target screen. Nullptr means "let the factory resolve from the
-    /// affinity" (typically primary).
+    /// Target screen. Nullptr means "let the factory resolve to the screen
+    /// provider's primary()". Consumers that want focus-follows-surface can
+    /// pass `IScreenProvider::focused()` here.
     QScreen* screen = nullptr;
 
     /// Injected into the surface's QML root context. Keys become context

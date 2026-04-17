@@ -91,7 +91,14 @@ void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState
 
 // Release surfaces for state entries whose key starts with @p prefix,
 // then erase those entries from the map.
-void cleanupScreenStatesByPrefix(QHash<QString, OverlayService::PerScreenOverlayState>& states, const QString& prefix)
+//
+// Semantics: prefix is typically `physId + VirtualScreenId::Separator`, so
+// this function matches ONLY virtual-screen entries (`physId/vs:N`) and
+// deliberately skips the bare-physId entry (`physId`). Callers that need
+// to clean up the bare entry must do so separately — see the
+// onVirtualScreensChangedHandler call site where both are explicitly
+// cleaned in sequence.
+void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states, const QString& prefix)
 {
     for (auto it = states.begin(); it != states.end();) {
         if (it.key().startsWith(prefix)) {
@@ -138,9 +145,9 @@ OverlayService::OverlayService(QObject* parent)
             if (!physScreen) {
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
                 const QString prefix = physicalScreenId + VirtualScreenId::Separator;
-                cleanupScreenStatesByPrefix(m_screenStates, prefix);
+                cleanupVirtualScreenStates(m_screenStates, prefix);
                 // Also clean up the bare physical-ID entry (no /vs:N suffix) —
-                // cleanupScreenStatesByPrefix only matches entries starting with "physId/",
+                // cleanupVirtualScreenStates only matches entries starting with "physId/",
                 // not the bare "physId" key itself.
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
@@ -915,7 +922,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             // this state entry never actually held any — e.g. an OSD
             // creation failed earlier), drop the empty shell so screen
             // hot-plug cycles don't slowly accumulate dead keys. Matches
-            // cleanupScreenStatesByPrefix semantics: the state entry is
+            // cleanupVirtualScreenStates semantics: the state entry is
             // meaningless without at least one live window.
             auto& s = m_screenStates[id];
             if (!s.overlaySurface && !s.zoneSelectorSurface && !s.layoutOsdSurface && !s.navigationOsdSurface) {

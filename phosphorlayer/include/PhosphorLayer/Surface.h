@@ -19,6 +19,7 @@ namespace PhosphorLayer {
 
 class ILayerShellTransport;
 class IQmlEngineProvider;
+class IScreenProvider;
 class ITransportHandle;
 class SurfaceFactory;
 
@@ -29,11 +30,22 @@ class SurfaceFactory;
  * Surface* and the dependency pointers need to travel with it; private
  * because only SurfaceFactory constructs Surfaces. No stable ABI guarantee
  * between library versions — revisit if Surface becomes user-constructible.
+ *
+ * @note **Pre-1.0 ABI.** SurfaceDeps is a plain aggregate exposed across
+ * the DSO boundary. Adding or reordering fields is a binary-incompatible
+ * change until the library reaches 1.0; consumers that aggregate-init by
+ * position must rebuild. Use named-member init
+ * (`SurfaceDeps{.transport = ...}`) for forward-compatibility.
  */
 struct SurfaceDeps
 {
     ILayerShellTransport* transport = nullptr;
     IQmlEngineProvider* engineProvider = nullptr; // Optional — nullptr = per-surface engine
+    /// Screen provider the Surface subscribes to for hot-unplug detection.
+    /// Optional: if nullptr the Surface cannot re-validate its bound QScreen*
+    /// after screensChanged and will hand dangling pointers to the transport
+    /// on reattach. The factory always sets it.
+    IScreenProvider* screenProvider = nullptr;
     QString loggingCategory;
 };
 

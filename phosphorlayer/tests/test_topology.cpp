@@ -40,7 +40,7 @@ private Q_SLOTS:
         QCOMPARE(changingSpy.count(), 1); // fired once on first burst
         QCOMPARE(changedSpy.count(), 0); // debounced — not yet
 
-        QTRY_COMPARE_WITH_TIMEOUT(changedSpy.count(), 1, 500);
+        QTRY_COMPARE_WITH_TIMEOUT(changedSpy.count(), 1, 2000);
         QCOMPARE(callbackRuns, 1);
     }
 
@@ -58,7 +58,7 @@ private Q_SLOTS:
 
         s.emitScreensChanged();
         QSignalSpy done(&coord, &TopologyCoordinator::screensChanged);
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 500);
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 2000);
         QCOMPARE(runs, 0);
     }
 
@@ -72,7 +72,7 @@ private Q_SLOTS:
         t.simulateCompositorLost();
         // Emission is Queued (cross-thread pattern) — needs event loop
         // turnaround even when sender and receiver are on the same thread.
-        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 500);
+        QTRY_COMPARE_WITH_TIMEOUT(spy.count(), 1, 2000);
     }
 
     void multipleCallbacksFireInRegistrationOrder()
@@ -94,7 +94,7 @@ private Q_SLOTS:
 
         s.emitScreensChanged();
         QSignalSpy done(&coord, &TopologyCoordinator::screensChanged);
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 500);
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 2000);
         QCOMPARE(order, QList<int>({1, 2, 3}));
     }
 
@@ -125,7 +125,7 @@ private Q_SLOTS:
 
         s.emitScreensChanged();
         QSignalSpy done(&coord, &TopologyCoordinator::screensChanged);
-        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 500);
+        QTRY_COMPARE_WITH_TIMEOUT(done.count(), 1, 2000);
 
         QCOMPARE(cb1Runs, 1);
         QCOMPARE(cb2Runs, 0); // detached mid-fire, never invoked

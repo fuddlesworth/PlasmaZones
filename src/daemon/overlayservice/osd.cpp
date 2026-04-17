@@ -264,6 +264,38 @@ void OverlayService::showDisabledOsd(const QString& reason, const QString& scree
 // NavigationOsdWindow() are only invoked from screen-removal / shutdown
 // cleanup paths.
 
+// Shared hot-plug hook for both OSDs. Called from warmUpLayoutOsd AND
+// warmUpNavigationOsd so a caller that only warms one kind still gets
+// per-screen instances on hot-plug for whichever OSDs it actually warmed.
+// The per-OSD m_*OsdWarmed booleans inside the lambda gate which windows
+// actually get created, so warming only one kind doesn't force the other.
+void OverlayService::ensureOsdScreenAddedConnected()
+{
+    if (m_screenAddedConnected) {
+        return;
+    }
+    connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
+        auto* mgr2 = ScreenManager::instance();
+        const QString physId = Utils::screenIdentifier(screen);
+        const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
+        if (m_layoutOsdWarmed) {
+            for (const QString& sid : ids) {
+                if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
+                    createLayoutOsdWindow(sid, screen);
+                }
+            }
+        }
+        if (m_navigationOsdWarmed) {
+            for (const QString& sid : ids) {
+                if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
+                    createNavigationOsdWindow(sid, screen);
+                }
+            }
+        }
+    });
+    m_screenAddedConnected = true;
+}
+
 void OverlayService::warmUpLayoutOsd()
 {
     const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
@@ -279,31 +311,7 @@ void OverlayService::warmUpLayoutOsd()
     m_layoutOsdWarmed = true;
     qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
 
-    // Also warm up screens added later (hot-plug). One connection serves
-    // both OSDs; the per-OSD booleans gate which windows are actually
-    // created so warming only one of the pair doesn't force the other.
-    if (!m_screenAddedConnected) {
-        connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-            auto* mgr2 = ScreenManager::instance();
-            const QString physId = Utils::screenIdentifier(screen);
-            const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
-            if (m_layoutOsdWarmed) {
-                for (const QString& sid : ids) {
-                    if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-                        createLayoutOsdWindow(sid, screen);
-                    }
-                }
-            }
-            if (m_navigationOsdWarmed) {
-                for (const QString& sid : ids) {
-                    if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-                        createNavigationOsdWindow(sid, screen);
-                    }
-                }
-            }
-        });
-        m_screenAddedConnected = true;
-    }
+    ensureOsdScreenAddedConnected();
 }
 
 void OverlayService::warmUpNavigationOsd()
@@ -320,6 +328,11 @@ void OverlayService::warmUpNavigationOsd()
     }
     m_navigationOsdWarmed = true;
     qCInfo(lcOverlay) << "Pre-warmed Navigation OSD windows for" << effectiveIds.size() << "effective screens";
+
+    // Install the hot-plug hook even if the layout OSD warmer never ran —
+    // without this, a consumer that only warms the navigation OSD would
+    // silently miss navigation OSDs on later-added screens.
+    ensureOsdScreenAddedConnected();
 }
 
 void OverlayService::createLayoutOsdWindow(const QString& screenId, QScreen* physScreen)

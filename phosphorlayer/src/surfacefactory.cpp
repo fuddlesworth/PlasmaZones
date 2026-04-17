@@ -108,11 +108,12 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
         return nullptr;
     }
 
-    SurfaceDeps sdeps{
-        m_impl->m_deps.transport,
-        m_impl->m_deps.engineProvider,
-        m_impl->m_deps.loggingCategory.isEmpty() ? QStringLiteral("phosphorlayer") : m_impl->m_deps.loggingCategory,
-    };
+    SurfaceDeps sdeps;
+    sdeps.transport = m_impl->m_deps.transport;
+    sdeps.engineProvider = m_impl->m_deps.engineProvider;
+    sdeps.screenProvider = m_impl->m_deps.screens;
+    sdeps.loggingCategory =
+        m_impl->m_deps.loggingCategory.isEmpty() ? QStringLiteral("phosphorlayer") : m_impl->m_deps.loggingCategory;
     return new Surface(std::move(cfg), std::move(sdeps), parent ? parent : this);
 }
 

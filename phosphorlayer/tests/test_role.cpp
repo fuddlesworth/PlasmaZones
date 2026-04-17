@@ -3,6 +3,7 @@
 
 #include <PhosphorLayer/Role.h>
 
+#include <QMetaEnum>
 #include <QTest>
 
 using namespace PhosphorLayer;
@@ -122,6 +123,26 @@ private Q_SLOTS:
 
         QCOMPARE(AnchorAll, Anchor::Top | Anchor::Bottom | Anchor::Left | Anchor::Right);
         QVERIFY(AnchorNone == Anchors());
+    }
+
+    void namespaceMetaObjectLinked()
+    {
+        // Q_NAMESPACE_EXPORT + Q_ENUM_NS registers enum metadata on the
+        // namespace's staticMetaObject. If AUTOMOC doesn't emit the moc
+        // file for Role.h (or if the generated TU is dropped by the
+        // linker), QMetaEnum::fromType<Layer>() returns an invalid
+        // QMetaEnum and valueToKey returns nullptr. This is a linker-
+        // behaviour regression test: catches the case where a future
+        // refactor moves Q_NAMESPACE_EXPORT into a header AUTOMOC no
+        // longer processes.
+        const auto layerEnum = QMetaEnum::fromType<Layer>();
+        QVERIFY2(layerEnum.isValid(), "Layer metaenum did not register — moc_Role may not be linked");
+        QCOMPARE(QLatin1String(layerEnum.valueToKey(static_cast<int>(Layer::Overlay))), QLatin1String("Overlay"));
+
+        const auto kbdEnum = QMetaEnum::fromType<KeyboardInteractivity>();
+        QVERIFY2(kbdEnum.isValid(), "KeyboardInteractivity metaenum did not register");
+        QCOMPARE(QLatin1String(kbdEnum.valueToKey(static_cast<int>(KeyboardInteractivity::Exclusive))),
+                 QLatin1String("Exclusive"));
     }
 };
 

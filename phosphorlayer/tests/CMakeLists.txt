@@ -23,8 +23,11 @@ function(pl_add_test _name)
     )
     add_test(NAME ${_name} COMMAND ${_name})
     # Offscreen QPA so QQuickWindow can construct without a display server.
+    # LABELS lets `ctest -L phosphorlayer` select only our tests in a build
+    # that also runs PlasmaZones unit tests; keep in sync with the docs.
     set_tests_properties(${_name} PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorlayer.debug=false"
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_LOGGING_RULES=phosphorlayer.debug=false;phosphorlayer.warning=false"
+        LABELS "phosphorlayer"
     )
 endfunction()
 

@@ -28,7 +28,12 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+# Minimum pinned to 6.6 to match PhosphorLayerConfig.cmake.in — consumers
+# on older Qt would otherwise build in-tree but fail at find_package time
+# with a mismatched error, and the library uses a handful of 6.6-era APIs
+# (QWindow::visibility semantics, Q_DECLARE_FLAGS underlying-type handling)
+# that silently misbehave on older versions rather than failing to compile.
+find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick)
 # PhosphorShell provides the default ILayerShellTransport implementation.
 # Listed as PUBLIC dep so downstream consumers using PhosphorShellTransport
 # get PhosphorShell headers on their include path transitively.

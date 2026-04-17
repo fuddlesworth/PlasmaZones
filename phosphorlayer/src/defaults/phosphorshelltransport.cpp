@@ -90,10 +90,20 @@ public:
 
     bool isConfigured() const override
     {
-        // PhosphorShell doesn't expose an explicit "configured" flag, but
-        // window exposure is a strong proxy — exposure happens only after
-        // the compositor's initial configure event.
-        return m_window && m_window->isVisible();
+        // PhosphorShell doesn't expose an explicit "configured" flag. We
+        // use window-exposure as a proxy for "compositor has sent at least
+        // one configure event", then latch — once configured, always
+        // configured across hide()/show() cycles. Without the latch, a
+        // consumer that gates setAnchors() on isConfigured() would get a
+        // false negative after the first hide and incorrectly think the
+        // layer_surface was never ack'd.
+        if (!m_window) {
+            return false;
+        }
+        if (m_window->isVisible()) {
+            m_everConfigured = true;
+        }
+        return m_everConfigured;
     }
 
     QSize configuredSize() const override
@@ -135,6 +145,7 @@ public:
 private:
     QPointer<QQuickWindow> m_window;
     QPointer<PhosphorShell::LayerSurface> m_surface;
+    mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
 };
 
 // ── Transport ──────────────────────────────────────────────────────────
@@ -215,9 +226,15 @@ std::unique_ptr<ITransportHandle> PhosphorShellTransport::attach(QQuickWindow* w
     return std::make_unique<PhosphorShellTransportHandle>(win, surface);
 }
 
-void PhosphorShellTransport::addCompositorLostCallback(CompositorLostCallback cb)
+PhosphorShellTransport::CompositorLostCookie
+PhosphorShellTransport::addCompositorLostCallback(CompositorLostCallback cb)
 {
-    m_impl->m_broadcaster.addCallback(std::move(cb));
+    return m_impl->m_broadcaster.addCallback(std::move(cb));
+}
+
+void PhosphorShellTransport::removeCompositorLostCallback(CompositorLostCookie cookie)
+{
+    m_impl->m_broadcaster.removeCallback(cookie);
 }
 
 } // namespace PhosphorLayer

@@ -9,12 +9,15 @@
 #include "internal.h"
 
 #include <QLatin1String>
+#include <QMetaObject>
 #include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QScreen>
+#include <QWindow>
 
 namespace PhosphorLayer {
 
@@ -61,10 +64,23 @@ public:
         , m_config(std::move(cfg))
         , m_deps(std::move(deps))
     {
+        // Subscribe to screen-removal so we never hand the transport a dangling
+        // QScreen* after a hot-unplug. When the attached screen disappears we
+        // null m_config.screen; the next finishAttach() falls back to the
+        // provider's primary (validated on each call).
+        if (auto* screens = m_deps.screenProvider) {
+            if (auto* notifier = screens->notifier()) {
+                m_screensChangedConnection =
+                    QObject::connect(notifier, &ScreenProviderNotifier::screensChanged, m_q, [this] {
+                        onScreensChanged();
+                    });
+            }
+        }
     }
 
     ~Impl()
     {
+        QObject::disconnect(m_screensChangedConnection);
         // Ordered teardown: transport → component → window → engine. The component
         // holds a pointer into the engine and touches it in its dtor, so it must
         // go before the engine. The window hosts QML objects whose dtors also
@@ -119,9 +135,20 @@ public:
     Surface* const m_q;
     SurfaceConfig m_config; // non-const so we can release contentItem in ensureContent
     const SurfaceDeps m_deps;
+    QMetaObject::Connection m_screensChangedConnection;
 
     State m_state = State::Constructed;
     Intent m_intent = Intent::Idle;
+
+    /// Re-entry guard for drive(). QML binding evaluation triggered by
+    /// setInitialProperties / applyWindowProperties can synchronously reach
+    /// show()/hide()/warmUp(), which funnel back through drive(). If we
+    /// recursed, an outer frame could observe a half-advanced state after
+    /// its inner frame transitioned. The guard latches the new intent and
+    /// lets the current drive() frame finish — the outer frame then re-
+    /// evaluates with the latched intent when it loops back to the top.
+    bool m_driving = false;
+    bool m_intentPending = false; ///< A nested drive() latched a new intent
 
     QPointer<QQmlEngine> m_engine;
     EngineOwnership m_engineOwnership = EngineOwnership::None;
@@ -180,21 +207,55 @@ private:
         if (m_state == State::Failed) {
             return;
         }
-        switch (m_intent) {
-        case Intent::Warm:
-        case Intent::Show:
-            driveWarmOrShow();
-            break;
-        case Intent::Hide:
-            if (m_state == State::Shown && m_window) {
-                m_window->hide();
-                transitionTo(State::Hidden);
+        // Re-entry from a nested requestShow/Hide/Warm: the outer frame
+        // will see m_intentPending on loop-exit and re-run with the latched
+        // intent. Prevents two drive() frames from interleaving state
+        // transitions mid-transition.
+        if (m_driving) {
+            m_intentPending = true;
+            return;
+        }
+        m_driving = true;
+        do {
+            m_intentPending = false;
+            switch (m_intent) {
+            case Intent::Warm:
+            case Intent::Show:
+                driveWarmOrShow();
+                break;
+            case Intent::Hide:
+                if (m_state == State::Shown && m_window) {
+                    m_window->hide();
+                    transitionTo(State::Hidden);
+                }
+                // Other states: already hidden-ish (Constructed/Warming/Hidden);
+                // no-op, intent is latched for when Warming completes.
+                break;
+            case Intent::Idle:
+                break;
             }
-            // Other states: already hidden-ish (Constructed/Warming/Hidden);
-            // no-op, intent is latched for when Warming completes.
-            break;
-        case Intent::Idle:
-            break;
+            // If a nested call latched a new intent, run the loop once more
+            // under the same m_driving lock so the caller never observes a
+            // stale state when control returns.
+        } while (m_intentPending && m_state != State::Failed);
+        m_driving = false;
+    }
+
+    void onScreensChanged()
+    {
+        // A screen the Surface was bound to has been removed. The QScreen*
+        // is valid for the duration of the signal but dangling by the next
+        // event-loop turn. Null the config eagerly; the next finishAttach()
+        // falls back to the provider's primary.
+        auto* screens = m_deps.screenProvider;
+        if (!screens || !m_config.screen) {
+            return;
+        }
+        const auto list = screens->screens();
+        if (!list.contains(m_config.screen)) {
+            qCWarning(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName()
+                                       << "attached screen was removed — reassigning to primary on next attach";
+            m_config.screen = nullptr;
         }
     }
 
@@ -280,6 +341,19 @@ private:
         m_window->setFlag(Qt::FramelessWindowHint);
         m_window->setColor(Qt::transparent);
         applyWindowProperties(m_window);
+
+        // Pre-size from the target screen so the transport sees a non-zero
+        // size at attach time. Same rationale as the QML-Window-root path:
+        // for partial-anchor layer surfaces (e.g. Top|Left only), a 0×0
+        // initial commit causes the compositor to echo back 0×0 and the
+        // surface stays stuck. Callers that want a different size call
+        // setWidth/setHeight between warmUp() and show().
+        if (m_config.screen) {
+            const QRect geo = m_config.screen->geometry();
+            if (!geo.isEmpty()) {
+                m_window->setGeometry(geo);
+            }
+        }
     }
 
     void applyWindowProperties(QQuickWindow* target)
@@ -390,6 +464,18 @@ private:
             // SurfaceConfig contract.
             applyWindowProperties(win);
 
+            // Force the Window into Hidden visibility BEFORE completeCreate.
+            // Default QQuickWindow visibility is AutomaticVisibility, and
+            // componentComplete's AutomaticVisibility branch calls
+            // setWindowVisibility(Windowed) → QPA createShellSurface with
+            // whatever role Qt decides (xdg_toplevel for AutomaticVisibility
+            // before our layer-shell attach lands). Setting Hidden up-front
+            // suppresses that branch so the first shell surface created is
+            // always the layer_surface we attach below. setVisible(false) is
+            // insufficient: it flips m_visible but leaves m_visibility at
+            // AutomaticVisibility, so componentComplete still auto-shows.
+            win->setVisibility(QWindow::Hidden);
+
             // Sized first — see #2 above.
             if (m_config.screen) {
                 const QRect geo = m_config.screen->geometry();
@@ -400,25 +486,20 @@ private:
 
             // Attached second — see #1 above.
             if (!finishAttach()) {
-                // completeCreate + setVisible(false) even on failure so
-                // the QML-created window doesn't flash visible between
-                // failure and teardown.
+                // completeCreate even on failure so QML teardown is clean.
+                // Because visibility is already Hidden, componentComplete
+                // does not auto-show and there is no xdg_toplevel flash
+                // between failure and destruction.
                 m_component->completeCreate();
-                win->setVisible(false);
                 return false;
             }
 
             // completeCreate triggers componentComplete, which (for
-            // AutomaticVisibility — the Qt Quick default) calls
-            // setWindowVisibility(Windowed) → QPA createShellSurface with
-            // _ps_layer_shell set and a non-zero size.
+            // AutomaticVisibility — NOT our case, we forced Hidden above)
+            // would call setWindowVisibility(Windowed). Since we're Hidden
+            // the auto-show branch is skipped and the window stays mapped-
+            // but-hidden until show() flips it.
             m_component->completeCreate();
-
-            // Leave the surface unmapped for the consumer's explicit
-            // show(). On Qt Wayland this unmaps the layer_surface; the
-            // role persists across hide/show cycles so the next
-            // setVisible(true) just remaps the same layer_surface.
-            win->setVisible(false);
             return true;
         }
 
@@ -456,6 +537,26 @@ private:
 
     bool finishAttach()
     {
+        // Revalidate the screen right before handing it to the transport.
+        // onScreensChanged() nulls m_config.screen when the attached screen is
+        // removed, but we also guard here for belt-and-braces: a caller that
+        // short-circuits the notifier (e.g. a mock) could still leave us with
+        // a screen that isn't in the provider's current list. Fall back to
+        // primary; the transport accepts nullptr (compositor picks) but we
+        // prefer a deterministic target so failures surface at the boundary.
+        auto* screens = m_deps.screenProvider;
+        if (screens && m_config.screen) {
+            const auto list = screens->screens();
+            if (!list.contains(m_config.screen)) {
+                qCWarning(lcPhosphorLayer) << "Surface" << m_config.effectiveDebugName()
+                                           << "screen is no longer in provider list — falling back to primary";
+                m_config.screen = screens->primary();
+            }
+        }
+        if (!m_config.screen && screens) {
+            m_config.screen = screens->primary();
+        }
+
         TransportAttachArgs args;
         args.screen = m_config.screen;
         args.layer = m_config.effectiveLayer();

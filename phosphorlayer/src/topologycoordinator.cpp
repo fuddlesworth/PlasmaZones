@@ -46,7 +46,7 @@ public:
         if (m_transport) {
             // Callback runs on Wayland dispatch context; hop to GUI thread.
             QPointer<TopologyCoordinator> qp = m_q;
-            m_transport->addCompositorLostCallback([qp] {
+            m_compositorLostCookie = m_transport->addCompositorLostCallback([qp] {
                 if (!qp) {
                     return;
                 }
@@ -57,6 +57,17 @@ public:
                     },
                     Qt::QueuedConnection);
             });
+        }
+    }
+
+    ~Impl()
+    {
+        // Unsubscribe before destruction so the broadcaster doesn't invoke a
+        // stale lambda capturing our (now-destroyed) QPointer<Self> after
+        // aboutToQuit fires. Without this, a transport outliving its
+        // coordinator leaked a dead entry per instance.
+        if (m_transport && m_compositorLostCookie != 0) {
+            m_transport->removeCompositorLostCallback(m_compositorLostCookie);
         }
     }
 
@@ -110,6 +121,8 @@ public:
     // dependent, which broke the documented "callbacks fire in registration
     // order" contract tests rely on.
     QMap<CallbackId, SyncCallback> m_callbacks;
+
+    ILayerShellTransport::CompositorLostCookie m_compositorLostCookie = 0;
 };
 
 TopologyCoordinator::TopologyCoordinator(IScreenProvider* screens, ILayerShellTransport* transport, TopologyConfig cfg,

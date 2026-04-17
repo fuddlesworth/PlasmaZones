@@ -31,6 +31,16 @@ class PHOSPHORLAYER_EXPORT SurfaceFactory : public QObject
 {
     Q_OBJECT
 public:
+    /**
+     * @brief Dependency bundle for SurfaceFactory.
+     *
+     * @note **Pre-1.0 ABI.** Deps is a plain aggregate exposed across the
+     * DSO boundary. Adding or reordering fields between releases is a
+     * binary-incompatible change until the library reaches 1.0 (SOVERSION
+     * 0 signals this). Consumers using positional aggregate-init must
+     * rebuild against each release; prefer named-member init
+     * (`Deps{.transport = ...}`) for forward compatibility.
+     */
     struct Deps
     {
         /// Required. Concrete transport implementation (e.g. PhosphorShellTransport).

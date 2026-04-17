@@ -264,6 +264,94 @@ private Q_SLOTS:
         QVERIFY(p.m_windowDestroyed);
         QCOMPARE(p.m_releaseCalls, 1);
     }
+
+    void attachRecordsNonZeroSizeAtAttach()
+    {
+        // Anti-regression for the partial-anchor zero-size-commit bug
+        // (commit 4630da9d): for a wlr-layer-shell surface that is NOT
+        // doubly-anchored on both axes, the initial commit MUST carry a
+        // non-zero size or the compositor echoes back 0×0 and the surface
+        // stays stuck. Surface::instantiateFromComponent calls
+        // setGeometry(screen->geometry()) before completeCreate precisely
+        // to prevent this. Verify the transport sees a non-zero size at
+        // attach time.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        auto cfg = buildConfig(s.primary());
+        // Top|Left anchor: non-doubly-anchored on either axis — the case
+        // the regression affected.
+        cfg.anchorsOverride = Anchors{Anchor::Top, Anchor::Left};
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+
+        QCOMPARE(t.m_attachRecords.size(), 1);
+        const auto& rec = t.m_attachRecords.first();
+        QVERIFY2(!rec.sizeAtAttach.isEmpty(),
+                 qPrintable(QStringLiteral("size at attach was %1x%2")
+                                .arg(rec.sizeAtAttach.width())
+                                .arg(rec.sizeAtAttach.height())));
+        QVERIFY(rec.sizeAtAttach.width() > 0);
+        QVERIFY(rec.sizeAtAttach.height() > 0);
+    }
+
+    void compositorLostDoesNotCrashShownSurface()
+    {
+        // A Surface in Shown state must tolerate a compositor-lost pulse
+        // without crashing. The library doesn't auto-recreate the surface
+        // (that's the consumer's job via TopologyCoordinator), but the
+        // transport's lost-callback must fire cleanly and the Surface must
+        // remain in a usable state for explicit teardown.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        auto* surface = f.create(buildConfig(s.primary()));
+        surface->show();
+        QCOMPARE(surface->state(), Surface::State::Shown);
+
+        t.simulateCompositorLost();
+        // State is preserved (library leaves recovery to the consumer);
+        // the crucial assertion is that no UAF/crash happened.
+        QVERIFY(surface->state() == Surface::State::Shown || surface->state() == Surface::State::Failed);
+    }
+
+    void screenRemovalNullsStaleScreenReference()
+    {
+        // Anti-regression for the stale-QScreen* hazard (review L3): after
+        // a screensChanged removing the bound screen, the next re-attach
+        // must NOT pass the now-dangling QScreen* to the transport. The
+        // Surface subscribes to the notifier and nulls m_config.screen so
+        // finishAttach falls back to primary.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+
+        // Fake a secondary screen by listing the primary twice (offscreen
+        // QPA gives us only one QScreen*, but the mock accepts duplicates
+        // for test purposes — see MockScreenProvider::setScreens).
+        QScreen* primary = s.primary();
+        QVERIFY(primary);
+
+        auto cfg = buildConfig(primary);
+        auto* surface = f.create(std::move(cfg));
+        surface->warmUp();
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+
+        // Simulate removing the only screen: provider now reports empty.
+        s.setScreens({});
+        // Surface should have nulled its m_config.screen internally. We
+        // can't observe m_config.screen directly, but we CAN observe that
+        // a subsequent call path (which we can't trigger from outside)
+        // would fall back to primary. The public-observable effect is:
+        // no crash from the screensChanged signal hitting a null provider-
+        // primary, and the surface stays in Hidden.
+        QCOMPARE(surface->state(), Surface::State::Hidden);
+
+        // Restore a screen and verify normal operation resumes.
+        s.setScreens({primary});
+        surface->show();
+        QCOMPARE(surface->state(), Surface::State::Shown);
+    }
 };
 
 QTEST_MAIN(TestSurface)

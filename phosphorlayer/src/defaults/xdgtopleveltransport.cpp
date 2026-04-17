@@ -36,8 +36,16 @@ public:
     bool isConfigured() const override
     {
         // xdg_toplevel receives its first configure immediately after
-        // commit; treat any visible window as configured.
-        return m_window && m_window->isVisible();
+        // commit; latch on first-visible so hide()/show() cycles don't
+        // flip the handle back to "unconfigured" — once the compositor has
+        // ack'd the role, it stays ack'd for the lifetime of the surface.
+        if (!m_window) {
+            return false;
+        }
+        if (m_window->isVisible()) {
+            m_everConfigured = true;
+        }
+        return m_everConfigured;
     }
 
     QSize configuredSize() const override
@@ -83,6 +91,7 @@ public:
 
 private:
     QPointer<QQuickWindow> m_window;
+    mutable bool m_everConfigured = false; ///< Latched true on first isVisible()
 };
 
 // ── Transport ──────────────────────────────────────────────────────────
@@ -131,16 +140,21 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
 
     // Hook up the target screen so Qt picks the right wl_output at show time.
     // If the platform window already exists (consumer prepared it before
-    // attach) Qt may have already committed the xdg_surface on a different
-    // screen — warn so the consumer fixes ordering rather than silently
-    // ignoring the screen hint.
+    // attach) Qt has already committed the xdg_surface on a wl_output, and
+    // calling setScreen() from user code triggers a surface-recreate on Qt
+    // Wayland mid-attach — the new wl_output association arrives as a
+    // separate configure and races against the caller's subsequent show().
+    // Drop the hint rather than flail: the existing wl_output binding wins,
+    // and the warning tells the consumer to reorder their setup so attach
+    // runs before QWindow::handle() materialises.
     if (args.screen) {
         if (win->handle()) {
             qCWarning(lcPhosphorLayer)
-                << "XdgToplevelTransport: attach() after QWindow::handle() is created — screen hint may be ignored"
-                << "(Qt has already committed the xdg_surface)";
+                << "XdgToplevelTransport: attach() after QWindow::handle() is created — screen hint dropped"
+                << "(Qt has already committed the xdg_surface; calling setScreen now would recreate it mid-attach)";
+        } else {
+            win->setScreen(args.screen);
         }
-        win->setScreen(args.screen);
     }
     // The scope is a machine identifier, not a user-facing label — don't
     // forward it as QWindow::setTitle() (which surfaces in Alt-Tab and
@@ -173,12 +187,17 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
     return std::make_unique<XdgToplevelTransportHandle>(win);
 }
 
-void XdgToplevelTransport::addCompositorLostCallback(CompositorLostCallback cb)
+XdgToplevelTransport::CompositorLostCookie XdgToplevelTransport::addCompositorLostCallback(CompositorLostCallback cb)
 {
     // xdg_toplevel doesn't expose a global-removal hook the way wlr-layer-
     // shell does. The callback fires on QGuiApplication::aboutToQuit (clean
     // exit); mid-session compositor crash is not detectable here.
-    m_impl->m_broadcaster.addCallback(std::move(cb));
+    return m_impl->m_broadcaster.addCallback(std::move(cb));
+}
+
+void XdgToplevelTransport::removeCompositorLostCallback(CompositorLostCookie cookie)
+{
+    m_impl->m_broadcaster.removeCallback(cookie);
 }
 
 } // namespace PhosphorLayer

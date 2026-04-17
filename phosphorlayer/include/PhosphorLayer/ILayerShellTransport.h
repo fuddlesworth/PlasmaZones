@@ -120,9 +120,17 @@ public:
      * attached handles; consumer code generally does not need to subscribe.
      * Callbacks run on the Wayland event-dispatch context — consumers
      * must marshal to the GUI thread themselves if needed.
+     *
+     * Returns an opaque cookie; pass it to @ref removeCompositorLostCallback
+     * to unsubscribe. 0 is reserved for "registration refused" (e.g. null
+     * callback) and is safe to pass to remove. Long-lived transports
+     * without unsubscribe accumulate dead callbacks indefinitely — always
+     * remove on consumer destruction.
      */
     using CompositorLostCallback = std::function<void()>;
-    virtual void addCompositorLostCallback(CompositorLostCallback cb) = 0;
+    using CompositorLostCookie = quint64;
+    [[nodiscard]] virtual CompositorLostCookie addCompositorLostCallback(CompositorLostCallback cb) = 0;
+    virtual void removeCompositorLostCallback(CompositorLostCookie cookie) = 0;
 };
 
 } // namespace PhosphorLayer

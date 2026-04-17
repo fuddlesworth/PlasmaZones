@@ -6,6 +6,8 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/SurfaceFactory.h>
 
+#include <QMap>
+#include <QQuickWindow>
 #include <QSize>
 
 #include <memory>
@@ -101,6 +103,11 @@ public:
         ++m_attachCount;
         m_lastArgs = args;
         m_lastWindow = win;
+        AttachRecord rec;
+        rec.args = args;
+        rec.window = win;
+        rec.sizeAtAttach = win ? win->size() : QSize();
+        m_attachRecords.append(rec);
         if (m_rejectNextAttach) {
             m_rejectNextAttach = false;
             return nullptr;
@@ -110,9 +117,19 @@ public:
         return handle;
     }
 
-    void addCompositorLostCallback(CompositorLostCallback cb) override
+    [[nodiscard]] CompositorLostCookie addCompositorLostCallback(CompositorLostCallback cb) override
     {
-        m_lostCallbacks.append(std::move(cb));
+        if (!cb) {
+            return 0;
+        }
+        const CompositorLostCookie cookie = ++m_nextCookie;
+        m_lostCallbacks.insert(cookie, std::move(cb));
+        return cookie;
+    }
+
+    void removeCompositorLostCallback(CompositorLostCookie cookie) override
+    {
+        m_lostCallbacks.remove(cookie);
     }
 
     // Test drivers ─────────────────────────────────────────────────────
@@ -127,10 +144,25 @@ public:
     }
     void simulateCompositorLost()
     {
-        for (auto& cb : m_lostCallbacks) {
-            cb();
+        // Copy before iterating so callbacks that unsubscribe themselves
+        // mid-fire don't invalidate our iterator.
+        const auto snapshot = m_lostCallbacks.values();
+        for (const auto& cb : snapshot) {
+            if (cb) {
+                cb();
+            }
         }
     }
+
+    /// Record every attach() call for tests that need ordering / per-call
+    /// arg inspection. m_lastArgs / m_lastWindow mirror the last entry for
+    /// the single-attach shorthand.
+    struct AttachRecord
+    {
+        TransportAttachArgs args;
+        QQuickWindow* window = nullptr;
+        QSize sizeAtAttach; ///< win->size() captured at attach-time
+    };
 
     bool m_supported = true;
     bool m_rejectNextAttach = false;
@@ -138,7 +170,9 @@ public:
     TransportAttachArgs m_lastArgs;
     QQuickWindow* m_lastWindow = nullptr;
     MockTransportHandle* m_lastHandle = nullptr;
-    QList<CompositorLostCallback> m_lostCallbacks;
+    QList<AttachRecord> m_attachRecords;
+    QMap<CompositorLostCookie, CompositorLostCallback> m_lostCallbacks;
+    CompositorLostCookie m_nextCookie = 0;
 };
 
 } // namespace PhosphorLayer::Testing

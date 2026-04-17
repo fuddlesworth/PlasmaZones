@@ -208,13 +208,17 @@ private Q_SLOTS:
         QVERIFY(win);
         QVERIFY(win->contentItem());
         QQuickItem* root = nullptr;
-        for (QObject* child : win->contentItem()->childItems()) {
+        const auto children = win->contentItem()->childItems();
+        for (QObject* child : children) {
             if (auto* qi = qobject_cast<QQuickItem*>(child)) {
                 root = qi;
                 break;
             }
         }
-        QVERIFY(root);
+        QVERIFY2(
+            root,
+            qPrintable(
+                QStringLiteral("content root not found in contentItem childItems (count=%1)").arg(children.size())));
         QCOMPARE(root->property("tag").toString(), QStringLiteral("hello-phosphorlayer"));
     }
 };

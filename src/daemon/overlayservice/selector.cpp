@@ -410,6 +410,11 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
             it->zoneSelectorWindow = nullptr;
         }
         it->zoneSelectorPhysScreen = nullptr;
+        // Hit-testing on updateSelectorPosition() gates reads on
+        // zoneSelectorWindow != nullptr, but clearing the cached geometry
+        // alongside the window keeps the state entry consistent if a
+        // future reader ever drops that guard.
+        it->zoneSelectorGeometry = QRect();
     }
 }
 

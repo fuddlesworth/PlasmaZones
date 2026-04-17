@@ -158,6 +158,39 @@ private Q_SLOTS:
         QVERIFY(watcher.isNull());
     }
 
+    void zeroScreenProviderYieldsEmptyRegistry()
+    {
+        // Hot-unplug of the last screen (laptop lid closed, single external
+        // disconnected) is a realistic state. Registry must tolerate an
+        // empty screens() list: creation is a no-op, syncToScreens drops
+        // every tracked surface, no crash on subsequent queries.
+        MockTransport t;
+        MockScreenProvider s;
+        SurfaceFactory f(PhosphorLayer::Testing::makeDeps(&t, &s));
+        ScreenSurfaceRegistry<> reg(&f, &s);
+
+        // Seed the registry with a real surface.
+        reg.createForAllScreens([&](QScreen* screen) {
+            return f.create(makeConfig(screen));
+        });
+        QVERIFY(!reg.surfaces().isEmpty());
+
+        // Simulate "all screens removed". Provider reports empty; the
+        // factory will reject any new creates (no primary), so
+        // syncToScreens must remove everything without invoking the
+        // builder. Without this behaviour the registry would keep dangling
+        // QPointers to surfaces bound to removed screens.
+        s.setScreens({});
+        QCOMPARE(s.screens().size(), 0);
+        QCOMPARE(s.primary(), nullptr);
+
+        reg.syncToScreens([&](QScreen* screen) {
+            return f.create(makeConfig(screen)); // never called
+        });
+        QCOMPARE(reg.surfaces().size(), 0);
+        QCOMPARE(reg.surfaceForScreen(nullptr), nullptr);
+    }
+
     void adoptSurfaceSameSurfaceIsIdempotent()
     {
         MockTransport t;

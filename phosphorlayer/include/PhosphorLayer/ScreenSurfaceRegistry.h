@@ -16,6 +16,7 @@
 #include <QSet>
 
 #include <functional>
+#include <type_traits>
 
 namespace PhosphorLayer {
 

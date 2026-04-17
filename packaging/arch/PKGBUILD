@@ -4,6 +4,8 @@
 # Requires Plasma 6.6+ (KF6 6.6, Qt 6.6, KWin 6.6).
 
 pkgname=plasmazones
+# pkgver/pkgrel are placeholders; CI rewrites them against the release tag
+# before publishing. See packaging/arch/update-aur.sh.
 pkgver=0.0.0
 pkgrel=1
 pkgdesc='Window tiling and autotiling for KDE Plasma'

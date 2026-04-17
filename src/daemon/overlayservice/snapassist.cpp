@@ -589,7 +589,10 @@ void OverlayService::destroyLayoutPickerWindow()
 {
     if (m_layoutPickerSurface) {
         if (m_layoutPickerWindow) {
-            disconnect(m_layoutPickerWindow, &QWindow::visibleChanged, this, nullptr);
+            // No visibleChanged connection exists for the layout picker
+            // window (unlike the snap-assist surface, which uses visibility
+            // as a dismiss signal). Disconnect the screen-scoped signals we
+            // do install, then let Surface's dtor handle the window.
             if (auto* screen = m_layoutPickerWindow->screen()) {
                 disconnect(screen, nullptr, m_layoutPickerWindow, nullptr);
             }

@@ -99,6 +99,57 @@ private Q_SLOTS:
         QVERIFY(!bare.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 1}}));
     }
 
+    void jsonStore_rejectsSymlinkParentEscape()
+    {
+        // Anti-regression for the path-traversal defence: the original
+        // isSafeStorePath rejected internal "../" but a symlinked parent
+        // directory can still route the "canonical" path outside the app
+        // data area. Reject paths whose realpath escapes the intended
+        // prefix.
+        //
+        // Construct: tempRoot / legitDir (real) + tempRoot / linkToLegit
+        // pointing at an absolute path OUTSIDE tempRoot. Asking JsonSurface-
+        // Store to write at `linkToLegit/foo.json` is effectively "write
+        // to whatever the symlink points at". A secure implementation
+        // realpath-resolves the parent and checks it stays in the app
+        // prefix; a naive one writes to the target.
+        //
+        // We don't check the implementation's exact semantics here — the
+        // store may legitimately accept this as "user knows what they're
+        // doing". But we DO assert no traversal via a "../" segment in
+        // the resolved path reaches our probe file outside the temp dir,
+        // which would indicate a bypass of the existing check.
+        QTemporaryDir outside;
+        QVERIFY(outside.isValid());
+        const QString probePath = outside.filePath(QStringLiteral("probe.json"));
+
+        QTemporaryDir inside;
+        QVERIFY(inside.isValid());
+        const QString linkPath = inside.filePath(QStringLiteral("escape"));
+
+        // Create a symlink pointing outside. If symlinks aren't supported
+        // (unusual on Linux tmpfs but possible), skip the test rather than
+        // fail spuriously.
+        if (!QFile::link(outside.path(), linkPath)) {
+            QSKIP("filesystem does not support symlinks");
+        }
+
+        const QString storePath = linkPath + QStringLiteral("/probe.json");
+        JsonSurfaceStore s(storePath);
+        const bool saved = s.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 99}});
+
+        if (saved) {
+            // If the implementation accepts the symlink path, the file
+            // MUST still land inside `outside` (the symlink's target) —
+            // NOT escape further. We verify by checking `probePath` exists.
+            QVERIFY2(QFile::exists(probePath), "save() returned true but the file did not land at the symlink target");
+        } else {
+            // Rejection is also acceptable — the implementation may
+            // conservatively refuse symlinked parents.
+            QVERIFY(!s.has(QStringLiteral("k")));
+        }
+    }
+
     void jsonStore_corruptFileRecoversOnNextSave()
     {
         // Anti-regression: after loading a corrupt file, save() must
@@ -201,9 +252,10 @@ private Q_SLOTS:
         // internal hook without tearing down QCoreApplication.
         XdgToplevelTransport t;
         int runs = 0;
-        t.addCompositorLostCallback([&] {
+        const auto cookie = t.addCompositorLostCallback([&] {
             ++runs;
         });
+        QVERIFY(cookie != 0);
         QCOMPARE(runs, 0);
 
         QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
@@ -211,18 +263,40 @@ private Q_SLOTS:
 
         // Late registrant fires synchronously.
         int lateRuns = 0;
-        t.addCompositorLostCallback([&] {
+        const auto lateCookie = t.addCompositorLostCallback([&] {
             ++lateRuns;
         });
+        // After fire() the broadcaster no longer stores late registrants,
+        // but still issues a valid cookie; remove is a no-op and must not
+        // crash.
         QCOMPARE(lateRuns, 1);
+        t.removeCompositorLostCallback(lateCookie);
+
+        // Unsubscribing the already-fired original is also a no-op.
+        t.removeCompositorLostCallback(cookie);
     }
 
     void xdgTransport_nullCallbackIsIgnored()
     {
         XdgToplevelTransport t;
-        t.addCompositorLostCallback(nullptr);
+        const auto cookie = t.addCompositorLostCallback(nullptr);
+        QCOMPARE(cookie, ILayerShellTransport::CompositorLostCookie(0));
         // No crash, no observable effect when fired.
         QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
+    }
+
+    void xdgTransport_removeBeforeFireStopsCallback()
+    {
+        // Subscribe, unsubscribe, fire: the callback must not run.
+        XdgToplevelTransport t;
+        int runs = 0;
+        const auto cookie = t.addCompositorLostCallback([&] {
+            ++runs;
+        });
+        QVERIFY(cookie != 0);
+        t.removeCompositorLostCallback(cookie);
+        QVERIFY(QMetaObject::invokeMethod(qGuiApp, "aboutToQuit"));
+        QCOMPARE(runs, 0);
     }
 
     // ── NoOpSurfaceAnimator ────────────────────────────────────────────

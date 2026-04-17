@@ -55,12 +55,15 @@ public:
     /// Full list of screens the surfaces should be aware of.
     virtual QList<QScreen*> screens() const = 0;
 
-    /// Canonical "primary" screen — surfaces with Affinity::Primary bind here.
+    /// Canonical "primary" screen. SurfaceFactory falls back here when a
+    /// SurfaceConfig doesn't pin a specific QScreen*. Also used as the
+    /// recovery target when a bound screen is hot-unplugged.
     virtual QScreen* primary() const = 0;
 
     /// Screen currently containing the focus / cursor. Implementations that
-    /// don't track focus return @ref primary(). Surfaces with
-    /// Affinity::Focused bind here.
+    /// don't track focus return @ref primary(). Consumers pick between
+    /// @ref primary() and @ref focused() themselves when constructing a
+    /// SurfaceConfig; the library does not carry an affinity enum.
     virtual QScreen* focused() const = 0;
 
     /// Notifier for signal-driven updates. Pointer is owned by the provider;

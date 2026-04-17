@@ -37,7 +37,8 @@ public:
 
     bool isSupported() const override;
     std::unique_ptr<ITransportHandle> attach(QQuickWindow* win, const TransportAttachArgs& args) override;
-    void addCompositorLostCallback(CompositorLostCallback cb) override;
+    [[nodiscard]] CompositorLostCookie addCompositorLostCallback(CompositorLostCallback cb) override;
+    void removeCompositorLostCallback(CompositorLostCookie cookie) override;
 
 private:
     class Impl;

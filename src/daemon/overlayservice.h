@@ -211,6 +211,18 @@ public:
      */
     void warmUpNavigationOsd();
 
+private:
+    /**
+     * @brief Install the QGuiApplication::screenAdded hook once for both OSD
+     * warmers.
+     *
+     * Called from warmUpLayoutOsd AND warmUpNavigationOsd so consumers that
+     * only warm one kind still get hot-plug-triggered instances for the
+     * OSDs they actually warmed. Idempotent via m_screenAddedConnected.
+     */
+    void ensureOsdScreenAddedConnected();
+
+public:
     // Navigation OSD (feedback for keyboard navigation)
     void showNavigationOsd(bool success, const QString& action, const QString& reason,
                            const QString& sourceZoneId = QString(), const QString& targetZoneId = QString(),
