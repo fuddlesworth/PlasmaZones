@@ -358,9 +358,9 @@ bool Daemon::init()
     // Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Give the window drag adaptor access to the shortcut backend for
+    // Give the window drag adaptor access to the shortcut registry for
     // registering/unregistering the Escape cancel shortcut during drags
-    m_windowDragAdaptor->setShortcutBackend(m_shortcutManager->shortcutBackend());
+    m_windowDragAdaptor->setShortcutRegistry(m_shortcutManager->registry());
 
     // When the compositor bridge re-registers (e.g. KWin reloaded the effect,
     // effect process restarted, or daemon itself restarted mid-drag), any drag

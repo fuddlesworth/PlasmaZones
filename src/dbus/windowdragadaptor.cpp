@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
-#include <QAction>
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
 #include "pz_i18n.h"
 #include "../config/configdefaults.h"
-#include "../daemon/shortcutbackend.h"
+#include <PhosphorShortcuts/Registry.h>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -26,6 +25,11 @@
 #include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
+
+// Stable id for the Escape cancel-overlay shortcut bound dynamically during
+// a drag. Matches the pre-library object name so kglobalshortcutsrc entries
+// created by earlier installs continue to resolve.
+static constexpr auto kCancelOverlayId = "cancel_overlay_during_drag";
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
                                      ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent)
@@ -59,10 +63,9 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
         onLayoutChanged();
     });
 
-    // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
-    m_cancelOverlayAction = new QAction(PzI18n::tr("Cancel Zone Overlay"), this);
-    m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
-    connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
+    // Escape shortcut to cancel overlay during drag: bound into the Registry
+    // on drag start (see registerCancelOverlayShortcut) and released on end
+    // so the global Escape grab doesn't persist between drags.
 
     // When snap assist is dismissed (selection, timeout, etc.), unregister the Escape shortcut
     // that was kept alive during dragStopped() for the snap assist phase
@@ -282,20 +285,28 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction && m_shortcutBackend) {
-        m_shortcutBackend->setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
+    if (!m_shortcutRegistry) {
+        return;
     }
+    m_shortcutRegistry->bind(QString::fromLatin1(kCancelOverlayId), QKeySequence(Qt::Key_Escape),
+                             PzI18n::tr("Cancel Zone Overlay"), [this] {
+                                 cancelSnap();
+                             });
+    m_shortcutRegistry->flush();
 }
 
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction && m_shortcutBackend) {
-        // removeAllShortcuts() fully deregisters the action from the backend,
-        // releasing the compositor-level key grab. The previous approach of setting an empty
-        // QKeySequence left the action registered with a stale grab on Wayland, causing Escape
-        // to remain intercepted system-wide after every window drag (see discussion #155).
-        m_shortcutBackend->removeAllShortcuts(m_cancelOverlayAction);
+    if (!m_shortcutRegistry) {
+        return;
     }
+    // unbind() drops both the Registry entry and the compositor-level key
+    // grab. Prior IShortcutBackend-era bug (discussion #155) where setting
+    // an empty QKeySequence left a stale Wayland grab is no longer
+    // expressible with the new API — the only way to release a grab is
+    // unbind, which does it cleanly.
+    m_shortcutRegistry->unbind(QString::fromLatin1(kCancelOverlayId));
+    m_shortcutRegistry->flush();
 }
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)

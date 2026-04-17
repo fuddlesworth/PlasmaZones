@@ -1,0 +1,327 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorShortcuts/IBackend.h>
+#include <PhosphorShortcuts/Registry.h>
+
+#include <QKeySequence>
+#include <QSignalSpy>
+#include <QString>
+#include <QTest>
+#include <QVector>
+
+namespace Phosphor::Shortcuts::tests {
+
+/**
+ * FakeBackend: records every method call into inspectable vectors so tests
+ * can assert on the exact sequence of backend operations Registry produced
+ * for a given input. activate() exposes the IBackend::activated signal so
+ * tests can simulate key-press events without a real portal / KGlobalAccel
+ * round-trip.
+ */
+class FakeBackend : public IBackend
+{
+    Q_OBJECT
+public:
+    struct RegisterCall
+    {
+        QString id;
+        QKeySequence preferred;
+        QString description;
+    };
+    struct UpdateCall
+    {
+        QString id;
+        QKeySequence newTrigger;
+    };
+
+    using IBackend::IBackend;
+
+    void registerShortcut(const QString& id, const QKeySequence& preferredTrigger, const QString& description) override
+    {
+        registers.push_back({id, preferredTrigger, description});
+    }
+
+    void updateShortcut(const QString& id, const QKeySequence& newTrigger) override
+    {
+        updates.push_back({id, newTrigger});
+    }
+
+    void unregisterShortcut(const QString& id) override
+    {
+        unregisters.push_back(id);
+    }
+
+    void flush() override
+    {
+        ++flushes;
+        Q_EMIT ready();
+    }
+
+    void activate(const QString& id)
+    {
+        Q_EMIT activated(id);
+    }
+
+    QVector<RegisterCall> registers;
+    QVector<UpdateCall> updates;
+    QVector<QString> unregisters;
+    int flushes = 0;
+};
+
+class TestRegistry : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void bindThenFlush_queuesRegisterAndUpdate()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.test"), QKeySequence(QStringLiteral("Ctrl+Shift+T")),
+                      QStringLiteral("Test shortcut"));
+
+        // bind() queues but does not flush on its own — backend should be
+        // untouched until flush() is called.
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 0);
+        QCOMPARE(backend.flushes, 0);
+
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].id, QStringLiteral("pz.test"));
+        QCOMPARE(backend.registers[0].preferred, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+        QCOMPARE(backend.registers[0].description, QStringLiteral("Test shortcut"));
+        QCOMPARE(backend.updates.size(), 1);
+        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+        QCOMPARE(backend.flushes, 1);
+    }
+
+    void flushIdempotentWhenClean()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.registers.clear();
+        backend.updates.clear();
+
+        // Second flush with no pending changes — backend should see only the
+        // flush call itself, no duplicate registrations.
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 0);
+        QCOMPARE(backend.flushes, 2);
+    }
+
+    void rebindSameSequence_shortCircuits()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        // Same seq → no-op; backend should only see the flush, no updates.
+        QCOMPARE(backend.updates.size(), 0);
+    }
+
+    void rebindDifferentSequence_queuesUpdate()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        // Not yet flushed.
+        QCOMPARE(backend.updates.size(), 0);
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
+
+        registry.flush();
+
+        QCOMPARE(backend.updates.size(), 1);
+        QCOMPARE(backend.updates[0].id, QStringLiteral("pz.a"));
+        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void rebindUnknownId_isIgnored()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.rebind(QStringLiteral("pz.nonexistent"), QKeySequence(QStringLiteral("Meta+X")));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 0);
+    }
+
+    void unbind_releasesBackendGrab()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        registry.unbind(QStringLiteral("pz.a"));
+
+        QCOMPARE(backend.unregisters.size(), 1);
+        QCOMPARE(backend.unregisters[0], QStringLiteral("pz.a"));
+        QCOMPARE(registry.bindings().size(), 0);
+    }
+
+    void unbindUnknownId_isIdempotent()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.unbind(QStringLiteral("pz.never-bound"));
+        QCOMPARE(backend.unregisters.size(), 0);
+    }
+
+    void activation_emitsTriggeredAndInvokesCallback()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        int callbackCount = 0;
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            ++callbackCount;
+        });
+        registry.flush();
+
+        QSignalSpy triggeredSpy(&registry, &Registry::triggered);
+
+        backend.activate(QStringLiteral("pz.a"));
+
+        QCOMPARE(callbackCount, 1);
+        QCOMPARE(triggeredSpy.count(), 1);
+        QCOMPARE(triggeredSpy.at(0).at(0).toString(), QStringLiteral("pz.a"));
+    }
+
+    void activation_withoutCallback_stillEmitsTriggered()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        QSignalSpy triggeredSpy(&registry, &Registry::triggered);
+
+        backend.activate(QStringLiteral("pz.a"));
+
+        QCOMPARE(triggeredSpy.count(), 1);
+        QCOMPARE(triggeredSpy.at(0).at(0).toString(), QStringLiteral("pz.a"));
+    }
+
+    void activation_unknownId_stillEmitsTriggered()
+    {
+        // Consumers may use triggered() as a centralised dispatcher that logs
+        // or routes unknown ids — Registry shouldn't silently drop them.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        QSignalSpy triggeredSpy(&registry, &Registry::triggered);
+
+        backend.activate(QStringLiteral("pz.ghost"));
+
+        QCOMPARE(triggeredSpy.count(), 1);
+        QCOMPARE(triggeredSpy.at(0).at(0).toString(), QStringLiteral("pz.ghost"));
+    }
+
+    void activationAfterUnbind_isSuppressed()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        int callbackCount = 0;
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            ++callbackCount;
+        });
+        registry.flush();
+
+        registry.unbind(QStringLiteral("pz.a"));
+
+        backend.activate(QStringLiteral("pz.a"));
+
+        QCOMPARE(callbackCount, 0);
+    }
+
+    void readySignal_forwardsFromBackend()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        QSignalSpy readySpy(&registry, &Registry::ready);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        QCOMPARE(readySpy.count(), 1);
+    }
+
+    void rebindReplacesCallback()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        int firstCount = 0;
+        int secondCount = 0;
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            ++firstCount;
+        });
+        // Second bind() for the same id must replace the callback in place.
+        // This matches the ShortcutManager hot-reload pattern where compiled
+        // defaults are re-applied during registerShortcuts().
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")), QStringLiteral("A updated"), [&] {
+            ++secondCount;
+        });
+        registry.flush();
+
+        backend.activate(QStringLiteral("pz.a"));
+
+        QCOMPARE(firstCount, 0);
+        QCOMPARE(secondCount, 1);
+
+        const auto bindings = registry.bindings();
+        QCOMPARE(bindings.size(), 1);
+        QCOMPARE(bindings[0].description, QStringLiteral("A updated"));
+    }
+
+    void shortcut_returnsCurrentSequence()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.missing")), QKeySequence());
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+1")));
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
+    }
+};
+
+} // namespace Phosphor::Shortcuts::tests
+
+QTEST_MAIN(Phosphor::Shortcuts::tests::TestRegistry)
+#include "test_registry.moc"

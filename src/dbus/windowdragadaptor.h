@@ -5,7 +5,6 @@
 
 #include "plasmazones_export.h"
 #include <dbus_types.h>
-#include <QAction>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
@@ -15,11 +14,14 @@
 #include <QVector>
 #include <memory>
 
+namespace Phosphor::Shortcuts {
+class Registry;
+} // namespace Phosphor::Shortcuts
+
 class QScreen;
 
 namespace PlasmaZones {
 
-class IShortcutBackend;
 class IOverlayService;
 class IZoneDetector;
 class LayoutManager; // Concrete type needed for signal connections
@@ -63,14 +65,16 @@ public:
     }
 
     /**
-     * @brief Set the shortcut backend for registering/unregistering shortcuts
+     * @brief Set the shared shortcut registry.
      *
      * Must be called after construction, before any drag operations.
-     * The backend is owned by ShortcutManager — this is a non-owning pointer.
+     * The registry is owned by ShortcutManager — this is a non-owning pointer.
+     * Used to dynamically register/release the Escape cancel-overlay shortcut
+     * around active drag sessions.
      */
-    void setShortcutBackend(IShortcutBackend* backend)
+    void setShortcutRegistry(Phosphor::Shortcuts::Registry* registry)
     {
-        m_shortcutBackend = backend;
+        m_shortcutRegistry = registry;
     }
 
 public Q_SLOTS:
@@ -303,7 +307,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    IShortcutBackend* m_shortcutBackend = nullptr; // Non-owning: owned by ShortcutManager
+    Phosphor::Shortcuts::Registry* m_shortcutRegistry = nullptr; // Non-owning: owned by ShortcutManager
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap
     // assist is requested; consumed by computeAndEmitSnapAssist() which runs
@@ -384,8 +388,9 @@ private:
     QSet<QUuid> m_paintedZoneIds; // Accumulates zones during paint-to-span drag
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
-    // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
-    QAction* m_cancelOverlayAction = nullptr;
+    // Escape cancel-overlay shortcut is registered/unregistered dynamically
+    // via the PhosphorShortcuts Registry around drag sessions — no QAction
+    // member needed (the Registry owns everything).
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;

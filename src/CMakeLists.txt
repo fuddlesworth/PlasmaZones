@@ -153,8 +153,6 @@ set(plasmazones_core_SRCS
     dbus/windowdragadaptor/drag_protocol.cpp
     dbus/windowdragadaptor/drop.cpp
     dbus/windowdragadaptor.h
-    daemon/shortcutbackend.h
-    daemon/shortcutbackend.cpp
     dbus/autotileadaptor.cpp
     dbus/autotileadaptor/config.cpp
     dbus/autotileadaptor.h
@@ -244,6 +242,7 @@ target_link_libraries(plasmazones_core
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
         PhosphorShell::PhosphorShell
+        PhosphorShortcuts::PhosphorShortcuts
     PRIVATE
         Wayland::Client
         Qt6::Concurrent
@@ -411,7 +410,6 @@ set(plasmazones_daemon_SRCS
     daemon/windowthumbnailservice.cpp
     daemon/windowthumbnailservice.h
     daemon/shortcutmanager.cpp
-    daemon/shortcutmanager/handlers.cpp
     daemon/shortcutmanager.h
     daemon/zoneselectorcontroller.cpp
     daemon/zoneselectorcontroller.h

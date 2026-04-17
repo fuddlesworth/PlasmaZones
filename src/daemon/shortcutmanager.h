@@ -3,13 +3,18 @@
 
 #pragma once
 
-#include <QObject>
-#include <QAction>
 #include <QKeySequence>
-#include <QPointer>
-#include <QQueue>
+#include <QObject>
+#include <QString>
+#include <QVector>
+
+#include <functional>
 #include <memory>
-#include "shortcutbackend.h"
+
+namespace Phosphor::Shortcuts {
+class IBackend;
+class Registry;
+} // namespace Phosphor::Shortcuts
 
 namespace PlasmaZones {
 
@@ -27,11 +32,13 @@ enum class NavigationDirection {
 };
 
 /**
- * @brief Manages global keyboard shortcuts
+ * @brief Manages global keyboard shortcuts for PlasmaZones.
  *
- * Handles registration and management of all global shortcuts
- * for PlasmaZones.
- * separating shortcut management from other daemon concerns.
+ * Thin glue layer on top of Phosphor::Shortcuts::Registry. Owns one entry per
+ * PlasmaZones action, wires each entry's current sequence to the matching
+ * Settings getter, and fans activation into the domain-specific Q_SIGNALS
+ * below. The actual key-grab mechanism (KGlobalAccel / XDG Portal /
+ * D-Bus trigger) is selected inside the PhosphorShortcuts library.
  */
 class ShortcutManager : public QObject
 {
@@ -41,138 +48,37 @@ public:
     explicit ShortcutManager(Settings* settings, LayoutManager* layoutManager, QObject* parent = nullptr);
     ~ShortcutManager() override;
 
-    /**
-     * @brief Initialize and register shortcuts
-     */
     void registerShortcuts();
-
-    /**
-     * @brief Update shortcuts when settings change
-     */
     void updateShortcuts();
-
-    /**
-     * @brief Clear all registered shortcuts
-     */
     void unregisterShortcuts();
 
-    /**
-     * @brief Access the shortcut backend (for sharing with other components)
-     */
-    IShortcutBackend* shortcutBackend() const
+    /// Registry handle for subsystems that need to register their own
+    /// ad-hoc shortcuts (e.g. WindowDragAdaptor for the Escape cancel).
+    Phosphor::Shortcuts::Registry* registry() const
     {
-        return m_shortcutBackend.get();
+        return m_registry.get();
     }
 
 Q_SIGNALS:
-    /**
-     * @brief Emitted when editor shortcut is triggered
-     */
     void openEditorRequested();
-
-    /**
-     * @brief Emitted when settings shortcut is triggered
-     */
     void openSettingsRequested();
-
-    /**
-     * @brief Emitted when previous layout shortcut is triggered
-     */
     void previousLayoutRequested();
-
-    /**
-     * @brief Emitted when next layout shortcut is triggered
-     */
     void nextLayoutRequested();
-
-    /**
-     * @brief Emitted when quick layout shortcut is triggered
-     * @param number Layout number (1-9)
-     */
     void quickLayoutRequested(int number);
 
-    // Keyboard navigation signals
-    /**
-     * @brief Emitted when move window to adjacent zone is requested
-     * @param direction Navigation direction (Left, Right, Up, Down)
-     */
     void moveWindowRequested(NavigationDirection direction);
-
-    /**
-     * @brief Emitted when focus navigation to adjacent zone is requested
-     * @param direction Navigation direction (Left, Right, Up, Down)
-     */
     void focusZoneRequested(NavigationDirection direction);
-
-    /**
-     * @brief Emitted when push window to empty zone is requested
-     */
     void pushToEmptyZoneRequested();
-
-    /**
-     * @brief Emitted when restore window size is requested
-     */
     void restoreWindowSizeRequested();
-
-    /**
-     * @brief Emitted when toggle window float is requested
-     */
     void toggleWindowFloatRequested();
-
-    /**
-     * @brief Emitted when swap window with adjacent zone is requested
-     * @param direction Navigation direction (Left, Right, Up, Down)
-     */
     void swapWindowRequested(NavigationDirection direction);
-
-    /**
-     * @brief Emitted when snap to zone by number is requested
-     * @param zoneNumber Zone number (1-9)
-     */
     void snapToZoneRequested(int zoneNumber);
-
-    /**
-     * @brief Emitted when rotate windows is requested
-     * @param clockwise true for clockwise, false for counterclockwise
-     */
     void rotateWindowsRequested(bool clockwise);
-
-    /**
-     * @brief Emitted when cycle windows in zone is requested
-     * @param forward true for forward/next, false for backward/previous
-     */
     void cycleWindowsInZoneRequested(bool forward);
-
-    /**
-     * @brief Emitted when resnap to new layout is requested
-     *
-     * Resnaps all windows from the previous layout to the current layout
-     * (by zone number with cycling when fewer zones).
-     */
     void resnapToNewLayoutRequested();
-
-    /**
-     * @brief Emitted when snap all windows shortcut is triggered
-     *
-     * Snaps all visible unsnapped windows on the current screen to zones.
-     */
     void snapAllWindowsRequested();
-
-    /**
-     * @brief Emitted when layout picker shortcut is triggered
-     *
-     * Opens the layout picker overlay to browse and switch layouts interactively.
-     */
     void layoutPickerRequested();
-
-    /**
-     * @brief Emitted when toggle layout lock shortcut is triggered
-     */
     void toggleLayoutLockRequested();
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // Autotile Shortcuts
-    // ═══════════════════════════════════════════════════════════════════════════
 
     void toggleAutotileRequested();
     void focusMasterRequested();
@@ -183,235 +89,34 @@ Q_SIGNALS:
     void decreaseMasterCountRequested();
     void retileRequested();
 
-    /**
-     * @brief Emitted when swap virtual screen in direction is requested
-     * @param direction Navigation direction (Left, Right, Up, Down)
-     */
     void swapVirtualScreenRequested(NavigationDirection direction);
-
-    /**
-     * @brief Emitted when rotate virtual screens is requested
-     * @param clockwise true for clockwise, false for counterclockwise
-     */
     void rotateVirtualScreensRequested(bool clockwise);
 
-    /**
-     * @brief Emitted when deferred shortcut registration completes
-     */
     void shortcutsRegistered();
 
-private Q_SLOTS:
-    void onOpenEditor();
-    void onOpenSettings();
-    void onPreviousLayout();
-    void onNextLayout();
-    void onQuickLayout(int number);
-    void updateEditorShortcut();
-    void updateSettingsShortcut();
-    void updatePreviousLayoutShortcut();
-    void updateNextLayoutShortcut();
-    void updateQuickLayoutShortcut(int index);
-
-    // Keyboard navigation slots
-    void onMoveWindowLeft();
-    void onMoveWindowRight();
-    void onMoveWindowUp();
-    void onMoveWindowDown();
-    void onFocusZoneLeft();
-    void onFocusZoneRight();
-    void onFocusZoneUp();
-    void onFocusZoneDown();
-    void onPushToEmptyZone();
-    void onRestoreWindowSize();
-    void onToggleWindowFloat();
-
-    // Swap window slots
-    void onSwapWindowLeft();
-    void onSwapWindowRight();
-    void onSwapWindowUp();
-    void onSwapWindowDown();
-
-    // Swap virtual screen slots
-    void onSwapVirtualScreenLeft();
-    void onSwapVirtualScreenRight();
-    void onSwapVirtualScreenUp();
-    void onSwapVirtualScreenDown();
-
-    // Rotate virtual screens slots
-    void onRotateVirtualScreensClockwise();
-    void onRotateVirtualScreensCounterclockwise();
-
-    // Update navigation shortcuts from settings
-    void updateMoveWindowLeftShortcut();
-    void updateMoveWindowRightShortcut();
-    void updateMoveWindowUpShortcut();
-    void updateMoveWindowDownShortcut();
-    void updateFocusZoneLeftShortcut();
-    void updateFocusZoneRightShortcut();
-    void updateFocusZoneUpShortcut();
-    void updateFocusZoneDownShortcut();
-    void updatePushToEmptyZoneShortcut();
-    void updateRestoreWindowSizeShortcut();
-    void updateToggleWindowFloatShortcut();
-
-    // Update swap window shortcuts from settings
-    void updateSwapWindowLeftShortcut();
-    void updateSwapWindowRightShortcut();
-    void updateSwapWindowUpShortcut();
-    void updateSwapWindowDownShortcut();
-
-    // Update swap virtual screen shortcuts from settings
-    void updateSwapVirtualScreenLeftShortcut();
-    void updateSwapVirtualScreenRightShortcut();
-    void updateSwapVirtualScreenUpShortcut();
-    void updateSwapVirtualScreenDownShortcut();
-
-    // Update rotate virtual screens shortcuts from settings
-    void updateRotateVirtualScreensClockwiseShortcut();
-    void updateRotateVirtualScreensCounterclockwiseShortcut();
-
-    // Snap to Zone by Number
-    void onSnapToZone(int zoneNumber);
-    void updateSnapToZoneShortcut(int index);
-
-    // Rotate Windows
-    void onRotateWindowsClockwise();
-    void onRotateWindowsCounterclockwise();
-    void updateRotateWindowsClockwiseShortcut();
-    void updateRotateWindowsCounterclockwiseShortcut();
-
-    // Cycle Windows in Zone
-    void onCycleWindowForward();
-    void onCycleWindowBackward();
-    void updateCycleWindowForwardShortcut();
-    void updateCycleWindowBackwardShortcut();
-
-    // Resnap to New Layout
-    void onResnapToNewLayout();
-    void updateResnapToNewLayoutShortcut();
-
-    // Snap All Windows
-    void onSnapAllWindows();
-    void updateSnapAllWindowsShortcut();
-
-    // Layout Picker
-    void onLayoutPicker();
-    void updateLayoutPickerShortcut();
-
-    // Toggle Layout Lock
-    void onToggleLayoutLock();
-    void updateToggleLayoutLockShortcut();
-
-    // Autotile shortcuts
-    void onToggleAutotile();
-    void onFocusMaster();
-    void onSwapWithMaster();
-    void onIncreaseMasterRatio();
-    void onDecreaseMasterRatio();
-    void onIncreaseMasterCount();
-    void onDecreaseMasterCount();
-    void onRetile();
-
-    // Update autotile shortcuts from settings
-    void updateToggleAutotileShortcut();
-    void updateFocusMasterShortcut();
-    void updateSwapMasterShortcut();
-    void updateIncMasterRatioShortcut();
-    void updateDecMasterRatioShortcut();
-    void updateIncMasterCountShortcut();
-    void updateDecMasterCountShortcut();
-    void updateRetileShortcut();
-
 private:
-    void setupEditorShortcut();
-    void setupSettingsShortcut();
-    void setupCyclingShortcuts();
-    void setupQuickLayoutShortcuts();
-    void setupNavigationShortcuts();
-    void setupSwapWindowShortcuts();
-    void setupSnapToZoneShortcuts();
-    void setupRotateWindowsShortcuts();
-    void setupCycleWindowsShortcuts();
-    void setupResnapToNewLayoutShortcut();
-    void setupSnapAllWindowsShortcut();
-    void setupLayoutPickerShortcut();
-    void setupToggleLayoutLockShortcut();
-    void setupSwapVirtualScreenShortcuts();
-    void setupRotateVirtualScreensShortcuts();
-    void setupAutotileShortcuts();
+    struct Entry
+    {
+        QString id;
+        QKeySequence defaultSeq;
+        QString description;
+        // Reads the current key sequence from m_settings (handles per-slot
+        // getters for the quick-layout / snap-to-zone arrays).
+        std::function<QKeySequence()> currentSeq;
+        // Emits the domain Q_SIGNAL corresponding to this id.
+        std::function<void()> fire;
+    };
+
+    void buildEntries();
+    void rebindAll();
+
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
 
-    QAction* m_editorAction = nullptr;
-    QAction* m_settingsAction = nullptr;
-    QAction* m_previousLayoutAction = nullptr;
-    QAction* m_nextLayoutAction = nullptr;
-    QVector<QAction*> m_quickLayoutActions;
+    std::unique_ptr<Phosphor::Shortcuts::IBackend> m_backend;
+    std::unique_ptr<Phosphor::Shortcuts::Registry> m_registry;
 
-    // Keyboard navigation actions
-    QAction* m_moveWindowLeftAction = nullptr;
-    QAction* m_moveWindowRightAction = nullptr;
-    QAction* m_moveWindowUpAction = nullptr;
-    QAction* m_moveWindowDownAction = nullptr;
-    QAction* m_focusZoneLeftAction = nullptr;
-    QAction* m_focusZoneRightAction = nullptr;
-    QAction* m_focusZoneUpAction = nullptr;
-    QAction* m_focusZoneDownAction = nullptr;
-    QAction* m_pushToEmptyZoneAction = nullptr;
-    QAction* m_restoreWindowSizeAction = nullptr;
-    QAction* m_toggleWindowFloatAction = nullptr;
-
-    // Swap window actions
-    QAction* m_swapWindowLeftAction = nullptr;
-    QAction* m_swapWindowRightAction = nullptr;
-    QAction* m_swapWindowUpAction = nullptr;
-    QAction* m_swapWindowDownAction = nullptr;
-
-    // Swap virtual screen actions
-    QAction* m_swapVirtualScreenLeftAction = nullptr;
-    QAction* m_swapVirtualScreenRightAction = nullptr;
-    QAction* m_swapVirtualScreenUpAction = nullptr;
-    QAction* m_swapVirtualScreenDownAction = nullptr;
-
-    // Rotate virtual screens actions
-    QAction* m_rotateVirtualScreensClockwiseAction = nullptr;
-    QAction* m_rotateVirtualScreensCounterclockwiseAction = nullptr;
-
-    // Snap to Zone by Number actions
-    QVector<QAction*> m_snapToZoneActions;
-
-    // Rotate Windows actions
-    QAction* m_rotateWindowsClockwiseAction = nullptr;
-    QAction* m_rotateWindowsCounterclockwiseAction = nullptr;
-
-    // Cycle Windows in Zone actions
-    QAction* m_cycleWindowForwardAction = nullptr;
-    QAction* m_cycleWindowBackwardAction = nullptr;
-
-    // Resnap to New Layout action
-    QAction* m_resnapToNewLayoutAction = nullptr;
-
-    // Snap All Windows action
-    QAction* m_snapAllWindowsAction = nullptr;
-
-    // Layout Picker action
-    QAction* m_layoutPickerAction = nullptr;
-
-    // Toggle Layout Lock action
-    QAction* m_toggleLayoutLockAction = nullptr;
-
-    // Autotile actions
-    QAction* m_toggleAutotileAction = nullptr;
-    QAction* m_focusMasterAction = nullptr;
-    QAction* m_swapMasterAction = nullptr;
-    QAction* m_incMasterRatioAction = nullptr;
-    QAction* m_decMasterRatioAction = nullptr;
-    QAction* m_incMasterCountAction = nullptr;
-    QAction* m_decMasterCountAction = nullptr;
-    QAction* m_retileAction = nullptr;
-
-    // Shortcut backend (KGlobalAccel, Portal, or D-Bus trigger fallback)
-    std::unique_ptr<IShortcutBackend> m_shortcutBackend;
+    QVector<Entry> m_entries;
 
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;
