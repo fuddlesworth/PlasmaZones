@@ -1002,41 +1002,19 @@ public:
     }
     void setAutotileRetileShortcut(const QString& shortcut);
 
-    // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool animationsEnabled() const override
-    {
-        return m_animationsEnabled;
-    }
+    // Animation Settings (applies to both snapping and autotiling geometry
+    // changes) — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    bool animationsEnabled() const override;
     void setAnimationsEnabled(bool enabled) override;
-
-    int animationDuration() const override
-    {
-        return m_animationDuration;
-    }
+    int animationDuration() const override;
     void setAnimationDuration(int duration) override;
-
-    QString animationEasingCurve() const override
-    {
-        return m_animationEasingCurve;
-    }
+    QString animationEasingCurve() const override;
     void setAnimationEasingCurve(const QString& curve) override;
-
-    int animationMinDistance() const override
-    {
-        return m_animationMinDistance;
-    }
+    int animationMinDistance() const override;
     void setAnimationMinDistance(int distance) override;
-
-    int animationSequenceMode() const override
-    {
-        return m_animationSequenceMode;
-    }
+    int animationSequenceMode() const override;
     void setAnimationSequenceMode(int mode) override;
-
-    int animationStaggerInterval() const override
-    {
-        return m_animationStaggerInterval;
-    }
+    int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
 
     // Additional Autotiling Settings
@@ -1752,12 +1730,7 @@ private:
     bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
-    bool m_animationsEnabled = ConfigDefaults::animationsEnabled();
-    int m_animationDuration = ConfigDefaults::animationDuration();
-    QString m_animationEasingCurve = ConfigDefaults::animationEasingCurve();
-    int m_animationMinDistance = ConfigDefaults::animationMinDistance();
-    int m_animationSequenceMode = ConfigDefaults::animationSequenceMode();
-    int m_animationStaggerInterval = ConfigDefaults::animationStaggerInterval();
+    // Animations are stored in m_store; no cached members here.
 
     // Additional Autotiling Settings
     bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();

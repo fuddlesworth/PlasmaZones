@@ -31,5 +31,6 @@ PLASMAZONES_EXPORT PhosphorConfig::Schema buildSettingsSchema();
 void appendShadersSchema(PhosphorConfig::Schema& schema);
 void appendAppearanceSchema(PhosphorConfig::Schema& schema);
 void appendOrderingSchema(PhosphorConfig::Schema& schema);
+void appendAnimationsSchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

@@ -439,11 +439,14 @@ void Settings::setAudioSpectrumBarCount(int count)
     Q_EMIT settingsChanged();
 }
 
-// ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
-// Each getter/setter pair is mechanical: read through m_store, write through
-// m_store, then check a "did it change" before emitting NOTIFY. Setters with
-// validators (opacity, border width/radius, font weight/scale) rely on the
-// schema to coerce — the read-back after write() returns the canonical value.
+// ── Store-backed getter/setter macros ───────────────────────────────────────
+// Shared by every group migrated to PhosphorConfig::Store. Each macro
+// expands to a mechanical "read through m_store / write through m_store,
+// then check change before NOTIFY" implementation. Clamp / normalize
+// behaviour lives in the schema validator, so the read-back after write
+// gives the canonical value.
+//
+// These are local to settings.cpp and #undef'd at the bottom of the file.
 
 #define PZ_STORE_GET(retType, fn, group, key, readType)                                                                \
     retType Settings::fn() const                                                                                       \
@@ -510,6 +513,7 @@ void Settings::setAudioSpectrumBarCount(int count)
         Q_EMIT settingsChanged();                                                                                      \
     }
 
+// ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
 // Colors group
 PZ_STORE_GET(bool, useSystemColors, snappingAppearanceColorsGroup, useSystemKey, bool)
 void Settings::setUseSystemColors(bool use)
@@ -562,13 +566,6 @@ PZ_STORE_SET_INT(setBorderRadius, snappingAppearanceBorderGroup, radiusKey, bord
 // Effects group (blur lives here for historical reasons)
 PZ_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
 PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
-
-#undef PZ_STORE_GET
-#undef PZ_STORE_SET_BOOL
-#undef PZ_STORE_SET_INT
-#undef PZ_STORE_SET_DOUBLE
-#undef PZ_STORE_SET_COLOR
-#undef PZ_STORE_SET_STRING
 
 // ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
 // On disk: comma-joined QString. In API: QStringList. The schema validator
@@ -623,6 +620,23 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
     Q_EMIT tilingAlgorithmOrderChanged();
     Q_EMIT settingsChanged();
 }
+
+// ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
+// Snapping + autotile geometry-change transitions. Clamp validators enforce
+// duration/min-distance/sequence-mode/stagger-interval ranges uniformly.
+
+PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
+PZ_STORE_GET(int, animationDuration, animationsGroup, durationKey, int)
+PZ_STORE_SET_INT(setAnimationDuration, animationsGroup, durationKey, animationDurationChanged)
+PZ_STORE_GET(QString, animationEasingCurve, animationsGroup, easingCurveKey, QString)
+PZ_STORE_SET_STRING(setAnimationEasingCurve, animationsGroup, easingCurveKey, animationEasingCurveChanged)
+PZ_STORE_GET(int, animationMinDistance, animationsGroup, minDistanceKey, int)
+PZ_STORE_SET_INT(setAnimationMinDistance, animationsGroup, minDistanceKey, animationMinDistanceChanged)
+PZ_STORE_GET(int, animationSequenceMode, animationsGroup, sequenceModeKey, int)
+PZ_STORE_SET_INT(setAnimationSequenceMode, animationsGroup, sequenceModeKey, animationSequenceModeChanged)
+PZ_STORE_GET(int, animationStaggerInterval, animationsGroup, staggerIntervalKey, int)
+PZ_STORE_SET_INT(setAnimationStaggerInterval, animationsGroup, staggerIntervalKey, animationStaggerIntervalChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
@@ -815,5 +829,12 @@ void Settings::applyAutotileBorderSystemColor()
         Q_EMIT autotileInactiveBorderColorChanged();
     }
 }
+
+#undef PZ_STORE_GET
+#undef PZ_STORE_SET_BOOL
+#undef PZ_STORE_SET_INT
+#undef PZ_STORE_SET_DOUBLE
+#undef PZ_STORE_SET_COLOR
+#undef PZ_STORE_SET_STRING
 
 } // namespace PlasmaZones

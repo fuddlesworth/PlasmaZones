@@ -510,17 +510,7 @@ SETTINGS_SETTER(const QString&, AutotileRetileShortcut, m_autotileRetileShortcut
 // Animation setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-SETTINGS_SETTER(bool, AnimationsEnabled, m_animationsEnabled, animationsEnabledChanged)
-SETTINGS_SETTER_CLAMPED(AnimationDuration, m_animationDuration, animationDurationChanged,
-                        ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax())
-SETTINGS_SETTER(const QString&, AnimationEasingCurve, m_animationEasingCurve, animationEasingCurveChanged)
-
-SETTINGS_SETTER_CLAMPED(AnimationMinDistance, m_animationMinDistance, animationMinDistanceChanged,
-                        ConfigDefaults::animationMinDistanceMin(), ConfigDefaults::animationMinDistanceMax())
-SETTINGS_SETTER_CLAMPED(AnimationSequenceMode, m_animationSequenceMode, animationSequenceModeChanged,
-                        ConfigDefaults::animationSequenceModeMin(), ConfigDefaults::animationSequenceModeMax())
-SETTINGS_SETTER_CLAMPED(AnimationStaggerInterval, m_animationStaggerInterval, animationStaggerIntervalChanged,
-                        ConfigDefaults::animationStaggerIntervalMin(), ConfigDefaults::animationStaggerIntervalMax())
+// Animation setters moved to settings.cpp (PhosphorConfig::Store-backed).
 SETTINGS_SETTER(bool, AutotileFocusFollowsMouse, m_autotileFocusFollowsMouse, autotileFocusFollowsMouseChanged)
 SETTINGS_SETTER(bool, AutotileRespectMinimumSize, m_autotileRespectMinimumSize, autotileRespectMinimumSizeChanged)
 SETTINGS_SETTER(bool, AutotileHideTitleBars, m_autotileHideTitleBars, autotileHideTitleBarsChanged)

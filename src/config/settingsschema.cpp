@@ -19,6 +19,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendShadersSchema(s);
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
+    appendAnimationsSchema(s);
 
     return s;
 }
@@ -166,6 +167,40 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
     schema.groups[CD::orderingGroup()] = {
         {CD::snappingLayoutOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
         {CD::tilingAlgorithmOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+    };
+}
+
+// ─── Animations ─────────────────────────────────────────────────────────────
+// Covers both snapping and autotile geometry-change transitions. Easing curve
+// is a string (EasingCurve::fromString/toString handle the wire format
+// outside the schema); the rest are clamped ints + one bool.
+
+void appendAnimationsSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::animationsGroup()] = {
+        {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
+        {CD::durationKey(),
+         CD::animationDuration(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationDurationMin(), CD::animationDurationMax())},
+        {CD::easingCurveKey(), CD::animationEasingCurve(), QMetaType::QString},
+        {CD::minDistanceKey(),
+         CD::animationMinDistance(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationMinDistanceMin(), CD::animationMinDistanceMax())},
+        {CD::sequenceModeKey(),
+         CD::animationSequenceMode(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationSequenceModeMin(), CD::animationSequenceModeMax())},
+        {CD::staggerIntervalKey(),
+         CD::animationStaggerInterval(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::animationStaggerIntervalMin(), CD::animationStaggerIntervalMax())},
     };
 }
 

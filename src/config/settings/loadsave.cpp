@@ -507,28 +507,9 @@ void Settings::loadAutotilingConfig(PhosphorConfig::IBackend* backend)
             tilingColors->readBool(ConfigDefaults::useSystemKey(), ConfigDefaults::autotileUseSystemBorderColors());
     }
 
-    // Animation Settings
-    {
-        auto animations = backend->group(ConfigDefaults::animationsGroup());
-        m_animationsEnabled = animations->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::animationsEnabled());
-        m_animationDuration = readValidatedInt(
-            *animations, ConfigDefaults::durationKey(), ConfigDefaults::animationDuration(),
-            ConfigDefaults::animationDurationMin(), ConfigDefaults::animationDurationMax(), "animation duration");
-        m_animationEasingCurve =
-            animations->readString(ConfigDefaults::easingCurveKey(), ConfigDefaults::animationEasingCurve());
-        m_animationMinDistance =
-            readValidatedInt(*animations, ConfigDefaults::minDistanceKey(), ConfigDefaults::animationMinDistance(),
-                             ConfigDefaults::animationMinDistanceMin(), ConfigDefaults::animationMinDistanceMax(),
-                             "animation min distance");
-        m_animationSequenceMode =
-            readValidatedInt(*animations, ConfigDefaults::sequenceModeKey(), ConfigDefaults::animationSequenceMode(),
-                             ConfigDefaults::animationSequenceModeMin(), ConfigDefaults::animationSequenceModeMax(),
-                             "animation sequence mode");
-        m_animationStaggerInterval =
-            readValidatedInt(*animations, ConfigDefaults::staggerIntervalKey(),
-                             ConfigDefaults::animationStaggerInterval(), ConfigDefaults::animationStaggerIntervalMin(),
-                             ConfigDefaults::animationStaggerIntervalMax(), "animation stagger interval");
-    }
+    // Animation settings are backed by PhosphorConfig::Store — nothing to
+    // load here. Getters read through the store on demand with the schema's
+    // clamp validators applied.
 
     // Tiling Shortcuts
     {
@@ -881,15 +862,8 @@ void Settings::saveAutotilingConfig(PhosphorConfig::IBackend* backend)
         tilingColors->writeBool(ConfigDefaults::useSystemKey(), m_autotileUseSystemBorderColors);
     }
 
-    {
-        auto animations = backend->group(ConfigDefaults::animationsGroup());
-        animations->writeBool(ConfigDefaults::enabledKey(), m_animationsEnabled);
-        animations->writeInt(ConfigDefaults::durationKey(), m_animationDuration);
-        animations->writeString(ConfigDefaults::easingCurveKey(), m_animationEasingCurve);
-        animations->writeInt(ConfigDefaults::minDistanceKey(), m_animationMinDistance);
-        animations->writeInt(ConfigDefaults::sequenceModeKey(), m_animationSequenceMode);
-        animations->writeInt(ConfigDefaults::staggerIntervalKey(), m_animationStaggerInterval);
-    }
+    // Animation settings are backed by PhosphorConfig::Store — persisted
+    // by setters directly, no save pass needed here.
 
     {
         auto tilingShortcuts = backend->group(ConfigDefaults::shortcutsTilingGroup());
