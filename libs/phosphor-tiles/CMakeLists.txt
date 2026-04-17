@@ -38,7 +38,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml)
+find_package(Qt6 REQUIRED COMPONENTS Core Qml)
 
 # PhosphorLayoutApi provides the LayoutPreview / ILayoutSource contract that
 # this library implements via AutotileLayoutSource. Found via add_subdirectory
@@ -118,7 +118,6 @@ target_compile_features(PhosphorTiles PUBLIC cxx_std_20)
 target_link_libraries(PhosphorTiles
     PUBLIC
         Qt6::Core
-        Qt6::Gui
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
 )
