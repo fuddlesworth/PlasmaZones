@@ -417,43 +417,21 @@ public:
 
     // No singleton - use dependency injection instead
 
-    // ISettings interface implementation
-    QVariantList dragActivationTriggers() const override
-    {
-        return m_dragActivationTriggers;
-    }
+    // Activation — PhosphorConfig::Store-backed.
+    QVariantList dragActivationTriggers() const override;
     void setDragActivationTriggers(const QVariantList& triggers) override;
-
-    bool zoneSpanEnabled() const override
-    {
-        return m_zoneSpanEnabled;
-    }
+    bool zoneSpanEnabled() const override;
     void setZoneSpanEnabled(bool enabled) override;
-    DragModifier zoneSpanModifier() const override
-    {
-        return m_zoneSpanModifier;
-    }
+    DragModifier zoneSpanModifier() const override;
     void setZoneSpanModifier(DragModifier modifier) override;
-    QVariantList zoneSpanTriggers() const override
-    {
-        return m_zoneSpanTriggers;
-    }
-    void setZoneSpanTriggers(const QVariantList& triggers) override;
-    bool toggleActivation() const override
-    {
-        return m_toggleActivation;
-    }
-    void setToggleActivation(bool enable) override;
-    bool snappingEnabled() const override
-    {
-        return m_snappingEnabled;
-    }
-    void setSnappingEnabled(bool enabled) override;
-    int zoneSpanModifierInt() const
-    {
-        return static_cast<int>(m_zoneSpanModifier);
-    }
+    int zoneSpanModifierInt() const;
     void setZoneSpanModifierInt(int modifier);
+    QVariantList zoneSpanTriggers() const override;
+    void setZoneSpanTriggers(const QVariantList& triggers) override;
+    bool toggleActivation() const override;
+    void setToggleActivation(bool enable) override;
+    bool snappingEnabled() const override;
+    void setSnappingEnabled(bool enabled) override;
 
     // Display — PhosphorConfig::Store-backed.
     bool showZonesOnAllMonitors() const override;
@@ -546,62 +524,26 @@ public:
     int minimumZoneDisplaySizePx() const override;
     void setMinimumZoneDisplaySizePx(int size) override;
 
-    bool keepWindowsInZonesOnResolutionChange() const override
-    {
-        return m_keepWindowsInZonesOnResolutionChange;
-    }
+    // Behavior — PhosphorConfig::Store-backed.
+    bool keepWindowsInZonesOnResolutionChange() const override;
     void setKeepWindowsInZonesOnResolutionChange(bool keep) override;
-
-    bool moveNewWindowsToLastZone() const override
-    {
-        return m_moveNewWindowsToLastZone;
-    }
+    bool moveNewWindowsToLastZone() const override;
     void setMoveNewWindowsToLastZone(bool move) override;
-
-    bool restoreOriginalSizeOnUnsnap() const override
-    {
-        return m_restoreOriginalSizeOnUnsnap;
-    }
+    bool restoreOriginalSizeOnUnsnap() const override;
     void setRestoreOriginalSizeOnUnsnap(bool restore) override;
-    StickyWindowHandling stickyWindowHandling() const override
-    {
-        return m_stickyWindowHandling;
-    }
+    StickyWindowHandling stickyWindowHandling() const override;
     void setStickyWindowHandling(StickyWindowHandling handling) override;
-    int stickyWindowHandlingInt() const
-    {
-        return static_cast<int>(m_stickyWindowHandling);
-    }
+    int stickyWindowHandlingInt() const;
     void setStickyWindowHandlingInt(int handling);
-
-    bool restoreWindowsToZonesOnLogin() const override
-    {
-        return m_restoreWindowsToZonesOnLogin;
-    }
+    bool restoreWindowsToZonesOnLogin() const override;
     void setRestoreWindowsToZonesOnLogin(bool restore) override;
-
-    bool snapAssistFeatureEnabled() const override
-    {
-        return m_snapAssistFeatureEnabled;
-    }
+    bool snapAssistFeatureEnabled() const override;
     void setSnapAssistFeatureEnabled(bool enabled) override;
-
-    bool snapAssistEnabled() const override
-    {
-        return m_snapAssistEnabled;
-    }
+    bool snapAssistEnabled() const override;
     void setSnapAssistEnabled(bool enabled) override;
-
-    QVariantList snapAssistTriggers() const override
-    {
-        return m_snapAssistTriggers;
-    }
+    QVariantList snapAssistTriggers() const override;
     void setSnapAssistTriggers(const QVariantList& triggers) override;
-
-    QString defaultLayoutId() const override
-    {
-        return m_defaultLayoutId;
-    }
+    QString defaultLayoutId() const override;
     void setDefaultLayoutId(const QString& layoutId) override;
 
     bool filterLayoutsByAspectRatio() const override;
@@ -1250,12 +1192,7 @@ private:
     static QString normalizeUuidString(const QString& uuidStr);
 
     // Activation
-    QVariantList m_dragActivationTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_zoneSpanEnabled = ConfigDefaults::zoneSpanEnabled();
-    DragModifier m_zoneSpanModifier = DragModifier::Ctrl;
-    QVariantList m_zoneSpanTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_toggleActivation = ConfigDefaults::toggleActivation();
-    bool m_snappingEnabled = ConfigDefaults::snappingEnabled();
+    // Activation is stored in m_store.
 
     // Display
     // Display is stored in m_store; no cached members here.
@@ -1271,17 +1208,10 @@ private:
     // Performance is stored in m_store; no cached members here.
 
     // Window behavior
-    bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
-    bool m_moveNewWindowsToLastZone = ConfigDefaults::moveNewWindowsToLastZone();
-    bool m_restoreOriginalSizeOnUnsnap = ConfigDefaults::restoreOriginalSizeOnUnsnap();
-    StickyWindowHandling m_stickyWindowHandling = StickyWindowHandling::TreatAsNormal;
-    bool m_restoreWindowsToZonesOnLogin = ConfigDefaults::restoreWindowsToZonesOnLogin();
-    bool m_snapAssistFeatureEnabled = ConfigDefaults::snapAssistFeatureEnabled();
-    bool m_snapAssistEnabled = ConfigDefaults::snapAssistEnabled();
-    QVariantList m_snapAssistTriggers; // [{modifier: int, mouseButton: int}, ...]
+    // Behavior (WindowHandling + SnapAssist) is stored in m_store.
 
     // Default layout (used when no explicit assignment exists)
-    QString m_defaultLayoutId;
+    // defaultLayoutId stored in m_store.
 
     // Layout filtering
     // filterLayoutsByAspectRatio is stored in m_store.

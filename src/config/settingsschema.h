@@ -40,5 +40,7 @@ void appendEditorSchema(PhosphorConfig::Schema& schema);
 void appendExclusionsSchema(PhosphorConfig::Schema& schema);
 void appendDisplaySchema(PhosphorConfig::Schema& schema);
 void appendZoneSelectorSchema(PhosphorConfig::Schema& schema);
+void appendActivationSchema(PhosphorConfig::Schema& schema);
+void appendBehaviorSchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

@@ -13,18 +13,10 @@
 namespace PlasmaZones {
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Activation setters
+// Activation setters moved to settings.cpp (PhosphorConfig::Store-backed).
+// autotileDragInsertTriggers/Toggle stay inline below until the Autotiling
+// group migration lands (those keys live in Tiling.Behavior).
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void Settings::setDragActivationTriggers(const QVariantList& triggers)
-{
-    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (m_dragActivationTriggers != capped) {
-        m_dragActivationTriggers = capped;
-        Q_EMIT dragActivationTriggersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
 
 void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 {
@@ -37,54 +29,6 @@ void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
 }
 
 SETTINGS_SETTER(bool, AutotileDragInsertToggle, m_autotileDragInsertToggle, autotileDragInsertToggleChanged)
-
-void Settings::setZoneSpanModifier(DragModifier modifier)
-{
-    if (m_zoneSpanModifier != modifier) {
-        m_zoneSpanModifier = modifier;
-        // Keep triggers in sync: update first trigger's modifier to match
-        if (!m_zoneSpanTriggers.isEmpty()) {
-            auto first = m_zoneSpanTriggers.first().toMap();
-            first[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
-            m_zoneSpanTriggers[0] = first;
-        } else {
-            QVariantMap trigger;
-            trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
-            trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-            m_zoneSpanTriggers = {trigger};
-        }
-        Q_EMIT zoneSpanModifierChanged();
-        Q_EMIT zoneSpanTriggersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setZoneSpanTriggers(const QVariantList& triggers)
-{
-    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (m_zoneSpanTriggers != capped) {
-        m_zoneSpanTriggers = capped;
-        // Sync legacy zoneSpanModifier from first trigger with a non-zero modifier
-        DragModifier synced = DragModifier::Disabled;
-        for (const auto& t : capped) {
-            int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
-            if (mod != 0) {
-                synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
-                break;
-            }
-        }
-        m_zoneSpanModifier = synced;
-        Q_EMIT zoneSpanTriggersChanged();
-        Q_EMIT zoneSpanModifierChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-SETTINGS_SETTER_ENUM_INT(ZoneSpanModifier, DragModifier, 0, static_cast<int>(DragModifier::CtrlAltMeta))
-
-SETTINGS_SETTER(bool, ZoneSpanEnabled, m_zoneSpanEnabled, zoneSpanEnabledChanged)
-SETTINGS_SETTER(bool, ToggleActivation, m_toggleActivation, toggleActivationChanged)
-SETTINGS_SETTER(bool, SnappingEnabled, m_snappingEnabled, snappingEnabledChanged)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Display setters
@@ -173,45 +117,9 @@ void Settings::setContextLocked(const QString& screenIdOrName, int virtualDeskto
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Behavior setters
+// Behavior setters moved to settings.cpp (PhosphorConfig::Store-backed).
+// Exclusions + filterLayoutsByAspectRatio also Store-backed, see settings.cpp.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-SETTINGS_SETTER(bool, KeepWindowsInZonesOnResolutionChange, m_keepWindowsInZonesOnResolutionChange,
-                keepWindowsInZonesOnResolutionChangeChanged)
-SETTINGS_SETTER(bool, MoveNewWindowsToLastZone, m_moveNewWindowsToLastZone, moveNewWindowsToLastZoneChanged)
-SETTINGS_SETTER(bool, RestoreOriginalSizeOnUnsnap, m_restoreOriginalSizeOnUnsnap, restoreOriginalSizeOnUnsnapChanged)
-SETTINGS_SETTER(StickyWindowHandling, StickyWindowHandling, m_stickyWindowHandling, stickyWindowHandlingChanged)
-
-SETTINGS_SETTER_ENUM_INT(StickyWindowHandling, StickyWindowHandling,
-                         static_cast<int>(StickyWindowHandling::TreatAsNormal),
-                         static_cast<int>(StickyWindowHandling::IgnoreAll))
-
-SETTINGS_SETTER(bool, RestoreWindowsToZonesOnLogin, m_restoreWindowsToZonesOnLogin, restoreWindowsToZonesOnLoginChanged)
-SETTINGS_SETTER(bool, SnapAssistFeatureEnabled, m_snapAssistFeatureEnabled, snapAssistFeatureEnabledChanged)
-SETTINGS_SETTER(bool, SnapAssistEnabled, m_snapAssistEnabled, snapAssistEnabledChanged)
-
-void Settings::setSnapAssistTriggers(const QVariantList& triggers)
-{
-    QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
-    if (m_snapAssistTriggers != capped) {
-        m_snapAssistTriggers = capped;
-        Q_EMIT snapAssistTriggersChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setDefaultLayoutId(const QString& layoutId)
-{
-    QString normalizedId = normalizeUuidString(layoutId);
-    if (m_defaultLayoutId != normalizedId) {
-        m_defaultLayoutId = normalizedId;
-        Q_EMIT defaultLayoutIdChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-// filterLayoutsByAspectRatio + Exclusions (apps, window classes, transient,
-// min width, min height) moved to settings.cpp (PhosphorConfig::Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone Selector setters moved to settings.cpp (PhosphorConfig::Store-backed).

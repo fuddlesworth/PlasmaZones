@@ -5,6 +5,7 @@
 
 #include "configdefaults.h"
 #include "configmigration.h"
+#include "../core/enums.h"
 
 #include <QtGlobal>
 
@@ -28,6 +29,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendExclusionsSchema(s);
     appendDisplaySchema(s);
     appendZoneSelectorSchema(s);
+    appendActivationSchema(s);
+    appendBehaviorSchema(s);
 
     return s;
 }
@@ -515,6 +518,62 @@ void appendZoneSelectorSchema(PhosphorConfig::Schema& schema)
          clampInt(CD::gridColumnsMin(), CD::gridColumnsMax())},
         {CD::sizeModeKey(), CD::sizeMode(), QMetaType::Int, {}, clampInt(0, 2)},
         {CD::maxRowsKey(), CD::maxRows(), QMetaType::Int, {}, clampInt(CD::maxRowsMin(), CD::maxRowsMax())},
+    };
+}
+
+// ─── Activation ─────────────────────────────────────────────────────────────
+// Top-level Snapping.Enabled + the Snapping.Behavior scalar keys (drag
+// activation triggers, toggle-activation). Trigger lists are stored as JSON
+// strings; the backend auto-round-trips them as native JSON arrays.
+
+void appendActivationSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::snappingGroup()] = {
+        {CD::enabledKey(), CD::snappingEnabled(), QMetaType::Bool},
+    };
+    // Snapping.Behavior owns two scalar keys directly (Triggers, ToggleActivation);
+    // the SnapAssist / ZoneSpan / WindowHandling / Display / AutotileDragInsert
+    // sub-groups each get their own Schema entry below (or already migrated).
+    schema.groups[CD::snappingBehaviorGroup()] = {
+        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::toggleActivationKey(), CD::toggleActivation(), QMetaType::Bool},
+    };
+    schema.groups[CD::snappingBehaviorZoneSpanGroup()] = {
+        {CD::enabledKey(), CD::zoneSpanEnabled(), QMetaType::Bool},
+        {CD::modifierKey(),
+         CD::zoneSpanModifier(),
+         QMetaType::Int,
+         {},
+         clampInt(0, static_cast<int>(DragModifier::CtrlAltMeta))},
+        {CD::triggersKey(), QString(), QMetaType::QString},
+    };
+}
+
+// ─── Behavior ───────────────────────────────────────────────────────────────
+// WindowHandling + SnapAssist sub-groups. The Autotile drag-insert triggers
+// live in Tiling.Behavior and get scheduled under the Autotiling migration.
+
+void appendBehaviorSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::snappingBehaviorWindowHandlingGroup()] = {
+        {CD::keepOnResolutionChangeKey(), CD::keepWindowsInZonesOnResolutionChange(), QMetaType::Bool},
+        {CD::moveNewToLastZoneKey(), CD::moveNewWindowsToLastZone(), QMetaType::Bool},
+        {CD::restoreOnUnsnapKey(), CD::restoreOriginalSizeOnUnsnap(), QMetaType::Bool},
+        {CD::stickyWindowHandlingKey(),
+         CD::stickyWindowHandling(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                  static_cast<int>(StickyWindowHandling::IgnoreAll))},
+        {CD::restoreOnLoginKey(), CD::restoreWindowsToZonesOnLogin(), QMetaType::Bool},
+        {CD::defaultLayoutIdKey(), QString(), QMetaType::QString},
+    };
+    schema.groups[CD::snappingBehaviorSnapAssistGroup()] = {
+        {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
+        {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
+        {CD::triggersKey(), QString(), QMetaType::QString},
     };
 }
 

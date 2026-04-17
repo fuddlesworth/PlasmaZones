@@ -17,39 +17,9 @@ namespace PlasmaZones {
 
 void Settings::loadActivationConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto snapping = backend->group(ConfigDefaults::snappingGroup());
-        m_snappingEnabled = snapping->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::snappingEnabled());
-    }
-    {
-        auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
-        m_dragActivationTriggers = parseTriggerListJson(behavior->readString(ConfigDefaults::triggersKey()))
-                                       .value_or(ConfigDefaults::dragActivationTriggers());
-        m_toggleActivation =
-            behavior->readBool(ConfigDefaults::toggleActivationKey(), ConfigDefaults::toggleActivation());
-    }
-    {
-        auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
-        m_zoneSpanEnabled = zoneSpan->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::zoneSpanEnabled());
-
-        int spanMod = zoneSpan->readInt(ConfigDefaults::modifierKey(), ConfigDefaults::zoneSpanModifier());
-        if (spanMod < 0 || spanMod > static_cast<int>(DragModifier::CtrlAltMeta)) {
-            qCWarning(lcConfig) << "Invalid ZoneSpanModifier value:" << spanMod << "- using default";
-            spanMod = ConfigDefaults::zoneSpanModifier();
-        }
-        m_zoneSpanModifier = static_cast<DragModifier>(spanMod);
-
-        auto parsedSpanTriggers = parseTriggerListJson(zoneSpan->readString(ConfigDefaults::triggersKey()));
-        if (parsedSpanTriggers.has_value()) {
-            m_zoneSpanTriggers = *parsedSpanTriggers;
-        } else {
-            // No valid JSON — build default trigger from the actual spanMod value read above
-            QVariantMap trigger;
-            trigger[ConfigDefaults::triggerModifierField()] = spanMod;
-            trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
-            m_zoneSpanTriggers = {trigger};
-        }
-    }
+    Q_UNUSED(backend);
+    // Activation (Snapping.Enabled + Snapping.Behavior.{Triggers,
+    // ToggleActivation, ZoneSpan.*}) is backed by PhosphorConfig::Store.
 }
 
 void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
@@ -75,34 +45,9 @@ void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto windowHandling = backend->group(ConfigDefaults::snappingBehaviorWindowHandlingGroup());
-        m_keepWindowsInZonesOnResolutionChange = windowHandling->readBool(
-            ConfigDefaults::keepOnResolutionChangeKey(), ConfigDefaults::keepWindowsInZonesOnResolutionChange());
-        m_moveNewWindowsToLastZone = windowHandling->readBool(ConfigDefaults::moveNewToLastZoneKey(),
-                                                              ConfigDefaults::moveNewWindowsToLastZone());
-        m_restoreOriginalSizeOnUnsnap = windowHandling->readBool(ConfigDefaults::restoreOnUnsnapKey(),
-                                                                 ConfigDefaults::restoreOriginalSizeOnUnsnap());
-        int stickyHandling =
-            windowHandling->readInt(ConfigDefaults::stickyWindowHandlingKey(), ConfigDefaults::stickyWindowHandling());
-        m_stickyWindowHandling = static_cast<StickyWindowHandling>(
-            qBound(static_cast<int>(StickyWindowHandling::TreatAsNormal), stickyHandling,
-                   static_cast<int>(StickyWindowHandling::IgnoreAll)));
-        m_restoreWindowsToZonesOnLogin = windowHandling->readBool(ConfigDefaults::restoreOnLoginKey(),
-                                                                  ConfigDefaults::restoreWindowsToZonesOnLogin());
-        m_defaultLayoutId = normalizeUuidString(windowHandling->readString(ConfigDefaults::defaultLayoutIdKey()));
-    }
-
-    {
-        auto snapAssist = backend->group(ConfigDefaults::snappingBehaviorSnapAssistGroup());
-        m_snapAssistFeatureEnabled =
-            snapAssist->readBool(ConfigDefaults::featureEnabledKey(), ConfigDefaults::snapAssistFeatureEnabled());
-        m_snapAssistEnabled = snapAssist->readBool(ConfigDefaults::enabledKey(), ConfigDefaults::snapAssistEnabled());
-        m_snapAssistTriggers = parseTriggerListJson(snapAssist->readString(ConfigDefaults::triggersKey()))
-                                   .value_or(ConfigDefaults::snapAssistTriggers());
-    }
-
-    // Exclusions are backed by PhosphorConfig::Store.
+    Q_UNUSED(backend);
+    // Behavior (WindowHandling + SnapAssist) and Exclusions are backed by
+    // PhosphorConfig::Store.
 }
 
 void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
@@ -323,21 +268,8 @@ void Settings::saveEditorConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveActivationConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto snapping = backend->group(ConfigDefaults::snappingGroup());
-        snapping->writeBool(ConfigDefaults::enabledKey(), m_snappingEnabled);
-    }
-    {
-        auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
-        saveTriggerList(*behavior, ConfigDefaults::triggersKey(), m_dragActivationTriggers);
-        behavior->writeBool(ConfigDefaults::toggleActivationKey(), m_toggleActivation);
-    }
-    {
-        auto zoneSpan = backend->group(ConfigDefaults::snappingBehaviorZoneSpanGroup());
-        zoneSpan->writeBool(ConfigDefaults::enabledKey(), m_zoneSpanEnabled);
-        zoneSpan->writeInt(ConfigDefaults::modifierKey(), static_cast<int>(m_zoneSpanModifier));
-        saveTriggerList(*zoneSpan, ConfigDefaults::triggersKey(), m_zoneSpanTriggers);
-    }
+    Q_UNUSED(backend);
+    // Activation is backed by PhosphorConfig::Store.
 }
 
 void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
@@ -359,22 +291,8 @@ void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 
 void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)
 {
-    {
-        auto windowHandling = backend->group(ConfigDefaults::snappingBehaviorWindowHandlingGroup());
-        windowHandling->writeBool(ConfigDefaults::keepOnResolutionChangeKey(), m_keepWindowsInZonesOnResolutionChange);
-        windowHandling->writeBool(ConfigDefaults::moveNewToLastZoneKey(), m_moveNewWindowsToLastZone);
-        windowHandling->writeBool(ConfigDefaults::restoreOnUnsnapKey(), m_restoreOriginalSizeOnUnsnap);
-        windowHandling->writeInt(ConfigDefaults::stickyWindowHandlingKey(), static_cast<int>(m_stickyWindowHandling));
-        windowHandling->writeBool(ConfigDefaults::restoreOnLoginKey(), m_restoreWindowsToZonesOnLogin);
-        windowHandling->writeString(ConfigDefaults::defaultLayoutIdKey(), m_defaultLayoutId);
-    }
-    {
-        auto snapAssist = backend->group(ConfigDefaults::snappingBehaviorSnapAssistGroup());
-        snapAssist->writeBool(ConfigDefaults::featureEnabledKey(), m_snapAssistFeatureEnabled);
-        snapAssist->writeBool(ConfigDefaults::enabledKey(), m_snapAssistEnabled);
-        saveTriggerList(*snapAssist, ConfigDefaults::triggersKey(), m_snapAssistTriggers);
-    }
-    // Exclusions are backed by PhosphorConfig::Store.
+    Q_UNUSED(backend);
+    // Behavior (WindowHandling + SnapAssist) is backed by PhosphorConfig::Store.
 }
 
 void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)

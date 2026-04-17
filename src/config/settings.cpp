@@ -316,6 +316,14 @@ void Settings::purgeStaleKeys()
         purgeScalarsIn(it.key(), declared);
     }
     for (const QString& ancestor : std::as_const(storeAncestors)) {
+        // Skip ancestors that are themselves Store-declared groups (e.g.
+        // "Snapping.Behavior" carries its own declared keys AND hosts
+        // declared descendants). The schema-loop pass above already
+        // purged them with the right declared set; wiping with an empty
+        // set here would delete those declared scalars.
+        if (storeGroups.contains(ancestor)) {
+            continue;
+        }
         purgeScalarsIn(ancestor, {});
     }
 
@@ -1126,6 +1134,239 @@ void Settings::setZoneSelectorSizeModeInt(int value)
 
 PZ_STORE_GET(int, zoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, int)
 PZ_STORE_SET_INT(setZoneSelectorMaxRows, snappingZoneSelectorGroup, maxRowsKey, zoneSelectorMaxRowsChanged)
+
+// ── Activation + Behavior (PhosphorConfig::Store-backed) ────────────────────
+
+namespace {
+QVariantList readTriggerList(PhosphorConfig::Store* store, const QString& group, const QString& key,
+                             const QVariantList& fallback)
+{
+    const QString json = store->read<QString>(group, key);
+    if (json.isEmpty()) {
+        return fallback;
+    }
+    QJsonParseError err;
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &err);
+    if (err.error != QJsonParseError::NoError || !doc.isArray()) {
+        return fallback;
+    }
+    QVariantList out;
+    for (const QJsonValue& v : doc.array()) {
+        if (v.isObject()) {
+            out.append(v.toObject().toVariantMap());
+        }
+    }
+    return out;
+}
+
+void writeTriggerList(PhosphorConfig::Store* store, const QString& group, const QString& key,
+                      const QVariantList& triggers)
+{
+    QJsonArray arr;
+    for (const QVariant& t : triggers) {
+        const QVariantMap map = t.toMap();
+        QJsonObject obj;
+        obj[ConfigDefaults::triggerModifierField()] = map.value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        obj[ConfigDefaults::triggerMouseButtonField()] =
+            map.value(ConfigDefaults::triggerMouseButtonField(), 0).toInt();
+        arr.append(obj);
+    }
+    store->write(group, key, QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+}
+} // namespace
+
+PZ_STORE_GET(bool, snappingEnabled, snappingGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setSnappingEnabled, snappingGroup, enabledKey, snappingEnabledChanged)
+PZ_STORE_GET(bool, toggleActivation, snappingBehaviorGroup, toggleActivationKey, bool)
+PZ_STORE_SET_BOOL(setToggleActivation, snappingBehaviorGroup, toggleActivationKey, toggleActivationChanged)
+
+QVariantList Settings::dragActivationTriggers() const
+{
+    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(),
+                           ConfigDefaults::dragActivationTriggers());
+}
+void Settings::setDragActivationTriggers(const QVariantList& triggers)
+{
+    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (dragActivationTriggers() == capped) {
+        return;
+    }
+    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
+    Q_EMIT dragActivationTriggersChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, zoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setZoneSpanEnabled, snappingBehaviorZoneSpanGroup, enabledKey, zoneSpanEnabledChanged)
+
+DragModifier Settings::zoneSpanModifier() const
+{
+    return static_cast<DragModifier>(
+        m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey()));
+}
+int Settings::zoneSpanModifierInt() const
+{
+    return static_cast<int>(zoneSpanModifier());
+}
+void Settings::setZoneSpanModifier(DragModifier modifier)
+{
+    const int before =
+        m_store->read<int>(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey());
+    if (before == static_cast<int>(modifier)) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
+                   static_cast<int>(modifier));
+
+    // Keep the trigger list's first entry's modifier in sync.
+    QVariantList triggers = zoneSpanTriggers();
+    if (!triggers.isEmpty()) {
+        QVariantMap first = triggers.first().toMap();
+        first[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+        triggers[0] = first;
+    } else {
+        QVariantMap trigger;
+        trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(modifier);
+        trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+        triggers = {trigger};
+    }
+    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(),
+                     triggers);
+
+    Q_EMIT zoneSpanModifierChanged();
+    Q_EMIT zoneSpanTriggersChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setZoneSpanModifierInt(int modifier)
+{
+    if (modifier >= 0 && modifier <= static_cast<int>(DragModifier::CtrlAltMeta)) {
+        setZoneSpanModifier(static_cast<DragModifier>(modifier));
+    }
+}
+
+QVariantList Settings::zoneSpanTriggers() const
+{
+    QVariantList fallback;
+    QVariantMap trigger;
+    trigger[ConfigDefaults::triggerModifierField()] = static_cast<int>(zoneSpanModifier());
+    trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+    fallback.append(trigger);
+    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(),
+                           ConfigDefaults::triggersKey(), fallback);
+}
+void Settings::setZoneSpanTriggers(const QVariantList& triggers)
+{
+    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (zoneSpanTriggers() == capped) {
+        return;
+    }
+    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::triggersKey(),
+                     capped);
+
+    // Sync legacy modifier member from first trigger with a non-zero modifier.
+    DragModifier synced = DragModifier::Disabled;
+    for (const auto& t : capped) {
+        int mod = t.toMap().value(ConfigDefaults::triggerModifierField(), 0).toInt();
+        if (mod != 0) {
+            synced = static_cast<DragModifier>(qBound(0, mod, static_cast<int>(DragModifier::CtrlAltMeta)));
+            break;
+        }
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorZoneSpanGroup(), ConfigDefaults::modifierKey(),
+                   static_cast<int>(synced));
+
+    Q_EMIT zoneSpanTriggersChanged();
+    Q_EMIT zoneSpanModifierChanged();
+    Q_EMIT settingsChanged();
+}
+
+// Behavior: WindowHandling + SnapAssist.
+
+PZ_STORE_GET(bool, keepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup, keepOnResolutionChangeKey,
+             bool)
+PZ_STORE_SET_BOOL(setKeepWindowsInZonesOnResolutionChange, snappingBehaviorWindowHandlingGroup,
+                  keepOnResolutionChangeKey, keepWindowsInZonesOnResolutionChangeChanged)
+PZ_STORE_GET(bool, moveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey, bool)
+PZ_STORE_SET_BOOL(setMoveNewWindowsToLastZone, snappingBehaviorWindowHandlingGroup, moveNewToLastZoneKey,
+                  moveNewWindowsToLastZoneChanged)
+PZ_STORE_GET(bool, restoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey, bool)
+PZ_STORE_SET_BOOL(setRestoreOriginalSizeOnUnsnap, snappingBehaviorWindowHandlingGroup, restoreOnUnsnapKey,
+                  restoreOriginalSizeOnUnsnapChanged)
+
+StickyWindowHandling Settings::stickyWindowHandling() const
+{
+    return static_cast<StickyWindowHandling>(m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
+                                                                ConfigDefaults::stickyWindowHandlingKey()));
+}
+int Settings::stickyWindowHandlingInt() const
+{
+    return static_cast<int>(stickyWindowHandling());
+}
+void Settings::setStickyWindowHandling(StickyWindowHandling handling)
+{
+    const int before = m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
+                                          ConfigDefaults::stickyWindowHandlingKey());
+    m_store->write(ConfigDefaults::snappingBehaviorWindowHandlingGroup(), ConfigDefaults::stickyWindowHandlingKey(),
+                   static_cast<int>(handling));
+    const int after = m_store->read<int>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
+                                         ConfigDefaults::stickyWindowHandlingKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT stickyWindowHandlingChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setStickyWindowHandlingInt(int handling)
+{
+    if (handling >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+        && handling <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
+        setStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
+    }
+}
+
+PZ_STORE_GET(bool, restoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey, bool)
+PZ_STORE_SET_BOOL(setRestoreWindowsToZonesOnLogin, snappingBehaviorWindowHandlingGroup, restoreOnLoginKey,
+                  restoreWindowsToZonesOnLoginChanged)
+
+QString Settings::defaultLayoutId() const
+{
+    return m_store->read<QString>(ConfigDefaults::snappingBehaviorWindowHandlingGroup(),
+                                  ConfigDefaults::defaultLayoutIdKey());
+}
+void Settings::setDefaultLayoutId(const QString& layoutId)
+{
+    const QString normalized = normalizeUuidString(layoutId);
+    if (defaultLayoutId() == normalized) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingBehaviorWindowHandlingGroup(), ConfigDefaults::defaultLayoutIdKey(),
+                   normalized);
+    Q_EMIT defaultLayoutIdChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, snapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey, bool)
+PZ_STORE_SET_BOOL(setSnapAssistFeatureEnabled, snappingBehaviorSnapAssistGroup, featureEnabledKey,
+                  snapAssistFeatureEnabledChanged)
+PZ_STORE_GET(bool, snapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setSnapAssistEnabled, snappingBehaviorSnapAssistGroup, enabledKey, snapAssistEnabledChanged)
+
+QVariantList Settings::snapAssistTriggers() const
+{
+    return readTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorSnapAssistGroup(),
+                           ConfigDefaults::triggersKey(), ConfigDefaults::snapAssistTriggers());
+}
+void Settings::setSnapAssistTriggers(const QVariantList& triggers)
+{
+    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (snapAssistTriggers() == capped) {
+        return;
+    }
+    writeTriggerList(m_store.get(), ConfigDefaults::snappingBehaviorSnapAssistGroup(), ConfigDefaults::triggersKey(),
+                     capped);
+    Q_EMIT snapAssistTriggersChanged();
+    Q_EMIT settingsChanged();
+}
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
