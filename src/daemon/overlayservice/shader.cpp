@@ -12,6 +12,7 @@
 #include "../rendering/zonelabeltexturebuilder.h"
 #include "pz_roles.h"
 
+#include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include <QQuickWindow>
 #include <QScreen>
@@ -25,9 +26,6 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
-#include <PhosphorShell/LayerSurface.h>
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
@@ -334,19 +332,19 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     m_shaderPreviewShaderId = shaderId;
     m_shaderPreviewScreenId = screenId;
 
-    auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-    if (!layerSurface) {
-        qCWarning(lcOverlay) << "showShaderPreview: no LayerSurface for preview window"
+    auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr;
+    if (!handle) {
+        qCWarning(lcOverlay) << "showShaderPreview: no transport handle for preview surface"
                              << "— layer-shell may have been lost (compositor restart?)."
                              << "Destroying and recreating the window.";
         destroyShaderPreviewWindow();
         createShaderPreviewWindow(screen, screenId);
-        if (!m_shaderPreviewWindow) {
+        if (!m_shaderPreviewSurface) {
             return;
         }
-        layerSurface = LayerSurface::find(m_shaderPreviewWindow);
-        if (!layerSurface) {
-            qCWarning(lcOverlay) << "showShaderPreview: recreated window still has no LayerSurface — aborting";
+        handle = m_shaderPreviewSurface->transport();
+        if (!handle) {
+            qCWarning(lcOverlay) << "showShaderPreview: recreated surface still has no transport — aborting";
             return;
         }
     }
@@ -357,10 +355,8 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         const QRect physGeom = screen->geometry();
         const int marginLeft = x - physGeom.x();
         const int marginTop = y - physGeom.y();
-        // Batch anchors + margins into a single propertiesChanged() emission
-        LayerSurface::BatchGuard batch(layerSurface);
-        layerSurface->setAnchors(LayerSurface::Anchors(LayerSurface::AnchorTop | LayerSurface::AnchorLeft));
-        layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+        handle->setAnchors(PhosphorLayer::Anchors{PhosphorLayer::Anchor::Top, PhosphorLayer::Anchor::Left});
+        handle->setMargins(QMargins(marginLeft, marginTop, 0, 0));
     }
 
     // Set window size — position is controlled by layer-surface anchors + margins,
@@ -409,12 +405,12 @@ void OverlayService::updateShaderPreview(int x, int y, int width, int height, co
             // Size only — position is controlled by layer-surface anchors + margins.
             m_shaderPreviewWindow->setWidth(width);
             m_shaderPreviewWindow->setHeight(height);
-            if (auto* layerSurface = LayerSurface::find(m_shaderPreviewWindow)) {
+            if (auto* handle = m_shaderPreviewSurface ? m_shaderPreviewSurface->transport() : nullptr) {
                 // Margins are relative to the physical screen origin (LayerShell)
                 const QRect physGeom = screen->geometry();
                 const int marginLeft = x - physGeom.x();
                 const int marginTop = y - physGeom.y();
-                layerSurface->setMargins(QMargins(marginLeft, marginTop, 0, 0));
+                handle->setMargins(QMargins(marginLeft, marginTop, 0, 0));
             }
         }
     }

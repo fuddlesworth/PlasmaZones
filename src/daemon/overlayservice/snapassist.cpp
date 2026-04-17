@@ -15,13 +15,10 @@
 #include <QQmlEngine>
 #include <QKeyEvent>
 #include <QTimer>
-#include <PhosphorShell/LayerSurface.h>
 
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include "pz_roles.h"
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 

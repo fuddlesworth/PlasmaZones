@@ -19,13 +19,10 @@
 #include <QQmlContext>
 #include <QMutexLocker>
 #include <QPointer>
-#include <PhosphorShell/LayerSurface.h>
 
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
 
 namespace PlasmaZones {
 
@@ -620,7 +617,58 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     }
     PerScreenOverlayState state = std::move(donor.value());
     m_screenStates.erase(donor);
-    m_screenStates.insert(newKey, std::move(state));
+    auto inserted = m_screenStates.insert(newKey, std::move(state));
+
+    // The geometryChanged lambda captured the OLD sid by value. After the
+    // state moved to newKey, the lambda's m_screenStates.find(oldSid) lookup
+    // would return end() and silently drop every subsequent geometry update.
+    // Rebuild the connection with the new key so live resizes keep reaching
+    // the overlay.
+    auto& rekeyed = inserted.value();
+    if (rekeyed.overlayGeomConnection) {
+        QObject::disconnect(rekeyed.overlayGeomConnection);
+        rekeyed.overlayGeomConnection = {};
+    }
+    QScreen* physScreen = rekeyed.overlayPhysScreen;
+    if (physScreen) {
+        const bool isVS = VirtualScreenId::isVirtual(newKey);
+        QPointer<QScreen> screenPtr = physScreen;
+        const QString sid = newKey;
+        rekeyed.overlayGeomConnection =
+            connect(physScreen, &QScreen::geometryChanged, this, [this, screenPtr, sid, isVS](const QRect& newGeom) {
+                if (!screenPtr) {
+                    return;
+                }
+                auto stateIt = m_screenStates.find(sid);
+                if (stateIt == m_screenStates.end()) {
+                    return;
+                }
+                auto& st = stateIt.value();
+                if (auto* w = st.overlayWindow) {
+                    if (isVS) {
+                        const QRect vsGeom = resolveScreenGeometry(sid);
+                        if (vsGeom.isValid() && st.overlaySurface) {
+                            if (auto* handle = st.overlaySurface->transport()) {
+                                const QRect clamped = vsGeom.intersected(newGeom);
+                                handle->setMargins(
+                                    QMargins(clamped.x() - newGeom.x(), clamped.y() - newGeom.y(), 0, 0));
+                            }
+                            w->setWidth(vsGeom.width());
+                            w->setHeight(vsGeom.height());
+                            st.overlayGeometry = vsGeom;
+                            updateOverlayWindow(sid, screenPtr);
+                            return;
+                        }
+                    } else {
+                        w->setWidth(newGeom.width());
+                        w->setHeight(newGeom.height());
+                        st.overlayGeometry = newGeom;
+                        updateOverlayWindow(sid, screenPtr);
+                    }
+                }
+            });
+    }
+
     qCInfo(lcOverlay) << "rekeyOverlayState: migrated overlay" << oldKey << "->" << newKey
                       << "(same physical monitor, preserving Vulkan surface)";
     return true;

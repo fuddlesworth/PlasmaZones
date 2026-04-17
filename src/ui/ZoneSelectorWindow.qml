@@ -131,6 +131,10 @@ Window {
 
     function hide() {
         showAnimation.stop();
+        // Reset cursor state so autoScrollTimer doesn't tick on stale
+        // coordinates between hide and the next show().
+        root.cursorX = -1;
+        root.cursorY = -1;
         if (root.visible)
             hideAnimation.start();
 
@@ -263,7 +267,7 @@ Window {
             // State based on selectorPosition (0-8 grid)
             // 0=TopLeft, 1=Top, 2=TopRight, 3=Left, 4=Center, 5=Right, 6=BottomLeft, 7=Bottom, 8=BottomRight
             state: {
-                switch (selectorPosition) {
+                switch (root.selectorPosition) {
                 case 0:
                     return "topLeft";
                 case 1:
@@ -696,7 +700,7 @@ Window {
             Label {
                 anchors.centerIn: parent
                 text: i18n("No layouts available")
-                color: Qt.rgba(textColor.r, textColor.g, textColor.b, 0.5)
+                color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.5)
                 visible: root.layouts.length === 0
             }
 

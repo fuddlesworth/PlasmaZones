@@ -32,10 +32,6 @@
 #include "pz_qml_i18n.h"
 #include "vulkan_support.h"
 
-#include <PhosphorShell/LayerSurface.h>
-using PhosphorShell::LayerSurface;
-namespace LayerSurfaceProps = PhosphorShell::LayerSurfaceProps;
-
 #include <PhosphorLayer/Role.h>
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/SurfaceConfig.h>
@@ -49,62 +45,57 @@ namespace PlasmaZones {
 
 namespace {
 
-// Clean up a single QQuickWindow (close, destroy, schedule deletion)
-void cleanupWindow(QQuickWindow* window)
-{
-    if (window) {
-        QQmlEngine::setObjectOwnership(window, QQmlEngine::CppOwnership);
-        window->close();
-        window->destroy();
-        window->deleteLater();
-    }
-}
-
-// Disconnect physical screen signals before destroying windows in a state entry.
-// The overlay geometryChanged connection targets `this` (OverlayService), not the window,
-// so cleanupWindow's close/destroy/deleteLater would leave a dangling connection.
-void disconnectScreenSignals(OverlayService::PerScreenOverlayState& state)
+// Tear down every PhosphorLayer::Surface referenced by a state entry.
+// The Surface owns its QQuickWindow; deleteLater cascades into ~Surface
+// which unmaps the layer surface and schedules the window for deletion.
+// We never touch the QQuickWindow* directly — double-destroying a Surface-
+// owned window was the source of UB in a prior revision of this file.
+void releaseSurfacesInState(OverlayService::PerScreenOverlayState& state)
 {
     QObject::disconnect(state.overlayGeomConnection);
     state.overlayGeomConnection = {};
-    if (state.overlayPhysScreen && state.overlayWindow) {
-        QObject::disconnect(state.overlayPhysScreen, nullptr, state.overlayWindow, nullptr);
+    if (state.overlaySurface) {
+        state.overlaySurface->deleteLater();
     }
-    if (state.zoneSelectorPhysScreen && state.zoneSelectorWindow) {
-        QObject::disconnect(state.zoneSelectorPhysScreen, nullptr, state.zoneSelectorWindow, nullptr);
+    if (state.zoneSelectorSurface) {
+        state.zoneSelectorSurface->deleteLater();
     }
-    if (state.layoutOsdPhysScreen && state.layoutOsdWindow) {
-        QObject::disconnect(state.layoutOsdPhysScreen, nullptr, state.layoutOsdWindow, nullptr);
+    if (state.layoutOsdSurface) {
+        state.layoutOsdSurface->deleteLater();
     }
-    if (state.navigationOsdPhysScreen && state.navigationOsdWindow) {
-        QObject::disconnect(state.navigationOsdPhysScreen, nullptr, state.navigationOsdWindow, nullptr);
+    if (state.navigationOsdSurface) {
+        state.navigationOsdSurface->deleteLater();
     }
+    state.overlaySurface = nullptr;
+    state.zoneSelectorSurface = nullptr;
+    state.layoutOsdSurface = nullptr;
+    state.navigationOsdSurface = nullptr;
+    state.overlayWindow = nullptr;
+    state.zoneSelectorWindow = nullptr;
+    state.layoutOsdWindow = nullptr;
+    state.navigationOsdWindow = nullptr;
+    state.overlayPhysScreen = nullptr;
+    state.zoneSelectorPhysScreen = nullptr;
+    state.layoutOsdPhysScreen = nullptr;
+    state.navigationOsdPhysScreen = nullptr;
 }
 
-// Clean up all windows in a per-screen state map
+// Release every surface across the state map, then clear it.
 void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState>& states)
 {
     for (auto& state : states) {
-        disconnectScreenSignals(state);
-        cleanupWindow(state.overlayWindow);
-        cleanupWindow(state.zoneSelectorWindow);
-        cleanupWindow(state.layoutOsdWindow);
-        cleanupWindow(state.navigationOsdWindow);
+        releaseSurfacesInState(state);
     }
     states.clear();
 }
 
-// Clean up all windows in per-screen states whose keys start with a given prefix.
-// Entries with all-null windows are removed from the map.
+// Release surfaces for state entries whose key starts with @p prefix,
+// then erase those entries from the map.
 void cleanupScreenStatesByPrefix(QHash<QString, OverlayService::PerScreenOverlayState>& states, const QString& prefix)
 {
     for (auto it = states.begin(); it != states.end();) {
         if (it.key().startsWith(prefix)) {
-            disconnectScreenSignals(it.value());
-            cleanupWindow(it.value().overlayWindow);
-            cleanupWindow(it.value().zoneSelectorWindow);
-            cleanupWindow(it.value().layoutOsdWindow);
-            cleanupWindow(it.value().navigationOsdWindow);
+            releaseSurfacesInState(it.value());
             it = states.erase(it);
         } else {
             ++it;
@@ -276,6 +267,7 @@ OverlayService::OverlayService(QObject* parent)
             keepAlive->deleteLater();
             return;
         }
+        m_keepAliveSurface = keepAlive;
         m_keepAliveWindow = keepAlive->window();
         if (m_keepAliveWindow) {
 #if QT_CONFIG(vulkan)
@@ -318,17 +310,21 @@ OverlayService::~OverlayService()
         disconnect(qGuiApp, nullptr, this, nullptr);
     }
 
-    // Clean up all window types before engine is destroyed
-    // (takes C++ ownership to prevent QML GC interference)
+    // Clean up all window types before engine is destroyed. The Surface owns
+    // the QQuickWindow, so deleteLater on the Surface cascades into
+    // ~Surface → ~Impl → window teardown in the right order. Never destroy
+    // the window directly — that races against ~Surface and dereferences a
+    // deleted pointer in ~Impl.
     cleanupAllScreenStates(m_screenStates);
 
-    // Destroy keep-alive window last (after all other windows)
-    if (m_keepAliveWindow) {
-        m_keepAliveWindow->close();
-        m_keepAliveWindow->destroy();
-        m_keepAliveWindow->deleteLater();
-        m_keepAliveWindow = nullptr;
+    // Keep-alive surface is released last (after all other overlays), so its
+    // Vulkan instance outlives their teardown and prevents the global
+    // wl_display / VkInstance churn the keep-alive is designed to suppress.
+    if (m_keepAliveSurface) {
+        m_keepAliveSurface->deleteLater();
+        m_keepAliveSurface = nullptr;
     }
+    m_keepAliveWindow = nullptr;
 
     // Process pending deletions before destroying the QML engine.
     // All deleteLater() calls must complete while the engine is still valid.
@@ -856,6 +852,22 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     }
     if (m_layoutPickerScreen == screen) {
         destroyLayoutPickerWindow();
+    }
+
+    // Drop navigation-OSD "creation failed" sentinels for screen ids rooted
+    // on this physical screen. Without this, if the same physical monitor
+    // is reconnected (hot-plug cycle) it inherits the stale flag and we
+    // silently refuse to recreate the OSD. Matching is prefix-based because
+    // virtual-screen ids embed the physical id as the prefix.
+    const QString physId = Utils::screenIdentifier(screen);
+    if (!physId.isEmpty()) {
+        for (auto it = m_navigationOsdCreationFailed.begin(); it != m_navigationOsdCreationFailed.end();) {
+            if (it.key() == physId || it.key().startsWith(physId + VirtualScreenId::Separator)) {
+                it = m_navigationOsdCreationFailed.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 }
 

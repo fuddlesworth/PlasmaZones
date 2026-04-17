@@ -403,6 +403,10 @@ private:
 
     // Persistent 1x1 keep-alive window that prevents Qt from tearing down
     // global Wayland/Vulkan protocol objects when all other windows are destroyed.
+    // The Surface owns the QQuickWindow; the cached pointer is a convenience for
+    // property writes only — never destroy the window directly, deleteLater the
+    // Surface and let ~Surface tear the window down.
+    PhosphorLayer::Surface* m_keepAliveSurface = nullptr;
     QPointer<QQuickWindow> m_keepAliveWindow;
 
     // Track screens with failed window creation to prevent log spam
@@ -453,13 +457,14 @@ private:
     /**
      * @brief Prepare layout OSD window for display
      * @param window Output: the prepared window (nullptr on failure)
+     * @param outSurface Output: the backing PhosphorLayer::Surface (nullptr on failure)
      * @param screenGeom Output: screen geometry
      * @param aspectRatio Output: calculated aspect ratio
      * @param screenId Target screen (empty = primary)
      * @return true if window is ready, false on failure
      */
-    bool prepareLayoutOsdWindow(QQuickWindow*& window, QScreen*& outPhysScreen, QRect& screenGeom, qreal& aspectRatio,
-                                const QString& screenId = QString());
+    bool prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer::Surface*& outSurface, QScreen*& outPhysScreen,
+                                QRect& screenGeom, qreal& aspectRatio, const QString& screenId = QString());
 
     /**
      * @brief Create a PhosphorLayer::Surface for a layer-shell-backed overlay window.
