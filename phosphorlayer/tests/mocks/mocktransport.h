@@ -64,6 +64,10 @@ public:
     {
         m_keyboard = k;
     }
+    void setAnchors(Anchors a) override
+    {
+        m_anchors = a;
+    }
 
     // Test drivers
     void simulateConfigure(QSize s)
@@ -79,6 +83,7 @@ public:
     Layer m_layer = Layer::Overlay;
     int m_exclusiveZone = -1;
     KeyboardInteractivity m_keyboard = KeyboardInteractivity::None;
+    Anchors m_anchors = AnchorNone;
 };
 
 /// In-memory transport that records every attach() call and hands out

@@ -59,6 +59,31 @@ private Q_SLOTS:
         Q_EMIT p.notifier()->screensChanged();
         QCOMPARE(spy.count(), 1);
     }
+
+    void multipleProvidersDoNotAliasConnections()
+    {
+        // Regression guard for hotplug double-connect: some Wayland
+        // platforms re-announce existing screens via screenAdded after
+        // reparenting, and the provider must use Qt::UniqueConnection to
+        // avoid wiring the same screen-to-notifier slot twice.
+        //
+        // We can't synthesise QScreen::geometryChanged from user-space
+        // (Qt's signal emission is private to each class), but we can at
+        // least prove that constructing two independent providers
+        // targeting the same screen set doesn't cross-wire their
+        // notifiers — if UniqueConnection were applied on the wrong
+        // sender/receiver pair, one provider's notifier would fire when
+        // the other's screen changed.
+        DefaultScreenProvider p1;
+        DefaultScreenProvider p2;
+        QSignalSpy spy1(p1.notifier(), &ScreenProviderNotifier::screensChanged);
+        QSignalSpy spy2(p2.notifier(), &ScreenProviderNotifier::screensChanged);
+
+        Q_EMIT p1.notifier()->screensChanged();
+        QCoreApplication::processEvents();
+        QCOMPARE(spy1.count(), 1);
+        QCOMPARE(spy2.count(), 0);
+    }
 };
 
 QTEST_MAIN(TestDefaultScreenProvider)

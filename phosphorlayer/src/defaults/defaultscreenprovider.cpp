@@ -7,6 +7,7 @@
 
 #include <QGuiApplication>
 #include <QScreen>
+#include <QSet>
 
 namespace PhosphorLayer {
 
@@ -19,6 +20,7 @@ public:
     }
 
     ScreenProviderNotifier* const m_notifier;
+    QSet<QScreen*> m_hookedScreens; // de-dup for Wayland platforms that re-announce screens
 };
 
 DefaultScreenProvider::DefaultScreenProvider(QObject* parent)
@@ -26,34 +28,47 @@ DefaultScreenProvider::DefaultScreenProvider(QObject* parent)
     , m_impl(std::make_unique<Impl>(this))
 {
     if (auto* app = qGuiApp) {
+        // Hook a single screen's geometry signals to the notifier, skipping
+        // if the screen is already tracked. Some Wayland platforms
+        // re-announce existing screens via screenAdded() after reparenting;
+        // QSet lookup is O(1) and avoids the Qt::UniqueConnection
+        // restriction (which rejects non-member-function slots).
+        auto hookScreen = [this](QScreen* s) {
+            if (!s || m_impl->m_hookedScreens.contains(s)) {
+                return;
+            }
+            m_impl->m_hookedScreens.insert(s);
+            auto* notifier = m_impl->m_notifier;
+            // Drop from the set if the screen vanishes — Qt destroys
+            // QScreen on removal, so subsequent re-adds with the same
+            // address would otherwise be suppressed forever.
+            connect(s, &QObject::destroyed, this, [this, s] {
+                m_impl->m_hookedScreens.remove(s);
+            });
+            connect(s, &QScreen::geometryChanged, notifier, [notifier] {
+                Q_EMIT notifier->screensChanged();
+            });
+            connect(s, &QScreen::availableGeometryChanged, notifier, [notifier] {
+                Q_EMIT notifier->screensChanged();
+            });
+        };
+
         // Forward QGuiApplication's screen-list signals onto our notifier.
         // Connection via `this` ensures auto-disconnect on destruction.
-        connect(app, &QGuiApplication::screenAdded, this, [n = m_impl->m_notifier](QScreen* s) {
-            if (s) {
-                connect(s, &QScreen::geometryChanged, n, [n] {
-                    Q_EMIT n->screensChanged();
-                });
-                connect(s, &QScreen::availableGeometryChanged, n, [n] {
-                    Q_EMIT n->screensChanged();
-                });
-            }
-            Q_EMIT n->screensChanged();
+        connect(app, &QGuiApplication::screenAdded, this, [notifier = m_impl->m_notifier, hookScreen](QScreen* s) {
+            hookScreen(s);
+            Q_EMIT notifier->screensChanged();
         });
-        connect(app, &QGuiApplication::screenRemoved, this, [n = m_impl->m_notifier] {
-            Q_EMIT n->screensChanged();
+        connect(app, &QGuiApplication::screenRemoved, this, [notifier = m_impl->m_notifier] {
+            Q_EMIT notifier->screensChanged();
         });
-        connect(app, &QGuiApplication::primaryScreenChanged, this, [n = m_impl->m_notifier] {
-            Q_EMIT n->screensChanged();
-            Q_EMIT n->focusChanged();
+        connect(app, &QGuiApplication::primaryScreenChanged, this, [notifier = m_impl->m_notifier] {
+            Q_EMIT notifier->screensChanged();
+            Q_EMIT notifier->focusChanged();
         });
         // Hook any already-connected screens.
         for (QScreen* s : app->screens()) {
-            connect(s, &QScreen::geometryChanged, m_impl->m_notifier, [n = m_impl->m_notifier] {
-                Q_EMIT n->screensChanged();
-            });
-            connect(s, &QScreen::availableGeometryChanged, m_impl->m_notifier, [n = m_impl->m_notifier] {
-                Q_EMIT n->screensChanged();
-            });
+            hookScreen(s);
         }
     } else {
         qCWarning(lcPhosphorLayer) << "DefaultScreenProvider: QGuiApplication not initialized — provider is inert";

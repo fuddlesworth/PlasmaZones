@@ -186,17 +186,15 @@ public:
         Constructed,   // SurfaceConfig accepted; no window yet
         Warming,       // QML compiling / engine initializing (hidden)
         Shown,         // Layer surface configured by compositor; visible
-        Hiding,        // hide() called; waiting for compositor acknowledgement
         Hidden,        // Fully hidden; can transition back to Shown
-        Recreating,    // Destroyed in response to topology change; will respawn
         Failed,        // Unrecoverable (QML error, transport rejected, etc.)
     };
     Q_ENUM(State)
 
     ~Surface() override;
 
-    State state() const;
-    const SurfaceConfig& config() const;    // Read-only view for consumers
+    State state() const noexcept;
+    const SurfaceConfig& config() const noexcept; // Read-only view for consumers
 
     // Lifecycle transitions — idempotent, safe to call in any state.
     // Guarded: invalid transitions emit a warning and no-op.
@@ -205,22 +203,21 @@ public:
     void warmUp();                          // Pre-compile QML without showing
 
     // Escape hatches (use sparingly — prefer the declarative API above)
-    QQuickWindow* window() const;
-    PhosphorShell::LayerSurface* transport() const;
+    QQuickWindow* window() const noexcept;
+    ITransportHandle* transport() const noexcept;
 
 Q_SIGNALS:
-    void stateChanged(State from, State to);
+    // Carries only the new state — the previous state is not exposed.
+    // Consumers that need it should cache it in their slot.
+    void stateChanged(State newState);
     void failed(const QString& reason);
-    void aboutToRecreate();                 // Last chance to save content state
 
 private:
     friend class SurfaceFactory;
     Surface(SurfaceConfig cfg, SurfaceDeps deps, QObject* parent);
 
-    // State machine transitions enumerated in one place, not scattered
-    // across 15 slots. See §6 for full transition table.
-    class StateMachine;
-    std::unique_ptr<StateMachine> m_sm;
+    class Impl;
+    std::unique_ptr<Impl> m_impl;
 };
 ```
 
@@ -233,14 +230,17 @@ private:
 | Warming       | (QML compiled)           | Hidden       | Via warmUp path            |
 | Warming       | (QML error)              | Failed       | Emits `failed()`           |
 | Hidden/Warming| `show()`                 | Shown        | Calls transport            |
-| Shown         | `hide()`                 | Hiding       | Waits for compositor ack   |
-| Hiding        | (transport confirmed)    | Hidden       |                            |
-| *             | (screen removed)         | Recreating   | Factory destroys + respawns|
-| Recreating    | (respawn complete)       | Shown/Hidden | Restores prior state       |
+| Shown         | `hide()`                 | Hidden       | Synchronous — window unmapped immediately |
 | *             | (transport rejected)     | Failed       |                            |
 
 Invalid transitions (e.g., `show()` from `Failed`) log a `qCWarning` with the
 debugName and no-op. They do not throw.
+
+Topology-driven respawn (screen removed, compositor restarted) is **not**
+modelled as a Surface state — it's the consumer's responsibility via
+`TopologyCoordinator` callbacks or `ScreenSurfaceRegistry::syncToScreens`.
+The library deliberately keeps Surface oblivious to the screen lifecycle so
+consumers own the save-state-before-destroy sequencing.
 
 ---
 
@@ -453,22 +453,22 @@ class MockScreenProvider : public IScreenProvider { /* ... */ };
 
 void test_surface_state_machine() {
     MockTransport t; MockScreenProvider s;
-    SurfaceFactory f({&t, nullptr, &s});
+    SurfaceFactory f({&t, &s});
     auto* surface = f.create({.role = Roles::CenteredModal,
                               .contentItem = std::make_unique<QQuickItem>()});
     QCOMPARE(surface->state(), Surface::State::Constructed);
     surface->show();
     QCOMPARE(surface->state(), Surface::State::Shown);
-    t.simulateCompositorLoss();
-    QCOMPARE(surface->state(), Surface::State::Recreating);
+    surface->hide();
+    QCOMPARE(surface->state(), Surface::State::Hidden);
 }
 ```
 
 Coverage targets:
 - State machine: every transition, including invalid ones (must not crash)
 - Registry diffing: add/remove/reorder screens
-- Topology debouncing: rapid `screensChanged` coalesces to one recreation cycle
-- Compositor-lost: all registries respawn cleanly
+- Topology debouncing: rapid `screensChanged` coalesces to one sync cycle
+- Compositor-lost callback: fires on `QGuiApplication::aboutToQuit` (best-effort; deeper hooks require PhosphorShell upstream support)
 - Role composition: `with*()` modifiers don't alias / share state
 
 ---

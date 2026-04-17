@@ -15,17 +15,18 @@
 namespace PhosphorLayer {
 
 /**
- * Handle for a plain xdg_toplevel-backed surface. All protocol-level
- * mutators are best-effort — xdg_toplevel has no concept of layer,
- * exclusive zone, or anchor policy, so we store the intent (for
- * isConfigured-like queries) and apply geometry hints when we can.
+ * Handle for a plain xdg_toplevel-backed surface. Every wlr-layer-shell
+ * knob (layer, anchor, exclusive zone, margins, keyboard-interactivity)
+ * is silently ignored here — xdg_toplevel does not model any of them and
+ * Wayland compositors do not honour client-requested window positions.
+ * The ignores are documented per call-site and emitted once at attach()
+ * so consumers can audit what was dropped.
  */
 class XdgToplevelTransportHandle : public ITransportHandle
 {
 public:
-    explicit XdgToplevelTransportHandle(QQuickWindow* win, QMargins initialMargins)
+    explicit XdgToplevelTransportHandle(QQuickWindow* win)
         : m_window(win)
-        , m_margins(initialMargins)
     {
     }
 
@@ -46,10 +47,13 @@ public:
         return m_window ? m_window->size() : QSize();
     }
 
-    void setMargins(QMargins m) override
+    void setMargins(QMargins) override
     {
-        m_margins = m;
-        applyGeometry();
+        // xdg_toplevel has no client-positioning hooks on Wayland. Not
+        // forwarding to QWindow::setPosition — that is also a no-op on
+        // every major Wayland compositor (Sway, Hyprland, Mutter, KWin)
+        // and would give callers a false sense of success. Consumers that
+        // genuinely need placement must use the layer-shell transport.
     }
     void setLayer(Layer) override
     {
@@ -63,24 +67,14 @@ public:
     {
         // xdg_toplevel is always OnDemand — mutator is a no-op.
     }
-
-    void applyGeometry()
+    void setAnchors(Anchors) override
     {
-        // Best-effort positioning. A compositor that tiles aggressively
-        // (Sway, Hyprland) will ignore client position hints anyway.
-        if (!m_window || !m_window->screen()) {
-            return;
-        }
-        const QRect screenRect = m_window->screen()->availableGeometry();
-        const QMargins& m = m_margins;
-        const int x = screenRect.x() + m.left();
-        const int y = screenRect.y() + m.top();
-        m_window->setPosition(x, y);
+        // xdg_toplevel has no concept of screen-edge anchoring — compositor
+        // decides position. Silently accepted.
     }
 
 private:
     QPointer<QQuickWindow> m_window;
-    QMargins m_margins;
 };
 
 // ── Transport ──────────────────────────────────────────────────────────
@@ -101,9 +95,13 @@ XdgToplevelTransport::~XdgToplevelTransport() = default;
 
 bool XdgToplevelTransport::isSupported() const
 {
-    // xdg_toplevel is mandatory on every Wayland compositor, and trivially
-    // available on X11 via the Xwayland path. Always supported when we
-    // have a GUI application.
+    // xdg_toplevel is the baseline shell on every Wayland compositor and
+    // is trivially available via Xwayland. Requiring a GUI application is
+    // the only honest precondition — platform-specific attachment happens
+    // inside attach(), which gracefully warns and returns nullptr if the
+    // QPA plugin lacks a shell integration (e.g. offscreen/minimal). That
+    // keeps the "supported" check cheap and lets consumers fall through
+    // to attach() for the real diagnostic.
     return qGuiApp != nullptr;
 }
 
@@ -118,14 +116,12 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
     if (args.screen) {
         win->setScreen(args.screen);
     }
-    // xdg_toplevel windows have a title that the compositor may display in
-    // Alt-Tab / taskbars. Repurpose the scope string so the user sees
-    // something meaningful instead of "Unnamed window".
-    if (!args.scope.isEmpty()) {
-        win->setTitle(args.scope);
-    }
-    // Nothing else to commit before show() — the compositor handles the
-    // rest. Log the ignored parameters so consumers can audit.
+    // The scope is a machine identifier, not a user-facing label — don't
+    // forward it as QWindow::setTitle() (which surfaces in Alt-Tab and
+    // task bars). If a consumer wants a title they can set it on the
+    // window directly before show().
+
+    // Log every parameter we dropped so consumers can audit the fallback.
     if (args.layer != Layer::Top && args.layer != Layer::Overlay) {
         qCDebug(lcPhosphorLayer) << "XdgToplevelTransport: layer" << static_cast<int>(args.layer)
                                  << "ignored (no xdg_toplevel equivalent)";
@@ -138,8 +134,12 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
         qCDebug(lcPhosphorLayer)
             << "XdgToplevelTransport: exclusive keyboard ignored (xdg_toplevel is always on-demand)";
     }
+    if (!args.margins.isNull() || args.anchors != AnchorNone) {
+        qCDebug(lcPhosphorLayer)
+            << "XdgToplevelTransport: anchors/margins ignored (compositor controls xdg_toplevel placement)";
+    }
 
-    return std::make_unique<XdgToplevelTransportHandle>(win, args.margins);
+    return std::make_unique<XdgToplevelTransportHandle>(win);
 }
 
 void XdgToplevelTransport::addCompositorLostCallback(CompositorLostCallback cb)

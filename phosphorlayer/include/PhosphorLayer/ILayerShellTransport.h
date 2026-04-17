@@ -63,11 +63,19 @@ public:
 
     /// @name Post-show mutable properties
     /// Per wlr-layer-shell v4+. Values are committed immediately.
+    ///
+    /// `setAnchors` is permitted on compositors implementing wlr-layer-shell
+    /// v2+ (the surface stays attached and reconfigures in place). On
+    /// transports lacking this capability (xdg_toplevel fallback, older
+    /// compositors) the call is silently ignored — consumers that rely on
+    /// dynamic re-anchoring should check `isConfigured()` after the next
+    /// commit and fall back to destroy-and-recreate if needed.
     /// @{
     virtual void setMargins(QMargins m) = 0;
     virtual void setLayer(Layer l) = 0;
     virtual void setExclusiveZone(int z) = 0;
     virtual void setKeyboardInteractivity(KeyboardInteractivity k) = 0;
+    virtual void setAnchors(Anchors a) = 0;
     /// @}
 
     /// Cached last-known pixel size from the compositor's configure event.

@@ -80,6 +80,32 @@ private Q_SLOTS:
         QVERIFY(!s.has(QStringLiteral("anything")));
     }
 
+    void jsonStore_corruptFileRecoversOnNextSave()
+    {
+        // Anti-regression: after loading a corrupt file, save() must
+        // overwrite the garbage with well-formed JSON rather than
+        // refusing to write.
+        QTemporaryDir dir;
+        const QString path = dir.filePath(QStringLiteral("corrupt.json"));
+        QFile f(path);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write("{ not valid json");
+        f.close();
+
+        {
+            JsonSurfaceStore s(path);
+            QVERIFY(s.save(QStringLiteral("k"), QJsonObject{{QStringLiteral("v"), 7}}));
+            QVERIFY(s.has(QStringLiteral("k")));
+        }
+        // Re-open from disk: the corrupt garbage should be gone, replaced
+        // by the save()'d content.
+        {
+            JsonSurfaceStore s(path);
+            QVERIFY(s.has(QStringLiteral("k")));
+            QCOMPARE(s.load(QStringLiteral("k")).value(QStringLiteral("v")).toInt(), 7);
+        }
+    }
+
     // ── XdgToplevelTransport ───────────────────────────────────────────
 
     void xdgTransport_isSupportedWhenGuiApp()
@@ -92,6 +118,7 @@ private Q_SLOTS:
     {
         XdgToplevelTransport t;
         QQuickWindow win;
+        const QString originalTitle = win.title();
         TransportAttachArgs args;
         args.screen = qGuiApp->primaryScreen();
         args.layer = Layer::Top;
@@ -99,7 +126,9 @@ private Q_SLOTS:
         auto handle = t.attach(&win, args);
         QVERIFY(handle);
         QCOMPARE(handle->window(), &win);
-        QCOMPARE(win.title(), QStringLiteral("xdg-test"));
+        // Scope must not leak into the user-facing window title — it's a
+        // machine identifier, not a display string.
+        QCOMPARE(win.title(), originalTitle);
     }
 
     void xdgTransport_mutatorsAreBestEffort()
@@ -115,6 +144,24 @@ private Q_SLOTS:
         handle->setExclusiveZone(100);
         handle->setKeyboardInteractivity(KeyboardInteractivity::Exclusive);
         handle->setMargins(QMargins(10, 20, 30, 40));
+        handle->setAnchors(Anchors{Anchor::Top, Anchor::Left});
+    }
+
+    void xdgTransport_setMarginsDoesNotMoveWindow()
+    {
+        // Anti-regression: an earlier implementation called
+        // QWindow::setPosition from setMargins(), which is a no-op on every
+        // major Wayland compositor but gave consumers false feedback. Verify
+        // the mutator leaves window position untouched.
+        XdgToplevelTransport t;
+        QQuickWindow win;
+        win.setPosition(100, 200);
+        TransportAttachArgs args;
+        args.screen = qGuiApp->primaryScreen();
+        auto handle = t.attach(&win, args);
+        QVERIFY(handle);
+        handle->setMargins(QMargins(50, 60, 70, 80));
+        QCOMPARE(win.position(), QPoint(100, 200));
     }
 
     void xdgTransport_rejectsNullWindow()

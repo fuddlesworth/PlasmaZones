@@ -30,6 +30,14 @@ namespace PhosphorLayer {
  *                                QStandardPaths::AppDataLocation)
  *                            + "/surface-state.json");
  * @endcode
+ *
+ * @note **Thread safety.** This store is NOT thread-safe — `save()` and
+ * `load()` share a single in-memory `QJsonObject` without locks. All
+ * calls must originate from the same thread (typically the GUI thread).
+ * Consumers that need cross-thread access must serialise calls
+ * externally, or wrap the store in their own mutex. Every `save()` also
+ * rewrites the full file; batching on the caller side is recommended if
+ * many keys are mutated together.
  */
 class PHOSPHORLAYER_EXPORT JsonSurfaceStore : public ISurfaceStore
 {

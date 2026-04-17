@@ -9,6 +9,7 @@
 #include "internal.h"
 
 #include <QLatin1String>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -57,8 +58,10 @@ public:
         // dtor (rather than Surface's) keeps the lifetime dance local.
         m_handle.reset();
         if (m_window) {
+            // QPointer auto-nulls if the window was already destroyed externally
+            // (e.g. consumer called ->deleteLater() before ~Surface). Skip the
+            // second deleteLater in that case.
             m_window->deleteLater();
-            m_window = nullptr;
         }
         if (m_engineOwned && m_engine) {
             m_engine->deleteLater();
@@ -75,10 +78,13 @@ public:
     State m_state = State::Constructed;
     Intent m_intent = Intent::Idle;
 
-    QQmlEngine* m_engine = nullptr;
+    QPointer<QQmlEngine> m_engine;
     bool m_engineOwned = false;
-    QQuickWindow* m_window = nullptr;
-    QQuickItem* m_rootItem = nullptr; ///< Item-rooted content; null when QML root is a Window
+    // QPointer: survives external destruction (e.g. a consumer that mistakenly
+    // deleteLater()s the window directly instead of the Surface). Prevents UB
+    // on ~Impl when the window is already gone.
+    QPointer<QQuickWindow> m_window;
+    QPointer<QQuickItem> m_rootItem; ///< Item-rooted content; null when QML root is a Window
     std::unique_ptr<QQmlComponent> m_component;
     std::unique_ptr<ITransportHandle> m_handle;
     QString m_failureReason;
@@ -123,13 +129,19 @@ private:
 
     void drive()
     {
+        // Guard against re-entry after failWith() — onComponentStatus and
+        // async transport callbacks funnel through drive() and must not
+        // advance a Failed surface.
+        if (m_state == State::Failed) {
+            return;
+        }
         switch (m_intent) {
         case Intent::Warm:
         case Intent::Show:
             driveWarmOrShow();
             break;
         case Intent::Hide:
-            if (m_state == State::Shown) {
+            if (m_state == State::Shown && m_window) {
                 m_window->hide();
                 transitionTo(State::Hidden);
             }
@@ -195,7 +207,10 @@ private:
             m_engineOwned = false;
             return true;
         }
-        m_engine = new QQmlEngine(m_q);
+        // No parent: ~Impl calls deleteLater on the owned engine. Parenting
+        // to m_q would create a second owner (the QObject parent-child tree
+        // would also delete it on ~QObject), causing a race at teardown.
+        m_engine = new QQmlEngine();
         m_engineOwned = true;
         return true;
     }
@@ -441,7 +456,7 @@ const SurfaceConfig& Surface::config() const noexcept
 
 QQuickWindow* Surface::window() const noexcept
 {
-    return m_impl->m_window;
+    return m_impl->m_window.data();
 }
 
 ITransportHandle* Surface::transport() const noexcept

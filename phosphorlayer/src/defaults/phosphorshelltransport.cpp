@@ -7,6 +7,7 @@
 
 #include <PhosphorShell/LayerSurface.h>
 
+#include <QGuiApplication>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QQuickWindow>
@@ -19,6 +20,21 @@ namespace {
 // the zwlr_layer_shell_v1 protocol values, so these are compile-time casts;
 // keeping them in functions makes the intent explicit and gives us a place
 // to hang static_assert guards if the mappings ever diverge.
+
+// Backstop against either side renumbering the shared wlr-layer-shell enum.
+// Both enums mirror the zwlr_layer_shell_v1 protocol values (0-based layer
+// sequence, Wayland keyboard-interactivity values); if the mapping ever
+// diverges these asserts break the build instead of silently translating
+// wrong values at runtime.
+static_assert(static_cast<int>(Layer::Background) == PhosphorShell::LayerSurface::LayerBackground);
+static_assert(static_cast<int>(Layer::Bottom) == PhosphorShell::LayerSurface::LayerBottom);
+static_assert(static_cast<int>(Layer::Top) == PhosphorShell::LayerSurface::LayerTop);
+static_assert(static_cast<int>(Layer::Overlay) == PhosphorShell::LayerSurface::LayerOverlay);
+static_assert(static_cast<int>(KeyboardInteractivity::None) == PhosphorShell::LayerSurface::KeyboardInteractivityNone);
+static_assert(static_cast<int>(KeyboardInteractivity::Exclusive)
+              == PhosphorShell::LayerSurface::KeyboardInteractivityExclusive);
+static_assert(static_cast<int>(KeyboardInteractivity::OnDemand)
+              == PhosphorShell::LayerSurface::KeyboardInteractivityOnDemand);
 
 constexpr PhosphorShell::LayerSurface::Layer toShellLayer(Layer l)
 {
@@ -107,6 +123,12 @@ public:
             m_surface->setKeyboardInteractivity(toShellKbd(k));
         }
     }
+    void setAnchors(Anchors a) override
+    {
+        if (m_surface) {
+            m_surface->setAnchors(toShellAnchors(a));
+        }
+    }
 
 private:
     QPointer<QQuickWindow> m_window;
@@ -120,14 +142,41 @@ class PhosphorShellTransport::Impl
 public:
     QMutex m_cbMutex;
     QList<CompositorLostCallback> m_callbacks;
+    QMetaObject::Connection m_aboutToQuitConnection;
+    bool m_firedAboutToQuit = false;
 };
 
 PhosphorShellTransport::PhosphorShellTransport()
     : m_impl(std::make_unique<Impl>())
 {
+    // PhosphorShell's QPA plugin owns the wlr-layer-shell global-removal
+    // signal but does not expose it through a public API. The best we can
+    // do from user-space is listen for application shutdown — when Qt
+    // enters aboutToQuit the wl_display is about to disconnect, so every
+    // active layer surface is effectively lost. Consumers that need
+    // earlier detection (mid-session compositor crash) should subscribe
+    // via PhosphorShell::LayerShellIntegration once it gains a public
+    // accessor; this default covers the "clean compositor exit" case.
+    if (auto* app = qGuiApp) {
+        m_impl->m_aboutToQuitConnection = QObject::connect(app, &QGuiApplication::aboutToQuit, [impl = m_impl.get()] {
+            QMutexLocker lock(&impl->m_cbMutex);
+            if (impl->m_firedAboutToQuit) {
+                return;
+            }
+            impl->m_firedAboutToQuit = true;
+            for (const auto& cb : std::as_const(impl->m_callbacks)) {
+                if (cb) {
+                    cb();
+                }
+            }
+        });
+    }
 }
 
-PhosphorShellTransport::~PhosphorShellTransport() = default;
+PhosphorShellTransport::~PhosphorShellTransport()
+{
+    QObject::disconnect(m_impl->m_aboutToQuitConnection);
+}
 
 bool PhosphorShellTransport::isSupported() const
 {
@@ -173,15 +222,14 @@ void PhosphorShellTransport::addCompositorLostCallback(CompositorLostCallback cb
         return;
     }
     QMutexLocker lock(&m_impl->m_cbMutex);
+    // If aboutToQuit already fired before the caller registered, invoke
+    // the callback immediately so late-registrants still see the event.
+    if (m_impl->m_firedAboutToQuit) {
+        lock.unlock();
+        cb();
+        return;
+    }
     m_impl->m_callbacks.append(std::move(cb));
-    // PhosphorShell currently doesn't expose a generic "global removed"
-    // hook on the transport level (it has global-removal callbacks on the
-    // QPA integration, but those aren't part of the public LayerSurface
-    // API). For now we store callbacks and document that they fire only
-    // on explicit triggerCompositorLost() calls — a future PhosphorShell
-    // revision will wire this up. Consumers relying on live compositor-
-    // restart detection should subscribe via PhosphorShell::LayerShell-
-    // Integration directly.
 }
 
 } // namespace PhosphorLayer

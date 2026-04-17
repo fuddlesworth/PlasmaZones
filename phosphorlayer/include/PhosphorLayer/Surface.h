@@ -54,12 +54,17 @@ struct SurfaceDeps
  * | Warming        | (content error)          | Failed        |
  * | Hidden         | show()                   | Shown         |
  * | Shown          | hide()                   | Hidden        |
- * | any            | (screen removed)         | Recreating    |
- * | Recreating     | (respawn complete)       | prior state   |
  * | any            | (transport rejected)     | Failed        |
  *
  * Invalid transitions (e.g. `show()` from Failed) log `qCWarning` with the
  * debugName and no-op. They never throw.
+ *
+ * Topology-driven respawn (screen removal / compositor restart) is the
+ * consumer's responsibility, not the library's: subscribe to
+ * TopologyCoordinator callbacks or use ScreenSurfaceRegistry::syncToScreens
+ * to decide when to destroy and rebuild surfaces. The library deliberately
+ * keeps Surface oblivious to the screen lifecycle so consumers retain full
+ * control over the save-state-before-destroy sequencing.
  *
  * `hide()` is synchronous from the caller's perspective — the window is
  * unmapped immediately. We do not expose a transient "Hiding" state because
@@ -77,7 +82,6 @@ public:
         Warming, ///< Engine / window / content initialising
         Shown, ///< Layer surface attached; window visible
         Hidden, ///< Attached but window hidden — show() is cheap
-        Recreating, ///< Torn down in response to topology change; will respawn
         Failed, ///< Unrecoverable (content error, transport rejected, …)
     };
     Q_ENUM(State)
@@ -117,11 +121,6 @@ Q_SIGNALS:
     /// human-readable diagnostic (QML compile error, transport rejection,
     /// etc.). Surface remains in Failed thereafter.
     void failed(const QString& reason);
-
-    /// Last chance to save content state before a topology-driven teardown.
-    /// After this signal, window() returns nullptr until the replacement
-    /// Surface is constructed.
-    void aboutToRecreate();
 
 private:
     friend class SurfaceFactory;

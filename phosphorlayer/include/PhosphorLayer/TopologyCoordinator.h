@@ -72,8 +72,8 @@ public:
     void detachSyncCallback(CallbackId id);
 
 Q_SIGNALS:
-    /// Debounce fired; recreation will begin momentarily. Consumers may
-    /// use this to snapshot state before the aboutToRecreate storm.
+    /// Debounce fired; the consumer should snapshot any state that depends
+    /// on the current screen set before sync callbacks start rebuilding it.
     void screensChanging();
 
     /// All sync callbacks have run; the screen set is stable again.
