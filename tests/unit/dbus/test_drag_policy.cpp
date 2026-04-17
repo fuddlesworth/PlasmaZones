@@ -364,9 +364,10 @@ private Q_SLOTS:
         diffReason.bypassReason = DragBypassReason::AutotileScreen;
         QVERIFY(!(diffReason == base));
 
-        // Each routing flag participates — e.g. showOverlay going false
-        // on a snap-disabled per-screen variant would flip the comparator
-        // even if bypassReason and screenId hadn't changed.
+        // Every routing flag participates — these cases exist so a future
+        // refactor that replaces `= default` with a hand-written operator==
+        // can't silently drop a field. If you add a field to DragPolicy, add
+        // a case here too.
         DragPolicy diffOverlay = base;
         diffOverlay.showOverlay = false;
         QVERIFY(!(diffOverlay == base));
@@ -374,6 +375,18 @@ private Q_SLOTS:
         DragPolicy diffStream = base;
         diffStream.streamDragMoved = false;
         QVERIFY(!(diffStream == base));
+
+        DragPolicy diffKeyboard = base;
+        diffKeyboard.grabKeyboard = false;
+        QVERIFY(!(diffKeyboard == base));
+
+        DragPolicy diffCapture = base;
+        diffCapture.captureGeometry = false;
+        QVERIFY(!(diffCapture == base));
+
+        DragPolicy diffImmediateFloat = base;
+        diffImmediateFloat.immediateFloatOnStart = true;
+        QVERIFY(!(diffImmediateFloat == base));
     }
 };
 
