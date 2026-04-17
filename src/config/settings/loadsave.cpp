@@ -140,19 +140,7 @@ void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
             *gaps, ConfigDefaults::adjacentThresholdKey(), ConfigDefaults::adjacentThreshold(),
             ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax(), "adjacent threshold");
     }
-    {
-        auto perf = backend->group(ConfigDefaults::performanceGroup());
-        m_pollIntervalMs =
-            readValidatedInt(*perf, ConfigDefaults::pollIntervalMsKey(), ConfigDefaults::pollIntervalMs(),
-                             ConfigDefaults::pollIntervalMsMin(), ConfigDefaults::pollIntervalMsMax(), "poll interval");
-        m_minimumZoneSizePx = readValidatedInt(
-            *perf, ConfigDefaults::minimumZoneSizePxKey(), ConfigDefaults::minimumZoneSizePx(),
-            ConfigDefaults::minimumZoneSizePxMin(), ConfigDefaults::minimumZoneSizePxMax(), "minimum zone size");
-        m_minimumZoneDisplaySizePx =
-            readValidatedInt(*perf, ConfigDefaults::minimumZoneDisplaySizePxKey(),
-                             ConfigDefaults::minimumZoneDisplaySizePx(), ConfigDefaults::minimumZoneDisplaySizePxMin(),
-                             ConfigDefaults::minimumZoneDisplaySizePxMax(), "minimum zone display size");
-    }
+    // Performance is backed by m_store — clamp validators in the schema.
 }
 
 void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
@@ -699,12 +687,7 @@ void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
         gaps->writeInt(ConfigDefaults::rightKey(), m_outerGapRight);
         gaps->writeInt(ConfigDefaults::adjacentThresholdKey(), m_adjacentThreshold);
     }
-    {
-        auto perf = backend->group(ConfigDefaults::performanceGroup());
-        perf->writeInt(ConfigDefaults::pollIntervalMsKey(), m_pollIntervalMs);
-        perf->writeInt(ConfigDefaults::minimumZoneSizePxKey(), m_minimumZoneSizePx);
-        perf->writeInt(ConfigDefaults::minimumZoneDisplaySizePxKey(), m_minimumZoneDisplaySizePx);
-    }
+    // Performance is backed by m_store — setters persist directly.
 }
 
 void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)

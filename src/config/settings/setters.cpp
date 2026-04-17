@@ -285,12 +285,7 @@ SETTINGS_SETTER_CLAMPED(OuterGapRight, m_outerGapRight, outerGapRightChanged, Co
                         ConfigDefaults::outerGapRightMax())
 SETTINGS_SETTER_CLAMPED(AdjacentThreshold, m_adjacentThreshold, adjacentThresholdChanged,
                         ConfigDefaults::adjacentThresholdMin(), ConfigDefaults::adjacentThresholdMax())
-SETTINGS_SETTER_CLAMPED(PollIntervalMs, m_pollIntervalMs, pollIntervalMsChanged, ConfigDefaults::pollIntervalMsMin(),
-                        ConfigDefaults::pollIntervalMsMax())
-SETTINGS_SETTER_CLAMPED(MinimumZoneSizePx, m_minimumZoneSizePx, minimumZoneSizePxChanged,
-                        ConfigDefaults::minimumZoneSizePxMin(), ConfigDefaults::minimumZoneSizePxMax())
-SETTINGS_SETTER_CLAMPED(MinimumZoneDisplaySizePx, m_minimumZoneDisplaySizePx, minimumZoneDisplaySizePxChanged,
-                        ConfigDefaults::minimumZoneDisplaySizePxMin(), ConfigDefaults::minimumZoneDisplaySizePxMax())
+// Performance setters moved to settings.cpp (PhosphorConfig::Store-backed).
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Behavior setters
@@ -566,18 +561,8 @@ void Settings::setLockedScreens(const QStringList& screens)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Rendering
+// Rendering — setter moved to settings.cpp (PhosphorConfig::Store-backed).
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void Settings::setRenderingBackend(const QString& backend)
-{
-    const QString value = ConfigDefaults::normalizeRenderingBackend(backend);
-    if (m_renderingBackend != value) {
-        m_renderingBackend = value;
-        Q_EMIT renderingBackendChanged();
-        Q_EMIT settingsChanged();
-    }
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shader Effects — setters live in settings.cpp and route through

@@ -20,6 +20,8 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendAppearanceSchema(s);
     appendOrderingSchema(s);
     appendAnimationsSchema(s);
+    appendRenderingSchema(s);
+    appendPerformanceSchema(s);
 
     return s;
 }
@@ -201,6 +203,50 @@ void appendAnimationsSchema(PhosphorConfig::Schema& schema)
          QMetaType::Int,
          {},
          clampInt(CD::animationStaggerIntervalMin(), CD::animationStaggerIntervalMax())},
+    };
+}
+
+// ─── Rendering ──────────────────────────────────────────────────────────────
+// Single-key group selecting the GPU backend. The validator coerces any
+// unknown string to a known value via ConfigDefaults::normalizeRenderingBackend
+// so hand-edited configs can't persist garbage.
+
+void appendRenderingSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::renderingGroup()] = {
+        {CD::backendKey(),
+         CD::renderingBackend(),
+         QMetaType::QString,
+         {},
+         [](const QVariant& v) {
+             return QVariant(CD::normalizeRenderingBackend(v.toString()));
+         }},
+    };
+}
+
+// ─── Performance ────────────────────────────────────────────────────────────
+// Poll interval + minimum zone size thresholds. All clamped ints.
+
+void appendPerformanceSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::performanceGroup()] = {
+        {CD::pollIntervalMsKey(),
+         CD::pollIntervalMs(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::pollIntervalMsMin(), CD::pollIntervalMsMax())},
+        {CD::minimumZoneSizePxKey(),
+         CD::minimumZoneSizePx(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::minimumZoneSizePxMin(), CD::minimumZoneSizePxMax())},
+        {CD::minimumZoneDisplaySizePxKey(),
+         CD::minimumZoneDisplaySizePx(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::minimumZoneDisplaySizePxMin(), CD::minimumZoneDisplaySizePxMax())},
     };
 }
 

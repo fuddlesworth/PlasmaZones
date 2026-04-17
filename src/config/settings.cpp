@@ -177,12 +177,7 @@ void Settings::load()
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
 
-    // Rendering backend
-    {
-        auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
-        m_renderingBackend = ConfigDefaults::normalizeRenderingBackend(
-            rendering->readString(ConfigDefaults::backendKey(), ConfigDefaults::renderingBackend()));
-    }
+    // Rendering backend is backed by m_store — nothing to load here.
 
     // Shaders is backed by m_store — nothing to load here. Getters read
     // through the store on demand, with the schema's validator clamping
@@ -361,12 +356,7 @@ void Settings::save()
     // Ordering is backed by m_store — setters persist immediately.
     saveEditorConfig(m_configBackend);
 
-    // Rendering backend
-    {
-        auto rendering = m_configBackend->group(ConfigDefaults::renderingGroup());
-        rendering->writeString(ConfigDefaults::backendKey(), m_renderingBackend);
-    }
-
+    // Rendering backend is backed by m_store — setter persists directly.
     // Shaders is backed by m_store — setters write to the backend
     // immediately, so save() only needs to flush alongside everything else.
 
@@ -637,6 +627,24 @@ PZ_STORE_GET(int, animationSequenceMode, animationsGroup, sequenceModeKey, int)
 PZ_STORE_SET_INT(setAnimationSequenceMode, animationsGroup, sequenceModeKey, animationSequenceModeChanged)
 PZ_STORE_GET(int, animationStaggerInterval, animationsGroup, staggerIntervalKey, int)
 PZ_STORE_SET_INT(setAnimationStaggerInterval, animationsGroup, staggerIntervalKey, animationStaggerIntervalChanged)
+
+// ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
+// Validator (normalizeRenderingBackend in the schema) coerces unknown values
+// to a known backend, so a hand-edited "Rendering.Backend = foobar" reads
+// back as the default on next load.
+
+PZ_STORE_GET(QString, renderingBackend, renderingGroup, backendKey, QString)
+PZ_STORE_SET_STRING(setRenderingBackend, renderingGroup, backendKey, renderingBackendChanged)
+
+// ── Performance (PhosphorConfig::Store-backed) ──────────────────────────────
+
+PZ_STORE_GET(int, pollIntervalMs, performanceGroup, pollIntervalMsKey, int)
+PZ_STORE_SET_INT(setPollIntervalMs, performanceGroup, pollIntervalMsKey, pollIntervalMsChanged)
+PZ_STORE_GET(int, minimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, int)
+PZ_STORE_SET_INT(setMinimumZoneSizePx, performanceGroup, minimumZoneSizePxKey, minimumZoneSizePxChanged)
+PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey, int)
+PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
+                 minimumZoneDisplaySizePxChanged)
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 

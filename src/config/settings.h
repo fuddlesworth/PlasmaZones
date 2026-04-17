@@ -612,22 +612,12 @@ public:
     }
     void setAdjacentThreshold(int threshold) override;
 
-    int pollIntervalMs() const override
-    {
-        return m_pollIntervalMs;
-    }
+    // Performance — PhosphorConfig::Store-backed (see settingsschema.cpp).
+    int pollIntervalMs() const override;
     void setPollIntervalMs(int interval) override;
-
-    int minimumZoneSizePx() const override
-    {
-        return m_minimumZoneSizePx;
-    }
+    int minimumZoneSizePx() const override;
     void setMinimumZoneSizePx(int size) override;
-
-    int minimumZoneDisplaySizePx() const override
-    {
-        return m_minimumZoneDisplaySizePx;
-    }
+    int minimumZoneDisplaySizePx() const override;
     void setMinimumZoneDisplaySizePx(int size) override;
 
     bool keepWindowsInZonesOnResolutionChange() const override
@@ -1126,10 +1116,10 @@ public:
     VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     // Rendering (ISettings)
-    QString renderingBackend() const override
-    {
-        return m_renderingBackend;
-    }
+    // Rendering backend — PhosphorConfig::Store-backed; the schema's
+    // validator runs normalizeRenderingBackend on every read/write so
+    // unknown strings are coerced to a valid choice.
+    QString renderingBackend() const override;
     void setRenderingBackend(const QString& backend) override;
 
     // Shader Effects — backed by PhosphorConfig::Store (see settingsschema.cpp).
@@ -1654,9 +1644,7 @@ private:
     int m_adjacentThreshold = ConfigDefaults::adjacentThreshold();
 
     // Performance and behavior
-    int m_pollIntervalMs = ConfigDefaults::pollIntervalMs();
-    int m_minimumZoneSizePx = ConfigDefaults::minimumZoneSizePx();
-    int m_minimumZoneDisplaySizePx = ConfigDefaults::minimumZoneDisplaySizePx();
+    // Performance is stored in m_store; no cached members here.
 
     // Window behavior
     bool m_keepWindowsInZonesOnResolutionChange = ConfigDefaults::keepWindowsInZonesOnResolutionChange();
@@ -1757,7 +1745,7 @@ private:
     QString m_autotileRetileShortcut = ConfigDefaults::autotileRetileShortcut();
 
     // Rendering
-    QString m_renderingBackend = ConfigDefaults::renderingBackend();
+    // Rendering is stored in m_store; no cached member here.
 
     // Shader Effects are stored in m_store; no cached members here.
 
