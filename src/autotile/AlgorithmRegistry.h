@@ -138,7 +138,11 @@ public:
     bool hasAlgorithm(const QString& id) const noexcept;
 
     /**
-     * @brief Get the default algorithm ID from KCM configuration defaults
+     * @brief Get the library's recommended default algorithm ID
+     *
+     * Owned by the algorithm layer itself (not the application config layer)
+     * so the registry remains self-contained.  Application config layers may
+     * expose their own user-facing default; that is intentionally independent.
      */
     static QString defaultAlgorithmId();
 

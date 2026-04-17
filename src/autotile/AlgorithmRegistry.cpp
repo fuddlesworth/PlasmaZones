@@ -4,9 +4,7 @@
 #include "AlgorithmRegistry.h"
 #include "TilingAlgorithm.h"
 #include "TilingState.h"
-#include "config/configdefaults.h"
 #include "core/constants.h"
-#include "core/layout.h"
 #include "core/logging.h"
 
 #include <QCoreApplication>
@@ -18,6 +16,13 @@
 namespace {
 /// Use 1000x1000 for high-precision relative coordinate conversion
 constexpr int PreviewSize = 1000;
+
+/// Library-owned recommended default algorithm.
+/// Kept as a literal so the registry is self-contained — no PlasmaZones
+/// config-layer dependency.  Application config layers may surface their own
+/// user-facing default (which today happens to also be "bsp"); the two are
+/// intentionally independent.
+constexpr auto RecommendedDefaultAlgorithmId = "bsp";
 }
 
 namespace PlasmaZones {
@@ -227,7 +232,7 @@ bool AlgorithmRegistry::hasAlgorithm(const QString& id) const noexcept
 
 QString AlgorithmRegistry::defaultAlgorithmId()
 {
-    return ConfigDefaults::defaultAutotileAlgorithm();
+    return QString::fromLatin1(RecommendedDefaultAlgorithmId);
 }
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
