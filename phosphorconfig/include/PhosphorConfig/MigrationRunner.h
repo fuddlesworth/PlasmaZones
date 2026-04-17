@@ -5,12 +5,13 @@
 
 #include <phosphorconfig_export.h>
 
+#include <PhosphorConfig/Schema.h>
+
 #include <QJsonObject>
 #include <QString>
+#include <QVector>
 
 namespace PhosphorConfig {
-
-struct Schema;
 
 /// Executes a @c Schema's migration chain against a JSON document.
 ///
@@ -54,6 +55,9 @@ public:
 
 private:
     const Schema& m_schema;
+    /// Sorted-by-fromVersion copy of m_schema.migrations, computed once at
+    /// construction so runInMemory doesn't pay the sort cost on every call.
+    QVector<MigrationStep> m_orderedSteps;
 };
 
 } // namespace PhosphorConfig

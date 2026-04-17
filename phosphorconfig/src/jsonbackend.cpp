@@ -95,12 +95,15 @@ QJsonObject navigatePath(const QJsonObject& root, const QStringList& segments)
     return chain.last();
 }
 
-void writeAtPath(QJsonObject& root, const QStringList& segments, const QJsonObject& leaf)
+/// Variant of writeAtPath that takes a pre-built chain — lets callers that
+/// already walked the path (e.g. for an equality-skip check) avoid the
+/// second traversal.
+void writeAtPathWithChain(QJsonObject& root, const QStringList& segments, const QList<QJsonObject>& chain,
+                          const QJsonObject& leaf)
 {
     if (segments.isEmpty()) {
         return;
     }
-    const auto chain = buildDotPathChain(root, segments);
     QJsonObject current = leaf;
     for (int i = segments.size() - 1; i >= 1; --i) {
         QJsonObject parent = chain[i - 1];
@@ -108,6 +111,14 @@ void writeAtPath(QJsonObject& root, const QStringList& segments, const QJsonObje
         current = parent;
     }
     root[segments[0]] = current;
+}
+
+void writeAtPath(QJsonObject& root, const QStringList& segments, const QJsonObject& leaf)
+{
+    if (segments.isEmpty()) {
+        return;
+    }
+    writeAtPathWithChain(root, segments, buildDotPathChain(root, segments), leaf);
 }
 
 void removeAtPath(QJsonObject& root, const QStringList& segments)
@@ -233,14 +244,14 @@ void JsonGroup::setGroupObject(const QJsonObject& obj)
         qWarning("PhosphorConfig::JsonGroup: refusing write to malformed group '%s'", qPrintable(m_groupName));
         return;
     }
-    // Short-circuit when the leaf already matches — the Settings::save()
-    // flush loop rewrites every declared key on every save; without this
-    // check, every save forces a full atomic file rewrite even when
-    // nothing changed.
-    if (navigatePath(m_root, segments) == obj) {
+    // Walk the path once, share the chain between the equality-skip and the
+    // write-back. The flush loop in Settings::save() can hit this hundreds of
+    // times per save and a redundant traversal is pure waste.
+    const auto chain = buildDotPathChain(m_root, segments);
+    if (chain.last() == obj) {
         return;
     }
-    writeAtPath(m_root, segments, obj);
+    writeAtPathWithChain(m_root, segments, chain, obj);
     m_backend->markDirty();
 }
 
@@ -628,6 +639,18 @@ bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject
         return false;
     }
 
+    // Capture the existing file's permissions before QSaveFile replaces it —
+    // QSaveFile's commit() creates a new inode with default umask perms, so
+    // a user's `chmod 600 config.json` would silently widen on every save.
+    // Re-applied after commit (small race window with default perms during
+    // the rename, acceptable for desktop config).
+    QFile::Permissions originalPerms;
+    bool restorePerms = false;
+    if (QFile::exists(filePath)) {
+        originalPerms = QFile::permissions(filePath);
+        restorePerms = (originalPerms != QFile::Permissions{});
+    }
+
     QSaveFile f(filePath);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
         qWarning("PhosphorConfig::JsonBackend: failed to open %s for writing: %s", qPrintable(filePath),
@@ -642,6 +665,13 @@ bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject
         qWarning("PhosphorConfig::JsonBackend: failed to commit write to %s: %s", qPrintable(filePath),
                  qPrintable(f.errorString()));
         return false;
+    }
+
+    if (restorePerms && !QFile::setPermissions(filePath, originalPerms)) {
+        qWarning("PhosphorConfig::JsonBackend: failed to restore permissions on %s after atomic write",
+                 qPrintable(filePath));
+        // Don't fail the write — content is on disk and readable; perm
+        // restore failure is recoverable by the user.
     }
 
     return true;

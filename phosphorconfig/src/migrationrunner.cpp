@@ -42,7 +42,15 @@ QVariant Schema::defaultFor(const QString& group, const QString& key) const
 
 MigrationRunner::MigrationRunner(const Schema& schema)
     : m_schema(schema)
+    , m_orderedSteps(schema.migrations)
 {
+    // Sort once at construction so registration order doesn't matter and
+    // runInMemory doesn't pay the sort cost on every call. Stable sort
+    // preserves the relative order of any (illegal but possible) duplicate
+    // fromVersion entries — the runner aborts on the second one anyway.
+    std::stable_sort(m_orderedSteps.begin(), m_orderedSteps.end(), [](const MigrationStep& a, const MigrationStep& b) {
+        return a.fromVersion < b.fromVersion;
+    });
 }
 
 int MigrationRunner::readVersion(const QJsonObject& root) const
@@ -58,18 +66,13 @@ void MigrationRunner::stampVersion(QJsonObject& root) const
 
 void MigrationRunner::runInMemory(QJsonObject& root) const
 {
-    // Sort a local copy of the migration list by fromVersion so registration
-    // order doesn't matter. Without this, a schema that declares {2,...}
-    // before {1,...} skips the v1→v2 step entirely (the loop sees
-    // fromVersion=2 first with version=1, continues, then v1→v2 runs, but
-    // the loop's already past the v2 entry).
-    QVector<MigrationStep> ordered = m_schema.migrations;
-    std::stable_sort(ordered.begin(), ordered.end(), [](const MigrationStep& a, const MigrationStep& b) {
-        return a.fromVersion < b.fromVersion;
-    });
-
+    // m_orderedSteps is sorted at construction, so a schema that declares
+    // {2,...} before {1,...} still runs v1→v2 first.
     int version = readVersion(root);
-    for (const MigrationStep& step : ordered) {
+    for (const MigrationStep& step : m_orderedSteps) {
+        if (version >= m_schema.version) {
+            break; // Already at or past target; remaining steps are no-ops.
+        }
         if (version != step.fromVersion) {
             continue;
         }
@@ -128,7 +131,10 @@ bool MigrationRunner::runOnFile(const QString& jsonPath) const
     QJsonObject root = doc.object();
     const int oldVersion = readVersion(root);
     runInMemory(root);
-    const int newVersion = root.value(m_schema.versionKey).toInt();
+    // Use readVersion (which clamps <1 → 1) for parity with the start-of-chain
+    // read, so a migration that left the version key cleared is reported as
+    // "no advance" instead of accidentally appearing to roll back to 0.
+    const int newVersion = readVersion(root);
 
     if (newVersion == oldVersion) {
         return true;

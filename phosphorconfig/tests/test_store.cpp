@@ -308,6 +308,62 @@ private Q_SLOTS:
         QCOMPARE(g->readString(QStringLiteral("Big")), QString::number(big));
     }
 
+    void write_canonicalisesNonCanonicalDiskValue()
+    {
+        // Validator that strips whitespace from a comma list. The disk holds
+        // a non-canonical " a , b ", and the caller writes the canonical form
+        // "a,b". Both validate to the same value, so the OLD short-circuit
+        // (which compared validator(disk) vs validator(input)) silently kept
+        // the non-canonical disk value. The new behaviour compares against
+        // the raw disk value, so the rewrite happens and the file ends up
+        // canonical.
+        Schema s;
+        s.version = 1;
+        auto canonicalise = [](const QVariant& v) -> QVariant {
+            QStringList parts = v.toString().split(QLatin1Char(','));
+            for (auto& p : parts) {
+                p = p.trimmed();
+            }
+            parts.removeAll(QString());
+            return QVariant(parts.join(QLatin1Char(',')));
+        };
+        s.groups[QStringLiteral("L")] = {
+            {QStringLiteral("Items"), QString(), QMetaType::QString, QString(), canonicalise},
+        };
+
+        JsonBackend backend(m_path);
+        Store store(&backend, s);
+
+        // Seed disk with non-canonical value, bypassing the Store.
+        {
+            auto g = backend.group(QStringLiteral("L"));
+            g->writeString(QStringLiteral("Items"), QStringLiteral(" a , b "));
+        }
+
+        // Write the canonical form through the Store. The flush-loop pattern
+        // mimics what Settings::save does: read+write the same key.
+        store.write(QStringLiteral("L"), QStringLiteral("Items"), QStringLiteral("a,b"));
+
+        // The on-disk value should now be canonical, not the seeded garbage.
+        auto g = backend.group(QStringLiteral("L"));
+        QCOMPARE(g->readString(QStringLiteral("Items")), QStringLiteral("a,b"));
+    }
+
+    void write_rejectsUndeclaredKey()
+    {
+        JsonBackend backend(m_path);
+        Store store(&backend, makeSchema());
+
+        QSignalSpy spy(&store, &Store::changed);
+        QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("rejecting write to undeclared key")));
+        store.write(QStringLiteral("UnknownGroup"), QStringLiteral("undeclared"), 42);
+
+        // No emission, no leak into the backend.
+        QCOMPARE(spy.count(), 0);
+        auto g = backend.group(QStringLiteral("UnknownGroup"));
+        QVERIFY(!g->hasKey(QStringLiteral("undeclared")));
+    }
+
     void migrationChainRunsOnConstruction()
     {
         // Seed an on-disk v1 document.

@@ -266,31 +266,36 @@ QVariant Store::readVariant(const QString& group, const QString& key) const
 
 void Store::write(const QString& group, const QString& key, const QVariant& value)
 {
-    QVariant coerced = value;
     const KeyDef* def = d->schema.findKey(group, key);
-    const bool verbatimString = def ? def->verbatimStringStorage : false;
-    if (def) {
-        if (def->validator) {
-            coerced = def->validator(coerced);
-        }
-        if (def->expectedType != QMetaType::UnknownType && coerced.typeId() != static_cast<int>(def->expectedType)) {
-            qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
-                     qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
-        }
+    if (!def) {
+        // Reject writes to undeclared keys. Reads of undeclared keys return
+        // the value-initialized default (per Store::read docstring), so
+        // letting writes leak into storage would create an asymmetry where
+        // values can be persisted but never observed through Store. Callers
+        // that intentionally need raw access can go through backend()->group().
+        qWarning("PhosphorConfig::Store: rejecting write to undeclared key %s/%s", qPrintable(group), qPrintable(key));
+        return;
     }
+
+    QVariant coerced = value;
+    if (def->validator) {
+        coerced = def->validator(coerced);
+    }
+    if (def->expectedType != QMetaType::UnknownType && coerced.typeId() != static_cast<int>(def->expectedType)) {
+        qWarning("PhosphorConfig::Store: write to %s/%s with type %s, schema expected %s", qPrintable(group),
+                 qPrintable(key), QMetaType(coerced.typeId()).name(), QMetaType(def->expectedType).name());
+    }
+    const bool verbatimString = def->verbatimStringStorage;
     {
         auto g = d->backend->group(group);
-        // Skip the write (and the changed() emission) when the coerced value
-        // already matches what's on the backend. Eliminates spurious signals
-        // for flush loops that rewrite every declared key on save().
-        // The on-disk read is passed through the same validator as the write
-        // so a canonicalised input (e.g. comma-list trim/dedup) correctly
-        // compares equal to the previously-persisted canonical value.
-        if (def && g->hasKey(key)) {
-            QVariant current = readVariantAs(*g, key, def->defaultValue);
-            if (def->validator) {
-                current = def->validator(current);
-            }
+        // Skip the write (and the changed() emission) when the on-disk value
+        // already exactly matches what we'd write. The comparison is against
+        // the RAW disk value, not validator-coerced: this lets a canonicalising
+        // flush loop overwrite a non-canonical disk value (e.g. " a , b "
+        // re-written as "a,b") instead of being short-circuited by the
+        // validator on both sides agreeing on the same canonical form.
+        if (g->hasKey(key)) {
+            const QVariant current = readVariantAs(*g, key, def->defaultValue);
             if (current == coerced) {
                 return;
             }
@@ -386,7 +391,19 @@ void Store::importFromJson(const QJsonObject& snapshot)
             if (!groupObj.contains(def.key)) {
                 continue;
             }
-            const QVariant value = groupObj.value(def.key).toVariant();
+            QVariant value = groupObj.value(def.key).toVariant();
+            // QJsonValue::toVariant always returns Double for JSON numbers,
+            // even when the schema declares an Int. Coerce to the schema's
+            // expectedType when convertible so Store::write doesn't fire a
+            // type-mismatch warning for every numeric import. Only safe for
+            // bool/int/double/QString — int64-out-of-range is tested
+            // independently by callers passing typed QVariants directly.
+            if (def.expectedType != QMetaType::UnknownType && value.typeId() != static_cast<int>(def.expectedType)) {
+                QVariant converted = value;
+                if (converted.convert(QMetaType(def.expectedType))) {
+                    value = converted;
+                }
+            }
             write(git.key(), def.key, value);
         }
     }

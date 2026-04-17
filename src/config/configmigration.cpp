@@ -100,9 +100,16 @@ bool ConfigMigration::ensureJsonConfigImpl()
     const QString jsonPath = ConfigDefaults::configFilePath();
     if (QFile::exists(jsonPath)) {
         QFile f(jsonPath);
+        bool whitespaceOnly = false;
+        bool corrupt = false;
         if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
             const QByteArray data = f.readAll();
-            if (!data.trimmed().isEmpty()) {
+            if (data.trimmed().isEmpty()) {
+                // Truncated / zero-byte files aren't corruption — treat them
+                // like a fresh install (proceed to the INI / fresh-install
+                // logic below) instead of archiving the empty file.
+                whitespaceOnly = true;
+            } else {
                 QJsonParseError err;
                 QJsonDocument doc = QJsonDocument::fromJson(data, &err);
                 if (err.error == QJsonParseError::NoError && doc.isObject()) {
@@ -112,23 +119,50 @@ bool ConfigMigration::ensureJsonConfigImpl()
                     }
                     return true; // Already at current version
                 }
+                corrupt = true;
             }
+        } else {
+            // Open failed — log and treat as fresh-install fall-through.
+            qWarning("ConfigMigration: could not open %s for reading: %s", qPrintable(jsonPath),
+                     qPrintable(f.errorString()));
+            return false;
         }
-        // Corrupt or empty JSON — check if INI backup exists for re-migration.
+
+        // Real parse-error corruption — check if INI backup exists for re-migration.
         const QString iniPath = ConfigDefaults::legacyConfigFilePath();
-        if (!QFile::exists(iniPath)) {
+        if (corrupt && !QFile::exists(iniPath)) {
             const QString corruptBak = jsonPath + QStringLiteral(".corrupt.bak");
-            if (QFile::exists(corruptBak)) {
-                QFile::remove(corruptBak);
+            if (QFile::exists(corruptBak) && !QFile::remove(corruptBak)) {
+                qWarning("ConfigMigration: failed to remove old %s — leaving corrupt JSON in place",
+                         qPrintable(corruptBak));
+                return false;
             }
-            QFile::rename(jsonPath, corruptBak);
+            if (!QFile::rename(jsonPath, corruptBak)) {
+                qWarning("ConfigMigration: failed to rename corrupt JSON to %s — leaving it in place",
+                         qPrintable(corruptBak));
+                return false;
+            }
             qWarning(
                 "ConfigMigration: corrupt JSON config moved to %s — no INI to re-migrate from, "
                 "using defaults",
                 qPrintable(corruptBak));
             return true;
         }
-        QFile::remove(jsonPath);
+        if (corrupt) {
+            // Have an INI to re-migrate from — drop the corrupt JSON so we
+            // re-run INI→JSON below.
+            if (!QFile::remove(jsonPath)) {
+                qWarning("ConfigMigration: failed to remove corrupt JSON %s before INI re-migration",
+                         qPrintable(jsonPath));
+                return false;
+            }
+        } else if (whitespaceOnly) {
+            // Drop the empty file so the INI-or-fresh-install path below is clean.
+            if (!QFile::remove(jsonPath)) {
+                qWarning("ConfigMigration: failed to remove empty JSON %s", qPrintable(jsonPath));
+                return false;
+            }
+        }
     }
 
     const QString iniPath = ConfigDefaults::legacyConfigFilePath();

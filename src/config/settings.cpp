@@ -54,8 +54,16 @@ Settings::Settings(QObject* parent)
 Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     : ISettings(parent)
     , m_configBackend(backend)
-    , m_store(std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this))
+    , m_store(nullptr)
 {
+    // Mirror the owned-backend ctor's defensive call so callers that wire up
+    // a backend without going through migrateAndCreateOwnedBackend (tests,
+    // future integrations) still get migration on construction.
+    // ensureJsonConfig is process-level idempotent — production entry points
+    // (daemon/main, settings/main, editor controller) already call it at
+    // startup and the second call is a single atomic load.
+    ConfigMigration::ensureJsonConfig();
+    m_store = std::make_unique<PhosphorConfig::Store>(m_configBackend, buildSettingsSchema(), this);
     load();
 }
 
