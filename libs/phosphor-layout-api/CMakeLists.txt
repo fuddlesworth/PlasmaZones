@@ -29,7 +29,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
@@ -85,7 +85,6 @@ target_compile_features(PhosphorLayoutApi PUBLIC cxx_std_20)
 target_link_libraries(PhosphorLayoutApi
     PUBLIC
         Qt6::Core
-        Qt6::Gui
 )
 
 set_target_properties(PhosphorLayoutApi PROPERTIES

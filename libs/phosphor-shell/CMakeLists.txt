@@ -30,7 +30,7 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # These are likely already found by the parent project when built in-tree.
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui)
 find_package(Qt6GuiPrivate CONFIG REQUIRED)
 find_package(Qt6ShaderToolsPrivate CONFIG REQUIRED)
 find_package(Qt6 REQUIRED COMPONENTS WaylandClient ShaderTools)
@@ -146,7 +146,6 @@ target_link_libraries(PhosphorShell
     PUBLIC
         Qt6::Core
         Qt6::Gui
-        Qt6::Quick
     PRIVATE
         Qt6::GuiPrivate
         Qt6::WaylandClientPrivate
