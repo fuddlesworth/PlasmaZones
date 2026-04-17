@@ -381,8 +381,14 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
     const QImage labelsImage = buildLabelsImageForPreviewZones(zones, size, m_settings);
     writeQmlProperty(m_shaderPreviewWindow, QStringLiteral("labelsTexture"), QVariant::fromValue(labelsImage));
 
-    // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade)
-    applyShaderInfoToWindow(m_shaderPreviewWindow, info, shaderParams);
+    // applyShaderInfoToWindow sets shaderSource LAST (triggers statusChanged cascade).
+    // Pass the preview's sub-rect + the containing physical screen so a
+    // wallpaper-consuming shader samples the portion of the wallpaper that
+    // actually sits behind the preview rect — mirrors the VS-cropping path
+    // in overlay.cpp so preview and live overlay agree pixel-for-pixel.
+    const QRect previewSubGeom(x, y, width, height);
+    const QRect previewPhysGeom = screen->geometry();
+    applyShaderInfoToWindow(m_shaderPreviewWindow, info, shaderParams, previewSubGeom, previewPhysGeom);
 
     // Start iTime animation for preview (shared timer with main overlay)
     // Must start m_shaderTimer - updateShaderUniforms() uses it and returns early if invalid

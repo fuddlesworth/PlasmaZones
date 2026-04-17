@@ -780,6 +780,9 @@ QString ShaderRegistry::s_cachedWallpaperPath;
 QImage ShaderRegistry::s_cachedWallpaperImage;
 qint64 ShaderRegistry::s_cachedWallpaperMtime = 0;
 QMutex ShaderRegistry::s_wallpaperCacheMutex;
+std::array<ShaderRegistry::WallpaperCropEntry, ShaderRegistry::CropCacheCapacity>
+    ShaderRegistry::s_cachedWallpaperCrops;
+int ShaderRegistry::s_cachedWallpaperCropNextSlot = 0;
 
 QString ShaderRegistry::wallpaperPath()
 {
@@ -829,25 +832,24 @@ QImage ShaderRegistry::loadWallpaperImage()
     return s_cachedWallpaperImage;
 }
 
-QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& physGeom)
+QRect ShaderRegistry::computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom)
 {
-    QImage full = loadWallpaperImage();
-    if (full.isNull() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
-        return full;
+    if (wpSize.isEmpty() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
+        return {};
     }
-    // Only crop when the sub-region is strictly inside the physical screen.
+    // Only crop when the sub-region actually lies inside the physical screen.
     const QRect clamped = subGeom.intersected(physGeom);
     if (!clamped.isValid() || clamped == physGeom) {
-        return full;
+        return {};
     }
 
-    // "Cover" placement of the wallpaper on the physical screen:
-    // aspect-correct fill centered, overflow cropped. This matches the math
-    // in shaders/wallpaper.glsl::wallpaperUv so the cropped image sampled with
-    // aspect == subGeom reproduces the same portion of the wallpaper that
-    // would appear in subGeom if the full physical screen were drawn.
-    const qreal wpW = full.width();
-    const qreal wpH = full.height();
+    // "Cover" placement of the wallpaper on the physical screen: aspect-correct
+    // fill centered, overflow cropped. Mirrors shaders/wallpaper.glsl::wallpaperUv
+    // so the cropped image sampled with aspect == subGeom reproduces the same
+    // portion of the wallpaper that would appear inside subGeom if the whole
+    // physical screen were drawn with the full wallpaper.
+    const qreal wpW = wpSize.width();
+    const qreal wpH = wpSize.height();
     const qreal physW = physGeom.width();
     const qreal physH = physGeom.height();
     const qreal wpAspect = wpW / qMax<qreal>(wpH, 1.0);
@@ -861,24 +863,79 @@ QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& phy
         coverY = 0.0;
     } else {
         coverW = wpW;
-        coverH = wpW / qMax<qreal>(physAspect, 1e-6);
+        coverH = wpW / qMax<qreal>(physAspect, 1.0);
         coverX = 0.0;
         coverY = (wpH - coverH) * 0.5;
     }
 
-    const qreal fracX = (clamped.x() - physGeom.x()) / physW;
-    const qreal fracY = (clamped.y() - physGeom.y()) / physH;
-    const qreal fracW = clamped.width() / physW;
-    const qreal fracH = clamped.height() / physH;
+    // Compute edges (left/top/right/bottom) independently so adjacent VSes
+    // tile the wallpaper seam-free: VS-A's right edge equals VS-B's left edge
+    // because both are derived from the same coverX + frac*coverW expression
+    // on the shared boundary. Deriving width from (right - left) then keeps
+    // them tight regardless of how qRound breaks the tie.
+    const qreal fracL = (clamped.x() - physGeom.x()) / physW;
+    const qreal fracT = (clamped.y() - physGeom.y()) / physH;
+    const qreal fracR = (clamped.x() + clamped.width() - physGeom.x()) / physW;
+    const qreal fracB = (clamped.y() + clamped.height() - physGeom.y()) / physH;
 
-    const QRect cropRect(qRound(coverX + fracX * coverW), qRound(coverY + fracY * coverH),
-                         qMax(1, qRound(fracW * coverW)), qMax(1, qRound(fracH * coverH)));
+    const int left = qRound(coverX + fracL * coverW);
+    const int top = qRound(coverY + fracT * coverH);
+    const int right = qRound(coverX + fracR * coverW);
+    const int bottom = qRound(coverY + fracB * coverH);
 
-    const QRect safe = cropRect.intersected(full.rect());
+    const QRect cropRect(left, top, qMax(1, right - left), qMax(1, bottom - top));
+    const QRect safe = cropRect.intersected(QRect(QPoint(0, 0), wpSize));
     if (!safe.isValid() || safe.width() < 1 || safe.height() < 1) {
+        return {};
+    }
+    return safe;
+}
+
+QImage ShaderRegistry::loadWallpaperImage(const QRect& subGeom, const QRect& physGeom)
+{
+    QImage full = loadWallpaperImage();
+    if (full.isNull() || !subGeom.isValid() || !physGeom.isValid() || subGeom == physGeom) {
         return full;
     }
-    return full.copy(safe);
+
+    QMutexLocker lock(&s_wallpaperCacheMutex);
+    // Crops are only valid while the full wallpaper behind them is unchanged.
+    // Snapshot the mtime and verify cacheKey() matches the currently-cached
+    // full image — if another thread reloaded the wallpaper between our
+    // loadWallpaperImage() return and this lock, our `full` is stale relative
+    // to s_cachedWallpaperMtime and we must neither read from nor write to
+    // the crop cache under that mtime.
+    const qint64 mtime = s_cachedWallpaperMtime;
+    const bool cacheConsistent = (full.cacheKey() == s_cachedWallpaperImage.cacheKey());
+
+    if (cacheConsistent) {
+        // Cache hit: return the stored QImage (stable cacheKey() so downstream
+        // setWallpaperTexture equality checks short-circuit correctly).
+        for (const auto& entry : s_cachedWallpaperCrops) {
+            if (entry.mtime == mtime && !entry.img.isNull() && entry.sub == subGeom && entry.phys == physGeom) {
+                return entry.img;
+            }
+        }
+    }
+
+    const QRect safe = computeWallpaperCropRect(full.size(), physGeom, subGeom);
+    if (!safe.isValid()) {
+        return full;
+    }
+
+    QImage cropped = full.copy(safe);
+    if (cropped.isNull()) {
+        return full;
+    }
+
+    if (cacheConsistent) {
+        // Insert into the ring-buffer cache. Small fixed capacity — typical
+        // systems have at most a handful of VSes so an LRU isn't worth the
+        // bookkeeping; oldest entry is overwritten.
+        s_cachedWallpaperCrops[s_cachedWallpaperCropNextSlot] = {subGeom, physGeom, mtime, cropped};
+        s_cachedWallpaperCropNextSlot = (s_cachedWallpaperCropNextSlot + 1) % CropCacheCapacity;
+    }
+    return cropped;
 }
 
 void ShaderRegistry::invalidateWallpaperCache()
@@ -887,6 +944,10 @@ void ShaderRegistry::invalidateWallpaperCache()
     s_cachedWallpaperPath.clear();
     s_cachedWallpaperImage = QImage();
     s_cachedWallpaperMtime = 0;
+    for (auto& entry : s_cachedWallpaperCrops) {
+        entry = {};
+    }
+    s_cachedWallpaperCropNextSlot = 0;
     s_wallpaperProvider.reset(); // force re-detection on next call
 }
 
