@@ -319,6 +319,27 @@ OverlayService::~OverlayService()
     // deleted pointer in ~Impl.
     cleanupAllScreenStates(m_screenStates);
 
+    // Singleton surfaces (snap assist, layout picker, shader preview) are
+    // QObject children of `this`, so the QObject parent-child system would
+    // destroy them AFTER our own destructor body runs — i.e. after the
+    // deferred-delete drain below, and potentially after member destructors
+    // (m_engine, m_transport, m_surfaceFactory, m_screenProvider) have run.
+    // Schedule their deletion now so the drain loop picks them up in the
+    // right order and they don't touch dead engine/factory pointers during
+    // their own teardown.
+    if (m_snapAssistSurface) {
+        m_snapAssistSurface->deleteLater();
+        m_snapAssistSurface = nullptr;
+    }
+    if (m_layoutPickerSurface) {
+        m_layoutPickerSurface->deleteLater();
+        m_layoutPickerSurface = nullptr;
+    }
+    if (m_shaderPreviewSurface) {
+        m_shaderPreviewSurface->deleteLater();
+        m_shaderPreviewSurface = nullptr;
+    }
+
     // Keep-alive surface is released last (after all other overlays), so its
     // Vulkan instance outlives their teardown and prevents the global
     // wl_display / VkInstance churn the keep-alive is designed to suppress.
@@ -866,6 +887,16 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
             destroyZoneSelectorWindow(id);
             destroyLayoutOsdWindow(id);
             destroyNavigationOsdWindow(id);
+            // If every window for this screen-id was already released (or
+            // this state entry never actually held any — e.g. an OSD
+            // creation failed earlier), drop the empty shell so screen
+            // hot-plug cycles don't slowly accumulate dead keys. Matches
+            // cleanupScreenStatesByPrefix semantics: the state entry is
+            // meaningless without at least one live window.
+            auto& s = m_screenStates[id];
+            if (!s.overlaySurface && !s.zoneSelectorSurface && !s.layoutOsdSurface && !s.navigationOsdSurface) {
+                m_screenStates.remove(id);
+            }
         }
     }
 

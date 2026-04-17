@@ -260,7 +260,14 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
                 int scaledPadding = window->property("scaledPadding").toInt();
                 if (scaledPadding <= 0)
                     scaledPadding = 1;
-                constexpr int minZoneSize = 8;
+                // Read from the QML root property so the hit-test clamp
+                // matches the visual clamp used by LayoutCard / ZonePreview.
+                // Both sides reading the same property is the single source
+                // of truth; fall back to the historical 8px default if the
+                // property isn't set (older QML revisions).
+                int minZoneSize = window->property("minZoneSize").toInt();
+                if (minZoneSize <= 0)
+                    minZoneSize = 8;
 
                 for (int z = 0; z < zones.size(); ++z) {
                     QVariantMap zoneMap = zones[z].toMap();
@@ -398,9 +405,6 @@ void OverlayService::destroyZoneSelectorWindow(const QString& screenId)
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
         if (it->zoneSelectorSurface) {
-            if (it->zoneSelectorPhysScreen && it->zoneSelectorWindow) {
-                QObject::disconnect(it->zoneSelectorPhysScreen, nullptr, it->zoneSelectorWindow, nullptr);
-            }
             it->zoneSelectorSurface->deleteLater();
             it->zoneSelectorSurface = nullptr;
             it->zoneSelectorWindow = nullptr;

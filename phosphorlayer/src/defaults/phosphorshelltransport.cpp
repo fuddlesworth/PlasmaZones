@@ -175,6 +175,18 @@ std::unique_ptr<ITransportHandle> PhosphorShellTransport::attach(QQuickWindow* w
         qCWarning(lcPhosphorLayer) << "PhosphorShellTransport::attach: compositor lacks wlr-layer-shell";
         return nullptr;
     }
+    // Pre-show-immutable properties (scope, layer, anchors, kbd interactivity)
+    // can only be set before the wl_surface commits as a layer_surface. If
+    // the consumer already show()'d, PhosphorShell::LayerSurface::get logs
+    // a qCCritical but returns a surface whose setters silently no-op —
+    // that yields a handle that reports "configured" but never honoured
+    // its initial config. Refuse loudly so the caller fixes their ordering.
+    if (win->isVisible()) {
+        qCWarning(lcPhosphorLayer)
+            << "PhosphorShellTransport::attach: window is already visible — attach must run before show()"
+            << "(pre-show-immutable properties would be silently discarded)";
+        return nullptr;
+    }
     auto* surface = PhosphorShell::LayerSurface::get(win);
     if (!surface) {
         qCWarning(lcPhosphorLayer) << "PhosphorShellTransport::attach: LayerSurface::get returned nullptr";

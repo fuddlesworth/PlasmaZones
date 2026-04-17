@@ -14,12 +14,58 @@
 
 namespace PhosphorLayer {
 
+namespace {
+
+/**
+ * True if @p path is safe to use as a surface-store target. Rejects:
+ *   - empty paths
+ *   - paths containing ".." segments (directory traversal defence)
+ *   - paths whose existing target OR whose direct parent directory is a
+ *     symlink (prevents a malicious symlink from redirecting writes to
+ *     e.g. ~/.bashrc or /etc)
+ *
+ * A non-existent target whose parent is a real directory is fine — that
+ * is the "first run" case.
+ */
+bool isSafeStorePath(const QString& path)
+{
+    if (path.isEmpty()) {
+        return false;
+    }
+    // Reject traversal. QDir::cleanPath collapses ".." but we want to
+    // refuse even well-formed ones because the caller chose the path —
+    // if they wrote ".." in it, they intended to escape the parent.
+    const auto normalized = QDir::cleanPath(path);
+    if (normalized.contains(QStringLiteral("/../")) || normalized.endsWith(QStringLiteral("/.."))) {
+        return false;
+    }
+    const QFileInfo info(path);
+    if (info.isSymLink()) {
+        return false;
+    }
+    const QFileInfo parent(info.dir().absolutePath());
+    if (parent.exists() && parent.isSymLink()) {
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
 class JsonSurfaceStore::Impl
 {
 public:
     explicit Impl(QString path)
         : m_path(std::move(path))
+        , m_pathSafe(isSafeStorePath(m_path))
     {
+        if (!m_pathSafe) {
+            qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: refusing unsafe path" << m_path
+                                       << "(traversal segment or symlink in path/parent) — "
+                                       << "store will behave as in-memory-only";
+            m_root = {};
+            return;
+        }
         loadFromDisk();
     }
 
@@ -38,7 +84,20 @@ public:
         QJsonParseError err;
         const auto doc = QJsonDocument::fromJson(file.readAll(), &err);
         if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: parse error in" << m_path << ":" << err.errorString();
+            qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: parse error in" << m_path << ":" << err.errorString()
+                                       << "— renaming corrupt file and starting empty";
+            // Preserve forensic evidence — next save() would otherwise
+            // overwrite the corrupt file with a fresh empty one and destroy
+            // whatever state the user had. QFile::rename() overwrites on
+            // Windows but not POSIX; an existing .corrupt is acceptable
+            // collateral either way because the current state is already
+            // unreadable.
+            file.close();
+            const QString bak = m_path + QStringLiteral(".corrupt");
+            QFile::remove(bak);
+            if (!QFile::rename(m_path, bak)) {
+                qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: could not rename corrupt file to" << bak;
+            }
             m_root = {};
             return;
         }
@@ -47,6 +106,9 @@ public:
 
     bool flushToDisk()
     {
+        if (!m_pathSafe) {
+            return false;
+        }
         QFileInfo(m_path).dir().mkpath(QStringLiteral("."));
         QSaveFile file(m_path);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -62,10 +124,15 @@ public:
             qCWarning(lcPhosphorLayer) << "JsonSurfaceStore: commit failed for" << m_path << ":" << file.errorString();
             return false;
         }
+        // 0600 — these state files can hold sensitive window layout data
+        // and should not be world- or group-readable. Failure here is
+        // non-fatal; the payload is written regardless.
+        QFile::setPermissions(m_path, QFile::ReadOwner | QFile::WriteOwner);
         return true;
     }
 
     QString m_path;
+    bool m_pathSafe;
     QJsonObject m_root;
 };
 

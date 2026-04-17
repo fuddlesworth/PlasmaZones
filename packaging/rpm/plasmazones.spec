@@ -154,6 +154,7 @@ echo ""
 
 %files
 %license LICENSE
+%license COPYING.LESSER
 %doc README.md
 
 # Executables

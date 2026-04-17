@@ -53,6 +53,19 @@ Role Role::withScopePrefix(QString prefix) const
     return r;
 }
 
+bool Role::isValid() const
+{
+    if (scopePrefix.isEmpty()) {
+        return false;
+    }
+    // Overlay sits above everything and ignores other surfaces' zones —
+    // specifying a non-negative exclusive zone is a consumer mistake.
+    if (layer == Layer::Overlay && exclusiveZone >= 0) {
+        return false;
+    }
+    return true;
+}
+
 // ── Preset definitions ─────────────────────────────────────────────────
 // Declared `extern const` in the header so presets compose via QString
 // (which isn't constexpr). Dynamic-init cost is one-time at library load.

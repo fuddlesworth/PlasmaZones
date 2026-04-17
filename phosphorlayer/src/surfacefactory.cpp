@@ -66,6 +66,13 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
         return nullptr;
     }
 
+    if (!cfg.role.isValid()) {
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: Role is invalid (empty scopePrefix or"
+                                   << "semantically-conflicting layer/exclusiveZone) — refusing to create"
+                                   << "debugName=" << debug;
+        return nullptr;
+    }
+
     // If the caller did not pin a specific screen, fall back to the screen
     // provider's primary. Giving nullptr to the transport lets the compositor
     // pick (fine in principle) but makes the Surface's target non-deterministic
@@ -78,6 +85,13 @@ Surface* SurfaceFactory::create(SurfaceConfig cfg, QObject* parent)
                                        << "debugName=" << debug;
             return nullptr;
         }
+    } else if (!m_impl->m_deps.screens->screens().contains(cfg.screen)) {
+        // Stale QScreen* (disconnected monitor, or mock from a different
+        // provider). Fail loudly rather than let the transport attach to
+        // an orphan.
+        qCWarning(lcPhosphorLayer) << "SurfaceFactory::create: cfg.screen is not in the provider's screen list"
+                                   << "— disconnected or foreign screen. debugName=" << debug;
+        return nullptr;
     }
 
     SurfaceDeps sdeps{

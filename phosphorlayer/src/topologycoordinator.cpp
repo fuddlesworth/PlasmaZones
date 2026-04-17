@@ -23,6 +23,10 @@ public:
         , m_cfg(cfg)
     {
         m_debounceTimer.setSingleShot(true);
+        if (cfg.debounceMs < 0) {
+            qCWarning(lcPhosphorLayer) << "TopologyCoordinator: negative debounceMs" << cfg.debounceMs
+                                       << "— clamping to 0";
+        }
         m_debounceTimer.setInterval(qMax(0, cfg.debounceMs));
         QObject::connect(&m_debounceTimer, &QTimer::timeout, q, [this] {
             fireSync();
@@ -76,11 +80,17 @@ public:
             qCDebug(lcPhosphorLayer) << "TopologyCoordinator: firing" << m_callbacks.size() << "sync callbacks";
         }
         // Copy to a local list so callbacks can detach themselves during the loop.
+        // Callbacks attached during this fireSync() DO NOT run for this cycle —
+        // consumers relying on that behaviour should be aware. Callbacks MUST
+        // NOT throw: the library is compiled with -fno-exceptions so any
+        // thrown exception is undefined behaviour at the ABI boundary. This
+        // invariant is documented on TopologyCoordinator::attachSyncCallback.
         const auto cbs = m_callbacks;
         for (auto it = cbs.cbegin(); it != cbs.cend(); ++it) {
-            if (m_callbacks.contains(it.key())) {
-                it.value()();
+            if (!m_callbacks.contains(it.key())) {
+                continue;
             }
+            it.value()();
         }
         Q_EMIT m_q->screensChanged();
     }

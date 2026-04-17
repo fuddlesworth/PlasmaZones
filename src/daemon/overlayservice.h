@@ -400,6 +400,12 @@ private:
     QString m_layoutPickerScreenId;
 
     bool m_screenAddedConnected = false; // Guard for screenAdded connection (lambdas can't use UniqueConnection)
+    // Per-OSD "has been pre-warmed" flags. The screenAdded lambda only
+    // auto-creates OSDs whose warmer actually ran, so a future caller that
+    // warms only one of the two pair won't get an unwanted shadow window
+    // for the other on hot-plug.
+    bool m_layoutOsdWarmed = false;
+    bool m_navigationOsdWarmed = false;
 
     // Persistent 1x1 keep-alive window that prevents Qt from tearing down
     // global Wayland/Vulkan protocol objects when all other windows are destroyed.

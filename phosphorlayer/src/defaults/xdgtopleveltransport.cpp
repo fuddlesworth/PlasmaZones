@@ -120,7 +120,16 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
     }
 
     // Hook up the target screen so Qt picks the right wl_output at show time.
+    // If the platform window already exists (consumer prepared it before
+    // attach) Qt may have already committed the xdg_surface on a different
+    // screen — warn so the consumer fixes ordering rather than silently
+    // ignoring the screen hint.
     if (args.screen) {
+        if (win->handle()) {
+            qCWarning(lcPhosphorLayer)
+                << "XdgToplevelTransport: attach() after QWindow::handle() is created — screen hint may be ignored"
+                << "(Qt has already committed the xdg_surface)";
+        }
         win->setScreen(args.screen);
     }
     // The scope is a machine identifier, not a user-facing label — don't
@@ -138,8 +147,13 @@ std::unique_ptr<ITransportHandle> XdgToplevelTransport::attach(QQuickWindow* win
                                  << "ignored (no xdg_toplevel equivalent)";
     }
     if (args.keyboard == KeyboardInteractivity::Exclusive) {
-        qCDebug(lcPhosphorLayer)
-            << "XdgToplevelTransport: exclusive keyboard ignored (xdg_toplevel is always on-demand)";
+        // Exclusive keyboard is security-relevant (lock screen, PIN entry,
+        // any modal that must capture every keystroke). Silent downgrade to
+        // OnDemand would let focus leak to a background window; emit a
+        // qCWarning so downgrades are visible in production logs.
+        qCWarning(lcPhosphorLayer)
+            << "XdgToplevelTransport: exclusive keyboard REQUESTED but xdg_toplevel is always OnDemand —"
+            << "focus may leak to other windows. Use PhosphorShellTransport on compositors with wlr-layer-shell.";
     }
     if (!args.margins.isNull() || args.anchors != AnchorNone) {
         qCDebug(lcPhosphorLayer)

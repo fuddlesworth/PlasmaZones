@@ -35,22 +35,16 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
 /// AnchorAll so the compositor ignores x/y hints and honours the margins
 /// we write dynamically via the transport handle (see
 /// centerLayerWindowOnScreen in osd.cpp) to centre the OSD on-screen.
-/// No keyboard. Pre-warmed per screen at daemon start.
-inline const PhosphorLayer::Role LayoutOsd = PhosphorLayer::Role{PhosphorLayer::Layer::Overlay,
-                                                                 PhosphorLayer::AnchorAll,
-                                                                 -1,
-                                                                 PhosphorLayer::KeyboardInteractivity::None,
-                                                                 QMargins(),
-                                                                 QStringLiteral("plasmazones-layout-osd")};
+/// No keyboard. Pre-warmed per screen at daemon start. Derived from
+/// FullscreenOverlay so every PZ preset shares the library-primitive
+/// construction pattern — only the scope distinguishes the two OSDs.
+inline const PhosphorLayer::Role LayoutOsd =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
 
 /// Navigation OSD (keyboard-nav feedback). Same shape as LayoutOsd —
 /// different content + lifecycle.
-inline const PhosphorLayer::Role NavigationOsd = PhosphorLayer::Role{PhosphorLayer::Layer::Overlay,
-                                                                     PhosphorLayer::AnchorAll,
-                                                                     -1,
-                                                                     PhosphorLayer::KeyboardInteractivity::None,
-                                                                     QMargins(),
-                                                                     QStringLiteral("plasmazones-navigation-osd")};
+inline const PhosphorLayer::Role NavigationOsd =
+    PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-navigation-osd"));
 
 /// Snap assist (post-snap window picker). Top layer, exclusive keyboard
 /// so Escape reliably dismisses. Singleton — one instance, re-targeted

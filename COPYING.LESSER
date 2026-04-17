@@ -1,0 +1,40 @@
+GNU LESSER GENERAL PUBLIC LICENSE
+Version 2.1, February 1999
+
+Copyright (C) 1991, 1999 Free Software Foundation, Inc.
+51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+Everyone is permitted to copy and distribute verbatim copies
+of this license document, but changing it is not allowed.
+
+[This is the first released version of the Lesser GPL.  It also counts
+ as the successor of the GNU Library Public License, version 2, hence
+ the version number 2.1.]
+
+  This license applies to the following components of PlasmaZones,
+which are distributed under the terms of the GNU Lesser General
+Public License version 2.1 or (at your option) any later version:
+
+    * libPhosphorShell       — Wayland layer-shell QPA plugin + shader pipeline
+    * libPhosphorRendering   — Shared rendering primitives
+    * libPhosphorLayer       — Layer-surface lifecycle + factory library
+
+The remaining components of PlasmaZones are distributed under the GNU
+General Public License version 3 or later; see the LICENSE file at the
+top of this source tree.
+
+  The full text of the GNU Lesser General Public License, version 2.1,
+is published by the Free Software Foundation and is available from:
+
+    https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt
+    https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+
+On most Linux distributions the canonical license text is installed at
+/usr/share/common-licenses/LGPL-2.1 (Debian/Ubuntu) or
+/usr/share/licenses/common/LGPL-2.1 (Arch). Package managers that
+require the full text verbatim ship the FSF-published file alongside
+this notice.
+
+Each affected source file carries an SPDX-License-Identifier header
+(LGPL-2.1-or-later) identifying the license authoritatively; this
+notice is the project-level companion pointer required for LGPL-2.1
+compliance when redistributing the libraries in binary form.

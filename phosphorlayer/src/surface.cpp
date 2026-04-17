@@ -356,6 +356,14 @@ private:
             m_window = win;
             QQmlEngine::setObjectOwnership(win, QQmlEngine::CppOwnership);
 
+            // Dynamic-property writes (setProperty) for anything
+            // windowProperties contains that is NOT declared via QML
+            // `property`. setInitialProperties above handles QML-declared
+            // props; this covers arbitrary QObject dynamic properties so
+            // both QML-rooted and Item-rooted paths honour the same
+            // SurfaceConfig contract.
+            applyWindowProperties(win);
+
             // Sized first — see #2 above.
             if (m_config.screen) {
                 const QRect geo = m_config.screen->geometry();
@@ -366,7 +374,11 @@ private:
 
             // Attached second — see #1 above.
             if (!finishAttach()) {
+                // completeCreate + setVisible(false) even on failure so
+                // the QML-created window doesn't flash visible between
+                // failure and teardown.
                 m_component->completeCreate();
+                win->setVisible(false);
                 return false;
             }
 

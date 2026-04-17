@@ -156,11 +156,19 @@ void ScreenSurfaceRegistry<SurfaceT>::syncToScreens(Builder builder)
     const auto current = m_screens->screens();
     const QSet<QScreen*> currentSet(current.begin(), current.end());
 
+    // Single pass: remove entries for (a) removed screens and (b) screens
+    // whose QPointer auto-nulled because the surface was destroyed
+    // externally. Without the null-sweep the map accumulates dangling
+    // entries under pathological consumer behaviour (consumer deletes the
+    // surface without notifying the registry) and surfaceForScreen() keeps
+    // reporting null for a key that looks like it's present.
     for (auto it = m_entries.begin(); it != m_entries.end();) {
         if (!currentSet.contains(it.key())) {
             if (SurfaceT* s = it.value().data()) {
                 s->deleteLater();
             }
+            it = m_entries.erase(it);
+        } else if (!it.value().data()) {
             it = m_entries.erase(it);
         } else {
             ++it;

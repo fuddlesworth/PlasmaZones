@@ -14,8 +14,10 @@ import org.plasmazones.common as QFZCommon
  * Styled similar to KZones for consistent KDE UX
  */
 Window {
-    // Whether ScrollView is needed
-    // Border radius in pixels
+    // Do NOT requestActivate() — this surface is created with
+    // KeyboardInteractivity::None (PzRoles::ZoneSelector) so the
+    // compositor cannot grant it focus anyway. The call is a no-op
+    // at best and may log warnings on strict compositors.
 
     id: root
 
@@ -26,6 +28,11 @@ Window {
     // Selected zone tracking
     property string selectedLayoutId: ""
     property int selectedZoneIndex: -1
+    // Minimum on-screen pixel size for a hit-testable zone. MUST stay
+    // equal to the C++ hit-test clamp in overlayservice/selector.cpp
+    // (updateSelectorPosition); the two values together define the
+    // visual-vs-logical agreement contract.
+    property int minZoneSize: 8
     // Cursor position (updated from C++ during drag)
     property int cursorX: -1
     property int cursorY: -1
@@ -126,7 +133,6 @@ Window {
         contentWrapper.opacity = 0;
         root.visible = true;
         showAnimation.start();
-        root.requestActivate();
     }
 
     function hide() {
@@ -520,7 +526,7 @@ Window {
                                 // Zone appearance
                                 zonePadding: root.scaledPadding
                                 edgeGap: root.scaledPadding
-                                minZoneSize: 8
+                                minZoneSize: root.minZoneSize
                                 zoneHighlightColor: root.highlightColor
                                 zoneInactiveColor: root.inactiveColor
                                 zoneBorderColor: root.borderColor
@@ -547,6 +553,15 @@ Window {
                                     if (root.locked && !indicator.isActive)
                                         return ;
 
+                                    // Guard: don't re-emit when nothing changed.
+                                    // C++ writes selectedLayoutId/selectedZoneIndex
+                                    // back via property bindings when it hit-tests;
+                                    // without this guard the round-trip would loop
+                                    // through zoneSelected → C++ slot → property
+                                    // write → onZoneHovered fires again.
+                                    if (root.selectedLayoutId === indicator.layoutId && root.selectedZoneIndex === zoneIndex)
+                                        return ;
+
                                     root.selectedLayoutId = indicator.layoutId;
                                     root.selectedZoneIndex = zoneIndex;
                                     var zones = indicator.modelData.zones || [];
@@ -563,7 +578,9 @@ Window {
                                 anchors.fill: parent
                                 visible: root.locked && !indicator.isActive
                                 z: 100
-                                color: Qt.rgba(0, 0, 0, 0.5)
+                                // Theme-derived scrim rather than raw black so
+                                // light themes get a sensible dim colour too.
+                                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.5)
                                 radius: Kirigami.Units.largeSpacing
 
                                 Kirigami.Icon {
@@ -578,6 +595,7 @@ Window {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.ForbiddenCursor
+                                    Accessible.name: i18nc("@info:whatsthis zone selector lock overlay", "Layout is locked — switch to this layout before selecting a zone")
                                     onClicked: function(mouse) {
                                         mouse.accepted = true;
                                     }
@@ -699,8 +717,8 @@ Window {
             // Empty state
             Label {
                 anchors.centerIn: parent
-                text: i18n("No layouts available")
-                color: Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.5)
+                text: i18nc("@info zone selector empty state", "No layouts available")
+                color: Kirigami.Theme.disabledTextColor
                 visible: root.layouts.length === 0
             }
 

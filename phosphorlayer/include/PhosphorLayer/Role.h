@@ -87,6 +87,13 @@ struct PHOSPHORLAYER_EXPORT Role
     [[nodiscard]] Role withMargins(QMargins m) const;
     [[nodiscard]] Role withScopePrefix(QString prefix) const;
 
+    /// @brief True if this Role is a semantically valid wlr-layer-shell configuration.
+    /// False for combinations the protocol rejects (e.g. Overlay layer with a
+    /// positive exclusive zone — Overlay ignores zones so a non-negative value
+    /// is silently wasted) or that no compositor accepts (empty scopePrefix).
+    /// The factory calls this and refuses to create malformed surfaces.
+    [[nodiscard]] bool isValid() const;
+
     friend bool operator==(const Role& a, const Role& b) = default;
 };
 

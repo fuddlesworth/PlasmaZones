@@ -255,16 +255,14 @@ private Q_SLOTS:
         });
 
         surface->deleteLater();
-        // Drain deferred delete queue — multiple passes because ~Surface
-        // posts window delete, which posts child deletes, which posts more.
-        for (int i = 0; i < 8; ++i) {
-            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-            QCoreApplication::processEvents();
-        }
-
+        // Wait for the deferred-delete chain to settle rather than pumping
+        // a fixed number of passes — the exact depth depends on Qt internals
+        // and is not a behaviour this test needs to pin. Polling via
+        // QTRY_VERIFY keeps it robust as Qt / the Surface teardown graph
+        // evolve.
+        QTRY_VERIFY_WITH_TIMEOUT(winWatch.isNull(), 2000);
         QVERIFY(p.m_windowDestroyed);
         QCOMPARE(p.m_releaseCalls, 1);
-        QVERIFY(winWatch.isNull());
     }
 };
 

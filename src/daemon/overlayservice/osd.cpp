@@ -276,22 +276,29 @@ void OverlayService::warmUpLayoutOsd()
             }
         }
     }
+    m_layoutOsdWarmed = true;
     qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
 
-    // Also warm up screens added later (hot-plug)
+    // Also warm up screens added later (hot-plug). One connection serves
+    // both OSDs; the per-OSD booleans gate which windows are actually
+    // created so warming only one of the pair doesn't force the other.
     if (!m_screenAddedConnected) {
         connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
             auto* mgr2 = ScreenManager::instance();
             const QString physId = Utils::screenIdentifier(screen);
             const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
-            for (const QString& sid : ids) {
-                if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-                    createLayoutOsdWindow(sid, screen);
+            if (m_layoutOsdWarmed) {
+                for (const QString& sid : ids) {
+                    if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
+                        createLayoutOsdWindow(sid, screen);
+                    }
                 }
             }
-            for (const QString& sid : ids) {
-                if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-                    createNavigationOsdWindow(sid, screen);
+            if (m_navigationOsdWarmed) {
+                for (const QString& sid : ids) {
+                    if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
+                        createNavigationOsdWindow(sid, screen);
+                    }
                 }
             }
         });
@@ -311,6 +318,7 @@ void OverlayService::warmUpNavigationOsd()
             }
         }
     }
+    m_navigationOsdWarmed = true;
     qCInfo(lcOverlay) << "Pre-warmed Navigation OSD windows for" << effectiveIds.size() << "effective screens";
 }
 
@@ -344,9 +352,6 @@ void OverlayService::destroyLayoutOsdWindow(const QString& screenId)
         return;
     }
     if (it->layoutOsdSurface) {
-        if (it->layoutOsdPhysScreen && it->layoutOsdWindow) {
-            QObject::disconnect(it->layoutOsdPhysScreen, nullptr, it->layoutOsdWindow, nullptr);
-        }
         it->layoutOsdSurface->deleteLater();
         it->layoutOsdSurface = nullptr;
         it->layoutOsdWindow = nullptr;
@@ -544,9 +549,6 @@ void OverlayService::destroyNavigationOsdWindow(const QString& screenId)
     auto it = m_screenStates.find(screenId);
     if (it != m_screenStates.end()) {
         if (it->navigationOsdSurface) {
-            if (it->navigationOsdPhysScreen && it->navigationOsdWindow) {
-                QObject::disconnect(it->navigationOsdPhysScreen, nullptr, it->navigationOsdWindow, nullptr);
-            }
             it->navigationOsdSurface->deleteLater();
             it->navigationOsdSurface = nullptr;
             it->navigationOsdWindow = nullptr;
