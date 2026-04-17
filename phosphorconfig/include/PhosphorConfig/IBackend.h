@@ -39,7 +39,18 @@ public:
     virtual double readDouble(const QString& key, double defaultValue = 0.0) const = 0;
     virtual QColor readColor(const QString& key, const QColor& defaultValue = {}) const = 0;
 
-    // Typed writes.
+    /// Write a string.
+    ///
+    /// IMPORTANT: some backends (notably @c JsonBackend) treat a string that
+    /// starts with @c '[' or @c '{' AND parses as valid JSON as structured
+    /// data, and store it as a native JSON array/object rather than as a
+    /// string. This is useful for callers that round-trip complex values via
+    /// compact-JSON strings (the Store layer uses this for @c QVariantList /
+    /// @c QVariantMap round-trip), but silently reshapes any user-supplied
+    /// free-form text that happens to match the pattern. Use @c writeStringRaw
+    /// for any free-form text where the wire format must be preserved
+    /// verbatim. At the Schema layer, set @c KeyDef::verbatimStringStorage
+    /// to route @c Store::write through @c writeStringRaw automatically.
     virtual void writeString(const QString& key, const QString& value) = 0;
     virtual void writeInt(const QString& key, int value) = 0;
     virtual void writeBool(const QString& key, bool value) = 0;

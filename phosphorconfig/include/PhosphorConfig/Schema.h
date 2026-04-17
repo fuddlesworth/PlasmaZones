@@ -48,6 +48,14 @@ struct PHOSPHORCONFIG_EXPORT KeyDef
     ///   - normalize a string to one of a fixed set of values
     ///   - log a warning and return defaultValue on invalid input
     /// The QVariant signature lets one validator slot cover every type.
+    ///
+    /// CONTRACT: validators MUST be idempotent — `validator(validator(x))`
+    /// must equal `validator(x)` for every input. Store::write compares the
+    /// already-coerced write value against the canonicalized on-disk value
+    /// to decide whether to short-circuit the write; a non-idempotent
+    /// validator (e.g. one that appends a character each call) would cause
+    /// the comparison to never match, rewriting the file and firing
+    /// `changed()` on every save even when no user change occurred.
     std::function<QVariant(const QVariant& value)> validator;
 
     /// When true, string writes for this key bypass the JsonBackend

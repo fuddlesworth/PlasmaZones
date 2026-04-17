@@ -150,6 +150,12 @@ private:
     void decActiveGroupCount();
     int activeGroupCount() const;
 
+    /// Per-instance warn-once dedup. Returns true the first time
+    /// @c tag+@c key is observed on this backend, false on every subsequent
+    /// call. Stores entries up to an internal cap; beyond the cap every
+    /// unique combination fires its warning (safer than silent corruption).
+    bool shouldWarnOnce(const char* tag, const QString& key);
+
     struct Data;
     std::unique_ptr<Data> d;
 };

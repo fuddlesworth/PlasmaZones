@@ -126,11 +126,15 @@ QSettingsGroup::QSettingsGroup(QSettings* settings, QString groupName, QSettings
     }
     Q_ASSERT_X(m_settings->group().isEmpty(), "PhosphorConfig::QSettingsGroup",
                "Another group is still active — destroy it before creating a new one");
+    // Disabled groups don't call beginGroup() AND don't bump the active-group
+    // counter — a third group constructed after the concurrent pair would
+    // otherwise see an inflated count and disable itself too. Dtor mirrors
+    // this: only the enabled path pairs beginGroup/endGroup and inc/dec.
     if (!m_disabled) {
         m_settings->beginGroup(m_group);
-    }
-    if (m_backend) {
-        m_backend->incActiveGroupCount();
+        if (m_backend) {
+            m_backend->incActiveGroupCount();
+        }
     }
 }
 
@@ -138,9 +142,9 @@ QSettingsGroup::~QSettingsGroup()
 {
     if (!m_disabled) {
         m_settings->endGroup();
-    }
-    if (m_backend) {
-        m_backend->decActiveGroupCount();
+        if (m_backend) {
+            m_backend->decActiveGroupCount();
+        }
     }
 }
 

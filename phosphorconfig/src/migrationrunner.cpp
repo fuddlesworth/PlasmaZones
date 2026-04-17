@@ -48,9 +48,14 @@ MigrationRunner::MigrationRunner(const Schema& schema)
     // runInMemory doesn't pay the sort cost on every call. Stable sort
     // preserves the relative order of any (illegal but possible) duplicate
     // fromVersion entries — the runner aborts on the second one anyway.
-    std::stable_sort(m_orderedSteps.begin(), m_orderedSteps.end(), [](const MigrationStep& a, const MigrationStep& b) {
-        return a.fromVersion < b.fromVersion;
-    });
+    // Short-circuit on 0/1 steps (the common case: single-version or
+    // freshly-introduced schema) to avoid spinning up a comparator.
+    if (m_orderedSteps.size() > 1) {
+        std::stable_sort(m_orderedSteps.begin(), m_orderedSteps.end(),
+                         [](const MigrationStep& a, const MigrationStep& b) {
+                             return a.fromVersion < b.fromVersion;
+                         });
+    }
 }
 
 int MigrationRunner::readVersion(const QJsonObject& root) const

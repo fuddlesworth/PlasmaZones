@@ -47,6 +47,11 @@ private Q_SLOTS:
      * The clampInt validator wired into the Zone padding KeyDef must coerce
      * a hand-written 999 into the schema max, so the reader sees the
      * canonical default instead of the raw invalid value.
+     *
+     * Seeds at the v2 schema location (Snapping.Gaps/Inner) so the validator
+     * is actually exercised. Seeding at the legacy v1 location would be
+     * skipped by ensureJsonConfig's version-match short-circuit and the test
+     * would pass for the wrong reason.
      */
     void testReadValidatedInt_outOfRange_returnsDefault()
     {
@@ -54,14 +59,14 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto zones = backend->group(QStringLiteral("Zones"));
-            zones->writeInt(QStringLiteral("Padding"), 999); // max is 50
-            zones.reset();
+            auto gaps = backend->group(ConfigDefaults::snappingGapsGroup());
+            gaps->writeInt(ConfigDefaults::innerKey(), 999); // clamp max is zonePaddingMax()
+            gaps.reset();
             backend->sync();
         }
 
         Settings settings;
-        QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePadding());
+        QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePaddingMax());
     }
 
     // =========================================================================
@@ -70,7 +75,10 @@ private Q_SLOTS:
 
     /**
      * The validColorOr validator must fall back to the schema default when
-     * the stored string fails to parse as a valid QColor.
+     * the stored string fails to parse as a valid QColor. Seeds at the v2
+     * location (Snapping.Appearance.Colors/Highlight) and disables
+     * useSystemColors so Settings::load() doesn't call applySystemColorScheme
+     * and overwrite the validated value with a palette-derived tint.
      */
     void testReadValidatedColor_invalidColor_returnsDefault()
     {
@@ -78,15 +86,16 @@ private Q_SLOTS:
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto appearance = backend->group(QStringLiteral("Appearance"));
-            appearance->writeString(QStringLiteral("HighlightColor"), QStringLiteral("not-a-color"));
+            auto appearance = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
+            appearance->writeBool(ConfigDefaults::useSystemKey(), false);
+            appearance->writeString(ConfigDefaults::highlightKey(), QStringLiteral("not-a-color"));
             appearance.reset();
             backend->sync();
         }
 
         Settings settings;
-        // The color should be valid (either default or system color)
-        QVERIFY2(settings.highlightColor().isValid(), "Invalid color in config must fall back to a valid default");
+        // Must fall back to the schema default (which is always valid).
+        QCOMPARE(settings.highlightColor(), ConfigDefaults::highlightColor());
     }
 
     // =========================================================================
@@ -95,62 +104,53 @@ private Q_SLOTS:
 
     /**
      * Invalid JSON in the drag-activation trigger list must fall back to the
-     * schema default rather than propagating a corrupt list upwards.
+     * schema default rather than propagating a corrupt list upwards. Seeds
+     * at the v2 location (Snapping.Behavior/Triggers).
      */
-    void testParseTriggerListJson_invalidJson_returnsNullopt()
+    void testParseTriggerListJson_invalidJson_returnsSchemaDefault()
     {
         IsolatedConfigGuard guard;
 
         {
             auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            // Write invalid JSON as the trigger list
-            activation->writeString(QStringLiteral("DragActivationTriggers"), QStringLiteral("{broken json["));
-            // Provide a legacy fallback modifier
-            activation->writeInt(QStringLiteral("DragActivationModifier"), 3); // Alt
-            activation.reset();
+            auto behavior = backend->group(ConfigDefaults::snappingBehaviorGroup());
+            // writeStringRaw bypasses JsonBackend's JSON-shape heuristic so
+            // the literal "{broken json[" survives the write instead of being
+            // reparsed (and failing) into a native JSON value.
+            behavior->writeStringRaw(ConfigDefaults::triggersKey(), QStringLiteral("{broken json["));
+            behavior.reset();
             backend->sync();
         }
 
         Settings settings;
 
-        QVariantList triggers = settings.dragActivationTriggers();
-        // Should have fallen back to legacy migration
-        QVERIFY(!triggers.isEmpty());
-        QVariantMap first = triggers.first().toMap();
-        QCOMPARE(first.value(QStringLiteral("modifier")).toInt(), 3);
+        const QVariantList triggers = settings.dragActivationTriggers();
+        // Invalid JSON must fall back to the declarative schema default.
+        QCOMPARE(triggers, ConfigDefaults::dragActivationTriggers());
     }
 
     /**
-     * Trigger lists must be capped at MaxTriggersPerAction (4), so a config
-     * containing 6 triggers reads back with at most 4.
+     * The setter must cap trigger lists at MaxTriggersPerAction so an
+     * overlong list passed via the API (or the UI) can never persist more
+     * than the cap.
      */
-    void testParseTriggerListJson_capsAtMaxTriggers()
+    void testSetDragActivationTriggers_capsAtMaxTriggers()
     {
         IsolatedConfigGuard guard;
 
-        // Build a JSON array with 6 triggers (above MaxTriggersPerAction=4)
-        QJsonArray arr;
-        for (int i = 0; i < 6; ++i) {
-            QJsonObject obj;
-            obj[QLatin1String("modifier")] = i;
-            obj[QLatin1String("mouseButton")] = 0;
-            arr.append(obj);
-        }
-        QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            auto activation = backend->group(QStringLiteral("Activation"));
-            activation->writeString(QStringLiteral("DragActivationTriggers"), json);
-            activation.reset();
-            backend->sync();
-        }
-
         Settings settings;
 
-        QVERIFY2(settings.dragActivationTriggers().size() <= Settings::MaxTriggersPerAction,
-                 "Trigger list must be capped at MaxTriggersPerAction");
+        QVariantList overlong;
+        for (int i = 0; i < Settings::MaxTriggersPerAction + 2; ++i) {
+            QVariantMap trigger;
+            trigger[ConfigDefaults::triggerModifierField()] = i;
+            trigger[ConfigDefaults::triggerMouseButtonField()] = 0;
+            overlong.append(trigger);
+        }
+
+        settings.setDragActivationTriggers(overlong);
+
+        QCOMPARE(settings.dragActivationTriggers().size(), Settings::MaxTriggersPerAction);
     }
 
     // =========================================================================

@@ -181,6 +181,13 @@ void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
             backend->deleteGroup(groupName);
         }
     }
+    // Explicitly remove the resolver's reserved container (e.g. the "PerScreen"
+    // top-level object). groupList() hides this key entirely (it's filtered as
+    // a reserved root), so the loop above never sees it — but when every
+    // colon-form descendant has been individually deleted, an empty {} husk
+    // can survive at the container path. Delete it directly via the raw JSON
+    // path so it doesn't linger on disk after reset().
+    backend->deleteGroup(PerScreenPathResolver::perScreenKey());
 }
 
 void Settings::purgeStaleKeys()

@@ -125,12 +125,16 @@ void writeVariantTo(IGroup& g, const QString& key, const QVariant& value, bool v
     }
 }
 
-QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defaultValue)
+QVariant readVariantAs(const IGroup& g, const QString& key, const QVariant& defaultValue,
+                       QMetaType::Type expectedType = QMetaType::UnknownType)
 {
-    // Use the declared default's type to pick the right reader. If no default
-    // is declared, fall back to reading as a string (the universal backend
-    // format) and let the caller coerce.
-    const int typeId = defaultValue.typeId();
+    // expectedType is the authoritative type source when set. Falling back to
+    // defaultValue.typeId() keeps legacy callers working but means a KeyDef
+    // declaring expectedType=Int with an Invalid/unrelated default would be
+    // read as a string — a latent but real bug if a future caller leaves the
+    // default empty while setting the expected type.
+    const int typeId =
+        (expectedType != QMetaType::UnknownType) ? static_cast<int>(expectedType) : defaultValue.typeId();
     switch (typeId) {
     case QMetaType::Bool:
         return QVariant(g.readBool(key, defaultValue.toBool()));
@@ -257,7 +261,7 @@ QVariant Store::readVariant(const QString& group, const QString& key) const
         return {};
     }
     auto g = d->backend->group(group);
-    QVariant value = readVariantAs(*g, key, def->defaultValue);
+    QVariant value = readVariantAs(*g, key, def->defaultValue, def->expectedType);
     if (def->validator) {
         value = def->validator(value);
     }
@@ -295,7 +299,7 @@ void Store::write(const QString& group, const QString& key, const QVariant& valu
         // re-written as "a,b") instead of being short-circuited by the
         // validator on both sides agreeing on the same canonical form.
         if (g->hasKey(key)) {
-            const QVariant current = readVariantAs(*g, key, def->defaultValue);
+            const QVariant current = readVariantAs(*g, key, def->defaultValue, def->expectedType);
             if (current == coerced) {
                 return;
             }
@@ -311,15 +315,15 @@ void Store::reset(const QString& group, const QString& key)
     if (!def) {
         return;
     }
-    bool wasPresent = false;
-    {
-        auto g = d->backend->group(group);
-        wasPresent = g->hasKey(key);
-        writeVariantTo(*g, key, def->defaultValue, def->verbatimStringStorage);
+    auto g = d->backend->group(group);
+    if (!g->hasKey(key)) {
+        // Key isn't on disk, so the read path already returns the default.
+        // Skipping the write avoids stamping a default-valued key and dirtying
+        // the backend on otherwise-idempotent reset() calls.
+        return;
     }
-    if (wasPresent) {
-        Q_EMIT changed(group, key);
-    }
+    writeVariantTo(*g, key, def->defaultValue, def->verbatimStringStorage);
+    Q_EMIT changed(group, key);
 }
 
 void Store::resetGroup(const QString& group)
@@ -332,11 +336,14 @@ void Store::resetGroup(const QString& group)
     // resolver/path-walk cost once per declared key.
     auto g = d->backend->group(group);
     for (const KeyDef& def : *it) {
-        const bool wasPresent = g->hasKey(def.key);
-        writeVariantTo(*g, def.key, def.defaultValue, def.verbatimStringStorage);
-        if (wasPresent) {
-            Q_EMIT changed(group, def.key);
+        // Skip absent keys for the same reason as reset() — otherwise
+        // resetGroup() on a pristine install stamps every default to disk
+        // with no observable behavior change but a full file rewrite.
+        if (!g->hasKey(def.key)) {
+            continue;
         }
+        writeVariantTo(*g, def.key, def.defaultValue, def.verbatimStringStorage);
+        Q_EMIT changed(group, def.key);
     }
 }
 
@@ -354,7 +361,7 @@ QJsonObject Store::exportToJson() const
         QJsonObject groupObj;
         auto g = d->backend->group(git.key());
         for (const KeyDef& def : git.value()) {
-            const QVariant value = readVariantAs(*g, def.key, def.defaultValue);
+            const QVariant value = readVariantAs(*g, def.key, def.defaultValue, def.expectedType);
             groupObj[def.key] = QJsonValue::fromVariant(value);
         }
         out[git.key()] = groupObj;

@@ -29,29 +29,12 @@ namespace {
 /// overflow from pathologically deep dot paths or malicious configs.
 constexpr int MaxDotPathDepth = 8;
 
-/// Warn-once sink for per-key log messages. JsonBackend is single-threaded by
-/// contract (main/GUI thread only), so the set doesn't need synchronization.
-/// Keyed by "<tag>:<key>" so separate warning categories never clobber each
-/// other's dedup state.
-///
-/// The set is capped at @c MaxWarnOnceEntries — a long-running daemon that
-/// processes many distinct keys would otherwise grow the set unboundedly.
-/// Once the cap is hit further unique warnings are emitted but not deduped;
-/// the alternative (silencing them) would hide real corruption.
+/// Maximum unique warn-once entries to retain per backend instance. A
+/// long-running daemon processing many distinct keys would otherwise grow
+/// the set unboundedly. Once the cap is hit further unique warnings are
+/// emitted but not deduped; the alternative (silencing them) would hide
+/// real corruption.
 constexpr int MaxWarnOnceEntries = 1024;
-
-bool shouldWarnOnce(const char* tag, const QString& key)
-{
-    static QSet<QString> s_warned;
-    const QString id = QLatin1String(tag) + QLatin1Char(':') + key;
-    if (s_warned.contains(id)) {
-        return false;
-    }
-    if (s_warned.size() < MaxWarnOnceEntries) {
-        s_warned.insert(id);
-    }
-    return true;
-}
 
 /// Split a dot-path group name into segments with depth enforcement.
 /// Returns empty list if the group name resolves to no segments, or if it
@@ -165,6 +148,14 @@ struct JsonBackend::Data
     QString rootGroupName = QStringLiteral("General");
     QString versionStampKey;
     int versionStampValue = 0;
+
+    /// Per-instance warn-once sink keyed by "<tag>:<key>". Scoped to the
+    /// backend so each test (or each process-level backend instance) gets a
+    /// fresh dedup cache — otherwise a warning emitted during one test
+    /// silences the same warning in every subsequent test in the same
+    /// process, breaking QTest::ignoreMessage expectations. JsonBackend is
+    /// single-threaded by contract so no synchronization is needed.
+    QSet<QString> warnedKeys;
 };
 
 // ─── Path resolution (shared by groups + backend) ───────────────────────────
@@ -206,6 +197,11 @@ JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend)
         // still refuse to let this group mutate the shared root so the
         // already-live group retains sole ownership of writes. Reads go
         // through because they only observe the shared root, not mutate it.
+        //
+        // Disabled groups DON'T bump the active-group counter — if they did,
+        // a third legitimate group constructed after the concurrent pair
+        // would observe an inflated count and disable itself too, cascading
+        // the failure indefinitely.
         m_disabled = true;
         qCritical(
             "PhosphorConfig::JsonGroup: refusing writes on group '%s' — %d other group(s) still active on this "
@@ -213,12 +209,18 @@ JsonGroup::JsonGroup(QJsonObject& root, QString groupName, JsonBackend* backend)
             qPrintable(m_groupName), count);
     }
     Q_ASSERT_X(count == 0, "PhosphorConfig::JsonGroup", "Another JsonGroup is still alive — destroy it first");
-    m_backend->incActiveGroupCount();
+    if (!m_disabled) {
+        m_backend->incActiveGroupCount();
+    }
 }
 
 JsonGroup::~JsonGroup()
 {
-    m_backend->decActiveGroupCount();
+    // Mirror the constructor: only disabled groups skipped the increment, so
+    // they must also skip the decrement or the counter would drift negative.
+    if (!m_disabled) {
+        m_backend->decActiveGroupCount();
+    }
 }
 
 bool JsonGroup::refuseWrite(const char* op) const
@@ -293,8 +295,8 @@ int JsonGroup::readInt(const QString& key, int defaultValue) const
             const int result = static_cast<int>(d);
             // Truncating a non-integer double silently would hide a bad
             // hand-edit; warning on every read would flood the log for a
-            // key read many times per session. Warn once per key.
-            if (d != static_cast<double>(result) && shouldWarnOnce("readInt.trunc", key)) {
+            // key read many times per session. Warn once per key per backend.
+            if (d != static_cast<double>(result) && m_backend->shouldWarnOnce("readInt.trunc", key)) {
                 qWarning(
                     "PhosphorConfig::JsonGroup: key '%s' contains non-integer double %g, truncating to %d "
                     "(further truncations on this key will be suppressed)",
@@ -302,7 +304,7 @@ int JsonGroup::readInt(const QString& key, int defaultValue) const
             }
             return result;
         }
-        if (shouldWarnOnce("readInt.oor", key)) {
+        if (m_backend->shouldWarnOnce("readInt.oor", key)) {
             qWarning(
                 "PhosphorConfig::JsonGroup: key '%s' contains double %g outside int range, using default %d "
                 "(further out-of-range reads on this key will be suppressed)",
@@ -597,6 +599,18 @@ int JsonBackend::activeGroupCount() const
     return d->activeGroupCount;
 }
 
+bool JsonBackend::shouldWarnOnce(const char* tag, const QString& key)
+{
+    const QString id = QLatin1String(tag) + QLatin1Char(':') + key;
+    if (d->warnedKeys.contains(id)) {
+        return false;
+    }
+    if (d->warnedKeys.size() < MaxWarnOnceEntries) {
+        d->warnedKeys.insert(id);
+    }
+    return true;
+}
+
 std::unique_ptr<IGroup> JsonBackend::group(const QString& name)
 {
     return std::make_unique<JsonGroup>(d->root, name, this);
@@ -723,14 +737,21 @@ QStringList JsonBackend::groupList() const
 {
     QStringList groups;
 
-    // Reserved keys (version stamp + whatever the resolver owns) are hidden
-    // from the default dot-path enumeration so they don't appear in the list.
-    QStringList skip;
+    // Reserved root keys (version stamp + whatever the resolver owns at the
+    // top level) are hidden from the default dot-path enumeration. Resolver-
+    // owned keys are its EXCLUSIVE domain: the entire subtree under them is
+    // also skipped so descendants don't leak as dot-path groups the Store
+    // doesn't know how to purge. Otherwise a blanket deleteGroup on a leaked
+    // descendant would recursively wipe resolver-managed data.
+    QSet<QString> skipRoots;
     if (!d->versionStampKey.isEmpty()) {
-        skip << d->versionStampKey;
+        skipRoots.insert(d->versionStampKey);
     }
     if (d->resolver) {
-        skip << d->resolver->reservedRootKeys();
+        const QStringList reserved = d->resolver->reservedRootKeys();
+        for (const QString& r : reserved) {
+            skipRoots.insert(r);
+        }
     }
 
     std::function<void(const QJsonObject&, const QString&, int)> enumerate = [&](const QJsonObject& obj,
@@ -739,7 +760,11 @@ QStringList JsonBackend::groupList() const
             return;
         }
         for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
-            if (skip.contains(it.key())) {
+            // Reserved keys are filtered at every depth, not just depth 0.
+            // A resolver like PerScreenPathResolver owns "PerScreen" as an
+            // opaque container — its children ("PerScreen.Autotile.<id>")
+            // must not be re-exposed as generic dot-path groups.
+            if (skipRoots.contains(it.key())) {
                 continue;
             }
             if (it.value().isObject()) {
