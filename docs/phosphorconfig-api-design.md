@@ -316,19 +316,33 @@ key the migration writes into the v2 tree is declared in
 
 ## Future Work
 
-- **Drop the `dynamic_cast<JsonBackend*>` in `Store::Store`.** Version
-  stamping, resolver wiring, and in-memory migration are JsonBackend-only
-  today. Exposing these through the `IBackend` interface (default
-  no-ops; JsonBackend overrides) removes the RTTI downcast and lets a
-  future backend participate in the same ceremony.
-- **Structured-value round-trip on `QSettingsBackend`.** The default
-  `IGroup::writeJson`/`readJson` implementation now stores strings in
-  quoted form so the pair round-trips uniformly. A future hardening
-  could distinguish "stored via writeString" from "stored via writeJson"
-  with a sidecar type annotation.
-- **Async sync.** `sync()` is synchronous. A daemon with high write
-  frequency could benefit from a debounced or background-thread commit
-  path, with the existing dirty flag as the source of truth.
+- ✅ **Schema-aware hooks on `IBackend`.** Version stamping, resolver
+  wiring, and in-memory migration are exposed as polymorphic no-op
+  virtuals on `IBackend`; `JsonBackend` overrides, `QSettingsBackend`
+  inherits the defaults. `Store::Store` drives them through the
+  interface — no RTTI downcast.
+- ✅ **Debounced sync policy.** `JsonBackend::setSyncPolicy(Deferred, ms)`
+  turns `sync()` into a coalescing debounce: rapid successive calls
+  restart a single-shot timer and the actual flush lands on timeout
+  (same thread, via the event loop). `flushPending()` forces an
+  immediate flush when a caller needs a guaranteed-committed state,
+  and the destructor flushes pending writes so a daemon torn down
+  mid-window doesn't lose data. Default policy remains `Synchronous`.
+- **Structured-value round-trip on `QSettingsBackend`** (deferred).
+  The default `IGroup::writeJson`/`readJson` implementation stores
+  strings in quoted form so the pair round-trips uniformly within a
+  single backend — the current state is correct, not a bug. A sidecar
+  type annotation would distinguish "stored via writeString" from
+  "stored via writeJson" across a cross-backend migration, but the
+  design tradeoffs (sidecar keys pollute `keyList()`; magic prefixes
+  leak into `readString` results) haven't been resolved. Deferred
+  pending a concrete consumer with a cross-backend round-trip need.
+- **Off-thread sync.** The deferred-sync flush still runs on the
+  thread that owns the backend (typically the GUI thread). A daemon
+  with very-large config files could move the write to a worker
+  thread; the existing dirty flag is the right synchronization source
+  but Qt's event-loop-threading model needs careful handling for the
+  post-write `replaceRoot` / `clearDirty` sequence.
 
 ---
 

@@ -3,6 +3,8 @@
 
 #include <PhosphorConfig/IGroupPathResolver.h>
 #include <PhosphorConfig/JsonBackend.h>
+#include <PhosphorConfig/MigrationRunner.h>
+#include <PhosphorConfig/Schema.h>
 
 #include <QColor>
 #include <QDebug>
@@ -17,6 +19,7 @@
 #include <QSaveFile>
 #include <QSet>
 #include <QStringList>
+#include <QTimer>
 
 #include <limits>
 
@@ -147,6 +150,17 @@ struct JsonBackend::Data
     /// process, breaking QTest::ignoreMessage expectations. JsonBackend is
     /// single-threaded by contract so no synchronization is needed.
     QSet<QString> warnedKeys;
+
+    /// Sync-timing policy. Synchronous (default) keeps the pre-policy
+    /// behaviour where @c sync() flushes inline. Deferred trades that for
+    /// a debounced write — see @c setSyncPolicy for the contract.
+    JsonBackend::SyncPolicy syncPolicy = JsonBackend::SyncPolicy::Synchronous;
+    int syncDebounceMs = 500;
+    /// Owned only when syncPolicy == Deferred. Reset to null on switch back
+    /// to Synchronous so the main-thread event loop doesn't keep firing an
+    /// orphan callback at the old cadence. QTimer is a QObject so the
+    /// unique_ptr handles the parentless-lifetime cleanup.
+    std::unique_ptr<QTimer> syncDebounceTimer;
 };
 
 // ─── Path resolution (shared by groups + backend) ───────────────────────────
@@ -539,6 +553,13 @@ JsonBackend::~JsonBackend()
 {
     Q_ASSERT_X(d->activeGroupCount == 0, "PhosphorConfig::JsonBackend::~JsonBackend",
                "JsonGroup still alive when backend is being destroyed");
+    // Flush any pending deferred-sync write synchronously before the timer
+    // (and the rest of Data) is destroyed. Without this, a daemon running
+    // with Deferred policy that gets torn down between sync() and the
+    // debounce firing would silently drop the pending changes.
+    if (d->syncPolicy == SyncPolicy::Deferred && d->dirty) {
+        flushPending();
+    }
 }
 
 void JsonBackend::loadFromDisk()
@@ -614,6 +635,23 @@ bool JsonBackend::sync()
     if (!d->dirty) {
         return true;
     }
+    if (d->syncPolicy == SyncPolicy::Deferred && d->syncDebounceTimer) {
+        // Coalesce: restart the debounce window. The actual flush happens
+        // on timeout via the lambda installed by setSyncPolicy. Returning
+        // true here means "request accepted", not "committed" — callers
+        // that need a committed state use flushPending() or switch to
+        // Synchronous policy. Documented on SyncPolicy::Deferred.
+        d->syncDebounceTimer->start();
+        return true;
+    }
+    return flushNow();
+}
+
+bool JsonBackend::flushNow()
+{
+    if (!d->dirty) {
+        return true;
+    }
 
     if (!d->versionStampKey.isEmpty() && !d->root.contains(d->versionStampKey)) {
         d->root[d->versionStampKey] = d->versionStampValue;
@@ -628,6 +666,68 @@ bool JsonBackend::sync()
 
     d->dirty = false;
     return true;
+}
+
+bool JsonBackend::flushPending()
+{
+    // A pending debounce timer would fire flushNow() on next timeout; stop
+    // it so we don't double-flush (cheap no-op write, but still noise in
+    // the log if the second flush races with an external mutation).
+    if (d->syncDebounceTimer && d->syncDebounceTimer->isActive()) {
+        d->syncDebounceTimer->stop();
+    }
+    return flushNow();
+}
+
+void JsonBackend::setSyncPolicy(SyncPolicy policy, int debounceMs)
+{
+    // Clamp debounceMs up front so the rest of the logic can assume a
+    // positive interval. 0 or negative would fire the timer immediately,
+    // defeating the debounce and hammering the disk on every sync().
+    if (debounceMs <= 0) {
+        debounceMs = 1;
+    }
+    d->syncDebounceMs = debounceMs;
+
+    if (policy == SyncPolicy::Synchronous) {
+        // Flush any in-flight deferred write so a subsequent sync() inherits
+        // a clean "no pending deferred state" invariant. Without this, a
+        // consumer that flips back to Synchronous mid-write would see the
+        // very next sync() commit only the newly-marked dirty state, losing
+        // the earlier deferred change entirely.
+        if (d->syncPolicy == SyncPolicy::Deferred && d->dirty) {
+            flushPending();
+        }
+        d->syncDebounceTimer.reset();
+        d->syncPolicy = SyncPolicy::Synchronous;
+        return;
+    }
+
+    // Deferred: ensure a timer exists and reflects the current interval.
+    // Re-entrant calls (consumer flipping the interval mid-run) just update
+    // the existing timer's interval rather than rebuilding it so a pending
+    // coalescing window isn't accidentally cancelled.
+    if (!d->syncDebounceTimer) {
+        d->syncDebounceTimer = std::make_unique<QTimer>();
+        d->syncDebounceTimer->setSingleShot(true);
+        QTimer* timer = d->syncDebounceTimer.get();
+        // Context object = the timer itself so the connection auto-
+        // disconnects when the timer dies. Capture `this` raw: the timer is
+        // owned by Data, Data is owned by JsonBackend, so the JsonBackend
+        // outlives the timer by definition — there is no dangling-this
+        // window. Still null-check flushNow's preconditions by going
+        // through the existing entry point.
+        QObject::connect(timer, &QTimer::timeout, timer, [this]() {
+            flushNow();
+        });
+    }
+    d->syncDebounceTimer->setInterval(d->syncDebounceMs);
+    d->syncPolicy = SyncPolicy::Deferred;
+}
+
+JsonBackend::SyncPolicy JsonBackend::syncPolicy() const
+{
+    return d->syncPolicy;
 }
 
 bool JsonBackend::writeJsonAtomically(const QString& filePath, const QJsonObject& root)
@@ -865,6 +965,46 @@ void JsonBackend::replaceRoot(QJsonObject root)
     // clearDirty() right after. We mark dirty here to cover the general
     // case where disk state is unknown.
     d->dirty = true;
+}
+
+bool JsonBackend::applyMigration(const Schema& schema)
+{
+    // No declared migrations is a valid "nothing to do" — return true so the
+    // caller can't distinguish it from "ran but no step applied", matching
+    // the IBackend contract that true means "backend supports migrations".
+    if (schema.migrations.isEmpty()) {
+        return true;
+    }
+    // Work against an in-memory snapshot so a partial migration (step 3 of 5
+    // fails) never leaves the backend's live root half-transformed. On
+    // success we swap the whole thing into place; on failure the live state
+    // keeps the pre-migration shape.
+    QJsonObject snapshot = d->root;
+    const int before = snapshot.value(schema.versionKey).toInt(1);
+    MigrationRunner runner(schema);
+    runner.runInMemory(snapshot);
+    const int after = snapshot.value(schema.versionKey).toInt(before);
+    if (after == before) {
+        // No step applied (already at target) — nothing to commit.
+        return true;
+    }
+    // Atomic disk rewrite. If this fails the backend keeps its unmigrated
+    // in-memory state; the next successful sync() retries. Returning false
+    // tells the caller the migration didn't land this call, but since the
+    // live state matches disk they can continue to operate until the next
+    // startup retries.
+    if (!writeJsonAtomically(d->filePath, snapshot)) {
+        qWarning(
+            "PhosphorConfig::JsonBackend::applyMigration: failed to commit migrated config to %s — backend "
+            "continues with the unmigrated on-disk state until the next successful sync()",
+            qPrintable(d->filePath));
+        return false;
+    }
+    // Disk and memory both advanced — replaceRoot then clearDirty restores
+    // the "in-memory matches disk" invariant without paying a re-read.
+    replaceRoot(std::move(snapshot));
+    clearDirty();
+    return true;
 }
 
 } // namespace PhosphorConfig

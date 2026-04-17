@@ -12,6 +12,10 @@
 
 #include <memory>
 
+QT_BEGIN_NAMESPACE
+class QTimer;
+QT_END_NAMESPACE
+
 namespace PhosphorConfig {
 
 class IGroupPathResolver;
@@ -102,8 +106,8 @@ public:
     /// Attach a custom path resolver. Passing @c nullptr removes it.
     /// Safe to call at any time; the resolver is consulted on every group
     /// access, so it should be cheap.
-    void setPathResolver(std::shared_ptr<IGroupPathResolver> resolver);
-    std::shared_ptr<IGroupPathResolver> pathResolver() const;
+    void setPathResolver(std::shared_ptr<IGroupPathResolver> resolver) override;
+    std::shared_ptr<IGroupPathResolver> pathResolver() const override;
 
     /// Change the JSON object that receives ungrouped @c writeRootString
     /// calls. Defaults to @c "General". Call before the first write.
@@ -115,12 +119,21 @@ public:
     /// root. Used by consumers who pair a @c JsonBackend with a @c Schema
     /// so fresh stores carry the current version from day one. Default
     /// disables the behaviour (empty key).
-    void setVersionStamp(const QString& key, int version);
+    void setVersionStamp(const QString& key, int version) override;
 
     /// Currently-installed version stamp as @c {key, version}. Returns an
     /// empty key when no stamp is installed. Used by shared-backend safety
     /// checks (see @c Store::Store) to detect a clobber.
-    std::pair<QString, int> versionStamp() const;
+    std::pair<QString, int> versionStamp() const override;
+
+    /// Run @p schema's migration chain against the in-memory root, and
+    /// if any step bumps the version stamp, atomically rewrite the backing
+    /// file and refresh the in-memory state. Returns @c true unless the
+    /// atomic disk rewrite fails — in which case the backend stays at the
+    /// unmigrated state and the next successful @c sync() retries.
+    /// Consumers that need the "did migrations actually apply" bit should
+    /// check @c versionStamp() before and after, not this return value.
+    bool applyMigration(const Schema& schema) override;
 
     /// Atomically write @p root to @p filePath (temp file + rename via
     /// @c QSaveFile). Exposed for use by @c MigrationRunner and other
@@ -147,11 +160,56 @@ public:
     /// called while any @c JsonGroup views are alive.
     void replaceRoot(QJsonObject root);
 
+    /// Sync timing policy. See @c setSyncPolicy for the full contract.
+    enum class SyncPolicy {
+        /// @c sync() flushes the dirty root to disk synchronously and
+        /// returns the commit result. Default — matches the pre-policy
+        /// behaviour so switching an existing consumer requires no change.
+        Synchronous,
+        /// @c sync() restarts a single-shot debounce timer and returns
+        /// @c true without touching disk. The actual flush happens on the
+        /// timer's timeout, on the same thread that owns the backend (i.e.
+        /// whichever thread is pumping the event loop that owns the timer).
+        /// Callers that need a guaranteed-committed state before proceeding
+        /// (e.g. closing a save dialog, shutting down a daemon) call
+        /// @c flushPending() to force an immediate flush. The backend's
+        /// destructor also flushes pending writes.
+        ///
+        /// Requires a running event loop to actually fire. Tests that
+        /// exercise this path must call @c QTest::qWait() or
+        /// @c QCoreApplication::processEvents() after @c sync() to let the
+        /// timer elapse, or call @c flushPending() directly.
+        Deferred,
+    };
+
+    /// Configure when @c sync() commits to disk. @p debounceMs is only
+    /// consulted for @c Deferred policy; it sets the coalescing window
+    /// during which repeated @c sync() calls restart the same timer.
+    /// Values <= 0 are clamped to 1 ms.
+    ///
+    /// Safe to call at any time. Switching from @c Deferred back to
+    /// @c Synchronous also flushes any pending deferred write so the
+    /// in-memory and on-disk state agree on return.
+    void setSyncPolicy(SyncPolicy policy, int debounceMs = 500);
+    SyncPolicy syncPolicy() const;
+
+    /// Flush any pending deferred-sync write to disk now. No-op when the
+    /// policy is @c Synchronous or when the backend is not dirty.
+    /// Returns the commit result (or @c true when there was nothing to
+    /// flush). Safe to call from any context that would otherwise be
+    /// able to call @c sync().
+    bool flushPending();
+
 private:
     friend class JsonGroup;
 
     void loadFromDisk();
     void markDirty();
+    /// Synchronous inner flush used by @c sync() (Synchronous policy),
+    /// @c flushPending(), the deferred-sync timer callback, and the
+    /// destructor. No-op when not dirty; returns the @c writeJsonAtomically
+    /// result otherwise.
+    bool flushNow();
     void incActiveGroupCount();
     void decActiveGroupCount();
     int activeGroupCount() const;

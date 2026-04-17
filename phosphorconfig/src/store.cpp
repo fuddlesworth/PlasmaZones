@@ -3,8 +3,6 @@
 
 #include <PhosphorConfig/IBackend.h>
 #include <PhosphorConfig/IGroupPathResolver.h>
-#include <PhosphorConfig/JsonBackend.h>
-#include <PhosphorConfig/MigrationRunner.h>
 #include <PhosphorConfig/Schema.h>
 #include <PhosphorConfig/Store.h>
 
@@ -218,88 +216,55 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
     , d(std::make_unique<Private>(backend, std::move(schema)))
 {
     Q_ASSERT_X(backend != nullptr, "PhosphorConfig::Store", "backend must not be null");
-    // Wire the schema's path resolver onto the JsonBackend when present.
-    // QSettingsBackend has no resolver concept; passing it one is a no-op.
-    if (auto* json = dynamic_cast<JsonBackend*>(d->backend)) {
-        if (d->schema.pathResolver) {
-            // Shared-backend safety: refuse to clobber an existing resolver
-            // since multiple Stores can share one backend (see class docs).
-            // The first attached resolver wins; later Stores must either
-            // declare a compatible resolver or rely on the one already
-            // installed by their host.
-            if (auto existing = json->pathResolver()) {
-                if (existing != d->schema.pathResolver) {
-                    qWarning(
-                        "PhosphorConfig::Store: backend already has a path resolver attached — refusing to "
-                        "overwrite. Stores sharing a backend must agree on the resolver.");
-                }
-            } else {
-                json->setPathResolver(d->schema.pathResolver);
-            }
-        }
-        if (!d->schema.versionKey.isEmpty()) {
-            // Shared-backend safety: if another Store has already attached a
-            // version stamp with a different key or version, refuse to
-            // clobber it. Stores sharing one backend must agree on their
-            // version-stamping convention for exactly the same reason they
-            // must agree on the path resolver.
-            const auto [existingKey, existingVersion] = json->versionStamp();
-            if (existingKey.isEmpty()) {
-                json->setVersionStamp(d->schema.versionKey, d->schema.version);
-            } else if (existingKey != d->schema.versionKey || existingVersion != d->schema.version) {
-                qWarning(
-                    "PhosphorConfig::Store: backend already has a version stamp ('%s' = %d) — refusing to "
-                    "overwrite with ('%s' = %d). Stores sharing a backend must agree on the version stamp.",
-                    qPrintable(existingKey), existingVersion, qPrintable(d->schema.versionKey), d->schema.version);
-            }
-        }
 
-        // Run the migration chain against the backend's in-memory state.
-        // We don't use MigrationRunner::runOnFile because the backend has
-        // already loaded the file; running on the file would race.
-        if (!d->schema.migrations.isEmpty()) {
-            QJsonObject snapshot = json->jsonRootSnapshot();
-            const int before = snapshot.value(d->schema.versionKey).toInt(1);
-            MigrationRunner runner(d->schema);
-            runner.runInMemory(snapshot);
-            const int after = snapshot.value(d->schema.versionKey).toInt(before);
-            if (after != before) {
-                // Rewrite the file in place, then push the migrated snapshot
-                // into the backend's in-memory state. Going through
-                // replaceRoot + clearDirty skips the disk re-read + parse
-                // cycle that reparseConfiguration would do — we already
-                // know the content is equivalent to disk.
-                //
-                // If the atomic write fails, leave the backend's in-memory
-                // state at the unmigrated version: a fresh load from disk
-                // would show the unmigrated file anyway, and skipping the
-                // replace means the in-memory state matches disk until the
-                // next save() retries the disk commit.
-                if (JsonBackend::writeJsonAtomically(json->filePath(), snapshot)) {
-                    json->replaceRoot(std::move(snapshot));
-                    json->clearDirty();
-                } else {
-                    qWarning(
-                        "PhosphorConfig::Store: failed to commit migrated config to %s — backend continues "
-                        "with the unmigrated on-disk state until the next successful sync()",
-                        qPrintable(json->filePath()));
-                }
+    // Path resolver: install via the backend's polymorphic hook. Backends
+    // without a resolver concept (QSettingsBackend) inherit the no-op
+    // default, so the call is cheap and safe.
+    //
+    // Shared-backend safety: refuse to clobber an existing resolver since
+    // multiple Stores can share one backend (see class docs). The first
+    // attached resolver wins; later Stores must either declare a compatible
+    // resolver or rely on the one already installed by their host.
+    if (d->schema.pathResolver) {
+        if (auto existing = d->backend->pathResolver()) {
+            if (existing != d->schema.pathResolver) {
+                qWarning(
+                    "PhosphorConfig::Store: backend already has a path resolver attached — refusing to "
+                    "overwrite. Stores sharing a backend must agree on the resolver.");
             }
+        } else {
+            d->backend->setPathResolver(d->schema.pathResolver);
         }
-    } else {
-        // Non-JsonBackend path: path resolvers, version stamping, and the
-        // migration chain are all JsonBackend-only. Warn the caller so a
-        // silently-dropped resolver or migration chain doesn't turn into a
-        // surprise at runtime.
-        if (d->schema.pathResolver) {
+    }
+
+    // Version stamp: same polymorphic-hook pattern as the resolver. The
+    // no-op default on IBackend means a QSettings-backed Store silently
+    // skips stamping, which matches pre-polymorphic behaviour. JsonBackend
+    // overrides to persist the stamp through its next sync().
+    if (!d->schema.versionKey.isEmpty()) {
+        const auto [existingKey, existingVersion] = d->backend->versionStamp();
+        if (existingKey.isEmpty()) {
+            d->backend->setVersionStamp(d->schema.versionKey, d->schema.version);
+        } else if (existingKey != d->schema.versionKey || existingVersion != d->schema.version) {
             qWarning(
-                "PhosphorConfig::Store: schema supplies a pathResolver, but the backend is not a JsonBackend "
-                "— the resolver will NOT be applied");
+                "PhosphorConfig::Store: backend already has a version stamp ('%s' = %d) — refusing to "
+                "overwrite with ('%s' = %d). Stores sharing a backend must agree on the version stamp.",
+                qPrintable(existingKey), existingVersion, qPrintable(d->schema.versionKey), d->schema.version);
         }
-        if (!d->schema.migrations.isEmpty()) {
+    }
+
+    // Migration chain: route through IBackend::applyMigration. Backends that
+    // support it (JsonBackend) take a snapshot, run the chain, and commit
+    // atomically on a version bump. Backends that don't (QSettingsBackend,
+    // in-memory mocks without a JSON root) inherit the no-op default that
+    // returns false — surfaced here as a qWarning so a silently-dropped
+    // migration chain doesn't become a runtime surprise.
+    if (!d->schema.migrations.isEmpty()) {
+        if (!d->backend->applyMigration(d->schema)) {
             qWarning(
-                "PhosphorConfig::Store: schema declares %lld migration step(s), but the backend is not a "
-                "JsonBackend — migrations will NOT run",
+                "PhosphorConfig::Store: schema declares %lld migration step(s) but the backend reported no "
+                "migration support — migrations will NOT run. Ensure the backend implements applyMigration() "
+                "or remove the migration chain from the schema.",
                 static_cast<long long>(d->schema.migrations.size()));
         }
     }

@@ -18,6 +18,9 @@
 
 namespace PhosphorConfig {
 
+class IGroupPathResolver;
+struct Schema;
+
 /// Scoped view into a single configuration group.
 ///
 /// Obtained from IBackend::group() as a unique_ptr. Implementations may
@@ -175,6 +178,55 @@ public:
     /// Groups produced by a plugged-in IGroupPathResolver appear in the
     /// resolver's preferred external form.
     virtual QStringList groupList() const = 0;
+
+    // ── Schema-aware hooks (default no-op) ────────────────────────────────
+    // Store consults these to wire a schema's resolver, version stamp, and
+    // migration chain into the backend. Backends without a JSON-root concept
+    // (QSettingsBackend) inherit the default no-ops; JsonBackend overrides.
+    // Keeping the hooks on IBackend lets Store work against the polymorphic
+    // interface instead of a dynamic_cast, and lets a future backend opt in
+    // to schema participation by providing its own overrides.
+
+    /// Install a group-path resolver. The caller shares ownership via
+    /// shared_ptr so multiple Stores/backends can reference the same
+    /// instance. Backends that have no resolver concept return without
+    /// storing the pointer.
+    virtual void setPathResolver(std::shared_ptr<IGroupPathResolver>)
+    {
+    }
+    /// Currently-installed resolver, or @c nullptr when none is set (also
+    /// the default for backends that ignore @c setPathResolver).
+    virtual std::shared_ptr<IGroupPathResolver> pathResolver() const
+    {
+        return nullptr;
+    }
+
+    /// Install a "stamp on first sync" version annotation: if @p key is
+    /// absent from the backend's root on the next flush, write
+    /// @p key = @p version. Backends without a stamp concept ignore the
+    /// call. Passing an empty key disables the stamp.
+    virtual void setVersionStamp(const QString&, int)
+    {
+    }
+    /// Currently-installed version stamp as @c {key, version}. Empty key
+    /// means "no stamp installed" (also the default for backends that
+    /// ignore @c setVersionStamp).
+    virtual std::pair<QString, int> versionStamp() const
+    {
+        return {};
+    }
+
+    /// Apply @p schema's migration chain against the backend's in-memory
+    /// state and commit any resulting version bump. Returns @c true when the
+    /// backend supports schema migrations (even if no step applied — e.g.
+    /// the on-disk version already matches). Returns @c false when the
+    /// backend has no concept of a JSON-root snapshot; callers should log
+    /// that declared migrations will not run. Default: no-op returning
+    /// @c false.
+    virtual bool applyMigration(const Schema&)
+    {
+        return false;
+    }
 
     IBackend(const IBackend&) = delete;
     IBackend& operator=(const IBackend&) = delete;

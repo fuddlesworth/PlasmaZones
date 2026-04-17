@@ -344,7 +344,104 @@ private Q_SLOTS:
         QVERIFY(!keys.contains(QStringLiteral("Child")));
     }
 
+    // ── Deferred sync policy ──────────────────────────────────────────────
+
+    void deferredSync_coalescesRepeatedSyncsIntoOneFlush()
+    {
+        JsonBackend b(m_path);
+        b.setSyncPolicy(JsonBackend::SyncPolicy::Deferred, 50);
+
+        auto g = b.group(QStringLiteral("Group"));
+        g->writeInt(QStringLiteral("counter"), 1);
+        g.reset();
+
+        // sync() with Deferred policy must NOT have committed anything yet.
+        // The file shouldn't exist until the debounce window elapses, even
+        // if we sync repeatedly in rapid succession.
+        QVERIFY(b.sync());
+        QVERIFY(b.sync());
+        QVERIFY(b.sync());
+        QVERIFY(!QFile::exists(m_path));
+
+        // Wait past the debounce window. QTRY_* pumps the event loop so the
+        // QTimer can fire; a bare sleep would keep the timer starved.
+        QTRY_VERIFY_WITH_TIMEOUT(QFile::exists(m_path), 2000);
+
+        // File landed exactly once — the three sync() calls coalesced.
+        QJsonDocument doc = QJsonDocument::fromJson(readFile(m_path));
+        QCOMPARE(doc.object().value(QStringLiteral("Group")).toObject().value(QStringLiteral("counter")).toInt(), 1);
+    }
+
+    void deferredSync_flushPendingCommitsImmediately()
+    {
+        JsonBackend b(m_path);
+        b.setSyncPolicy(JsonBackend::SyncPolicy::Deferred, 10'000); // long window
+
+        auto g = b.group(QStringLiteral("Group"));
+        g->writeString(QStringLiteral("k"), QStringLiteral("v"));
+        g.reset();
+
+        QVERIFY(b.sync());
+        QVERIFY(!QFile::exists(m_path)); // pending
+
+        // flushPending() forces the commit now instead of waiting 10s.
+        QVERIFY(b.flushPending());
+        QVERIFY(QFile::exists(m_path));
+
+        // Second flushPending() on a now-clean backend is a cheap no-op.
+        QVERIFY(b.flushPending());
+    }
+
+    void deferredSync_switchBackToSynchronousFlushesPending()
+    {
+        JsonBackend b(m_path);
+        b.setSyncPolicy(JsonBackend::SyncPolicy::Deferred, 10'000);
+
+        auto g = b.group(QStringLiteral("Group"));
+        g->writeBool(QStringLiteral("flag"), true);
+        g.reset();
+
+        QVERIFY(b.sync()); // deferred; nothing on disk yet
+        QVERIFY(!QFile::exists(m_path));
+
+        // Switching back to Synchronous must flush the in-flight deferred
+        // write — otherwise a consumer that flips policies mid-write would
+        // silently drop the change.
+        b.setSyncPolicy(JsonBackend::SyncPolicy::Synchronous);
+        QVERIFY(QFile::exists(m_path));
+        QCOMPARE(b.syncPolicy(), JsonBackend::SyncPolicy::Synchronous);
+    }
+
+    void deferredSync_destructorFlushesPending()
+    {
+        {
+            JsonBackend b(m_path);
+            b.setSyncPolicy(JsonBackend::SyncPolicy::Deferred, 10'000);
+
+            auto g = b.group(QStringLiteral("Group"));
+            g->writeInt(QStringLiteral("n"), 42);
+            g.reset();
+
+            QVERIFY(b.sync()); // deferred
+            QVERIFY(!QFile::exists(m_path));
+            // scope-exit: ~JsonBackend must flush pending so we don't lose
+            // the write when a daemon gets torn down between sync() and the
+            // timer firing.
+        }
+        QVERIFY(QFile::exists(m_path));
+        QJsonDocument doc = QJsonDocument::fromJson(readFile(m_path));
+        QCOMPARE(doc.object().value(QStringLiteral("Group")).toObject().value(QStringLiteral("n")).toInt(), 42);
+    }
+
 private:
+    static QByteArray readFile(const QString& path)
+    {
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) {
+            return {};
+        }
+        return f.readAll();
+    }
     std::unique_ptr<QTemporaryDir> m_tmp;
     QString m_path;
 };
