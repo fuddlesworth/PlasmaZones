@@ -5,11 +5,10 @@
 
 #include "plasmazones_export.h"
 #include "AutotileConstants.h"
-// EdgeGaps lives in core/constants.h.  It's a shared per-side gap struct used
-// by both manual-layout (PhosphorZones::Layout) and tiling-algorithm code, so
-// its eventual home is libs/phosphor-layout-api.  See follow-up decoupling
-// commit before the libs/phosphor-tiles extraction.
-#include "core/constants.h"
+// EdgeGaps is the per-side gap shape shared between manual layout and tiling;
+// it lives in libs/phosphor-layout-api so neither side has to depend on the
+// other's headers.
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <QObject>
 #include <QRect>
 #include <QString>
@@ -20,6 +19,10 @@
 #include <functional>
 
 namespace PlasmaZones {
+
+// Shorthand for the shared shape — declared here (rather than relying on a
+// transitive include of core/constants.h) so this header is self-contained.
+using EdgeGaps = ::PhosphorLayout::EdgeGaps;
 
 class TilingState;
 

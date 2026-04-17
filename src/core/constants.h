@@ -15,6 +15,11 @@
 // plasmazones_core, shares exactly one definition with the daemon.
 #include <dbus_constants.h>
 
+// Shared per-side gap struct lives in libs/phosphor-layout-api so it can be
+// consumed by every layout/tile provider without forcing them to depend on
+// PlasmaZones internals.  Re-aliased into namespace PlasmaZones below.
+#include <PhosphorLayoutApi/EdgeGaps.h>
+
 // Algorithm-layer constants live in their own header so the autotile
 // primitives can move into libs/phosphor-tiles/ without dragging
 // PlasmaZones-internal headers along.  Re-included here so any consumer
@@ -465,33 +470,9 @@ inline QString makeAutotileId(const QString& algorithmId)
 }
 }
 
-/**
- * @brief Per-side edge gap values (resolved, non-negative pixel values)
- *
- * Used when usePerSideOuterGap is enabled to apply different gaps
- * to each screen edge. When disabled, the single outerGap value
- * is used uniformly via EdgeGaps::uniform().
- *
- * Default member values (8px) represent the application default.
- * Note: Layout::rawOuterGaps() returns an EdgeGaps with -1 sentinels
- * (meaning "use global setting") — those must be resolved via
- * getEffectiveOuterGaps() before use in geometry calculations.
- */
-struct EdgeGaps
-{
-    int top = 8;
-    int bottom = 8;
-    int left = 8;
-    int right = 8;
-    bool operator==(const EdgeGaps&) const = default;
-    bool isUniform() const
-    {
-        return top == bottom && bottom == left && left == right;
-    }
-    static EdgeGaps uniform(int gap)
-    {
-        return {gap, gap, gap, gap};
-    }
-};
+// EdgeGaps now lives in PhosphorLayoutApi (shared between manual layout and
+// tiling).  Aliased here so existing PlasmaZones::EdgeGaps callers compile
+// without changes.
+using EdgeGaps = ::PhosphorLayout::EdgeGaps;
 
 } // namespace PlasmaZones
