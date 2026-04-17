@@ -7,6 +7,7 @@
 #include "../undo/UndoController.h"
 #include "../helpers/ShaderDbusQueries.h"
 #include "../../core/constants.h"
+#include "../../core/layout.h"
 #include "../../core/layoututils.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
@@ -356,7 +357,25 @@ void EditorController::loadLayout(const QString& layoutId)
         return;
     }
 
-    QString jsonLayout = m_layoutService->loadLayout(layoutId);
+    // Try the in-process LayoutManager first — opens the editor instantly
+    // even when the daemon is starting up, daemon is down, or the user
+    // launched the editor as a standalone tool. Falls back to D-Bus
+    // (DBusLayoutService::loadLayout via m_layoutService) when the layout
+    // isn't on disk yet (just-created in another process, etc.) or when
+    // the ID is an autotile algorithm preview that the local LayoutManager
+    // can't produce.
+    QString jsonLayout;
+    if (m_localLayoutManager) {
+        const QUuid uuid = QUuid::fromString(layoutId);
+        if (!uuid.isNull()) {
+            if (Layout* layout = m_localLayoutManager->layoutById(uuid)) {
+                jsonLayout = QString::fromUtf8(QJsonDocument(layout->toJson()).toJson());
+            }
+        }
+    }
+    if (jsonLayout.isEmpty()) {
+        jsonLayout = m_layoutService->loadLayout(layoutId);
+    }
     if (jsonLayout.isEmpty()) {
         // Error signal already emitted by service
         return;
