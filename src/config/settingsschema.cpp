@@ -31,6 +31,7 @@ PhosphorConfig::Schema buildSettingsSchema()
     appendZoneSelectorSchema(s);
     appendActivationSchema(s);
     appendBehaviorSchema(s);
+    appendAutotilingSchema(s);
 
     return s;
 }
@@ -62,6 +63,19 @@ auto validColorOr(QColor fallback)
     return [fallback](const QVariant& v) -> QVariant {
         const QColor c = v.value<QColor>();
         return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
+    };
+}
+
+/// Snap-to-default enum validator: accept a value only if it appears in the
+/// explicit valid set, otherwise return @p fallback. Used for enums where
+/// qBound would silently reinterpret out-of-range values as the nearest
+/// neighbour — that's the exact bug the effect-side cache loader avoids,
+/// and both readers must agree (see testAutotile*_unknownValueClampsToFloat).
+auto validIntOr(std::initializer_list<int> valid, int fallback)
+{
+    return [valid = QVector<int>(valid), fallback](const QVariant& v) -> QVariant {
+        const int raw = v.toInt();
+        return valid.contains(raw) ? raw : fallback;
     };
 }
 
@@ -574,6 +588,142 @@ void appendBehaviorSchema(PhosphorConfig::Schema& schema)
         {CD::featureEnabledKey(), CD::snapAssistFeatureEnabled(), QMetaType::Bool},
         {CD::enabledKey(), CD::snapAssistEnabled(), QMetaType::Bool},
         {CD::triggersKey(), QString(), QMetaType::QString},
+    };
+}
+
+// ─── Autotiling ─────────────────────────────────────────────────────────────
+// The biggest group — Tiling.* has six sub-groups: Algorithm, Behavior,
+// Appearance.{Colors,Decorations,Borders}, Gaps. Plus the top-level
+// Tiling.Enabled toggle. PerAlgorithmSettings is a JSON-encoded QVariantMap;
+// LockedScreens is a comma list; DragInsert triggers are a JSON list.
+
+void appendAutotilingSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+
+    schema.groups[CD::tilingGroup()] = {
+        {CD::enabledKey(), CD::autotileEnabled(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::tilingAlgorithmGroup()] = {
+        {CD::defaultKey(), CD::defaultAutotileAlgorithm(), QMetaType::QString},
+        {CD::splitRatioKey(),
+         CD::autotileSplitRatio(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::autotileSplitRatioMin(), CD::autotileSplitRatioMax())},
+        {CD::splitRatioStepKey(),
+         CD::autotileSplitRatioStep(),
+         QMetaType::Double,
+         {},
+         clampDouble(CD::autotileSplitRatioStepMin(), CD::autotileSplitRatioStepMax())},
+        {CD::masterCountKey(),
+         CD::autotileMasterCount(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileMasterCountMin(), CD::autotileMasterCountMax())},
+        {CD::maxWindowsKey(),
+         CD::autotileMaxWindows(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileMaxWindowsMin(), CD::autotileMaxWindowsMax())},
+        {CD::perAlgorithmSettingsKey(), QString(), QMetaType::QString},
+    };
+
+    schema.groups[CD::tilingBehaviorGroup()] = {
+        {CD::insertPositionKey(),
+         CD::autotileInsertPosition(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileInsertPositionMin(), CD::autotileInsertPositionMax())},
+        {CD::focusNewWindowsKey(), CD::autotileFocusNewWindows(), QMetaType::Bool},
+        {CD::focusFollowsMouseKey(), CD::autotileFocusFollowsMouse(), QMetaType::Bool},
+        {CD::respectMinimumSizeKey(), CD::autotileRespectMinimumSize(), QMetaType::Bool},
+        {CD::stickyWindowHandlingKey(),
+         CD::autotileStickyWindowHandling(),
+         QMetaType::Int,
+         {},
+         clampInt(static_cast<int>(StickyWindowHandling::TreatAsNormal),
+                  static_cast<int>(StickyWindowHandling::IgnoreAll))},
+        {CD::dragBehaviorKey(),
+         CD::autotileDragBehavior(),
+         QMetaType::Int,
+         {},
+         validIntOr({static_cast<int>(AutotileDragBehavior::Float), static_cast<int>(AutotileDragBehavior::Reorder)},
+                    static_cast<int>(AutotileDragBehavior::Float))},
+        {CD::overflowBehaviorKey(),
+         CD::autotileOverflowBehavior(),
+         QMetaType::Int,
+         {},
+         validIntOr(
+             {static_cast<int>(AutotileOverflowBehavior::Float), static_cast<int>(AutotileOverflowBehavior::Unlimited)},
+             static_cast<int>(AutotileOverflowBehavior::Float))},
+        {CD::lockedScreensKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::triggersKey(), QString(), QMetaType::QString},
+        {CD::toggleActivationKey(), CD::autotileDragInsertToggle(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::tilingAppearanceColorsGroup()] = {
+        {CD::activeKey(), CD::autotileBorderColor(), QMetaType::QColor, {}, validColorOr(CD::autotileBorderColor())},
+        {CD::inactiveKey(),
+         CD::autotileInactiveBorderColor(),
+         QMetaType::QColor,
+         {},
+         validColorOr(CD::autotileInactiveBorderColor())},
+        {CD::useSystemKey(), CD::autotileUseSystemBorderColors(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::tilingAppearanceDecorationsGroup()] = {
+        {CD::hideTitleBarsKey(), CD::autotileHideTitleBars(), QMetaType::Bool},
+    };
+
+    schema.groups[CD::tilingAppearanceBordersGroup()] = {
+        {CD::showBorderKey(), CD::autotileShowBorder(), QMetaType::Bool},
+        {CD::widthKey(),
+         CD::autotileBorderWidth(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileBorderWidthMin(), CD::autotileBorderWidthMax())},
+        {CD::radiusKey(),
+         CD::autotileBorderRadius(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileBorderRadiusMin(), CD::autotileBorderRadiusMax())},
+    };
+
+    schema.groups[CD::tilingGapsGroup()] = {
+        {CD::innerKey(),
+         CD::autotileInnerGap(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileInnerGapMin(), CD::autotileInnerGapMax())},
+        {CD::outerKey(),
+         CD::autotileOuterGap(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileOuterGapMin(), CD::autotileOuterGapMax())},
+        {CD::usePerSideKey(), CD::autotileUsePerSideOuterGap(), QMetaType::Bool},
+        {CD::topKey(),
+         CD::autotileOuterGapTop(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileOuterGapTopMin(), CD::autotileOuterGapTopMax())},
+        {CD::bottomKey(),
+         CD::autotileOuterGapBottom(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileOuterGapBottomMin(), CD::autotileOuterGapBottomMax())},
+        {CD::leftKey(),
+         CD::autotileOuterGapLeft(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileOuterGapLeftMin(), CD::autotileOuterGapLeftMax())},
+        {CD::rightKey(),
+         CD::autotileOuterGapRight(),
+         QMetaType::Int,
+         {},
+         clampInt(CD::autotileOuterGapRightMin(), CD::autotileOuterGapRightMax())},
+        {CD::smartGapsKey(), CD::autotileSmartGaps(), QMetaType::Bool},
     };
 }
 

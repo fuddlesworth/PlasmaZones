@@ -628,100 +628,38 @@ public:
     // Autotiling Settings (ISettings interface)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    bool autotileEnabled() const
-    {
-        return m_autotileEnabled;
-    }
+    // Autotiling — PhosphorConfig::Store-backed.
+    bool autotileEnabled() const;
     void setAutotileEnabled(bool enabled);
-
-    QString defaultAutotileAlgorithm() const
-    {
-        return m_defaultAutotileAlgorithm;
-    }
+    QString defaultAutotileAlgorithm() const;
     void setDefaultAutotileAlgorithm(const QString& algorithm);
-
-    qreal autotileSplitRatio() const
-    {
-        return m_autotileSplitRatio;
-    }
+    qreal autotileSplitRatio() const;
     void setAutotileSplitRatio(qreal ratio);
-
-    qreal autotileSplitRatioStep() const
-    {
-        return m_autotileSplitRatioStep;
-    }
+    qreal autotileSplitRatioStep() const;
     void setAutotileSplitRatioStep(qreal step);
-
-    int autotileMasterCount() const
-    {
-        return m_autotileMasterCount;
-    }
+    int autotileMasterCount() const;
     void setAutotileMasterCount(int count);
-
-    QVariantMap autotilePerAlgorithmSettings() const
-    {
-        return m_autotilePerAlgorithmSettings;
-    }
+    QVariantMap autotilePerAlgorithmSettings() const;
     void setAutotilePerAlgorithmSettings(const QVariantMap& settings);
-
-    int autotileInnerGap() const
-    {
-        return m_autotileInnerGap;
-    }
+    int autotileInnerGap() const;
     void setAutotileInnerGap(int gap);
-
-    int autotileOuterGap() const
-    {
-        return m_autotileOuterGap;
-    }
+    int autotileOuterGap() const;
     void setAutotileOuterGap(int gap);
-
-    bool autotileUsePerSideOuterGap() const
-    {
-        return m_autotileUsePerSideOuterGap;
-    }
+    bool autotileUsePerSideOuterGap() const;
     void setAutotileUsePerSideOuterGap(bool enabled);
-
-    int autotileOuterGapTop() const
-    {
-        return m_autotileOuterGapTop;
-    }
+    int autotileOuterGapTop() const;
     void setAutotileOuterGapTop(int gap);
-
-    int autotileOuterGapBottom() const
-    {
-        return m_autotileOuterGapBottom;
-    }
+    int autotileOuterGapBottom() const;
     void setAutotileOuterGapBottom(int gap);
-
-    int autotileOuterGapLeft() const
-    {
-        return m_autotileOuterGapLeft;
-    }
+    int autotileOuterGapLeft() const;
     void setAutotileOuterGapLeft(int gap);
-
-    int autotileOuterGapRight() const
-    {
-        return m_autotileOuterGapRight;
-    }
+    int autotileOuterGapRight() const;
     void setAutotileOuterGapRight(int gap);
-
-    bool autotileFocusNewWindows() const
-    {
-        return m_autotileFocusNewWindows;
-    }
+    bool autotileFocusNewWindows() const;
     void setAutotileFocusNewWindows(bool focus);
-
-    bool autotileSmartGaps() const
-    {
-        return m_autotileSmartGaps;
-    }
+    bool autotileSmartGaps() const;
     void setAutotileSmartGaps(bool smart);
-
-    int autotileMaxWindows() const
-    {
-        return m_autotileMaxWindows;
-    }
+    int autotileMaxWindows() const;
     void setAutotileMaxWindows(int count);
 
     enum class AutotileInsertPosition {
@@ -729,26 +667,14 @@ public:
         AfterFocused = 1,
         AsMaster = 2
     };
-    AutotileInsertPosition autotileInsertPosition() const
-    {
-        return m_autotileInsertPosition;
-    }
+    AutotileInsertPosition autotileInsertPosition() const;
     void setAutotileInsertPosition(AutotileInsertPosition position);
-    int autotileInsertPositionInt() const
-    {
-        return static_cast<int>(m_autotileInsertPosition);
-    }
+    int autotileInsertPositionInt() const;
     void setAutotileInsertPositionInt(int position);
 
-    QVariantList autotileDragInsertTriggers() const override
-    {
-        return m_autotileDragInsertTriggers;
-    }
+    QVariantList autotileDragInsertTriggers() const override;
     void setAutotileDragInsertTriggers(const QVariantList& triggers) override;
-    bool autotileDragInsertToggle() const override
-    {
-        return m_autotileDragInsertToggle;
-    }
+    bool autotileDragInsertToggle() const override;
     void setAutotileDragInsertToggle(bool enable) override;
 
     // Autotile Shortcuts — PhosphorConfig::Store-backed.
@@ -784,98 +710,38 @@ public:
     int animationStaggerInterval() const override;
     void setAnimationStaggerInterval(int ms) override;
 
-    // Additional Autotiling Settings
-    bool autotileFocusFollowsMouse() const override
-    {
-        return m_autotileFocusFollowsMouse;
-    }
+    // Additional Autotiling Settings — PhosphorConfig::Store-backed.
+    bool autotileFocusFollowsMouse() const override;
     void setAutotileFocusFollowsMouse(bool focus) override;
-
-    bool autotileRespectMinimumSize() const
-    {
-        return m_autotileRespectMinimumSize;
-    }
+    bool autotileRespectMinimumSize() const;
     void setAutotileRespectMinimumSize(bool respect);
-
-    bool autotileHideTitleBars() const override
-    {
-        return m_autotileHideTitleBars;
-    }
+    bool autotileHideTitleBars() const override;
     void setAutotileHideTitleBars(bool hide) override;
-
-    bool autotileShowBorder() const override
-    {
-        return m_autotileShowBorder;
-    }
+    bool autotileShowBorder() const override;
     void setAutotileShowBorder(bool show) override;
-
-    int autotileBorderWidth() const override
-    {
-        return m_autotileBorderWidth;
-    }
+    int autotileBorderWidth() const override;
     void setAutotileBorderWidth(int width) override;
-
-    int autotileBorderRadius() const override
-    {
-        return m_autotileBorderRadius;
-    }
+    int autotileBorderRadius() const override;
     void setAutotileBorderRadius(int radius) override;
-
-    QColor autotileBorderColor() const override
-    {
-        return m_autotileBorderColor;
-    }
+    QColor autotileBorderColor() const override;
     void setAutotileBorderColor(const QColor& color) override;
-
-    QColor autotileInactiveBorderColor() const override
-    {
-        return m_autotileInactiveBorderColor;
-    }
+    QColor autotileInactiveBorderColor() const override;
     void setAutotileInactiveBorderColor(const QColor& color) override;
-
-    bool autotileUseSystemBorderColors() const override
-    {
-        return m_autotileUseSystemBorderColors;
-    }
+    bool autotileUseSystemBorderColors() const override;
     void setAutotileUseSystemBorderColors(bool use) override;
-
-    StickyWindowHandling autotileStickyWindowHandling() const override
-    {
-        return m_autotileStickyWindowHandling;
-    }
+    StickyWindowHandling autotileStickyWindowHandling() const override;
     void setAutotileStickyWindowHandling(StickyWindowHandling handling) override;
-    int autotileStickyWindowHandlingInt() const
-    {
-        return static_cast<int>(m_autotileStickyWindowHandling);
-    }
+    int autotileStickyWindowHandlingInt() const;
     void setAutotileStickyWindowHandlingInt(int handling);
-
-    AutotileDragBehavior autotileDragBehavior() const override
-    {
-        return m_autotileDragBehavior;
-    }
+    AutotileDragBehavior autotileDragBehavior() const override;
     void setAutotileDragBehavior(AutotileDragBehavior behavior) override;
-    int autotileDragBehaviorInt() const
-    {
-        return static_cast<int>(m_autotileDragBehavior);
-    }
+    int autotileDragBehaviorInt() const;
     void setAutotileDragBehaviorInt(int behavior);
-
-    AutotileOverflowBehavior autotileOverflowBehavior() const override
-    {
-        return m_autotileOverflowBehavior;
-    }
+    AutotileOverflowBehavior autotileOverflowBehavior() const override;
     void setAutotileOverflowBehavior(AutotileOverflowBehavior behavior) override;
-    int autotileOverflowBehaviorInt() const
-    {
-        return static_cast<int>(m_autotileOverflowBehavior);
-    }
+    int autotileOverflowBehaviorInt() const;
     void setAutotileOverflowBehaviorInt(int behavior);
-
-    QStringList lockedScreens() const override
-    {
-        return m_lockedScreens;
-    }
+    QStringList lockedScreens() const override;
     void setLockedScreens(const QStringList& screens) override;
     bool isScreenLocked(const QString& screenIdOrName) const override;
     void setScreenLocked(const QString& screenIdOrName, bool locked) override;
@@ -1239,43 +1105,13 @@ private:
     QHash<QString, QVariantMap> m_perScreenSnappingSettings;
 
     // Autotiling Settings
-    bool m_autotileEnabled = ConfigDefaults::autotileEnabled();
-    QString m_defaultAutotileAlgorithm = ConfigDefaults::defaultAutotileAlgorithm();
-    qreal m_autotileSplitRatio = ConfigDefaults::autotileSplitRatio();
-    qreal m_autotileSplitRatioStep = ConfigDefaults::autotileSplitRatioStep();
-    int m_autotileMasterCount = ConfigDefaults::autotileMasterCount();
-    QVariantMap m_autotilePerAlgorithmSettings;
-    int m_autotileInnerGap = ConfigDefaults::autotileInnerGap();
-    int m_autotileOuterGap = ConfigDefaults::autotileOuterGap();
-    bool m_autotileUsePerSideOuterGap = ConfigDefaults::autotileUsePerSideOuterGap();
-    int m_autotileOuterGapTop = ConfigDefaults::autotileOuterGapTop();
-    int m_autotileOuterGapBottom = ConfigDefaults::autotileOuterGapBottom();
-    int m_autotileOuterGapLeft = ConfigDefaults::autotileOuterGapLeft();
-    int m_autotileOuterGapRight = ConfigDefaults::autotileOuterGapRight();
-    bool m_autotileFocusNewWindows = ConfigDefaults::autotileFocusNewWindows();
-    bool m_autotileSmartGaps = ConfigDefaults::autotileSmartGaps();
-    int m_autotileMaxWindows = ConfigDefaults::autotileMaxWindows();
-    AutotileInsertPosition m_autotileInsertPosition = AutotileInsertPosition::End;
-    QVariantList m_autotileDragInsertTriggers; // [{modifier: int, mouseButton: int}, ...]
-    bool m_autotileDragInsertToggle = ConfigDefaults::autotileDragInsertToggle();
+    // Autotiling stored in m_store.
 
     // Animation Settings (applies to both snapping and autotiling geometry changes)
     // Animations are stored in m_store; no cached members here.
 
     // Additional Autotiling Settings
-    bool m_autotileFocusFollowsMouse = ConfigDefaults::autotileFocusFollowsMouse();
-    bool m_autotileRespectMinimumSize = ConfigDefaults::autotileRespectMinimumSize();
-    bool m_autotileHideTitleBars = ConfigDefaults::autotileHideTitleBars();
-    bool m_autotileShowBorder = ConfigDefaults::autotileShowBorder();
-    int m_autotileBorderWidth = ConfigDefaults::autotileBorderWidth();
-    int m_autotileBorderRadius = ConfigDefaults::autotileBorderRadius();
-    QColor m_autotileBorderColor = ConfigDefaults::autotileBorderColor();
-    QColor m_autotileInactiveBorderColor = ConfigDefaults::autotileInactiveBorderColor();
-    bool m_autotileUseSystemBorderColors = ConfigDefaults::autotileUseSystemBorderColors();
-    StickyWindowHandling m_autotileStickyWindowHandling = StickyWindowHandling::TreatAsNormal;
-    AutotileDragBehavior m_autotileDragBehavior = AutotileDragBehavior::Float;
-    AutotileOverflowBehavior m_autotileOverflowBehavior = AutotileOverflowBehavior::Float;
-    QStringList m_lockedScreens;
+    // Autotiling (continued) stored in m_store.
 };
 
 } // namespace PlasmaZones

@@ -24,6 +24,7 @@
 #include <QSet>
 #include <QUuid>
 #include "../autotile/AlgorithmRegistry.h"
+#include "../autotile/AutotileConfig.h"
 #include <climits> // For INT_MAX in readValidatedInt
 
 namespace PlasmaZones {
@@ -193,7 +194,7 @@ void Settings::load()
     if (useSystemColors()) {
         applySystemColorScheme();
     }
-    if (m_autotileUseSystemBorderColors) {
+    if (autotileUseSystemBorderColors()) {
         applyAutotileBorderSystemColor();
     }
 
@@ -1368,6 +1369,342 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
     Q_EMIT settingsChanged();
 }
 
+// ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
+// Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
+// AlgorithmRegistry for validation; per-algorithm settings round-trip as a
+// JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
+
+PZ_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
+PZ_STORE_SET_BOOL(setAutotileEnabled, tilingGroup, enabledKey, autotileEnabledChanged)
+
+QString Settings::defaultAutotileAlgorithm() const
+{
+    return m_store->read<QString>(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::defaultKey());
+}
+void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
+{
+    QString validated = algorithm;
+    if (!algorithm.startsWith(QLatin1String("script:")) && !AlgorithmRegistry::instance()->algorithm(algorithm)) {
+        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
+        validated = AlgorithmRegistry::defaultAlgorithmId();
+    }
+    if (defaultAutotileAlgorithm() == validated) {
+        return;
+    }
+    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::defaultKey(), validated);
+    Q_EMIT defaultAutotileAlgorithmChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(qreal, autotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, double)
+PZ_STORE_SET_DOUBLE(setAutotileSplitRatio, tilingAlgorithmGroup, splitRatioKey, autotileSplitRatioChanged)
+PZ_STORE_GET(qreal, autotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, double)
+PZ_STORE_SET_DOUBLE(setAutotileSplitRatioStep, tilingAlgorithmGroup, splitRatioStepKey, autotileSplitRatioStepChanged)
+PZ_STORE_GET(int, autotileMasterCount, tilingAlgorithmGroup, masterCountKey, int)
+PZ_STORE_SET_INT(setAutotileMasterCount, tilingAlgorithmGroup, masterCountKey, autotileMasterCountChanged)
+PZ_STORE_GET(int, autotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, int)
+PZ_STORE_SET_INT(setAutotileMaxWindows, tilingAlgorithmGroup, maxWindowsKey, autotileMaxWindowsChanged)
+
+QVariantMap Settings::autotilePerAlgorithmSettings() const
+{
+    const QString raw =
+        m_store->read<QString>(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey());
+    if (raw.isEmpty()) {
+        return {};
+    }
+    const QJsonObject obj = QJsonDocument::fromJson(raw.toUtf8()).object();
+    return AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(obj.toVariantMap()));
+}
+void Settings::setAutotilePerAlgorithmSettings(const QVariantMap& value)
+{
+    const QVariantMap sanitized = AutotileConfig::perAlgoToVariantMap(AutotileConfig::perAlgoFromVariantMap(value));
+    if (autotilePerAlgorithmSettings() == sanitized) {
+        return;
+    }
+    const QString json = sanitized.isEmpty()
+        ? QString()
+        : QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(sanitized)).toJson(QJsonDocument::Compact));
+    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::perAlgorithmSettingsKey(), json);
+    Q_EMIT autotilePerAlgorithmSettingsChanged();
+    Q_EMIT settingsChanged();
+}
+
+// Tiling.Gaps
+PZ_STORE_GET(int, autotileInnerGap, tilingGapsGroup, innerKey, int)
+PZ_STORE_SET_INT(setAutotileInnerGap, tilingGapsGroup, innerKey, autotileInnerGapChanged)
+PZ_STORE_GET(int, autotileOuterGap, tilingGapsGroup, outerKey, int)
+PZ_STORE_SET_INT(setAutotileOuterGap, tilingGapsGroup, outerKey, autotileOuterGapChanged)
+PZ_STORE_GET(bool, autotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, bool)
+PZ_STORE_SET_BOOL(setAutotileUsePerSideOuterGap, tilingGapsGroup, usePerSideKey, autotileUsePerSideOuterGapChanged)
+PZ_STORE_GET(int, autotileOuterGapTop, tilingGapsGroup, topKey, int)
+PZ_STORE_SET_INT(setAutotileOuterGapTop, tilingGapsGroup, topKey, autotileOuterGapTopChanged)
+PZ_STORE_GET(int, autotileOuterGapBottom, tilingGapsGroup, bottomKey, int)
+PZ_STORE_SET_INT(setAutotileOuterGapBottom, tilingGapsGroup, bottomKey, autotileOuterGapBottomChanged)
+PZ_STORE_GET(int, autotileOuterGapLeft, tilingGapsGroup, leftKey, int)
+PZ_STORE_SET_INT(setAutotileOuterGapLeft, tilingGapsGroup, leftKey, autotileOuterGapLeftChanged)
+PZ_STORE_GET(int, autotileOuterGapRight, tilingGapsGroup, rightKey, int)
+PZ_STORE_SET_INT(setAutotileOuterGapRight, tilingGapsGroup, rightKey, autotileOuterGapRightChanged)
+PZ_STORE_GET(bool, autotileSmartGaps, tilingGapsGroup, smartGapsKey, bool)
+PZ_STORE_SET_BOOL(setAutotileSmartGaps, tilingGapsGroup, smartGapsKey, autotileSmartGapsChanged)
+
+// Tiling.Behavior
+PZ_STORE_GET(bool, autotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, bool)
+PZ_STORE_SET_BOOL(setAutotileFocusNewWindows, tilingBehaviorGroup, focusNewWindowsKey, autotileFocusNewWindowsChanged)
+PZ_STORE_GET(bool, autotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey, bool)
+PZ_STORE_SET_BOOL(setAutotileFocusFollowsMouse, tilingBehaviorGroup, focusFollowsMouseKey,
+                  autotileFocusFollowsMouseChanged)
+PZ_STORE_GET(bool, autotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey, bool)
+PZ_STORE_SET_BOOL(setAutotileRespectMinimumSize, tilingBehaviorGroup, respectMinimumSizeKey,
+                  autotileRespectMinimumSizeChanged)
+
+Settings::AutotileInsertPosition Settings::autotileInsertPosition() const
+{
+    return static_cast<AutotileInsertPosition>(
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::insertPositionKey()));
+}
+int Settings::autotileInsertPositionInt() const
+{
+    return static_cast<int>(autotileInsertPosition());
+}
+void Settings::setAutotileInsertPosition(AutotileInsertPosition position)
+{
+    const int before = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::insertPositionKey());
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::insertPositionKey(),
+                   static_cast<int>(position));
+    const int after = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::insertPositionKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT autotileInsertPositionChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setAutotileInsertPositionInt(int position)
+{
+    if (position >= ConfigDefaults::autotileInsertPositionMin()
+        && position <= ConfigDefaults::autotileInsertPositionMax()) {
+        setAutotileInsertPosition(static_cast<AutotileInsertPosition>(position));
+    }
+}
+
+StickyWindowHandling Settings::autotileStickyWindowHandling() const
+{
+    return static_cast<StickyWindowHandling>(
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::stickyWindowHandlingKey()));
+}
+int Settings::autotileStickyWindowHandlingInt() const
+{
+    return static_cast<int>(autotileStickyWindowHandling());
+}
+void Settings::setAutotileStickyWindowHandling(StickyWindowHandling handling)
+{
+    const int before =
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::stickyWindowHandlingKey());
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::stickyWindowHandlingKey(),
+                   static_cast<int>(handling));
+    const int after =
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::stickyWindowHandlingKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT autotileStickyWindowHandlingChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setAutotileStickyWindowHandlingInt(int handling)
+{
+    if (handling >= static_cast<int>(StickyWindowHandling::TreatAsNormal)
+        && handling <= static_cast<int>(StickyWindowHandling::IgnoreAll)) {
+        setAutotileStickyWindowHandling(static_cast<StickyWindowHandling>(handling));
+    }
+}
+
+AutotileDragBehavior Settings::autotileDragBehavior() const
+{
+    return static_cast<AutotileDragBehavior>(
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::dragBehaviorKey()));
+}
+int Settings::autotileDragBehaviorInt() const
+{
+    return static_cast<int>(autotileDragBehavior());
+}
+void Settings::setAutotileDragBehavior(AutotileDragBehavior behavior)
+{
+    const int before = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::dragBehaviorKey());
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::dragBehaviorKey(),
+                   static_cast<int>(behavior));
+    const int after = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::dragBehaviorKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT autotileDragBehaviorChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setAutotileDragBehaviorInt(int behavior)
+{
+    if (behavior == static_cast<int>(AutotileDragBehavior::Float)
+        || behavior == static_cast<int>(AutotileDragBehavior::Reorder)) {
+        setAutotileDragBehavior(static_cast<AutotileDragBehavior>(behavior));
+    }
+}
+
+AutotileOverflowBehavior Settings::autotileOverflowBehavior() const
+{
+    return static_cast<AutotileOverflowBehavior>(
+        m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::overflowBehaviorKey()));
+}
+int Settings::autotileOverflowBehaviorInt() const
+{
+    return static_cast<int>(autotileOverflowBehavior());
+}
+void Settings::setAutotileOverflowBehavior(AutotileOverflowBehavior behavior)
+{
+    const int before = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::overflowBehaviorKey());
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::overflowBehaviorKey(),
+                   static_cast<int>(behavior));
+    const int after = m_store->read<int>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::overflowBehaviorKey());
+    if (after == before) {
+        return;
+    }
+    Q_EMIT autotileOverflowBehaviorChanged();
+    Q_EMIT settingsChanged();
+}
+void Settings::setAutotileOverflowBehaviorInt(int behavior)
+{
+    if (behavior == static_cast<int>(AutotileOverflowBehavior::Float)
+        || behavior == static_cast<int>(AutotileOverflowBehavior::Unlimited)) {
+        setAutotileOverflowBehavior(static_cast<AutotileOverflowBehavior>(behavior));
+    }
+}
+
+QStringList Settings::lockedScreens() const
+{
+    return parseCommaListImpl(
+        m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey()));
+}
+void Settings::setLockedScreens(const QStringList& screens)
+{
+    const QString joined = screens.join(QLatin1Char(','));
+    if (m_store->read<QString>(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey()) == joined) {
+        return;
+    }
+    m_store->write(ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::lockedScreensKey(), joined);
+    Q_EMIT lockedScreensChanged();
+    Q_EMIT settingsChanged();
+}
+
+bool Settings::isScreenLocked(const QString& screenIdOrName) const
+{
+    return isContextLocked(screenIdOrName, 0, QString());
+}
+void Settings::setScreenLocked(const QString& screenIdOrName, bool locked)
+{
+    setContextLocked(screenIdOrName, 0, QString(), locked);
+}
+
+bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity) const
+{
+    const QStringList locked = lockedScreens();
+    QStringList namesToCheck = {screenIdOrName};
+    if (Utils::isConnectorName(screenIdOrName)) {
+        const QString resolved = Utils::screenIdForName(screenIdOrName);
+        if (resolved != screenIdOrName) {
+            namesToCheck.append(resolved);
+        }
+    } else {
+        const QString connector = Utils::screenNameForId(screenIdOrName);
+        if (!connector.isEmpty() && connector != screenIdOrName) {
+            namesToCheck.append(connector);
+        }
+    }
+    for (const QString& name : std::as_const(namesToCheck)) {
+        if (virtualDesktop > 0 && !activity.isEmpty()) {
+            const QString k =
+                name + QStringLiteral(":") + QString::number(virtualDesktop) + QStringLiteral(":") + activity;
+            if (locked.contains(k)) {
+                return true;
+            }
+        }
+        if (virtualDesktop > 0) {
+            const QString k = name + QStringLiteral(":") + QString::number(virtualDesktop);
+            if (locked.contains(k)) {
+                return true;
+            }
+        }
+        if (locked.contains(name)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void Settings::setContextLocked(const QString& screenIdOrName, int virtualDesktop, const QString& activity, bool locked)
+{
+    QString key = screenIdOrName;
+    if (virtualDesktop > 0) {
+        key += QStringLiteral(":") + QString::number(virtualDesktop);
+        if (!activity.isEmpty()) {
+            key += QStringLiteral(":") + activity;
+        }
+    }
+    QStringList current = lockedScreens();
+    if (locked && !current.contains(key)) {
+        current.append(key);
+        setLockedScreens(current);
+    } else if (!locked && current.removeAll(key) > 0) {
+        setLockedScreens(current);
+    }
+}
+
+QVariantList Settings::autotileDragInsertTriggers() const
+{
+    return readTriggerList(m_store.get(), ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(),
+                           ConfigDefaults::autotileDragInsertTriggers());
+}
+void Settings::setAutotileDragInsertTriggers(const QVariantList& triggers)
+{
+    const QVariantList capped = triggers.mid(0, MaxTriggersPerAction);
+    if (autotileDragInsertTriggers() == capped) {
+        return;
+    }
+    writeTriggerList(m_store.get(), ConfigDefaults::tilingBehaviorGroup(), ConfigDefaults::triggersKey(), capped);
+    Q_EMIT autotileDragInsertTriggersChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, autotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey, bool)
+PZ_STORE_SET_BOOL(setAutotileDragInsertToggle, tilingBehaviorGroup, toggleActivationKey,
+                  autotileDragInsertToggleChanged)
+
+// Tiling.Appearance
+PZ_STORE_GET(QColor, autotileBorderColor, tilingAppearanceColorsGroup, activeKey, QColor)
+PZ_STORE_SET_COLOR(setAutotileBorderColor, tilingAppearanceColorsGroup, activeKey, autotileBorderColorChanged)
+PZ_STORE_GET(QColor, autotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setAutotileInactiveBorderColor, tilingAppearanceColorsGroup, inactiveKey,
+                   autotileInactiveBorderColorChanged)
+
+PZ_STORE_GET(bool, autotileUseSystemBorderColors, tilingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setAutotileUseSystemBorderColors(bool use)
+{
+    if (autotileUseSystemBorderColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::tilingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applyAutotileBorderSystemColor();
+    }
+    Q_EMIT autotileUseSystemBorderColorsChanged();
+    Q_EMIT settingsChanged();
+}
+
+PZ_STORE_GET(bool, autotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey, bool)
+PZ_STORE_SET_BOOL(setAutotileHideTitleBars, tilingAppearanceDecorationsGroup, hideTitleBarsKey,
+                  autotileHideTitleBarsChanged)
+PZ_STORE_GET(bool, autotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, bool)
+PZ_STORE_SET_BOOL(setAutotileShowBorder, tilingAppearanceBordersGroup, showBorderKey, autotileShowBorderChanged)
+PZ_STORE_GET(int, autotileBorderWidth, tilingAppearanceBordersGroup, widthKey, int)
+PZ_STORE_SET_INT(setAutotileBorderWidth, tilingAppearanceBordersGroup, widthKey, autotileBorderWidthChanged)
+PZ_STORE_GET(int, autotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, int)
+PZ_STORE_SET_INT(setAutotileBorderRadius, tilingAppearanceBordersGroup, radiusKey, autotileBorderRadiusChanged)
+
 // ── reset / color helpers ────────────────────────────────────────────────────
 
 void Settings::reset()
@@ -1708,18 +2045,11 @@ void Settings::applySystemColorScheme()
 
 void Settings::applyAutotileBorderSystemColor()
 {
-    // Use the exact snapping zone highlight/inactive colors including their alpha.
-    const QColor hl = highlightColor();
-    if (m_autotileBorderColor != hl) {
-        m_autotileBorderColor = hl;
-        Q_EMIT autotileBorderColorChanged();
-    }
-
-    const QColor ia = inactiveColor();
-    if (m_autotileInactiveBorderColor != ia) {
-        m_autotileInactiveBorderColor = ia;
-        Q_EMIT autotileInactiveBorderColorChanged();
-    }
+    // Use the exact snapping zone highlight/inactive colors including their
+    // alpha. Route through the setters so the Store stays the source of
+    // truth (and the NOTIFY signals fire as a side effect).
+    setAutotileBorderColor(highlightColor());
+    setAutotileInactiveBorderColor(inactiveColor());
 }
 
 #undef PZ_STORE_GET
