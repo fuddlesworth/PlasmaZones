@@ -4,7 +4,6 @@
 #include "TilingAlgorithm.h"
 #include "AutotileConstants.h"
 #include "TilingState.h"
-#include "config/configdefaults.h"
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -60,7 +59,7 @@ bool TilingAlgorithm::supportsSplitRatio() const
 
 qreal TilingAlgorithm::defaultSplitRatio() const
 {
-    return ConfigDefaults::autotileSplitRatio();
+    return AutotileDefaults::DefaultSplitRatio;
 }
 
 int TilingAlgorithm::minimumWindows() const
@@ -70,7 +69,7 @@ int TilingAlgorithm::minimumWindows() const
 
 int TilingAlgorithm::defaultMaxWindows() const
 {
-    return ConfigDefaults::autotileMaxWindows();
+    return AutotileDefaults::DefaultMaxWindows;
 }
 
 bool TilingAlgorithm::producesOverlappingZones() const

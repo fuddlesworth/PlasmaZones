@@ -31,6 +31,14 @@ namespace PlasmaZones {
  * the application config layer may surface.
  */
 namespace AutotileDefaults {
+// Default values used by tiling primitives when no setting is supplied.
+// The application config layer surfaces these as the user-facing defaults
+// (see ConfigDefaults::autotile{SplitRatio,MasterCount,MaxWindows} in
+// src/config/configdefaults.h, which delegate here).
+constexpr qreal DefaultSplitRatio = 0.5; ///< 50/50 split when nothing else specified
+constexpr int DefaultMasterCount = 1; ///< Single master window
+constexpr int DefaultMaxWindows = 5; ///< Maximum tiled windows before overflow
+
 constexpr qreal MinSplitRatio = 0.1;
 constexpr qreal MaxSplitRatio = 0.9;
 constexpr int MinMasterCount = 1;

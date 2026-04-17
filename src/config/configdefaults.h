@@ -706,7 +706,7 @@ public:
     }
     static constexpr qreal autotileSplitRatio()
     {
-        return 0.5;
+        return AutotileDefaults::DefaultSplitRatio;
     }
     static constexpr qreal autotileSplitRatioMin()
     {
@@ -730,7 +730,7 @@ public:
     }
     static constexpr int autotileMasterCount()
     {
-        return 1;
+        return AutotileDefaults::DefaultMasterCount;
     }
     static constexpr int autotileMasterCountMin()
     {
@@ -838,7 +838,7 @@ public:
     }
     static constexpr int autotileMaxWindows()
     {
-        return 5;
+        return AutotileDefaults::DefaultMaxWindows;
     }
     static constexpr int autotileMaxWindowsMin()
     {
