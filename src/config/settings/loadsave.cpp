@@ -3,139 +3,17 @@
 
 #include "../settings.h"
 #include "../configdefaults.h"
-#include "../../core/constants.h"
 #include "../../core/logging.h"
-#include "../../core/utils.h"
-#include "../../autotile/AutotileConfig.h"
-
-#include <QJsonDocument>
-#include <QJsonObject>
 
 namespace PlasmaZones {
 
-// ── load() helpers ───────────────────────────────────────────────────────────
-
-void Settings::loadActivationConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Activation (Snapping.Enabled + Snapping.Behavior.{Triggers,
-    // ToggleActivation, ZoneSpan.*}) is backed by PhosphorConfig::Store.
-}
-
-void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Display is backed by PhosphorConfig::Store. Disabled-monitor
-    // connector-name resolution lives in the getter (see
-    // Settings::disabledMonitors in settings.cpp) so stored connector names
-    // get resolved to stable screen ids on every read.
-}
-
-// loadAppearanceConfig removed: Appearance group (Colors, Labels, Opacity,
-// Border) plus Effects.Blur are now backed by PhosphorConfig::Store and
-// loaded on-demand via the Settings getters. See settingsschema.cpp for
-// the declarative schema.
-
-void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Zone geometry + Performance are backed by m_store — clamp validators
-    // in the schema handle what the old readValidatedInt call chain did.
-}
-
-void Settings::loadBehaviorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Behavior (WindowHandling + SnapAssist) and Exclusions are backed by
-    // PhosphorConfig::Store.
-}
-
-void Settings::loadZoneSelectorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Zone selector is backed by PhosphorConfig::Store.
-}
-
-void Settings::loadShortcutConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Global shortcuts are backed by PhosphorConfig::Store — getters read
-    // through the store on demand.
-}
-
-void Settings::loadAutotilingConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Autotiling is backed by PhosphorConfig::Store. Note: PerAlgorithmSettings
-    // has a sanitization/clamp step (AutotileConfig::perAlgoFromVariantMap)
-    // that used to run in the load path; it's now applied inside the
-    // autotilePerAlgorithmSettings getter below so on-disk garbage gets
-    // coerced on every read.
-}
-
-void Settings::loadEditorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Editor settings (Shortcuts + Snapping + FillOnDrop) are backed by
-    // PhosphorConfig::Store. Post-load NOTIFY fan-out is handled by the
-    // generic Q_PROPERTY re-emit loop in load() — no group-specific logic
-    // needed here.
-}
-
-// ── save() helpers ───────────────────────────────────────────────────────────
-
-void Settings::saveEditorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Editor settings are backed by PhosphorConfig::Store.
-}
-
-void Settings::saveActivationConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Activation is backed by PhosphorConfig::Store.
-}
-
-void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Display is backed by PhosphorConfig::Store.
-}
-
-// saveAppearanceConfig removed: Appearance setters persist writes through
-// PhosphorConfig::Store immediately; the top-level Settings::save() still
-// calls m_configBackend->sync() to flush alongside other groups.
-
-void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Zone geometry + Performance are backed by m_store — setters persist
-    // immediately; save() flushes via m_configBackend->sync().
-}
-
-void Settings::saveBehaviorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Behavior (WindowHandling + SnapAssist) is backed by PhosphorConfig::Store.
-}
-
-void Settings::saveZoneSelectorConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Zone selector is backed by PhosphorConfig::Store.
-}
-
-void Settings::saveShortcutConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Global shortcuts are backed by PhosphorConfig::Store.
-}
-
-void Settings::saveAutotilingConfig(PhosphorConfig::IBackend* backend)
-{
-    Q_UNUSED(backend);
-    // Autotiling (all sub-groups) is backed by PhosphorConfig::Store.
-}
+// All Store-backed groups (Shaders, Appearance, Ordering, Animations,
+// Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
+// Display, ZoneSelector, Activation, Behavior, Autotiling) load on-demand
+// through Settings getters and persist via setters. The only groups that
+// still need explicit load/save logic are the per-physical-screen Virtual
+// Screen configs (below), whose QHash<QString, VirtualScreenConfig> shape
+// doesn't fit the Store's scalar-key-per-setting model.
 
 // ── Virtual screen config load/save ──────────────────────────────────────────
 

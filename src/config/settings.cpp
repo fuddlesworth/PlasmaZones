@@ -169,27 +169,12 @@ void Settings::load()
             snapshot[i] = prop.read(this);
     }
 
-    loadActivationConfig(m_configBackend);
-    loadDisplayConfig(m_configBackend);
-    // Appearance: backed by m_store — nothing to load here.
-    loadZoneGeometryConfig(m_configBackend);
-    loadBehaviorConfig(m_configBackend);
-    loadZoneSelectorConfig(m_configBackend);
+    // Store-backed groups (Shaders, Appearance, Ordering, Animations,
+    // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,
+    // Display, ZoneSelector, Activation, Behavior, Autotiling) don't need
+    // explicit load calls — their getters read through m_store on demand.
     loadPerScreenOverrides(m_configBackend);
     loadVirtualScreenConfigs(m_configBackend);
-
-    // Rendering backend is backed by m_store — nothing to load here.
-
-    // Shaders is backed by m_store — nothing to load here. Getters read
-    // through the store on demand, with the schema's validator clamping
-    // FrameRate and BarCount to their configured ranges.
-
-    loadShortcutConfig(m_configBackend);
-    loadAutotilingConfig(m_configBackend);
-    loadEditorConfig(m_configBackend);
-
-    // Ordering is backed by m_store — getters parse the comma-joined wire
-    // format on demand.
 
     if (useSystemColors()) {
         applySystemColorScheme();
@@ -375,22 +360,11 @@ void Settings::save()
         }
     }
 
-    saveActivationConfig(m_configBackend);
-    saveDisplayConfig(m_configBackend);
-    // Appearance: backed by m_store — writes persisted via setters.
-    saveZoneGeometryConfig(m_configBackend);
-    saveBehaviorConfig(m_configBackend);
-    saveZoneSelectorConfig(m_configBackend);
+    // Store-backed groups persist through setters on every write; the flush
+    // loop above rewrites every declared key so clamp/canonicalization takes
+    // effect during save(). Only the non-Store groups need explicit save calls.
     saveAllPerScreenOverrides(m_configBackend);
     saveVirtualScreenConfigs(m_configBackend);
-    saveShortcutConfig(m_configBackend);
-    saveAutotilingConfig(m_configBackend);
-    // Ordering is backed by m_store — setters persist immediately.
-    saveEditorConfig(m_configBackend);
-
-    // Rendering backend is backed by m_store — setter persists directly.
-    // Shaders is backed by m_store — setters write to the backend
-    // immediately, so save() only needs to flush alongside everything else.
 
     m_configBackend->sync();
 }

@@ -1014,30 +1014,14 @@ private:
     /// per-index NOTIFY signal.
     using ShortcutSignalFn = void (Settings::*)();
 
-    // ─── load() helpers (decomposed for SRP) ─────────────────────────────
-    void loadActivationConfig(PhosphorConfig::IBackend* backend);
-    void loadDisplayConfig(PhosphorConfig::IBackend* backend);
-    // loadAppearanceConfig removed — Appearance group backed by m_store.
-    void loadZoneGeometryConfig(PhosphorConfig::IBackend* backend);
-    void loadBehaviorConfig(PhosphorConfig::IBackend* backend);
-    void loadZoneSelectorConfig(PhosphorConfig::IBackend* backend);
+    // ─── load() / save() helpers ────────────────────────────────────────
+    // Only non-Store groups need dedicated helpers now. Store-backed groups
+    // (Activation/Display/ZoneGeometry/Behavior/ZoneSelector/Shortcut/
+    // Autotiling/Editor/Appearance/Rendering/Shaders/Ordering) persist via
+    // setters and flush via m_configBackend->sync() in save().
     void loadPerScreenOverrides(PhosphorConfig::IBackend* backend);
-    void loadShortcutConfig(PhosphorConfig::IBackend* backend);
-    void loadAutotilingConfig(PhosphorConfig::IBackend* backend);
-    void loadEditorConfig(PhosphorConfig::IBackend* backend);
     void loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
-
-    // ─── save() helpers (decomposed for SRP) ────────────────────────────
-    void saveActivationConfig(PhosphorConfig::IBackend* backend);
-    void saveDisplayConfig(PhosphorConfig::IBackend* backend);
-    // saveAppearanceConfig removed — Appearance group backed by m_store.
-    void saveZoneGeometryConfig(PhosphorConfig::IBackend* backend);
-    void saveBehaviorConfig(PhosphorConfig::IBackend* backend);
-    void saveZoneSelectorConfig(PhosphorConfig::IBackend* backend);
     void saveAllPerScreenOverrides(PhosphorConfig::IBackend* backend);
-    void saveShortcutConfig(PhosphorConfig::IBackend* backend);
-    void saveAutotilingConfig(PhosphorConfig::IBackend* backend);
-    void saveEditorConfig(PhosphorConfig::IBackend* backend);
     void saveVirtualScreenConfigs(PhosphorConfig::IBackend* backend);
 
     // Groups that save() writes exhaustively (excludes unmanaged groups).
