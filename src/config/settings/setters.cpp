@@ -339,23 +339,7 @@ void Settings::setFilterLayoutsByAspectRatio(bool filter)
     }
 }
 
-void Settings::setSnappingLayoutOrder(const QStringList& order)
-{
-    if (m_snappingLayoutOrder != order) {
-        m_snappingLayoutOrder = order;
-        Q_EMIT snappingLayoutOrderChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-void Settings::setTilingAlgorithmOrder(const QStringList& order)
-{
-    if (m_tilingAlgorithmOrder != order) {
-        m_tilingAlgorithmOrder = order;
-        Q_EMIT tilingAlgorithmOrderChanged();
-        Q_EMIT settingsChanged();
-    }
-}
+// Ordering setters moved to settings.cpp (PhosphorConfig::Store-backed).
 
 SETTINGS_SETTER(const QStringList&, ExcludedApplications, m_excludedApplications, excludedApplicationsChanged)
 

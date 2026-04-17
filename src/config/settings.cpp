@@ -192,30 +192,8 @@ void Settings::load()
     loadAutotilingConfig(m_configBackend);
     loadEditorConfig(m_configBackend);
 
-    // Ordering (small enough to stay inline)
-    {
-        auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
-        auto parseOrderList = [](const QString& raw) -> QStringList {
-            if (raw.isEmpty())
-                return {};
-            QStringList result = raw.split(QLatin1Char(','));
-            for (auto& s : result)
-                s = s.trimmed();
-            result.removeAll(QString());
-            result.removeDuplicates();
-            return result;
-        };
-        QStringList newSnappingOrder = parseOrderList(ordering->readString(ConfigDefaults::snappingLayoutOrderKey()));
-        if (m_snappingLayoutOrder != newSnappingOrder) {
-            m_snappingLayoutOrder = newSnappingOrder;
-            Q_EMIT snappingLayoutOrderChanged();
-        }
-        QStringList newTilingOrder = parseOrderList(ordering->readString(ConfigDefaults::tilingAlgorithmOrderKey()));
-        if (m_tilingAlgorithmOrder != newTilingOrder) {
-            m_tilingAlgorithmOrder = newTilingOrder;
-            Q_EMIT tilingAlgorithmOrderChanged();
-        }
-    }
+    // Ordering is backed by m_store — getters parse the comma-joined wire
+    // format on demand.
 
     if (useSystemColors()) {
         applySystemColorScheme();
@@ -380,11 +358,7 @@ void Settings::save()
     saveVirtualScreenConfigs(m_configBackend);
     saveShortcutConfig(m_configBackend);
     saveAutotilingConfig(m_configBackend);
-    {
-        auto ordering = m_configBackend->group(ConfigDefaults::orderingGroup());
-        ordering->writeString(ConfigDefaults::snappingLayoutOrderKey(), m_snappingLayoutOrder.join(QLatin1Char(',')));
-        ordering->writeString(ConfigDefaults::tilingAlgorithmOrderKey(), m_tilingAlgorithmOrder.join(QLatin1Char(',')));
-    }
+    // Ordering is backed by m_store — setters persist immediately.
     saveEditorConfig(m_configBackend);
 
     // Rendering backend
@@ -595,6 +569,60 @@ PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChange
 #undef PZ_STORE_SET_DOUBLE
 #undef PZ_STORE_SET_COLOR
 #undef PZ_STORE_SET_STRING
+
+// ── Ordering (PhosphorConfig::Store-backed) ─────────────────────────────────
+// On disk: comma-joined QString. In API: QStringList. The schema validator
+// normalizes the canonical format (trim/dedup), so the round-trip through
+// the store always produces the same string for any equivalent input.
+
+namespace {
+QStringList parseCommaList(const QString& raw)
+{
+    return raw.isEmpty() ? QStringList{} : raw.split(QLatin1Char(','));
+}
+} // namespace
+
+QStringList Settings::snappingLayoutOrder() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey()));
+}
+
+void Settings::setSnappingLayoutOrder(const QStringList& order)
+{
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
+    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey(),
+                   order.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::snappingLayoutOrderKey());
+    if (before == after) {
+        return;
+    }
+    Q_EMIT snappingLayoutOrderChanged();
+    Q_EMIT settingsChanged();
+}
+
+QStringList Settings::tilingAlgorithmOrder() const
+{
+    return parseCommaList(
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey()));
+}
+
+void Settings::setTilingAlgorithmOrder(const QStringList& order)
+{
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
+    m_store->write(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey(),
+                   order.join(QLatin1Char(',')));
+    const QString after =
+        m_store->read<QString>(ConfigDefaults::orderingGroup(), ConfigDefaults::tilingAlgorithmOrderKey());
+    if (before == after) {
+        return;
+    }
+    Q_EMIT tilingAlgorithmOrderChanged();
+    Q_EMIT settingsChanged();
+}
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 

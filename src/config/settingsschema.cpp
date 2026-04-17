@@ -18,6 +18,7 @@ PhosphorConfig::Schema buildSettingsSchema()
 
     appendShadersSchema(s);
     appendAppearanceSchema(s);
+    appendOrderingSchema(s);
 
     return s;
 }
@@ -50,6 +51,20 @@ auto validColorOr(QColor fallback)
         const QColor c = v.value<QColor>();
         return c.isValid() ? QVariant::fromValue(c) : QVariant::fromValue(fallback);
     };
+}
+
+/// Normalize a comma-joined list: split, trim each entry, drop empties,
+/// drop duplicates, rejoin. Shared by every setting whose wire format is a
+/// comma-separated list (layout order, algorithm order, exclusion lists).
+QVariant canonicalCommaList(const QVariant& v)
+{
+    QStringList parts = v.toString().split(QLatin1Char(','));
+    for (auto& s : parts) {
+        s = s.trimmed();
+    }
+    parts.removeAll(QString());
+    parts.removeDuplicates();
+    return QVariant(parts.join(QLatin1Char(',')));
 }
 } // namespace
 
@@ -137,6 +152,20 @@ void appendAppearanceSchema(PhosphorConfig::Schema& schema)
     // migrate here together.
     schema.groups[CD::snappingEffectsGroup()] = {
         {CD::blurKey(), CD::enableBlur(), QMetaType::Bool},
+    };
+}
+
+// ─── Ordering ───────────────────────────────────────────────────────────────
+// User-defined sort order for the layout picker and tiling algorithm menu.
+// Both are comma-joined lists on disk; the canonicalCommaList validator
+// normalizes formatting (trim, de-dupe) on every read/write.
+
+void appendOrderingSchema(PhosphorConfig::Schema& schema)
+{
+    using CD = ConfigDefaults;
+    schema.groups[CD::orderingGroup()] = {
+        {CD::snappingLayoutOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
+        {CD::tilingAlgorithmOrderKey(), QString(), QMetaType::QString, {}, canonicalCommaList},
     };
 }
 

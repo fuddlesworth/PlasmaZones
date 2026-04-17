@@ -694,16 +694,12 @@ public:
     }
     void setFilterLayoutsByAspectRatio(bool filter) override;
 
-    // Ordering
-    QStringList snappingLayoutOrder() const override
-    {
-        return m_snappingLayoutOrder;
-    }
+    // Ordering — PhosphorConfig::Store-backed (see settingsschema.cpp).
+    // Wire format is a comma-joined QString; the canonicalCommaList
+    // validator trims/dedups on every read and write.
+    QStringList snappingLayoutOrder() const override;
     void setSnappingLayoutOrder(const QStringList& order) override;
-    QStringList tilingAlgorithmOrder() const override
-    {
-        return m_tilingAlgorithmOrder;
-    }
+    QStringList tilingAlgorithmOrder() const override;
     void setTilingAlgorithmOrder(const QStringList& order) override;
 
     QStringList excludedApplications() const override
@@ -1701,8 +1697,7 @@ private:
     bool m_filterLayoutsByAspectRatio = ConfigDefaults::filterLayoutsByAspectRatio();
 
     // Ordering
-    QStringList m_snappingLayoutOrder;
-    QStringList m_tilingAlgorithmOrder;
+    // Ordering is stored in m_store; no cached members here.
 
     // Exclusions
     QStringList m_excludedApplications;
