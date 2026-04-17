@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 #include <PhosphorZones/ZoneDefaults.h>
 #include "constants.h"
 #include <QJsonArray>
@@ -215,7 +216,7 @@ QRectF Zone::applyPadding(int padding) const
 
 QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     QJsonObject json;
     json[Id] = m_id.toString();
@@ -256,7 +257,7 @@ QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
     appearance[BorderRadius] = m_borderRadius;
     appearance[UseCustomColors] = m_useCustomColors;
     if (m_overlayDisplayMode >= 0) {
-        appearance[JsonKeys::OverlayDisplayMode] = m_overlayDisplayMode;
+        appearance[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode] = m_overlayDisplayMode;
     }
     json[Appearance] = appearance;
 
@@ -265,7 +266,7 @@ QJsonObject Zone::toJson(const QRectF& referenceGeometry) const
 
 Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     auto zone = new Zone(parent);
 
@@ -304,8 +305,9 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
         zone->m_borderRadius = appearance[BorderRadius].toInt(::PhosphorZones::ZoneDefaults::BorderRadius);
         // Check if useCustomColors exists in JSON, default to false if missing
         zone->m_useCustomColors = appearance.contains(UseCustomColors) ? appearance[UseCustomColors].toBool() : false;
-        zone->m_overlayDisplayMode =
-            appearance.contains(JsonKeys::OverlayDisplayMode) ? appearance[JsonKeys::OverlayDisplayMode].toInt(-1) : -1;
+        zone->m_overlayDisplayMode = appearance.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)
+            ? appearance[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1)
+            : -1;
     }
 
     return zone;

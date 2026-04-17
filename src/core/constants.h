@@ -22,6 +22,7 @@
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/ZoneDefaults.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 // NOTE: AutotileJsonKeys / AutotileDefaults previously lived inline here and
 // were re-exported from <PhosphorTiles/AutotileConstants.h> via a transitive
@@ -145,56 +146,80 @@ inline constexpr QLatin1String DefaultBorderColor{"#C8FFFFFF"};
  * @brief JSON keys for serialization
  */
 namespace JsonKeys {
-// Zone keys
-inline constexpr QLatin1String Id{"id"};
-inline constexpr QLatin1String ZoneId{"zoneId"};
-inline constexpr QLatin1String Name{"name"};
-inline constexpr QLatin1String ZoneNumber{"zoneNumber"};
-inline constexpr QLatin1String RelativeGeometry{"relativeGeometry"};
-inline constexpr QLatin1String Appearance{"appearance"};
+// Zone & layout wire-format keys live in libs/phosphor-zones —
+// `PhosphorZones::ZoneJsonKeys`.  Re-exported here so existing
+// PlasmaZones::JsonKeys::* callers compile unchanged.
+using ::PhosphorZones::ZoneJsonKeys::Appearance;
+using ::PhosphorZones::ZoneJsonKeys::Id;
+using ::PhosphorZones::ZoneJsonKeys::Name;
+using ::PhosphorZones::ZoneJsonKeys::RelativeGeometry;
+using ::PhosphorZones::ZoneJsonKeys::ZoneId;
+using ::PhosphorZones::ZoneJsonKeys::ZoneNumber;
 
-// Geometry keys
-inline constexpr QLatin1String X{"x"};
-inline constexpr QLatin1String Y{"y"};
-inline constexpr QLatin1String Width{"width"};
-inline constexpr QLatin1String Height{"height"};
-inline constexpr QLatin1String ZOrder{"zOrder"};
+using ::PhosphorZones::ZoneJsonKeys::Height;
+using ::PhosphorZones::ZoneJsonKeys::Width;
+using ::PhosphorZones::ZoneJsonKeys::X;
+using ::PhosphorZones::ZoneJsonKeys::Y;
+using ::PhosphorZones::ZoneJsonKeys::ZOrder;
 
-// Appearance keys
-inline constexpr QLatin1String HighlightColor{"highlightColor"};
-inline constexpr QLatin1String InactiveColor{"inactiveColor"};
-inline constexpr QLatin1String BorderColor{"borderColor"};
-inline constexpr QLatin1String ActiveOpacity{"activeOpacity"};
-inline constexpr QLatin1String InactiveOpacity{"inactiveOpacity"};
-inline constexpr QLatin1String BorderWidth{"borderWidth"};
-inline constexpr QLatin1String BorderRadius{"borderRadius"};
-inline constexpr QLatin1String UseCustomColors{"useCustomColors"};
-inline constexpr QLatin1String IsHighlighted{"isHighlighted"};
+using ::PhosphorZones::ZoneJsonKeys::ActiveOpacity;
+using ::PhosphorZones::ZoneJsonKeys::BorderColor;
+using ::PhosphorZones::ZoneJsonKeys::BorderRadius;
+using ::PhosphorZones::ZoneJsonKeys::BorderWidth;
+using ::PhosphorZones::ZoneJsonKeys::HighlightColor;
+using ::PhosphorZones::ZoneJsonKeys::InactiveColor;
+using ::PhosphorZones::ZoneJsonKeys::InactiveOpacity;
+using ::PhosphorZones::ZoneJsonKeys::IsHighlighted;
+using ::PhosphorZones::ZoneJsonKeys::UseCustomColors;
 
-// Layout keys
-inline constexpr QLatin1String DefaultOrder{"defaultOrder"};
-inline constexpr QLatin1String Description{"description"};
-inline constexpr QLatin1String Zones{"zones"};
-inline constexpr QLatin1String ZonePadding{"zonePadding"};
-inline constexpr QLatin1String OuterGap{"outerGap"};
-inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
-inline constexpr QLatin1String OverlayDisplayMode{"overlayDisplayMode"};
-inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; // Legacy, for backward compat when loading
-inline constexpr QLatin1String IsSystem{"isSystem"}; // New: determined by source path
-inline constexpr QLatin1String HasSystemOrigin{"hasSystemOrigin"}; // True if user override of a system layout
-inline constexpr QLatin1String SystemSourcePath{"systemSourcePath"}; // Original system layout path (for user overrides)
-inline constexpr QLatin1String ZoneCount{"zoneCount"};
-inline constexpr QLatin1String Category{"category"}; // LayoutCategory: 0=Manual, 1=Autotile
+using ::PhosphorZones::ZoneJsonKeys::Category;
+using ::PhosphorZones::ZoneJsonKeys::DefaultOrder;
+using ::PhosphorZones::ZoneJsonKeys::Description;
+using ::PhosphorZones::ZoneJsonKeys::HasSystemOrigin;
+using ::PhosphorZones::ZoneJsonKeys::IsBuiltIn;
+using ::PhosphorZones::ZoneJsonKeys::IsSystem;
+using ::PhosphorZones::ZoneJsonKeys::OuterGap;
+using ::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode;
+using ::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers;
+using ::PhosphorZones::ZoneJsonKeys::SystemSourcePath;
+using ::PhosphorZones::ZoneJsonKeys::ZoneCount;
+using ::PhosphorZones::ZoneJsonKeys::ZonePadding;
+using ::PhosphorZones::ZoneJsonKeys::Zones;
 
-// Shader keys
-inline constexpr QLatin1String ShaderId{"shaderId"};
-inline constexpr QLatin1String ShaderParams{"shaderParams"};
+using ::PhosphorZones::ZoneJsonKeys::ShaderId;
+using ::PhosphorZones::ZoneJsonKeys::ShaderParams;
 
-// Visibility filtering keys
-inline constexpr QLatin1String HiddenFromSelector{"hiddenFromSelector"};
-inline constexpr QLatin1String AllowedScreens{"allowedScreens"};
-inline constexpr QLatin1String AllowedDesktops{"allowedDesktops"};
-inline constexpr QLatin1String AllowedActivities{"allowedActivities"};
+using ::PhosphorZones::ZoneJsonKeys::AllowedActivities;
+using ::PhosphorZones::ZoneJsonKeys::AllowedDesktops;
+using ::PhosphorZones::ZoneJsonKeys::AllowedScreens;
+using ::PhosphorZones::ZoneJsonKeys::HiddenFromSelector;
+
+using ::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey;
+using ::PhosphorZones::ZoneJsonKeys::MaxAspectRatio;
+using ::PhosphorZones::ZoneJsonKeys::MinAspectRatio;
+
+using ::PhosphorZones::ZoneJsonKeys::AppRules;
+using ::PhosphorZones::ZoneJsonKeys::AutoAssign;
+using ::PhosphorZones::ZoneJsonKeys::Pattern;
+using ::PhosphorZones::ZoneJsonKeys::TargetScreen;
+
+using ::PhosphorZones::ZoneJsonKeys::FixedGeometry;
+using ::PhosphorZones::ZoneJsonKeys::FixedHeight;
+using ::PhosphorZones::ZoneJsonKeys::FixedWidth;
+using ::PhosphorZones::ZoneJsonKeys::FixedX;
+using ::PhosphorZones::ZoneJsonKeys::FixedY;
+using ::PhosphorZones::ZoneJsonKeys::GeometryMode;
+using ::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry;
+
+using ::PhosphorZones::ZoneJsonKeys::OuterGapBottom;
+using ::PhosphorZones::ZoneJsonKeys::OuterGapLeft;
+using ::PhosphorZones::ZoneJsonKeys::OuterGapRight;
+using ::PhosphorZones::ZoneJsonKeys::OuterGapTop;
+using ::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap;
+
+// PlasmaZones-side JSON keys that aren't part of the zone/layout file
+// format proper — assignment runtime state, screen-info enumeration,
+// virtual-screen configuration, pywal colour ingestion.
 
 // Assignment keys
 inline constexpr QLatin1String Assignments{"assignments"};
@@ -213,38 +238,6 @@ inline constexpr QLatin1String PhysicalSize{"physicalSize"};
 inline constexpr QLatin1String Depth{"depth"};
 inline constexpr QLatin1String DevicePixelRatio{"devicePixelRatio"};
 inline constexpr QLatin1String RefreshRate{"refreshRate"};
-
-// Aspect ratio classification keys
-inline constexpr QLatin1String AspectRatioClassKey{"aspectRatioClass"};
-inline constexpr QLatin1String MinAspectRatio{"minAspectRatio"};
-inline constexpr QLatin1String MaxAspectRatio{"maxAspectRatio"};
-
-// App rules keys
-inline constexpr QLatin1String AppRules{"appRules"};
-inline constexpr QLatin1String Pattern{"pattern"};
-// ZoneNumber is reused from zone keys above
-inline constexpr QLatin1String TargetScreen{"targetScreen"};
-
-// Auto-assign keys
-inline constexpr QLatin1String AutoAssign{"autoAssign"};
-
-// Geometry mode keys
-inline constexpr QLatin1String UseFullScreenGeometry{"useFullScreenGeometry"};
-
-// Per-zone geometry mode keys
-inline constexpr QLatin1String GeometryMode{"geometryMode"};
-inline constexpr QLatin1String FixedGeometry{"fixedGeometry"};
-inline constexpr QLatin1String FixedX{"fixedX"};
-inline constexpr QLatin1String FixedY{"fixedY"};
-inline constexpr QLatin1String FixedWidth{"fixedWidth"};
-inline constexpr QLatin1String FixedHeight{"fixedHeight"};
-
-// Per-side outer gap keys
-inline constexpr QLatin1String UsePerSideOuterGap{"usePerSideOuterGap"};
-inline constexpr QLatin1String OuterGapTop{"outerGapTop"};
-inline constexpr QLatin1String OuterGapBottom{"outerGapBottom"};
-inline constexpr QLatin1String OuterGapLeft{"outerGapLeft"};
-inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
 
 // Pywal color file keys
 inline constexpr QLatin1String Colors{"colors"};
