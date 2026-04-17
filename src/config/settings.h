@@ -528,95 +528,40 @@ public:
     }
     void setOverlayDisplayModeInt(int mode);
 
-    bool useSystemColors() const override
-    {
-        return m_useSystemColors;
-    }
+    // Appearance — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Getters read through the store on demand with validator-driven
+    // clamping; setters go through the store so persistence is immediate.
+    bool useSystemColors() const override;
     void setUseSystemColors(bool use) override;
-
-    QColor highlightColor() const override
-    {
-        return m_highlightColor;
-    }
+    QColor highlightColor() const override;
     void setHighlightColor(const QColor& color) override;
-
-    QColor inactiveColor() const override
-    {
-        return m_inactiveColor;
-    }
+    QColor inactiveColor() const override;
     void setInactiveColor(const QColor& color) override;
-
-    QColor borderColor() const override
-    {
-        return m_borderColor;
-    }
+    QColor borderColor() const override;
     void setBorderColor(const QColor& color) override;
-
-    QColor labelFontColor() const override
-    {
-        return m_labelFontColor;
-    }
+    QColor labelFontColor() const override;
     void setLabelFontColor(const QColor& color) override;
-
-    qreal activeOpacity() const override
-    {
-        return m_activeOpacity;
-    }
+    qreal activeOpacity() const override;
     void setActiveOpacity(qreal opacity) override;
-
-    qreal inactiveOpacity() const override
-    {
-        return m_inactiveOpacity;
-    }
+    qreal inactiveOpacity() const override;
     void setInactiveOpacity(qreal opacity) override;
-
-    int borderWidth() const override
-    {
-        return m_borderWidth;
-    }
+    int borderWidth() const override;
     void setBorderWidth(int width) override;
-
-    int borderRadius() const override
-    {
-        return m_borderRadius;
-    }
+    int borderRadius() const override;
     void setBorderRadius(int radius) override;
-
-    bool enableBlur() const override
-    {
-        return m_enableBlur;
-    }
+    bool enableBlur() const override;
     void setEnableBlur(bool enable) override;
-
-    QString labelFontFamily() const override
-    {
-        return m_labelFontFamily;
-    }
+    QString labelFontFamily() const override;
     void setLabelFontFamily(const QString& family) override;
-    qreal labelFontSizeScale() const override
-    {
-        return m_labelFontSizeScale;
-    }
+    qreal labelFontSizeScale() const override;
     void setLabelFontSizeScale(qreal scale) override;
-    int labelFontWeight() const override
-    {
-        return m_labelFontWeight;
-    }
+    int labelFontWeight() const override;
     void setLabelFontWeight(int weight) override;
-    bool labelFontItalic() const override
-    {
-        return m_labelFontItalic;
-    }
+    bool labelFontItalic() const override;
     void setLabelFontItalic(bool italic) override;
-    bool labelFontUnderline() const override
-    {
-        return m_labelFontUnderline;
-    }
+    bool labelFontUnderline() const override;
     void setLabelFontUnderline(bool underline) override;
-    bool labelFontStrikeout() const override
-    {
-        return m_labelFontStrikeout;
-    }
+    bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
     int zonePadding() const override
@@ -1660,7 +1605,7 @@ private:
     // ─── load() helpers (decomposed for SRP) ─────────────────────────────
     void loadActivationConfig(PhosphorConfig::IBackend* backend);
     void loadDisplayConfig(PhosphorConfig::IBackend* backend);
-    void loadAppearanceConfig(PhosphorConfig::IBackend* backend);
+    // loadAppearanceConfig removed — Appearance group backed by m_store.
     void loadZoneGeometryConfig(PhosphorConfig::IBackend* backend);
     void loadBehaviorConfig(PhosphorConfig::IBackend* backend);
     void loadZoneSelectorConfig(PhosphorConfig::IBackend* backend);
@@ -1673,7 +1618,7 @@ private:
     // ─── save() helpers (decomposed for SRP) ────────────────────────────
     void saveActivationConfig(PhosphorConfig::IBackend* backend);
     void saveDisplayConfig(PhosphorConfig::IBackend* backend);
-    void saveAppearanceConfig(PhosphorConfig::IBackend* backend);
+    // saveAppearanceConfig removed — Appearance group backed by m_store.
     void saveZoneGeometryConfig(PhosphorConfig::IBackend* backend);
     void saveBehaviorConfig(PhosphorConfig::IBackend* backend);
     void saveZoneSelectorConfig(PhosphorConfig::IBackend* backend);
@@ -1721,22 +1666,8 @@ private:
     OverlayDisplayMode m_overlayDisplayMode = OverlayDisplayMode::ZoneRectangles;
 
     // Appearance
-    bool m_useSystemColors = ConfigDefaults::useSystemColors();
-    QColor m_highlightColor = ConfigDefaults::highlightColor();
-    QColor m_inactiveColor = ConfigDefaults::inactiveColor();
-    QColor m_borderColor = ConfigDefaults::borderColor();
-    QColor m_labelFontColor = ConfigDefaults::labelFontColor();
-    qreal m_activeOpacity = ConfigDefaults::activeOpacity();
-    qreal m_inactiveOpacity = ConfigDefaults::inactiveOpacity();
-    int m_borderWidth = ConfigDefaults::borderWidth();
-    int m_borderRadius = ConfigDefaults::borderRadius();
-    bool m_enableBlur = ConfigDefaults::enableBlur();
-    QString m_labelFontFamily;
-    qreal m_labelFontSizeScale = ConfigDefaults::labelFontSizeScale();
-    int m_labelFontWeight = ConfigDefaults::labelFontWeight();
-    bool m_labelFontItalic = ConfigDefaults::labelFontItalic();
-    bool m_labelFontUnderline = ConfigDefaults::labelFontUnderline();
-    bool m_labelFontStrikeout = ConfigDefaults::labelFontStrikeout();
+    // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
+    // m_store; no cached members here.
 
     // Zone settings
     int m_zonePadding = ConfigDefaults::zonePadding();

@@ -109,69 +109,10 @@ void Settings::loadDisplayConfig(PhosphorConfig::IBackend* backend)
     }
 }
 
-void Settings::loadAppearanceConfig(PhosphorConfig::IBackend* backend)
-{
-    {
-        auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
-        m_useSystemColors = colors->readBool(ConfigDefaults::useSystemKey(), ConfigDefaults::useSystemColors());
-        m_highlightColor =
-            readValidatedColor(*colors, ConfigDefaults::highlightKey(), ConfigDefaults::highlightColor(), "highlight");
-        m_inactiveColor =
-            readValidatedColor(*colors, ConfigDefaults::inactiveKey(), ConfigDefaults::inactiveColor(), "inactive");
-        m_borderColor =
-            readValidatedColor(*colors, ConfigDefaults::borderKey(), ConfigDefaults::borderColor(), "border");
-    }
-    {
-        auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
-        m_labelFontColor =
-            readValidatedColor(*labels, ConfigDefaults::fontColorKey(), ConfigDefaults::labelFontColor(), "label font");
-        m_labelFontFamily = labels->readString(ConfigDefaults::fontFamilyKey(), ConfigDefaults::labelFontFamily());
-        qreal fontScale = labels->readDouble(ConfigDefaults::fontSizeScaleKey(), ConfigDefaults::labelFontSizeScale());
-        m_labelFontSizeScale =
-            qBound(ConfigDefaults::labelFontSizeScaleMin(), fontScale, ConfigDefaults::labelFontSizeScaleMax());
-        m_labelFontWeight = readValidatedInt(*labels, ConfigDefaults::fontWeightKey(),
-                                             ConfigDefaults::labelFontWeight(), ConfigDefaults::labelFontWeightMin(),
-                                             ConfigDefaults::labelFontWeightMax(), "label font weight");
-        m_labelFontItalic = labels->readBool(ConfigDefaults::fontItalicKey(), ConfigDefaults::labelFontItalic());
-        m_labelFontUnderline =
-            labels->readBool(ConfigDefaults::fontUnderlineKey(), ConfigDefaults::labelFontUnderline());
-        m_labelFontStrikeout =
-            labels->readBool(ConfigDefaults::fontStrikeoutKey(), ConfigDefaults::labelFontStrikeout());
-    }
-    {
-        auto opacity = backend->group(ConfigDefaults::snappingAppearanceOpacityGroup());
-
-        qreal activeOpacity = opacity->readDouble(ConfigDefaults::activeKey(), ConfigDefaults::activeOpacity());
-        if (activeOpacity < ConfigDefaults::activeOpacityMin() || activeOpacity > ConfigDefaults::activeOpacityMax()) {
-            qCWarning(lcConfig) << "Invalid active opacity:" << activeOpacity << "clamping to valid range";
-            activeOpacity =
-                qBound(ConfigDefaults::activeOpacityMin(), activeOpacity, ConfigDefaults::activeOpacityMax());
-        }
-        m_activeOpacity = activeOpacity;
-
-        qreal inactiveOpacity = opacity->readDouble(ConfigDefaults::inactiveKey(), ConfigDefaults::inactiveOpacity());
-        if (inactiveOpacity < ConfigDefaults::inactiveOpacityMin()
-            || inactiveOpacity > ConfigDefaults::inactiveOpacityMax()) {
-            qCWarning(lcConfig) << "Invalid inactive opacity:" << inactiveOpacity << "clamping to valid range";
-            inactiveOpacity =
-                qBound(ConfigDefaults::inactiveOpacityMin(), inactiveOpacity, ConfigDefaults::inactiveOpacityMax());
-        }
-        m_inactiveOpacity = inactiveOpacity;
-    }
-    {
-        auto border = backend->group(ConfigDefaults::snappingAppearanceBorderGroup());
-        m_borderWidth =
-            readValidatedInt(*border, ConfigDefaults::widthKey(), ConfigDefaults::borderWidth(),
-                             ConfigDefaults::borderWidthMin(), ConfigDefaults::borderWidthMax(), "border width");
-        m_borderRadius =
-            readValidatedInt(*border, ConfigDefaults::radiusKey(), ConfigDefaults::borderRadius(),
-                             ConfigDefaults::borderRadiusMin(), ConfigDefaults::borderRadiusMax(), "border radius");
-    }
-    {
-        auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
-        m_enableBlur = effects->readBool(ConfigDefaults::blurKey(), ConfigDefaults::enableBlur());
-    }
-}
+// loadAppearanceConfig removed: Appearance group (Colors, Labels, Opacity,
+// Border) plus Effects.Blur are now backed by PhosphorConfig::Store and
+// loaded on-demand via the Settings getters. See settingsschema.cpp for
+// the declarative schema.
 
 void Settings::loadZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {
@@ -760,40 +701,9 @@ void Settings::saveDisplayConfig(PhosphorConfig::IBackend* backend)
     }
 }
 
-void Settings::saveAppearanceConfig(PhosphorConfig::IBackend* backend)
-{
-    {
-        auto colors = backend->group(ConfigDefaults::snappingAppearanceColorsGroup());
-        colors->writeBool(ConfigDefaults::useSystemKey(), m_useSystemColors);
-        colors->writeColor(ConfigDefaults::highlightKey(), m_highlightColor);
-        colors->writeColor(ConfigDefaults::inactiveKey(), m_inactiveColor);
-        colors->writeColor(ConfigDefaults::borderKey(), m_borderColor);
-    }
-    {
-        auto labels = backend->group(ConfigDefaults::snappingAppearanceLabelsGroup());
-        labels->writeColor(ConfigDefaults::fontColorKey(), m_labelFontColor);
-        labels->writeString(ConfigDefaults::fontFamilyKey(), m_labelFontFamily);
-        labels->writeDouble(ConfigDefaults::fontSizeScaleKey(), m_labelFontSizeScale);
-        labels->writeInt(ConfigDefaults::fontWeightKey(), m_labelFontWeight);
-        labels->writeBool(ConfigDefaults::fontItalicKey(), m_labelFontItalic);
-        labels->writeBool(ConfigDefaults::fontUnderlineKey(), m_labelFontUnderline);
-        labels->writeBool(ConfigDefaults::fontStrikeoutKey(), m_labelFontStrikeout);
-    }
-    {
-        auto opacity = backend->group(ConfigDefaults::snappingAppearanceOpacityGroup());
-        opacity->writeDouble(ConfigDefaults::activeKey(), m_activeOpacity);
-        opacity->writeDouble(ConfigDefaults::inactiveKey(), m_inactiveOpacity);
-    }
-    {
-        auto border = backend->group(ConfigDefaults::snappingAppearanceBorderGroup());
-        border->writeInt(ConfigDefaults::widthKey(), m_borderWidth);
-        border->writeInt(ConfigDefaults::radiusKey(), m_borderRadius);
-    }
-    {
-        auto effects = backend->group(ConfigDefaults::snappingEffectsGroup());
-        effects->writeBool(ConfigDefaults::blurKey(), m_enableBlur);
-    }
-}
+// saveAppearanceConfig removed: Appearance setters persist writes through
+// PhosphorConfig::Store immediately; the top-level Settings::save() still
+// calls m_configBackend->sync() to flush alongside other groups.
 
 void Settings::saveZoneGeometryConfig(PhosphorConfig::IBackend* backend)
 {

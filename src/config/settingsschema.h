@@ -29,5 +29,6 @@ PLASMAZONES_EXPORT PhosphorConfig::Schema buildSettingsSchema();
 // a monolithic switch statement.
 
 void appendShadersSchema(PhosphorConfig::Schema& schema);
+void appendAppearanceSchema(PhosphorConfig::Schema& schema);
 
 } // namespace PlasmaZones

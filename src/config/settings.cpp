@@ -7,6 +7,8 @@
 #include "configbackends.h"
 #include "perscreenresolver.h"
 #include "settingsschema.h"
+
+#include <PhosphorConfig/JsonBackend.h>
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
@@ -168,7 +170,7 @@ void Settings::load()
 
     loadActivationConfig(m_configBackend);
     loadDisplayConfig(m_configBackend);
-    loadAppearanceConfig(m_configBackend);
+    // Appearance: backed by m_store — nothing to load here.
     loadZoneGeometryConfig(m_configBackend);
     loadBehaviorConfig(m_configBackend);
     loadZoneSelectorConfig(m_configBackend);
@@ -215,7 +217,7 @@ void Settings::load()
         }
     }
 
-    if (m_useSystemColors) {
+    if (useSystemColors()) {
         applySystemColorScheme();
     }
     if (m_autotileUseSystemBorderColors) {
@@ -275,28 +277,77 @@ void Settings::deletePerScreenGroups(PhosphorConfig::IBackend* backend)
 
 void Settings::purgeStaleKeys()
 {
-    // Root-level groups that must survive a save() cycle.
-    // Everything else at the JSON root is considered stale and is deleted.
-    // Assignment:* and QuickLayouts now live in assignments.json, so they
-    // no longer need to be preserved here.
+    // Root-level groups that must survive a save() cycle — written
+    // independently of Settings::save(). Assignment:* and QuickLayouts
+    // live in assignments.json and aren't seen here.
     const QStringList preservedGroups = {
-        ConfigDefaults::tilingQuickLayoutSlotsGroup(), // written independently
-        ConfigDefaults::updatesGroup(), // written independently
+        ConfigDefaults::tilingQuickLayoutSlotsGroup(),
+        ConfigDefaults::updatesGroup(),
     };
 
-    // Collect unique top-level group names from the backend, then delete any
-    // that are not in the preserved set and are not per-screen groups.
-    // Per-screen groups are handled by saveAllPerScreenOverrides().
-    // Managed groups (Snapping, Tiling, …) are intentionally NOT preserved here
-    // — save() rewrites them from scratch with only currently-valid keys.
+    // Compute the set of paths the Store claims. These must not be
+    // blanket-deleted because Store::write has already persisted authoritative
+    // values and no subsequent save*Config call will rewrite them. Their
+    // ancestor paths ("Snapping" for "Snapping.Appearance.Colors") must also
+    // survive as intermediate JSON nodes.
+    const auto& schema = m_store->schema();
+    QSet<QString> storeGroups;
+    QSet<QString> storeAncestors;
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        const QString& groupName = it.key();
+        storeGroups.insert(groupName);
+        const QStringList segments = groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts);
+        QString ancestor;
+        for (int i = 0; i + 1 < segments.size(); ++i) {
+            ancestor = ancestor.isEmpty() ? segments[i] : (ancestor + QLatin1Char('.') + segments[i]);
+            storeAncestors.insert(ancestor);
+        }
+    }
+
+    auto isStoreClaimed = [&](const QString& group) {
+        return storeGroups.contains(group) || storeAncestors.contains(group);
+    };
+
+    // Pass 1: Store-declared groups get per-key purging — keep declared keys,
+    // delete everything else. This preserves the authoritative values while
+    // still evicting anything left over from a renamed or removed key.
+    for (auto it = schema.groups.constBegin(); it != schema.groups.constEnd(); ++it) {
+        const QString& groupName = it.key();
+        QSet<QString> declared;
+        for (const auto& def : it.value()) {
+            declared.insert(def.key);
+        }
+        auto g = m_configBackend->group(groupName);
+        // hasKey() doesn't expose an iterator, so probe the keys we found
+        // when the group is enumerated as a JSON leaf (flat children).
+        const QJsonObject snapshot = dynamic_cast<PhosphorConfig::JsonBackend*>(m_configBackend)->jsonRootSnapshot();
+        QJsonObject cursor = snapshot;
+        for (const QString& seg : groupName.split(QLatin1Char('.'), Qt::SkipEmptyParts)) {
+            cursor = cursor.value(seg).toObject();
+        }
+        for (auto keyIt = cursor.constBegin(); keyIt != cursor.constEnd(); ++keyIt) {
+            if (keyIt.value().isObject()) {
+                continue; // sub-group, not a leaf key
+            }
+            if (!declared.contains(keyIt.key())) {
+                g->deleteKey(keyIt.key());
+            }
+        }
+    }
+
+    // Pass 2: anything else in the backend that isn't preserved, isn't
+    // claimed by the Store, and isn't a per-screen / virtual-screen group
+    // gets blanket-deleted. save*Config runs next and rewrites unmigrated
+    // managed groups from their cached members.
     QSet<QString> deleted;
     for (const QString& groupName : m_configBackend->groupList()) {
         if (PerScreenPathResolver::isPerScreenPrefix(groupName)) {
             continue;
         }
-        // VirtualScreen: groups are saved separately by saveVirtualScreenConfigs()
-        // and must not be deleted here as a stale root-level group.
         if (groupName.startsWith(ConfigDefaults::virtualScreenGroupPrefix())) {
+            continue;
+        }
+        if (isStoreClaimed(groupName)) {
             continue;
         }
         const int dotIdx = groupName.indexOf(QLatin1Char('.'));
@@ -304,8 +355,14 @@ void Settings::purgeStaleKeys()
         if (deleted.contains(topLevel) || preservedGroups.contains(topLevel)) {
             continue;
         }
-        m_configBackend->deleteGroup(topLevel);
-        deleted.insert(topLevel);
+        // When the top-level itself is a Store ancestor, we can't delete
+        // the whole thing — descend and delete only the non-claimed child.
+        if (isStoreClaimed(topLevel)) {
+            m_configBackend->deleteGroup(groupName);
+        } else {
+            m_configBackend->deleteGroup(topLevel);
+            deleted.insert(topLevel);
+        }
     }
 }
 
@@ -315,7 +372,7 @@ void Settings::save()
 
     saveActivationConfig(m_configBackend);
     saveDisplayConfig(m_configBackend);
-    saveAppearanceConfig(m_configBackend);
+    // Appearance: backed by m_store — writes persisted via setters.
     saveZoneGeometryConfig(m_configBackend);
     saveBehaviorConfig(m_configBackend);
     saveZoneSelectorConfig(m_configBackend);
@@ -407,6 +464,137 @@ void Settings::setAudioSpectrumBarCount(int count)
     Q_EMIT audioSpectrumBarCountChanged();
     Q_EMIT settingsChanged();
 }
+
+// ── Appearance (PhosphorConfig::Store-backed) ───────────────────────────────
+// Each getter/setter pair is mechanical: read through m_store, write through
+// m_store, then check a "did it change" before emitting NOTIFY. Setters with
+// validators (opacity, border width/radius, font weight/scale) rely on the
+// schema to coerce — the read-back after write() returns the canonical value.
+
+#define PZ_STORE_GET(retType, fn, group, key, readType)                                                                \
+    retType Settings::fn() const                                                                                       \
+    {                                                                                                                  \
+        return m_store->read<readType>(ConfigDefaults::group(), ConfigDefaults::key());                                \
+    }
+
+#define PZ_STORE_SET_BOOL(fn, group, key, signal)                                                                      \
+    void Settings::fn(bool value)                                                                                      \
+    {                                                                                                                  \
+        if (m_store->read<bool>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                            \
+            return;                                                                                                    \
+        }                                                                                                              \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+#define PZ_STORE_SET_INT(fn, group, key, signal)                                                                       \
+    void Settings::fn(int value)                                                                                       \
+    {                                                                                                                  \
+        const int before = m_store->read<int>(ConfigDefaults::group(), ConfigDefaults::key());                         \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const int after = m_store->read<int>(ConfigDefaults::group(), ConfigDefaults::key());                          \
+        if (after == before) {                                                                                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+#define PZ_STORE_SET_DOUBLE(fn, group, key, signal)                                                                    \
+    void Settings::fn(qreal value)                                                                                     \
+    {                                                                                                                  \
+        const qreal before = m_store->read<double>(ConfigDefaults::group(), ConfigDefaults::key());                    \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        const qreal after = m_store->read<double>(ConfigDefaults::group(), ConfigDefaults::key());                     \
+        if (qFuzzyCompare(1.0 + before, 1.0 + after)) {                                                                \
+            return;                                                                                                    \
+        }                                                                                                              \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+#define PZ_STORE_SET_COLOR(fn, group, key, signal)                                                                     \
+    void Settings::fn(const QColor& value)                                                                             \
+    {                                                                                                                  \
+        if (m_store->read<QColor>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                          \
+            return;                                                                                                    \
+        }                                                                                                              \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+#define PZ_STORE_SET_STRING(fn, group, key, signal)                                                                    \
+    void Settings::fn(const QString& value)                                                                            \
+    {                                                                                                                  \
+        if (m_store->read<QString>(ConfigDefaults::group(), ConfigDefaults::key()) == value) {                         \
+            return;                                                                                                    \
+        }                                                                                                              \
+        m_store->write(ConfigDefaults::group(), ConfigDefaults::key(), value);                                         \
+        Q_EMIT signal();                                                                                               \
+        Q_EMIT settingsChanged();                                                                                      \
+    }
+
+// Colors group
+PZ_STORE_GET(bool, useSystemColors, snappingAppearanceColorsGroup, useSystemKey, bool)
+void Settings::setUseSystemColors(bool use)
+{
+    if (useSystemColors() == use) {
+        return;
+    }
+    m_store->write(ConfigDefaults::snappingAppearanceColorsGroup(), ConfigDefaults::useSystemKey(), use);
+    if (use) {
+        applySystemColorScheme();
+    }
+    Q_EMIT useSystemColorsChanged();
+    Q_EMIT settingsChanged();
+}
+PZ_STORE_GET(QColor, highlightColor, snappingAppearanceColorsGroup, highlightKey, QColor)
+PZ_STORE_SET_COLOR(setHighlightColor, snappingAppearanceColorsGroup, highlightKey, highlightColorChanged)
+PZ_STORE_GET(QColor, inactiveColor, snappingAppearanceColorsGroup, inactiveKey, QColor)
+PZ_STORE_SET_COLOR(setInactiveColor, snappingAppearanceColorsGroup, inactiveKey, inactiveColorChanged)
+PZ_STORE_GET(QColor, borderColor, snappingAppearanceColorsGroup, borderKey, QColor)
+PZ_STORE_SET_COLOR(setBorderColor, snappingAppearanceColorsGroup, borderKey, borderColorChanged)
+
+// Labels group
+PZ_STORE_GET(QColor, labelFontColor, snappingAppearanceLabelsGroup, fontColorKey, QColor)
+PZ_STORE_SET_COLOR(setLabelFontColor, snappingAppearanceLabelsGroup, fontColorKey, labelFontColorChanged)
+PZ_STORE_GET(QString, labelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, QString)
+PZ_STORE_SET_STRING(setLabelFontFamily, snappingAppearanceLabelsGroup, fontFamilyKey, labelFontFamilyChanged)
+PZ_STORE_GET(qreal, labelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, double)
+PZ_STORE_SET_DOUBLE(setLabelFontSizeScale, snappingAppearanceLabelsGroup, fontSizeScaleKey, labelFontSizeScaleChanged)
+PZ_STORE_GET(int, labelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, int)
+PZ_STORE_SET_INT(setLabelFontWeight, snappingAppearanceLabelsGroup, fontWeightKey, labelFontWeightChanged)
+PZ_STORE_GET(bool, labelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontItalic, snappingAppearanceLabelsGroup, fontItalicKey, labelFontItalicChanged)
+PZ_STORE_GET(bool, labelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontUnderline, snappingAppearanceLabelsGroup, fontUnderlineKey, labelFontUnderlineChanged)
+PZ_STORE_GET(bool, labelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, bool)
+PZ_STORE_SET_BOOL(setLabelFontStrikeout, snappingAppearanceLabelsGroup, fontStrikeoutKey, labelFontStrikeoutChanged)
+
+// Opacity group
+PZ_STORE_GET(qreal, activeOpacity, snappingAppearanceOpacityGroup, activeKey, double)
+PZ_STORE_SET_DOUBLE(setActiveOpacity, snappingAppearanceOpacityGroup, activeKey, activeOpacityChanged)
+PZ_STORE_GET(qreal, inactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, double)
+PZ_STORE_SET_DOUBLE(setInactiveOpacity, snappingAppearanceOpacityGroup, inactiveKey, inactiveOpacityChanged)
+
+// Border group
+PZ_STORE_GET(int, borderWidth, snappingAppearanceBorderGroup, widthKey, int)
+PZ_STORE_SET_INT(setBorderWidth, snappingAppearanceBorderGroup, widthKey, borderWidthChanged)
+PZ_STORE_GET(int, borderRadius, snappingAppearanceBorderGroup, radiusKey, int)
+PZ_STORE_SET_INT(setBorderRadius, snappingAppearanceBorderGroup, radiusKey, borderRadiusChanged)
+
+// Effects group (blur lives here for historical reasons)
+PZ_STORE_GET(bool, enableBlur, snappingEffectsGroup, blurKey, bool)
+PZ_STORE_SET_BOOL(setEnableBlur, snappingEffectsGroup, blurKey, enableBlurChanged)
+
+#undef PZ_STORE_GET
+#undef PZ_STORE_SET_BOOL
+#undef PZ_STORE_SET_INT
+#undef PZ_STORE_SET_DOUBLE
+#undef PZ_STORE_SET_COLOR
+#undef PZ_STORE_SET_STRING
 
 // ── reset / color helpers ────────────────────────────────────────────────────
 
@@ -556,9 +744,8 @@ QString Settings::loadColorsFromFile(const QString& filePath)
     setInactiveColor(result.inactiveColor);
     setBorderColor(result.borderColor);
     setLabelFontColor(result.labelFontColor);
-    if (m_useSystemColors) {
-        m_useSystemColors = false;
-        Q_EMIT useSystemColorsChanged();
+    if (useSystemColors()) {
+        setUseSystemColors(false);
     }
     return QString(); // Success - no error
 }
@@ -571,42 +758,32 @@ void Settings::applySystemColorScheme()
 
     QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
     highlight.setAlpha(Defaults::HighlightAlpha);
-    if (m_highlightColor != highlight) {
-        m_highlightColor = highlight;
-        Q_EMIT highlightColorChanged();
-    }
+    setHighlightColor(highlight);
 
     QColor inactive = pal.color(QPalette::Active, QPalette::Text);
     inactive.setAlpha(Defaults::InactiveAlpha);
-    if (m_inactiveColor != inactive) {
-        m_inactiveColor = inactive;
-        Q_EMIT inactiveColorChanged();
-    }
+    setInactiveColor(inactive);
 
     QColor border = pal.color(QPalette::Active, QPalette::Text);
     border.setAlpha(Defaults::BorderAlpha);
-    if (m_borderColor != border) {
-        m_borderColor = border;
-        Q_EMIT borderColorChanged();
-    }
+    setBorderColor(border);
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);
-    if (m_labelFontColor != fontColor) {
-        m_labelFontColor = fontColor;
-        Q_EMIT labelFontColorChanged();
-    }
+    setLabelFontColor(fontColor);
 }
 
 void Settings::applyAutotileBorderSystemColor()
 {
     // Use the exact snapping zone highlight/inactive colors including their alpha.
-    if (m_autotileBorderColor != m_highlightColor) {
-        m_autotileBorderColor = m_highlightColor;
+    const QColor hl = highlightColor();
+    if (m_autotileBorderColor != hl) {
+        m_autotileBorderColor = hl;
         Q_EMIT autotileBorderColorChanged();
     }
 
-    if (m_autotileInactiveBorderColor != m_inactiveColor) {
-        m_autotileInactiveBorderColor = m_inactiveColor;
+    const QColor ia = inactiveColor();
+    if (m_autotileInactiveBorderColor != ia) {
+        m_autotileInactiveBorderColor = ia;
         Q_EMIT autotileInactiveBorderColorChanged();
     }
 }

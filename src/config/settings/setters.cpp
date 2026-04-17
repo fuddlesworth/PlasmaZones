@@ -261,46 +261,10 @@ void Settings::setOverlayDisplayMode(OverlayDisplayMode mode)
 SETTINGS_SETTER_ENUM_INT(OverlayDisplayMode, OverlayDisplayMode, 0, static_cast<int>(OverlayDisplayMode::LayoutPreview))
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Appearance setters
+// Appearance setters — PhosphorConfig::Store-backed, live in settings.cpp.
+// See settingsschema.cpp for the schema and settings.cpp for the setter
+// implementations.
 // ═══════════════════════════════════════════════════════════════════════════════
-
-void Settings::setUseSystemColors(bool use)
-{
-    if (m_useSystemColors != use) {
-        m_useSystemColors = use;
-        if (use) {
-            applySystemColorScheme();
-        }
-        Q_EMIT useSystemColorsChanged();
-        Q_EMIT settingsChanged();
-    }
-}
-
-SETTINGS_SETTER(const QColor&, HighlightColor, m_highlightColor, highlightColorChanged)
-SETTINGS_SETTER(const QColor&, InactiveColor, m_inactiveColor, inactiveColorChanged)
-SETTINGS_SETTER(const QColor&, BorderColor, m_borderColor, borderColorChanged)
-SETTINGS_SETTER(const QColor&, LabelFontColor, m_labelFontColor, labelFontColorChanged)
-
-SETTINGS_SETTER_CLAMPED_QREAL(ActiveOpacity, m_activeOpacity, activeOpacityChanged, ConfigDefaults::activeOpacityMin(),
-                              ConfigDefaults::activeOpacityMax())
-SETTINGS_SETTER_CLAMPED_QREAL(InactiveOpacity, m_inactiveOpacity, inactiveOpacityChanged,
-                              ConfigDefaults::inactiveOpacityMin(), ConfigDefaults::inactiveOpacityMax())
-
-SETTINGS_SETTER_CLAMPED(BorderWidth, m_borderWidth, borderWidthChanged, ConfigDefaults::borderWidthMin(),
-                        ConfigDefaults::borderWidthMax())
-SETTINGS_SETTER_CLAMPED(BorderRadius, m_borderRadius, borderRadiusChanged, ConfigDefaults::borderRadiusMin(),
-                        ConfigDefaults::borderRadiusMax())
-
-SETTINGS_SETTER(bool, EnableBlur, m_enableBlur, enableBlurChanged)
-SETTINGS_SETTER(const QString&, LabelFontFamily, m_labelFontFamily, labelFontFamilyChanged)
-SETTINGS_SETTER_CLAMPED(LabelFontWeight, m_labelFontWeight, labelFontWeightChanged,
-                        ConfigDefaults::labelFontWeightMin(), ConfigDefaults::labelFontWeightMax())
-SETTINGS_SETTER(bool, LabelFontItalic, m_labelFontItalic, labelFontItalicChanged)
-SETTINGS_SETTER(bool, LabelFontUnderline, m_labelFontUnderline, labelFontUnderlineChanged)
-SETTINGS_SETTER(bool, LabelFontStrikeout, m_labelFontStrikeout, labelFontStrikeoutChanged)
-
-SETTINGS_SETTER_CLAMPED_QREAL(LabelFontSizeScale, m_labelFontSizeScale, labelFontSizeScaleChanged,
-                              ConfigDefaults::labelFontSizeScaleMin(), ConfigDefaults::labelFontSizeScaleMax())
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone geometry setters
