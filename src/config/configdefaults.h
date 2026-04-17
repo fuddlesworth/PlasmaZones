@@ -162,23 +162,23 @@ public:
     }
     static QColor highlightColor()
     {
-        return Defaults::HighlightColor;
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
     static QColor inactiveColor()
     {
-        return Defaults::InactiveColor;
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
     static QColor borderColor()
     {
-        return Defaults::BorderColor;
+        return ::PhosphorZones::ZoneDefaults::BorderColor;
     }
     static QColor labelFontColor()
     {
-        return Defaults::LabelFontColor;
+        return ::PhosphorZones::ZoneDefaults::LabelFontColor;
     }
     static double activeOpacity()
     {
-        return Defaults::Opacity;
+        return ::PhosphorZones::ZoneDefaults::Opacity;
     }
     static constexpr qreal activeOpacityMin()
     {
@@ -190,7 +190,7 @@ public:
     }
     static double inactiveOpacity()
     {
-        return Defaults::InactiveOpacity;
+        return ::PhosphorZones::ZoneDefaults::InactiveOpacity;
     }
     static constexpr qreal inactiveOpacityMin()
     {
@@ -202,7 +202,7 @@ public:
     }
     static int borderWidth()
     {
-        return Defaults::BorderWidth;
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
     }
     static constexpr int borderWidthMin()
     {
@@ -214,7 +214,7 @@ public:
     }
     static int borderRadius()
     {
-        return Defaults::BorderRadius;
+        return ::PhosphorZones::ZoneDefaults::BorderRadius;
     }
     static constexpr int borderRadiusMin()
     {
@@ -351,7 +351,7 @@ public:
     }
     static int adjacentThreshold()
     {
-        return Defaults::AdjacentThreshold;
+        return ::PhosphorZones::ZoneDefaults::AdjacentThreshold;
     }
     static constexpr int adjacentThresholdMin()
     {
@@ -925,7 +925,7 @@ public:
     }
     static int autotileBorderWidth()
     {
-        return Defaults::BorderWidth;
+        return ::PhosphorZones::ZoneDefaults::BorderWidth;
     }
     static constexpr int autotileBorderWidthMin()
     {
@@ -949,11 +949,11 @@ public:
     }
     static QColor autotileBorderColor()
     {
-        return Defaults::HighlightColor;
+        return ::PhosphorZones::ZoneDefaults::HighlightColor;
     }
     static QColor autotileInactiveBorderColor()
     {
-        return Defaults::InactiveColor;
+        return ::PhosphorZones::ZoneDefaults::InactiveColor;
     }
     static bool autotileUseSystemBorderColors()
     {

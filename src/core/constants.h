@@ -53,29 +53,9 @@ namespace Defaults {
 inline constexpr int FallbackScreenWidth = 1920;
 inline constexpr int FallbackScreenHeight = 1080;
 
-// Zone-presentation defaults (alpha + colors + appearance) live in
-// libs/phosphor-zones — `PhosphorZones::ZoneDefaults`.  Re-exported here so
-// existing PlasmaZones::Defaults::HighlightColor / Opacity / BorderWidth
-// callers compile unchanged.  The application config layer's user-facing
-// accessors (ConfigDefaults::*) continue to delegate downward.
-using ::PhosphorZones::ZoneDefaults::AdjacentThreshold;
-using ::PhosphorZones::ZoneDefaults::BorderAlpha;
-using ::PhosphorZones::ZoneDefaults::BorderColor;
-using ::PhosphorZones::ZoneDefaults::BorderRadius;
-using ::PhosphorZones::ZoneDefaults::BorderWidth;
-using ::PhosphorZones::ZoneDefaults::HighlightAlpha;
-using ::PhosphorZones::ZoneDefaults::HighlightColor;
-using ::PhosphorZones::ZoneDefaults::InactiveAlpha;
-using ::PhosphorZones::ZoneDefaults::InactiveColor;
-using ::PhosphorZones::ZoneDefaults::InactiveOpacity;
-using ::PhosphorZones::ZoneDefaults::LabelFontColor;
-using ::PhosphorZones::ZoneDefaults::Opacity;
-using ::PhosphorZones::ZoneDefaults::OpaqueAlpha;
-// Layout-factory split ratios — also library-owned (PhosphorZones).
-using ::PhosphorZones::ZoneDefaults::FocusMainRatio;
-using ::PhosphorZones::ZoneDefaults::FocusSideRatio;
-using ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio;
-using ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio;
+// Zone-presentation defaults + layout-factory ratios live in
+// `PhosphorZones::ZoneDefaults` (libs/phosphor-zones).  All in-tree
+// callers reference them qualified directly — no using-alias here.
 
 // PlasmaZones-side defaults that aren't part of the zone-presentation
 // surface — daemon overlay / settings / geometry constants.

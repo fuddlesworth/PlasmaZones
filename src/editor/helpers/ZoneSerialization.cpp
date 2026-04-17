@@ -38,15 +38,18 @@ QString serializeZonesToClipboard(const QVariantList& zones)
         zoneObj[QLatin1String("highlightColor")] = zone[JsonKeys::HighlightColor].toString();
         zoneObj[QLatin1String("inactiveColor")] = zone[JsonKeys::InactiveColor].toString();
         zoneObj[QLatin1String("borderColor")] = zone[JsonKeys::BorderColor].toString();
-        zoneObj[QLatin1String("activeOpacity")] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
+        zoneObj[QLatin1String("activeOpacity")] = zone.contains(JsonKeys::ActiveOpacity)
+            ? zone[JsonKeys::ActiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
         zoneObj[QLatin1String("inactiveOpacity")] = zone.contains(JsonKeys::InactiveOpacity)
             ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        zoneObj[QLatin1String("borderWidth")] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        zoneObj[QLatin1String("borderRadius")] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+        zoneObj[QLatin1String("borderWidth")] = zone.contains(JsonKeys::BorderWidth)
+            ? zone[JsonKeys::BorderWidth].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
+        zoneObj[QLatin1String("borderRadius")] = zone.contains(JsonKeys::BorderRadius)
+            ? zone[JsonKeys::BorderRadius].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
 
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
         zoneObj[QLatin1String("useCustomColors")] =
@@ -95,10 +98,14 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
         zone[JsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();
         zone[JsonKeys::InactiveColor] = zoneObj[QLatin1String("inactiveColor")].toString();
         zone[JsonKeys::BorderColor] = zoneObj[QLatin1String("borderColor")].toString();
-        zone[JsonKeys::ActiveOpacity] = zoneObj[QLatin1String("activeOpacity")].toDouble(Defaults::Opacity);
-        zone[JsonKeys::InactiveOpacity] = zoneObj[QLatin1String("inactiveOpacity")].toDouble(Defaults::InactiveOpacity);
-        zone[JsonKeys::BorderWidth] = zoneObj[QLatin1String("borderWidth")].toInt(Defaults::BorderWidth);
-        zone[JsonKeys::BorderRadius] = zoneObj[QLatin1String("borderRadius")].toInt(Defaults::BorderRadius);
+        zone[JsonKeys::ActiveOpacity] =
+            zoneObj[QLatin1String("activeOpacity")].toDouble(::PhosphorZones::ZoneDefaults::Opacity);
+        zone[JsonKeys::InactiveOpacity] =
+            zoneObj[QLatin1String("inactiveOpacity")].toDouble(::PhosphorZones::ZoneDefaults::InactiveOpacity);
+        zone[JsonKeys::BorderWidth] =
+            zoneObj[QLatin1String("borderWidth")].toInt(::PhosphorZones::ZoneDefaults::BorderWidth);
+        zone[JsonKeys::BorderRadius] =
+            zoneObj[QLatin1String("borderRadius")].toInt(::PhosphorZones::ZoneDefaults::BorderRadius);
 
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
         zone[useCustomColorsKey] = zoneObj[QLatin1String("useCustomColors")].toBool(false);

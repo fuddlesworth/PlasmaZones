@@ -246,10 +246,10 @@ QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qr
         ? QString::fromLatin1(EditorConstants::DefaultBorderColor)
         : m_defaultBorderColor;
     // Initialize appearance properties with defaults
-    zone[JsonKeys::ActiveOpacity] = Defaults::Opacity;
-    zone[JsonKeys::InactiveOpacity] = Defaults::InactiveOpacity;
-    zone[JsonKeys::BorderWidth] = Defaults::BorderWidth;
-    zone[JsonKeys::BorderRadius] = Defaults::BorderRadius;
+    zone[JsonKeys::ActiveOpacity] = ::PhosphorZones::ZoneDefaults::Opacity;
+    zone[JsonKeys::InactiveOpacity] = ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+    zone[JsonKeys::BorderWidth] = ::PhosphorZones::ZoneDefaults::BorderWidth;
+    zone[JsonKeys::BorderRadius] = ::PhosphorZones::ZoneDefaults::BorderRadius;
     zone[JsonKeys::UseCustomColors] = false; // New zones use theme colors by default
     zone[JsonKeys::GeometryMode] = 0; // Default to Relative geometry mode
     return zone;

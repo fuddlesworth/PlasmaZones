@@ -88,9 +88,9 @@ ColorImportResult ColorImporter::parsePywalJson(const QString& content)
     }
 
     // Apply standard alpha values
-    accent.setAlpha(Defaults::HighlightAlpha);
-    bg.setAlpha(Defaults::InactiveAlpha);
-    fg.setAlpha(Defaults::BorderAlpha);
+    accent.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
+    bg.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
+    fg.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
 
     result.success = true;
     result.highlightColor = accent;
@@ -125,9 +125,9 @@ ColorImportResult ColorImporter::parseColorList(const QString& content)
     }
 
     // Apply standard alpha values
-    accent.setAlpha(Defaults::HighlightAlpha);
-    bg.setAlpha(Defaults::InactiveAlpha);
-    fg.setAlpha(Defaults::BorderAlpha);
+    accent.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
+    bg.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
+    fg.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
 
     result.success = true;
     result.highlightColor = accent;

@@ -452,10 +452,12 @@ static EmptyZoneList buildEmptyZoneListImpl(Layout* layout, const std::optional<
                                               useAvail, screenId);
         QRect overlayGeom = snapToRect(availableAreaToOverlayCoordinates(geom, resolvedOverlayOrigin));
 
-        int bw = zone->useCustomColors() ? zone->borderWidth()
-                                         : (settings ? settings->borderWidth() : Defaults::BorderWidth);
-        int br = zone->useCustomColors() ? zone->borderRadius()
-                                         : (settings ? settings->borderRadius() : Defaults::BorderRadius);
+        int bw = zone->useCustomColors()
+            ? zone->borderWidth()
+            : (settings ? settings->borderWidth() : ::PhosphorZones::ZoneDefaults::BorderWidth);
+        int br = zone->useCustomColors()
+            ? zone->borderRadius()
+            : (settings ? settings->borderRadius() : ::PhosphorZones::ZoneDefaults::BorderRadius);
 
         EmptyZoneEntry entry;
         entry.zoneId = zone->id().toString();

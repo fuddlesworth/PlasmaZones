@@ -2052,15 +2052,15 @@ void Settings::applySystemColorScheme()
     const QPalette pal = QGuiApplication::palette();
 
     QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
-    highlight.setAlpha(Defaults::HighlightAlpha);
+    highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
     setHighlightColor(highlight);
 
     QColor inactive = pal.color(QPalette::Active, QPalette::Text);
-    inactive.setAlpha(Defaults::InactiveAlpha);
+    inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
     setInactiveColor(inactive);
 
     QColor border = pal.color(QPalette::Active, QPalette::Text);
-    border.setAlpha(Defaults::BorderAlpha);
+    border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
     setBorderColor(border);
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);

@@ -51,13 +51,13 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         out[QLatin1String(JsonKeys::Height)] = resH - 8.0;
         out[QLatin1String(JsonKeys::ZoneNumber)] = 1;
         out[QLatin1String(JsonKeys::IsHighlighted)] = false;
-        const QColor fc = Defaults::HighlightColor;
-        const qreal a = Defaults::Opacity;
+        const QColor fc = ::PhosphorZones::ZoneDefaults::HighlightColor;
+        const qreal a = ::PhosphorZones::ZoneDefaults::Opacity;
         out[QLatin1String("fillR")] = fc.redF() * a;
         out[QLatin1String("fillG")] = fc.greenF() * a;
         out[QLatin1String("fillB")] = fc.blueF() * a;
         out[QLatin1String("fillA")] = a;
-        const QColor bc = Defaults::BorderColor;
+        const QColor bc = ::PhosphorZones::ZoneDefaults::BorderColor;
         out[QLatin1String("borderR")] = bc.redF();
         out[QLatin1String("borderG")] = bc.greenF();
         out[QLatin1String("borderB")] = bc.blueF();
@@ -108,9 +108,10 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         const bool useCustom = zone.value(JsonKeys::UseCustomColors).toBool();
         QColor fillColor(zone.value(JsonKeys::HighlightColor).toString());
         if (!useCustom || !fillColor.isValid())
-            fillColor = Defaults::HighlightColor;
-        const qreal alpha =
-            useCustom ? zone.value(JsonKeys::ActiveOpacity, Defaults::Opacity).toReal() : Defaults::Opacity;
+            fillColor = ::PhosphorZones::ZoneDefaults::HighlightColor;
+        const qreal alpha = useCustom
+            ? zone.value(JsonKeys::ActiveOpacity, ::PhosphorZones::ZoneDefaults::Opacity).toReal()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
         out[QLatin1String("fillR")] = fillColor.redF() * alpha;
         out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
         out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
@@ -119,7 +120,7 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         // Border color
         QColor borderColor(zone.value(JsonKeys::BorderColor).toString());
         if (!useCustom || !borderColor.isValid())
-            borderColor = Defaults::BorderColor;
+            borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
         out[QLatin1String("borderR")] = borderColor.redF();
         out[QLatin1String("borderG")] = borderColor.greenF();
         out[QLatin1String("borderB")] = borderColor.blueF();
@@ -127,11 +128,11 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
 
         // Border dimensions
         out[QLatin1String("shaderBorderRadius")] = useCustom
-            ? zone.value(JsonKeys::BorderRadius, Defaults::BorderRadius).toReal()
-            : static_cast<qreal>(Defaults::BorderRadius);
+            ? zone.value(JsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius).toReal()
+            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
         out[QLatin1String("shaderBorderWidth")] = useCustom
-            ? zone.value(JsonKeys::BorderWidth, Defaults::BorderWidth).toReal()
-            : static_cast<qreal>(Defaults::BorderWidth);
+            ? zone.value(JsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth).toReal()
+            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
 
         result.append(out);
     }

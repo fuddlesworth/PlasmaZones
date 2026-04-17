@@ -432,16 +432,16 @@ void EditorController::loadLayout(const QString& layoutId)
         // Load all appearance properties with defaults if missing
         zone[JsonKeys::ActiveOpacity] = appearance.contains(QLatin1String(JsonKeys::ActiveOpacity))
             ? appearance[QLatin1String(JsonKeys::ActiveOpacity)].toDouble()
-            : Defaults::Opacity;
+            : ::PhosphorZones::ZoneDefaults::Opacity;
         zone[JsonKeys::InactiveOpacity] = appearance.contains(QLatin1String(JsonKeys::InactiveOpacity))
             ? appearance[QLatin1String(JsonKeys::InactiveOpacity)].toDouble()
-            : Defaults::InactiveOpacity;
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
         zone[JsonKeys::BorderWidth] = appearance.contains(QLatin1String(JsonKeys::BorderWidth))
             ? appearance[QLatin1String(JsonKeys::BorderWidth)].toInt()
-            : Defaults::BorderWidth;
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
         zone[JsonKeys::BorderRadius] = appearance.contains(QLatin1String(JsonKeys::BorderRadius))
             ? appearance[QLatin1String(JsonKeys::BorderRadius)].toInt()
-            : Defaults::BorderRadius;
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
         // Use consistent key format - normalize to QString for QVariantMap storage
         // QVariantMap uses QString keys, so convert QLatin1String to QString
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
@@ -690,15 +690,18 @@ void EditorController::saveLayout()
         appearance[QLatin1String(JsonKeys::InactiveColor)] = zone[JsonKeys::InactiveColor].toString();
         appearance[QLatin1String(JsonKeys::BorderColor)] = zone[JsonKeys::BorderColor].toString();
         // Include all appearance properties for persistence
-        appearance[QLatin1String(JsonKeys::ActiveOpacity)] =
-            zone.contains(JsonKeys::ActiveOpacity) ? zone[JsonKeys::ActiveOpacity].toDouble() : Defaults::Opacity;
+        appearance[QLatin1String(JsonKeys::ActiveOpacity)] = zone.contains(JsonKeys::ActiveOpacity)
+            ? zone[JsonKeys::ActiveOpacity].toDouble()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
         appearance[QLatin1String(JsonKeys::InactiveOpacity)] = zone.contains(JsonKeys::InactiveOpacity)
             ? zone[JsonKeys::InactiveOpacity].toDouble()
-            : Defaults::InactiveOpacity;
-        appearance[QLatin1String(JsonKeys::BorderWidth)] =
-            zone.contains(JsonKeys::BorderWidth) ? zone[JsonKeys::BorderWidth].toInt() : Defaults::BorderWidth;
-        appearance[QLatin1String(JsonKeys::BorderRadius)] =
-            zone.contains(JsonKeys::BorderRadius) ? zone[JsonKeys::BorderRadius].toInt() : Defaults::BorderRadius;
+            : ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+        appearance[QLatin1String(JsonKeys::BorderWidth)] = zone.contains(JsonKeys::BorderWidth)
+            ? zone[JsonKeys::BorderWidth].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderWidth;
+        appearance[QLatin1String(JsonKeys::BorderRadius)] = zone.contains(JsonKeys::BorderRadius)
+            ? zone[JsonKeys::BorderRadius].toInt()
+            : ::PhosphorZones::ZoneDefaults::BorderRadius;
         // Use consistent key format - normalize to QString for QVariantMap lookup
         // QVariantMap uses QString keys, so convert QLatin1String to QString
         QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
