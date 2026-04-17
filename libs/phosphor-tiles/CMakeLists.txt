@@ -15,10 +15,10 @@
 # extraction). It also does NOT include daemon-side overflow handling, settings
 # bridge, or per-screen config resolution — those are PlasmaZones-internal.
 #
-# CURRENT STATE: still depends on a few PlasmaZones-side utility headers
-# (logging.h, pz_i18n.h) via the PZ source tree's include path. Same temporary
-# situation as phosphor-zones — those need to be carved out (or duplicated
-# locally) before this library can ship truly standalone.
+# Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
+# library-local (`PhosphorTiles::lcTilesLib`).  Strings in
+# scriptedalgorithm.cpp ship as untranslated English placeholders — the
+# application config layer overrides them via algorithm display name.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -111,17 +111,6 @@ target_include_directories(PhosphorTiles
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
-        # PUBLIC (not PRIVATE) because PhosphorTiles' public headers still
-        # reach for "logging.h" (lcAutotile in implementation), "pz_i18n.h"
-        # (PzI18n::tr in ScriptedAlgorithm.cpp), and the auto-generated
-        # plasmazones_export.h carrying PLASMAZONES_EXPORT. Same temporary
-        # situation as phosphor-zones — the carve-out plan is to either
-        # duplicate the small subset locally or extract them into a shared
-        # phosphor-util library. PRIVATE here would compile this library
-        # fine and break every downstream compile.
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src/core>
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
-        $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/src>
 )
 
 target_compile_features(PhosphorTiles PUBLIC cxx_std_20)
@@ -133,11 +122,6 @@ target_link_libraries(PhosphorTiles
         Qt6::Qml
         PhosphorLayoutApi::PhosphorLayoutApi
 )
-
-# Bridge the PLASMAZONES_EXPORT macro for moved files that were previously
-# part of the plasmazones_core static archive — see phosphor-zones for the
-# full rationale.
-target_compile_definitions(PhosphorTiles PRIVATE PLASMAZONES_STATIC_DEFINE)
 
 set_target_properties(PhosphorTiles PROPERTIES
     VERSION ${PHOSPHORTILES_VERSION}

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 #include "AutotileConstants.h"
 // EdgeGaps is the per-side gap shape shared between manual layout and tiling;
 // it lives in libs/phosphor-layout-api so neither side has to depend on the
@@ -107,9 +107,9 @@ struct TilingParams
  * @param[out] focusedIndex Set to the index of the focused window, or -1
  * @return WindowInfo vector (empty if state is null; size may be less than windowCount)
  */
-PLASMAZONES_EXPORT QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
-                                                        const std::function<QString(const QString&)>& appIdResolver,
-                                                        int& focusedIndex);
+PHOSPHORTILES_EXPORT QVector<WindowInfo> buildWindowInfos(const TilingState* state, int windowCount,
+                                                          const std::function<QString(const QString&)>& appIdResolver,
+                                                          int& focusedIndex);
 
 /**
  * @brief Abstract base class for tiling algorithms
@@ -134,7 +134,7 @@ PLASMAZONES_EXPORT QVector<WindowInfo> buildWindowInfos(const TilingState* state
  *       methods can be called concurrently on the same instance. The
  *       TilingState parameter must not be modified during the call.
  */
-class PLASMAZONES_EXPORT TilingAlgorithm : public QObject
+class PHOSPHORTILES_EXPORT TilingAlgorithm : public QObject
 {
     Q_OBJECT
 

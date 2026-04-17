@@ -34,16 +34,10 @@
 
 namespace PlasmaZones {
 
-/**
- * @brief Geometry mode for individual zones
- *
- * Relative: 0.0-1.0 normalized coordinates (default, resolution-independent)
- * Fixed: Absolute pixel coordinates relative to reference screen origin
- */
-enum class ZoneGeometryMode {
-    Relative = 0,
-    Fixed = 1
-};
+// ZoneGeometryMode lives in libs/phosphor-zones — `PhosphorZones::Zone.h`
+// declares it inside `namespace PlasmaZones` so it's visible to existing
+// callers via the same name.  No alias needed here — the header transitively
+// reaches Zone.h via core/zone.h shim.
 
 /**
  * @brief Default values for zone appearance and core module constants
@@ -64,6 +58,7 @@ inline constexpr int FallbackScreenHeight = 1080;
 // existing PlasmaZones::Defaults::HighlightColor / Opacity / BorderWidth
 // callers compile unchanged.  The application config layer's user-facing
 // accessors (ConfigDefaults::*) continue to delegate downward.
+using ::PhosphorZones::ZoneDefaults::AdjacentThreshold;
 using ::PhosphorZones::ZoneDefaults::BorderAlpha;
 using ::PhosphorZones::ZoneDefaults::BorderColor;
 using ::PhosphorZones::ZoneDefaults::BorderRadius;
@@ -87,7 +82,6 @@ using ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio;
 constexpr int ZonePadding = 8;
 constexpr int OuterGap = 8; // Gap at screen edges (separate from zonePadding between zones)
 constexpr int MaxGap = 50; // Maximum for zone padding and outer gap settings
-constexpr int AdjacentThreshold = 20;
 // EdgeThreshold for overlay window detection (pixels, used in WindowTracker/Overlay)
 constexpr qreal EdgeThreshold = 15.0;
 

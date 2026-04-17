@@ -4,7 +4,6 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 #include <PhosphorZones/ZoneDefaults.h>
-#include "constants.h"
 #include <QJsonArray>
 #include <cmath>
 

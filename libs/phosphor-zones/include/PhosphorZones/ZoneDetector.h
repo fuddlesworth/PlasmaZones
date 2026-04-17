@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include <PhosphorZones/Zone.h>
-#include <PhosphorZones/Layout.h>
 #include <PhosphorZones/IZoneDetector.h>
-#include "constants.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneDefaults.h>
 #include <QPointF>
 #include <QRectF>
 #include <QVector>
@@ -34,7 +34,7 @@ namespace PlasmaZones {
  * Note: This class does NOT use the singleton pattern. Create instances
  * where needed and pass via dependency injection.
  */
-class PLASMAZONES_EXPORT ZoneDetector : public IZoneDetector
+class PHOSPHORZONES_EXPORT ZoneDetector : public IZoneDetector
 {
     Q_OBJECT
 
@@ -102,7 +102,7 @@ private:
     Zone* resolveOverlappingZone(const QPointF& point) const;
 
     Layout* m_layout = nullptr;
-    int m_adjacentThreshold = Defaults::AdjacentThreshold;
+    int m_adjacentThreshold = ::PhosphorZones::ZoneDefaults::AdjacentThreshold;
 
     // UI state management
     std::unique_ptr<class ZoneHighlighter> m_highlighter;

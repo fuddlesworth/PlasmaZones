@@ -38,6 +38,9 @@ constexpr qreal InactiveOpacity = 0.3;
 constexpr int BorderWidth = 2;
 constexpr int BorderRadius = 8;
 
+// Zone-detection defaults.
+constexpr int AdjacentThreshold = 20; ///< Pixel distance considered "adjacent" for multi-zone span detection.
+
 // Layout-factory split ratios (used when constructing template layouts —
 // priority-grid main/secondary split, focus-mode side/main columns).
 constexpr qreal PriorityGridMainRatio = 0.667;

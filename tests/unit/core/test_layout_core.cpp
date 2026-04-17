@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
+#include "core/constants.h"
 #include "core/layout.h"
 #include "core/zone.h"
 

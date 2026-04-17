@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 #include "AutotileConstants.h"
 #include <QHash>
 #include <QLatin1String>
@@ -63,7 +63,7 @@ class TilingAlgorithm;
  * @see TilingAlgorithm for the algorithm interface
  * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
  */
-class PLASMAZONES_EXPORT AlgorithmRegistry : public QObject
+class PHOSPHORTILES_EXPORT AlgorithmRegistry : public QObject
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(AlgorithmRegistry)
@@ -308,7 +308,7 @@ private:
 /**
  * @brief Pending algorithm registration data
  */
-struct PLASMAZONES_EXPORT PendingAlgorithmRegistration
+struct PHOSPHORTILES_EXPORT PendingAlgorithmRegistration
 {
     QString id;
     int priority;
@@ -321,7 +321,7 @@ struct PLASMAZONES_EXPORT PendingAlgorithmRegistration
  * This is separate from the template to ensure all registrations go to the
  * same list regardless of template instantiation.
  */
-PLASMAZONES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations();
+PHOSPHORTILES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations();
 
 /**
  * @brief Helper for static self-registration of built-in algorithms

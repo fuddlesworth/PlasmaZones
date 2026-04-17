@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
@@ -24,8 +24,8 @@ namespace PhosphorTiles {
 /// Provided as a free function so consumers that already hold a
 /// TilingAlgorithm* can build a preview without going through
 /// AutotileLayoutSource (mirrors PhosphorZones::previewFromLayout).
-PLASMAZONES_EXPORT PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm* algorithm,
-                                                                      int windowCount = 4);
+PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZones::TilingAlgorithm* algorithm,
+                                                                        int windowCount = 4);
 
 /// ILayoutSource adapter wrapping the AlgorithmRegistry singleton.
 ///
@@ -38,7 +38,7 @@ PLASMAZONES_EXPORT PhosphorLayout::LayoutPreview previewFromAlgorithm(PlasmaZone
 /// Borrows the registry — caller (typically the singleton itself, via
 /// `AlgorithmRegistry::instance()`) owns it and outlives this source.
 /// Source is non-copyable (matches ILayoutSource's contract).
-class PLASMAZONES_EXPORT AutotileLayoutSource : public PhosphorLayout::ILayoutSource
+class PHOSPHORTILES_EXPORT AutotileLayoutSource : public PhosphorLayout::ILayoutSource
 {
 public:
     /// Construct over a borrowed algorithm registry.  Caller owns @p registry

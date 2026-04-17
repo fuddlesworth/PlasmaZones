@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphorzones_export.h>
 #include <QObject>
 #include <QVector>
 
@@ -17,7 +17,7 @@ class Zone;
  * Separates UI state from detection logic. ZoneDetector runs the detection
  * algorithms; this class manages the visual highlighting.
  */
-class PLASMAZONES_EXPORT ZoneHighlighter : public QObject
+class PHOSPHORZONES_EXPORT ZoneHighlighter : public QObject
 {
     Q_OBJECT
 

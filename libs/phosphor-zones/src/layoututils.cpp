@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorZones/LayoutUtils.h>
-#include "constants.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
+#include <PhosphorZones/ZoneJsonKeys.h>
 
 #include <QColor>
 #include <QJsonArray>
@@ -20,7 +20,7 @@ namespace LayoutUtils {
 namespace {
 QVariantMap zoneToVariantMap(Zone* zone, ZoneFields fields, const QRectF& referenceGeometry = QRectF())
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     QVariantMap map;
 
     if (!zone) {
@@ -109,7 +109,7 @@ QVariantList zonesToVariantList(Layout* layout, ZoneFields fields, const QRectF&
 
 QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     QVariantMap map;
 
     if (!layout) {
@@ -143,7 +143,7 @@ QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields)
 void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
                          const QStringList& activities)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     if (!screens.isEmpty()) {
         json[AllowedScreens] = QJsonArray::fromStringList(screens);
@@ -162,7 +162,7 @@ void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QL
 
 void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops, QStringList& activities)
 {
-    using namespace JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     screens.clear();
     desktops.clear();

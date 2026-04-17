@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 
 #include "AutotileConstants.h"
 
@@ -23,7 +23,7 @@ namespace PlasmaZones {
  * Internal nodes have two children and define a split direction + ratio.
  * Leaf nodes represent individual windows and have no children.
  */
-struct PLASMAZONES_EXPORT SplitNode
+struct PHOSPHORTILES_EXPORT SplitNode
 {
     qreal splitRatio = AutotileDefaults::DefaultSplitRatio; ///< How to divide this node's space (first child fraction)
     bool splitHorizontal = false; ///< true = top/bottom, false = left/right
@@ -54,7 +54,7 @@ struct PLASMAZONES_EXPORT SplitNode
  *
  * @warning This class is not thread-safe. All access must be serialized by the caller.
  */
-class PLASMAZONES_EXPORT SplitTree
+class PHOSPHORTILES_EXPORT SplitTree
 {
 public:
     /// Construct an empty tree (no root)

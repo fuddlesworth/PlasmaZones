@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
-#include "constants.h"
+#include <PhosphorZones/ZoneDefaults.h>
+#include <phosphorzones_export.h>
 #include <QObject>
 #include <QRect>
 #include <QUuid>
@@ -13,6 +13,20 @@
 #include <QJsonObject>
 
 namespace PlasmaZones {
+
+/**
+ * @brief Geometry mode for individual zones.
+ *
+ * Relative: 0.0–1.0 normalized coordinates (default, resolution-independent).
+ * Fixed:    Absolute pixel coordinates relative to reference screen origin.
+ *
+ * Owned by phosphor-zones because it's a per-zone shape.  Mirrored into
+ * src/core/constants.h via a using-alias for PlasmaZones-side callers.
+ */
+enum class ZoneGeometryMode {
+    Relative = 0,
+    Fixed = 1
+};
 
 /**
  * @brief Represents a single zone within a layout
@@ -24,7 +38,7 @@ namespace PlasmaZones {
  * Note: Zone inherits from QObject and follows Qt's object model.
  * QObjects should NOT be copied - use clone() to create duplicates.
  */
-class PLASMAZONES_EXPORT Zone : public QObject
+class PHOSPHORZONES_EXPORT Zone : public QObject
 {
     Q_OBJECT
 
@@ -241,14 +255,14 @@ private:
     QRectF m_relativeGeometry;
     int m_zoneNumber = 0;
 
-    // Appearance (ricer-friendly) - using constants for defaults
-    QColor m_highlightColor = Defaults::HighlightColor;
-    QColor m_inactiveColor = Defaults::InactiveColor;
-    QColor m_borderColor = Defaults::BorderColor;
-    qreal m_activeOpacity = Defaults::Opacity;
-    qreal m_inactiveOpacity = Defaults::InactiveOpacity;
-    int m_borderWidth = Defaults::BorderWidth;
-    int m_borderRadius = Defaults::BorderRadius;
+    // Appearance (ricer-friendly) — defaults sourced from PhosphorZones::ZoneDefaults.
+    QColor m_highlightColor = ::PhosphorZones::ZoneDefaults::HighlightColor;
+    QColor m_inactiveColor = ::PhosphorZones::ZoneDefaults::InactiveColor;
+    QColor m_borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
+    qreal m_activeOpacity = ::PhosphorZones::ZoneDefaults::Opacity;
+    qreal m_inactiveOpacity = ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+    int m_borderWidth = ::PhosphorZones::ZoneDefaults::BorderWidth;
+    int m_borderRadius = ::PhosphorZones::ZoneDefaults::BorderRadius;
     bool m_isHighlighted = false;
     bool m_useCustomColors = false;
     int m_overlayDisplayMode = -1; // -1 = use layout/global setting

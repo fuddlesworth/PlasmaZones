@@ -6,7 +6,6 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ZoneDefaults.h>
-#include "constants.h"
 #include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {

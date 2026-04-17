@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
@@ -24,7 +24,7 @@ namespace PlasmaZones {
  * User scripts in ~/.local/share/plasmazones/algorithms/ override system
  * scripts with the same filename.
  */
-class PLASMAZONES_EXPORT ScriptedAlgorithmLoader : public QObject
+class PHOSPHORTILES_EXPORT ScriptedAlgorithmLoader : public QObject
 {
     Q_OBJECT
 

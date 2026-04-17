@@ -6,7 +6,6 @@
 
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
-#include "constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include "../zoneslogging.h"
 #include <PhosphorZones/Zone.h>
@@ -156,7 +155,7 @@ QJsonObject Layout::toJson() const
     }
 
     // Aspect ratio classification - only serialize non-default values
-    if (m_aspectRatioClass != AspectRatioClass::Any) {
+    if (m_aspectRatioClass != ::PhosphorLayout::AspectRatioClass::Any) {
         json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey] =
             ::PhosphorLayout::ScreenClassification::toString(m_aspectRatioClass);
     }

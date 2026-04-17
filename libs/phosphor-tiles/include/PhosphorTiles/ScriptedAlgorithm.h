@@ -76,7 +76,7 @@ T jsValueTo(const QJSValue& v)
  * @note Registration is handled externally by ScriptedAlgorithmLoader,
  *       not by self-registration macros.
  */
-class PLASMAZONES_EXPORT ScriptedAlgorithm : public TilingAlgorithm
+class PHOSPHORTILES_EXPORT ScriptedAlgorithm : public TilingAlgorithm
 {
     Q_OBJECT
 

@@ -4,7 +4,7 @@
 #pragma once
 
 #include "AutotileConstants.h"
-#include "plasmazones_export.h"
+#include <phosphortiles_export.h>
 #include <QObject>
 #include <QJsonObject>
 #include <QRect>
@@ -35,7 +35,7 @@ struct SplitNode;
  *
  * Note: Window IDs are KWin's internal resource names (QString).
  */
-class PLASMAZONES_EXPORT TilingState : public QObject
+class PHOSPHORTILES_EXPORT TilingState : public QObject
 {
     Q_OBJECT
 

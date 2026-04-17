@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <phosphorzones_export.h>
 #include <QFlags>
 #include <QJsonObject>
 #include <QList>
@@ -55,14 +55,14 @@ namespace LayoutUtils {
 /**
  * @brief Serialize visibility allow-lists to JSON (only writes non-empty lists)
  */
-PLASMAZONES_EXPORT void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
-                                            const QStringList& activities);
+PHOSPHORZONES_EXPORT void serializeAllowLists(QJsonObject& json, const QStringList& screens, const QList<int>& desktops,
+                                              const QStringList& activities);
 
 /**
  * @brief Deserialize visibility allow-lists from JSON (clears output params first)
  */
-PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops,
-                                              QStringList& activities);
+PHOSPHORZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringList& screens, QList<int>& desktops,
+                                                QStringList& activities);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Zone conversion utilities
@@ -76,8 +76,8 @@ PLASMAZONES_EXPORT void deserializeAllowLists(const QJsonObject& json, QStringLi
  * @param referenceGeometry Screen geometry for normalizing fixed zones (empty = use raw relativeGeometry)
  * @return QVariantList of zone maps
  */
-PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal,
-                                                   const QRectF& referenceGeometry = QRectF());
+PHOSPHORZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fields = ZoneField::Minimal,
+                                                     const QRectF& referenceGeometry = QRectF());
 
 /**
  * @brief Convert a layout to a QVariantMap (metadata + zones)
@@ -85,7 +85,7 @@ PLASMAZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields fi
  * Used by LayoutAdaptor for D-Bus and other consumers that want the
  * whole layout as a single map without building a UnifiedLayoutEntry.
  */
-PLASMAZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
+PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
 
 } // namespace LayoutUtils
 

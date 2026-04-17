@@ -11,7 +11,7 @@
 // Prerequisite for eventually moving Layout + ILayoutManager into a
 // standalone phosphor-zones library.
 
-#include "plasmazones_export.h"
+#include <phosphorzones_export.h>
 
 #include <QHash>
 #include <QPair>
@@ -35,7 +35,7 @@ class Layout;
  *
  * Components needing signals should use LayoutManager* directly.
  */
-class PLASMAZONES_EXPORT ILayoutManager
+class PHOSPHORZONES_EXPORT ILayoutManager
 {
 public:
     ILayoutManager() = default;

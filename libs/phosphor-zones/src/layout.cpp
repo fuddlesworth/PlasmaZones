@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <PhosphorZones/Layout.h>
-#include "constants.h"
 #include <PhosphorZones/LayoutUtils.h>
 #include "zoneslogging.h"
 #include <window_id.h>

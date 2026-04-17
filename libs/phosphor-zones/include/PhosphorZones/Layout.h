@@ -4,8 +4,9 @@
 #pragma once
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorZones/Zone.h>
-#include "plasmazones_export.h"
+#include <phosphorzones_export.h>
 #include <QObject>
 #include <QVariantMap>
 #include <QVector>
@@ -23,7 +24,7 @@ namespace PlasmaZones {
  * Maps a window class pattern to a zone number within a layout.
  * Patterns are case-insensitive substring matches against the window class.
  */
-struct PLASMAZONES_EXPORT AppRule
+struct PHOSPHORZONES_EXPORT AppRule
 {
     QString pattern; // Window class or app name pattern (case-insensitive substring match)
     int zoneNumber = 0; // 1-based zone number to snap to
@@ -47,7 +48,7 @@ struct PLASMAZONES_EXPORT AppRule
 /**
  * @brief Result of matching a window class against app rules
  */
-struct PLASMAZONES_EXPORT AppRuleMatch
+struct PHOSPHORZONES_EXPORT AppRuleMatch
 {
     int zoneNumber = 0;
     QString targetScreen;
@@ -74,7 +75,7 @@ enum class LayoutCategory {
  * and activities. Supports both predefined templates and custom
  * canvas-style layouts.
  */
-class PLASMAZONES_EXPORT Layout : public QObject
+class PHOSPHORZONES_EXPORT Layout : public QObject
 {
     Q_OBJECT
 
@@ -209,7 +210,7 @@ public:
      * Callers should use GeometryUtils::getEffectiveOuterGaps() instead
      * for resolved pixel values.
      */
-    EdgeGaps rawOuterGaps() const
+    ::PhosphorLayout::EdgeGaps rawOuterGaps() const
     {
         return {m_outerGapTop, m_outerGapBottom, m_outerGapLeft, m_outerGapRight};
     }

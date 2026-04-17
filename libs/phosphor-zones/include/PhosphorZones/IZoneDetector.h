@@ -11,7 +11,7 @@
 // into a standalone phosphor-zones library without dragging the rest of
 // PZ's service interfaces along.
 
-#include "plasmazones_export.h"
+#include <phosphorzones_export.h>
 
 #include <QObject>
 #include <QPointF>
@@ -28,7 +28,7 @@ class Layout;
  *
  * Defined here so interfaces can use it without circular dependencies.
  */
-struct PLASMAZONES_EXPORT ZoneDetectionResult
+struct PHOSPHORZONES_EXPORT ZoneDetectionResult
 {
     Zone* primaryZone = nullptr; // Main zone to snap to
     QVector<Zone*> adjacentZones; // Adjacent zones for multi-zone snap
@@ -41,7 +41,7 @@ struct PLASMAZONES_EXPORT ZoneDetectionResult
 /**
  * @brief Abstract interface for zone detection
  */
-class PLASMAZONES_EXPORT IZoneDetector : public QObject
+class PHOSPHORZONES_EXPORT IZoneDetector : public QObject
 {
     Q_OBJECT
 
