@@ -5,8 +5,8 @@
 
 #include <phosphorconfig_export.h>
 
-#include <QHash>
 #include <QJsonObject>
+#include <QMap>
 #include <QMetaType>
 #include <QString>
 #include <QVariant>
@@ -94,7 +94,11 @@ struct PHOSPHORCONFIG_EXPORT Schema
     /// the attached resolver + backend combination — the schema itself is
     /// agnostic to whether it's flat ("General"), dot-path
     /// ("Snapping.Behavior"), or resolver-translated ("Prefix:ScreenId").
-    QHash<QString, QVector<KeyDef>> groups;
+    ///
+    /// QMap (sorted) rather than QHash so @c exportToJson and the on-disk
+    /// flush loop emit groups in deterministic order — important for
+    /// version-controlling exported configs and for diff-based debugging.
+    QMap<QString, QVector<KeyDef>> groups;
 
     /// Ordered migration chain. MigrationRunner applies every step whose
     /// @c fromVersion matches the current persisted version, advancing one

@@ -64,14 +64,20 @@ QString Settings::normalizeUuidString(const QString& uuidStr)
 
 void Settings::load()
 {
-    m_configBackend->reparseConfiguration();
-
     // Snapshot every Q_PROPERTY declared on Settings (skipping inherited
     // QObject properties like objectName) that has a NOTIFY signal, so we
-    // can re-emit the matching NOTIFY signal after load() sets members
-    // directly. Without these emits QML bindings bound to, say,
+    // can re-emit the matching NOTIFY signal after load() refreshes
+    // backing state. Without these emits QML bindings bound to, say,
     // `settings.borderWidth` would not update when the discard path
     // reloads the on-disk values.
+    //
+    // CRITICAL ORDERING: snapshot MUST be taken BEFORE
+    // reparseConfiguration() and before per-screen / virtual-screen
+    // loaders mutate members. Store-backed properties read on demand
+    // through m_store, so once reparseConfiguration() overwrites the
+    // backend's in-memory state, a post-reparse snapshot would see the
+    // already-reloaded value and the comparison loop below would never
+    // detect a change — silently breaking the discard-changes UX flow.
     //
     // INVARIANT: every Q_PROPERTY on Settings must hold a type whose
     // QVariant comparison is meaningful (Qt builtins, POD enums,
@@ -87,6 +93,8 @@ void Settings::load()
         if (prop.hasNotifySignal() && prop.isReadable())
             snapshot[i] = prop.read(this);
     }
+
+    m_configBackend->reparseConfiguration();
 
     // Store-backed groups (Shaders, Appearance, Ordering, Animations,
     // Rendering, Performance, ZoneGeometry, Shortcuts, Editor, Exclusions,

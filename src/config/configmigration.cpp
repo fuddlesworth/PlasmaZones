@@ -798,6 +798,15 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     // Skip the bump when any side-effect write failed. MigrationRunner
     // detects the unbumped version, aborts the chain with a critical log,
     // and config.json is left untouched so the next startup retries.
+    //
+    // Note: the in-memory @p root has already been mutated extensively
+    // above (v1 groups removed, dot-path hierarchy rebuilt) by the time
+    // we get here. On a side-effect failure these mutations are silently
+    // discarded by the caller — MigrationRunner::runOnFile sees that the
+    // version key didn't advance and skips the disk write entirely, and
+    // Store::Store's in-memory migration path likewise compares before vs.
+    // after and skips the file rewrite. The on-disk file is therefore left
+    // at v1 with the original layout, ready for the next startup to retry.
     if (allSideEffectsSucceeded) {
         root[ConfigKeys::versionKey()] = 2;
     }

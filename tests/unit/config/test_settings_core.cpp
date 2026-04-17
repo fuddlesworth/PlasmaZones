@@ -264,6 +264,55 @@ private Q_SLOTS:
     }
 
     /**
+     * REGRESSION GUARD (PR #331 review).
+     *
+     * load() must emit per-property NOTIFY signals when the on-disk value
+     * differs from the in-memory value at the time of the call. This is
+     * the discard-changes UX flow: the user mutates a setting, the in-memory
+     * Store now disagrees with disk, then calls load() to revert. QML
+     * bindings rely on the specific NOTIFY signal — settingsChanged() alone
+     * is not enough.
+     *
+     * The bug being guarded: pre-fix, load() reparseConfiguration()'d BEFORE
+     * snapshotting properties. Store-backed getters read on demand from the
+     * just-reloaded backend, so snapshot==reloaded value, the comparison
+     * loop never detected a difference, and no NOTIFY signal fired —
+     * leaving the QML binding stuck on the user's pre-discard value.
+     *
+     * Fix: snapshot must be taken BEFORE reparseConfiguration() so the
+     * pre-discard in-memory value is captured.
+     */
+    void testLoad_emitsSpecificNotifyOnDiscardChanges()
+    {
+        IsolatedConfigGuard guard;
+
+        // Seed disk with a known value via save().
+        {
+            Settings settings;
+            settings.setBorderWidth(3);
+            settings.save();
+        }
+
+        // Open Settings — getter now reads 3 from the freshly loaded backend.
+        Settings settings;
+        QCOMPARE(settings.borderWidth(), 3);
+
+        // Mutate in-memory only — disk still says 3.
+        settings.setBorderWidth(7);
+        QCOMPARE(settings.borderWidth(), 7);
+
+        // The discard-changes flow: load() reverts in-memory state to
+        // disk and must emit borderWidthChanged() so QML rebinds.
+        QSignalSpy specificSpy(&settings, &Settings::borderWidthChanged);
+        QVERIFY(specificSpy.isValid());
+
+        settings.load();
+
+        QCOMPARE(settings.borderWidth(), 3);
+        QCOMPARE(specificSpy.count(), 1);
+    }
+
+    /**
      * LabelFontWeight default must be 700 (CSS Bold), not 75 (Qt5 QFont::Bold).
      * Regression guard for the CSS vs QFont weight confusion.
      */

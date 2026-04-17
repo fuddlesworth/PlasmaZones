@@ -23,6 +23,11 @@ class PHOSPHORCONFIG_EXPORT MigrationRunner
 public:
     explicit MigrationRunner(const Schema& schema);
 
+    /// Forbid construction from a temporary @c Schema — the runner stores
+    /// a const reference, which would dangle the moment the temporary
+    /// expires. Callers must own the schema for the runner's full lifetime.
+    explicit MigrationRunner(Schema&&) = delete;
+
     /// Apply the full migration chain in memory. Steps whose
     /// @c fromVersion matches the current @c Schema::versionKey are
     /// invoked in declared order; each step MUST bump the version by one.

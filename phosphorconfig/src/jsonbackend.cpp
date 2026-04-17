@@ -33,6 +33,13 @@ constexpr int MaxDotPathDepth = 8;
 /// contract (main/GUI thread only), so the set doesn't need synchronization.
 /// Keyed by "<tag>:<key>" so separate warning categories never clobber each
 /// other's dedup state.
+///
+/// The set is capped at @c MaxWarnOnceEntries — a long-running daemon that
+/// processes many distinct keys would otherwise grow the set unboundedly.
+/// Once the cap is hit further unique warnings are emitted but not deduped;
+/// the alternative (silencing them) would hide real corruption.
+constexpr int MaxWarnOnceEntries = 1024;
+
 bool shouldWarnOnce(const char* tag, const QString& key)
 {
     static QSet<QString> s_warned;
@@ -40,7 +47,9 @@ bool shouldWarnOnce(const char* tag, const QString& key)
     if (s_warned.contains(id)) {
         return false;
     }
-    s_warned.insert(id);
+    if (s_warned.size() < MaxWarnOnceEntries) {
+        s_warned.insert(id);
+    }
     return true;
 }
 

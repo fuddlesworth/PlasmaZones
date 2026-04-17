@@ -163,7 +163,20 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
     // QSettingsBackend has no resolver concept; passing it one is a no-op.
     if (auto* json = dynamic_cast<JsonBackend*>(d->backend)) {
         if (d->schema.pathResolver) {
-            json->setPathResolver(d->schema.pathResolver);
+            // Shared-backend safety: refuse to clobber an existing resolver
+            // since multiple Stores can share one backend (see class docs).
+            // The first attached resolver wins; later Stores must either
+            // declare a compatible resolver or rely on the one already
+            // installed by their host.
+            if (auto existing = json->pathResolver()) {
+                if (existing != d->schema.pathResolver) {
+                    qWarning(
+                        "PhosphorConfig::Store: backend already has a path resolver attached — refusing to "
+                        "overwrite. Stores sharing a backend must agree on the resolver.");
+                }
+            } else {
+                json->setPathResolver(d->schema.pathResolver);
+            }
         }
         if (!d->schema.versionKey.isEmpty()) {
             json->setVersionStamp(d->schema.versionKey, d->schema.version);
@@ -182,8 +195,20 @@ Store::Store(IBackend* backend, Schema schema, QObject* parent)
                 // Rewrite the file in place, then have the backend re-read
                 // it. Can't update the backend's internal QJsonObject from
                 // here (it's private), so the round-trip keeps both in sync.
-                JsonBackend::writeJsonAtomically(json->filePath(), snapshot);
-                json->reparseConfiguration();
+                //
+                // If the atomic write fails, leave the backend's in-memory
+                // state at the unmigrated version: reparseConfiguration()
+                // would reload the unmigrated file anyway, and skipping it
+                // means the in-memory migration result is preserved until
+                // the next save() retries the disk commit.
+                if (JsonBackend::writeJsonAtomically(json->filePath(), snapshot)) {
+                    json->reparseConfiguration();
+                } else {
+                    qWarning(
+                        "PhosphorConfig::Store: failed to commit migrated config to %s — backend continues "
+                        "with the unmigrated on-disk state until the next successful sync()",
+                        qPrintable(json->filePath()));
+                }
             }
         }
     } else {

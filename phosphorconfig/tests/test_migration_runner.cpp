@@ -214,11 +214,12 @@ private Q_SLOTS:
         MigrationRunner(schema).runInMemory(root);
     }
 
-    void chain_warnsOnMissingIntermediateStep()
+    void chain_logsCriticalOnMissingIntermediateStep()
     {
         // schema.version=3 but only a v1→v2 step is registered. The chain
-        // should run v1→v2, then emit a warning because there's no v2→v3
-        // step, leaving persisted version at 2.
+        // should run v1→v2, then log a CRITICAL because there's no v2→v3
+        // step, leaving persisted version at 2 — a permanent stall that
+        // every startup will hit until the schema gains the missing step.
         Schema schema;
         schema.version = 3;
         schema.migrations = {
@@ -233,7 +234,7 @@ private Q_SLOTS:
         QJsonObject root;
         root[QStringLiteral("_version")] = 1;
 
-        QTest::ignoreMessage(QtWarningMsg,
+        QTest::ignoreMessage(QtCriticalMsg,
                              QRegularExpression(QStringLiteral("chain exhausted at v2 but Schema::version is 3")));
         MigrationRunner(schema).runInMemory(root);
 

@@ -93,11 +93,13 @@ void MigrationRunner::runInMemory(QJsonObject& root) const
     }
 
     // Chain finished but we didn't reach the declared target version — the
-    // schema is missing a step for some intermediate version. Silent skip
-    // here would leave users permanently stuck at the stalled version with
-    // no diagnostic.
+    // schema is missing a step for some intermediate version. This is a
+    // permanent stall: every startup will leave the user at the stalled
+    // version with no recovery path until the schema gains the missing
+    // step, so log at @c qCritical to surface it as actionable rather than
+    // background noise.
     if (version < m_schema.version) {
-        qWarning(
+        qCritical(
             "PhosphorConfig::MigrationRunner: chain exhausted at v%d but Schema::version is %d — no step found "
             "with fromVersion=%d. Persisted config will NOT reach the target schema version.",
             version, m_schema.version, version);

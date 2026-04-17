@@ -1033,6 +1033,14 @@ public:
     {
         return 0.1;
     }
+    static double editorSnapIntervalMin()
+    {
+        return 0.01;
+    }
+    static double editorSnapIntervalMax()
+    {
+        return 1.0;
+    }
     static int editorSnapOverrideModifier()
     {
         return static_cast<int>(Qt::ShiftModifier);

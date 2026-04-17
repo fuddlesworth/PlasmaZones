@@ -58,8 +58,20 @@ public:
     /// Read a declared key. If the value is absent or unparseable, returns
     /// the schema default. Undeclared keys also return the schema default
     /// (which is @c QVariant() — effectively @c T{}).
+    ///
+    /// The primary template is intentionally a static_assert trap:
+    /// @c Store::read<T> is only fully specialized for the types listed
+    /// below, and instantiating it with anything else should fail at
+    /// compile time with a clear message rather than at link time with
+    /// an opaque "undefined reference" error.
     template<typename T>
-    T read(const QString& group, const QString& key) const;
+    T read(const QString& group, const QString& key) const
+    {
+        static_assert(sizeof(T) == 0,
+                      "PhosphorConfig::Store::read<T> is only implemented for QString, int, bool, double, QColor — "
+                      "extend store.cpp with a new specialization to add another type.");
+        return T();
+    }
 
     /// Read as @c QVariant. Uses @c QString coercion on the wire and
     /// reconstructs the type via @c QMetaType when possible. Undeclared
