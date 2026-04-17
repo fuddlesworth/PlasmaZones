@@ -436,7 +436,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
             qCDebug(lcOverlay) << "Overlay shader=" << shaderId << "multipass=" << info.isMultipass
                                << "bufferPaths=" << info.bufferShaderPaths.size();
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
-            applyShaderInfoToWindow(window, info, translatedParams);
+            applyShaderInfoToWindow(window, info, translatedParams, geometry, physScreenGeom);
         }
     }
 
@@ -785,7 +785,9 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
             const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
-            applyShaderInfoToWindow(window, info, translatedParams);
+            const QRect vsGeom = resolveScreenGeometry(screenId);
+            const QRect physGeom = physScreen ? physScreen->geometry() : vsGeom;
+            applyShaderInfoToWindow(window, info, translatedParams, vsGeom, physGeom);
         }
     } else if (windowIsShader && !screenUsesShader) {
         // Clear shader properties if window is shader type but shaders are now disabled

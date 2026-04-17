@@ -12,10 +12,13 @@
 #include <QMap>
 #include <QMutex>
 #include <QObject>
+#include <QRect>
+#include <QSize>
 #include <QString>
 #include <QTimer>
 #include <QUrl>
 #include <QVariant>
+#include <array>
 #include <memory>
 
 namespace PhosphorShell {
@@ -131,6 +134,32 @@ public:
 
     static QString wallpaperPath();
     static QImage loadWallpaperImage();
+
+    /// Return the wallpaper image cropped to the portion that a sub-region
+    /// (@p subGeom) occupies on a physical screen (@p physGeom), assuming
+    /// "cover" scaling (aspect-correct fill, centered, overflow cropped) —
+    /// the same placement model the `wallpaperUv` GLSL helper uses.
+    ///
+    /// Returns the full (uncropped) wallpaper when either rect is invalid
+    /// or when @p subGeom covers all of @p physGeom.
+    ///
+    /// Virtual screens that share a physical monitor need this so each VS
+    /// samples the wallpaper portion it occupies on the monitor, instead of
+    /// each getting the center-cropped wallpaper as if it were a full screen.
+    ///
+    /// The result is memoized keyed on (@p subGeom, @p physGeom, wallpaper
+    /// mtime), so repeated calls for the same VS return the same QImage
+    /// (stable cacheKey()) and avoid re-uploading to the GPU each frame.
+    static QImage loadWallpaperImage(const QRect& subGeom, const QRect& physGeom);
+
+    /// Pure geometry helper: compute the pixel rect inside a wallpaper of
+    /// size @p wpSize that corresponds to @p subGeom when the wallpaper
+    /// covers @p physGeom under the same "cover" placement used by
+    /// `wallpaperUv`. Returns an invalid rect if inputs are degenerate or
+    /// if @p subGeom fully covers @p physGeom (caller should use the full
+    /// image in that case). Exposed for unit testing.
+    static QRect computeWallpaperCropRect(QSize wpSize, const QRect& physGeom, const QRect& subGeom);
+
     static void invalidateWallpaperCache();
 
 Q_SIGNALS:
@@ -164,6 +193,21 @@ private:
     static QImage s_cachedWallpaperImage;
     static qint64 s_cachedWallpaperMtime;
     static QMutex s_wallpaperCacheMutex;
+
+    // Per-VS crop cache: keeps the same QImage (and cacheKey) for repeated
+    // loadWallpaperImage(sub, phys) calls so downstream cacheKey()-based
+    // short-circuits in ShaderEffect/ShaderNodeRhi keep working and the GPU
+    // doesn't re-upload the wallpaper on every overlay update.
+    struct WallpaperCropEntry
+    {
+        QRect sub;
+        QRect phys;
+        qint64 mtime = 0;
+        QImage img;
+    };
+    static constexpr int CropCacheCapacity = 8;
+    static std::array<WallpaperCropEntry, CropCacheCapacity> s_cachedWallpaperCrops;
+    static int s_cachedWallpaperCropNextSlot;
 
     static constexpr int RefreshDebounceMs = 500;
 };
