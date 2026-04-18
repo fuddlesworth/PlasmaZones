@@ -1,6 +1,6 @@
 # PhosphorScreens — API Design
 
-**Status:** design / scaffolding
+**Status:** initial landing complete (see "Migration sequence" for per-step status; "Deferred from initial landing" for what was explicitly left for later)
 **Version:** 0.1.0 (pre-release, API unstable)
 **License:** LGPL-2.1-or-later (shared library) — consumers under any GPL-compatible licence
 
@@ -461,58 +461,180 @@ Optional sub-targets:
 
 ## Migration sequence
 
-The doc-and-scaffold step is a write-only operation (this file). When
-implementation work begins, the migration should land in PRs of this
-shape:
+Steps landed as a single PR with one commit per logical chunk. Status
+annotations record what shipped vs. what was folded or deferred.
 
-1. **Scaffold `libs/phosphor-screens/`** — empty CMake target, umbrella
-   header, README, `PhosphorScreensConfig.cmake.in`. Library compiles
-   and exports nothing. No daemon changes.
-2. **Lift POD types** — `VirtualScreen.h` moves, daemon includes the
-   library header via a forwarding shim at `src/core/virtualscreen.h`
-   that re-exports the new types under the existing `PlasmaZones`
-   namespace alias. All 30+ existing call sites compile unchanged.
-3. **Lift `ScreenResolver`** — small, no daemon coupling, low-risk.
-4. **Define `IPanelSource` + `NoOpPanelSource` + `PlasmaPanelSource`** —
-   library-side. Daemon is not yet using them.
-5. **Define `IConfigStore` + `InMemoryConfigStore`** — library-side.
-   Add `SettingsConfigStore` adapter daemon-side.
-6. **Move `VirtualScreenSwapper`** — switch from `Settings*` to
-   `IConfigStore*`, daemon constructs it with the new adapter.
-7. **Move `ScreenManager` core** — split current `Settings*` /
-   `Plasma D-Bus` constructor wiring into the `Config` struct. Daemon
-   constructs the same pair and injects.
-8. **Move `panels.cpp` / `virtualscreens.cpp`** — relocate as
-   `manager_panels.cpp` / `manager_virtualscreens.cpp`.
-9. **Move `ScreenAdaptor`** — under the optional D-Bus sub-target.
-   Update daemon to register the adaptor against the new class.
-10. **Drop the forwarding shims** — once nothing in `src/` depends on
-    the old paths, delete them. `phosphor-screens` is now standalone.
+1. ✅ **Scaffold `libs/phosphor-screens/`** — empty SHARED target, umbrella
+   header, `PhosphorScreensConfig.cmake.in`, top-level `add_subdirectory`.
+   Landed in the same commit as step 2 because an empty SHARED target is
+   awkward to ship standalone.
+2. ✅ **Lift POD types** — `VirtualScreen.h` moved. `src/core/virtualscreen.h`
+   is a forwarding shim that type-aliases `Phosphor::Screens::VirtualScreenDef`
+   / `VirtualScreenConfig` back into `PlasmaZones::` for the ~30 existing
+   in-tree call sites.
+3. ✅ **Lift `ScreenResolver`** — `Endpoint` struct (renamed
+   `ResolverEndpoint`, hoisted to namespace scope so its in-class member
+   initialisers reach the default-arg site) + `Phosphor::Screens::ScreenResolver`
+   class. `src/core/screen_resolver.h` shim dropped in a follow-up commit;
+   `src/editor/main.cpp` (the only in-tree caller) uses the canonical path.
+4. ✅ **Pluggable backend contracts** — `IPanelSource` + `NoOpPanelSource`
+   + `PlasmaPanelSource` all landed. `PlasmaPanelSource` is pure Qt6::DBus
+   against `org.kde.plasmashell`; no KF6 link, confirming the lib's
+   "no KF6" invariant.
+5. ✅ **Persistence contracts** — `IConfigStore` + `InMemoryConfigStore`
+   in the lib. `SettingsConfigStore` adapter daemon-side in
+   `src/config/settingsconfigstore.{h,cpp}`. Interface grew a single-key
+   `get(physicalScreenId)` overload alongside `loadAll` so the swapper
+   doesn't round-trip through the full map for one-monitor mutations.
+6. ✅ **Move `VirtualScreenSwapper`** — constructor takes `IConfigStore*`.
+   Both daemon and `ScreenAdaptor` own a `SettingsConfigStore` member
+   ahead of the swapper for destruction order. All 19 swapper tests pass.
+7. ✅ **Move `ScreenManager` core** — `ScreenManagerConfig` struct (top-level,
+   not nested — same reason as `ResolverEndpoint`) carries the injectable
+   `IPanelSource*` / `IConfigStore*` / geometry-sensor toggle /
+   VS-cap knob. Defaulted to `ScreenManagerConfig{}` so tests and any
+   future harness can `ScreenManager()` with no args.
 
-Each PR keeps the daemon green; no big-bang move.
+   **Scope expansion:** eliminated the singleton + statics from the lib
+   entirely (see "Singleton scope" under "Resolved during implementation").
+   Daemon ships a thin service-locator
+   (`src/core/screenmanagerservice.{h,cpp}`) providing `screenManager()`
+   plus `actualAvailableGeometry` / `isPanelGeometryReady` /
+   `resolvePhysicalScreen` / `effectiveScreenIdsWithFallback` free
+   functions that delegate to the registered instance with Qt-only
+   fallbacks for cold-start and tests. 107 `ScreenManager::instance()` /
+   `ScreenManager::<static>` call sites across 39 files mass-renamed by
+   `sed`. Five forward-decl headers got proper qualified forward
+   declarations + using-alias.
+8. ✅ **Move `panels.cpp` / `virtualscreens.cpp`** — folded into step 7.
+   `panels.cpp` didn't reappear under `manager_panels.cpp` because its
+   D-Bus query code moved into `PlasmaPanelSource`; the remaining
+   "merge sensor + panel-offsets into an available rect" logic lives
+   inline in `manager.cpp`'s `calculateAvailableGeometry`.
+9. 🟡 **Move `ScreenAdaptor`** — **deferred.** See "Deferred from
+   initial landing" below. `ScreenAdaptor` continues to live in
+   `src/dbus/` until a concrete non-PlasmaZones consumer shows up.
+10. 🟡 **Drop the forwarding shims** — **partial.**
+    `src/core/screen_resolver.h` deleted; the rest intentionally remain.
+    See "Deferred from initial landing" for the list and the reasoning.
 
-## Open questions
+Concurrent with the main sequence:
 
-These are settled in 0.1 by deferring them to the implementation PR — the
-doc flags them so reviewers know the scaffolding step is not pre-deciding
-anything contentious.
+- ✅ **`ScreenIdentity` helpers moved to the library.** The
+  `Utils::screenIdentifier` / `findScreenByIdOrName` / `screensMatch` /
+  family that previously lived in `src/core/utils.cpp` are now in
+  `Phosphor::Screens::ScreenIdentity`. The daemon's `Utils::*` functions
+  are thin trampolines into the lib; daemon-side API surface unchanged.
+- ✅ **EDID primitives moved to `phosphor-identity`.** The
+  `ScreenIdUtils::readEdidHeaderSerial` / `buildScreenBaseId` /
+  `normalizeHexSerial` / `invalidateEdidCache` family that previously
+  lived in `src/compositor-common/screen_id.{h,cpp}` is now
+  `PhosphorIdentity::ScreenId` — header-only inline (C++17 inline
+  function-static guarantees a single cache across TUs, so PhosphorIdentity
+  stays INTERFACE with no SHARED conversion). The KWin effect still
+  reaches the helpers via `compositor-common/screen_id.h` which is now
+  a namespace-alias shim.
+- ✅ **Pre-existing `easingcurve.cpp` missing-include bug fixed.**
+  Only surfaced with unity builds disabled.
 
-- **Singleton scope.** Today `ScreenManager::instance()` is a process-global
-  pointer set by the daemon. The library keeps that pattern for 0.x. If a
-  consumer ever wants two instances in one process (test harness with two
-  fake compositor sessions, multi-display embedded shell), this needs a
-  rework. Out of scope for the extraction.
-- **Static helper accessibility.** `isPanelGeometryReady()` and
-  `actualAvailableGeometry(QScreen*)` are called from the layer-shell QPA
-  plugin and from `WindowTrackingService` paths that have no `ScreenManager*`
-  in scope. They route through the singleton today and continue to. If the
-  singleton ever goes away, these helpers must take an explicit instance
-  pointer — every call site already has one available.
-- **Plasma D-Bus + Wayfire.** A Wayfire host that wants panel-aware geometry
-  needs its own `IPanelSource` that queries Wayfire's wlr-foreign-toplevel
-  data. Designing that interface is a Wayfire-plugin concern, not a
-  PhosphorScreens 0.1 concern; the `IPanelSource` shape is deliberately
-  small enough to support it later.
+## Deferred from initial landing
+
+These items are named in the design but intentionally stayed behind
+when the main PR landed. Each entry records what, why, and what it
+would take to land later.
+
+### 🟡 `ScreenAdaptor` lift
+
+**What the design says.** Move `src/dbus/screenadaptor.{h,cpp}` into
+an optional `PhosphorScreens::DBusAdaptor` sub-target. Parameterise
+`Q_CLASSINFO("D-Bus Interface", ...)` so a future Phosphor WM can
+register the same adaptor class against `org.phosphor.Screen` while
+PlasmaZones keeps registering against `org.plasmazones.Screen`.
+
+**Why deferred.** `Q_CLASSINFO` is compile-time only. Parameterising
+the interface name requires one of:
+
+1. An inheritance hierarchy — `Phosphor::Screens::ScreenAdaptorBase`
+   with `Q_OBJECT` but no `Q_CLASSINFO`, plus per-host subclasses
+   (`PlasmaZones::ScreenAdaptor : ScreenAdaptorBase` with the
+   `Q_CLASSINFO`). Each host carries its own thin moc-only subclass.
+2. A code-generation step that stamps the `Q_CLASSINFO` literal at
+   configure time from a CMake variable.
+3. Keeping the adaptor per-host, which is where we are now.
+
+The JSON round-trip in `setVirtualScreenConfig(QString physId, QString json)`
+is also daemon-specific (it parses the PlasmaZones VS config schema
+with backwards-compat fallbacks). A clean lib surface would push that
+to a `decodeAndApply` callback the host provides, further widening
+the inheritance / factory seam.
+
+None of this work is speculative-clean — it's a real refactor — and
+there is no second consumer today to validate the abstraction. This
+is a textbook case of "wait for the second example before designing
+the interface."
+
+**What it would take to land.** One concrete non-PlasmaZones consumer
+(a Wayfire or Hyprland plugin prototype, or a single-process WM) plus
+the inheritance scaffolding above. At that point the split is
+justified. Until then, `ScreenAdaptor` remains a well-named daemon
+file that happens to consume lib types — the mirror image of how
+`src/config/settingsconfigstore.{h,cpp}` consumes `IConfigStore`.
+
+### 🟡 Remaining forwarding shims
+
+Five of the six shims the main migration introduced are still in place.
+They were kept deliberately — each has specific, narrow reasons. None
+are on a "cleanup later" list that would go stale.
+
+| Shim | Canonical target | Callers | Why it stays |
+|---|---|---|---|
+| `src/core/virtualscreen.h` | `<PhosphorScreens/VirtualScreen.h>` | ~30 in-tree (daemon, KCM, editor, tests) | Re-exports `VirtualScreenDef` / `VirtualScreenConfig` into `PlasmaZones::`. Dropping it is a mechanical sed on both the `#include` path and every `PlasmaZones::VirtualScreenDef` reference, but the churn surface is substantial and the aliases cost nothing at runtime. |
+| `src/core/virtualscreenswapper.h` | `<PhosphorScreens/Swapper.h>` | ~10 in-tree (daemon, adaptor, tests) | Same pattern as `virtualscreen.h`. |
+| `src/core/screenmanager.h` | (none — the shim is also the service-locator entry point) | ~50 in-tree | NOT a pure shim. It forwards to `screenmanagerservice.h` which provides the daemon's process-global `screenManager()` free function plus the Qt-fallback wrappers for `actualAvailableGeometry` / `isPanelGeometryReady` / `resolvePhysicalScreen` / `effectiveScreenIdsWithFallback`. Removing it would require every caller to include `screenmanagerservice.h` directly. Keeping it at the legacy include path is cheaper and still clean architecturally — the daemon's service-locator is a justified globals-scoped concession that the lib does NOT inherit. |
+| `shared/virtualscreenid.h` | `<PhosphorIdentity/VirtualScreenId.h>` | KWin effect + daemon | KWin effect includes it via the top-level `${CMAKE_SOURCE_DIR}` include path and cannot take a direct dependency on phosphor-screens. The shim is effectively a namespace-alias header — two lines of content, zero runtime cost. |
+| `src/compositor-common/screen_id.h` | `<PhosphorIdentity/ScreenId.h>` | KWin effect + daemon | Same as above. The KWin effect pulls phosphor-identity transitively via `plasmazones_compositor_common` and reaches the canonical header through this shim. |
+
+`src/core/screen_resolver.h` was dropped because it had exactly one
+caller. The scale rule is simple: a shim with one caller isn't worth
+keeping; a shim with 30+ callers costs nothing and the cleanup is
+best done by the team at whatever cadence suits the codebase's
+formatting / commit policy.
+
+## Resolved during implementation
+
+The "open questions" from the initial design — deliberately left
+unsettled when the design doc was written — shook out as follows.
+
+- ✅ **Singleton scope — REMOVED from the lib.** The initial design
+  said the singleton would stay for 0.x. When the daemon's 107 call
+  sites were laid out in detail, eliminating the singleton from the
+  **library** turned out to be strictly better than the smell it was
+  papering over, because:
+    - Singletons in a library force every consumer into the same
+      scope model. Two hypothetical future consumers (test harness
+      with two fake compositor sessions, multi-process embedded
+      shell) couldn't use the lib at all.
+    - The singleton's sole **real** consumer is the daemon, which can
+      and did re-introduce a thin process-global accessor in its own
+      code (`src/core/screenmanagerservice.cpp`) for the legitimate
+      "I'm deep in a utility chain and can't plumb a pointer" case.
+    - Moving the accessor from the lib to the daemon shifts the
+      global-state sin to where it actually makes sense: the host
+      that has exactly one and knows it.
+- ✅ **Static helper accessibility — same solution.** The
+  previously-static helpers (`actualAvailableGeometry`,
+  `isPanelGeometryReady`, `resolvePhysicalScreen`,
+  `effectiveScreenIdsWithFallback`) are now instance methods on
+  `ScreenManager` plus daemon-side free-function wrappers that
+  compose the instance method with a Qt-only fallback for "no
+  manager registered yet". Call sites that had no `ScreenManager*`
+  in scope under the singleton design call the free functions
+  without ceremony.
+- 🟡 **Plasma D-Bus + Wayfire.** Not yet a real concern because
+  there is no Wayfire consumer yet. `IPanelSource` has shipped and
+  is small enough to satisfy the design intent — a future Wayfire
+  backend drops in alongside `PlasmaPanelSource` without lib-side
+  changes.
 
 ## Versioning & stability
 
