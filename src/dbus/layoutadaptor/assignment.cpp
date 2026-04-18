@@ -135,7 +135,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the KCM sees one entry per virtual screen, not per physical monitor.
-    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList screenIds = effectiveScreenIdsWithFallback();
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Derive connector name for the JSON key (KCM compatibility)
@@ -263,7 +263,7 @@ QString LayoutAdaptor::getScreenStates()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the settings app sees one entry per virtual screen, not per physical monitor.
-    const QStringList screenIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList screenIds = effectiveScreenIdsWithFallback();
 
     for (const QString& screenId : std::as_const(screenIds)) {
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);

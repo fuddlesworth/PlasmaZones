@@ -34,7 +34,7 @@ namespace {
 // warning over a silent jump to wrong coordinates.
 bool isSnapReadyOrWarn(const char* method)
 {
-    if (!ScreenManager::instance() || ScreenManager::isPanelGeometryReady()) {
+    if (!screenManager() || isPanelGeometryReady()) {
         return true;
     }
     static bool warned = false;

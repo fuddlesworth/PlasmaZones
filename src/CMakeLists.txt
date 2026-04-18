@@ -92,10 +92,14 @@ set(plasmazones_core_SRCS
     # `core/screen_resolver.h` re-exports `Phosphor::Screens::ScreenResolver`
     # as `PlasmaZones::ScreenResolver` for existing in-tree callers.
     core/screen_resolver.h
-    core/screenmanager.cpp
-    core/screenmanager/panels.cpp
-    core/screenmanager/virtualscreens.cpp
+    # screenmanager.cpp + screenmanager/panels.cpp + screenmanager/virtualscreens.cpp
+    # lifted to libs/phosphor-screens. The shim header `core/screenmanager.h`
+    # re-exports `Phosphor::Screens::ScreenManager` as
+    # `PlasmaZones::ScreenManager` and pulls in the daemon-side service-
+    # locator (`screenmanagerservice.h`) for in-tree callers.
     core/screenmanager.h
+    core/screenmanagerservice.cpp
+    core/screenmanagerservice.h
     core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
     core/activitymanager.cpp

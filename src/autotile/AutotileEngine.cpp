@@ -2876,7 +2876,7 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    return ScreenManager::actualAvailableGeometry(screen);
+    return actualAvailableGeometry(screen);
 }
 
 bool AutotileEngine::isKnownScreen(const QString& screenId) const

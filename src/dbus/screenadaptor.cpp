@@ -41,7 +41,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             Q_EMIT screenAdded(id);
         });
         if (hadVirtual) {
-            auto* mgr2 = ScreenManager::instance();
+            auto* mgr2 = screenManager();
             if (mgr2) {
                 m_lastEmittedEffectiveIds = mgr2->effectiveScreenIds();
             }
@@ -50,7 +50,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
             // ScreenManager may not be fully initialized yet — defer a re-check
             // so virtual screen signals are emitted once the event loop settles.
             QTimer::singleShot(0, this, [this, physId]() {
-                auto* mgr = ScreenManager::instance();
+                auto* mgr = screenManager();
                 if (!mgr) {
                     return;
                 }
@@ -81,7 +81,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         // Cache effective screen IDs in a member map so they can be updated when
         // virtualScreensChanged fires. When screenRemoved fires, ScreenManager may
         // have already cleaned up virtual screen data, so we rely on cached IDs.
-        auto* mgrForCache = ScreenManager::instance();
+        auto* mgrForCache = screenManager();
         if (mgrForCache && mgrForCache->hasVirtualScreens(physId)) {
             m_cachedEffectiveIdsPerScreen[physId] = mgrForCache->virtualScreenIdsFor(physId);
         }
@@ -103,7 +103,7 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
         });
 
         // Cache effective screen IDs in member map (same rationale as screenAdded above).
-        auto* mgrForExisting = ScreenManager::instance();
+        auto* mgrForExisting = screenManager();
         if (mgrForExisting && mgrForExisting->hasVirtualScreens(cachedId)) {
             m_cachedEffectiveIdsPerScreen[cachedId] = mgrForExisting->virtualScreenIdsFor(cachedId);
         }
@@ -119,10 +119,10 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // listeners (KWin effect) refetch their virtual screen state at runtime.
     // Without this, runtime add/remove only updates the daemon — the effect keeps
     // stale defs until something else triggers fetchAllVirtualScreenConfigs.
-    if (auto* mgr = ScreenManager::instance()) {
+    if (auto* mgr = screenManager()) {
         auto refreshAndEmit = [this](const QString& physId) {
             invalidateScreenInfoCache();
-            auto* m = ScreenManager::instance();
+            auto* m = screenManager();
             if (m && m->hasVirtualScreens(physId)) {
                 m_cachedEffectiveIdsPerScreen[physId] = m->virtualScreenIdsFor(physId);
             } else {
@@ -169,7 +169,7 @@ void ScreenAdaptor::invalidateScreenInfoCache()
 
 bool ScreenAdaptor::emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         bool hadVirtual = mgr->hasVirtualScreens(physId);
         const QStringList ids = mgr->effectiveIdsForPhysical(physId);
@@ -187,7 +187,7 @@ QStringList ScreenAdaptor::getScreens()
     // Return effective screen IDs (virtual screens when configured, physical otherwise)
     // so consumers (settings app, KCM) see virtual screens as first-class entries.
     // Falls back to physical screen IDs when ScreenManager is unavailable.
-    return ScreenManager::effectiveScreenIdsWithFallback();
+    return effectiveScreenIdsWithFallback();
 }
 
 QString ScreenAdaptor::getScreenInfo(const QString& screenId)
@@ -210,7 +210,7 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
 
     // For virtual screens, resolve the backing physical screen for metadata
     // (manufacturer, model, refresh rate) and use ScreenManager for geometry
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     const QScreen* screen = DbusHelpers::resolvePhysicalQScreen(screenId);
 
     if (screen) {
@@ -289,7 +289,7 @@ QString ScreenAdaptor::getPrimaryScreen()
     }
     // If the primary monitor is subdivided into virtual screens, return the
     // first effective (virtual) screen ID so callers can use it for layout lookups.
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         if (!vsIds.isEmpty()) {
@@ -316,7 +316,7 @@ QString ScreenAdaptor::getScreenId(const QString& connectorName)
 QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
 {
     // Virtual screens: use ScreenManager's VS-aware available geometry
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && VirtualScreenId::isVirtual(screenId)) {
         return mgr->screenAvailableGeometry(screenId);
     }
@@ -331,12 +331,12 @@ QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
     if (!screen) {
         return QRect();
     }
-    return ScreenManager::actualAvailableGeometry(screen);
+    return actualAvailableGeometry(screen);
 }
 
 QRect ScreenAdaptor::getScreenGeometry(const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         QRect geo = mgr->screenGeometry(screenId);
         if (geo.isValid()) {
@@ -359,7 +359,7 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
         return QString();
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (!mgr) {
         qCWarning(lcDbus) << "getVirtualScreenConfig: no ScreenManager instance";
         return QString();
@@ -517,7 +517,7 @@ QString ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, boo
 QStringList ScreenAdaptor::getPhysicalScreens()
 {
     QStringList result;
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (!mgr) {
         return result;
     }
@@ -529,7 +529,7 @@ QStringList ScreenAdaptor::getPhysicalScreens()
 
 QString ScreenAdaptor::getEffectiveScreenAt(int x, int y)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (!mgr) {
         return QString();
     }

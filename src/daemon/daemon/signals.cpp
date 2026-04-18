@@ -550,7 +550,7 @@ void Daemon::connectOverlaySignals()
             QString effectiveScreenId = screenId;
             if (effectiveScreenId.isEmpty()) {
                 // Prefer effective screen IDs (virtual-screen-aware) over physical screen
-                const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+                const QStringList effectiveIds = effectiveScreenIdsWithFallback();
                 if (!effectiveIds.isEmpty()) {
                     effectiveScreenId = effectiveIds.first();
                 }

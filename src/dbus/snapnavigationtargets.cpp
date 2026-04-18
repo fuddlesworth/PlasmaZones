@@ -72,7 +72,7 @@ bool isStoredScreenValid(const QString& storedScreen)
         if (!Utils::findScreenByIdOrName(physId)) {
             return false;
         }
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
     }
     return Utils::findScreenByIdOrName(storedScreen) != nullptr;

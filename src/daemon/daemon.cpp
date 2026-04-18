@@ -33,6 +33,7 @@
 #include "../core/utils.h"
 #include "../config/settingsconfigstore.h"
 #include "../core/virtualscreenswapper.h"
+#include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
@@ -98,11 +99,24 @@ Daemon::Daemon(QObject* parent)
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
-    , m_screenManager(std::make_unique<ScreenManager>(nullptr))
+    , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
+    , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
+    , m_screenManager(std::make_unique<ScreenManager>(Phosphor::Screens::ScreenManager::Config{
+                                                          /*panelSource=*/m_panelSource.get(),
+                                                          /*configStore=*/m_virtualScreenStore.get(),
+                                                      },
+                                                      nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
+    // Register this daemon's ScreenManager as the process-global instance
+    // so the service-locator helpers (PlasmaZones::screenManager(),
+    // actualAvailableGeometry, isPanelGeometryReady, ...) and the ~107
+    // legacy callers of those resolve to the same pointer this Daemon owns.
+    // Cleared in the destructor before m_screenManager destructs.
+    setScreenManager(m_screenManager.get());
+
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.
     // Use a longer debounce so KDE panel edit mode exit and other transient
@@ -136,6 +150,10 @@ Daemon::Daemon(QObject* parent)
 Daemon::~Daemon()
 {
     stop();
+    // Clear the service-locator pointer BEFORE m_screenManager destructs.
+    // QPointer would zero itself anyway, but explicit teardown keeps the
+    // ordering obvious to anyone reading the code.
+    setScreenManager(nullptr);
 }
 
 bool Daemon::init()
@@ -500,12 +518,9 @@ bool Daemon::init()
     m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
     m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
 
-    // Stateless façade for VS swap/rotate. Held here so navigation handlers
-    // and any future consumer share one instance instead of constructing
-    // throwaway swappers per call. Constructed unconditionally during init
-    // so downstream handlers (handleSwapVirtualScreen / handleRotateVirtualScreens)
-    // can assume the pointer is non-null for the remainder of the daemon's lifetime.
-    m_virtualScreenStore = std::make_unique<SettingsConfigStore>(m_settings.get());
+    // m_virtualScreenStore is constructed in the initializer list (it's a
+    // Config arg for m_screenManager). The swapper is constructed here
+    // because navigation handlers don't run before init() returns anyway.
     m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_virtualScreenStore.get());
     Q_ASSERT(m_virtualScreenSwapper);
 

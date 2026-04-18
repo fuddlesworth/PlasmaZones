@@ -212,7 +212,7 @@ inline constexpr QLatin1StringView Down{"down"};
  * Queries ScreenManager::effectiveScreenAt() for virtual screen resolution,
  * falling back to the physical QScreen's stable identifier. Eliminates the
  * repeated pattern of:
- *   auto* mgr = ScreenManager::instance();
+ *   auto* mgr = screenManager();
  *   QString id = mgr ? mgr->effectiveScreenAt(pos) : QString();
  *   if (id.isEmpty()) id = Utils::screenIdentifier(screen);
  *

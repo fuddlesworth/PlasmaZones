@@ -1,0 +1,213 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include "PhosphorScreens/ScreenIdentity.h"
+
+#include "screenslogging.h"
+
+#include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
+
+#include <QGuiApplication>
+#include <QHash>
+#include <QPointer>
+#include <QScreen>
+
+namespace Phosphor::Screens::ScreenIdentity {
+
+namespace {
+
+// QScreen* → cached identifier (full, with disambiguation).
+QHash<const QScreen*, QString>& identifierCache()
+{
+    static QHash<const QScreen*, QString> s_cache;
+    return s_cache;
+}
+
+// Reverse cache: ID → QScreen* for findByIdOrName slow path.
+QHash<QString, QPointer<QScreen>>& reverseCache()
+{
+    static QHash<QString, QPointer<QScreen>> s_cache;
+    return s_cache;
+}
+
+} // namespace
+
+void invalidateEdidCache(const QString& connectorName)
+{
+    // Cascade through the cross-process EDID cache in PhosphorIdentity
+    // first so subsequent identifier rebuilds see the fresh hardware
+    // state.
+    PhosphorIdentity::ScreenId::invalidateEdidCache(connectorName);
+
+    if (connectorName.isEmpty()) {
+        identifierCache().clear();
+        reverseCache().clear();
+        return;
+    }
+
+    auto& idCache = identifierCache();
+    for (auto it = idCache.begin(); it != idCache.end(); ++it) {
+        if (it.key() && it.key()->name() == connectorName) {
+            idCache.erase(it);
+            break;
+        }
+    }
+
+    auto& byIdCache = reverseCache();
+    for (auto it = byIdCache.begin(); it != byIdCache.end();) {
+        if (it.value().isNull() || it.value()->name() == connectorName) {
+            it = byIdCache.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+QString baseIdentifierFor(const QScreen* screen)
+{
+    if (!screen) {
+        return QString();
+    }
+    // Recompute from EDID fields. Cheap because the EDID-serial sysfs
+    // read is cached one level down in PhosphorIdentity::ScreenId.
+    return PhosphorIdentity::ScreenId::buildScreenBaseId(screen->manufacturer(), screen->model(),
+                                                         screen->serialNumber(), screen->name());
+}
+
+QString identifierFor(const QScreen* screen)
+{
+    if (!screen) {
+        return QString();
+    }
+
+    auto& cache = identifierCache();
+    auto cacheIt = cache.constFind(screen);
+    if (cacheIt != cache.constEnd()) {
+        return cacheIt.value();
+    }
+
+    const QString baseId = baseIdentifierFor(screen);
+    QString result = baseId;
+
+    // Disambiguate identical monitors via "/CONNECTOR" suffix.
+    for (const QScreen* other : QGuiApplication::screens()) {
+        if (other != screen && baseIdentifierFor(other) == baseId) {
+            result = baseId + QLatin1Char('/') + screen->name();
+            break;
+        }
+    }
+
+    cache.insert(screen, result);
+    return result;
+}
+
+QString idForName(const QString& connectorName)
+{
+    if (connectorName.isEmpty()) {
+        return connectorName;
+    }
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == connectorName) {
+            return identifierFor(screen);
+        }
+    }
+    return connectorName;
+}
+
+QString nameForId(const QString& screenId)
+{
+    if (screenId.isEmpty()) {
+        return QString();
+    }
+    QScreen* screen = findByIdOrName(screenId);
+    return screen ? screen->name() : QString();
+}
+
+QScreen* findByIdOrName(const QString& identifier)
+{
+    if (identifier.isEmpty()) {
+        return QGuiApplication::primaryScreen();
+    }
+
+    // Virtual screen IDs ("EDID/vs:N") resolve to the physical parent.
+    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(identifier);
+
+    // Fast path: connector name match.
+    for (QScreen* screen : QGuiApplication::screens()) {
+        if (screen->name() == physId) {
+            return screen;
+        }
+    }
+
+    auto& cache = reverseCache();
+    auto cacheIt = cache.constFind(physId);
+    if (cacheIt != cache.constEnd()) {
+        QScreen* cached = cacheIt.value().data();
+        if (cached && QGuiApplication::screens().contains(cached)) {
+            return cached;
+        }
+        cache.remove(physId);
+    }
+
+    // Exact screen ID match (only if it looks like an EDID-style ID).
+    if (physId.contains(QLatin1Char(':'))) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (identifierFor(screen) == physId) {
+                cache.insert(physId, screen);
+                return screen;
+            }
+        }
+    }
+
+    // Disambiguated form: "Manuf:Model:Serial/CONNECTOR".
+    // Skip for virtual screen IDs (the slash there is the VS separator).
+    int slashPos = physId.lastIndexOf(QLatin1Char('/'));
+    if (slashPos > 0 && physId == identifier) {
+        const QString connectorPart = identifier.mid(slashPos + 1);
+        const QString basePart = identifier.left(slashPos);
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (screen->name() == connectorPart && baseIdentifierFor(screen) == basePart) {
+                cache.insert(identifier, screen);
+                return screen;
+            }
+        }
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (identifierFor(screen) == basePart) {
+                cache.insert(identifier, screen);
+                return screen;
+            }
+        }
+    }
+
+    // Reverse fallback: stored config has bare base ID without suffix,
+    // but currently-connected monitors are duplicates (so identifierFor
+    // adds suffix). Match by base part of current screens.
+    if (identifier.contains(QLatin1Char(':')) && !identifier.contains(QLatin1Char('/'))) {
+        for (QScreen* screen : QGuiApplication::screens()) {
+            if (baseIdentifierFor(screen) == identifier) {
+                return screen;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+bool screensMatch(const QString& a, const QString& b)
+{
+    if (a == b) {
+        return true;
+    }
+    if (a.isEmpty() || b.isEmpty()) {
+        return false;
+    }
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(a) || PhosphorIdentity::VirtualScreenId::isVirtual(b)) {
+        return false;
+    }
+    QScreen* sa = findByIdOrName(a);
+    QScreen* sb = findByIdOrName(b);
+    return sa && sb && sa == sb;
+}
+
+} // namespace Phosphor::Screens::ScreenIdentity

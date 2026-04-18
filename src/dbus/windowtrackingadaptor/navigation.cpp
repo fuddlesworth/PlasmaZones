@@ -159,12 +159,12 @@ QStringList WindowTrackingAdaptor::resolveSnapModeScreensForResnap(const QString
     if (!screenFilter.isEmpty()) {
         if (VirtualScreenId::isVirtual(screenFilter)) {
             candidates.append(screenFilter);
-        } else if (auto* mgr = ScreenManager::instance()) {
+        } else if (auto* mgr = screenManager()) {
             candidates = mgr->virtualScreenIdsFor(screenFilter);
         } else {
             candidates.append(screenFilter);
         }
-    } else if (auto* mgr = ScreenManager::instance()) {
+    } else if (auto* mgr = screenManager()) {
         candidates = mgr->effectiveScreenIds();
     }
 

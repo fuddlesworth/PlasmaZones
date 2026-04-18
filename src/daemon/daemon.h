@@ -14,9 +14,14 @@
 
 #include "shortcutmanager.h"
 #include "../core/layoutsourcefactory.h"
+#include "../core/screenmanagerservice.h" // ScreenManager alias + service-locator helpers
 #include "../core/types.h"
 #include "../core/virtualscreenswapper.h" // shim → Phosphor::Screens::VirtualScreenSwapper alias
 #include "../autotile/AutotileEngine.h"
+
+namespace Phosphor::Screens {
+class PlasmaPanelSource;
+}
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -32,7 +37,8 @@ class LayoutManager;
 class LayoutComputeService;
 class Settings;
 class OverlayService;
-class ScreenManager;
+// ScreenManager type alias + service-locator helpers come from
+// "../core/screenmanagerservice.h" included above.
 class VirtualDesktopManager;
 class ActivityManager;
 class ShortcutManager;
@@ -369,6 +375,14 @@ private:
     // instead of parsing composite windowId strings.
     std::unique_ptr<WindowRegistry> m_windowRegistry;
     std::unique_ptr<OverlayService> m_overlayService;
+    /// Plasma D-Bus panel-offset source. Declared before m_screenManager
+    /// because the manager holds a non-owning IPanelSource* into it.
+    std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
+    /// Settings-backed IConfigStore for VS topology. Shared by
+    /// m_screenManager (Config::configStore) and m_virtualScreenSwapper
+    /// (constructor arg). Declared before both so destruction order
+    /// runs swapper → screen-manager → store.
+    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
     std::unique_ptr<ScreenManager> m_screenManager;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
@@ -411,11 +425,6 @@ private:
     /// and AutotileEngine owns the autotile ones.
     std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
     std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
-    /// Settings-backed Phosphor::Screens::IConfigStore facade, lifetimed
-    /// to outlast m_virtualScreenSwapper (declaration order matters for
-    /// destruction). The swapper holds a non-owning IConfigStore* into
-    /// this store, so the store must be destroyed *after* the swapper.
-    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
     /// Stateless façade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.

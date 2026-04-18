@@ -452,7 +452,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
         const QString primaryId = Utils::screenIdentifier(screen);
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
         layout->setAspectRatioClass(PhosphorLayout::ScreenClassification::classify(geo.width(), geo.height()));

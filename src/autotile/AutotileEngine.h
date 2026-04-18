@@ -82,7 +82,13 @@ class AutotileConfig;
 class LayoutManager;
 class NavigationController;
 class PerScreenConfigResolver;
+// ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+} // namespace PlasmaZones
+namespace Phosphor::Screens {
 class ScreenManager;
+}
+namespace PlasmaZones {
+using ScreenManager = Phosphor::Screens::ScreenManager;
 class Settings;
 class SettingsBridge;
 class WindowRegistry;

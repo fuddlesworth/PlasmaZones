@@ -108,7 +108,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen = resolvePhysicalScreen(screenId);
     if (!screen) {
         return {};
     }
@@ -139,7 +139,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     }
 
     // Resolve physical screen (virtual IDs resolve to backing QScreen*)
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen = resolvePhysicalScreen(screenId);
     if (!screen) {
         return QRect();
     }
@@ -153,7 +153,7 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen = resolvePhysicalScreen(screenId);
     if (!screen) {
         return combined.toAlignedRect();
     }
@@ -259,7 +259,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         }
 
         // Resolve physical screen for zone geometry calculation
-        QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+        QScreen* screen = resolvePhysicalScreen(screenId);
         if (!screen) {
             continue;
         }

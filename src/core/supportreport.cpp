@@ -62,7 +62,7 @@ SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenMana
             Snapshot::ScreenInfo info;
             info.name = screen->name();
             info.geometry = screen->geometry();
-            info.available = ScreenManager::actualAvailableGeometry(screen);
+            info.available = actualAvailableGeometry(screen);
             info.refreshRate = screen->refreshRate();
             info.devicePixelRatio = screen->devicePixelRatio();
             snap.screens.append(info);

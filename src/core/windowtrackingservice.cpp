@@ -434,7 +434,7 @@ std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& 
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
     if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
         && !Utils::screensMatch(storedScreen, currentScreenName)) {
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         QScreen* target =
             mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);
         if (target) {
@@ -653,7 +653,7 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
         // Validate virtual screen still exists — configuration may have changed since float
         restoreScreen = resolveEffectiveScreenId(restoreScreen);
         // Check if the physical screen still exists
-        QScreen* physScreen = ScreenManager::resolvePhysicalScreen(restoreScreen);
+        QScreen* physScreen = resolvePhysicalScreen(restoreScreen);
         if (!physScreen) {
             restoreScreen.clear();
         }

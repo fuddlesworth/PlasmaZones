@@ -9,16 +9,14 @@
 // library is at the step-1 scaffold from
 // docs/phosphor-screens-api-design.md and ships no public types yet.
 //
-// Subsequent migration PRs will land the remaining headers alongside the
-// ones already migrated:
-//
-//   #include <PhosphorScreens/Manager.h>         // ScreenManager  (next)
-
 #include <PhosphorScreens/IConfigStore.h>
 #include <PhosphorScreens/IPanelSource.h>
 #include <PhosphorScreens/InMemoryConfigStore.h>
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/NoOpPanelSource.h>
+#include <PhosphorScreens/PlasmaPanelSource.h>
 #include <PhosphorScreens/Resolver.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/VirtualScreen.h>
 

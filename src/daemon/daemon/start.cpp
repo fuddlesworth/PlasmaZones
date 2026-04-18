@@ -675,7 +675,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // Trigger debounced geometry recalculation for the rest of the system
     // (overlays, panel requery, autotile retile). Reuse the same debounced
     // path as physical screen geometry changes.
-    if (ScreenManager::resolvePhysicalScreen(physicalScreenId)) {
+    if (resolvePhysicalScreen(physicalScreenId)) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }

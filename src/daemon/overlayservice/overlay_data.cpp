@@ -172,7 +172,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
     const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         if (!vsIds.isEmpty()) {
@@ -225,7 +225,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     // screen center disambiguation always resolves to the same VS. Callers must
     // use the QString overload instead.
     const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
                              << "has virtual screens configured — caller should use QString overload.";

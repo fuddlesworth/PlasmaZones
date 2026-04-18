@@ -75,7 +75,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     // should have a live overlay window after this call completes. Filters
     // on single-monitor mode, disabled contexts, autotile exclusion, and
     // physical-screen resolvability.
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
     const bool haveEffective = mgr && !effectiveIds.isEmpty();
 
@@ -355,7 +355,7 @@ void OverlayService::updateMousePosition(int cursorX, int cursorY)
 void OverlayService::createOverlayWindow(QScreen* screen)
 {
     const QString screenId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     QRect geom = (mgr && mgr->screenGeometry(screenId).isValid()) ? mgr->screenGeometry(screenId) : screen->geometry();
     createOverlayWindow(screenId, screen, geom);
 }

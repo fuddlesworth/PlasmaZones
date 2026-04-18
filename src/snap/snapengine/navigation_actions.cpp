@@ -67,7 +67,7 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
                     const QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
                     QScreen* physScreen = Utils::findScreenByIdOrName(physId);
                     if (physScreen) {
-                        auto* mgr = ScreenManager::instance();
+                        auto* mgr = screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }

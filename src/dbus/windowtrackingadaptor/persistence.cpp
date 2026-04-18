@@ -137,7 +137,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
 
     QRect geometry(x, y, width, height);
     // Use effective screen IDs (virtual if subdivided) for correct geometry checks
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
             QRect screenGeom = mgr->screenGeometry(sid);
@@ -232,14 +232,14 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
     // Check if panel geometry is ready, or if ScreenManager doesn't exist (fallback)
     // If ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
-    if (ScreenManager::instance() && !ScreenManager::isPanelGeometryReady()) {
+    if (screenManager() && !isPanelGeometryReady()) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }
 
     // Both conditions met (or ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
-    if (!ScreenManager::instance()) {
+    if (!screenManager()) {
         qCWarning(lcDbusWindow) << "pendingRestoresAvailable: no ScreenManager, geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
@@ -262,7 +262,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
     // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
     for (const QString& sid : effectiveIds) {
         PhosphorZones::Layout* layout =
             m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
@@ -282,7 +282,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         return QString();
     }
     // Use effective screen IDs for virtual screen support
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
             QScreen* screen = mgr->physicalQScreenFor(sid);

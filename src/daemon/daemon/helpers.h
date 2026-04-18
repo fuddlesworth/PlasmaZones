@@ -27,7 +27,7 @@ namespace PlasmaZones {
 inline QString resolveVirtualScreenId(const QString& physicalId, const WindowTrackingAdaptor* trackingAdaptor,
                                       const QPoint& cursorPos = QPoint(-1, -1))
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (!mgr || !mgr->hasVirtualScreens(physicalId)) {
         return physicalId;
     }

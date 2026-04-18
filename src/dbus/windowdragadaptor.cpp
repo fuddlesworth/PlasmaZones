@@ -90,13 +90,13 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
     ScreenResolution result;
     result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
     result.physicalId = VirtualScreenId::extractPhysicalId(result.screenId);
-    result.qscreen = ScreenManager::resolvePhysicalScreen(result.physicalId);
+    result.qscreen = resolvePhysicalScreen(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
         if (result.qscreen) {
             result.physicalId = Utils::screenIdentifier(result.qscreen);
             // Try virtual screen resolution before falling back to physical ID
-            auto* mgr = ScreenManager::instance();
+            auto* mgr = screenManager();
             if (mgr && mgr->hasVirtualScreens(result.physicalId)) {
                 QString vsId = mgr->effectiveScreenAt(QPoint(qRound(globalPos.x()), qRound(globalPos.y())));
                 result.screenId = vsId.isEmpty() ? result.physicalId : vsId;
@@ -377,7 +377,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
     // Use virtual screen geometry when available
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = screenManager();
     QRect vsGeom = smgr ? smgr->screenGeometry(effectiveId) : QRect();
     const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 

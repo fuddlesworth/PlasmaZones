@@ -57,7 +57,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
 
         // Validate that the target screen exists. Use ScreenManager::resolvePhysicalScreen
         // which properly handles virtual screen IDs (resolving to backing QScreen*).
-        QScreen* screen = ScreenManager::resolvePhysicalScreen(effectiveScreen);
+        QScreen* screen = resolvePhysicalScreen(effectiveScreen);
         if (!screen) {
             qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                            << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
@@ -121,7 +121,7 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     // Build a unified list of screen IDs from either effective screens (includes
     // virtual screens) or physical screens as fallback, then use a single loop.
     QStringList screenIds;
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = screenManager();
     if (smgr) {
         screenIds = smgr->effectiveScreenIds();
     } else {
@@ -586,7 +586,7 @@ WindowGeometryList WindowTrackingService::applyBatchAssignments(const QVector<Zo
         return geometries;
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
 
     for (const auto& entry : entries) {
         if (entry.targetZoneId == QLatin1String("__restore__")) {
@@ -608,7 +608,7 @@ WindowGeometryList WindowTrackingService::applyBatchAssignments(const QVector<Zo
             // Physical fallback for early startup when ScreenManager
             // isn't initialised yet. effectiveScreenAt above handles
             // VS-aware resolution, so this pass only needs to cover
-            // the "ScreenManager::instance() == nullptr" edge case.
+            // the "screenManager() == nullptr" edge case.
             for (QScreen* screen : QGuiApplication::screens()) {
                 if (screen->geometry().contains(center)) {
                     screenId = Utils::screenIdentifier(screen);

@@ -19,7 +19,7 @@ QString resolveScreenId(const QString& screenId)
         // Fall back to the primary screen's effective screen ID.
         // QCursor::pos() returns stale data for Wayland background daemons,
         // so we avoid it entirely and use the primary screen instead.
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         QScreen* primary = QGuiApplication::primaryScreen();
         if (primary && mgr) {
             // If the primary screen has virtual subdivisions, returns the first
@@ -34,7 +34,7 @@ QString resolveScreenId(const QString& screenId)
 
 QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         const QRect geom = mgr->screenGeometry(screenId);
         if (geom.isValid()) {
@@ -43,7 +43,7 @@ QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& scree
     }
     QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
     if (!screen) {
-        screen = ScreenManager::resolvePhysicalScreen(screenId);
+        screen = resolvePhysicalScreen(screenId);
     }
     if (screen) {
         return GeometryUtils::effectiveScreenGeometry(layout, screen);
@@ -53,7 +53,7 @@ QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& scree
 
 QScreen* resolvePhysicalQScreen(const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         QScreen* screen = mgr->physicalQScreenFor(screenId);
         if (screen) {

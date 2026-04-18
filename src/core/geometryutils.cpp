@@ -43,7 +43,7 @@ struct ScreenGeometries
 
 ScreenGeometries resolveScreenGeometries(const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (!mgr) {
         return {};
     }
@@ -82,7 +82,7 @@ static QRectF calculateZoneGeometryInAvailableArea(PhosphorZones::Zone* zone, QS
     }
 
     // Use actualAvailableGeometry which excludes panels/taskbars (queries PlasmaShell on Wayland)
-    const QRectF availableGeom = ScreenManager::actualAvailableGeometry(screen);
+    const QRectF availableGeom = actualAvailableGeometry(screen);
     return zone->calculateAbsoluteGeometry(availableGeom);
 }
 
@@ -182,14 +182,14 @@ QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, QScreen* screen, int i
     }
 
     // Detect which edges are at screen boundaries
-    QRectF screenGeom = useAvailableGeometry ? ScreenManager::actualAvailableGeometry(screen) : screen->geometry();
+    QRectF screenGeom = useAvailableGeometry ? actualAvailableGeometry(screen) : screen->geometry();
 
     // Look up physical edges via ScreenManager so virtual screen internal edges
     // get inner gap instead of outer gap, matching the QRect overload behavior.
     // When the caller provides a virtual screen ID, use it; otherwise fall back
     // to the physical screen identifier (which yields all-true physical edges).
     VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
         physEdges = mgr->physicalEdgesFor(resolvedId);
@@ -220,12 +220,12 @@ QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, const QRect& screenGeo
     // For virtual screens, internal edges (shared with another virtual screen) get inner
     // gap instead of outer gap to avoid double gaps at virtual screen boundaries.
     // For physical screens, physicalEdgesFor() returns all-true (all edges are outer).
-    // Note: When ScreenManager::instance() is null (e.g. in unit tests), the fallback
+    // Note: When screenManager() is null (e.g. in unit tests), the fallback
     // applies default {true,true,true,true} physEdges. Tests exercising virtual
     // screen gap calculations should provide explicit physEdges via applyGapsToZoneGeometry()
     // directly, rather than relying on this code path.
     if (!screenId.isEmpty()) {
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         if (mgr) {
             auto pe = mgr->physicalEdgesFor(screenId);
             return applyGapsToZoneGeometry(geom, zone, referenceGeom, innerGap, outerGaps, pe);
@@ -390,7 +390,7 @@ QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, QScreen* screen)
     if (layout && layout->useFullScreenGeometry()) {
         return screen->geometry();
     }
-    return ScreenManager::actualAvailableGeometry(screen);
+    return actualAvailableGeometry(screen);
 }
 
 QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
@@ -441,7 +441,7 @@ static EmptyZoneList buildEmptyZoneListImpl(PhosphorZones::Layout* layout, const
         resolvedOverlayOrigin = overlayOriginRect;
     } else if (physScreen) {
         resolvedScreenGeom = physScreen->geometry();
-        resolvedAvailGeom = ScreenManager::actualAvailableGeometry(physScreen);
+        resolvedAvailGeom = actualAvailableGeometry(physScreen);
         resolvedOverlayOrigin = physScreen->geometry();
     } else {
         return {};

@@ -40,6 +40,12 @@ if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
     find_package(PhosphorIdentity 0.1 QUIET)
 endif()
 
+# PhosphorShell ships the wlr-layer-shell QPA integration. ScreenManager
+# consumes it for the per-screen geometry sensor windows.
+if(NOT TARGET PhosphorShell::PhosphorShell)
+    find_package(PhosphorShell 0.1 QUIET)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -48,9 +54,12 @@ set(phosphorscreens_public_HDRS
     include/PhosphorScreens/IConfigStore.h
     include/PhosphorScreens/InMemoryConfigStore.h
     include/PhosphorScreens/IPanelSource.h
+    include/PhosphorScreens/Manager.h
     include/PhosphorScreens/NoOpPanelSource.h
     include/PhosphorScreens/PhosphorScreens.h
+    include/PhosphorScreens/PlasmaPanelSource.h
     include/PhosphorScreens/Resolver.h
+    include/PhosphorScreens/ScreenIdentity.h
     include/PhosphorScreens/Swapper.h
     include/PhosphorScreens/VirtualScreen.h
 )
@@ -60,7 +69,11 @@ set(phosphorscreens_private_HDRS
 )
 
 set(phosphorscreens_SRCS
+    src/manager.cpp
+    src/manager_virtualscreens.cpp
+    src/plasmapanelsource.cpp
     src/resolver.cpp
+    src/screenidentity.cpp
     src/screenslogging.cpp
     src/swapper.cpp
 )
@@ -98,10 +111,11 @@ target_compile_features(PhosphorScreens PUBLIC cxx_std_20)
 target_link_libraries(PhosphorScreens
     PUBLIC
         Qt6::Core
-        Qt6::Gui  # QRect / QRectF in VirtualScreen.h public surface
+        Qt6::Gui  # QRect / QRectF / QScreen in public headers
         PhosphorIdentity::PhosphorIdentity
     PRIVATE
-        Qt6::DBus  # ScreenResolver internal D-Bus call; not in public headers
+        Qt6::DBus            # ScreenResolver D-Bus + PlasmaPanelSource internal
+        PhosphorShell::PhosphorShell  # LayerSurface for geometry sensors
 )
 
 set_target_properties(PhosphorScreens PROPERTIES

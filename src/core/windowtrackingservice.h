@@ -25,7 +25,13 @@ namespace PlasmaZones {
 
 class LayoutManager;
 class ISettings;
+// ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+} // namespace PlasmaZones
+namespace Phosphor::Screens {
 class ScreenManager;
+}
+namespace PlasmaZones {
+using ScreenManager = Phosphor::Screens::ScreenManager;
 class VirtualDesktopManager;
 class WindowRegistry;
 

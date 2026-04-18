@@ -290,7 +290,7 @@ void OverlayService::ensureOsdScreenAddedConnected()
         return;
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-        auto* mgr2 = ScreenManager::instance();
+        auto* mgr2 = screenManager();
         const QString physId = Utils::screenIdentifier(screen);
         const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
         if (m_layoutOsdWarmed) {
@@ -313,11 +313,11 @@ void OverlayService::ensureOsdScreenAddedConnected()
 
 void OverlayService::warmUpLayoutOsd()
 {
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-            QScreen* physScreen = ScreenManager::resolvePhysicalScreen(sid);
+            QScreen* physScreen = resolvePhysicalScreen(sid);
             if (physScreen) {
                 createLayoutOsdWindow(sid, physScreen);
             }
@@ -331,11 +331,11 @@ void OverlayService::warmUpLayoutOsd()
 
 void OverlayService::warmUpNavigationOsd()
 {
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-            QScreen* physScreen = ScreenManager::resolvePhysicalScreen(sid);
+            QScreen* physScreen = resolvePhysicalScreen(sid);
             if (physScreen) {
                 createNavigationOsdWindow(sid, physScreen);
             }

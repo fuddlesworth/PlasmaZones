@@ -46,7 +46,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     m_zoneSelectorVisible = true;
 
     // Resolve target screen from screenId (supports virtual screen IDs)
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
         targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId) : Utils::findScreenByIdOrName(targetScreenId);
@@ -103,7 +103,7 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-            auto* smgr = ScreenManager::instance();
+            auto* smgr = screenManager();
             QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
                                                                             : screen->geometry();
             destroyZoneSelectorWindow(screenId);
@@ -166,7 +166,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
         return;
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     // Clear selection highlight on all OTHER zone selector windows when cursor moves
     // to a different virtual screen, preventing stale highlights from previous screen.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
@@ -456,7 +456,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         return QRect();
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : Utils::findScreenByIdOrName(screenId);
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
@@ -484,7 +484,7 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         }
     }
     if (!areaGeom.isValid() && physScreen) {
-        areaGeom = ScreenManager::actualAvailableGeometry(physScreen);
+        areaGeom = actualAvailableGeometry(physScreen);
     }
     if (!areaGeom.isValid()) {
         return QRect();

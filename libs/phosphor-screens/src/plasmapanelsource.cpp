@@ -1,0 +1,289 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include "PhosphorScreens/PlasmaPanelSource.h"
+
+#include "screenslogging.h"
+
+#include <QDBusConnection>
+#include <QDBusConnectionInterface>
+#include <QDBusInterface>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusServiceWatcher>
+#include <QGuiApplication>
+#include <QRegularExpression>
+#include <QScreen>
+
+namespace Phosphor::Screens {
+
+namespace {
+constexpr auto kPlasmaShellService = "org.kde.plasmashell";
+constexpr auto kPlasmaShellPath = "/PlasmaShell";
+constexpr auto kPlasmaShellInterface = "org.kde.PlasmaShell";
+
+/// JS evaluated by `org.kde.plasmashell.evaluateScript` to enumerate panels.
+/// Output format per panel:
+///   PANEL:<screenIdx>:<location>:<hiding>:<offset>:<floating>:<x>,<y>,<w>,<h>
+const QString& panelScript()
+{
+    static const QString s = QStringLiteral(R"(
+        panels().forEach(function(p,i){
+            var thickness = Math.abs(p.height);
+            var floating = p.floating ? 1 : 0;
+            var hiding = p.hiding;
+            var sg = screenGeometry(p.screen);
+            var loc = p.location;
+            var pg = p.geometry;
+            var offset = thickness;
+            if (pg && sg) {
+                if (loc === "top") {
+                    offset = (pg.y + pg.height) - sg.y;
+                } else if (loc === "bottom") {
+                    offset = (sg.y + sg.height) - pg.y;
+                } else if (loc === "left") {
+                    offset = (pg.x + pg.width) - sg.x;
+                } else if (loc === "right") {
+                    offset = (sg.x + sg.width) - pg.x;
+                }
+            }
+            var sgStr = sg ? (sg.x + "," + sg.y + "," + sg.width + "," + sg.height) : "";
+            print("PANEL:" + p.screen + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
+        });
+    )");
+    return s;
+}
+} // namespace
+
+PlasmaPanelSource::PlasmaPanelSource(QObject* parent)
+    : IPanelSource(parent)
+{
+    m_requeryTimer.setSingleShot(true);
+    connect(&m_requeryTimer, &QTimer::timeout, this, [this]() {
+        issueQuery(/*emitRequeryCompleted=*/true);
+    });
+}
+
+PlasmaPanelSource::~PlasmaPanelSource() = default;
+
+void PlasmaPanelSource::start()
+{
+    if (m_running) {
+        return;
+    }
+    m_running = true;
+
+    // Watch for plasmashell registration so we re-query as soon as the
+    // service appears, instead of guessing with arbitrary timer delays.
+    if (!m_plasmaShellWatcher) {
+        m_plasmaShellWatcher =
+            new QDBusServiceWatcher(QString::fromLatin1(kPlasmaShellService), QDBusConnection::sessionBus(),
+                                    QDBusServiceWatcher::WatchForRegistration, this);
+        connect(m_plasmaShellWatcher, &QDBusServiceWatcher::serviceRegistered, this, [this]() {
+            qCInfo(lcPhosphorScreens) << "Plasmashell: registered, querying panels";
+            issueQuery(/*emitRequeryCompleted=*/false);
+        });
+    }
+
+    issueQuery(/*emitRequeryCompleted=*/false);
+}
+
+void PlasmaPanelSource::stop()
+{
+    if (!m_running) {
+        return;
+    }
+    m_running = false;
+    m_requeryTimer.stop();
+    if (m_plasmaShellWatcher) {
+        m_plasmaShellWatcher->deleteLater();
+        m_plasmaShellWatcher = nullptr;
+    }
+}
+
+PlasmaPanelSource::Offsets PlasmaPanelSource::currentOffsets(QScreen* screen) const
+{
+    if (!screen) {
+        return {};
+    }
+    return m_offsets.value(screen->name());
+}
+
+bool PlasmaPanelSource::ready() const
+{
+    return m_ready;
+}
+
+void PlasmaPanelSource::requestRequery(int delayMs)
+{
+    if (delayMs <= 0) {
+        issueQuery(/*emitRequeryCompleted=*/true);
+        return;
+    }
+    m_requeryTimer.setInterval(delayMs);
+    m_requeryTimer.start();
+}
+
+void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
+{
+    auto* plasmaShell =
+        new QDBusInterface(QString::fromLatin1(kPlasmaShellService), QString::fromLatin1(kPlasmaShellPath),
+                           QString::fromLatin1(kPlasmaShellInterface), QDBusConnection::sessionBus());
+
+    if (!plasmaShell->isValid()) {
+        // No Plasma shell — clear m_offsets (so previously-recorded panels
+        // disappear after a Plasma shell exit), mark ready, fire per-screen
+        // change signals so the manager re-runs availability calculation.
+        delete plasmaShell;
+
+        QHash<QString, Offsets> previous = m_offsets;
+        m_offsets.clear();
+
+        for (auto* screen : QGuiApplication::screens()) {
+            if (previous.contains(screen->name())) {
+                Q_EMIT panelOffsetsChanged(screen);
+            }
+        }
+
+        if (!m_ready) {
+            m_ready = true;
+            qCInfo(lcPhosphorScreens) << "Panel geometry: ready, no Plasma shell";
+            // First-ready transition — kick a synthetic per-screen
+            // change so listeners refresh available-geometry. Otherwise
+            // a host that wires panelGeometryReady to "now compute zones"
+            // would try to compute against stale (Qt-default) availability.
+            for (auto* screen : QGuiApplication::screens()) {
+                Q_EMIT panelOffsetsChanged(screen);
+            }
+        }
+        if (emitRequeryCompleted) {
+            Q_EMIT requeryCompleted();
+        }
+        return;
+    }
+
+    QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), panelScript());
+    auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, plasmaShell, emitRequeryCompleted](QDBusPendingCallWatcher* w) {
+                QDBusPendingReply<QString> reply = *w;
+
+                QHash<QString, Offsets> newOffsets;
+
+                if (reply.isValid()) {
+                    const QString output = reply.value();
+                    qCDebug(lcPhosphorScreens) << "queryKdePlasmaPanels D-Bus reply=" << output;
+
+                    static const QRegularExpression panelRegex(QStringLiteral(
+                        "PANEL:(\\d+):(\\w+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
+                    const auto qtScreens = QGuiApplication::screens();
+                    auto it = panelRegex.globalMatch(output);
+                    while (it.hasNext()) {
+                        QRegularExpressionMatch match = it.next();
+                        const int plasmaIndex = match.captured(1).toInt();
+                        const QString location = match.captured(2);
+                        const QString hiding = match.captured(3);
+                        int totalOffset = match.captured(4).toInt();
+
+                        QString connectorName;
+                        if (!match.captured(6).isEmpty()) {
+                            const QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
+                                                   match.captured(8).toInt(), match.captured(9).toInt());
+                            for (auto* qs : qtScreens) {
+                                if (qs->geometry() == plasmaGeom) {
+                                    connectorName = qs->name();
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (connectorName.isEmpty()) {
+                            qCWarning(lcPhosphorScreens) << "Could not match Plasma screen" << plasmaIndex
+                                                         << "to any Qt screen by geometry — skipping panel";
+                            continue;
+                        }
+
+                        const bool autoHides =
+                            (hiding == QLatin1String("autohide") || hiding == QLatin1String("dodgewindows")
+                             || hiding == QLatin1String("windowsgobelow"));
+                        if (autoHides) {
+                            totalOffset = 0;
+                        }
+
+                        Offsets& offsets = newOffsets[connectorName];
+                        if (location == QLatin1String("top")) {
+                            offsets.top = qMax(offsets.top, totalOffset);
+                        } else if (location == QLatin1String("bottom")) {
+                            offsets.bottom = qMax(offsets.bottom, totalOffset);
+                        } else if (location == QLatin1String("left")) {
+                            offsets.left = qMax(offsets.left, totalOffset);
+                        } else if (location == QLatin1String("right")) {
+                            offsets.right = qMax(offsets.right, totalOffset);
+                        }
+                    }
+                } else {
+                    qCWarning(lcPhosphorScreens)
+                        << "queryKdePlasmaPanels D-Bus query failed:" << reply.error().message();
+                    // Preserve previous offsets on failure — clearing them
+                    // would zero out every screen's panel info on a transient
+                    // error.
+                    newOffsets = m_offsets;
+                }
+
+                // Diff old vs new and fire per-screen change signals only
+                // for screens whose offsets actually changed (including
+                // transitions to/from "no panels").
+                QSet<QString> changedNames;
+                for (auto it = newOffsets.constBegin(); it != newOffsets.constEnd(); ++it) {
+                    auto prev = m_offsets.constFind(it.key());
+                    if (prev == m_offsets.constEnd() || !(prev.value() == it.value())) {
+                        changedNames.insert(it.key());
+                    }
+                    qCInfo(lcPhosphorScreens)
+                        << "Screen" << it.key() << "panel offsets T=" << it.value().top << "B=" << it.value().bottom
+                        << "L=" << it.value().left << "R=" << it.value().right;
+                }
+                for (auto it = m_offsets.constBegin(); it != m_offsets.constEnd(); ++it) {
+                    if (!newOffsets.contains(it.key())) {
+                        changedNames.insert(it.key());
+                    }
+                }
+
+                m_offsets = std::move(newOffsets);
+
+                const auto qtScreens = QGuiApplication::screens();
+                for (const QString& name : std::as_const(changedNames)) {
+                    for (auto* qs : qtScreens) {
+                        if (qs->name() == name) {
+                            Q_EMIT panelOffsetsChanged(qs);
+                            break;
+                        }
+                    }
+                }
+
+                if (!m_ready) {
+                    m_ready = true;
+                    qCInfo(lcPhosphorScreens) << "Panel geometry: ready";
+                    // First-ready transition — synthetic per-screen fan-out so
+                    // listeners that wire panelGeometryReady to "now compute
+                    // zones" pick up the offsets even if no per-screen diff
+                    // fired (e.g. a screen with no panels at all).
+                    for (auto* qs : qtScreens) {
+                        if (!changedNames.contains(qs->name())) {
+                            Q_EMIT panelOffsetsChanged(qs);
+                        }
+                    }
+                }
+
+                if (emitRequeryCompleted) {
+                    Q_EMIT requeryCompleted();
+                }
+
+                plasmaShell->deleteLater();
+                w->deleteLater();
+            });
+}
+
+} // namespace Phosphor::Screens

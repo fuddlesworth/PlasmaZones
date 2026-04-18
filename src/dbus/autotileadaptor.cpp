@@ -202,7 +202,7 @@ bool AutotileAdaptor::deferUntilPanelReady()
 {
     // Fast path: panel geometry already known, or no ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
-    if (!ScreenManager::instance() || ScreenManager::isPanelGeometryReady()) {
+    if (!screenManager() || isPanelGeometryReady()) {
         return false;
     }
 
@@ -213,8 +213,7 @@ bool AutotileAdaptor::deferUntilPanelReady()
     // session is fine — panelGeometryReady is a one-shot signal (see
     // ScreenManager::queryKdePlasmaPanels).
     if (!m_pendingOpensListenerInstalled) {
-        connect(ScreenManager::instance(), &ScreenManager::panelGeometryReady, this,
-                &AutotileAdaptor::flushPendingWindowOpens);
+        connect(screenManager(), &ScreenManager::panelGeometryReady, this, &AutotileAdaptor::flushPendingWindowOpens);
         m_pendingOpensListenerInstalled = true;
     }
     return true;

@@ -97,7 +97,7 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     // Resolve to virtual screen ID when the physical screen has subdivisions,
     // so shader-type checks use the correct per-virtual-screen layout.
     const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && mgr->hasVirtualScreens(physId)) {
         // Check all virtual screens — if any uses a shader, return true.
         // This is used by initializeOverlay which creates per-virtual-screen windows.

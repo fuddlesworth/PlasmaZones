@@ -135,7 +135,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
     // tryEmitPendingRestoresAvailable(), which emits immediately when
     // isPanelGeometryReady() returns false (no ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
-        auto* screenMgr = ScreenManager::instance();
+        auto* screenMgr = screenManager();
         if (!screenMgr) {
             qCWarning(lcDbusWindow)
                 << "ScreenManager instance not available - window restoration may use incorrect geometry";
@@ -143,7 +143,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
         }
         connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
         // If panel geometry is already ready, trigger the check now
-        if (ScreenManager::isPanelGeometryReady()) {
+        if (isPanelGeometryReady()) {
             onPanelGeometryReady();
         }
     });
@@ -507,7 +507,7 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     // focused window's daemon-tracked screen assignment as the best hint.
     QString resolvedId = screenId;
     if (!VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         if (mgr && mgr->hasVirtualScreens(screenId)) {
             // Use focused window's tracked screen as hint
             if (m_service && !m_lastActiveWindowId.isEmpty()) {

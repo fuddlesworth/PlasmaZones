@@ -140,7 +140,7 @@ OverlayService::OverlayService(QObject* parent)
     }
 
     // Connect to virtual screen configuration changes
-    if (auto* mgr = ScreenManager::instance()) {
+    if (auto* mgr = screenManager()) {
         auto onVirtualScreensChangedHandler = [this](const QString& physicalScreenId) {
             // Destroy old overlays for this physical screen, recreate with new config
             QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
@@ -163,7 +163,7 @@ OverlayService::OverlayService(QObject* parent)
             // destroy any overlay window keyed by the bare physical screen ID
             // itself. Virtual screens use prefixed keys; the bare key would be
             // a leftover from the previous (non-virtual) configuration.
-            auto* mgr2 = ScreenManager::instance();
+            auto* mgr2 = screenManager();
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
@@ -832,7 +832,7 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 void OverlayService::setupForScreen(QScreen* screen)
 {
     // Set up overlay windows for all effective screens on this physical screen
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     const QString physId = Utils::screenIdentifier(screen);
     if (mgr && mgr->hasVirtualScreens(physId)) {
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
@@ -883,7 +883,7 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     }
     const QString physScreenId = Utils::screenIdentifier(screen);
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {

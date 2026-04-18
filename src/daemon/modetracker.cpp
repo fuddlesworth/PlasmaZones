@@ -50,7 +50,7 @@ bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) cons
     // Use caller-supplied values when provided; fall back to stored context.
     const int effectiveDesktop = (desktop >= 0) ? desktop : m_desktop;
     const QString& effectiveActivity = activity.isEmpty() ? m_activity : activity;
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);

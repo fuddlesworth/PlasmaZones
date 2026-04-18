@@ -198,7 +198,7 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     }
 
     // Use virtual screen geometry for zone calculation when available
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     QRectF effectiveGeom;
     if (mgr) {
         QRect vsGeom = mgr->screenGeometry(outScreenId);

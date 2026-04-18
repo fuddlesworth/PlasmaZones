@@ -160,7 +160,7 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList
     // virtual screen to target.
     QString resolvedScreen = screenId;
     if (!VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = ScreenManager::instance();
+        auto* mgr = screenManager();
         if (mgr && mgr->hasVirtualScreens(screenId) && !emptyZones.isEmpty()) {
             const EmptyZoneEntry& first = emptyZones.first();
             QPoint center(first.x + first.width / 2, first.y + first.height / 2);

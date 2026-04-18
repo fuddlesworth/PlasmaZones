@@ -115,7 +115,7 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 // IDs, connector names, and falls back to primary screen.
 inline QScreen* resolveTargetScreen(const QString& screenId)
 {
-    return ScreenManager::resolvePhysicalScreen(screenId);
+    return resolvePhysicalScreen(screenId);
 }
 
 /// Resolve the PhosphorLayer anchors + margins for a surface that targets
@@ -169,7 +169,7 @@ inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& phy
 /// Returns the geometry the overlay window should cover.
 inline QRect resolveScreenGeometry(const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         QRect geom = mgr->screenGeometry(screenId);
         if (geom.isValid()) {

@@ -94,7 +94,7 @@ QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds
     return vsIds[bestIdx];
 }
 
-// Takes an explicit ScreenManager* parameter rather than using ScreenManager::instance()
+// Takes an explicit ScreenManager* parameter rather than using screenManager()
 // because this method is called during daemon startup (Daemon::start) before the
 // singleton instance may be fully initialized, and the caller already holds a valid
 // ScreenManager pointer from its own member (m_screenManager.get()).
@@ -808,7 +808,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     // Check virtual screens first (covers both virtual and non-subdivided physical screens).
     // Use area-overlap semantics (not center-point containment) so windows on virtual
     // screen boundaries are handled consistently with the physical-screen fallback path.
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
@@ -837,7 +837,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
     // Try virtual/effective screens first via ScreenManager
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = screenManager();
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
@@ -896,7 +896,7 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return screenId;
     }
 
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = screenManager();
     if (!smgr) {
         return screenId;
     }

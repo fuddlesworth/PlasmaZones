@@ -22,7 +22,13 @@ class WindowTrackingAdaptor;
 class LayoutAdaptor;
 class AutotileEngine;
 class LayoutManager;
+// ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+} // namespace PlasmaZones
+namespace Phosphor::Screens {
 class ScreenManager;
+}
+namespace PlasmaZones {
+using ScreenManager = Phosphor::Screens::ScreenManager;
 
 /**
  * @brief D-Bus adaptor for high-level convenience API
