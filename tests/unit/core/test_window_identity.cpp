@@ -95,12 +95,10 @@ private Q_SLOTS:
 
     void testExtractAppId_pipeAtStart()
     {
-        // Edge case: pipe at position 0 -- should return empty (sep == 0, not > 0)
         QString windowId = QStringLiteral("|uuid-1234");
         QString appId = extractAppId(windowId);
 
-        // extractAppId returns original string when sep is not > 0
-        QCOMPARE(appId, windowId);
+        QCOMPARE(appId, QString());
     }
 
     // =====================================================================
@@ -188,12 +186,10 @@ private Q_SLOTS:
 
     void testWindowIdWithEmptyAppId()
     {
-        // Empty app ID part (pipe at start)
         QString windowId = QStringLiteral("|uuid-12345");
         QString appId = extractAppId(windowId);
 
-        // pipe at position 0 means sep is not > 0, returns original
-        QCOMPARE(appId, windowId);
+        QCOMPARE(appId, QString());
     }
 };
 

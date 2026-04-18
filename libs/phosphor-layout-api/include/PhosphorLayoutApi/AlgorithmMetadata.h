@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <phosphorlayoutapi_export.h>
-
 #include <QString>
 
 namespace PhosphorLayout {
@@ -19,7 +17,7 @@ namespace PhosphorLayout {
 /// count" parameter editor, system-vs-user lock badge). Tuning parameters
 /// that affect the algorithm's actual computation (split ratio, master
 /// count) live in per-algorithm settings, not here.
-struct PHOSPHORLAYOUTAPI_EXPORT AlgorithmMetadata
+struct AlgorithmMetadata
 {
     /// True when the algorithm honours an explicit master-window count.
     /// Picker shows a count editor only when this is set.
@@ -57,7 +55,10 @@ struct PHOSPHORLAYOUTAPI_EXPORT AlgorithmMetadata
     /// How zone numbers are displayed in previews — algorithm-specific
     /// hint passed through to the renderer. Values in current use:
     /// "all" (every zone numbered), "last" (only the trailing slot
-    /// numbered), "" (renderer decides).
+    /// numbered), "firstAndLast", "none", "" (renderer decides).
+    /// Stringly-typed: the value is wire-format across D-Bus and threaded
+    /// through QML properties + JS script front-matter, so it stays a
+    /// QString rather than being promoted to an enum here.
     QString zoneNumberDisplay;
 };
 

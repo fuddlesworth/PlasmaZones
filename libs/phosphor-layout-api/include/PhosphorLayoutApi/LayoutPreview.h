@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <phosphorlayoutapi_export.h>
-
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 
@@ -36,7 +34,7 @@ inline constexpr int DefaultPreviewWindowCount = 4;
 /// the "preview" geometry is computed for some specific window count (see
 /// @c ILayoutSource::previewAt) — different counts yield different
 /// previews from the same algorithm.
-struct PHOSPHORLAYOUTAPI_EXPORT LayoutPreview
+struct LayoutPreview
 {
     /// Stable identifier for this layout entry. For manual layouts this is
     /// the layout's UUID string (with braces); for autotile entries it's

@@ -3,7 +3,6 @@
 
 #pragma once
 
-#include <QLatin1String>
 #include <QString>
 
 namespace PhosphorLayout {

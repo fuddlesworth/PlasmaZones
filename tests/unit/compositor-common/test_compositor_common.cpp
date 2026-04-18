@@ -1115,8 +1115,8 @@ private Q_SLOTS:
 
     void testExtractAppIdLeadingSeparator()
     {
-        // Separator at index 0 means sep is NOT > 0, so should return original
-        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("|instance")), QStringLiteral("|instance"));
+        // Leading separator: empty appId prefix, mirroring extractInstanceId's semantics.
+        QCOMPARE(::PhosphorIdentity::WindowId::extractAppId(QStringLiteral("|instance")), QString());
     }
 
     // =================================================================

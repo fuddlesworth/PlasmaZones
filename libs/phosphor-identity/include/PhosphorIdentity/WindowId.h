@@ -31,7 +31,7 @@ inline QString extractAppId(const QString& windowId)
         return windowId;
     }
     int sep = windowId.indexOf(QLatin1Char('|'));
-    return (sep > 0) ? windowId.left(sep) : windowId;
+    return (sep >= 0) ? windowId.left(sep) : windowId;
 }
 
 /**
@@ -41,6 +41,8 @@ inline QString extractAppId(const QString& windowId)
  * the window's lifetime; the appId is mutable (Electron/CEF apps rebroadcast
  * WM_CLASS mid-session). Per discussion #271, runtime keys use the bare
  * instance id — this helper exists for legacy fixtures and compat paths.
+ *
+ * A bare appId with no '|' separator is returned verbatim.
  */
 inline QString extractInstanceId(const QString& windowId)
 {
@@ -110,7 +112,7 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
         }
         // Reverse: appId matches start of pattern's last segment
         lastDot = pattern.lastIndexOf(QLatin1Char('.'));
-        if (lastDot >= 0 && appId.length() >= 5) {
+        if (lastDot >= 0) {
             QStringView lastSeg = QStringView(pattern).mid(lastDot + 1);
             if (lastSeg.startsWith(appId, Qt::CaseInsensitive) && lastSeg.length() != appId.length()) {
                 return true;

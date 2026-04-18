@@ -43,6 +43,9 @@ inline QString extractAlgorithmId(const QString& id)
         qWarning("PhosphorLayout::LayoutId::extractAlgorithmId called with non-autotile id: %s", qUtf8Printable(id));
         return QString();
     }
+    if (id.size() <= AutotilePrefix.size()) {
+        return {};
+    }
     return id.mid(AutotilePrefix.size());
 }
 
