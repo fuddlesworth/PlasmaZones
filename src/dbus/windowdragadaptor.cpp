@@ -8,7 +8,7 @@
 #include <cmath>
 #include "pz_i18n.h"
 #include "../config/configdefaults.h"
-#include "../core/ishortcutregistrar.h"
+#include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -28,8 +28,10 @@ namespace PlasmaZones {
 
 // Stable id for the Escape cancel-overlay shortcut bound dynamically during
 // a drag. Matches the pre-library object name so kglobalshortcutsrc entries
-// created by earlier installs continue to resolve.
-static constexpr auto kCancelOverlayId = "cancel_overlay_during_drag";
+// created by earlier installs continue to resolve. QLatin1String is constexpr-
+// constructible from a string literal in Qt 6, so we pay zero per-call
+// conversion at the IAdhocRegistrar boundary (QString accepts it implicitly).
+static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
                                      ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent)
@@ -288,7 +290,7 @@ void WindowDragAdaptor::registerCancelOverlayShortcut()
     if (!m_shortcutRegistrar) {
         return;
     }
-    m_shortcutRegistrar->registerAdhocShortcut(QString::fromLatin1(kCancelOverlayId), QKeySequence(Qt::Key_Escape),
+    m_shortcutRegistrar->registerAdhocShortcut(kCancelOverlayId, QKeySequence(Qt::Key_Escape),
                                                PzI18n::tr("Cancel Zone Overlay"), [this] {
                                                    cancelSnap();
                                                });
@@ -305,7 +307,7 @@ void WindowDragAdaptor::unregisterCancelOverlayShortcut()
     // no longer expressible: rebind() with an empty sequence now routes
     // through unbind() inside the Registry, and the cancel path always uses
     // the explicit unregister call below.
-    m_shortcutRegistrar->unregisterAdhocShortcut(QString::fromLatin1(kCancelOverlayId));
+    m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
 }
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)

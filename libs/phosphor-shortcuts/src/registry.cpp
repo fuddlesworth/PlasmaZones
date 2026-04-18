@@ -93,6 +93,11 @@ void Registry::unbind(const QString& id)
 void Registry::flush()
 {
     if (!m_backend) {
+        // Backend died after Registry construction (it's a QPointer). Without
+        // a backend we can't honour any flush; warn so the misuse is visible
+        // in production logs instead of silently dropping every grab.
+        qCWarning(lcPhosphorShortcuts)
+            << "Registry::flush(): backend is gone — entries will not reach any backend until a new Registry is built";
         return;
     }
 
@@ -123,7 +128,7 @@ void Registry::flush()
             entry.lastSentDefault = entry.binding.defaultSeq;
             entry.lastSentCurrent = entry.binding.currentSeq;
         } else if (entry.lastSentCurrent != entry.binding.currentSeq) {
-            m_backend->updateShortcut(entry.binding.id, entry.binding.currentSeq);
+            m_backend->updateShortcut(entry.binding.id, entry.binding.defaultSeq, entry.binding.currentSeq);
             entry.lastSentCurrent = entry.binding.currentSeq;
         }
         // else: nothing changed for this id since the last flush — skip.

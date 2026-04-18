@@ -196,6 +196,29 @@ Consumers that bind a shortcut for the duration of a UI state (e.g. an
 Escape cancel grab tied to an active drag) can simply pair `bind()` on
 entry with `unbind()` on exit.
 
+For subsystems that need a transient grab without taking a hard dependency
+on the concrete shortcut-manager type, the library exposes
+`Phosphor::Shortcuts::IAdhocRegistrar` — a pure-abstract two-method
+interface (`registerAdhocShortcut` / `unregisterAdhocShortcut`) that the
+consumer's manager implements. Subsystems hold an `IAdhocRegistrar*` and
+call through it; the underlying Registry stays private to the manager.
+
+```cpp
+class WindowDragAdaptor {
+    Phosphor::Shortcuts::IAdhocRegistrar* m_registrar = nullptr;
+    void onDragStart() {
+        m_registrar->registerAdhocShortcut("cancel_overlay", QKeySequence(Qt::Key_Escape),
+                                           tr("Cancel"), [this]{ cancelDrag(); });
+    }
+    void onDragEnd() { m_registrar->unregisterAdhocShortcut("cancel_overlay"); }
+};
+```
+
+The PlasmaZones daemon's `ShortcutManager` implements `IAdhocRegistrar`
+and refuses adhoc registrations during the initial settings-driven batch
+(would race the Portal `BindShortcuts` Response). Other consumers may
+implement different bind-flow semantics.
+
 One KGlobalAccel-specific caveat: each `unbind()` → `unregisterShortcut()`
 on that backend runs `KGlobalAccel::removeAllShortcuts(action)`, which wipes
 the persistent entry from `kglobalshortcutsrc`. For a genuinely ephemeral

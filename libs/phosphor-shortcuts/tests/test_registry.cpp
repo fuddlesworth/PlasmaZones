@@ -33,6 +33,7 @@ public:
     struct UpdateCall
     {
         QString id;
+        QKeySequence defaultSeq;
         QKeySequence newTrigger;
     };
 
@@ -44,9 +45,9 @@ public:
         registers.push_back({id, defaultSeq, currentSeq, description});
     }
 
-    void updateShortcut(const QString& id, const QKeySequence& newTrigger) override
+    void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override
     {
-        updates.push_back({id, newTrigger});
+        updates.push_back({id, defaultSeq, newTrigger});
     }
 
     void unregisterShortcut(const QString& id) override
@@ -559,6 +560,56 @@ private Q_SLOTS:
         QCOMPARE(events.size(), 2);
         QCOMPARE(events[0], QStringLiteral("callback"));
         QCOMPARE(events[1], QStringLiteral("signal"));
+    }
+
+    void updateShortcut_carriesDefaultSeqForBackendConsistency()
+    {
+        // Pins the IBackend contract change: updateShortcut takes both
+        // defaultSeq and newTrigger. PortalBackend uses defaultSeq for
+        // preferred_trigger consistently with registerShortcut; KGlobalAccel
+        // ignores it (its setDefaultShortcut is refreshed via the register
+        // path on default deltas). Test that Registry passes the
+        // currently-bound defaultSeq through unchanged so backends can rely
+        // on it.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+9")));
+        registry.flush();
+
+        QCOMPARE(backend.updates.size(), 1);
+        QCOMPARE(backend.updates[0].id, QStringLiteral("pz.a"));
+        QCOMPARE(backend.updates[0].defaultSeq, QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+9")));
+    }
+
+    void flushAfterBackendDestroyed_isSafeAndWarns()
+    {
+        // Pins the QPointer guard in flush(): if the backend is destroyed
+        // before the Registry, flush() must not crash. (Real consumers like
+        // ShortcutManager own both via unique_ptr in declaration order, so
+        // this can happen during teardown.)
+        auto backend = std::make_unique<FakeBackend>();
+        Registry registry(backend.get());
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+        QCOMPARE(backend->registers.size(), 1);
+
+        backend.reset(); // QPointer in Registry::m_backend goes null
+
+        // Should not crash, should not register, and should leave entries
+        // intact for later (non-existent) re-flush.
+        registry.flush();
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        registry.flush();
+
+        QCOMPARE(registry.bindings().size(), 1);
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
     }
 
     void descriptionChange_isLocalOnly()

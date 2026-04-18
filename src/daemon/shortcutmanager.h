@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "../core/ishortcutregistrar.h"
+#include <PhosphorShortcuts/IAdhocRegistrar.h>
 
 #include <QKeySequence>
 #include <QObject>
@@ -42,7 +42,7 @@ enum class NavigationDirection {
  * below. The actual key-grab mechanism (KGlobalAccel / XDG Portal /
  * D-Bus trigger) is selected inside the PhosphorShortcuts library.
  */
-class ShortcutManager : public QObject, public IShortcutRegistrar
+class ShortcutManager : public QObject, public Phosphor::Shortcuts::IAdhocRegistrar
 {
     Q_OBJECT
 

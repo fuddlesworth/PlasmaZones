@@ -54,6 +54,7 @@ endif()
 
 set(phosphorshortcuts_public_HDRS
     include/PhosphorShortcuts/PhosphorShortcuts.h
+    include/PhosphorShortcuts/IAdhocRegistrar.h
     include/PhosphorShortcuts/IBackend.h
     include/PhosphorShortcuts/Registry.h
     include/PhosphorShortcuts/Factory.h

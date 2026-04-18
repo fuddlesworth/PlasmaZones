@@ -28,7 +28,6 @@ set(plasmazones_core_SRCS
     # wallpaperprovider moved to PhosphorShell
     core/enums.h
     core/interfaces.h
-    core/ishortcutregistrar.h
     core/interfaces.cpp
     core/inavigationactions.h
     core/iwindowengine.h
@@ -249,9 +248,15 @@ target_link_libraries(plasmazones_core
         Qt6::WaylandClientPrivate
 )
 
-# PhosphorShortcuts is only consumed by the daemon's ShortcutManager; the
-# core library's IShortcutRegistrar interface uses only QString/QKeySequence.
-# See target_link_libraries(plasmazonesd ...) below for the actual link.
+# PhosphorShortcuts: plasmazones_core uses ONLY the IAdhocRegistrar header
+# (consumed by WindowDragAdaptor); the daemon links the shared library
+# binary (see target_link_libraries(plasmazonesd ...) below). Wire the
+# headers via INTERFACE-only include — pulls no .so dependency into
+# editor / settings builds that link plasmazones_core but never touch
+# shortcuts.
+target_include_directories(plasmazones_core SYSTEM PRIVATE
+    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/libs/phosphor-shortcuts/include>
+)
 
 # Conditionally link PlasmaActivities/KActivities if available
 if(PlasmaActivities_FOUND)

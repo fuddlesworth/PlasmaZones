@@ -29,7 +29,10 @@ class PHOSPHORSHORTCUTS_EXPORT IBackend : public QObject
 {
     Q_OBJECT
 public:
-    using QObject::QObject;
+    explicit IBackend(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
     ~IBackend() override = default;
 
     /**
@@ -60,16 +63,22 @@ public:
                                   const QString& description) = 0;
 
     /**
-     * Change the active binding for an already-registered id. Only affects
-     * the currently-grabbed key; the compiled-in default established by
-     * registerShortcut is left intact. Takes effect after the next flush().
+     * Change the active binding for an already-registered id. Takes both
+     * sequences — defaultSeq stays for backends that need to keep the
+     * "factory default" target current (PortalBackend's preferred_trigger,
+     * which is keyed off defaultSeq for consistency with registerShortcut),
+     * currentSeq is the new value to grab.
+     *
+     * KGlobalAccel backend ignores defaultSeq here because the default
+     * target is independently refreshed via registerShortcut whenever the
+     * compiled-in default changes (Registry re-invokes registerShortcut for
+     * defaultSeq changes; updateShortcut only fires on currentSeq-only
+     * deltas).
      *
      * Does NOT carry a description — description updates require a fresh
-     * registerShortcut call (Registry re-invokes registerShortcut when the
-     * default changes, which is the natural point to refresh description
-     * on the backend side).
+     * registerShortcut call. Takes effect after the next flush().
      */
-    virtual void updateShortcut(const QString& id, const QKeySequence& newTrigger) = 0;
+    virtual void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) = 0;
 
     /**
      * Release the key grab for an id. Idempotent; unknown ids are ignored.

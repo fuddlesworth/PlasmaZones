@@ -16,6 +16,10 @@
 
 class QScreen;
 
+namespace Phosphor::Shortcuts {
+class IAdhocRegistrar;
+}
+
 namespace PlasmaZones {
 
 class IOverlayService;
@@ -26,7 +30,6 @@ class Layout;
 class Zone;
 class WindowTrackingAdaptor;
 class AutotileEngine;
-class IShortcutRegistrar;
 
 /**
  * @brief D-Bus adaptor for window drag handling
@@ -77,7 +80,7 @@ public:
      * shutdown (member destruction order: unique_ptr members destruct before
      * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutRegistrar(IShortcutRegistrar* registrar)
+    void setShortcutRegistrar(Phosphor::Shortcuts::IAdhocRegistrar* registrar)
     {
         m_shortcutRegistrar = registrar;
     }
@@ -312,7 +315,8 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    IShortcutRegistrar* m_shortcutRegistrar = nullptr; // Non-owning: owned by Daemon (ShortcutManager)
+    Phosphor::Shortcuts::IAdhocRegistrar* m_shortcutRegistrar =
+        nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap
     // assist is requested; consumed by computeAndEmitSnapAssist() which runs

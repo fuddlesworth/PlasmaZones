@@ -30,7 +30,7 @@ public:
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
                           const QString& description) override;
-    void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
+    void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
 
@@ -52,7 +52,7 @@ public:
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
                           const QString& description) override;
-    void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
+    void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
 
@@ -129,7 +129,7 @@ public:
 
     void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
                           const QString& description) override;
-    void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
+    void updateShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
 

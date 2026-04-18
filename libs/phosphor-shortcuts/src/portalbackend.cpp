@@ -135,7 +135,8 @@ void PortalBackend::registerShortcut(const QString& id, const QKeySequence& defa
     m_descriptions.insert(id, description);
 }
 
-void PortalBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)
+void PortalBackend::updateShortcut(const QString& id, const QKeySequence& defaultSeq,
+                                   const QKeySequence& /*newTrigger*/)
 {
     // Only allow update for ids the Registry has previously passed to
     // registerShortcut — otherwise we'd silently synthesise a registration
@@ -146,18 +147,27 @@ void PortalBackend::updateShortcut(const QString& id, const QKeySequence& newTri
         return;
     }
 
+    // preferred_trigger is keyed off the compiled-in default in BOTH
+    // registerShortcut and updateShortcut for consistency. The XDG spec
+    // treats preferred_trigger as advisory — the compositor exposes its own
+    // rebinding UI and we cannot override the user's compositor-side choice
+    // from the client side. Sending the user's customised currentSeq as
+    // preferred_trigger would falsely advertise it as the app's "factory"
+    // value. The user-customised key still has effect through KGlobalAccel /
+    // any compositor that surfaces preferred_trigger as a default — but
+    // that's a behaviour the consumer chose by binding both seqs.
     auto it = m_pending.find(id);
     if (it == m_pending.end()) {
-        // Already flushed; re-queue so the next flush re-sends with the new
-        // trigger. Description is known because m_descriptions.contains check
-        // above passed.
+        // Already flushed; re-queue so the next flush re-sends with the
+        // current default. Description is known because m_descriptions.contains
+        // check above passed.
         Pending p;
-        p.preferred = newTrigger;
+        p.preferred = defaultSeq;
         p.description = m_descriptions.value(id);
         m_pending.insert(id, p);
         return;
     }
-    it->preferred = newTrigger;
+    it->preferred = defaultSeq;
 }
 
 void PortalBackend::unregisterShortcut(const QString& id)
@@ -381,27 +391,52 @@ void PortalBackend::sendBindShortcuts()
                       QVariant::fromValue(QString()), QVariant::fromValue(callOptions)});
 
     QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
+
+    // Snapshot the entries we just dispatched so a failure path can restore
+    // them into m_pending for the next flush() to retry. Without this, an RPC
+    // failure (auth refused, bus disconnect) silently drops the grabs and the
+    // consumer has no way to recover except re-binding everything from scratch.
+    QHash<QString, Pending> dispatched = m_pending;
     m_pending.clear();
 
-    // Direct-reply watcher handles errors on the BindShortcuts RPC itself
-    // (auth failures, bus disconnect). In the happy path the watcher fires
-    // before Response arrives; in the unhappy path we clear m_bindRequestPath
-    // and emit ready() so consumers don't hang waiting for a Response that
-    // will never come. The Response, if it arrives later, will be dropped by
-    // the unified dispatcher because m_bindRequestPath is empty.
+    // Capture the path this watcher belongs to. If a second sendBindShortcuts
+    // overwrites m_bindRequestPath before this lambda runs, our cleanup must
+    // not clear the SUCCESSOR's path — that would orphan its Response and
+    // hang the consumer. Compare against m_bindRequestPath before clearing,
+    // and only emit ready() if WE were the live request.
+    const QString myRequestPath = m_bindRequestPath;
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
-        watcher->deleteLater();
-        QDBusPendingReply<> reply = *watcher;
-        if (reply.isError()) {
-            qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
-            m_bindRequestPath.clear();
-            Q_EMIT ready();
-            return;
-        }
-        // Happy path: Response will arrive via onAnyRequestResponse and
-        // emit ready() from handleBindShortcutsResponse.
-    });
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [this, watcher, myRequestPath, dispatched = std::move(dispatched)]() mutable {
+                watcher->deleteLater();
+                QDBusPendingReply<> reply = *watcher;
+                if (!reply.isError()) {
+                    // Happy path: Response will arrive via onAnyRequestResponse
+                    // and emit ready() from handleBindShortcutsResponse.
+                    return;
+                }
+
+                qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
+
+                // Restore the grabs we tried to send so a subsequent flush()
+                // (or the consumer's own retry) can re-attempt. Only restore
+                // ids the consumer hasn't unregistered in the meantime —
+                // m_descriptions is the live "still wanted" set.
+                for (auto it = dispatched.constBegin(); it != dispatched.constEnd(); ++it) {
+                    if (m_descriptions.contains(it.key()) && !m_pending.contains(it.key())) {
+                        m_pending.insert(it.key(), it.value());
+                    }
+                }
+
+                // Only the request that's still considered "live" gets to
+                // clear the dispatch tag and emit ready. A superseded request
+                // must not touch m_bindRequestPath (that path now belongs to a
+                // newer in-flight call) or fire ready (the newer call will).
+                if (m_bindRequestPath == myRequestPath) {
+                    m_bindRequestPath.clear();
+                    Q_EMIT ready();
+                }
+            });
 }
 
 void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap& results)

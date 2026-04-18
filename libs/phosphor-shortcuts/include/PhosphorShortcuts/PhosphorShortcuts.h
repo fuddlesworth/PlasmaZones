@@ -7,6 +7,7 @@
 // a consumer can `#include <PhosphorShortcuts/PhosphorShortcuts.h>` once and be
 // done.
 
+#include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include <PhosphorShortcuts/IBackend.h>
 #include <PhosphorShortcuts/Registry.h>
 #include <PhosphorShortcuts/Factory.h>

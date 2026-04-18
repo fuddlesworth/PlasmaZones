@@ -33,9 +33,11 @@ void DBusTriggerBackend::registerShortcut(const QString& id, const QKeySequence&
     m_descriptions.insert(id, description);
 }
 
-void DBusTriggerBackend::updateShortcut(const QString& /*id*/, const QKeySequence& /*newTrigger*/)
+void DBusTriggerBackend::updateShortcut(const QString& /*id*/, const QKeySequence& /*defaultSeq*/,
+                                        const QKeySequence& /*newTrigger*/)
 {
-    // DBusTrigger ignores key sequences — bindings live compositor-side.
+    // DBusTrigger ignores key sequences entirely — bindings live compositor-
+    // side. Both args are accepted only to match the IBackend signature.
 }
 
 void DBusTriggerBackend::unregisterShortcut(const QString& id)

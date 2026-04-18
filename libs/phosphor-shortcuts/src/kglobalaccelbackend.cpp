@@ -44,7 +44,21 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
     : IBackend(parent)
     , m_impl(std::make_unique<Impl>())
 {
-    qCInfo(lcPhosphorShortcuts) << "KGlobalAccelBackend: active";
+    // KGlobalAccel groups shortcuts by QCoreApplication::applicationName() at
+    // the time setShortcut() is first called. An empty applicationName silently
+    // groups every shortcut under "" — they show up under no component in
+    // System Settings and persistent kglobalshortcutsrc entries are unfindable.
+    // Assert in debug; warn in release. Callers MUST set applicationName before
+    // constructing this backend (typically in main() before the daemon ctor).
+    Q_ASSERT_X(!QCoreApplication::applicationName().isEmpty(), "KGlobalAccelBackend",
+               "QCoreApplication::applicationName() must be set before constructing the backend");
+    if (QCoreApplication::applicationName().isEmpty()) {
+        qCWarning(lcPhosphorShortcuts)
+            << "KGlobalAccelBackend: applicationName is empty — shortcuts will register under no component"
+            << "and System Settings will not surface them. Set QCoreApplication::setApplicationName() first.";
+    }
+    qCInfo(lcPhosphorShortcuts) << "KGlobalAccelBackend: active (component:" << QCoreApplication::applicationName()
+                                << ")";
 }
 
 KGlobalAccelBackend::~KGlobalAccelBackend()
@@ -103,8 +117,15 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
     }
 }
 
-void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)
+void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& /*defaultSeq*/,
+                                         const QKeySequence& newTrigger)
 {
+    // defaultSeq is intentionally unused: setDefaultShortcut is refreshed via
+    // registerShortcut whenever the compiled-in default changes (Registry
+    // re-invokes registerShortcut for default deltas; updateShortcut only
+    // fires for currentSeq-only deltas). Avoiding a redundant
+    // setDefaultShortcut call here also saves a D-Bus round-trip and a
+    // kglobalshortcutsrc write per update.
     auto it = m_impl->entries.find(id);
     if (it == m_impl->entries.end() || !it->action) {
         qCWarning(lcPhosphorShortcuts) << "KGlobalAccel updateShortcut: unknown id" << id;

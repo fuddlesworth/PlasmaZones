@@ -82,6 +82,10 @@ std::unique_ptr<IBackend> createBackend(BackendHint hint, QObject* parent)
             << "createBackend(Native) returns nullptr. Callers that want automatic fallback should pass Auto.";
         return nullptr;
     }
+    // Adding a new BackendHint without a corresponding case above is a
+    // compile-time error under -Wswitch / -Wswitch-enum (Qt6 builds with
+    // both); this Q_UNREACHABLE is a runtime backstop for builds that
+    // suppress those warnings.
     Q_UNREACHABLE();
 }
 

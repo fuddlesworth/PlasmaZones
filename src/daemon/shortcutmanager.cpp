@@ -72,6 +72,250 @@ QString snapToZoneId(int slotZeroBased)
     return QStringLiteral("snap_to_zone_%1").arg(slotZeroBased + 1);
 }
 
+// ─── Static shortcut table ──────────────────────────────────────────────────
+// One row per settings-driven shortcut. The two indexed slot families
+// (quick_layout_N, snap_to_zone_N) are below in helper loops because their
+// getters are array-indexed rather than per-id.
+//
+// Adding a shortcut: declare the Q_SIGNAL in shortcutmanager.h, add a
+// ConfigDefaults::xxxShortcut accessor, add the Settings::xxxShortcut getter,
+// then add one row here. The signal-emit lambda must be capture-less so it
+// can decay to a function pointer for storage in the table.
+struct StaticEntry
+{
+    const char* id;
+    QString (*defGetter)();
+    QString (Settings::*curGetter)() const;
+    const char* label;
+    void (*fire)(ShortcutManager*);
+};
+
+const StaticEntry kStaticEntries[] = {
+    // ─── Core ──────────────────────────────────────────────────────────────
+    {kIdOpenEditor, &ConfigDefaults::openEditorShortcut, &Settings::openEditorShortcut, "Open Zone Editor",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->openEditorRequested();
+     }},
+    {kIdOpenSettings, &ConfigDefaults::openSettingsShortcut, &Settings::openSettingsShortcut, "Open Settings",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->openSettingsRequested();
+     }},
+    {kIdPreviousLayout, &ConfigDefaults::previousLayoutShortcut, &Settings::previousLayoutShortcut, "Previous Layout",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->previousLayoutRequested();
+     }},
+    {kIdNextLayout, &ConfigDefaults::nextLayoutShortcut, &Settings::nextLayoutShortcut, "Next Layout",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->nextLayoutRequested();
+     }},
+
+    // ─── Move window ───────────────────────────────────────────────────────
+    {kIdMoveWindowLeft, &ConfigDefaults::moveWindowLeftShortcut, &Settings::moveWindowLeftShortcut, "Move Window Left",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->moveWindowRequested(NavigationDirection::Left);
+     }},
+    {kIdMoveWindowRight, &ConfigDefaults::moveWindowRightShortcut, &Settings::moveWindowRightShortcut,
+     "Move Window Right",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->moveWindowRequested(NavigationDirection::Right);
+     }},
+    {kIdMoveWindowUp, &ConfigDefaults::moveWindowUpShortcut, &Settings::moveWindowUpShortcut, "Move Window Up",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->moveWindowRequested(NavigationDirection::Up);
+     }},
+    {kIdMoveWindowDown, &ConfigDefaults::moveWindowDownShortcut, &Settings::moveWindowDownShortcut, "Move Window Down",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->moveWindowRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Focus zone ────────────────────────────────────────────────────────
+    {kIdFocusZoneLeft, &ConfigDefaults::focusZoneLeftShortcut, &Settings::focusZoneLeftShortcut, "Focus Zone Left",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->focusZoneRequested(NavigationDirection::Left);
+     }},
+    {kIdFocusZoneRight, &ConfigDefaults::focusZoneRightShortcut, &Settings::focusZoneRightShortcut, "Focus Zone Right",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->focusZoneRequested(NavigationDirection::Right);
+     }},
+    {kIdFocusZoneUp, &ConfigDefaults::focusZoneUpShortcut, &Settings::focusZoneUpShortcut, "Focus Zone Up",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->focusZoneRequested(NavigationDirection::Up);
+     }},
+    {kIdFocusZoneDown, &ConfigDefaults::focusZoneDownShortcut, &Settings::focusZoneDownShortcut, "Focus Zone Down",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->focusZoneRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Non-directional navigation ────────────────────────────────────────
+    {kIdPushToEmptyZone, &ConfigDefaults::pushToEmptyZoneShortcut, &Settings::pushToEmptyZoneShortcut,
+     "Move Window to Empty Zone",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->pushToEmptyZoneRequested();
+     }},
+    {kIdRestoreWindowSize, &ConfigDefaults::restoreWindowSizeShortcut, &Settings::restoreWindowSizeShortcut,
+     "Restore Window Size",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->restoreWindowSizeRequested();
+     }},
+    {kIdToggleWindowFloat, &ConfigDefaults::toggleWindowFloatShortcut, &Settings::toggleWindowFloatShortcut,
+     "Toggle Window Floating",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleWindowFloatRequested();
+     }},
+
+    // ─── Swap window ───────────────────────────────────────────────────────
+    {kIdSwapWindowLeft, &ConfigDefaults::swapWindowLeftShortcut, &Settings::swapWindowLeftShortcut, "Swap Window Left",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapWindowRequested(NavigationDirection::Left);
+     }},
+    {kIdSwapWindowRight, &ConfigDefaults::swapWindowRightShortcut, &Settings::swapWindowRightShortcut,
+     "Swap Window Right",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapWindowRequested(NavigationDirection::Right);
+     }},
+    {kIdSwapWindowUp, &ConfigDefaults::swapWindowUpShortcut, &Settings::swapWindowUpShortcut, "Swap Window Up",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapWindowRequested(NavigationDirection::Up);
+     }},
+    {kIdSwapWindowDown, &ConfigDefaults::swapWindowDownShortcut, &Settings::swapWindowDownShortcut, "Swap Window Down",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapWindowRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Swap virtual screen ───────────────────────────────────────────────
+    {kIdSwapVirtualScreenLeft, &ConfigDefaults::swapVirtualScreenLeftShortcut, &Settings::swapVirtualScreenLeftShortcut,
+     "Swap Virtual Screen Left",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Left);
+     }},
+    {kIdSwapVirtualScreenRight, &ConfigDefaults::swapVirtualScreenRightShortcut,
+     &Settings::swapVirtualScreenRightShortcut, "Swap Virtual Screen Right",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Right);
+     }},
+    {kIdSwapVirtualScreenUp, &ConfigDefaults::swapVirtualScreenUpShortcut, &Settings::swapVirtualScreenUpShortcut,
+     "Swap Virtual Screen Up",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Up);
+     }},
+    {kIdSwapVirtualScreenDown, &ConfigDefaults::swapVirtualScreenDownShortcut, &Settings::swapVirtualScreenDownShortcut,
+     "Swap Virtual Screen Down",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapVirtualScreenRequested(NavigationDirection::Down);
+     }},
+
+    // ─── Rotate virtual screens ────────────────────────────────────────────
+    {kIdRotateVirtualScreensCW, &ConfigDefaults::rotateVirtualScreensClockwiseShortcut,
+     &Settings::rotateVirtualScreensClockwiseShortcut, "Rotate Virtual Screens Clockwise",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->rotateVirtualScreensRequested(true);
+     }},
+    {kIdRotateVirtualScreensCCW, &ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut,
+     &Settings::rotateVirtualScreensCounterclockwiseShortcut, "Rotate Virtual Screens Counterclockwise",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->rotateVirtualScreensRequested(false);
+     }},
+
+    // ─── Rotate windows ────────────────────────────────────────────────────
+    {kIdRotateWindowsCW, &ConfigDefaults::rotateWindowsClockwiseShortcut, &Settings::rotateWindowsClockwiseShortcut,
+     "Rotate Windows Clockwise",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->rotateWindowsRequested(true);
+     }},
+    {kIdRotateWindowsCCW, &ConfigDefaults::rotateWindowsCounterclockwiseShortcut,
+     &Settings::rotateWindowsCounterclockwiseShortcut, "Rotate Windows Counterclockwise",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->rotateWindowsRequested(false);
+     }},
+
+    // ─── Cycle window in zone ──────────────────────────────────────────────
+    {kIdCycleWindowForward, &ConfigDefaults::cycleWindowForwardShortcut, &Settings::cycleWindowForwardShortcut,
+     "Cycle Window Forward in Zone",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->cycleWindowsInZoneRequested(true);
+     }},
+    {kIdCycleWindowBackward, &ConfigDefaults::cycleWindowBackwardShortcut, &Settings::cycleWindowBackwardShortcut,
+     "Cycle Window Backward in Zone",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->cycleWindowsInZoneRequested(false);
+     }},
+
+    // ─── Misc layout ops ───────────────────────────────────────────────────
+    {kIdResnapToNewLayout, &ConfigDefaults::resnapToNewLayoutShortcut, &Settings::resnapToNewLayoutShortcut,
+     "Reapply Layout to Windows",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->resnapToNewLayoutRequested();
+     }},
+    {kIdSnapAllWindows, &ConfigDefaults::snapAllWindowsShortcut, &Settings::snapAllWindowsShortcut,
+     "Snap All Windows to Zones",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->snapAllWindowsRequested();
+     }},
+    {kIdLayoutPicker, &ConfigDefaults::layoutPickerShortcut, &Settings::layoutPickerShortcut, "Open Layout Picker",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->layoutPickerRequested();
+     }},
+    {kIdToggleLayoutLock, &ConfigDefaults::toggleLayoutLockShortcut, &Settings::toggleLayoutLockShortcut,
+     "Toggle Layout Lock",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleLayoutLockRequested();
+     }},
+
+    // ─── Autotile ──────────────────────────────────────────────────────────
+    {kIdToggleAutotile, &ConfigDefaults::autotileToggleShortcut, &Settings::autotileToggleShortcut, "Toggle Autotile",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->toggleAutotileRequested();
+     }},
+    {kIdFocusMaster, &ConfigDefaults::autotileFocusMasterShortcut, &Settings::autotileFocusMasterShortcut,
+     "Focus Master Window",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->focusMasterRequested();
+     }},
+    {kIdSwapMaster, &ConfigDefaults::autotileSwapMasterShortcut, &Settings::autotileSwapMasterShortcut,
+     "Swap with Master",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->swapWithMasterRequested();
+     }},
+    {kIdIncreaseMasterRatio, &ConfigDefaults::autotileIncMasterRatioShortcut, &Settings::autotileIncMasterRatioShortcut,
+     "Increase Master Ratio",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->increaseMasterRatioRequested();
+     }},
+    {kIdDecreaseMasterRatio, &ConfigDefaults::autotileDecMasterRatioShortcut, &Settings::autotileDecMasterRatioShortcut,
+     "Decrease Master Ratio",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->decreaseMasterRatioRequested();
+     }},
+    {kIdIncreaseMasterCount, &ConfigDefaults::autotileIncMasterCountShortcut, &Settings::autotileIncMasterCountShortcut,
+     "Increase Master Count",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->increaseMasterCountRequested();
+     }},
+    {kIdDecreaseMasterCount, &ConfigDefaults::autotileDecMasterCountShortcut, &Settings::autotileDecMasterCountShortcut,
+     "Decrease Master Count",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->decreaseMasterCountRequested();
+     }},
+    {kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut, "Retile Windows",
+     [](ShortcutManager* sm) {
+         Q_EMIT sm->retileRequested();
+     }},
+};
+
+// Indexed slot defaults — array of static accessors so the slot loop can
+// resolve defaults by index without 9 constexpr-if branches.
+using DefaultGetter = QString (*)();
+constexpr DefaultGetter kQuickLayoutDefaults[9] = {
+    &ConfigDefaults::quickLayout1Shortcut, &ConfigDefaults::quickLayout2Shortcut, &ConfigDefaults::quickLayout3Shortcut,
+    &ConfigDefaults::quickLayout4Shortcut, &ConfigDefaults::quickLayout5Shortcut, &ConfigDefaults::quickLayout6Shortcut,
+    &ConfigDefaults::quickLayout7Shortcut, &ConfigDefaults::quickLayout8Shortcut, &ConfigDefaults::quickLayout9Shortcut,
+};
+constexpr DefaultGetter kSnapToZoneDefaults[9] = {
+    &ConfigDefaults::snapToZone1Shortcut, &ConfigDefaults::snapToZone2Shortcut, &ConfigDefaults::snapToZone3Shortcut,
+    &ConfigDefaults::snapToZone4Shortcut, &ConfigDefaults::snapToZone5Shortcut, &ConfigDefaults::snapToZone6Shortcut,
+    &ConfigDefaults::snapToZone7Shortcut, &ConfigDefaults::snapToZone8Shortcut, &ConfigDefaults::snapToZone9Shortcut,
+};
+
 // QKeySequence(QString) silently returns an empty sequence on malformed
 // input. Wrap with a warning log so a typo in the config surfaces from the
 // logs instead of silently disabling a shortcut.
@@ -93,14 +337,18 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     : QObject(parent)
     , m_settings(settings)
     , m_layoutManager(layoutManager)
-    // unique_ptr owns lifetime — DON'T also pass `this` as Qt parent, or the
-    // backend/registry end up with two owners (works today because Qt auto-
-    // drops children as they're destroyed, but violates project style).
-    , m_backend(Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, nullptr))
-    , m_registry(std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), nullptr))
 {
     Q_ASSERT(settings);
     Q_ASSERT(layoutManager);
+
+    // Backend + Registry are NOT created here — they're created lazily in
+    // registerShortcuts() so unregisterShortcuts() can fully release the
+    // Portal session (XDG GlobalShortcuts has no per-id release; the only
+    // way to drop grabs is to destroy the session). Re-creating in a
+    // subsequent registerShortcuts() then goes through a fresh
+    // CreateSession round-trip and the compositor sees clean state.
+    // This matches the IBackend lifecycle documented on
+    // PortalBackend::unregisterShortcut.
 
     // Settings::settingsChanged() fires both on individual setter emits AND
     // on bulk load (KCM reload). A single connect handles both cases; the
@@ -117,6 +365,29 @@ void ShortcutManager::registerShortcuts()
         qCWarning(lcShortcuts) << "registerShortcuts() called re-entrantly — ignoring";
         return;
     }
+    if (!m_entries.isEmpty()) {
+        // Already registered. A second registerShortcuts() call would
+        // rebuild m_entries via buildEntries() (which clears the local
+        // table) without first unbinding the prior set from the Registry,
+        // leaving orphan registry entries pointing at stale callback
+        // captures. The intended single-call lifecycle is enforced here
+        // — call unregisterShortcuts() first if you want to rebuild.
+        qCWarning(lcShortcuts) << "registerShortcuts(): already registered (" << m_entries.size()
+                               << "entries) — call unregisterShortcuts() first to rebuild";
+        return;
+    }
+
+    // Lazy backend creation. Lets unregisterShortcuts() fully drop the
+    // Portal session and a subsequent re-register start fresh. unique_ptr
+    // owns lifetime — DON'T also pass `this` as Qt parent, or the
+    // backend/registry end up with two owners.
+    if (!m_backend) {
+        m_backend = Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, nullptr);
+    }
+    if (!m_registry) {
+        m_registry = std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), nullptr);
+    }
+
     m_registrationInProgress = true;
 
     buildEntries();
@@ -162,16 +433,32 @@ void ShortcutManager::unregisterShortcuts()
 {
     m_registrationInProgress = false;
     m_settingsDirty = false;
-    for (const auto& e : std::as_const(m_entries)) {
-        m_registry->unbind(e.id);
+    if (m_registry) {
+        for (const auto& e : std::as_const(m_entries)) {
+            m_registry->unbind(e.id);
+        }
     }
     m_entries.clear();
+
+    // Tear down the backend so any Portal session is closed and grabs are
+    // released compositor-side. KGlobalAccel and DBusTrigger backends are
+    // cheap to recreate; PortalBackend's CreateSession is a single async
+    // round-trip that's hidden by its existing m_flushRequested deferral.
+    // A subsequent registerShortcuts() will lazily recreate both.
+    m_registry.reset();
+    m_backend.reset();
 }
 
 void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
                                             std::function<void()> callback)
 {
     if (!m_registry) {
+        // Backend lifecycle: registerShortcuts() must run first so the
+        // Registry exists. Adhoc consumers (drag adaptor) wire up post-init
+        // in response to user actions, so this is a programming error if
+        // it ever fires.
+        qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
+                               << "): no registry — registerShortcuts() must be called before adhoc binding";
         return;
     }
     // Adhoc registration during the initial settings-driven batch would race
@@ -201,6 +488,8 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
 void ShortcutManager::unregisterAdhocShortcut(const QString& id)
 {
     if (!m_registry) {
+        // Backend already torn down (e.g. via unregisterShortcuts() during
+        // shutdown) — release is implicit since the entire session is gone.
         return;
     }
     m_registry->unbind(id);
@@ -217,56 +506,36 @@ void ShortcutManager::rebindAll()
 void ShortcutManager::buildEntries()
 {
     m_entries.clear();
-    m_entries.reserve(64);
+    m_entries.reserve(std::size(kStaticEntries) + 9 + 9);
 
-    // Helper: build one entry with getter plumbing.
-    // defGetter is a plain static free function (ConfigDefaults::xxx are static).
-    // curGetter is a Settings member function (live config value).
-    auto add = [this](const char* id, QString (*defGetter)(), QString (Settings::*curGetter)() const,
-                      const char* i18nText, std::function<void()> fire) {
+    Settings* s = m_settings;
+
+    // Static table — one entry per row.
+    for (const auto& src : kStaticEntries) {
         Entry e;
-        e.id = QString::fromLatin1(id);
-        e.defaultSeq = parseSequence(defGetter(), e.id);
-        e.description = PzI18n::tr(i18nText);
-        Settings* s = m_settings;
+        e.id = QString::fromLatin1(src.id);
+        e.defaultSeq = parseSequence(src.defGetter(), e.id);
+        e.description = PzI18n::tr(src.label);
+        const auto curGetter = src.curGetter;
         const QString idCopy = e.id;
         e.currentSeq = [s, curGetter, idCopy] {
             return parseSequence((s->*curGetter)(), idCopy);
         };
-        e.fire = std::move(fire);
+        ShortcutManager* sm = this;
+        const auto fire = src.fire;
+        e.fire = [sm, fire] {
+            fire(sm);
+        };
         m_entries.push_back(std::move(e));
-    };
+    }
 
-    // ─── Core ──────────────────────────────────────────────────────────────
-    add(kIdOpenEditor, &ConfigDefaults::openEditorShortcut, &Settings::openEditorShortcut, "Open Zone Editor", [this] {
-        Q_EMIT openEditorRequested();
-    });
-    add(kIdOpenSettings, &ConfigDefaults::openSettingsShortcut, &Settings::openSettingsShortcut, "Open Settings",
-        [this] {
-            Q_EMIT openSettingsRequested();
-        });
-    add(kIdPreviousLayout, &ConfigDefaults::previousLayoutShortcut, &Settings::previousLayoutShortcut,
-        "Previous Layout", [this] {
-            Q_EMIT previousLayoutRequested();
-        });
-    add(kIdNextLayout, &ConfigDefaults::nextLayoutShortcut, &Settings::nextLayoutShortcut, "Next Layout", [this] {
-        Q_EMIT nextLayoutRequested();
-    });
-
-    // ─── Quick layout slots 1–9 (indexed getters) ──────────────────────────
-    const QString quickDefaults[9] = {
-        ConfigDefaults::quickLayout1Shortcut(), ConfigDefaults::quickLayout2Shortcut(),
-        ConfigDefaults::quickLayout3Shortcut(), ConfigDefaults::quickLayout4Shortcut(),
-        ConfigDefaults::quickLayout5Shortcut(), ConfigDefaults::quickLayout6Shortcut(),
-        ConfigDefaults::quickLayout7Shortcut(), ConfigDefaults::quickLayout8Shortcut(),
-        ConfigDefaults::quickLayout9Shortcut(),
-    };
+    // Quick layout slots 1–9. Default getters indexed via kQuickLayoutDefaults;
+    // current getter is Settings::quickLayoutShortcut(int) keyed by slot index.
     for (int i = 0; i < 9; ++i) {
         Entry e;
         e.id = quickLayoutId(i);
-        e.defaultSeq = parseSequence(quickDefaults[i], e.id);
+        e.defaultSeq = parseSequence(kQuickLayoutDefaults[i](), e.id);
         e.description = PzI18n::tr("Apply Layout %1").arg(i + 1);
-        Settings* s = m_settings;
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->quickLayoutShortcut(i), idCopy);
@@ -278,115 +547,13 @@ void ShortcutManager::buildEntries()
         m_entries.push_back(std::move(e));
     }
 
-    // ─── Move window ───────────────────────────────────────────────────────
-    add(kIdMoveWindowLeft, &ConfigDefaults::moveWindowLeftShortcut, &Settings::moveWindowLeftShortcut,
-        "Move Window Left", [this] {
-            Q_EMIT moveWindowRequested(NavigationDirection::Left);
-        });
-    add(kIdMoveWindowRight, &ConfigDefaults::moveWindowRightShortcut, &Settings::moveWindowRightShortcut,
-        "Move Window Right", [this] {
-            Q_EMIT moveWindowRequested(NavigationDirection::Right);
-        });
-    add(kIdMoveWindowUp, &ConfigDefaults::moveWindowUpShortcut, &Settings::moveWindowUpShortcut, "Move Window Up",
-        [this] {
-            Q_EMIT moveWindowRequested(NavigationDirection::Up);
-        });
-    add(kIdMoveWindowDown, &ConfigDefaults::moveWindowDownShortcut, &Settings::moveWindowDownShortcut,
-        "Move Window Down", [this] {
-            Q_EMIT moveWindowRequested(NavigationDirection::Down);
-        });
-
-    // ─── Focus zone ────────────────────────────────────────────────────────
-    add(kIdFocusZoneLeft, &ConfigDefaults::focusZoneLeftShortcut, &Settings::focusZoneLeftShortcut, "Focus Zone Left",
-        [this] {
-            Q_EMIT focusZoneRequested(NavigationDirection::Left);
-        });
-    add(kIdFocusZoneRight, &ConfigDefaults::focusZoneRightShortcut, &Settings::focusZoneRightShortcut,
-        "Focus Zone Right", [this] {
-            Q_EMIT focusZoneRequested(NavigationDirection::Right);
-        });
-    add(kIdFocusZoneUp, &ConfigDefaults::focusZoneUpShortcut, &Settings::focusZoneUpShortcut, "Focus Zone Up", [this] {
-        Q_EMIT focusZoneRequested(NavigationDirection::Up);
-    });
-    add(kIdFocusZoneDown, &ConfigDefaults::focusZoneDownShortcut, &Settings::focusZoneDownShortcut, "Focus Zone Down",
-        [this] {
-            Q_EMIT focusZoneRequested(NavigationDirection::Down);
-        });
-
-    // ─── Non-directional navigation ────────────────────────────────────────
-    add(kIdPushToEmptyZone, &ConfigDefaults::pushToEmptyZoneShortcut, &Settings::pushToEmptyZoneShortcut,
-        "Move Window to Empty Zone", [this] {
-            Q_EMIT pushToEmptyZoneRequested();
-        });
-    add(kIdRestoreWindowSize, &ConfigDefaults::restoreWindowSizeShortcut, &Settings::restoreWindowSizeShortcut,
-        "Restore Window Size", [this] {
-            Q_EMIT restoreWindowSizeRequested();
-        });
-    add(kIdToggleWindowFloat, &ConfigDefaults::toggleWindowFloatShortcut, &Settings::toggleWindowFloatShortcut,
-        "Toggle Window Floating", [this] {
-            Q_EMIT toggleWindowFloatRequested();
-        });
-
-    // ─── Swap window ───────────────────────────────────────────────────────
-    add(kIdSwapWindowLeft, &ConfigDefaults::swapWindowLeftShortcut, &Settings::swapWindowLeftShortcut,
-        "Swap Window Left", [this] {
-            Q_EMIT swapWindowRequested(NavigationDirection::Left);
-        });
-    add(kIdSwapWindowRight, &ConfigDefaults::swapWindowRightShortcut, &Settings::swapWindowRightShortcut,
-        "Swap Window Right", [this] {
-            Q_EMIT swapWindowRequested(NavigationDirection::Right);
-        });
-    add(kIdSwapWindowUp, &ConfigDefaults::swapWindowUpShortcut, &Settings::swapWindowUpShortcut, "Swap Window Up",
-        [this] {
-            Q_EMIT swapWindowRequested(NavigationDirection::Up);
-        });
-    add(kIdSwapWindowDown, &ConfigDefaults::swapWindowDownShortcut, &Settings::swapWindowDownShortcut,
-        "Swap Window Down", [this] {
-            Q_EMIT swapWindowRequested(NavigationDirection::Down);
-        });
-
-    // ─── Swap virtual screen ───────────────────────────────────────────────
-    add(kIdSwapVirtualScreenLeft, &ConfigDefaults::swapVirtualScreenLeftShortcut,
-        &Settings::swapVirtualScreenLeftShortcut, "Swap Virtual Screen Left", [this] {
-            Q_EMIT swapVirtualScreenRequested(NavigationDirection::Left);
-        });
-    add(kIdSwapVirtualScreenRight, &ConfigDefaults::swapVirtualScreenRightShortcut,
-        &Settings::swapVirtualScreenRightShortcut, "Swap Virtual Screen Right", [this] {
-            Q_EMIT swapVirtualScreenRequested(NavigationDirection::Right);
-        });
-    add(kIdSwapVirtualScreenUp, &ConfigDefaults::swapVirtualScreenUpShortcut, &Settings::swapVirtualScreenUpShortcut,
-        "Swap Virtual Screen Up", [this] {
-            Q_EMIT swapVirtualScreenRequested(NavigationDirection::Up);
-        });
-    add(kIdSwapVirtualScreenDown, &ConfigDefaults::swapVirtualScreenDownShortcut,
-        &Settings::swapVirtualScreenDownShortcut, "Swap Virtual Screen Down", [this] {
-            Q_EMIT swapVirtualScreenRequested(NavigationDirection::Down);
-        });
-
-    // ─── Rotate virtual screens ────────────────────────────────────────────
-    add(kIdRotateVirtualScreensCW, &ConfigDefaults::rotateVirtualScreensClockwiseShortcut,
-        &Settings::rotateVirtualScreensClockwiseShortcut, "Rotate Virtual Screens Clockwise", [this] {
-            Q_EMIT rotateVirtualScreensRequested(true);
-        });
-    add(kIdRotateVirtualScreensCCW, &ConfigDefaults::rotateVirtualScreensCounterclockwiseShortcut,
-        &Settings::rotateVirtualScreensCounterclockwiseShortcut, "Rotate Virtual Screens Counterclockwise", [this] {
-            Q_EMIT rotateVirtualScreensRequested(false);
-        });
-
-    // ─── Snap to zone slots 1–9 (indexed getters) ──────────────────────────
-    const QString snapDefaults[9] = {
-        ConfigDefaults::snapToZone1Shortcut(), ConfigDefaults::snapToZone2Shortcut(),
-        ConfigDefaults::snapToZone3Shortcut(), ConfigDefaults::snapToZone4Shortcut(),
-        ConfigDefaults::snapToZone5Shortcut(), ConfigDefaults::snapToZone6Shortcut(),
-        ConfigDefaults::snapToZone7Shortcut(), ConfigDefaults::snapToZone8Shortcut(),
-        ConfigDefaults::snapToZone9Shortcut(),
-    };
+    // Snap-to-zone slots 1–9. Mirror of quick-layout slots — separate signal,
+    // separate Settings getter, but identical structure.
     for (int i = 0; i < 9; ++i) {
         Entry e;
         e.id = snapToZoneId(i);
-        e.defaultSeq = parseSequence(snapDefaults[i], e.id);
+        e.defaultSeq = parseSequence(kSnapToZoneDefaults[i](), e.id);
         e.description = PzI18n::tr("Snap to Zone %1").arg(i + 1);
-        Settings* s = m_settings;
         const QString idCopy = e.id;
         e.currentSeq = [s, i, idCopy] {
             return parseSequence(s->snapToZoneShortcut(i), idCopy);
@@ -397,78 +564,6 @@ void ShortcutManager::buildEntries()
         };
         m_entries.push_back(std::move(e));
     }
-
-    // ─── Rotate windows ────────────────────────────────────────────────────
-    add(kIdRotateWindowsCW, &ConfigDefaults::rotateWindowsClockwiseShortcut, &Settings::rotateWindowsClockwiseShortcut,
-        "Rotate Windows Clockwise", [this] {
-            Q_EMIT rotateWindowsRequested(true);
-        });
-    add(kIdRotateWindowsCCW, &ConfigDefaults::rotateWindowsCounterclockwiseShortcut,
-        &Settings::rotateWindowsCounterclockwiseShortcut, "Rotate Windows Counterclockwise", [this] {
-            Q_EMIT rotateWindowsRequested(false);
-        });
-
-    // ─── Cycle window in zone ──────────────────────────────────────────────
-    add(kIdCycleWindowForward, &ConfigDefaults::cycleWindowForwardShortcut, &Settings::cycleWindowForwardShortcut,
-        "Cycle Window Forward in Zone", [this] {
-            Q_EMIT cycleWindowsInZoneRequested(true);
-        });
-    add(kIdCycleWindowBackward, &ConfigDefaults::cycleWindowBackwardShortcut, &Settings::cycleWindowBackwardShortcut,
-        "Cycle Window Backward in Zone", [this] {
-            Q_EMIT cycleWindowsInZoneRequested(false);
-        });
-
-    // ─── Misc layout ops ───────────────────────────────────────────────────
-    add(kIdResnapToNewLayout, &ConfigDefaults::resnapToNewLayoutShortcut, &Settings::resnapToNewLayoutShortcut,
-        "Reapply Layout to Windows", [this] {
-            Q_EMIT resnapToNewLayoutRequested();
-        });
-    add(kIdSnapAllWindows, &ConfigDefaults::snapAllWindowsShortcut, &Settings::snapAllWindowsShortcut,
-        "Snap All Windows to Zones", [this] {
-            Q_EMIT snapAllWindowsRequested();
-        });
-    add(kIdLayoutPicker, &ConfigDefaults::layoutPickerShortcut, &Settings::layoutPickerShortcut, "Open Layout Picker",
-        [this] {
-            Q_EMIT layoutPickerRequested();
-        });
-    add(kIdToggleLayoutLock, &ConfigDefaults::toggleLayoutLockShortcut, &Settings::toggleLayoutLockShortcut,
-        "Toggle Layout Lock", [this] {
-            Q_EMIT toggleLayoutLockRequested();
-        });
-
-    // ─── Autotile ──────────────────────────────────────────────────────────
-    add(kIdToggleAutotile, &ConfigDefaults::autotileToggleShortcut, &Settings::autotileToggleShortcut,
-        "Toggle Autotile", [this] {
-            Q_EMIT toggleAutotileRequested();
-        });
-    add(kIdFocusMaster, &ConfigDefaults::autotileFocusMasterShortcut, &Settings::autotileFocusMasterShortcut,
-        "Focus Master Window", [this] {
-            Q_EMIT focusMasterRequested();
-        });
-    add(kIdSwapMaster, &ConfigDefaults::autotileSwapMasterShortcut, &Settings::autotileSwapMasterShortcut,
-        "Swap with Master", [this] {
-            Q_EMIT swapWithMasterRequested();
-        });
-    add(kIdIncreaseMasterRatio, &ConfigDefaults::autotileIncMasterRatioShortcut,
-        &Settings::autotileIncMasterRatioShortcut, "Increase Master Ratio", [this] {
-            Q_EMIT increaseMasterRatioRequested();
-        });
-    add(kIdDecreaseMasterRatio, &ConfigDefaults::autotileDecMasterRatioShortcut,
-        &Settings::autotileDecMasterRatioShortcut, "Decrease Master Ratio", [this] {
-            Q_EMIT decreaseMasterRatioRequested();
-        });
-    add(kIdIncreaseMasterCount, &ConfigDefaults::autotileIncMasterCountShortcut,
-        &Settings::autotileIncMasterCountShortcut, "Increase Master Count", [this] {
-            Q_EMIT increaseMasterCountRequested();
-        });
-    add(kIdDecreaseMasterCount, &ConfigDefaults::autotileDecMasterCountShortcut,
-        &Settings::autotileDecMasterCountShortcut, "Decrease Master Count", [this] {
-            Q_EMIT decreaseMasterCountRequested();
-        });
-    add(kIdRetile, &ConfigDefaults::autotileRetileShortcut, &Settings::autotileRetileShortcut, "Retile Windows",
-        [this] {
-            Q_EMIT retileRequested();
-        });
 }
 
 } // namespace PlasmaZones
