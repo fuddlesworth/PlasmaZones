@@ -187,8 +187,16 @@ std::shared_ptr<const Curve> CurveRegistry::tryCreate(const QString& spec) const
 std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
 {
     if (spec.isEmpty()) {
-        // No default configured — caller handles fallback.
-        return nullptr;
+        // Empty spec → same fallback as unknown typeId. Previously this
+        // branch returned nullptr and the caller had to guard, but the
+        // single `animationEasingCurve` setting round-trips through
+        // empty during config reload / migration / settings-UI edits,
+        // and a null curve means linear progression in
+        // WindowMotion::updateProgress — which is a visible regression
+        // from the pre-registry default OutCubic bezier. Match the
+        // unknown-typeId branch's behaviour so callers don't need
+        // parallel null-guards.
+        return std::make_shared<Easing>();
     }
 
     const ParsedSpec parsed = parseSpec(spec);

@@ -8,6 +8,7 @@
 
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <PhosphorAnimation/AnimationController.h>
 #include <PhosphorAnimation/AnimationMath.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveRegistry.h>

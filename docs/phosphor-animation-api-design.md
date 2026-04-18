@@ -384,11 +384,15 @@ Progress semantics:
 - Progress overshoot (elastic / bounce) is preserved — `progress()`
   can legitimately return 1.05 or -0.02.
 
-Phase-2 note: `WindowMotion::easing` is a concrete `Easing` value for
-drop-in compatibility with today's `kwin-effect/windowanimator.cpp`.
-Phase 2 replaces it with `std::shared_ptr<const Curve>` so Spring +
-user-registered curves can drive window motion. The struct layout
-change is mechanical — every field except `easing` is unchanged.
+Phase 2 note ✅: `WindowMotion::easing` was replaced by `curve`
+(`std::shared_ptr<const Curve>`). No `CurveState` lives on the struct —
+progression is parametric (`curve->evaluate(t)` populates `cachedProgress`
+once per frame). The terminal frame snaps `cachedProgress` to exactly
+`1.0` regardless of curve shape, so Spring-like curves whose
+`evaluate(1)` lands within their settle band do not paint a visible miss
+on the last frame. Stateful step-based progression + velocity-preserving
+retarget are a Phase 3 concern (`AnimatedValue<T>` holds `CurveState`
+alongside the clock; see Open Question 3 below).
 
 ### `AnimationMath.h`
 
@@ -554,43 +558,48 @@ Each phase is independently shippable, independently reviewable, and
 can be sequenced in any order that matches external priorities. Phase
 numbering reflects dependency order, not required calendar order.
 
-### Phase 2 — WindowAnimator split
+### Phase 2 — WindowAnimator split ✅ DONE
 
 **Scope:** Pull the compositor-agnostic state machine out of
 `kwin-effect/windowanimator.cpp` into a reusable
 `PhosphorAnimation::AnimationController` base; `WindowAnimator` in
 `kwin-effect/` becomes a thin KWin adapter.
 
-**Library additions:**
-- `include/PhosphorAnimation/AnimationController.h` — template or
-  QObject base holding `QHash<Handle, WindowMotion>`, configuration
-  setters (enabled, duration, easing, minDistance), lifecycle methods
-  (`startAnimation`, `removeAnimation`, `clear`, `hasAnimation`,
-  `isAnimatingToTarget`, `currentVisualPosition / Size`).
-- `advanceAnimations(presentTime)` on the base: iterates, calls
-  `WindowMotion::updateProgress`, invokes virtual `onComplete(handle)`
-  / `onRepaintNeeded(bounds)` hooks for subclasses.
-- `WindowMotion::easing` upgrade from `Easing` (value) to
-  `std::shared_ptr<const Curve>` — unblocks Spring-backed window
-  motion without touching the KWin adapter surface.
+**Landed:**
+- `include/PhosphorAnimation/AnimationController.h` — header-only
+  template `AnimationController<Handle>` holding `QHash<Handle,
+  WindowMotion>`, configuration setters (enabled, duration, curve,
+  minDistance), lifecycle methods (`startAnimation`, `removeAnimation`,
+  `clear`, `hasAnimation`, `isAnimatingToTarget`, `currentVisualPosition
+  / Size`, `motionFor`).
+- `advanceAnimations(presentTime)` iterates, calls
+  `WindowMotion::updateProgress`, invokes the four virtual hooks for
+  subclasses (`onAnimationStarted`, `onAnimationComplete`,
+  `onRepaintNeeded`, `isHandleValid`, `expandedPadding`).
+- `WindowMotion::easing` (Easing value) renamed to `curve`
+  (`std::shared_ptr<const Curve>`) — Spring + user-registered curves
+  drive window motion via polymorphic `evaluate()`. Null curve =
+  linear progression.
+- `Curve::overshoots()` virtual added; Easing + Spring override.
+  `AnimationMath::repaintBounds` uses it polymorphically (no more
+  Easing-specific `type` switch in the bounds computation).
+- `AnimationMath::createSnapMotion` + `repaintBounds` signatures take
+  `shared_ptr<const Curve>`.
+- `kwin-effect/WindowAnimator` is now `: public
+  AnimationController<KWin::EffectWindow*>` with four hook overrides
+  (`onAnimationStarted`, `onAnimationComplete`, `onRepaintNeeded`,
+  `isHandleValid`, `expandedPadding`) plus the retained
+  `applyTransform(EffectWindow*, WindowPaintData&)` paint coupling.
+- `plasmazoneseffect.cpp` switched from `Easing::fromString` to
+  `CurveRegistry::create` so Spring works end-to-end.
+- 10 new `pa_test_animationcontroller` cases with a mock `int`-handle
+  controller cover lifecycle, hook ordering, polymorphic curve
+  dispatch, invalid-handle pruning, fallback queries, and bounds.
 
-**kwin-effect adapter:**
-- `WindowAnimator` becomes `class WindowAnimator : public
-  AnimationController<KWin::EffectWindow*>`.
-- Overrides: `onRepaintNeeded` → `KWin::effects->addRepaint(bounds)`;
-  `onComplete` → `window->addRepaintFull()`.
-- Retains: `applyTransform(EffectWindow*, WindowPaintData&)` — the
-  KWin paint-pipeline hook. This is the only genuinely KWin-coupled
-  code left after the split.
-
-**Success criteria:**
-- `kwin_effect_plasmazones.so` shrinks by ~95 LOC.
-- `AnimationController` has its own unit tests with a mock handle
-  type (no KWin dependency).
-- Existing snap-animation behavior is byte-identical.
-
-**Estimated scope:** ~400 LOC in library, ~150 LOC removed from
-kwin-effect, 8–10 new unit tests.
+**Out:**
+- `WindowAnimator` is no longer a `QObject` (it doesn't emit signals
+  and the controller base is plain C++) — construction site changed
+  from `make_unique<WindowAnimator>(this)` to `make_unique<WindowAnimator>()`.
 
 ### Phase 3 — IMotionClock + AnimatedValue<T>
 
@@ -819,11 +828,48 @@ Full PlasmaZones suite (116 tests) runs green after every phase.
    no — ProfileTree is value-type, copied across threads rather than
    shared. Revisit if a use case appears.
 
-3. **Spring physics for `WindowMotion` — is `std::shared_ptr<const
+3. **~~Spring physics for `WindowMotion` — is `std::shared_ptr<const
    Curve>` the right upgrade, or should WindowMotion carry a
-   `CurveState` directly?** Leaning toward the shared_ptr so multiple
-   motions can share a curve definition while each holds its own
-   progression state. Decision deferred to Phase 2.
+   `CurveState` directly?~~** Resolved in Phase 2. `WindowMotion`
+   carries **`std::shared_ptr<const Curve>` only** — no `CurveState`
+   field. Rationale:
+
+   - **Motion holds the curve definition by reference.** Multiple
+     motions for different windows share one `shared_ptr<const Curve>`
+     (immutable after construction per Curve's thread-safety contract).
+     No copy-on-write, no duplication.
+   - **Progression is parametric, not stateful.** `updateProgress`
+     computes `t = elapsed / duration`, calls `curve->evaluate(t)`,
+     and caches the scalar result in `cachedProgress`. This path
+     uses the `Curve::evaluate(t)` API — the stateful `step()` API is
+     intentionally not wired into `WindowMotion`.
+   - **Why no `CurveState` in Phase 2.** A `CurveState` field only
+     earns its weight once two things land together: (a) a clock that
+     supplies `dt` (Phase 3's `IMotionClock`) and (b) a retarget policy
+     surface that lets callers opt into velocity preservation (Phase
+     3's `RetargetPolicy` enum on `AnimatedValue<T>`). Without both,
+     a lone `CurveState` on `WindowMotion` would be a half-built
+     physics engine — it would need the caller to compute `dt` from
+     `presentTime`, would carry velocity through frames without a way
+     to consume it on retarget, and would duplicate state that Phase 3
+     puts in its natural home.
+   - **Retarget semantics today.** When the consumer issues a new
+     `startAnimation(handle, …)` for a handle that is already
+     animating, it reads `currentVisualPosition` / `currentVisualSize`
+     and passes those as the new start state. That is equivalent to
+     `RetargetPolicy::ResetVelocity` in the Phase 3 design — the
+     Spring's analytical `evaluate(t)` restarts from `t=0` at the
+     captured visual position. A user dragging a window through
+     multiple zones mid-snap sees smooth position continuity but not
+     physical velocity continuity. The Phase 3 `AnimatedValue<T>` path
+     — built on `curve->step(dt, state, target)` — is where
+     velocity-preserving retarget lands.
+   - **Terminal-frame clamp.** A parametric Spring's `evaluate(1)`
+     returns a value within its settle band (e.g. 0.98 for underdamped
+     at 2% settle), not exactly 1.0. `WindowMotion::updateProgress`
+     clamps `cachedProgress` to `1.0` when `elapsed >= duration` so
+     the final paint lands on target regardless of the curve's
+     endpoint arithmetic.
 
 4. **Plugin curve discovery.** Today `registerFactory` must be called
    imperatively. Phase 4/5 could add a `data/curves/*.json` discovery

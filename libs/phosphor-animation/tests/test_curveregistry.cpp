@@ -72,10 +72,23 @@ private Q_SLOTS:
         QVERIFY(curve->isStateful());
     }
 
-    void testCreateEmptyReturnsNull()
+    void testCreateEmptyFallsBackToDefault()
     {
+        // Empty spec falls through to the same default curve as unknown
+        // typeIds. The `animationEasingCurve` setting round-trips through
+        // empty during config reload / migration / settings edits, and
+        // a null curve would mean linear progression in WindowMotion —
+        // a visible regression from the pre-registry OutCubic default.
+        // create() guarantees a non-null curve so consumers don't need
+        // parallel null-guards.
         auto curve = CurveRegistry::instance().create(QString());
-        QVERIFY(curve == nullptr);
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
+
+        // Sanity: default Easing is OutCubic bezier (0.33, 1, 0.68, 1).
+        // At t=0.5 an OutCubic bezier sits above 0.5 — linear would be
+        // exactly 0.5. Proves we're not silently handing back linear.
+        QVERIFY(curve->evaluate(0.5) > 0.55);
     }
 
     void testCreateUnknownFallsBack()

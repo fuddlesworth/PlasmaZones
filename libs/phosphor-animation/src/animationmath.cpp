@@ -7,8 +7,8 @@ namespace PhosphorAnimation {
 namespace AnimationMath {
 
 std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
-                                             const QRect& targetGeometry, qreal duration, const Easing& easing,
-                                             int minDistance)
+                                             const QRect& targetGeometry, qreal duration,
+                                             std::shared_ptr<const Curve> curve, int minDistance)
 {
     if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
         return std::nullopt;
@@ -27,12 +27,12 @@ std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const Q
     motion.startSize = oldSize;
     motion.targetGeometry = targetGeometry;
     motion.duration = duration;
-    motion.easing = easing;
+    motion.curve = std::move(curve);
     return motion;
 }
 
 QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRect& targetGeometry,
-                     const Easing& easing, const QMarginsF& padding)
+                     const std::shared_ptr<const Curve>& curve, const QMarginsF& padding)
 {
     QRectF atTarget(targetGeometry.x() - padding.left(), targetGeometry.y() - padding.top(),
                     targetGeometry.width() + padding.left() + padding.right(),
@@ -43,17 +43,11 @@ QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRe
 
     QRectF bounds = atTarget.united(atStart);
 
-    // Curves that overshoot the unit interval need sampling: otherwise
+    // Curves that overshoot the unit interval need sampling — otherwise
     // we'd under-invalidate mid-animation and leave painting artifacts.
-    const bool isBounce = (easing.type == Easing::Type::BounceIn || easing.type == Easing::Type::BounceOut
-                           || easing.type == Easing::Type::BounceInOut);
-    const bool needsSampling = (easing.type == Easing::Type::ElasticIn || easing.type == Easing::Type::ElasticOut
-                                || easing.type == Easing::Type::ElasticInOut)
-        || (isBounce && easing.amplitude > 1.0)
-        || (easing.type == Easing::Type::CubicBezier
-            && (easing.y1 < 0.0 || easing.y1 > 1.0 || easing.y2 < 0.0 || easing.y2 > 1.0));
-
-    if (needsSampling) {
+    // Null / non-overshooting curves are sufficiently bounded by the
+    // start/target union.
+    if (curve && curve->overshoots()) {
         const qreal dx = startPos.x() - targetGeometry.x();
         const qreal dy = startPos.y() - targetGeometry.y();
         const qreal dw = startSize.width() - targetGeometry.width();
@@ -61,13 +55,11 @@ QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRe
 
         // 50 samples ≈ one sample every 20 ms at the typical 1000 ms
         // upper bound on snap durations — fine for the parameter ranges
-        // these curves clamp to (elastic amplitude ≤ 3, bounce count ≤ 8,
-        // bezier y ∈ [-1, 2]). Bounce-out with N=8 still gets ~6 samples
-        // per sub-bounce, enough to capture each peak. Longer / wilder
-        // curves should drive their own per-frame repaint instead.
+        // these curves clamp to. Runs once per animation start, not per
+        // frame, so the cost is negligible.
         constexpr int nSamples = 50;
         for (int i = 1; i < nSamples; ++i) {
-            qreal p = easing.evaluate(qreal(i) / nSamples);
+            qreal p = curve->evaluate(qreal(i) / nSamples);
             const qreal inv = 1.0 - p;
             QRectF sampledRect(targetGeometry.x() + dx * inv - padding.left(),
                                targetGeometry.y() + dy * inv - padding.top(),
