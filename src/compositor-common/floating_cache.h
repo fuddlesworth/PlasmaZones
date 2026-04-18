@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "window_id.h"
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QSet>
 #include <QString>

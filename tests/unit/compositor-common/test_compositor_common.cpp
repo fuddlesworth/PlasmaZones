@@ -15,7 +15,7 @@
 #include "compositor-common/dbus_types.h"
 #include "compositor-common/floating_cache.h"
 #include "compositor-common/trigger_parser.h"
-#include "compositor-common/window_id.h"
+#include <PhosphorIdentity/WindowId.h>
 
 // Easing curves, AnimationMath, and WindowMotion have their own tests
 // under libs/phosphor-animation/tests. Keep this TU focused on the

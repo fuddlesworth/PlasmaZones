@@ -8,7 +8,7 @@
 #include <dbus_constants.h>
 #include <dbus_helpers.h>
 #include <dbus_types.h>
-#include <window_id.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 

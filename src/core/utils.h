@@ -4,7 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include <window_id.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QGuiApplication>
 #include <QScreen>

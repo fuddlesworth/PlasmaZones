@@ -31,7 +31,7 @@ Naming smell test: every clean `libs/phosphor-*` is named after its *domain* (co
 | `snap_assist_filter.{h,cpp}` | ✅ Confirmed | `phosphor-tiles` | Filters candidates via `ICompositorBridge`; *not* snap geometry |
 | `trigger_parser.{h,cpp}` | ✅ Confirmed | `phosphor-shortcuts` | Hardcoded enum values 0-10 documented, not a blocker |
 | `screen_id.{h,cpp}` | ✅ Confirmed | `phosphor-identity` | Already shimmed |
-| `window_id.h` | ✅ Confirmed | `phosphor-identity` | Already shimmed |
+| `window_id.h` | ✅ Confirmed | `phosphor-identity` | Extracted; consumers `#include <PhosphorIdentity/WindowId.h>` directly |
 | `dbus_types.{h,cpp}` | ✅ Confirmed | `phosphor-shell` / new `phosphor-ipc` | Keep triple together |
 | `dbus_constants.h` | ✅ Confirmed | same as `dbus_types` | |
 | `dbus_helpers.h` | 🔗 **Blocked** | same as `dbus_types` | Uses `lcCompositorCommon`; resolve logging ownership first |

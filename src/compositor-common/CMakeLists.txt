@@ -22,15 +22,12 @@ add_library(plasmazones_compositor_common STATIC
     trigger_parser.h
     screen_id.cpp
     screen_id.h
-    # window_id moved to libs/phosphor-identity — backward-compat shim
-    # `window_id.h` in this directory forwards to <PhosphorIdentity/WindowId.h>
-    # so the KWin effect's existing `#include "window_id.h"` keeps working.
-    # The shim is header-only; it's reachable via the public include-dir
-    # wired below and does not need to be listed as a source.
+    # window_id moved to libs/phosphor-identity. Consumers include
+    # <PhosphorIdentity/WindowId.h> directly — no forwarding shim.
     #
-    # Animation primitives moved to libs/phosphor-animation.
-    # #include <PhosphorAnimation/{Easing,WindowMotion,AnimationMath,
-    # StaggerTimer}.h> directly — no forwarding shim layer.
+    # Animation primitives moved to libs/phosphor-animation. Consumers
+    # include <PhosphorAnimation/{Easing,WindowMotion,AnimationMath,
+    # StaggerTimer}.h> directly — no forwarding shim.
     autotile_state.h
     compositor_bridge.h
     dbus_types.cpp
