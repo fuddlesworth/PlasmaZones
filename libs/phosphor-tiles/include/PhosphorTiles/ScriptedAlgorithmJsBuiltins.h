@@ -6,6 +6,34 @@
 #include <QString>
 
 namespace PhosphorTiles {
+
+/**
+ * @namespace PhosphorTiles::ScriptedHelpers
+ *
+ * JS builtin sources loaded from the `:/builtins/` Qt resource at
+ * @c ScriptedAlgorithm::loadScript() time. Each helper below returns the
+ * source text of one builtin; the sandbox injects + freezes them before a
+ * user script runs.
+ *
+ * ## Pre-injected JS globals available inside every builtin and user script
+ *
+ * These constants are injected by @c ScriptedAlgorithmSandbox alongside the
+ * builtin functions and are in scope for every script. Keep this list in
+ * sync with the injection points in @c scriptedalgorithmjsbuiltins.cpp.
+ *
+ *   - `PZ_MIN_ZONE_SIZE` — integer, per-zone minimum dimension (pixels).
+ *     Mirrors @c AutotileDefaults::MinZoneSize.
+ *   - `PZ_MIN_SPLIT`     — float, lower bound for split ratios. Mirrors
+ *     @c AutotileDefaults::MinSplitRatio.
+ *   - `PZ_MAX_SPLIT`     — float, upper bound for split ratios. Mirrors
+ *     @c AutotileDefaults::MaxSplitRatio.
+ *   - `MAX_TREE_DEPTH`   — integer, recursion guard for tree-walking
+ *     builtins (e.g. @c applyTreeGeometry). Mirrors
+ *     @c AutotileDefaults::MaxRuntimeTreeDepth.
+ *
+ * Builtin authors should prefer these names over re-introducing local
+ * constants, so values stay in exactly one place (the C++ defaults header).
+ */
 namespace ScriptedHelpers {
 
 /**
