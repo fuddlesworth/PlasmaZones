@@ -156,6 +156,13 @@ std::unique_ptr<Curve> Spring::clone() const
     return std::make_unique<Spring>(*this);
 }
 
+bool Spring::overshoots() const
+{
+    // Underdamped springs oscillate past the target; critical and
+    // overdamped springs approach monotonically from below.
+    return zeta < 1.0 - CriticalDampingEpsilon;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Parsing + equality + presets
 // ═══════════════════════════════════════════════════════════════════════════════

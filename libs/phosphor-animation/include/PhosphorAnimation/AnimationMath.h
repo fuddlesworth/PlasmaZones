@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/WindowMotion.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
@@ -14,6 +14,7 @@
 #include <QRectF>
 #include <QSizeF>
 
+#include <memory>
 #include <optional>
 
 namespace PhosphorAnimation {
@@ -50,25 +51,29 @@ namespace AnimationMath {
  */
 PHOSPHORANIMATION_EXPORT std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
                                                                       const QRect& targetGeometry, qreal duration,
-                                                                      const Easing& easing, int minDistance);
+                                                                      std::shared_ptr<const Curve> curve,
+                                                                      int minDistance);
 
 /**
  * @brief Bounding rect covering the full animation path including
  * overshoot.
  *
- * Elastic and bounce curves — and out-of-range bezier y controls — can
- * send the visual position outside the start/target union during the
- * middle of the animation. This function samples the curve when
- * necessary and returns a union rect that's guaranteed to contain every
- * frame's damage region, so callers can invalidate a single rectangle
- * per animation instead of guessing per frame.
+ * Curves whose `overshoots()` is true (elastic, bounce with amplitude
+ * > 1, out-of-range bezier, underdamped spring) can send the visual
+ * position outside the start/target union during the middle of the
+ * animation. This function samples the curve in that case and returns
+ * a union rect guaranteed to contain every frame's damage region, so
+ * callers can invalidate a single rectangle per animation. For curves
+ * that do not overshoot, the union of start + target rects (with
+ * padding) is returned without sampling.
  *
- * @p padding  Extra margin added around each sample (shadow / decoration
- *             bleed). Same value is applied on all four edges of each
- *             sampled rect before unioning.
+ * @p curve   May be null — treated as linear (no overshoot).
+ * @p padding Extra margin added around each sample (shadow / decoration
+ *            bleed). Same value is applied on all four edges of each
+ *            sampled rect before unioning.
  */
 PHOSPHORANIMATION_EXPORT QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize,
-                                              const QRect& targetGeometry, const Easing& easing,
+                                              const QRect& targetGeometry, const std::shared_ptr<const Curve>& curve,
                                               const QMarginsF& padding);
 
 } // namespace AnimationMath

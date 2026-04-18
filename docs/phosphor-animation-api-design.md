@@ -554,43 +554,48 @@ Each phase is independently shippable, independently reviewable, and
 can be sequenced in any order that matches external priorities. Phase
 numbering reflects dependency order, not required calendar order.
 
-### Phase 2 — WindowAnimator split
+### Phase 2 — WindowAnimator split ✅ DONE
 
 **Scope:** Pull the compositor-agnostic state machine out of
 `kwin-effect/windowanimator.cpp` into a reusable
 `PhosphorAnimation::AnimationController` base; `WindowAnimator` in
 `kwin-effect/` becomes a thin KWin adapter.
 
-**Library additions:**
-- `include/PhosphorAnimation/AnimationController.h` — template or
-  QObject base holding `QHash<Handle, WindowMotion>`, configuration
-  setters (enabled, duration, easing, minDistance), lifecycle methods
-  (`startAnimation`, `removeAnimation`, `clear`, `hasAnimation`,
-  `isAnimatingToTarget`, `currentVisualPosition / Size`).
-- `advanceAnimations(presentTime)` on the base: iterates, calls
-  `WindowMotion::updateProgress`, invokes virtual `onComplete(handle)`
-  / `onRepaintNeeded(bounds)` hooks for subclasses.
-- `WindowMotion::easing` upgrade from `Easing` (value) to
-  `std::shared_ptr<const Curve>` — unblocks Spring-backed window
-  motion without touching the KWin adapter surface.
+**Landed:**
+- `include/PhosphorAnimation/AnimationController.h` — header-only
+  template `AnimationController<Handle>` holding `QHash<Handle,
+  WindowMotion>`, configuration setters (enabled, duration, curve,
+  minDistance), lifecycle methods (`startAnimation`, `removeAnimation`,
+  `clear`, `hasAnimation`, `isAnimatingToTarget`, `currentVisualPosition
+  / Size`, `motionFor`).
+- `advanceAnimations(presentTime)` iterates, calls
+  `WindowMotion::updateProgress`, invokes the four virtual hooks for
+  subclasses (`onAnimationStarted`, `onAnimationComplete`,
+  `onRepaintNeeded`, `isHandleValid`, `expandedPadding`).
+- `WindowMotion::easing` (Easing value) renamed to `curve`
+  (`std::shared_ptr<const Curve>`) — Spring + user-registered curves
+  drive window motion via polymorphic `evaluate()`. Null curve =
+  linear progression.
+- `Curve::overshoots()` virtual added; Easing + Spring override.
+  `AnimationMath::repaintBounds` uses it polymorphically (no more
+  Easing-specific `type` switch in the bounds computation).
+- `AnimationMath::createSnapMotion` + `repaintBounds` signatures take
+  `shared_ptr<const Curve>`.
+- `kwin-effect/WindowAnimator` is now `: public
+  AnimationController<KWin::EffectWindow*>` with four hook overrides
+  (`onAnimationStarted`, `onAnimationComplete`, `onRepaintNeeded`,
+  `isHandleValid`, `expandedPadding`) plus the retained
+  `applyTransform(EffectWindow*, WindowPaintData&)` paint coupling.
+- `plasmazoneseffect.cpp` switched from `Easing::fromString` to
+  `CurveRegistry::create` so Spring works end-to-end.
+- 10 new `pa_test_animationcontroller` cases with a mock `int`-handle
+  controller cover lifecycle, hook ordering, polymorphic curve
+  dispatch, invalid-handle pruning, fallback queries, and bounds.
 
-**kwin-effect adapter:**
-- `WindowAnimator` becomes `class WindowAnimator : public
-  AnimationController<KWin::EffectWindow*>`.
-- Overrides: `onRepaintNeeded` → `KWin::effects->addRepaint(bounds)`;
-  `onComplete` → `window->addRepaintFull()`.
-- Retains: `applyTransform(EffectWindow*, WindowPaintData&)` — the
-  KWin paint-pipeline hook. This is the only genuinely KWin-coupled
-  code left after the split.
-
-**Success criteria:**
-- `kwin_effect_plasmazones.so` shrinks by ~95 LOC.
-- `AnimationController` has its own unit tests with a mock handle
-  type (no KWin dependency).
-- Existing snap-animation behavior is byte-identical.
-
-**Estimated scope:** ~400 LOC in library, ~150 LOC removed from
-kwin-effect, 8–10 new unit tests.
+**Out:**
+- `WindowAnimator` is no longer a `QObject` (it doesn't emit signals
+  and the controller base is plain C++) — construction site changed
+  from `make_unique<WindowAnimator>(this)` to `make_unique<WindowAnimator>()`.
 
 ### Phase 3 — IMotionClock + AnimatedValue<T>
 

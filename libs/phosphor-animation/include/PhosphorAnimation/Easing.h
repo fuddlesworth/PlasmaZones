@@ -71,6 +71,7 @@ public:
     qreal evaluate(qreal x) const override;
     QString toString() const override;
     std::unique_ptr<Curve> clone() const override;
+    bool overshoots() const override;
 
     /// Overrides `Curve::equals()` to delegate to the tight
     /// `operator==`. The base default compares `toString()` forms,

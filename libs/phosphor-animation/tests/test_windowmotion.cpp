@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Spring.h>
 #include <PhosphorAnimation/WindowMotion.h>
 
 #include <QTest>
 
+#include <memory>
+
 using namespace std::chrono_literals;
 
 using PhosphorAnimation::Easing;
+using PhosphorAnimation::Spring;
 using PhosphorAnimation::WindowMotion;
 
 class TestWindowMotion : public QObject
@@ -115,6 +120,42 @@ private Q_SLOTS:
 
         m.targetGeometry = QRect(0, 0, 200, 100);
         QVERIFY(m.hasScaleChange());
+    }
+
+    void testNullCurveProgressesLinearly()
+    {
+        // A null curve is a valid state — the progress field falls back
+        // to the raw normalized t. Useful for default-constructed
+        // motion records and as a sentinel.
+        WindowMotion m;
+        m.duration = 100.0;
+        m.curve = nullptr;
+        m.updateProgress(std::chrono::milliseconds(0));
+        m.updateProgress(std::chrono::milliseconds(50));
+        QVERIFY(qAbs(m.progress() - 0.5) < 1e-6);
+    }
+
+    void testPolymorphicCurveDispatchesViaSharedPtr()
+    {
+        // Spring + Easing both drive WindowMotion through the same
+        // shared_ptr<const Curve> field — that's the whole point of
+        // the Phase-2 polymorphic upgrade.
+        WindowMotion easingMotion;
+        easingMotion.duration = 100.0;
+        easingMotion.curve = std::make_shared<Easing>();
+
+        WindowMotion springMotion;
+        springMotion.duration = 100.0;
+        springMotion.curve = std::make_shared<Spring>(Spring::snappy());
+
+        easingMotion.updateProgress(std::chrono::milliseconds(0));
+        springMotion.updateProgress(std::chrono::milliseconds(0));
+        easingMotion.updateProgress(std::chrono::milliseconds(50));
+        springMotion.updateProgress(std::chrono::milliseconds(50));
+
+        // Both produce a numeric progress in roughly the [0, 1+] band.
+        QVERIFY(easingMotion.progress() >= 0.0 && easingMotion.progress() <= 1.5);
+        QVERIFY(springMotion.progress() >= 0.0 && springMotion.progress() <= 1.5);
     }
 };
 

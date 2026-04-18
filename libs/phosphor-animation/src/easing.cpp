@@ -159,6 +159,24 @@ std::unique_ptr<Curve> Easing::clone() const
     return std::make_unique<Easing>(*this);
 }
 
+bool Easing::overshoots() const
+{
+    switch (type) {
+    case Type::ElasticIn:
+    case Type::ElasticOut:
+    case Type::ElasticInOut:
+        return true; // elastic always rings beyond [0, 1]
+    case Type::BounceIn:
+    case Type::BounceOut:
+    case Type::BounceInOut:
+        return amplitude > 1.0; // amplitude>1 amplifies bounce dips beyond unit
+    case Type::CubicBezier:
+        // Bezier overshoots iff a y control point leaves [0, 1].
+        return y1 < 0.0 || y1 > 1.0 || y2 < 0.0 || y2 > 1.0;
+    }
+    return false;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Parsing + equality
 // ═══════════════════════════════════════════════════════════════════════════════

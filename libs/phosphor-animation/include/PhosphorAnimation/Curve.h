@@ -168,6 +168,21 @@ public:
     }
 
     /**
+     * @brief True if this curve may evaluate outside [0, 1] during
+     * progression.
+     *
+     * Used by sampling-based callers (e.g., `AnimationMath::repaintBounds`)
+     * to decide whether the union of start + target is sufficient or
+     * whether the curve must be sampled to capture mid-progression
+     * overshoot. Default false — only override when the curve genuinely
+     * can leave the unit interval.
+     */
+    virtual bool overshoots() const
+    {
+        return false;
+    }
+
+    /**
      * @brief Approximate time (seconds) for a stateful curve to settle to
      * its target within epsilon.
      *

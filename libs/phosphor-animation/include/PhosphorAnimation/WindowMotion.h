@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QPointF>
@@ -12,6 +12,7 @@
 #include <QtGlobal>
 
 #include <chrono>
+#include <memory>
 
 namespace PhosphorAnimation {
 
@@ -46,11 +47,10 @@ namespace PhosphorAnimation {
  *
  * ## Curve type
  *
- * `easing` is a concrete `Easing` value — Spring + user-registered
- * curves are not yet wired through to WindowMotion. Phase 2 replaces
- * the field with `std::shared_ptr<const Curve>` once `WindowAnimator`
- * is migrated; that lives in a follow-up PR so the migration touches
- * one consumer at a time.
+ * `curve` is `shared_ptr<const Curve>` so any registered curve subclass
+ * (Easing, Spring, third-party) drives window motion via polymorphic
+ * `evaluate()`. A null curve is interpreted as linear progression — the
+ * cached progress simply equals normalized time `t`.
  */
 struct PHOSPHORANIMATION_EXPORT WindowMotion
 {
@@ -59,7 +59,7 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
     QRect targetGeometry; ///< Final geometry (duplicate detection)
     std::chrono::milliseconds startTime{-1}; ///< presentTime at start (-1 = pending)
     qreal duration = 150.0; ///< Animation length in milliseconds
-    Easing easing; ///< Curve evaluated per frame
+    std::shared_ptr<const Curve> curve; ///< Polymorphic curve evaluated per frame; null = linear
     qreal cachedProgress = 0.0; ///< Eased progress (per-frame snapshot)
 
     /// True once @ref startTime has been latched (first paint seen).
@@ -96,7 +96,7 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
         }
         const qreal elapsed = qreal((presentTime - startTime).count());
         const qreal t = qMin(1.0, elapsed / duration);
-        cachedProgress = easing.evaluate(t);
+        cachedProgress = curve ? curve->evaluate(t) : t;
     }
 
     /// Eased progress cached by updateProgress(). See Overshoot above.
