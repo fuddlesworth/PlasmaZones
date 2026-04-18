@@ -70,10 +70,6 @@ public:
     explicit ScreenManager(ScreenManagerConfig cfg = ScreenManagerConfig{}, QObject* parent = nullptr);
     ~ScreenManager() override;
 
-    /// Placeholder kept for API symmetry with previous in-tree class.
-    /// Real wiring happens in @ref start().
-    bool init();
-
     /**
      * @brief Begin tracking screens.
      *

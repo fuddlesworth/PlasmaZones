@@ -3,8 +3,6 @@
 
 #include "screenadaptor.h"
 
-#include "../config/settings.h"
-#include "../config/settingsconfigstore.h"
 #include "../core/screenmanagerservice.h"
 
 namespace PlasmaZones {
@@ -18,17 +16,13 @@ ScreenAdaptor::ScreenAdaptor(QObject* parent)
     // D-Bus queries can land (D-Bus registration happens during init()),
     // so the value we read here is authoritative.
     setScreenManager(screenManager());
+    // setConfigStore() is invoked directly by the daemon with its
+    // SettingsConfigStore after construction — keeping a single store
+    // instance per process so VS writes go through one change-signal
+    // channel instead of the adaptor owning a parallel store backed
+    // by the same Settings.
 }
 
 ScreenAdaptor::~ScreenAdaptor() = default;
-
-void ScreenAdaptor::setSettings(Settings* settings)
-{
-    // Build a backing SettingsConfigStore and hand a non-owning pointer
-    // to the base adaptor. Reset rather than reuse to handle a re-wire
-    // in tests.
-    m_virtualScreenStore = settings ? std::make_unique<SettingsConfigStore>(settings) : nullptr;
-    setConfigStore(m_virtualScreenStore.get());
-}
 
 } // namespace PlasmaZones

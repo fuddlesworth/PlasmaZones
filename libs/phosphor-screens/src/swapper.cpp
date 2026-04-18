@@ -211,7 +211,7 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
 
     const QString targetId = cfg.screens[targetIndex].id;
     if (!cfg.swapRegions(currentVirtualScreenId, targetId)) {
-        return Result::SettingsRejected;
+        return Result::SwapFailed;
     }
 
     if (!m_store->save(physId, cfg)) {
@@ -241,7 +241,7 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::rotate(const QString& physica
     }
 
     if (!cfg.rotateRegions(orderedIds, clockwise)) {
-        return Result::SettingsRejected;
+        return Result::SwapFailed;
     }
 
     if (!m_store->save(physicalScreenId, cfg)) {
@@ -265,6 +265,8 @@ QString VirtualScreenSwapper::reasonString(Result result)
         return QStringLiteral("no_sibling");
     case Result::InvalidDirection:
         return QStringLiteral("invalid_direction");
+    case Result::SwapFailed:
+        return QStringLiteral("swap_failed");
     case Result::SettingsRejected:
         return QStringLiteral("settings_rejected");
     }

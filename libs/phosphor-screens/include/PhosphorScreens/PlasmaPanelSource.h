@@ -10,6 +10,7 @@
 #include <QString>
 #include <QTimer>
 
+class QDBusPendingCallWatcher;
 class QDBusServiceWatcher;
 
 namespace Phosphor::Screens {
@@ -61,7 +62,16 @@ private:
 
     bool m_running = false;
     bool m_ready = false;
+
+    /// True while a D-Bus call is in flight. Rapid requestRequery calls
+    /// coalesce: additional requests while pending set m_requeryQueued so
+    /// the watcher's finished-handler kicks one more round after the
+    /// current reply lands.
     bool m_queryPending = false;
+    bool m_requeryQueued = false;
+    /// True while the queued follow-up should emit requeryCompleted when
+    /// it lands (set when requestRequery is called while pending).
+    bool m_queuedEmitRequeryCompleted = false;
 
     /// Per-connector-name reserved-edge offsets.
     QHash<QString, Offsets> m_offsets;
@@ -73,6 +83,10 @@ private:
     /// query panels as soon as Plasma Shell is available, instead of
     /// guessing with arbitrary timer delays.
     QDBusServiceWatcher* m_plasmaShellWatcher = nullptr;
+
+    /// In-flight pending-call watcher, tracked so stop() can cancel it
+    /// and suppress post-stop state mutation / signal emission.
+    QDBusPendingCallWatcher* m_activeWatcher = nullptr;
 };
 
 } // namespace Phosphor::Screens

@@ -7,29 +7,21 @@
 
 #include <PhosphorScreens/DBusScreenAdaptor.h>
 
-#include <memory>
-
 namespace PlasmaZones {
-
-class Settings;
-class SettingsConfigStore;
 
 /**
  * @brief PlasmaZones-specific D-Bus adaptor.
  *
  * All the logic — screen queries, virtual-screen mutation, caches,
  * signal plumbing — lives in @ref Phosphor::Screens::DBusScreenAdaptor.
- * This subclass adds exactly three things:
+ * This subclass exists only to add
+ * `Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")` so
+ * registrations go to the right interface name.
  *
- *  1. `Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")` so
- *     registrations go to the right interface name.
- *  2. A `setSettings(Settings*)` convenience that builds a
- *     `SettingsConfigStore` and wires it through to the base's
- *     `setConfigStore`. Matches the existing daemon init call
- *     sequence (ScreenAdaptor constructed before Settings).
- *  3. Ownership of the SettingsConfigStore (declared here so its
- *     lifetime is tied to the adaptor; the base holds a non-owning
- *     pointer into it).
+ * Wiring: the daemon calls the base's `setScreenManager` /
+ * `setConfigStore` directly with its own service-locator pointers; no
+ * ownership or convenience wrappers live here. One IConfigStore
+ * instance per process (the daemon's) → single change-signal channel.
  *
  * Interface name must match `dbus/org.plasmazones.Screen.xml` and
  * `DBus::Interface::Screen` for KCM signal connections.
@@ -42,14 +34,6 @@ class PLASMAZONES_EXPORT ScreenAdaptor : public Phosphor::Screens::DBusScreenAda
 public:
     explicit ScreenAdaptor(QObject* parent = nullptr);
     ~ScreenAdaptor() override;
-
-    /// Wire the authoritative Settings instance. Builds a backing
-    /// `SettingsConfigStore` and hands it to the base adaptor's
-    /// `setConfigStore`.
-    void setSettings(Settings* settings);
-
-private:
-    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
 };
 
 } // namespace PlasmaZones

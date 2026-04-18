@@ -62,6 +62,10 @@ public:
         UnknownVirtualScreen, ///< The VS id is well-formed but not present in the current config.
         NoSiblingInDirection, ///< Swap: no sibling VS lies in the requested direction.
         InvalidDirection, ///< Swap: direction string was empty or unrecognised.
+        /// In-memory swap/rotate step failed (duplicate ids, ids not in the
+        /// working config). Distinct from SettingsRejected because nothing
+        /// was ever handed to the store — the caller's input is the problem.
+        SwapFailed,
         SettingsRejected, ///< IConfigStore::save rejected the mutated config.
     };
 

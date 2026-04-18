@@ -43,34 +43,21 @@ namespace PlasmaZones {
 
 void Daemon::connectScreenSignals()
 {
-    // Initialize and start screen manager
-    m_screenManager->init();
+    // Start screen manager
     m_screenManager->start();
 
     // Warn about identical monitors producing duplicate screen IDs
     Utils::warnDuplicateScreenIds();
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Settings → ScreenManager observer wiring
-    //
-    // Settings is the single source of truth for virtual screen configs.
-    // ScreenManager keeps a cache (for fast geometry lookups) that is rebuilt
-    // from Settings whenever Settings::virtualScreenConfigsChanged fires —
-    // either from disk reload (notifyReload), in-process mutation (D-Bus
-    // ScreenAdaptor::setVirtualScreenConfig writes here, not directly to
-    // ScreenManager), or programmatic settings changes.
-    //
-    // Both connections fire ScreenManager::virtualScreensChanged(physId) for
-    // each changed entry, which the downstream handler below picks up to do
-    // migration / autotile / resnap work.
-    // ─────────────────────────────────────────────────────────────────────
-    connect(m_settings.get(), &Settings::virtualScreenConfigsChanged, this, [this]() {
-        m_screenManager->refreshVirtualConfigs(m_settings->virtualScreenConfigs());
-    });
-    // Initial sync: pull whatever Settings::load() already populated.
-    m_screenManager->refreshVirtualConfigs(m_settings->virtualScreenConfigs());
+    // Settings → ScreenManager refresh flows exclusively through the
+    // IConfigStore contract: SettingsConfigStore forwards
+    // Settings::virtualScreenConfigsChanged to IConfigStore::changed, which
+    // ScreenManager subscribes to in its start() (already called above) and
+    // which also seeds the initial cache via loadAll(). A parallel direct
+    // Settings observer here would double every refresh — left intentionally
+    // absent.
 
-    // React to ScreenManager VS cache changes (driven by the observer above
+    // React to ScreenManager VS cache changes (driven by the IConfigStore
     // OR by direct test calls). Delegates to onVirtualScreensReconfigured
     // which migrates window assignments, refreshes autotile, resnaps
     // windows, and schedules downstream geometry updates. NOTE: this

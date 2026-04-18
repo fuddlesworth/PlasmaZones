@@ -17,10 +17,19 @@ namespace Phosphor::Screens::ScreenIdentity {
 
 namespace {
 
-// QScreen* → cached identifier (full, with disambiguation).
-QHash<const QScreen*, QString>& identifierCache()
+/// Identifier cache entry. Held by pointer value (stable inside Qt's
+/// QScreen lifetime) + name fingerprint (so stale entries can be swept
+/// safely without dereferencing a possibly-dangling QScreen*).
+struct IdentifierCacheEntry
 {
-    static QHash<const QScreen*, QString> s_cache;
+    QString connectorName; ///< screen->name() at insert time
+    QString identifier; ///< full, disambiguation-aware screen ID
+};
+
+// QScreen* → cached identifier (full, with disambiguation).
+QHash<const QScreen*, IdentifierCacheEntry>& identifierCache()
+{
+    static QHash<const QScreen*, IdentifierCacheEntry> s_cache;
     return s_cache;
 }
 
@@ -46,16 +55,22 @@ void invalidateEdidCache(const QString& connectorName)
         return;
     }
 
+    // Sweep ALL entries whose cached connector matches — raw pointer keys
+    // may be stale so we match by the stored connector name, not by
+    // dereferencing the QScreen*. The connector name is captured at insert
+    // time so a later `it.key()->name()` would UB-deref a dangling pointer.
     auto& idCache = identifierCache();
-    for (auto it = idCache.begin(); it != idCache.end(); ++it) {
-        if (it.key() && it.key()->name() == connectorName) {
-            idCache.erase(it);
-            break;
+    for (auto it = idCache.begin(); it != idCache.end();) {
+        if (it.value().connectorName == connectorName) {
+            it = idCache.erase(it);
+        } else {
+            ++it;
         }
     }
 
     auto& byIdCache = reverseCache();
     for (auto it = byIdCache.begin(); it != byIdCache.end();) {
+        // value() is a QPointer — guards against dangling, safely returns null.
         if (it.value().isNull() || it.value()->name() == connectorName) {
             it = byIdCache.erase(it);
         } else {
@@ -84,7 +99,7 @@ QString identifierFor(const QScreen* screen)
     auto& cache = identifierCache();
     auto cacheIt = cache.constFind(screen);
     if (cacheIt != cache.constEnd()) {
-        return cacheIt.value();
+        return cacheIt.value().identifier;
     }
 
     const QString baseId = baseIdentifierFor(screen);
@@ -98,7 +113,7 @@ QString identifierFor(const QScreen* screen)
         }
     }
 
-    cache.insert(screen, result);
+    cache.insert(screen, IdentifierCacheEntry{screen->name(), result});
     return result;
 }
 

@@ -17,11 +17,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QJsonValue>
 #include <QPoint>
 #include <QScreen>
 #include <QSet>
 #include <QSizeF>
 #include <QTimer>
+
+#include <cmath>
 
 namespace Phosphor::Screens {
 
@@ -281,11 +284,23 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
         QJsonObject{{kKeyX, geom.x()}, {kKeyY, geom.y()}, {kKeyWidth, geom.width()}, {kKeyHeight, geom.height()}};
 
     QSizeF physSize = screen->physicalSize();
-    const int vsIndex = isVirtual ? PhosphorIdentity::VirtualScreenId::extractIndex(screenId) : -1;
     const VirtualScreenConfig vsConfig =
         (isVirtual && m_screenManager) ? m_screenManager->virtualScreenConfig(physId) : VirtualScreenConfig();
-    if (isVirtual && vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
-        const QRectF& region = vsConfig.screens[vsIndex].region;
+    // Resolve the VS def by exact id match — `index` is a semantic field and
+    // is NOT guaranteed to match the array position (swap/rotate/external
+    // writes can reorder the vector). A bare `vsConfig.screens[index]` would
+    // silently return the wrong def after such a reorder.
+    const VirtualScreenDef* vsDef = nullptr;
+    if (isVirtual) {
+        for (const auto& d : vsConfig.screens) {
+            if (d.id == screenId) {
+                vsDef = &d;
+                break;
+            }
+        }
+    }
+    if (vsDef) {
+        const QRectF& region = vsDef->region;
         physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
     }
     info[kKeyPhysicalSize] = QJsonObject{{kKeyWidth, physSize.width()}, {kKeyHeight, physSize.height()}};
@@ -297,8 +312,8 @@ QString DBusScreenAdaptor::getScreenInfo(const QString& screenId)
     if (isVirtual) {
         info[kKeyIsVirtualScreen] = true;
         info[kKeyPhysicalScreenId] = physId;
-        if (vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
-            info[kKeyVirtualDisplayName] = vsConfig.screens[vsIndex].displayName;
+        if (vsDef) {
+            info[kKeyVirtualDisplayName] = vsDef->displayName;
         }
     }
 
@@ -439,9 +454,18 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
         qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: invalid JSON:" << parseError.errorString();
         return;
     }
+    if (!doc.isObject()) {
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: JSON root is not an object";
+        return;
+    }
 
     QJsonObject root = doc.object();
-    QJsonArray screensArr = root[kKeyScreens].toArray();
+    const QJsonValue screensVal = root.value(kKeyScreens);
+    if (!screensVal.isArray()) {
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: missing or non-array 'screens' key";
+        return;
+    }
+    const QJsonArray screensArr = screensVal.toArray();
 
     if (screensArr.isEmpty()) {
         VirtualScreenConfig empty;
@@ -453,17 +477,37 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
     VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
 
+    auto finiteOrReject = [](double v) {
+        return std::isfinite(v);
+    };
+
     for (const auto& entry : screensArr) {
-        QJsonObject screenObj = entry.toObject();
-        QJsonObject regionObj = screenObj[kKeyRegion].toObject();
+        if (!entry.isObject()) {
+            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: screens[] entry is not an object";
+            return;
+        }
+        const QJsonObject screenObj = entry.toObject();
+        const QJsonValue regionVal = screenObj.value(kKeyRegion);
+        if (!regionVal.isObject()) {
+            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: entry missing 'region' object";
+            return;
+        }
+        const QJsonObject regionObj = regionVal.toObject();
+        const double rx = regionObj.value(kKeyX).toDouble();
+        const double ry = regionObj.value(kKeyY).toDouble();
+        const double rw = regionObj.value(kKeyWidth).toDouble();
+        const double rh = regionObj.value(kKeyHeight).toDouble();
+        if (!finiteOrReject(rx) || !finiteOrReject(ry) || !finiteOrReject(rw) || !finiteOrReject(rh)) {
+            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: non-finite region value for" << physicalScreenId;
+            return;
+        }
 
         VirtualScreenDef def;
-        def.index = screenObj[kKeyIndex].toInt();
+        def.index = screenObj.value(kKeyIndex).toInt();
         def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, def.index);
         def.physicalScreenId = physicalScreenId;
-        def.displayName = screenObj[kKeyDisplayName].toString();
-        def.region = QRectF(regionObj[kKeyX].toDouble(), regionObj[kKeyY].toDouble(), regionObj[kKeyWidth].toDouble(),
-                            regionObj[kKeyHeight].toDouble());
+        def.displayName = screenObj.value(kKeyDisplayName).toString();
+        def.region = QRectF(rx, ry, rw, rh);
         config.screens.append(def);
     }
 

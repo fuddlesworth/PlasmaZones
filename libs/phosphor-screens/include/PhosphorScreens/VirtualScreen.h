@@ -136,6 +136,12 @@ struct VirtualScreenConfig
         return screens.isEmpty();
     }
 
+    /// Exact vector equality: order-sensitive (QVector::operator==). Two
+    /// configs with the same VS defs in different array orders compare
+    /// as NOT equal, even though they describe identical topology. The
+    /// `regionsOnly` detection in ScreenManager::setVirtualScreenConfig
+    /// is the order-insensitive path that catches reordered-but-identical
+    /// configs and routes them through the cheaper regions-only signal.
     bool operator==(const VirtualScreenConfig&) const = default;
 
     /// Validate geometric and structural invariants for this config.

@@ -43,11 +43,6 @@ ScreenManager::~ScreenManager()
     stop();
 }
 
-bool ScreenManager::init()
-{
-    return true;
-}
-
 void ScreenManager::start()
 {
     if (m_running || !m_valid) {
@@ -68,8 +63,12 @@ void ScreenManager::start()
         // inside the deferred lambda so callers invoking
         // isPanelGeometryReady() BEFORE the tick fires (in tests especially)
         // see the false state they expect.
+        //
+        // Guarded by m_running so a stop() between this schedule and the
+        // tick firing doesn't surface a stale readiness signal to listeners
+        // that already tore down their wiring.
         QTimer::singleShot(0, this, [this]() {
-            if (!m_panelGeometryReadyEmitted) {
+            if (m_running && !m_panelGeometryReadyEmitted) {
                 m_panelGeometryReadyEmitted = true;
                 Q_EMIT panelGeometryReady();
             }
@@ -417,7 +416,6 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     destroyGeometrySensor(screen);
     disconnectScreenSignals(screen);
     m_trackedScreens.removeAll(screen);
-    m_effectiveScreenIdsDirty = true;
     // Do NOT clear m_virtualConfigs[physId] — the host's IConfigStore is the
     // authoritative source. Stale entries for unconnected screens are filtered
     // by effectiveScreenIds().

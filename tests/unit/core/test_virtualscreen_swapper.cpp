@@ -211,6 +211,8 @@ private Q_SLOTS:
                  QStringLiteral("not_virtual"));
         QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::InvalidDirection),
                  QStringLiteral("invalid_direction"));
+        QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::SwapFailed),
+                 QStringLiteral("swap_failed"));
         QCOMPARE(Phosphor::Screens::VirtualScreenSwapper::reasonString(Result::SettingsRejected),
                  QStringLiteral("settings_rejected"));
     }

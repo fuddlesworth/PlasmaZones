@@ -8,9 +8,10 @@
 # detection (KDE Plasma D-Bus, no-op) and VS-config persistence
 # (Settings, in-memory). See docs/phosphor-screens-api-design.md.
 #
-# Currently shipping: VirtualScreen.h POD types and ScreenResolver.
-# ScreenManager / IPanelSource / IConfigStore / VirtualScreenSwapper /
-# ScreenAdaptor land in subsequent migration PRs.
+# Surface: VirtualScreen.h POD types, ScreenResolver, ScreenManager,
+# IPanelSource (+ PlasmaPanelSource, NoOpPanelSource), IConfigStore
+# (+ InMemoryConfigStore), VirtualScreenSwapper, DBusScreenAdaptor,
+# ScreenIdentity helpers.
 
 cmake_minimum_required(VERSION 3.16)
 

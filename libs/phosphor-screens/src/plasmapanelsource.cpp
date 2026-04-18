@@ -100,6 +100,18 @@ void PlasmaPanelSource::stop()
         m_plasmaShellWatcher->deleteLater();
         m_plasmaShellWatcher = nullptr;
     }
+    // Cancel any in-flight async D-Bus call. The watcher's finished slot
+    // early-returns when m_activeWatcher has been cleared, so we avoid
+    // mutating m_offsets or emitting signals post-stop. The watcher itself
+    // is parented to `this` and deleted with us; deleteLater keeps the
+    // Qt event-loop teardown order clean.
+    if (m_activeWatcher) {
+        m_activeWatcher->deleteLater();
+        m_activeWatcher = nullptr;
+    }
+    m_queryPending = false;
+    m_requeryQueued = false;
+    m_queuedEmitRequeryCompleted = false;
 }
 
 PlasmaPanelSource::Offsets PlasmaPanelSource::currentOffsets(QScreen* screen) const
@@ -127,6 +139,18 @@ void PlasmaPanelSource::requestRequery(int delayMs)
 
 void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 {
+    // Coalesce: if a query is already in flight, schedule exactly one
+    // follow-up to run when it lands. Additional calls while pending
+    // collapse onto that single queued follow-up. The emit-completion
+    // request is OR-ed across queued callers so any one that asked for
+    // `requeryCompleted` still gets it.
+    if (m_queryPending) {
+        m_requeryQueued = true;
+        m_queuedEmitRequeryCompleted = m_queuedEmitRequeryCompleted || emitRequeryCompleted;
+        return;
+    }
+    m_queryPending = true;
+
     auto* plasmaShell =
         new QDBusInterface(QString::fromLatin1(kPlasmaShellService), QString::fromLatin1(kPlasmaShellPath),
                            QString::fromLatin1(kPlasmaShellInterface), QDBusConnection::sessionBus());
@@ -160,14 +184,28 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         if (emitRequeryCompleted) {
             Q_EMIT requeryCompleted();
         }
+        // Synchronous path — no pending async call to track.
+        m_queryPending = false;
+        // Service absent: don't silently drain queued requeries; they would
+        // all hit the same missing-service path. Clear and move on.
+        m_requeryQueued = false;
+        m_queuedEmitRequeryCompleted = false;
         return;
     }
 
     QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), panelScript());
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    m_activeWatcher = watcher;
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, plasmaShell, emitRequeryCompleted](QDBusPendingCallWatcher* w) {
+                // stop() cancelled us — don't mutate state or emit signals.
+                // The watcher has already been queued for deletion via stop(),
+                // so we just return without touching anything.
+                if (m_activeWatcher != w) {
+                    plasmaShell->deleteLater();
+                    return;
+                }
                 QDBusPendingReply<QString> reply = *w;
 
                 QHash<QString, Offsets> newOffsets;
@@ -283,6 +321,18 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 
                 plasmaShell->deleteLater();
                 w->deleteLater();
+                m_activeWatcher = nullptr;
+                m_queryPending = false;
+
+                // Drain any coalesced follow-up. One reissue covers the
+                // collapsed stack of requestRequery calls that arrived
+                // while the current call was in flight.
+                if (m_running && m_requeryQueued) {
+                    const bool queuedEmit = m_queuedEmitRequeryCompleted;
+                    m_requeryQueued = false;
+                    m_queuedEmitRequeryCompleted = false;
+                    issueQuery(queuedEmit);
+                }
             });
 }
 

@@ -41,6 +41,14 @@ public:
         if (config.isEmpty()) {
             return remove(physicalScreenId);
         }
+        // Honour the IConfigStore contract: reject what
+        // VirtualScreenConfig::isValid rejects. Mirrors SettingsConfigStore's
+        // behaviour so tests exercise the same acceptance surface real
+        // consumers see. A 0 cap means "no cap" — don't impose an arbitrary
+        // limit here; callers of the lib pass their own via ScreenManagerConfig.
+        if (!VirtualScreenConfig::isValid(config, physicalScreenId, /*maxScreensPerPhysical=*/0)) {
+            return false;
+        }
         const auto it = m_configs.constFind(physicalScreenId);
         if (it != m_configs.constEnd() && it.value() == config) {
             return true; // No-op write — don't fire changed().
