@@ -74,6 +74,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/Easing.h
     include/PhosphorAnimation/Spring.h
     include/PhosphorAnimation/CurveRegistry.h
+    include/PhosphorAnimation/IMotionClock.h
     include/PhosphorAnimation/Profile.h
     include/PhosphorAnimation/ProfilePaths.h
     include/PhosphorAnimation/ProfileTree.h

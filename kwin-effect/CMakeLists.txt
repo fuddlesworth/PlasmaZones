@@ -51,6 +51,8 @@ set(plasmazones_effect_SRCS
     snapassisthandler.h
     windowanimator.cpp
     windowanimator.h
+    compositorclock.cpp
+    compositorclock.h
     dragtracker.cpp
     dragtracker.h
     ${CMAKE_SOURCE_DIR}/shared/virtualscreenid.h
