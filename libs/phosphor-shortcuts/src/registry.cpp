@@ -14,7 +14,15 @@ Registry::Registry(IBackend* backend, QObject* parent)
     : QObject(parent)
     , m_backend(backend)
 {
+    // A null backend yields a permanently-broken registry; flag it loudly in
+    // both debug and release builds so misuse doesn't hide behind silent
+    // flush short-circuits.
     Q_ASSERT_X(backend, "Phosphor::Shortcuts::Registry", "backend must not be null");
+    if (!backend) {
+        qCCritical(lcPhosphorShortcuts)
+            << "Registry constructed with null backend — all bind/flush calls will be silently dropped";
+        return;
+    }
 
     connect(backend, &IBackend::activated, this, &Registry::onBackendActivated);
     connect(backend, &IBackend::ready, this, &Registry::onBackendReady);
@@ -33,7 +41,11 @@ void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QSt
         entry.binding.currentSeq = defaultSeq;
         entry.binding.description = description;
         entry.callback = std::move(callback);
-        entry.dirty = true;
+        // Mark dirty only if we actually have a key to grab. A bind() with an
+        // empty default would otherwise hit flush() with an empty currentSeq
+        // and on KGlobalAccel that re-introduces the stale-grab hazard from
+        // discussion #155. A later rebind() with a non-empty seq flips dirty.
+        entry.dirty = !defaultSeq.isEmpty();
         entry.registered = false;
         m_entries.insert(id, std::move(entry));
         return;
@@ -90,8 +102,23 @@ void Registry::flush()
         if (!it->dirty) {
             continue;
         }
+        if (it->binding.currentSeq.isEmpty()) {
+            // Don't ask the backend to grab nothing — skips the stale-grab
+            // hazard on KGlobalAccel. Entry stays in the registry (so a
+            // later rebind() to a non-empty seq will register it) but clears
+            // dirty to avoid hitting this branch on every flush.
+            it->dirty = false;
+            continue;
+        }
         if (!it->registered) {
-            m_backend->registerShortcut(it->binding.id, it->binding.currentSeq, it->binding.description);
+            // First flush for this id: pass both the compiled-in default
+            // (for KGlobalAccel's setDefaultShortcut / portal's
+            // preferred_trigger) AND the current user value (what actually
+            // gets grabbed). Conflating the two — which an earlier version
+            // of this code did — broke "Reset to default" in System Settings
+            // once a user had customised the shortcut.
+            m_backend->registerShortcut(it->binding.id, it->binding.defaultSeq, it->binding.currentSeq,
+                                        it->binding.description);
             it->registered = true;
         } else {
             m_backend->updateShortcut(it->binding.id, it->binding.currentSeq);

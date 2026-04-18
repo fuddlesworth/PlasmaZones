@@ -33,36 +33,46 @@ public:
     ~IBackend() override = default;
 
     /**
-     * Register a new shortcut id with a preferred trigger.
+     * Register a new shortcut id.
      *
-     * @param id                Stable string id (e.g. "pz.move-window-left").
-     * @param preferredTrigger  Compiled-in default key sequence. Portal
-     *                          backends treat this as advisory — the
-     *                          compositor assigns the actual key. DBusTrigger
-     *                          ignores it entirely.
-     * @param description       Human-readable label surfaced in portal
-     *                          settings UIs and kglobalaccel listings.
+     * @param id          Stable string id (e.g. "pz.move-window-left").
+     * @param defaultSeq  Compiled-in default key sequence — the "factory"
+     *                    value a user can reset to. KGlobalAccel records
+     *                    this via setDefaultShortcut so System Settings'
+     *                    "Reset to default" resets to the correct value.
+     *                    Portal backends use this as `preferred_trigger`
+     *                    (advisory — the compositor assigns the actual key).
+     *                    DBusTrigger ignores it entirely.
+     * @param currentSeq  The key sequence to actually grab now. Usually the
+     *                    user's customised value read from config; equals
+     *                    defaultSeq on a fresh install. May be empty (no grab).
+     * @param description Human-readable label surfaced in portal settings
+     *                    UIs and kglobalaccel listings.
      *
      * Registration is queued until flush() is called.
      */
-    virtual void registerShortcut(const QString& id, const QKeySequence& preferredTrigger,
+    virtual void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
                                   const QString& description) = 0;
 
     /**
-     * Change the active binding for an already-registered id. Takes effect
-     * after the next flush().
+     * Change the active binding for an already-registered id. Only affects
+     * the currently-grabbed key; the compiled-in default established by
+     * registerShortcut is left intact. Takes effect after the next flush().
      */
     virtual void updateShortcut(const QString& id, const QKeySequence& newTrigger) = 0;
 
     /**
      * Release the key grab for an id. Idempotent; unknown ids are ignored.
+     * This call is NOT queued — backends apply it immediately (subject to
+     * per-backend semantics; see PortalBackend notes in the .cpp).
      */
     virtual void unregisterShortcut(const QString& id) = 0;
 
     /**
-     * Commit any queued register/update/unregister ops. Emits ready() once
-     * the underlying backend has acknowledged the batch (may be synchronous
-     * or asynchronous depending on backend).
+     * Commit any queued register/update ops. Emits ready() once the
+     * underlying backend has acknowledged the batch (may be synchronous or
+     * asynchronous depending on backend). unregisterShortcut() is NOT
+     * queued — see its doc above.
      */
     virtual void flush() = 0;
 

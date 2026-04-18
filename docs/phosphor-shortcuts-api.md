@@ -58,12 +58,13 @@ class IBackend : public QObject {
     Q_OBJECT
 public:
     virtual void registerShortcut(const QString& id,
-                                  const QKeySequence& preferredTrigger,
+                                  const QKeySequence& defaultSeq,
+                                  const QKeySequence& currentSeq,
                                   const QString& description) = 0;
     virtual void updateShortcut(const QString& id,
                                 const QKeySequence& newTrigger) = 0;
-    virtual void unregisterShortcut(const QString& id) = 0;
-    virtual void flush() = 0;                // batch commit queued ops
+    virtual void unregisterShortcut(const QString& id) = 0;  // immediate, NOT batched
+    virtual void flush() = 0;                // batch-commit queued register/update ops
 
 Q_SIGNALS:
     void activated(QString id);              // key pressed — the ONLY input signal
@@ -71,13 +72,19 @@ Q_SIGNALS:
 };
 ```
 
+`registerShortcut` takes both the compiled-in default and the user's current
+value as separate arguments. This lets KGlobalAccel record the right value
+in `setDefaultShortcut` (so "Reset to default" in System Settings actually
+resets to the factory default) while still grabbing whatever the user has
+customised via `setShortcut`.
+
 Implementation notes per backend:
 
 | Backend | Behaviour |
 |---------|-----------|
-| KGlobalAccelBackend | Wraps a private `QHash<QString, QAction*>`. The QAction is internal; consumers never see it. |
-| PortalShortcutBackend | Uses `BindShortcuts(o, a(sa{sv}), s, a{sv})`. `preferredTrigger` is advisory — the compositor assigns the actual key. |
-| DBusTriggerBackend | Ignores `preferredTrigger` entirely; exposes `TriggerAction(id)` at `/org/Phosphor/Shortcuts`. Users bind keybinds compositor-side. |
+| KGlobalAccelBackend | Wraps a private `QHash<QString, QAction*>`. The QAction is internal; consumers never see it. `defaultSeq` → `setDefaultShortcut`, `currentSeq` → `setShortcut`. |
+| PortalShortcutBackend | Uses `BindShortcuts(o, a(sa{sv}), s, a{sv})`. Sends `defaultSeq` as `preferred_trigger` — the compositor treats it as advisory and assigns the actual key. `currentSeq` is ignored because user customisation happens compositor-side, not in consumer config. |
+| DBusTriggerBackend | Ignores both sequences; exposes `TriggerAction(id)` at `/org/Phosphor/Shortcuts`. Users bind keybinds compositor-side. |
 
 ### `Registry` — consumer-facing facade
 
@@ -120,13 +127,21 @@ Contract details worth knowing:
 - `bind()` is safe to call multiple times for the same id. The second call
   updates `defaultSeq`, `description`, and `callback` in place but **preserves
   `currentSeq`** — any prior `rebind()` (e.g. from user config) is kept.
+- `bind()` with an empty `defaultSeq` is stored but NOT registered with the
+  backend until a subsequent `rebind()` supplies a non-empty sequence. This
+  matches `rebind()`'s empty-seq → `unbind()` routing and keeps the
+  stale-Wayland-grab hazard from PlasmaZones discussion #155 unreachable
+  from either entry point.
 - `rebind()` with an empty `QKeySequence` routes through `unbind()` rather
-  than leaving an empty sequence registered. This closes off the
-  stale-Wayland-grab hazard from PlasmaZones discussion #155.
+  than leaving an empty sequence registered.
 - `flush()` only calls `IBackend::registerShortcut` once per id (on the
   first flush after bind). Subsequent sequence changes go through
   `IBackend::updateShortcut`. Consumers writing backends can rely on
   register-before-update ordering.
+- `unbind()` applies immediately — it is NOT batched until the next flush.
+  Backends' unregister paths all run synchronously or with trivial state,
+  and a deferred release would be surprising for a "release this grab now"
+  API.
 - `ready()` is emitted after the backend acknowledges the batch. For
   async backends (Portal) it waits on the D-Bus reply; for synchronous
   backends (KGlobalAccel, DBusTrigger) it fires immediately.
@@ -139,6 +154,24 @@ Consumers pick one of two patterns:
   hooking without a central dispatcher.
 
 Both fire on every activation; use whichever suits the caller.
+
+### Ad-hoc / transient shortcuts
+
+Consumers that bind a shortcut for the duration of a UI state (e.g. an
+Escape cancel grab tied to an active drag) can simply pair `bind()` on
+entry with `unbind()` on exit.
+
+One KGlobalAccel-specific caveat: each `unbind()` → `unregisterShortcut()`
+on that backend runs `KGlobalAccel::removeAllShortcuts(action)`, which wipes
+the persistent entry from `kglobalshortcutsrc`. For a genuinely ephemeral
+id this is correct (no stale grab between sessions), but it also means a
+user can't customise the key for that id via System Settings — their
+customisation is erased on the next `unbind()`. Registry-level entries
+that stay bound for the lifetime of the app (the common case) are not
+affected; the destructor deliberately does NOT call `removeAllShortcuts`.
+If a consumer needs user-customisable bindings for a transient id, keep
+the Registry entry bound for the process lifetime and toggle the callback
+instead of re-binding.
 
 ### `Factory` — runtime backend selection
 

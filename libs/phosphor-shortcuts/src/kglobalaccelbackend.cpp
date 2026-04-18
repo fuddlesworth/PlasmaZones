@@ -58,8 +58,8 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     }
 }
 
-void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence& preferredTrigger,
-                                           const QString& description)
+void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence& defaultSeq,
+                                           const QKeySequence& currentSeq, const QString& description)
 {
     auto& entry = m_impl->entries[id];
     if (!entry.action) {
@@ -76,15 +76,18 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
 
     if (!entry.defaultApplied) {
         // setDefaultShortcut establishes the "reset to default" binding shown
-        // in System Settings. Only needs to happen once per id — repeating it
-        // on every re-register causes extra writes to kglobalshortcutsrc.
-        KGlobalAccel::self()->setDefaultShortcut(entry.action, {preferredTrigger});
+        // in System Settings. Must be called with the compiled-in default
+        // (NOT the user's current value) so "Reset to default" actually
+        // resets to the factory default. Only needs to happen once per id —
+        // repeating it on every re-register causes extra writes to
+        // kglobalshortcutsrc.
+        KGlobalAccel::self()->setDefaultShortcut(entry.action, {defaultSeq});
         entry.defaultApplied = true;
     }
     // setShortcut actually grabs the key. Uses the default autoloading flag
     // so any user override persisted in kglobalshortcutsrc wins over the
-    // preferredTrigger passed here.
-    KGlobalAccel::self()->setShortcut(entry.action, {preferredTrigger});
+    // currentSeq passed here.
+    KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
 }
 
 void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)

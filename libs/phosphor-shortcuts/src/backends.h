@@ -26,7 +26,8 @@ class DBusTriggerBackend : public IBackend
 public:
     explicit DBusTriggerBackend(QObject* parent = nullptr);
 
-    void registerShortcut(const QString& id, const QKeySequence& preferredTrigger, const QString& description) override;
+    void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
@@ -47,14 +48,23 @@ public:
     explicit PortalBackend(QObject* parent = nullptr);
     ~PortalBackend() override;
 
-    void registerShortcut(const QString& id, const QKeySequence& preferredTrigger, const QString& description) override;
+    void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;
 
 private Q_SLOTS:
     void onSessionCreated(QDBusPendingCallWatcher* watcher);
-    void onActivated(const QDBusObjectPath& sessionHandle, const QString& shortcutId, const QVariantMap& options);
+    // Portal Request::Response for the CreateSession request. Per spec,
+    // CreateSession returns a Request handle synchronously; the actual
+    // session_handle only arrives here.
+    void onCreateSessionResponse(uint response, const QVariantMap& results);
+    // Portal Request::Response for each BindShortcuts batch. Fires ready()
+    // once the portal confirms the grab is live.
+    void onBindShortcutsResponse(uint response, const QVariantMap& results);
+    void onActivated(const QDBusObjectPath& sessionHandle, const QString& shortcutId, qulonglong timestamp,
+                     const QVariantMap& options);
 
 private:
     struct Pending
@@ -65,9 +75,16 @@ private:
 
     void createSession();
     void sendBindShortcuts();
+    void disconnectCreateSessionResponse();
+    void disconnectBindShortcutsResponse();
 
     QString m_sessionToken; // used for session_handle_token — derived from applicationName()
-    QString m_sessionHandle; // populated once CreateSession returns
+    QString m_sessionHandle; // populated once Request::Response delivers session_handle
+    // Request path currently subscribed for CreateSession's Response (empty
+    // once that subscription has been torn down after the signal fired).
+    QString m_createRequestPath;
+    // Same, for the in-flight BindShortcuts Response (at most one at a time).
+    QString m_bindRequestPath;
     bool m_flushRequested = false;
     // Latched true if CreateSession failed. flush() then keeps emitting
     // ready() synchronously (with a warning) so consumers don't hang waiting
@@ -95,7 +112,8 @@ public:
     explicit KGlobalAccelBackend(QObject* parent = nullptr);
     ~KGlobalAccelBackend() override;
 
-    void registerShortcut(const QString& id, const QKeySequence& preferredTrigger, const QString& description) override;
+    void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
+                          const QString& description) override;
     void updateShortcut(const QString& id, const QKeySequence& newTrigger) override;
     void unregisterShortcut(const QString& id) override;
     void flush() override;

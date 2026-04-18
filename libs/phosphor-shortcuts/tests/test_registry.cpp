@@ -26,7 +26,8 @@ public:
     struct RegisterCall
     {
         QString id;
-        QKeySequence preferred;
+        QKeySequence defaultSeq;
+        QKeySequence currentSeq;
         QString description;
     };
     struct UpdateCall
@@ -37,9 +38,10 @@ public:
 
     using IBackend::IBackend;
 
-    void registerShortcut(const QString& id, const QKeySequence& preferredTrigger, const QString& description) override
+    void registerShortcut(const QString& id, const QKeySequence& defaultSeq, const QKeySequence& currentSeq,
+                          const QString& description) override
     {
-        registers.push_back({id, preferredTrigger, description});
+        registers.push_back({id, defaultSeq, currentSeq, description});
     }
 
     void updateShortcut(const QString& id, const QKeySequence& newTrigger) override
@@ -92,12 +94,74 @@ private Q_SLOTS:
 
         // First flush: registerShortcut only. updateShortcut is NOT called
         // for a fresh registration — the Registry distinguishes internally.
+        // Default and current match here because no rebind ran between bind
+        // and flush — the dedicated test below covers the divergent case.
         QCOMPARE(backend.registers.size(), 1);
         QCOMPARE(backend.registers[0].id, QStringLiteral("pz.test"));
-        QCOMPARE(backend.registers[0].preferred, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
         QCOMPARE(backend.registers[0].description, QStringLiteral("Test shortcut"));
         QCOMPARE(backend.updates.size(), 0);
         QCOMPARE(backend.flushes, 1);
+    }
+
+    void registerPassesBothDefaultAndCurrent_whenUserRebindBeforeFirstFlush()
+    {
+        // Critical: if the consumer applies a user-customised value via
+        // rebind() BEFORE the initial flush, register() must receive the
+        // compiled-in default AND the user's current value as two separate
+        // args. Conflating them (older Registry behaviour) made KGlobalAccel
+        // persist the user's value as the "reset to default" target.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.x"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("X"));
+        registry.rebind(QStringLiteral("pz.x"), QKeySequence(QStringLiteral("Meta+9")));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+9")));
+        // No follow-up updateShortcut — the values are delivered in one call.
+        QCOMPARE(backend.updates.size(), 0);
+    }
+
+    void bindWithEmptyDefault_doesNotRegister()
+    {
+        // Guard against the stale-grab hazard from discussion #155: an
+        // entry whose compiled-in default is empty must not reach the
+        // backend until a rebind() supplies a non-empty sequence.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.empty"), QKeySequence(), QStringLiteral("Empty default"));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 0);
+        // Entry is still in the registry — a later rebind will promote it.
+        QCOMPARE(registry.bindings().size(), 1);
+    }
+
+    void bindWithEmptyDefault_thenRebind_registersOnce()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.empty"), QKeySequence(), QStringLiteral("Empty default"));
+        registry.flush();
+
+        registry.rebind(QStringLiteral("pz.empty"), QKeySequence(QStringLiteral("Meta+E")));
+        registry.flush();
+
+        // Now that currentSeq is non-empty we should see a single register
+        // (not an update — this is the first time the backend hears about
+        // this id) with currentSeq = the rebind value. defaultSeq stays
+        // empty because that's what the consumer bound with.
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence());
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+E")));
+        QCOMPARE(backend.updates.size(), 0);
     }
 
     void secondFlushAfterRebind_emitsUpdateOnly()
@@ -331,6 +395,12 @@ private Q_SLOTS:
         QCOMPARE(bindings[0].description, QStringLiteral("A updated"));
         QCOMPARE(bindings[0].defaultSeq, QKeySequence(QStringLiteral("Meta+2")));
         QCOMPARE(bindings[0].currentSeq, QKeySequence(QStringLiteral("Meta+9")));
+
+        // And the backend register saw the NEW default but the preserved
+        // current — proof that the register call separates the two.
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+9")));
     }
 
     void shortcut_returnsCurrentSequence()

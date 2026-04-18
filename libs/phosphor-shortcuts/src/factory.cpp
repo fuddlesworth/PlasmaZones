@@ -15,6 +15,11 @@ namespace Phosphor::Shortcuts {
 
 namespace {
 
+const QString kKGlobalAccelService = QStringLiteral("org.kde.kglobalaccel");
+const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
+const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
+const QString kPortalInterface = QStringLiteral("org.freedesktop.portal.GlobalShortcuts");
+
 std::unique_ptr<IBackend> makeDBusTrigger(QObject* parent)
 {
     qCInfo(lcPhosphorShortcuts) << "Selected backend: DBusTrigger";
@@ -30,16 +35,14 @@ std::unique_ptr<IBackend> autoSelect(QObject* parent)
     }
 
 #ifdef PHOSPHORSHORTCUTS_HAVE_KGLOBALACCEL
-    if (bus->isServiceRegistered(QStringLiteral("org.kde.kglobalaccel"))) {
+    if (bus->isServiceRegistered(kKGlobalAccelService)) {
         qCInfo(lcPhosphorShortcuts) << "Selected backend: KGlobalAccel";
         return std::make_unique<KGlobalAccelBackend>(parent);
     }
 #endif
 
-    if (bus->isServiceRegistered(QStringLiteral("org.freedesktop.portal.Desktop"))) {
-        QDBusInterface portalCheck(
-            QStringLiteral("org.freedesktop.portal.Desktop"), QStringLiteral("/org/freedesktop/portal/desktop"),
-            QStringLiteral("org.freedesktop.portal.GlobalShortcuts"), QDBusConnection::sessionBus());
+    if (bus->isServiceRegistered(kPortalService)) {
+        QDBusInterface portalCheck(kPortalService, kPortalPath, kPortalInterface, QDBusConnection::sessionBus());
         if (portalCheck.isValid()) {
             qCInfo(lcPhosphorShortcuts) << "Selected backend: Portal";
             return std::make_unique<PortalBackend>(parent);

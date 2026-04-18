@@ -68,14 +68,17 @@ public:
 
     /**
      * Drop a binding entirely. Releases any key grab and forgets the
-     * callback. Idempotent.
+     * callback. Idempotent. Applied immediately — NOT batched until flush()
+     * — because the backends' unregister paths all act synchronously or
+     * with trivial state, and a late flush would be surprising for a
+     * "release this grab now" API.
      */
     void unbind(const QString& id);
 
     /**
-     * Forward queued ops to the backend. The Registry batches bind/rebind
-     * calls and only dispatches them on flush(), matching the backend's own
-     * queue-then-flush model.
+     * Forward queued bind/rebind ops to the backend. Does NOT include
+     * unbind() — those are applied immediately at the call site. Matches
+     * the backend's queue-then-flush model for register / update.
      */
     void flush();
 

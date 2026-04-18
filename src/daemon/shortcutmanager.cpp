@@ -93,8 +93,11 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     : QObject(parent)
     , m_settings(settings)
     , m_layoutManager(layoutManager)
-    , m_backend(Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, this))
-    , m_registry(std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), this))
+    // unique_ptr owns lifetime — DON'T also pass `this` as Qt parent, or the
+    // backend/registry end up with two owners (works today because Qt auto-
+    // drops children as they're destroyed, but violates project style).
+    , m_backend(Phosphor::Shortcuts::createBackend(Phosphor::Shortcuts::BackendHint::Auto, nullptr))
+    , m_registry(std::make_unique<Phosphor::Shortcuts::Registry>(m_backend.get(), nullptr))
 {
     Q_ASSERT(settings);
     Q_ASSERT(layoutManager);
@@ -137,7 +140,7 @@ void ShortcutManager::registerShortcuts()
                 updateShortcuts();
             }
         },
-        static_cast<Qt::ConnectionType>(Qt::SingleShotConnection));
+        Qt::SingleShotConnection);
 
     m_registry->flush();
 }
