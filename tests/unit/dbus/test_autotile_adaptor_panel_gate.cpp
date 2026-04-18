@@ -27,6 +27,7 @@
 #include <QTest>
 #include <QCoreApplication>
 #include <QObject>
+#include <QScopeGuard>
 #include <QSignalSpy>
 
 #include <dbus_types.h>
@@ -79,6 +80,10 @@ private Q_SLOTS:
     void testDefersWhenPanelNotReady_flushesOnSignal()
     {
         ScreenManager mgr;
+        setScreenManager(&mgr);
+        auto unregister = qScopeGuard([] {
+            setScreenManager(nullptr);
+        });
         QVERIFY(!isPanelGeometryReady());
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
@@ -113,6 +118,10 @@ private Q_SLOTS:
     void testRejectsInvalidSingleOpens()
     {
         ScreenManager mgr;
+        setScreenManager(&mgr);
+        auto unregister = qScopeGuard([] {
+            setScreenManager(nullptr);
+        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
@@ -140,6 +149,10 @@ private Q_SLOTS:
     void testBatchOrderPreservedAcrossFlush()
     {
         ScreenManager mgr;
+        setScreenManager(&mgr);
+        auto unregister = qScopeGuard([] {
+            setScreenManager(nullptr);
+        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
@@ -173,6 +186,10 @@ private Q_SLOTS:
     void testFlushWithClearedEngine_noCrash()
     {
         ScreenManager mgr;
+        setScreenManager(&mgr);
+        auto unregister = qScopeGuard([] {
+            setScreenManager(nullptr);
+        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;

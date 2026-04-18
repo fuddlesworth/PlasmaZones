@@ -51,6 +51,7 @@ endif()
 # ═══════════════════════════════════════════════════════════════════════════════
 
 set(phosphorscreens_public_HDRS
+    include/PhosphorScreens/DBusScreenAdaptor.h
     include/PhosphorScreens/IConfigStore.h
     include/PhosphorScreens/InMemoryConfigStore.h
     include/PhosphorScreens/IPanelSource.h
@@ -69,6 +70,7 @@ set(phosphorscreens_private_HDRS
 )
 
 set(phosphorscreens_SRCS
+    src/dbusscreenadaptor.cpp
     src/manager.cpp
     src/manager_virtualscreens.cpp
     src/plasmapanelsource.cpp
@@ -111,10 +113,10 @@ target_compile_features(PhosphorScreens PUBLIC cxx_std_20)
 target_link_libraries(PhosphorScreens
     PUBLIC
         Qt6::Core
-        Qt6::Gui  # QRect / QRectF / QScreen in public headers
+        Qt6::Gui   # QRect / QRectF / QScreen in public headers
+        Qt6::DBus  # QDBusAbstractAdaptor in DBusScreenAdaptor.h public surface
         PhosphorIdentity::PhosphorIdentity
     PRIVATE
-        Qt6::DBus            # ScreenResolver D-Bus + PlasmaPanelSource internal
         PhosphorShell::PhosphorShell  # LayerSurface for geometry sensors
 )
 

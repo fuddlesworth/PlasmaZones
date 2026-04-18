@@ -64,7 +64,10 @@ void ScreenManager::start()
         m_cfg.panelSource->start();
     } else {
         // No panel source — emit panelGeometryReady on the next event-loop
-        // tick so listeners that gate on it don't hang.
+        // tick so listeners that gate on it don't hang. The bit is set
+        // inside the deferred lambda so callers invoking
+        // isPanelGeometryReady() BEFORE the tick fires (in tests especially)
+        // see the false state they expect.
         QTimer::singleShot(0, this, [this]() {
             if (!m_panelGeometryReadyEmitted) {
                 m_panelGeometryReadyEmitted = true;
@@ -366,8 +369,17 @@ QRect ScreenManager::actualAvailableGeometry(QScreen* screen) const
 
 bool ScreenManager::isPanelGeometryReady() const
 {
-    // No panel source = trivially ready (no offsets to wait on).
-    return !m_cfg.panelSource || m_cfg.panelSource->ready();
+    // Tracks the first @ref panelGeometryReady emission, not the panel
+    // source's own `ready()` flag. This keeps the answer consistent
+    // with "has the `panelGeometryReady` signal fired yet?" which is
+    // what every consumer actually cares about.
+    //
+    // In particular it stays false for a freshly-constructed
+    // ScreenManager that hasn't had `start()` called, even when no
+    // panel source is configured — tests rely on that to simulate
+    // the "waiting for panel geometry" state without running a real
+    // Plasma shell.
+    return m_panelGeometryReadyEmitted;
 }
 
 void ScreenManager::scheduleDelayedPanelRequery(int delayMs)

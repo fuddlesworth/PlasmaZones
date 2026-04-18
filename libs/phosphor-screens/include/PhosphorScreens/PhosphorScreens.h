@@ -5,10 +5,11 @@
 
 // PhosphorScreens — domain-free screen-topology library for Qt6 Wayland.
 //
-// This is the umbrella header. Right now it is intentionally empty: the
-// library is at the step-1 scaffold from
-// docs/phosphor-screens-api-design.md and ships no public types yet.
-//
+// Umbrella header that pulls in the entire public surface. Callers can
+// include this for convenience or pick individual headers for smaller
+// compile-time footprint.
+
+#include <PhosphorScreens/DBusScreenAdaptor.h>
 #include <PhosphorScreens/IConfigStore.h>
 #include <PhosphorScreens/IPanelSource.h>
 #include <PhosphorScreens/InMemoryConfigStore.h>
