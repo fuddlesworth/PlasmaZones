@@ -29,6 +29,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QScreen>
+#include <QThread>
 
 namespace PlasmaZones {
 
@@ -42,6 +43,11 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
 {
     Q_ASSERT(manager);
     connectLayoutManagerSignals();
+    m_layoutSourceCoalesce.setSingleShot(true);
+    m_layoutSourceCoalesce.setInterval(200);
+    connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
+        Q_EMIT layoutListChanged();
+    });
 }
 
 LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm, QObject* parent)
@@ -52,6 +58,11 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
     Q_ASSERT(manager);
     connectLayoutManagerSignals();
     connectVirtualDesktopSignals();
+    m_layoutSourceCoalesce.setSingleShot(true);
+    m_layoutSourceCoalesce.setInterval(200);
+    connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
+        Q_EMIT layoutListChanged();
+    });
 }
 
 void LayoutAdaptor::connectLayoutManagerSignals()
@@ -66,7 +77,11 @@ void LayoutAdaptor::onActiveLayoutChanged(PhosphorZones::Layout* layout)
     m_cachedActiveLayoutId = QUuid();
     m_cachedActiveLayoutJson.clear();
     if (layout) {
-        Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson()));
+        // Compact serialisation: this is the hottest layoutChanged emit path
+        // (fires on every active-layout switch). Pretty-printing drops ~30%
+        // of the payload over the bus with no functional difference —
+        // QJsonDocument::fromJson round-trips either form identically.
+        Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson(QJsonDocument::Compact)));
         qCInfo(lcDbusLayout) << "Emitting activeLayoutIdChanged D-Bus signal for:" << layout->id().toString();
         Q_EMIT activeLayoutIdChanged(layout->id().toString());
     }
@@ -426,7 +441,13 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     m_layoutManager->addLayout(layout);
 
     qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
-    return layout->id().toString();
+    // Addition-specific companion to layoutListChanged (emitted by the
+    // LayoutManager::layoutsChanged fan-out). Subscribers that only care
+    // about new layouts — e.g. the settings list auto-select path — can
+    // react without diffing the full list.
+    const QString newId = layout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
 }
 
 void LayoutAdaptor::deleteLayout(const QString& id)
@@ -442,6 +463,7 @@ void LayoutAdaptor::deleteLayout(const QString& id)
     }
 
     QUuid uuid = layout->id();
+    const QString deletedId = uuid.toString();
     m_layoutManager->removeLayoutById(uuid);
 
     m_cachedLayoutJson.remove(uuid);
@@ -450,6 +472,9 @@ void LayoutAdaptor::deleteLayout(const QString& id)
         m_cachedActiveLayoutJson.clear();
     }
     qCInfo(lcDbusLayout) << "Deleted layout" << id;
+    // Deletion-specific companion to layoutListChanged — lets subscribers
+    // evict per-layout state keyed by UUID before the list refresh lands.
+    Q_EMIT layoutDeleted(deletedId);
 }
 
 QString LayoutAdaptor::duplicateLayout(const QString& id)
@@ -466,7 +491,9 @@ QString LayoutAdaptor::duplicateLayout(const QString& id)
     }
 
     qCInfo(lcDbusLayout) << "Duplicated layout" << id << "to" << duplicate->id();
-    return duplicate->id().toString();
+    const QString dupId = duplicate->id().toString();
+    Q_EMIT layoutCreated(dupId);
+    return dupId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -567,7 +594,36 @@ void LayoutAdaptor::setSettings(ISettings* settings)
 
 void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 {
+    // The adaptor is a QDBusAbstractAdaptor child of the service-owning
+    // QObject — signal plumbing and the coalesce QTimer live on this
+    // thread only. Catch cross-thread setters at dev time before they
+    // cause subtle double-emit races.
+    Q_ASSERT(QThread::currentThread() == thread());
+    // The daemon/editor/settings each call setLayoutSource exactly once
+    // during init(); allow idempotent re-assignment with the same pointer
+    // but trip on a silent swap that would leave stale connections wired.
+    Q_ASSERT(!m_layoutSource || m_layoutSource == source);
+
+    if (m_layoutSource == source)
+        return;
+
+    // Drop any prior connection into the coalesce timer before rebinding.
+    // Disconnect-by-receiver: the timer is the only sink we ever wire
+    // contentsChanged into, so the narrow target keeps unrelated signal
+    // fan-outs on @p source intact.
+    if (m_layoutSource) {
+        disconnect(m_layoutSource, nullptr, &m_layoutSourceCoalesce, nullptr);
+    }
+
     m_layoutSource = source;
+
+    if (m_layoutSource) {
+        // Coalesce bursts of contentsChanged (AlgorithmRegistry churn on
+        // startup, scripted-algorithm hot-reload) into one layoutListChanged
+        // D-Bus emission — see m_layoutSourceCoalesce member comment.
+        connect(m_layoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, &m_layoutSourceCoalesce,
+                QOverload<>::of(&QTimer::start));
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

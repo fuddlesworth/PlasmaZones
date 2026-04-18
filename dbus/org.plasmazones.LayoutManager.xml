@@ -462,6 +462,18 @@
         <signal name="layoutListChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the list of layouts changes."/>
         </signal>
+        <signal name="layoutCreated">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new layout is created (createLayout, createLayoutFromJson, duplicateLayout, importLayout). Carries the new layout's UUID."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the newly created layout."/>
+            </arg>
+        </signal>
+        <signal name="layoutDeleted">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a layout is deleted. Carries the UUID of the deleted layout."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the deleted layout."/>
+            </arg>
+        </signal>
         <signal name="screenLayoutChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's layout assignment changes."/>
             <arg name="screenName" type="s">

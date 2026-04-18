@@ -34,9 +34,10 @@ namespace PlasmaZones {
 
 /// Owning bundle for one consumer's layout sources.
 ///
-/// Declaration order is significant: @c composite is listed last so it's
-/// destroyed first, dropping its borrowed pointers before the child
-/// sources go out of scope.
+/// Declaration order is load-bearing; do not reorder. `composite` holds raw
+/// pointers to `zones` and `autotile`, and C++'s reverse-declaration
+/// destruction order guarantees composite is destroyed first, dropping its
+/// borrowed pointers before the child sources go out of scope.
 struct PLASMAZONES_EXPORT LayoutSourceBundle
 {
     LayoutSourceBundle();

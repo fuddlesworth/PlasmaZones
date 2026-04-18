@@ -3,9 +3,10 @@
 
 #pragma once
 
-// Backward-compat shim — actual definition lives in libs/phosphor-identity/.
-// Existing `#include "window_id.h"` consumers (KWin effect, daemon, tests)
-// keep working; new code should prefer `#include <PhosphorIdentity/WindowId.h>`
-// directly.
+// Forwarding shim for the KWin effect's include-path. The canonical header
+// is <PhosphorIdentity/WindowId.h>; this file only exists because the KWin
+// effect build (kwin-effect/) cannot add the PhosphorIdentity target to its
+// include search path without dragging in the rest of the core/daemon
+// dependency graph. New callers should use the canonical path.
 
 #include <PhosphorIdentity/WindowId.h>

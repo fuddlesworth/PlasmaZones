@@ -67,7 +67,9 @@ QString LayoutAdaptor::importLayout(const QString& filePath)
     if (layouts.size() > layoutCountBefore) {
         PhosphorZones::Layout* newLayout = layouts.last();
         qCInfo(lcDbusLayout) << "Imported layout from" << filePath << "with ID" << newLayout->id();
-        return newLayout->id().toString();
+        const QString newId = newLayout->id().toString();
+        Q_EMIT layoutCreated(newId);
+        return newId;
     }
 
     qCWarning(lcDbusLayout) << "Failed to import layout from" << filePath;
@@ -309,7 +311,9 @@ QString LayoutAdaptor::createLayoutFromJson(const QString& layoutJson)
     m_layoutManager->addLayout(layout);
 
     qCInfo(lcDbusLayout) << "Created layout from JSON:" << layout->id();
-    return layout->id().toString();
+    const QString newId = layout->id().toString();
+    Q_EMIT layoutCreated(newId);
+    return newId;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

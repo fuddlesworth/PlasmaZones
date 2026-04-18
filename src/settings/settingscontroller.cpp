@@ -291,28 +291,33 @@ SettingsController::SettingsController(QObject* parent)
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
 
-    // Connect layout D-Bus signals for live updates
+    // Connect layout D-Bus signals for live updates — route through the 50 ms
+    // scheduleLayoutLoad() debounce slot so a burst of signals (e.g. editor
+    // save → layoutChanged + layoutListChanged together, or KCM property
+    // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
+    // one loadLayoutsAsync() call instead of recomputing the full preview
+    // list + D-Bus round-trip for every hit.
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutCreated"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutDeleted"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
     // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
     // triggers a full reload so the layout list view refreshes, but the daemon side
     // saved a full JSON serialization per mutation by not emitting layoutChanged.
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager),
-                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(loadLayoutsAsync()));
+                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
@@ -727,19 +732,12 @@ void SettingsController::loadLayoutsAsync()
         m_localLayoutManager->loadLayouts();
     }
 
-    // Step 1: instant paint from the in-process composite source so the
-    // layouts page renders previews before D-Bus has even round-tripped —
-    // and continues to work entirely if the daemon isn't running. The
-    // composite already contains both manual zones (from the local
-    // LayoutManager) and autotile entries (from the shared
-    // AlgorithmRegistry singleton), so this view is self-sufficient.
-    recalcLocalLayouts();
-    QVariantList localLayouts = localLayoutPreviews();
-    if (!localLayouts.isEmpty()) {
-        sortMergedLayoutList(localLayouts);
-        m_layouts = localLayouts;
-        Q_EMIT layoutsChanged();
-    }
+    // Step 1: instant paint from the in-process composite source is handled
+    // by the ctor-wired LayoutManager::layoutsChanged lambda (see ~line 180
+    // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
+    // and emits layoutsChanged). loadLayouts() above triggers that signal
+    // synchronously when the disk contents actually changed, so the instant-paint
+    // path runs without a duplicate recalc/emit here.
 
     // Step 2: async D-Bus call to pick up daemon-side enrichment
     // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)

@@ -9,6 +9,7 @@
 #include <QDBusVariant>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QUuid>
 #include <QHash>
 #include <optional>
@@ -271,6 +272,26 @@ Q_SIGNALS:
     void layoutPropertyChanged(const QString& layoutId, const QString& property, const QDBusVariant& value);
 
     void layoutListChanged();
+
+    /**
+     * @brief Emitted when a new layout is created.
+     *
+     * Fires alongside @c layoutListChanged from createLayout,
+     * createLayoutFromJson, duplicateLayout, and importLayout so subscribers
+     * that only care about additions (e.g. the settings list-view auto-select
+     * path) can react without parsing the full list diff.
+     */
+    void layoutCreated(const QString& layoutId);
+
+    /**
+     * @brief Emitted when a layout is deleted.
+     *
+     * Fires alongside @c layoutListChanged from deleteLayout so subscribers
+     * can evict stale per-layout state keyed by the UUID before the list
+     * refresh round-trip completes.
+     */
+    void layoutDeleted(const QString& layoutId);
+
     void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
     void virtualDesktopCountChanged(int count);
 
@@ -414,6 +435,13 @@ private:
     QString m_cachedActiveLayoutJson;
     QUuid m_cachedActiveLayoutId;
     QHash<QUuid, QString> m_cachedLayoutJson; // Cache for individual layouts
+
+    // Coalesces bursts of ILayoutSource::contentsChanged into a single
+    // layoutListChanged D-Bus emission. Autotile algorithm registration can
+    // fire contentsChanged several times during startup / script hot-reload;
+    // without debouncing, each hit would wake every KCM/editor client on
+    // the bus. 200 ms is well under any human-visible refresh latency.
+    QTimer m_layoutSourceCoalesce;
 };
 
 } // namespace PlasmaZones

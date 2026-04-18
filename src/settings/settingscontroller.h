@@ -812,6 +812,12 @@ private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
     void loadLayoutsAsync();
+    // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
+    // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
+    // route here so bursts coalesce into one loadLayoutsAsync() on the
+    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it's a
+    // private slot.
+    void scheduleLayoutLoad();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
@@ -836,7 +842,6 @@ private:
     QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
 
     void setNeedsSave(bool needs);
-    void scheduleLayoutLoad();
     void refreshVirtualDesktops();
     void refreshActivities();
 

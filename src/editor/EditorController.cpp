@@ -90,6 +90,15 @@ EditorController::EditorController(QObject* parent)
     // regardless of which file-event path fires first. When the daemon
     // isn't running, none of these signals fire — the QFSW path covers
     // single-process editor + manual hand-edits.
+    //
+    // Debounce the 5 signals through a 50 ms single-shot timer so a
+    // typical editor save (layoutChanged + layoutListChanged back-to-back)
+    // only triggers one reloadLocalLayouts() pass. Mirrors the
+    // SettingsController::m_layoutLoadTimer pattern.
+    m_layoutReloadTimer.setSingleShot(true);
+    m_layoutReloadTimer.setInterval(50);
+    connect(&m_layoutReloadTimer, &QTimer::timeout, this, &EditorController::reloadLocalLayouts);
+
     auto bus = QDBusConnection::sessionBus();
     const QString svc = QString::fromLatin1(DBus::ServiceName);
     const QString path = QString::fromLatin1(DBus::ObjectPath);
@@ -97,7 +106,7 @@ EditorController::EditorController(QObject* parent)
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {
-        bus.connect(svc, path, iface, sig, this, SLOT(reloadLocalLayouts()));
+        bus.connect(svc, path, iface, sig, &m_layoutReloadTimer, SLOT(start()));
     }
 
     // Connect service signals

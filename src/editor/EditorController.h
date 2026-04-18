@@ -8,6 +8,7 @@
 #include <QFont>
 #include <QImage>
 #include <QRectF>
+#include <QTimer>
 #include <QUuid>
 #include <QScreen>
 #include <QQuickWindow>
@@ -898,6 +899,14 @@ private:
     // must outlive the bundle's zones source that borrows its catalog.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     LayoutSourceBundle m_localSources;
+
+    /// Debounces D-Bus layout-mutation bursts (layoutCreated / layoutDeleted /
+    /// layoutChanged / layoutListChanged / layoutPropertyChanged) into a
+    /// single reloadLocalLayouts() call. Mirrors the SettingsController
+    /// m_layoutLoadTimer pattern so a typical editor save — which fires
+    /// layoutChanged + layoutListChanged back-to-back — only hits the
+    /// LayoutManager once.
+    QTimer m_layoutReloadTimer;
 
     /// Recompute zone geometry for every manual layout against the
     /// primary screen so ZonesLayoutSource previews render fixed-geometry
