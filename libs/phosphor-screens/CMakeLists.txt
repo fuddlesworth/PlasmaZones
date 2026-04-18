@@ -36,15 +36,18 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui DBus)
 
 # PhosphorIdentity ships VirtualScreenId — the cross-process ID format
 # helpers that VirtualScreen.h consumes. INTERFACE-only dependency, so
-# zero runtime cost and no .so to chase.
+# zero runtime cost and no .so to chase. Found via add_subdirectory in
+# PZ in-tree builds; falls back to find_package when this library is
+# consumed standalone. CONFIG + REQUIRED matches the pattern sibling
+# phosphor-* libs use (phosphor-zones, phosphor-tiles).
 if(NOT TARGET PhosphorIdentity::PhosphorIdentity)
-    find_package(PhosphorIdentity 0.1 QUIET)
+    find_package(PhosphorIdentity CONFIG REQUIRED)
 endif()
 
 # PhosphorShell ships the wlr-layer-shell QPA integration. ScreenManager
 # consumes it for the per-screen geometry sensor windows.
 if(NOT TARGET PhosphorShell::PhosphorShell)
-    find_package(PhosphorShell 0.1 QUIET)
+    find_package(PhosphorShell CONFIG REQUIRED)
 endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -166,10 +169,12 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorScreensConfigVersion.cmake"
     VERSION ${PHOSPHORSCREENS_VERSION}
-    # Pre-1.0: minor-version bumps may break API. Use SameMinorVersion so
-    # consumers don't silently accept incompatible 0.x updates. Bump back
-    # to SameMajorVersion once the library stabilises at 1.0.
-    COMPATIBILITY SameMinorVersion
+    # SameMajorVersion matches every other phosphor-* library in this
+    # tree (phosphor-identity, phosphor-layer, phosphor-animation,
+    # phosphor-tiles, phosphor-zones, phosphor-shell). Keep the policy
+    # uniform across the family so consumers see one compatibility rule
+    # rather than per-library divergence.
+    COMPATIBILITY SameMajorVersion
 )
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorScreensConfig.cmake"

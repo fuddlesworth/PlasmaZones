@@ -8,6 +8,7 @@
 #include <QDBusAbstractAdaptor>
 #include <QHash>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QStringList>
 
@@ -95,16 +96,13 @@ Q_SIGNALS:
     void virtualScreensChanged(const QString& physicalScreenId);
 
 protected:
-    /// @return the wired ScreenManager pointer (may be null).
-    ScreenManager* screenManager() const
-    {
-        return m_screenManager;
-    }
-    /// @return the wired IConfigStore pointer (may be null).
-    IConfigStore* configStore() const
-    {
-        return m_configStore;
-    }
+    /// @return the wired ScreenManager pointer (may be null, including when
+    /// the wired manager has since been destroyed — QPointer tracks that).
+    /// Defined out-of-line so callers don't need the complete ScreenManager
+    /// / IConfigStore types just to include this header.
+    ScreenManager* screenManager() const;
+    /// @return the wired IConfigStore pointer (may be null, QPointer-guarded).
+    IConfigStore* configStore() const;
 
 private:
     void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
@@ -116,8 +114,12 @@ private:
     void wireQGuiApplicationSignals();
 
     QString m_primaryScreenOverride;
-    ScreenManager* m_screenManager = nullptr;
-    IConfigStore* m_configStore = nullptr;
+    // QPointer-guarded so a ScreenManager / IConfigStore destroyed before
+    // this adaptor (e.g. daemon tears down data members before QObject
+    // children) safely reads as null rather than dangling. Prevents UAF in
+    // the destructor's disconnect path.
+    QPointer<ScreenManager> m_screenManager;
+    QPointer<IConfigStore> m_configStore;
 
     QStringList m_lastEmittedEffectiveIds;
     QHash<QString, QStringList> m_cachedEffectiveIdsPerScreen;

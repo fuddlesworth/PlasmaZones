@@ -63,11 +63,26 @@ DBusScreenAdaptor::DBusScreenAdaptor(QObject* parent)
     wireQGuiApplicationSignals();
 }
 
+ScreenManager* DBusScreenAdaptor::screenManager() const
+{
+    return m_screenManager.data();
+}
+
+IConfigStore* DBusScreenAdaptor::configStore() const
+{
+    return m_configStore.data();
+}
+
 DBusScreenAdaptor::~DBusScreenAdaptor()
 {
-    if (m_screenManager) {
-        disconnectScreenManagerSignals(m_screenManager);
-    }
+    // Intentionally empty — Qt breaks connections on either peer's
+    // destruction, so disconnecting here would be redundant at best and UB
+    // at worst. Earlier versions called disconnect() against a raw pointer
+    // that could already have been destroyed in daemon shutdown ordering
+    // (QObject children are deleted AFTER the derived class's data members,
+    // so a Daemon-owned ScreenManager held by unique_ptr is gone before a
+    // Daemon-child ScreenAdaptor's destructor runs). m_screenManager is
+    // now QPointer-guarded for readers elsewhere.
 }
 
 void DBusScreenAdaptor::setScreenManager(ScreenManager* manager)
@@ -471,6 +486,18 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
         VirtualScreenConfig empty;
         empty.physicalScreenId = physicalScreenId;
         m_configStore->save(physicalScreenId, empty);
+        return;
+    }
+
+    // Reject a 1-entry screens[] up front. VirtualScreenConfig::hasSubdivisions
+    // treats size<2 as "no subdivision", and Settings silently coerces such
+    // a payload into a removal. Without this guard, a caller that sent a
+    // 1-VS config over D-Bus sees their monitor's existing subdivision
+    // erased with no error signal. Surface the rejection explicitly.
+    if (screensArr.size() < 2) {
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: screens[] has" << screensArr.size()
+                                     << "entries; need at least 2 for a subdivision "
+                                        "(send an empty array to remove the existing config)";
         return;
     }
 

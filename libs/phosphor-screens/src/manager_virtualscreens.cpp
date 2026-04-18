@@ -154,6 +154,14 @@ QStringList ScreenManager::effectiveScreenIds() const
     for (auto* screen : m_trackedScreens) {
         QString physId = ScreenIdentity::identifierFor(screen);
         if (!ScreenIdentity::findByIdOrName(physId)) {
+            // Identifier round-trip fails — QScreen* exists in our tracked
+            // list but its identifier doesn't resolve back to any
+            // currently-connected screen. Usually a hotplug race (screen
+            // removal in flight). Log so identity-resolution drift doesn't
+            // mask itself silently.
+            qCDebug(lcPhosphorScreens) << "effectiveScreenIds: skipping tracked screen"
+                                       << (screen ? screen->name() : QString()) << "— identifier" << physId
+                                       << "does not resolve back to a live QScreen";
             continue;
         }
         auto it = m_virtualConfigs.constFind(physId);
@@ -242,11 +250,6 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
     return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
 }
 
-QStringList ScreenManager::effectiveIdsForPhysical(const QString& physicalScreenId) const
-{
-    return virtualScreenIdsFor(physicalScreenId);
-}
-
 VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const
 {
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
@@ -301,7 +304,15 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
     for (auto* screen : m_trackedScreens) {
-        if (!screen->geometry().contains(globalPos)) {
+        // Exclusive-right containment to match VS lookup semantics — a
+        // point on the boundary between two adjacent physical screens
+        // belongs to the screen whose origin is that pixel, never both.
+        // QRect::contains() is inclusive on all four edges, which would
+        // pick the first screen in iteration order and hide layout bugs
+        // where two screens share an edge.
+        const QRect g = screen->geometry();
+        if (!(globalPos.x() >= g.x() && globalPos.x() < g.x() + g.width() && globalPos.y() >= g.y()
+              && globalPos.y() < g.y() + g.height())) {
             continue;
         }
         QString physId = ScreenIdentity::identifierFor(screen);

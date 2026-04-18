@@ -35,7 +35,6 @@ ScreenManager::ScreenManager(ScreenManagerConfig cfg, QObject* parent)
     : QObject(parent)
     , m_cfg(cfg)
 {
-    m_valid = true;
 }
 
 ScreenManager::~ScreenManager()
@@ -45,7 +44,7 @@ ScreenManager::~ScreenManager()
 
 void ScreenManager::start()
 {
-    if (m_running || !m_valid) {
+    if (m_running) {
         return;
     }
     m_running = true;
@@ -120,6 +119,16 @@ void ScreenManager::stop()
     disconnect(qApp, &QGuiApplication::screenRemoved, this, nullptr);
 
     m_availableGeometryCache.clear();
+    // Invalidate derived caches so a post-stop effectiveScreenIds() /
+    // screenGeometry(vsId) call doesn't return pre-stop IDs or regions.
+    // m_virtualConfigs stays — the IConfigStore is authoritative and
+    // clearing it would drop legitimate pending state between stop/start
+    // cycles. m_panelGeometryReadyEmitted stays for the same reason (a
+    // restart shouldn't re-fire the one-shot unless the panel source
+    // actually re-transitions to ready).
+    m_cachedEffectiveScreenIds.clear();
+    m_effectiveScreenIdsDirty = true;
+    m_virtualGeometryCache.clear();
 }
 
 QVector<QScreen*> ScreenManager::screens() const
@@ -383,9 +392,14 @@ bool ScreenManager::isPanelGeometryReady() const
 
 void ScreenManager::scheduleDelayedPanelRequery(int delayMs)
 {
-    if (delayMs <= 0 || !m_cfg.panelSource) {
+    if (!m_cfg.panelSource) {
         return;
     }
+    // Forward the caller's delay verbatim — the panel source's contract
+    // treats delayMs<=0 as "immediate" (matches
+    // IPanelSource::requestRequery), so this wrapper preserves that
+    // semantic instead of silently dropping the call. Callers that truly
+    // want a delay pass a positive value.
     m_cfg.panelSource->requestRequery(delayMs);
 }
 

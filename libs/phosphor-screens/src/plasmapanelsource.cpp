@@ -97,6 +97,12 @@ void PlasmaPanelSource::stop()
     m_running = false;
     m_requeryTimer.stop();
     if (m_plasmaShellWatcher) {
+        // Disconnect BEFORE deleteLater — the watcher lingers on Qt's
+        // deferred-delete queue until the next event-loop turn, and a
+        // serviceRegistered signal that arrives in that window would
+        // otherwise fire our lambda and kick a fresh issueQuery after
+        // stop() has cleared our state.
+        disconnect(m_plasmaShellWatcher, nullptr, this, nullptr);
         m_plasmaShellWatcher->deleteLater();
         m_plasmaShellWatcher = nullptr;
     }
@@ -139,6 +145,13 @@ void PlasmaPanelSource::requestRequery(int delayMs)
 
 void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 {
+    // Belt-and-braces: even with the stop() disconnect, a queued-but-
+    // not-yet-dispatched slot invocation could still reach here. Bail
+    // so we don't spin up a fresh D-Bus call or mutate m_offsets post-stop.
+    if (!m_running) {
+        return;
+    }
+
     // Coalesce: if a query is already in flight, schedule exactly one
     // follow-up to run when it lands. Additional calls while pending
     // collapse onto that single queued follow-up. The emit-completion

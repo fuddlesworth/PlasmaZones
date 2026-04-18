@@ -31,6 +31,7 @@
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include "../config/configdefaults.h"
 #include "../config/settingsconfigstore.h"
 #include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/PlasmaPanelSource.h>
@@ -101,11 +102,19 @@ Daemon::Daemon(QObject* parent)
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
-    , m_screenManager(std::make_unique<ScreenManager>(Phosphor::Screens::ScreenManager::Config{
-                                                          /*panelSource=*/m_panelSource.get(),
-                                                          /*configStore=*/m_virtualScreenStore.get(),
-                                                      },
-                                                      nullptr))
+    , m_screenManager(std::make_unique<ScreenManager>(
+          Phosphor::Screens::ScreenManager::Config{
+              /*panelSource=*/m_panelSource.get(),
+              /*configStore=*/m_virtualScreenStore.get(),
+              /*useGeometrySensors=*/true,
+              // Align the lib's cap with the daemon's source-of-truth (Settings
+              // uses ConfigDefaults::maxVirtualScreensPerPhysical() when
+              // validating writes). A lower cap here would silently reject
+              // configs Settings accepted, leaving Settings ↔ ScreenManager
+              // divergent.
+              /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
+          },
+          nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))

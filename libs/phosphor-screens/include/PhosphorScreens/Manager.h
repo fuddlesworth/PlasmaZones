@@ -131,7 +131,14 @@ public:
 
     QStringList effectiveScreenIds() const;
     QStringList virtualScreenIdsFor(const QString& physicalScreenId) const;
-    QStringList effectiveIdsForPhysical(const QString& physicalScreenId) const;
+    /// Synonym for @ref virtualScreenIdsFor — exists because in-tree call
+    /// sites use both spellings interchangeably and converging to one name
+    /// is a cross-cutting rename out of scope for this library's surface.
+    /// New code should prefer @ref virtualScreenIdsFor. Thin inline forward.
+    QStringList effectiveIdsForPhysical(const QString& physicalScreenId) const
+    {
+        return virtualScreenIdsFor(physicalScreenId);
+    }
 
     QRect screenGeometry(const QString& screenId) const;
     QRect screenAvailableGeometry(const QString& screenId) const;
@@ -202,7 +209,6 @@ private:
     void onConfigStoreChanged();
 
     Config m_cfg;
-    bool m_valid = false;
     bool m_running = false;
     bool m_panelGeometryReadyEmitted = false;
 

@@ -3,6 +3,8 @@
 
 #include "PhosphorScreens/Resolver.h"
 
+#include "PhosphorScreens/ScreenIdentity.h"
+
 #include <QCursor>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -41,12 +43,15 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpo
     // Daemon unreachable or returned empty — fall back to Qt's own screen
     // lookup. This misses virtual-screen contexts but is good enough for
     // the "pick a monitor to open on" use case when no daemon exists yet
-    // (e.g. editor launched before the daemon has started).
+    // (e.g. editor launched before the daemon has started). Returns the
+    // canonical EDID-style identifier so callers see the same ID shape
+    // the daemon path produces (connector-name-only would be a different
+    // format and break code that routes both through one resolver).
     QScreen* screen = QGuiApplication::screenAt(pos);
     if (!screen) {
         screen = QGuiApplication::primaryScreen();
     }
-    return screen ? screen->name() : QString();
+    return screen ? ScreenIdentity::identifierFor(screen) : QString();
 }
 
 QString ScreenResolver::effectiveScreenAtCursor(const ResolverEndpoint& endpoint, int timeoutMs)
