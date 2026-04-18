@@ -17,7 +17,7 @@
 #include "helpers.h"
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include "../config/settings.h"

@@ -124,9 +124,29 @@ bool TilingState::moveWindow(int fromIndex, int toIndex)
         return true; // No-op is still success
     }
 
+    // Fast-path: an adjacent move is identical to a swap of the two neighbours,
+    // so we can avoid the O(N) rebuildFromOrder() and mutate two leaves in
+    // place. For non-adjacent moves, QList::move rotates intermediate slots
+    // and the tree must be rebuilt in order.
+    const bool adjacent = (std::abs(fromIndex - toIndex) == 1);
+    const QString srcId = m_windowOrder.at(fromIndex);
+    const QString dstId = m_windowOrder.at(toIndex);
+
     m_windowOrder.move(fromIndex, toIndex);
 
-    rebuildSplitTree();
+    bool fastPathDone = false;
+    if (adjacent && m_splitTree && !m_floatingWindows.contains(srcId) && !m_floatingWindows.contains(dstId)) {
+        // Both windows must already exist as leaves in the tree — if either is
+        // missing (floating transition not yet synced, lazy tree creation, etc)
+        // we fall back to the full rebuild.
+        if (m_splitTree->leafForWindow(srcId) && m_splitTree->leafForWindow(dstId)) {
+            fastPathDone = m_splitTree->swapLeaves(srcId, dstId);
+        }
+    }
+
+    if (!fastPathDone) {
+        rebuildSplitTree();
+    }
 
     Q_EMIT windowOrderChanged();
     notifyStateChanged();

@@ -325,6 +325,29 @@ void SplitTree::swap(const QString& windowId1, const QString& windowId2)
     std::swap(leaf1->windowId, leaf2->windowId);
 }
 
+bool SplitTree::swapLeaves(const QString& a, const QString& b)
+{
+    // Locate both leaves before any mutation so a missing second id can't
+    // leave the first half-swapped.
+    SplitNode* leafA = findLeaf(m_root.get(), a);
+    if (!leafA) {
+        return false;
+    }
+    if (a == b) {
+        // Self-swap: the leaf exists, so the operation is a successful no-op.
+        return true;
+    }
+    SplitNode* leafB = findLeaf(m_root.get(), b);
+    if (!leafB) {
+        return false;
+    }
+
+    // Only the window ids on the leaves are exchanged; split ratios, split
+    // directions, and parent/child pointers are preserved.
+    std::swap(leafA->windowId, leafB->windowId);
+    return true;
+}
+
 void SplitTree::resizeSplit(const QString& windowId, qreal newRatio)
 {
     SplitNode* leaf = findLeaf(m_root.get(), windowId);

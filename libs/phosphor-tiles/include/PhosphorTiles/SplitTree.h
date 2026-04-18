@@ -168,6 +168,26 @@ public:
     void swap(const QString& windowId1, const QString& windowId2);
 
     /**
+     * @brief Swap the stored window ids on two existing leaves
+     *
+     * Fast-path variant of @ref swap that reports whether both leaves were
+     * actually found. Callers can use the return value to decide whether the
+     * swap succeeded or whether a fallback rebuild is required.
+     *
+     * Tree structure, split ratios, split directions, and child ordering are
+     * left untouched; only the @c windowId strings on the two leaf nodes are
+     * exchanged.
+     *
+     * @param a First window id
+     * @param b Second window id
+     * @return @c true if both leaves were located and their ids swapped;
+     *         @c false otherwise (tree is left unchanged in the false case).
+     *         Swapping an id with itself returns @c true as a no-op when the
+     *         leaf exists, and @c false when it doesn't.
+     */
+    bool swapLeaves(const QString& a, const QString& b);
+
+    /**
      * @brief Adjust the split ratio of a window's parent node
      * @param windowId Window whose parent split to resize
      * @param newRatio New split ratio (clamped to MinSplitRatio..MaxSplitRatio)

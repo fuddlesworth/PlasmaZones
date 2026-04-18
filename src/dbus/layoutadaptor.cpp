@@ -12,7 +12,7 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../core/unifiedlayoutlist.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
@@ -77,13 +77,19 @@ void LayoutAdaptor::onActiveLayoutChanged(PhosphorZones::Layout* layout)
     m_cachedActiveLayoutId = QUuid();
     m_cachedActiveLayoutJson.clear();
     if (layout) {
+        const QString layoutIdStr = layout->id().toString();
         // Compact serialisation: this is the hottest layoutChanged emit path
         // (fires on every active-layout switch). Pretty-printing drops ~30%
         // of the payload over the bus with no functional difference —
         // QJsonDocument::fromJson round-trips either form identically.
         Q_EMIT layoutChanged(QString::fromUtf8(QJsonDocument(layout->toJson()).toJson(QJsonDocument::Compact)));
-        qCInfo(lcDbusLayout) << "Emitting activeLayoutIdChanged D-Bus signal for:" << layout->id().toString();
-        Q_EMIT activeLayoutIdChanged(layout->id().toString());
+        // Cheap companion to layoutChanged(json): carries only the UUID so
+        // subscribers that re-load from disk (editor) can bind to the UUID
+        // signal and skip the 5–20 KB JSON marshalling on context switches.
+        // Additive — existing consumers of layoutChanged(json) are unaffected.
+        Q_EMIT activeLayoutChanged(layoutIdStr);
+        qCInfo(lcDbusLayout) << "Emitting activeLayoutIdChanged D-Bus signal for:" << layoutIdStr;
+        Q_EMIT activeLayoutIdChanged(layoutIdStr);
     }
 }
 

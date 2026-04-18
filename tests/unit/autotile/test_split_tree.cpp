@@ -223,6 +223,88 @@ private Q_SLOTS:
         QCOMPARE(root->splitRatio, 0.3);
     }
 
+    void testSwapLeaves_bothPresent()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        const bool ok = tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win3"));
+        QVERIFY(ok);
+
+        auto order = tree.leafOrder();
+        QCOMPARE(order.size(), 3);
+        QCOMPARE(order[0], QStringLiteral("win3"));
+        QCOMPARE(order[1], QStringLiteral("win2"));
+        QCOMPARE(order[2], QStringLiteral("win1"));
+
+        // Structure unchanged — tree still has 3 leaves and a non-leaf root.
+        QCOMPARE(tree.leafCount(), 3);
+        QVERIFY(!tree.root()->isLeaf());
+    }
+
+    void testSwapLeaves_eitherMissing()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        const auto orderBefore = tree.leafOrder();
+
+        // First id missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope"), QStringLiteral("win2")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+
+        // Second id missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("nope")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+
+        // Both missing
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope1"), QStringLiteral("nope2")));
+        QCOMPARE(tree.leafOrder(), orderBefore);
+    }
+
+    void testSwapLeaves_preservesGeometry()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+        tree.insertAtEnd(QStringLiteral("win3"));
+
+        // Customise some ratios so we can verify they survive the swap.
+        tree.resizeSplit(QStringLiteral("win2"), 0.7);
+        const qreal rootRatioBefore = tree.root()->splitRatio;
+        const bool rootHorizontalBefore = tree.root()->splitHorizontal;
+        const auto zonesBefore = tree.applyGeometry(m_screenGeometry, 0);
+
+        QVERIFY(tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win3")));
+
+        // Split ratios / directions are untouched by the id-only swap.
+        QVERIFY(qFuzzyCompare(tree.root()->splitRatio, rootRatioBefore));
+        QCOMPARE(tree.root()->splitHorizontal, rootHorizontalBefore);
+
+        // Because swapLeaves only exchanges ids on existing leaves, the per-slot
+        // geometry the tree produces must be byte-identical to before.
+        const auto zonesAfter = tree.applyGeometry(m_screenGeometry, 0);
+        QCOMPARE(zonesAfter, zonesBefore);
+    }
+
+    void testSwapLeaves_selfSwap()
+    {
+        PhosphorTiles::SplitTree tree;
+        tree.insertAtEnd(QStringLiteral("win1"));
+        tree.insertAtEnd(QStringLiteral("win2"));
+
+        // Self-swap on an existing id is a successful no-op.
+        QVERIFY(tree.swapLeaves(QStringLiteral("win1"), QStringLiteral("win1")));
+        QCOMPARE(tree.leafOrder(), (QStringList{QStringLiteral("win1"), QStringLiteral("win2")}));
+
+        // Self-swap on a missing id still reports failure.
+        QVERIFY(!tree.swapLeaves(QStringLiteral("nope"), QStringLiteral("nope")));
+    }
+
     // =========================================================================
     // Geometry tests
     // =========================================================================
