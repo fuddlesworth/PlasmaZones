@@ -31,14 +31,8 @@ struct PHOSPHORZONES_EXPORT AppRule
     int zoneNumber = 0; // 1-based zone number to snap to
     QString targetScreen; // Optional: snap to zone on this screen instead of current
 
-    bool operator==(const AppRule& other) const
-    {
-        return pattern == other.pattern && zoneNumber == other.zoneNumber && targetScreen == other.targetScreen;
-    }
-    bool operator!=(const AppRule& other) const
-    {
-        return !(*this == other);
-    }
+    // C++20 synthesises operator!= from operator==.
+    bool operator==(const AppRule& other) const = default;
 
     // Serialization helpers (centralized to avoid DRY violations)
     QJsonObject toJson() const;

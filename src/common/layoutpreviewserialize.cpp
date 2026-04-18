@@ -41,7 +41,11 @@ constexpr QLatin1String Width{"width"};
 constexpr QLatin1String Height{"height"};
 constexpr QLatin1String ZoneNumber{"zoneNumber"};
 
-// Per-algorithm
+// Per-algorithm (flat under the same top-level object — see header comment).
+// Note: the historical `isSystemEntry` key is intentionally not emitted —
+// consumers read `isSystem` at the top level, which the producer has already
+// resolved for both manual and autotile previews. Keeping both would mean
+// two wire-format flags for the same semantic with one source of truth.
 constexpr QLatin1String SupportsMasterCount{"supportsMasterCount"};
 constexpr QLatin1String SupportsSplitRatio{"supportsSplitRatio"};
 constexpr QLatin1String ProducesOverlappingZones{"producesOverlappingZones"};
@@ -49,7 +53,6 @@ constexpr QLatin1String SupportsCustomParams{"supportsCustomParams"};
 constexpr QLatin1String SupportsMemory{"supportsMemory"};
 constexpr QLatin1String IsScripted{"isScripted"};
 constexpr QLatin1String IsUserScript{"isUserScript"};
-constexpr QLatin1String IsSystemEntry{"isSystemEntry"};
 constexpr QLatin1String ZoneNumberDisplay{"zoneNumberDisplay"};
 } // namespace K
 
@@ -90,9 +93,9 @@ void writeAlgorithmFlat(Container& dst, const PhosphorLayout::AlgorithmMetadata&
     }
 }
 
-QString aspectRatioClassTag(int cls)
+QString aspectRatioClassTag(PhosphorLayout::AspectRatioClass cls)
 {
-    return PhosphorLayout::ScreenClassification::toString(static_cast<PhosphorLayout::AspectRatioClass>(cls));
+    return PhosphorLayout::ScreenClassification::toString(cls);
 }
 
 } // namespace

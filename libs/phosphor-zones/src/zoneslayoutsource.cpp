@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -22,7 +23,7 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
     preview.description = layout->description();
     preview.zoneCount = layout->zoneCount();
     preview.autoAssign = layout->autoAssign();
-    preview.aspectRatioClass = static_cast<int>(layout->aspectRatioClass());
+    preview.aspectRatioClass = layout->aspectRatioClass();
     preview.isSystem = layout->isSystemLayout();
     // Manual preview — leave preview.algorithm as std::nullopt so
     // isAutotile() returns false.
@@ -86,6 +87,11 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
                                                            const QSize& /*canvas*/) const
 {
     if (!m_catalog || id.isEmpty()) {
+        return {};
+    }
+    // Explicit classifier — keeps parity with AutotileLayoutSource and makes
+    // the "not mine" branch self-documenting rather than a silent parse fail.
+    if (PhosphorLayout::LayoutId::isAutotile(id)) {
         return {};
     }
     const QUuid uuid = QUuid::fromString(id);

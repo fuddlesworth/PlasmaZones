@@ -13,9 +13,9 @@ namespace PhosphorLayout {
  *
  * Used to tag layouts with their intended monitor type and to classify
  * physical screens at runtime so the layout picker can recommend matching
- * layouts.  The same enum is exposed in @c LayoutPreview::aspectRatioClass
- * (via integer cast) so consumers can group/filter previews uniformly
- * regardless of which provider produced them.
+ * layouts.  The same enum is the type of @c LayoutPreview::aspectRatioClass
+ * so consumers can group/filter previews uniformly regardless of which
+ * provider produced them.
  */
 enum class AspectRatioClass {
     Any = 0, ///< Suitable for all aspect ratios (default)

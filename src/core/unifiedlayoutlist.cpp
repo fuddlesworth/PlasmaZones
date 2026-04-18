@@ -38,7 +38,7 @@ namespace {
 /// Map aspect-ratio class to section label + order for manual previews.
 void setAspectRatioSection(LayoutPreview& preview)
 {
-    const auto cls = static_cast<AspectRatioClass>(preview.aspectRatioClass);
+    const auto cls = preview.aspectRatioClass;
     preview.sectionKey = ScreenClassification::toString(cls);
     switch (cls) {
     case AspectRatioClass::Any:

@@ -5,6 +5,7 @@
 
 #include <QLatin1String>
 #include <QString>
+#include <QtGlobal>
 
 namespace PhosphorLayout {
 
@@ -29,10 +30,19 @@ inline bool isAutotile(const QString& id)
     return id.startsWith(AutotilePrefix);
 }
 
+/// Extract the algorithm id portion from an autotile preview id.
+/// Callers are expected to check @c isAutotile first — passing a non-autotile
+/// id here is a contract violation. In debug builds this fires an assert; in
+/// release builds we warn and return an empty string so the misuse is loud
+/// rather than silent.
 inline QString extractAlgorithmId(const QString& id)
 {
-    if (!isAutotile(id))
+    if (!isAutotile(id)) {
+        Q_ASSERT_X(false, "PhosphorLayout::LayoutId::extractAlgorithmId",
+                   "passed a non-autotile id — call isAutotile() first");
+        qWarning("PhosphorLayout::LayoutId::extractAlgorithmId called with non-autotile id: %s", qUtf8Printable(id));
         return QString();
+    }
     return id.mid(AutotilePrefix.size());
 }
 

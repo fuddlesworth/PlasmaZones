@@ -30,9 +30,9 @@
 // nesting adds one `.algorithm.` step everywhere without buying
 // disambiguation (manual previews simply lack the flag fields).
 // Consumers that care about system-entry classification read the
-// top-level @c isSystem (populated by the producer via
-// @c AlgorithmMetadata::isSystemEntry for autotile previews, and via
-// @c Layout::isSystemLayout for manual previews).
+// top-level @c isSystem (populated by the producer at source-build time
+// — AutotileLayoutSource derives it from `!isScripted || !isUserScript`,
+// ZonesLayoutSource from @c Layout::isSystemLayout).
 //
 // Each zone in `zones` is flat: {x, y, width, height, zoneNumber}.
 

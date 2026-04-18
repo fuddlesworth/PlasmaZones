@@ -83,6 +83,11 @@ Layout::Layout(const QString& name, QObject* parent)
 {
 }
 
+// Copy semantics: the copy represents a distinct user-owned layout. It gets a
+// fresh id, and we deliberately do NOT carry over m_sourcePath or
+// m_systemSourcePath — a duplicate of a system layout becomes a plain user
+// layout with no system-origin tracking, so the "restore system original"
+// path doesn't think the duplicate is a user-override of the same entry.
 Layout::Layout(const Layout& other)
     : QObject(other.parent())
     , m_id(QUuid::createUuid()) // New layout gets new ID

@@ -59,18 +59,6 @@ struct PHOSPHORLAYOUTAPI_EXPORT AlgorithmMetadata
     /// "all" (every zone numbered), "last" (only the trailing slot
     /// numbered), "" (renderer decides).
     QString zoneNumberDisplay;
-
-    /// Whether this algorithm should show as a "system" entry (lock icon)
-    /// in the picker. Built-in C++ algorithms are always system entries.
-    /// Scripted algorithms are system entries only when system-installed
-    /// (not user-script).
-    bool isSystemEntry() const
-    {
-        if (!isScripted) {
-            return true; // built-in C++
-        }
-        return !isUserScript;
-    }
 };
 
 } // namespace PhosphorLayout

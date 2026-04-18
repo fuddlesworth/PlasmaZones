@@ -6,6 +6,7 @@
 #include <phosphorlayoutapi_export.h>
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 
 #include <QRectF>
 #include <QString>
@@ -82,12 +83,11 @@ struct PHOSPHORLAYOUTAPI_EXPORT LayoutPreview
     /// adapt to any aspect).
     qreal referenceAspectRatio = 0.0;
 
-    /// Aspect-ratio class hint propagated up from the layout source.
-    /// 0 = "Any monitor", 1 = "Standard 16:9", 2 = "Ultrawide 21:9",
-    /// 3 = "Super-Ultrawide 32:9", 4 = "Portrait 9:16". Picker uses this
-    /// for section grouping; renderer ignores. Manual layouts source this
-    /// from their AspectRatioClass tag; autotile entries leave it at 0.
-    int aspectRatioClass = 0;
+    /// Aspect-ratio class hint propagated up from the layout source. Picker
+    /// uses this for section grouping; renderer ignores. Manual layouts
+    /// source this from `Layout::aspectRatioClass`; autotile entries leave
+    /// it at the default (`AspectRatioClass::Any`).
+    AspectRatioClass aspectRatioClass = AspectRatioClass::Any;
 
     /// Section-grouping metadata for the picker UI. Sources fill these
     /// to drive grouped headers ("Built-in", "Custom", "Standard 16:9",
@@ -104,11 +104,14 @@ struct PHOSPHORLAYOUTAPI_EXPORT LayoutPreview
     /// True when the layout is "system-owned" and should render with a
     /// lock badge in the picker. For manual layouts this reflects whether
     /// the layout file came from the system install (vs. a user-created
-    /// copy). For autotile layouts it mirrors
-    /// @c AlgorithmMetadata::isSystemEntry (built-in C++ algorithms and
-    /// system-installed scripts = system; user scripts = not system).
-    /// Sources populate this at preview construction — consumers treat
-    /// it as authoritative.
+    /// copy). For autotile layouts the source computes this from
+    /// `!algorithm->isScripted || !algorithm->isUserScript` — i.e.
+    /// built-in C++ algorithms and system-installed scripts are system
+    /// entries; user scripts are not.
+    ///
+    /// Sources (ZonesLayoutSource, AutotileLayoutSource) are the sole
+    /// populators. Consumers treat this as authoritative — do not
+    /// recompute from algorithm flags; that's the source's job.
     bool isSystem = false;
 
     /// Optional autotile algorithm metadata. Presence is the sole signal

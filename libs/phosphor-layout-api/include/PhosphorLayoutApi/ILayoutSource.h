@@ -64,8 +64,8 @@ public:
     /// @p windowCount  for autotile entries, the window count to render
     ///                 the algorithm with. Ignored by manual sources
     ///                 (their zones are authored statically). Defaults
-    ///                 to a sensible reference count (4 — most picker
-    ///                 thumbnails fit this nicely).
+    ///                 to @c PhosphorLayout::DefaultPreviewWindowCount
+    ///                 (4 — most picker thumbnails fit this nicely).
     /// @p canvas       optional aspect-ratio + size hint. Sources that
     ///                 implement aspect-ratio filtering use this to set
     ///                 @c LayoutPreview::recommended; sources that don't
