@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/utils.h"
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"

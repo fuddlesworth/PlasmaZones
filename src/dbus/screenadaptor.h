@@ -70,7 +70,7 @@ public Q_SLOTS:
     /// lies in that direction. All per-VS state (windows, layout, autotile)
     /// follows the new geometry automatically.
     /// @return Empty string on success, otherwise a stable rejection token
-    ///         from VirtualScreenSwapper::reasonString() so callers can
+    ///         from Phosphor::Screens::VirtualScreenSwapper::reasonString() so callers can
     ///         distinguish failure modes without parsing logs.
     QString swapVirtualScreenInDirection(const QString& currentVirtualScreenId, const QString& direction);
 
@@ -79,7 +79,7 @@ public Q_SLOTS:
     /// convention: with @p clockwise=true each VS moves forward in the ring.
     /// No-op if the physical monitor has fewer than two VSs.
     /// @return Empty string on success, otherwise a stable rejection token
-    ///         from VirtualScreenSwapper::reasonString().
+    ///         from Phosphor::Screens::VirtualScreenSwapper::reasonString().
     QString rotateVirtualScreens(const QString& physicalScreenId, bool clockwise);
 
 Q_SIGNALS:
@@ -108,7 +108,7 @@ private:
     Settings* m_settings = nullptr;
     /// Phosphor::Screens::IConfigStore facade over m_settings, lazily
     /// constructed in setSettings(). Owned here so the two D-Bus methods
-    /// that drive a VirtualScreenSwapper share one adapter (vs. one
+    /// that drive a Phosphor::Screens::VirtualScreenSwapper share one adapter (vs. one
     /// stack-allocated per call) and the IConfigStore::changed →
     /// Settings::virtualScreenConfigsChanged forwarding connection only
     /// gets wired once.

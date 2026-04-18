@@ -8,7 +8,7 @@
 #include "core/constants.h"
 #include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
-#include "core/screenmanager.h"
+#include "core/screenmanagerservice.h"
 #include "core/utils.h"
 
 #include <QScreen>

@@ -6,7 +6,7 @@
  * @brief Unit tests for virtual screen data model and ID utilities
  *
  * Tests VirtualScreenId namespace (ID parsing/construction),
- * VirtualScreenDef::absoluteGeometry(), and VirtualScreenConfig
+ * Phosphor::Screens::VirtualScreenDef::absoluteGeometry(), and Phosphor::Screens::VirtualScreenConfig
  * equality and subdivision detection.
  */
 
@@ -15,9 +15,11 @@
 #include <QRect>
 #include <QRectF>
 
-#include "core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 
-using namespace PlasmaZones;
+using namespace Phosphor::Screens;
+namespace VirtualScreenId = PhosphorIdentity::VirtualScreenId;
 
 class TestVirtualScreen : public QObject
 {
@@ -25,107 +27,108 @@ class TestVirtualScreen : public QObject
 
 private Q_SLOTS:
 
-    // --- VirtualScreenId::isVirtual ---
+    // --- PhosphorIdentity::VirtualScreenId::isVirtual ---
 
     void testIsVirtual_physicalId_returnsFalse()
     {
-        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107")));
+        QVERIFY(!PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107")));
     }
     void testIsVirtual_virtualId_returnsTrue()
     {
-        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:0")));
+        QVERIFY(PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:0")));
     }
     void testIsVirtual_virtualIdHighIndex_returnsTrue()
     {
-        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:5")));
+        QVERIFY(PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:5")));
     }
     void testIsVirtual_emptyString_returnsFalse()
     {
-        QVERIFY(!VirtualScreenId::isVirtual(QString()));
+        QVERIFY(!PhosphorIdentity::VirtualScreenId::isVirtual(QString()));
     }
     void testIsVirtual_bareVsSeparator_returnsTrue()
     {
         // Malformed ID — isVirtual() requires pos > 0 to reject
-        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("/vs:0")));
+        QVERIFY(!PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("/vs:0")));
     }
 
-    // --- VirtualScreenId::extractPhysicalId ---
+    // --- PhosphorIdentity::VirtualScreenId::extractPhysicalId ---
     void testExtractPhysicalId_virtualId()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:0")),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:0")),
                  QStringLiteral("Dell:U2722D:115107"));
     }
     void testExtractPhysicalId_physicalId_returnsUnchanged()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107")),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107")),
                  QStringLiteral("Dell:U2722D:115107"));
     }
     void testExtractPhysicalId_higherIndex()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:2")),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:2")),
                  QStringLiteral("Dell:U2722D:115107"));
     }
     void testExtractPhysicalId_emptyString()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QString()), QString());
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QString()), QString());
     }
     void testExtractPhysicalId_bareVsSeparator_returnsOriginal()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("/vs:0")), QStringLiteral("/vs:0"));
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("/vs:0")),
+                 QStringLiteral("/vs:0"));
     }
 
-    // --- VirtualScreenId::extractIndex ---
+    // --- PhosphorIdentity::VirtualScreenId::extractIndex ---
     void testExtractIndex_index0()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:0")), 0);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:0")), 0);
     }
     void testExtractIndex_index3()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:3")), 3);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:3")), 3);
     }
     void testExtractIndex_physicalId_returnsNegOne()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107")), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107")), -1);
     }
     void testExtractIndex_invalidIndex_returnsNegOne()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:abc")), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:abc")), -1);
     }
     void testExtractIndex_emptyString_returnsNegOne()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QString()), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QString()), -1);
     }
     void testExtractIndex_emptyAfterSeparator_returnsNegOne()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:")), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:")), -1);
     }
 
-    // --- VirtualScreenId::make ---
+    // --- PhosphorIdentity::VirtualScreenId::make ---
     void testMake_index0()
     {
-        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 0),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 0),
                  QStringLiteral("Dell:U2722D:115107/vs:0"));
     }
     void testMake_index1()
     {
-        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 1),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 1),
                  QStringLiteral("Dell:U2722D:115107/vs:1"));
     }
     void testMake_roundTrip()
     {
         const QString physId = QStringLiteral("LG:27GP850:ABC123");
         const int idx = 2;
-        const QString vsId = VirtualScreenId::make(physId, idx);
-        QCOMPARE(VirtualScreenId::extractPhysicalId(vsId), physId);
-        QCOMPARE(VirtualScreenId::extractIndex(vsId), idx);
-        QVERIFY(VirtualScreenId::isVirtual(vsId));
+        const QString vsId = PhosphorIdentity::VirtualScreenId::make(physId, idx);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(vsId), physId);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(vsId), idx);
+        QVERIFY(PhosphorIdentity::VirtualScreenId::isVirtual(vsId));
     }
 
-    // --- VirtualScreenDef::absoluteGeometry ---
+    // --- Phosphor::Screens::VirtualScreenDef::absoluteGeometry ---
 
     void testAbsoluteGeometry_leftHalf()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0, 0, 0.5, 1.0);
         QRect phys(0, 0, 3440, 1440);
 
@@ -135,7 +138,7 @@ private Q_SLOTS:
 
     void testAbsoluteGeometry_rightHalf()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.5, 0, 0.5, 1.0);
         QRect phys(0, 0, 3440, 1440);
 
@@ -146,7 +149,7 @@ private Q_SLOTS:
     void testAbsoluteGeometry_leftThirdWithOffset()
     {
         // Physical screen at an offset (multi-monitor setup)
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0, 0, 0.333, 1.0);
         QRect phys(1920, 0, 3840, 1600);
 
@@ -160,7 +163,7 @@ private Q_SLOTS:
 
     void testAbsoluteGeometry_middleThird()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.333, 0, 0.334, 1.0);
         QRect phys(1920, 0, 3840, 1600);
 
@@ -176,7 +179,7 @@ private Q_SLOTS:
 
     void testAbsoluteGeometry_rightThird()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.667, 0, 0.333, 1.0);
         QRect phys(1920, 0, 3840, 1600);
 
@@ -190,7 +193,7 @@ private Q_SLOTS:
 
     void testAbsoluteGeometry_fullScreen()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0, 0, 1.0, 1.0);
         QRect phys(0, 0, 1920, 1080);
 
@@ -198,60 +201,60 @@ private Q_SLOTS:
         QCOMPARE(result, QRect(0, 0, 1920, 1080));
     }
 
-    // --- VirtualScreenConfig::hasSubdivisions ---
+    // --- Phosphor::Screens::VirtualScreenConfig::hasSubdivisions ---
 
     void testHasSubdivisions_empty_returnsFalse()
     {
-        VirtualScreenConfig config;
+        Phosphor::Screens::VirtualScreenConfig config;
         QVERIFY(!config.hasSubdivisions());
     }
 
     void testHasSubdivisions_singleScreen_returnsFalse()
     {
-        VirtualScreenConfig config;
-        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
-                                               QStringLiteral("Full"), QRectF(0, 0, 1, 1), 0});
+        Phosphor::Screens::VirtualScreenConfig config;
+        config.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                                  QStringLiteral("Full"), QRectF(0, 0, 1, 1), 0});
         QVERIFY(!config.hasSubdivisions());
     }
 
     void testHasSubdivisions_twoScreens_returnsTrue()
     {
-        VirtualScreenConfig config;
-        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
-                                               QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
-        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
-                                               QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1});
+        Phosphor::Screens::VirtualScreenConfig config;
+        config.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                                  QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
+        config.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                                  QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1});
         QVERIFY(config.hasSubdivisions());
     }
 
     void testIsEmpty_noScreens()
     {
-        VirtualScreenConfig config;
+        Phosphor::Screens::VirtualScreenConfig config;
         QVERIFY(config.isEmpty());
     }
 
     void testIsEmpty_withScreens()
     {
-        VirtualScreenConfig config;
-        config.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
-                                               QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
+        Phosphor::Screens::VirtualScreenConfig config;
+        config.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                                  QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
         QVERIFY(!config.isEmpty());
     }
 
-    // --- VirtualScreenConfig equality ---
+    // --- Phosphor::Screens::VirtualScreenConfig equality ---
 
     void testConfigEquality_sameConfigs()
     {
         auto makeDef = [](const QString& id, const QString& name, const QRectF& region, int idx) {
-            return VirtualScreenDef{id, QStringLiteral("phys"), name, region, idx};
+            return Phosphor::Screens::VirtualScreenDef{id, QStringLiteral("phys"), name, region, idx};
         };
 
-        VirtualScreenConfig a;
+        Phosphor::Screens::VirtualScreenConfig a;
         a.physicalScreenId = QStringLiteral("phys");
         a.screens.append(makeDef(QStringLiteral("phys/vs:0"), QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0));
         a.screens.append(makeDef(QStringLiteral("phys/vs:1"), QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1));
 
-        VirtualScreenConfig b;
+        Phosphor::Screens::VirtualScreenConfig b;
         b.physicalScreenId = QStringLiteral("phys");
         b.screens.append(makeDef(QStringLiteral("phys/vs:0"), QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0));
         b.screens.append(makeDef(QStringLiteral("phys/vs:1"), QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1));
@@ -262,85 +265,85 @@ private Q_SLOTS:
 
     void testConfigEquality_differentRegions()
     {
-        VirtualScreenConfig a;
+        Phosphor::Screens::VirtualScreenConfig a;
         a.physicalScreenId = QStringLiteral("phys");
-        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        a.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
 
-        VirtualScreenConfig b;
+        Phosphor::Screens::VirtualScreenConfig b;
         b.physicalScreenId = QStringLiteral("phys");
-        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.6, 1), 0});
+        b.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.6, 1), 0});
 
         QVERIFY(a != b);
     }
 
     void testConfigEquality_differentNames()
     {
-        VirtualScreenConfig a;
+        Phosphor::Screens::VirtualScreenConfig a;
         a.physicalScreenId = QStringLiteral("phys");
-        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        a.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
 
-        VirtualScreenConfig b;
+        Phosphor::Screens::VirtualScreenConfig b;
         b.physicalScreenId = QStringLiteral("phys");
-        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Right"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        b.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Right"), QRectF(0, 0, 0.5, 1), 0});
 
         QVERIFY(a != b);
     }
 
     void testConfigEquality_differentPhysicalScreenId()
     {
-        VirtualScreenConfig a;
+        Phosphor::Screens::VirtualScreenConfig a;
         a.physicalScreenId = QStringLiteral("phys1");
-        a.screens.append(VirtualScreenDef{QStringLiteral("phys1/vs:0"), QStringLiteral("phys1"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        a.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys1/vs:0"), QStringLiteral("phys1"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
 
-        VirtualScreenConfig b;
+        Phosphor::Screens::VirtualScreenConfig b;
         b.physicalScreenId = QStringLiteral("phys2");
-        b.screens.append(VirtualScreenDef{QStringLiteral("phys2/vs:0"), QStringLiteral("phys2"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        b.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys2/vs:0"), QStringLiteral("phys2"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
 
         QVERIFY(a != b);
     }
 
     void testConfigEquality_differentScreenCount()
     {
-        VirtualScreenConfig a;
+        Phosphor::Screens::VirtualScreenConfig a;
         a.physicalScreenId = QStringLiteral("phys");
-        a.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
+        a.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
 
-        VirtualScreenConfig b;
+        Phosphor::Screens::VirtualScreenConfig b;
         b.physicalScreenId = QStringLiteral("phys");
-        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                          QRectF(0, 0, 0.5, 1), 0});
-        b.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("Right"),
-                                          QRectF(0.5, 0, 0.5, 1), 1});
+        b.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                             QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0});
+        b.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                             QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1});
 
         QVERIFY(a != b);
     }
 
-    // --- VirtualScreenDef equality ---
+    // --- Phosphor::Screens::VirtualScreenDef equality ---
 
     void testDefEquality_sameId()
     {
-        VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                           QRectF(0, 0, 0.5, 1), 0};
-        VirtualScreenDef b{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                           QRectF(0, 0, 0.5, 1), 0};
+        Phosphor::Screens::VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                              QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0};
+        Phosphor::Screens::VirtualScreenDef b{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                              QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0};
 
-        // VirtualScreenDef::operator== compares all fields
+        // Phosphor::Screens::VirtualScreenDef::operator== compares all fields
         QVERIFY(a == b);
     }
 
     void testDefEquality_differentId()
     {
-        VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                           QRectF(0, 0, 0.5, 1), 0};
-        VirtualScreenDef b{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("Right"),
-                           QRectF(0.5, 0, 0.5, 1), 1};
+        Phosphor::Screens::VirtualScreenDef a{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                              QStringLiteral("Left"), QRectF(0, 0, 0.5, 1), 0};
+        Phosphor::Screens::VirtualScreenDef b{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                              QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1), 1};
 
         QVERIFY(!(a == b));
     }
@@ -353,7 +356,7 @@ private Q_SLOTS:
         // raw width = round(0.001 * 1920) - round(0 * 1920) could be ~2px,
         // but absoluteGeometry enforces qMax(1, ...) so even a sub-pixel
         // region must produce at least 1px in each dimension.
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0, 0, 0.001, 0.001);
         QRect phys(0, 0, 1920, 1080);
 
@@ -375,11 +378,11 @@ private Q_SLOTS:
         for (int physWidth : widths) {
             QRect physGeom(0, 0, physWidth, 1440);
 
-            VirtualScreenDef left;
+            Phosphor::Screens::VirtualScreenDef left;
             left.region = QRectF(0, 0, 0.333, 1.0);
-            VirtualScreenDef center;
+            Phosphor::Screens::VirtualScreenDef center;
             center.region = QRectF(0.333, 0, 0.334, 1.0);
-            VirtualScreenDef right;
+            Phosphor::Screens::VirtualScreenDef right;
             right.region = QRectF(0.667, 0, 0.333, 1.0);
 
             QRect leftGeom = left.absoluteGeometry(physGeom);
@@ -397,7 +400,7 @@ private Q_SLOTS:
         }
     }
 
-    // --- VirtualScreenConfig::swapRegions (direct struct-level tests) ---
+    // --- Phosphor::Screens::VirtualScreenConfig::swapRegions (direct struct-level tests) ---
     //
     // The swapper test suite (test_virtualscreen_swapper.cpp) exercises
     // this through Settings::setVirtualScreenConfig. These tests pin the
@@ -407,12 +410,12 @@ private Q_SLOTS:
 
     void testSwapRegions_exchangesRegionsAndPreservesFields()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
-                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("Left"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
 
         QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
 
@@ -432,12 +435,12 @@ private Q_SLOTS:
 
     void testSwapRegions_selfSwap_returnsFalse()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
-                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("Left"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
 
         QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:0")));
         // Regions unchanged.
@@ -447,12 +450,12 @@ private Q_SLOTS:
 
     void testSwapRegions_unknownId_returnsFalse()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
-                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("Left"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
 
         // idA unknown
         QVERIFY(!cfg.swapRegions(QStringLiteral("phys/vs:99"), QStringLiteral("phys/vs:1")));
@@ -467,31 +470,31 @@ private Q_SLOTS:
 
     void testSwapRegions_isInvolutive()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("Left"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
-                                            QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("Left"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
 
-        const VirtualScreenConfig before = cfg;
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
         QVERIFY(cfg.swapRegions(QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1")));
         QCOMPARE(cfg, before);
     }
 
-    // --- VirtualScreenConfig::rotateRegions (direct struct-level tests) ---
+    // --- Phosphor::Screens::VirtualScreenConfig::rotateRegions (direct struct-level tests) ---
 
     void testRotateRegions_threeElement_clockwise()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
-                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"),
+                                                               QStringLiteral("C"), QRectF(0.667, 0.0, 0.333, 1.0), 2});
 
         const QRectF a = cfg.screens[0].region;
         const QRectF b = cfg.screens[1].region;
@@ -509,14 +512,14 @@ private Q_SLOTS:
 
     void testRotateRegions_threeElement_counterclockwise()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
-                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"),
+                                                               QStringLiteral("C"), QRectF(0.667, 0.0, 0.333, 1.0), 2});
 
         const QRectF a = cfg.screens[0].region;
         const QRectF b = cfg.screens[1].region;
@@ -537,14 +540,14 @@ private Q_SLOTS:
         // rotateRegions must accept an orderedIds list that names only a
         // subset of the config's defs — the docstring explicitly says so.
         // Here we rotate only VSs 0 and 2, leaving VS 1 completely alone.
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.25, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.25, 0.0, 0.25, 1.0), 1});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
-                                            QRectF(0.5, 0.0, 0.5, 1.0), 2});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.25, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.25, 0.0, 0.25, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"),
+                                                               QStringLiteral("C"), QRectF(0.5, 0.0, 0.5, 1.0), 2});
 
         const QRectF r0 = cfg.screens[0].region;
         const QRectF r1 = cfg.screens[1].region;
@@ -562,13 +565,13 @@ private Q_SLOTS:
 
     void testRotateRegions_fewerThanTwoIds_returnsFalse()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.5, 0.0, 0.5, 1.0), 1});
-        const VirtualScreenConfig before = cfg;
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
 
         QVERIFY(!cfg.rotateRegions({}, /*clockwise=*/true));
         QVERIFY(!cfg.rotateRegions({QStringLiteral("phys/vs:0")}, /*clockwise=*/true));
@@ -578,13 +581,13 @@ private Q_SLOTS:
 
     void testRotateRegions_unknownId_returnsFalse()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.5, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.5, 0.0, 0.5, 1.0), 1});
-        const VirtualScreenConfig before = cfg;
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.5, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.5, 0.0, 0.5, 1.0), 1});
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
 
         const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:999")};
         QVERIFY(!cfg.rotateRegions(order, /*clockwise=*/true));
@@ -594,17 +597,17 @@ private Q_SLOTS:
 
     void testRotateRegions_fullCycle_returnsToStart()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.25, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.25, 0.0, 0.25, 1.0), 1});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
-                                            QRectF(0.5, 0.0, 0.25, 1.0), 2});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:3"), QStringLiteral("phys"), QStringLiteral("D"),
-                                            QRectF(0.75, 0.0, 0.25, 1.0), 3});
-        const VirtualScreenConfig before = cfg;
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.25, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.25, 0.0, 0.25, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"),
+                                                               QStringLiteral("C"), QRectF(0.5, 0.0, 0.25, 1.0), 2});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:3"), QStringLiteral("phys"),
+                                                               QStringLiteral("D"), QRectF(0.75, 0.0, 0.25, 1.0), 3});
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
 
         const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
                                      QStringLiteral("phys/vs:2"), QStringLiteral("phys/vs:3")};
@@ -616,15 +619,15 @@ private Q_SLOTS:
 
     void testRotateRegions_cwThenCcw_isNoOp()
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = QStringLiteral("phys");
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"), QStringLiteral("A"),
-                                            QRectF(0.0, 0.0, 0.333, 1.0), 0});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"), QStringLiteral("B"),
-                                            QRectF(0.333, 0.0, 0.334, 1.0), 1});
-        cfg.screens.append(VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"), QStringLiteral("C"),
-                                            QRectF(0.667, 0.0, 0.333, 1.0), 2});
-        const VirtualScreenConfig before = cfg;
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:0"), QStringLiteral("phys"),
+                                                               QStringLiteral("A"), QRectF(0.0, 0.0, 0.333, 1.0), 0});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:1"), QStringLiteral("phys"),
+                                                               QStringLiteral("B"), QRectF(0.333, 0.0, 0.334, 1.0), 1});
+        cfg.screens.append(Phosphor::Screens::VirtualScreenDef{QStringLiteral("phys/vs:2"), QStringLiteral("phys"),
+                                                               QStringLiteral("C"), QRectF(0.667, 0.0, 0.333, 1.0), 2});
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
 
         const QVector<QString> order{QStringLiteral("phys/vs:0"), QStringLiteral("phys/vs:1"),
                                      QStringLiteral("phys/vs:2")};
@@ -643,9 +646,9 @@ private Q_SLOTS:
         for (int physHeight : heights) {
             QRect physGeom(0, 0, 1920, physHeight);
 
-            VirtualScreenDef top;
+            Phosphor::Screens::VirtualScreenDef top;
             top.region = QRectF(0, 0, 1.0, 0.5);
-            VirtualScreenDef bottom;
+            Phosphor::Screens::VirtualScreenDef bottom;
             bottom.region = QRectF(0, 0.5, 1.0, 0.5);
 
             QRect topGeom = top.absoluteGeometry(physGeom);
@@ -681,13 +684,13 @@ private Q_SLOTS:
         for (const auto& res : resolutions) {
             QRect physGeom(0, 0, res.w, res.h);
 
-            VirtualScreenDef topLeft;
+            Phosphor::Screens::VirtualScreenDef topLeft;
             topLeft.region = QRectF(0, 0, 0.5, 0.5);
-            VirtualScreenDef topRight;
+            Phosphor::Screens::VirtualScreenDef topRight;
             topRight.region = QRectF(0.5, 0, 0.5, 0.5);
-            VirtualScreenDef bottomLeft;
+            Phosphor::Screens::VirtualScreenDef bottomLeft;
             bottomLeft.region = QRectF(0, 0.5, 0.5, 0.5);
-            VirtualScreenDef bottomRight;
+            Phosphor::Screens::VirtualScreenDef bottomRight;
             bottomRight.region = QRectF(0.5, 0.5, 0.5, 0.5);
 
             QRect tlGeom = topLeft.absoluteGeometry(physGeom);
@@ -715,11 +718,11 @@ private Q_SLOTS:
         }
     }
 
-    // --- VirtualScreenDef::physicalEdges ---
+    // --- Phosphor::Screens::VirtualScreenDef::physicalEdges ---
 
     void testPhysicalEdges_leftEdgeAtOrigin()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.0, 0.0, 0.5, 1.0);
         auto edges = def.physicalEdges();
         QVERIFY(edges.left);
@@ -730,7 +733,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_rightEdgeAtOne()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.5, 0.0, 0.5, 1.0);
         auto edges = def.physicalEdges();
         QVERIFY(!edges.left);
@@ -741,7 +744,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_topEdgeAtOrigin()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.0, 0.0, 1.0, 0.5);
         auto edges = def.physicalEdges();
         QVERIFY(edges.left);
@@ -752,7 +755,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_bottomEdgeAtOne()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.0, 0.5, 1.0, 0.5);
         auto edges = def.physicalEdges();
         QVERIFY(edges.left);
@@ -763,7 +766,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_interiorRegion_allFalse()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.3, 0.3, 0.4, 0.4);
         auto edges = def.physicalEdges();
         QVERIFY(!edges.left);
@@ -774,7 +777,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_withinTolerance_stillTrue()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.0005, 0.0005, 0.999, 0.999);
         auto edges = def.physicalEdges();
         QVERIFY(edges.left);
@@ -785,7 +788,7 @@ private Q_SLOTS:
 
     void testPhysicalEdges_fullScreen_allTrue()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0.0, 0.0, 1.0, 1.0);
         auto edges = def.physicalEdges();
         QVERIFY(edges.left);
@@ -798,7 +801,7 @@ private Q_SLOTS:
 
     void testMake_negativeIndex_returnsEmpty()
     {
-        QVERIFY(VirtualScreenId::make(QStringLiteral("physId"), -1).isEmpty());
+        QVERIFY(PhosphorIdentity::VirtualScreenId::make(QStringLiteral("physId"), -1).isEmpty());
     }
 
     void testMake_doubleNestedVirtualId()
@@ -806,24 +809,24 @@ private Q_SLOTS:
         // Calling make() with an already-virtual ID produces a double-suffixed ID.
         // extractPhysicalId uses indexOf (first match), so it returns the true physical ID.
         // extractIndex fails because "0/vs:1" is not a valid integer.
-        QString result = VirtualScreenId::make(QStringLiteral("physId/vs:0"), 1);
+        QString result = PhosphorIdentity::VirtualScreenId::make(QStringLiteral("physId/vs:0"), 1);
         QCOMPARE(result, QStringLiteral("physId/vs:0/vs:1"));
-        QCOMPARE(VirtualScreenId::extractPhysicalId(result), QStringLiteral("physId"));
-        QCOMPARE(VirtualScreenId::extractIndex(result), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(result), QStringLiteral("physId"));
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(result), -1);
     }
 
     void testExtractIndex_multiDigit()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:10")), 10);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("physId/vs:10")), 10);
     }
 
     void testExtractIndex_largeIndex()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("physId/vs:999")), 999);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("physId/vs:999")), 999);
     }
 
     // --- Cross-validation: daemon vs effect extractPhysicalId ---
-    // Validates daemon VirtualScreenId::extractPhysicalId() matches effect-side logic.
+    // Validates daemon PhosphorIdentity::VirtualScreenId::extractPhysicalId() matches effect-side logic.
     // If the effect's implementation changes, the local copy below must be updated.
     void testExtractPhysicalId_crossValidation()
     {
@@ -851,7 +854,7 @@ private Q_SLOTS:
         };
 
         for (const auto& tc : cases) {
-            QString daemonResult = VirtualScreenId::extractPhysicalId(tc.input);
+            QString daemonResult = PhosphorIdentity::VirtualScreenId::extractPhysicalId(tc.input);
             QString effectResult = effectExtractPhysicalScreenId(tc.input);
 
             QCOMPARE(daemonResult, tc.expected);
@@ -860,21 +863,21 @@ private Q_SLOTS:
         }
     }
 
-    // ─── VirtualScreenConfig::swapRegions ─────────────────────────────────
+    // ─── Phosphor::Screens::VirtualScreenConfig::swapRegions ─────────────────────────────────
 
     // Helper: build a two-VS horizontal-split config on a fake monitor.
-    static VirtualScreenConfig makeTwoSplit(const QString& physicalId = QStringLiteral("DP-1"))
+    static Phosphor::Screens::VirtualScreenConfig makeTwoSplit(const QString& physicalId = QStringLiteral("DP-1"))
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = physicalId;
-        VirtualScreenDef left;
-        left.id = VirtualScreenId::make(physicalId, 0);
+        Phosphor::Screens::VirtualScreenDef left;
+        left.id = PhosphorIdentity::VirtualScreenId::make(physicalId, 0);
         left.physicalScreenId = physicalId;
         left.displayName = QStringLiteral("Left");
         left.region = QRectF(0.0, 0.0, 0.5, 1.0);
         left.index = 0;
-        VirtualScreenDef right;
-        right.id = VirtualScreenId::make(physicalId, 1);
+        Phosphor::Screens::VirtualScreenDef right;
+        right.id = PhosphorIdentity::VirtualScreenId::make(physicalId, 1);
         right.physicalScreenId = physicalId;
         right.displayName = QStringLiteral("Right");
         right.region = QRectF(0.5, 0.0, 0.5, 1.0);
@@ -884,13 +887,13 @@ private Q_SLOTS:
     }
 
     // Helper: build a three-VS horizontal-split config.
-    static VirtualScreenConfig makeThreeSplit(const QString& physicalId = QStringLiteral("DP-1"))
+    static Phosphor::Screens::VirtualScreenConfig makeThreeSplit(const QString& physicalId = QStringLiteral("DP-1"))
     {
-        VirtualScreenConfig cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg;
         cfg.physicalScreenId = physicalId;
         for (int i = 0; i < 3; ++i) {
-            VirtualScreenDef def;
-            def.id = VirtualScreenId::make(physicalId, i);
+            Phosphor::Screens::VirtualScreenDef def;
+            def.id = PhosphorIdentity::VirtualScreenId::make(physicalId, i);
             def.physicalScreenId = physicalId;
             def.displayName = QStringLiteral("VS %1").arg(i);
             def.region = QRectF(i / 3.0, 0.0, 1.0 / 3.0, 1.0);
@@ -902,7 +905,7 @@ private Q_SLOTS:
 
     void swapRegions_twoSplit_exchangesGeometry()
     {
-        VirtualScreenConfig cfg = makeTwoSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeTwoSplit();
         const QString idLeft = cfg.screens[0].id;
         const QString idRight = cfg.screens[1].id;
         const QRectF leftRegion = cfg.screens[0].region;
@@ -923,34 +926,34 @@ private Q_SLOTS:
 
     void swapRegions_resultPassesValidation()
     {
-        VirtualScreenConfig cfg = makeTwoSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeTwoSplit();
         QVERIFY(cfg.swapRegions(cfg.screens[0].id, cfg.screens[1].id));
         QString err;
-        QVERIFY2(VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
+        QVERIFY2(Phosphor::Screens::VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
     }
 
     void swapRegions_sameId_returnsFalse()
     {
-        VirtualScreenConfig cfg = makeTwoSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeTwoSplit();
         const QString idLeft = cfg.screens[0].id;
-        const VirtualScreenConfig before = cfg;
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(!cfg.swapRegions(idLeft, idLeft));
         QCOMPARE(cfg, before); // unchanged
     }
 
     void swapRegions_unknownId_returnsFalse()
     {
-        VirtualScreenConfig cfg = makeTwoSplit();
-        const VirtualScreenConfig before = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeTwoSplit();
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(!cfg.swapRegions(cfg.screens[0].id, QStringLiteral("DP-1/vs:9")));
         QCOMPARE(cfg, before);
     }
 
-    // ─── VirtualScreenConfig::rotateRegions ──────────────────────────────
+    // ─── Phosphor::Screens::VirtualScreenConfig::rotateRegions ──────────────────────────────
 
     void rotateRegions_threeSplit_clockwise()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
         QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
         const QRectF r0 = cfg.screens[0].region;
         const QRectF r1 = cfg.screens[1].region;
@@ -966,7 +969,7 @@ private Q_SLOTS:
 
     void rotateRegions_threeSplit_counterClockwise()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
         QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
         const QRectF r0 = cfg.screens[0].region;
         const QRectF r1 = cfg.screens[1].region;
@@ -981,8 +984,8 @@ private Q_SLOTS:
 
     void rotateRegions_fullCycleReturnsToStart()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
-        const VirtualScreenConfig original = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
+        const Phosphor::Screens::VirtualScreenConfig original = cfg;
         QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
 
         for (int i = 0; i < 3; ++i) {
@@ -993,8 +996,8 @@ private Q_SLOTS:
 
     void rotateRegions_clockwiseThenCCW_isNoOp()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
-        const VirtualScreenConfig original = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
+        const Phosphor::Screens::VirtualScreenConfig original = cfg;
         QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
 
         QVERIFY(cfg.rotateRegions(order, true));
@@ -1004,8 +1007,8 @@ private Q_SLOTS:
 
     void rotateRegions_twoSplit_equivalentToSwap()
     {
-        VirtualScreenConfig a = makeTwoSplit();
-        VirtualScreenConfig b = makeTwoSplit();
+        Phosphor::Screens::VirtualScreenConfig a = makeTwoSplit();
+        Phosphor::Screens::VirtualScreenConfig b = makeTwoSplit();
         QVERIFY(a.rotateRegions({a.screens[0].id, a.screens[1].id}, true));
         QVERIFY(b.swapRegions(b.screens[0].id, b.screens[1].id));
         QCOMPARE(a, b);
@@ -1013,18 +1016,18 @@ private Q_SLOTS:
 
     void rotateRegions_resultPassesValidation()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
         QVector<QString> order{cfg.screens[0].id, cfg.screens[1].id, cfg.screens[2].id};
         QVERIFY(cfg.rotateRegions(order, true));
         QString err;
-        QVERIFY2(VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
+        QVERIFY2(Phosphor::Screens::VirtualScreenConfig::isValid(cfg, cfg.physicalScreenId, 8, &err), qPrintable(err));
     }
 
     void rotateRegions_subsetOfDefs()
     {
         // Rotate only two of three defs — the third should be untouched.
         // For a two-element list, CW and swap are equivalent.
-        VirtualScreenConfig cfg = makeThreeSplit();
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
         const QRectF untouched = cfg.screens[2].region;
         const QRectF r0 = cfg.screens[0].region;
         const QRectF r1 = cfg.screens[1].region;
@@ -1037,8 +1040,8 @@ private Q_SLOTS:
 
     void rotateRegions_tooFewIds_returnsFalse()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
-        const VirtualScreenConfig before = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(!cfg.rotateRegions({}, true));
         QVERIFY(!cfg.rotateRegions({cfg.screens[0].id}, true));
         QCOMPARE(cfg, before);
@@ -1046,8 +1049,8 @@ private Q_SLOTS:
 
     void rotateRegions_unknownId_returnsFalse()
     {
-        VirtualScreenConfig cfg = makeThreeSplit();
-        const VirtualScreenConfig before = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, QStringLiteral("DP-1/vs:9")}, true));
         QCOMPARE(cfg, before);
     }
@@ -1058,8 +1061,8 @@ private Q_SLOTS:
         // target def index, and the rotation loop would then overwrite that
         // def twice with different sources — silently corrupting geometry.
         // The guard must reject this before any mutation happens.
-        VirtualScreenConfig cfg = makeThreeSplit();
-        const VirtualScreenConfig before = cfg;
+        Phosphor::Screens::VirtualScreenConfig cfg = makeThreeSplit();
+        const Phosphor::Screens::VirtualScreenConfig before = cfg;
         QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, cfg.screens[0].id, cfg.screens[1].id}, true));
         QCOMPARE(cfg, before);
         QVERIFY(!cfg.rotateRegions({cfg.screens[0].id, cfg.screens[1].id, cfg.screens[0].id}, false));

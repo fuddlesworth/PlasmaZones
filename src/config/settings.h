@@ -5,7 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
 
@@ -758,13 +758,13 @@ public:
                           bool locked) override;
 
     // Virtual screen configuration
-    QHash<QString, VirtualScreenConfig> virtualScreenConfigs() const;
-    void setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs);
+    QHash<QString, Phosphor::Screens::VirtualScreenConfig> virtualScreenConfigs() const;
+    void setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs);
     /// Returns true on success, false if the config was rejected by
-    /// VirtualScreenConfig::isValid (or empty physicalScreenId). An
+    /// Phosphor::Screens::VirtualScreenConfig::isValid (or empty physicalScreenId). An
     /// already-current value is treated as a successful no-op.
-    bool setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config);
-    VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
+    bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
+    Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
     // Rendering (ISettings)
     // Rendering backend — PhosphorConfig::Store-backed; the schema's
@@ -1032,7 +1032,7 @@ private:
     // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)
-    QHash<QString, VirtualScreenConfig> m_virtualScreenConfigs;
+    QHash<QString, Phosphor::Screens::VirtualScreenConfig> m_virtualScreenConfigs;
 
     // Per-screen zone selector overrides (screenIdOrName -> settings map)
     QHash<QString, QVariantMap> m_perScreenZoneSelectorSettings;

@@ -13,7 +13,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../../shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusInterface>
@@ -455,7 +455,7 @@ void EditorController::refreshUsableAreaInsets()
     // For virtual screens, use the daemon's geometry (QScreen doesn't know about VS).
     // The daemon's getScreenGeometry and getAvailableGeometry handle VS IDs.
     QString screenId = m_targetScreen;
-    bool isVirtual = VirtualScreenId::isVirtual(screenId);
+    bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
     // For physical screens, pre-populate fullGeom from Qt as a fallback in case the
     // daemon D-Bus call fails. For virtual screens, fullGeom stays empty — the daemon

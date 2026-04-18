@@ -32,7 +32,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
-#include "core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
@@ -270,31 +270,31 @@ private Q_SLOTS:
 
     void testVirtualScreenId_isVirtual()
     {
-        QVERIFY(VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:0")));
-        QVERIFY(!VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107")));
+        QVERIFY(PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107/vs:0")));
+        QVERIFY(!PhosphorIdentity::VirtualScreenId::isVirtual(QStringLiteral("Dell:U2722D:115107")));
     }
 
     void testVirtualScreenId_extractPhysicalId()
     {
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:0")),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107/vs:0")),
                  QStringLiteral("Dell:U2722D:115107"));
         // Non-virtual ID returns itself
-        QCOMPARE(VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107")),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractPhysicalId(QStringLiteral("Dell:U2722D:115107")),
                  QStringLiteral("Dell:U2722D:115107"));
     }
 
     void testVirtualScreenId_extractIndex()
     {
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:0")), 0);
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:3")), 3);
-        QCOMPARE(VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107")), -1);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:0")), 0);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107/vs:3")), 3);
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::extractIndex(QStringLiteral("Dell:U2722D:115107")), -1);
     }
 
     void testVirtualScreenId_make()
     {
-        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 0),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 0),
                  QStringLiteral("Dell:U2722D:115107/vs:0"));
-        QCOMPARE(VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 2),
+        QCOMPARE(PhosphorIdentity::VirtualScreenId::make(QStringLiteral("Dell:U2722D:115107"), 2),
                  QStringLiteral("Dell:U2722D:115107/vs:2"));
     }
 

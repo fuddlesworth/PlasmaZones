@@ -7,7 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
-#include "../screenmanager.h"
+#include "../screenmanagerservice.h"
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../utils.h"
@@ -237,7 +237,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             // physical) never match. If the filter is a physical screen ID,
             // match windows stored on that physical screen OR on any of its
             // virtual children — belongsToPhysicalScreen handles both cases.
-            const bool match = VirtualScreenId::isVirtual(screenFilter)
+            const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
                 ? Utils::screensMatch(screenId, screenFilter)
                 : Utils::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
@@ -281,8 +281,9 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
         auto screenMatches = [&](const QString& screen) {
             if (screenFilter.isEmpty())
                 return true;
-            return VirtualScreenId::isVirtual(screenFilter) ? Utils::screensMatch(screen, screenFilter)
-                                                            : Utils::belongsToPhysicalScreen(screen, screenFilter);
+            return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
+                ? Utils::screensMatch(screen, screenFilter)
+                : Utils::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
             QString screen = m_windowScreenAssignments.value(it.key());

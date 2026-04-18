@@ -9,7 +9,7 @@
 #include "layoutworker/layoutcomputeservice.h"
 #include "interfaces.h"
 #include "constants.h"
-#include "screenmanager.h"
+#include "screenmanagerservice.h"
 #include "utils.h"
 #include <algorithm>
 #include <QJsonArray>
@@ -26,8 +26,8 @@ namespace PlasmaZones {
 static QVariantMap getPerScreenSnappingWithFallback(ISettings* settings, const QString& screenId)
 {
     QVariantMap result = settings->getPerScreenSnappingSettings(screenId);
-    if (result.isEmpty() && VirtualScreenId::isVirtual(screenId)) {
-        result = settings->getPerScreenSnappingSettings(VirtualScreenId::extractPhysicalId(screenId));
+    if (result.isEmpty() && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        result = settings->getPerScreenSnappingSettings(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
     }
     return result;
 }
@@ -138,7 +138,8 @@ static EdgeBoundaries detectEdgeBoundaries(PhosphorZones::Zone* zone, const QRec
  */
 static QRectF applyGapsToZoneGeometry(const QRectF& zoneGeom, PhosphorZones::Zone* zone, const QRectF& referenceGeom,
                                       int innerGap, const ::PhosphorLayout::EdgeGaps& outerGaps,
-                                      const VirtualScreenDef::PhysicalEdges& physEdges = {true, true, true, true})
+                                      const Phosphor::Screens::VirtualScreenDef::PhysicalEdges& physEdges = {
+                                          true, true, true, true})
 {
     // Detect which edges are at screen boundaries
     EdgeBoundaries edges = detectEdgeBoundaries(zone, referenceGeom);
@@ -188,7 +189,7 @@ QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, QScreen* screen, int i
     // get inner gap instead of outer gap, matching the QRect overload behavior.
     // When the caller provides a virtual screen ID, use it; otherwise fall back
     // to the physical screen identifier (which yields all-true physical edges).
-    VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
+    Phosphor::Screens::VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
     auto* mgr = screenManager();
     if (mgr) {
         QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
@@ -260,7 +261,7 @@ QRectF getZoneGeometryForScreenF(PhosphorZones::Zone* zone, QScreen* screen, con
     // stored VS scope and corrupting WindowScreenAssignments. Better to
     // return an invalid rect so the caller skips the entry; the next resnap
     // (after VS state is restored) will succeed.
-    if (VirtualScreenId::isVirtual(screenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return QRectF();
     }
     if (screen) {

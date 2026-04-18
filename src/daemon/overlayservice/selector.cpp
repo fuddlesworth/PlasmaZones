@@ -9,9 +9,9 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
 #include <QCursor>
@@ -348,7 +348,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // sizes the surface to the VS sub-region. Without this, a VS selector
     // covers the whole physical screen and the QML-internal corner anchor
     // lands on the wrong VS.
-    const bool isVS = VirtualScreenId::isVirtual(screenId);
+    const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
     const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
     std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
     std::optional<QMargins> marginsOverride;

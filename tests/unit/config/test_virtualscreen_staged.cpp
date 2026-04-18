@@ -8,7 +8,7 @@
  * Tests cover:
  * 1. Staging pattern: store, query, retrieval (mirrors SettingsController API)
  * 2. Staging empty list represents removal
- * 3. JSON round-trip for D-Bus transport (VirtualScreenConfig <-> JSON)
+ * 3. JSON round-trip for D-Bus transport (Phosphor::Screens::VirtualScreenConfig <-> JSON)
  * 4. JSON deserialization of invalid/malformed input
  *
  * The SettingsController depends on D-Bus and Kirigami, so these tests
@@ -23,7 +23,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
-#include "core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
@@ -58,8 +58,8 @@ private:
         return staged.value(physId);
     }
 
-    /// Serialize a VirtualScreenConfig to JSON (mirrors ScreenAdaptor::getVirtualScreenConfig)
-    static QString configToJson(const VirtualScreenConfig& config)
+    /// Serialize a Phosphor::Screens::VirtualScreenConfig to JSON (mirrors ScreenAdaptor::getVirtualScreenConfig)
+    static QString configToJson(const Phosphor::Screens::VirtualScreenConfig& config)
     {
         QJsonObject root;
         root[QLatin1String("physicalScreenId")] = config.physicalScreenId;
@@ -81,8 +81,8 @@ private:
         return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
     }
 
-    /// Deserialize a VirtualScreenConfig from JSON (mirrors ScreenAdaptor::setVirtualScreenConfig)
-    static VirtualScreenConfig configFromJson(const QString& physId, const QString& json)
+    /// Deserialize a Phosphor::Screens::VirtualScreenConfig from JSON (mirrors ScreenAdaptor::setVirtualScreenConfig)
+    static Phosphor::Screens::VirtualScreenConfig configFromJson(const QString& physId, const QString& json)
     {
         QJsonParseError parseError;
         QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8(), &parseError);
@@ -93,16 +93,16 @@ private:
         QJsonObject root = doc.object();
         QJsonArray screensArr = root[QLatin1String("screens")].toArray();
 
-        VirtualScreenConfig config;
+        Phosphor::Screens::VirtualScreenConfig config;
         config.physicalScreenId = physId;
 
         for (const auto& entry : screensArr) {
             QJsonObject screenObj = entry.toObject();
             QJsonObject regionObj = screenObj[QLatin1String("region")].toObject();
 
-            VirtualScreenDef def;
+            Phosphor::Screens::VirtualScreenDef def;
             def.index = screenObj[QLatin1String("index")].toInt();
-            def.id = VirtualScreenId::make(physId, def.index);
+            def.id = PhosphorIdentity::VirtualScreenId::make(physId, def.index);
             def.physicalScreenId = physId;
             def.displayName = screenObj[QLatin1String("displayName")].toString();
             def.region =
@@ -219,13 +219,13 @@ private Q_SLOTS:
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
-        VirtualScreenConfig original;
+        Phosphor::Screens::VirtualScreenConfig original;
         original.physicalScreenId = physId;
         original.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1)));
         original.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0, 0.5, 1)));
 
         QString json = configToJson(original);
-        VirtualScreenConfig loaded = configFromJson(physId, json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(physId, json);
 
         QCOMPARE(loaded.physicalScreenId, original.physicalScreenId);
         QCOMPARE(loaded.screens.size(), original.screens.size());
@@ -246,14 +246,14 @@ private Q_SLOTS:
     {
         const QString physId = QStringLiteral("LG:27GP850:ABC123");
 
-        VirtualScreenConfig original;
+        Phosphor::Screens::VirtualScreenConfig original;
         original.physicalScreenId = physId;
         original.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.333, 1)));
         original.screens.append(makeDef(physId, 1, QStringLiteral("Center"), QRectF(0.333, 0, 0.334, 1)));
         original.screens.append(makeDef(physId, 2, QStringLiteral("Right"), QRectF(0.667, 0, 0.333, 1)));
 
         QString json = configToJson(original);
-        VirtualScreenConfig loaded = configFromJson(physId, json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(physId, json);
 
         QCOMPARE(loaded.screens.size(), 3);
 
@@ -269,19 +269,20 @@ private Q_SLOTS:
     {
         const QString physId = QStringLiteral("test:empty");
 
-        VirtualScreenConfig original;
+        Phosphor::Screens::VirtualScreenConfig original;
         original.physicalScreenId = physId;
         // screens is empty
 
         QString json = configToJson(original);
-        VirtualScreenConfig loaded = configFromJson(physId, json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(physId, json);
 
         QVERIFY(loaded.screens.isEmpty());
     }
 
     void testJsonDeserialization_invalidJson()
     {
-        VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), QStringLiteral("{invalid json}"));
+        Phosphor::Screens::VirtualScreenConfig loaded =
+            configFromJson(QStringLiteral("test"), QStringLiteral("{invalid json}"));
         QVERIFY(loaded.screens.isEmpty());
         QVERIFY(loaded.physicalScreenId.isEmpty());
     }
@@ -289,14 +290,14 @@ private Q_SLOTS:
     void testJsonDeserialization_missingScreensKey()
     {
         QString json = QStringLiteral(R"({"physicalScreenId":"test"})");
-        VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
         QVERIFY(loaded.screens.isEmpty());
     }
 
     void testJsonDeserialization_emptyScreensArray()
     {
         QString json = QStringLiteral(R"({"physicalScreenId":"test","screens":[]})");
-        VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
         QVERIFY(loaded.screens.isEmpty());
     }
 
@@ -307,7 +308,7 @@ private Q_SLOTS:
             "physicalScreenId": "test",
             "screens": [{"index": 0, "displayName": "Test"}]
         })");
-        VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
+        Phosphor::Screens::VirtualScreenConfig loaded = configFromJson(QStringLiteral("test"), json);
         QCOMPARE(loaded.screens.size(), 1);
         QVERIFY(qFuzzyIsNull(loaded.screens[0].region.x()));
         QVERIFY(qFuzzyIsNull(loaded.screens[0].region.y()));
@@ -316,48 +317,54 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // VirtualScreenDef::isValid (boundary testing)
+    // Phosphor::Screens::VirtualScreenDef::isValid (boundary testing)
     // =========================================================================
 
     void testIsValid_normalDef()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Left"), QRectF(0, 0, 0.5, 1));
         QVERIFY(def.isValid());
     }
 
     void testIsValid_fullScreen()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Full"), QRectF(0, 0, 1.0, 1.0));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Full"), QRectF(0, 0, 1.0, 1.0));
         QVERIFY(def.isValid());
     }
 
     void testIsValid_exceedingWidth()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.5, 0, 0.7, 1));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.5, 0, 0.7, 1));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_exceedingHeight()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0, 0.5, 1, 0.7));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0, 0.5, 1, 0.7));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_negativeX()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(-0.1, 0, 0.5, 1));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(-0.1, 0, 0.5, 1));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_zeroWidth()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0, 0, 0, 1));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0, 0, 0, 1));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_emptyId()
     {
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.region = QRectF(0, 0, 0.5, 1);
         // id is empty
         QVERIFY(!def.isValid());
@@ -365,25 +372,29 @@ private Q_SLOTS:
 
     void testIsValid_negativeWidth()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, -0.5, 1.0));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, -0.5, 1.0));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_negativeHeight()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, -1.0));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, -1.0));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_zeroHeight()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, 0.0));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, 0.0, 0.5, 0.0));
         QVERIFY(!def.isValid());
     }
 
     void testIsValid_negativeY()
     {
-        VirtualScreenDef def = makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, -0.1, 0.5, 1.0));
+        Phosphor::Screens::VirtualScreenDef def =
+            makeDef(QStringLiteral("phys"), 0, QStringLiteral("Bad"), QRectF(0.0, -0.1, 0.5, 1.0));
         QVERIFY(!def.isValid());
     }
 };

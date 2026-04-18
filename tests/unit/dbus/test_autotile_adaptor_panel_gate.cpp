@@ -32,7 +32,7 @@
 #include <dbus_types.h>
 
 #include "autotile/AutotileEngine.h"
-#include "core/screenmanager.h"
+#include "core/screenmanagerservice.h"
 #include "dbus/autotileadaptor.h"
 
 using namespace PlasmaZones;

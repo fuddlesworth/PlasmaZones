@@ -10,8 +10,8 @@
 #include "../../core/constants.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreen.h"
+#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../rendering/zonelabeltexturebuilder.h"
 #include <QCursor>
 #include <QHashFunctions>
@@ -258,7 +258,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin
-    const bool isVirtual = VirtualScreenId::isVirtual(screenId);
+    const bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
     QRectF overlayGeom = isVirtual ? GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry)
                                    : GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
 

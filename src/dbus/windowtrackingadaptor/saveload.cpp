@@ -6,7 +6,7 @@
 #include "persistenceworker.h"
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/layoutmanager.h"
 #include <PhosphorZones/Layout.h>
 #include "../../core/logging.h"
@@ -88,8 +88,9 @@ void WindowTrackingAdaptor::saveState()
             entry[QLatin1String("windowId")] = it.key();
             entry[QLatin1String("zoneIds")] = toJsonArray(it.value());
             const QString assignedScreen = m_service->screenAssignments().value(it.key());
-            entry[QLatin1String("screen")] =
-                VirtualScreenId::isVirtual(assignedScreen) ? assignedScreen : Utils::screenIdForName(assignedScreen);
+            entry[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(assignedScreen)
+                ? assignedScreen
+                : Utils::screenIdForName(assignedScreen);
             entry[QLatin1String("desktop")] = m_service->desktopAssignments().value(it.key(), 0);
             fullAssignments.append(entry);
         }
@@ -108,7 +109,7 @@ void WindowTrackingAdaptor::saveState()
                 QJsonObject entryObj;
                 entryObj[QLatin1String("zoneIds")] = toJsonArray(entry.zoneIds);
                 if (!entry.screenId.isEmpty()) {
-                    entryObj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.screenId)
+                    entryObj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
                         ? entry.screenId
                         : Utils::screenIdForName(entry.screenId);
                 }
@@ -196,8 +197,9 @@ void WindowTrackingAdaptor::saveState()
             if (key.isEmpty()) {
                 continue;
             }
-            preFloatScreensObj[key] =
-                VirtualScreenId::isVirtual(it.value()) ? it.value() : Utils::screenIdForName(it.value());
+            preFloatScreensObj[key] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value())
+                ? it.value()
+                : Utils::screenIdForName(it.value());
         }
         tracking->writeString(ConfigKeys::preFloatScreenAssignmentsKey(),
                               QString::fromUtf8(QJsonDocument(preFloatScreensObj).toJson(QJsonDocument::Compact)));
@@ -628,7 +630,7 @@ void WindowTrackingAdaptor::loadState()
                 if (it.value().isString()) {
                     QString storedScreen = it.value().toString();
                     // Virtual screen IDs are stored as-is — no connector/ID translation
-                    if (!VirtualScreenId::isVirtual(storedScreen)) {
+                    if (!PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                         if (!Utils::isConnectorName(storedScreen)) {
                             QString connectorName = Utils::screenNameForId(storedScreen);
                             if (!connectorName.isEmpty()) {

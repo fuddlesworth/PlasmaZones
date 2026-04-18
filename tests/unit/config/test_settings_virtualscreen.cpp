@@ -20,7 +20,7 @@
 #include "../../../src/config/configdefaults.h"
 #include "../../../src/config/configbackends.h"
 #include "../../../src/config/settings.h"
-#include "../../../src/core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/VirtualScreenTestHelpers.h"
 
@@ -59,14 +59,14 @@ private Q_SLOTS:
 
         // Load into a fresh Settings instance
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
 
         QCOMPARE(loaded.physicalScreenId, physId);
         QCOMPARE(loaded.screens.size(), 2);
 
         // Left screen
-        const VirtualScreenDef& left = loaded.screens[0];
-        QCOMPARE(left.id, VirtualScreenId::make(physId, 0));
+        const Phosphor::Screens::VirtualScreenDef& left = loaded.screens[0];
+        QCOMPARE(left.id, PhosphorIdentity::VirtualScreenId::make(physId, 0));
         QCOMPARE(left.physicalScreenId, physId);
         QCOMPARE(left.displayName, QStringLiteral("Left"));
         QCOMPARE(left.index, 0);
@@ -76,8 +76,8 @@ private Q_SLOTS:
         QVERIFY(qFuzzyCompare(left.region.height(), 1.0));
 
         // Right screen
-        const VirtualScreenDef& right = loaded.screens[1];
-        QCOMPARE(right.id, VirtualScreenId::make(physId, 1));
+        const Phosphor::Screens::VirtualScreenDef& right = loaded.screens[1];
+        QCOMPARE(right.id, PhosphorIdentity::VirtualScreenId::make(physId, 1));
         QCOMPARE(right.physicalScreenId, physId);
         QCOMPARE(right.displayName, QStringLiteral("Right"));
         QCOMPARE(right.index, 1);
@@ -108,7 +108,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
 
         QCOMPARE(loaded.physicalScreenId, physId);
         QCOMPARE(loaded.screens.size(), 3);
@@ -179,7 +179,7 @@ private Q_SLOTS:
 
         // Load should reject the entire config for this physical screen
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "Config with region exceeding 1.0 must be rejected on load");
     }
 
@@ -206,7 +206,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "Config with negative region coordinates must be rejected on load");
     }
 
@@ -228,7 +228,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY(loaded.isEmpty());
     }
 
@@ -262,7 +262,7 @@ private Q_SLOTS:
         // Now save an empty config (removal)
         {
             Settings settings;
-            VirtualScreenConfig empty;
+            Phosphor::Screens::VirtualScreenConfig empty;
             empty.physicalScreenId = physId;
             // screens is empty
             settings.setVirtualScreenConfig(physId, empty);
@@ -272,7 +272,7 @@ private Q_SLOTS:
         // Verify it was removed
         {
             Settings settings;
-            VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+            Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
             QVERIFY2(loaded.isEmpty(), "Empty config must remove the virtual screen config on save/load");
         }
     }
@@ -300,8 +300,8 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        VirtualScreenConfig loaded1 = settings.virtualScreenConfig(physId1);
-        VirtualScreenConfig loaded2 = settings.virtualScreenConfig(physId2);
+        Phosphor::Screens::VirtualScreenConfig loaded1 = settings.virtualScreenConfig(physId1);
+        Phosphor::Screens::VirtualScreenConfig loaded2 = settings.virtualScreenConfig(physId2);
 
         QCOMPARE(loaded1.screens.size(), 2);
         QCOMPARE(loaded2.screens.size(), 3);
@@ -348,7 +348,7 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId1, makeSplitConfig(physId1));
         settings.setVirtualScreenConfig(physId2, makeThreeWayConfig(physId2));
 
-        QHash<QString, VirtualScreenConfig> all = settings.virtualScreenConfigs();
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> all = settings.virtualScreenConfigs();
         QCOMPARE(all.size(), 2);
         QVERIFY(all.contains(physId1));
         QVERIFY(all.contains(physId2));
@@ -372,12 +372,12 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId2, makeThreeWayConfig(physId2));
 
         // Replace with a single config
-        QHash<QString, VirtualScreenConfig> newConfigs;
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> newConfigs;
         newConfigs.insert(physId1, makeThreeWayConfig(physId1));
 
         settings.setVirtualScreenConfigs(newConfigs);
 
-        QHash<QString, VirtualScreenConfig> all = settings.virtualScreenConfigs();
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> all = settings.virtualScreenConfigs();
         QCOMPARE(all.size(), 1);
         QVERIFY(all.contains(physId1));
         QVERIFY(!all.contains(physId2));
@@ -400,7 +400,7 @@ private Q_SLOTS:
 
         settings.reset();
 
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "reset() must clear virtual screen configs");
     }
 
@@ -452,7 +452,7 @@ private Q_SLOTS:
 
         // Load: invalid screen 1 is dropped, 2 valid screens remain (>= 2 threshold met)
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(!loaded.isEmpty(), "Config with 2 valid screens after invalidation must be kept");
         QCOMPARE(loaded.screens.size(), 2);
         QCOMPARE(loaded.screens[0].displayName, QStringLiteral("Left"));
@@ -506,7 +506,7 @@ private Q_SLOTS:
         }
 
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(!loaded.isEmpty(), "Config with capped count must still load");
         QCOMPARE(loaded.screens.size(), 10);
     }
@@ -527,10 +527,10 @@ private Q_SLOTS:
 
         {
             Settings settings;
-            VirtualScreenConfig config;
+            Phosphor::Screens::VirtualScreenConfig config;
             config.physicalScreenId = physId;
-            VirtualScreenDef def;
-            def.id = VirtualScreenId::make(physId, 0);
+            Phosphor::Screens::VirtualScreenDef def;
+            def.id = PhosphorIdentity::VirtualScreenId::make(physId, 0);
             def.physicalScreenId = physId;
             def.index = 0;
             def.region = QRectF(0, 0, 1, 1);
@@ -542,7 +542,7 @@ private Q_SLOTS:
 
         // Reload and verify single-screen config was discarded
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "Single-screen config must be discarded on load (requires >= 2)");
     }
 
@@ -563,7 +563,7 @@ private Q_SLOTS:
 
         {
             Settings settings;
-            VirtualScreenConfig config;
+            Phosphor::Screens::VirtualScreenConfig config;
             config.physicalScreenId = physId;
             // Screen 0: x=0, w=0.6 — covers [0, 0.6]
             config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0, 0, 0.6, 1)));
@@ -575,7 +575,7 @@ private Q_SLOTS:
 
         // Overlapping regions are rejected by the loader
         Settings settings;
-        VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig loaded = settings.virtualScreenConfig(physId);
         QVERIFY2(loaded.isEmpty(), "Overlapping regions must be rejected by the loader");
     }
 
@@ -597,7 +597,7 @@ private Q_SLOTS:
         Settings settings;
 
         // Out-of-bounds region (width > 1.0).
-        VirtualScreenConfig bad;
+        Phosphor::Screens::VirtualScreenConfig bad;
         bad.physicalScreenId = physId;
         bad.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 1.5, 1.0)));
         bad.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.5, 0.0, 0.5, 1.0)));

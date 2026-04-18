@@ -3,7 +3,7 @@
 
 #include "supportreport.h"
 #include "logging.h"
-#include "screenmanager.h"
+#include "screenmanagerservice.h"
 #include "layoutmanager.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>

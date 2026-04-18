@@ -14,7 +14,7 @@ namespace PlasmaZones {
 // Every concrete setter implementation now lives in settings.cpp and routes
 // through PhosphorConfig::Store. The macro-generated boilerplate this file
 // used to carry is gone; only the Virtual screen config setters below remain
-// because the QHash<QString, VirtualScreenConfig> shape doesn't fit the
+// because the QHash<QString, Phosphor::Screens::VirtualScreenConfig> shape doesn't fit the
 // Store's scalar-key-per-setting model — they persist via a per-screen
 // "VirtualScreen:<id>" group structure that saveVirtualScreenConfigs
 // handles directly.
@@ -36,27 +36,27 @@ namespace PlasmaZones {
 // Virtual screen config setters
 // ═══════════════════════════════════════════════════════════════════════════════
 
-QHash<QString, VirtualScreenConfig> Settings::virtualScreenConfigs() const
+QHash<QString, Phosphor::Screens::VirtualScreenConfig> Settings::virtualScreenConfigs() const
 {
     return m_virtualScreenConfigs;
 }
 
-void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>& configs)
+void Settings::setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::VirtualScreenConfig>& configs)
 {
     // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,
     // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
     // causes inconsistency (settings says VS exists, ScreenManager disagrees).
-    // Also reject individually-invalid entries via VirtualScreenConfig::isValid
+    // Also reject individually-invalid entries via Phosphor::Screens::VirtualScreenConfig::isValid
     // — Settings is the source of truth, so it must apply the same admission
     // rules as the singular setVirtualScreenConfig path.
-    QHash<QString, VirtualScreenConfig> filtered;
+    QHash<QString, Phosphor::Screens::VirtualScreenConfig> filtered;
     for (auto it = configs.constBegin(); it != configs.constEnd(); ++it) {
         if (!it.value().hasSubdivisions()) {
             continue;
         }
         QString error;
-        if (!VirtualScreenConfig::isValid(it.value(), it.key(), ConfigDefaults::maxVirtualScreensPerPhysical(),
-                                          &error)) {
+        if (!Phosphor::Screens::VirtualScreenConfig::isValid(it.value(), it.key(),
+                                                             ConfigDefaults::maxVirtualScreensPerPhysical(), &error)) {
             qCWarning(lcConfig) << "setVirtualScreenConfigs: dropping invalid entry for" << it.key() << "—" << error;
             continue;
         }
@@ -81,7 +81,8 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, VirtualScreenConfig>
     }
 }
 
-bool Settings::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
+bool Settings::setVirtualScreenConfig(const QString& physicalScreenId,
+                                      const Phosphor::Screens::VirtualScreenConfig& config)
 {
     if (physicalScreenId.isEmpty()) {
         qCWarning(lcConfig) << "setVirtualScreenConfig: empty physicalScreenId";
@@ -98,8 +99,8 @@ bool Settings::setVirtualScreenConfig(const QString& physicalScreenId, const Vir
         // ScreenManager. Otherwise Settings and ScreenManager diverge in
         // memory and the disk save persists garbage that next-load drops.
         QString error;
-        if (!VirtualScreenConfig::isValid(config, physicalScreenId, ConfigDefaults::maxVirtualScreensPerPhysical(),
-                                          &error)) {
+        if (!Phosphor::Screens::VirtualScreenConfig::isValid(config, physicalScreenId,
+                                                             ConfigDefaults::maxVirtualScreensPerPhysical(), &error)) {
             qCWarning(lcConfig) << "setVirtualScreenConfig: rejected invalid config for" << physicalScreenId << "—"
                                 << error;
             return false;
@@ -113,7 +114,7 @@ bool Settings::setVirtualScreenConfig(const QString& physicalScreenId, const Vir
     return true;
 }
 
-VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const
+Phosphor::Screens::VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const
 {
     return m_virtualScreenConfigs.value(physicalScreenId);
 }

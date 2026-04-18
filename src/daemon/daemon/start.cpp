@@ -8,7 +8,7 @@
 #include "../shortcutmanager.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layoutworker/layoutcomputeservice.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
@@ -598,7 +598,7 @@ void Daemon::pruneAutotileOrdersForRemovedScreens(const QString& physicalScreenI
     keepIds.insert(physicalScreenId);
 
     for (auto it = m_lastAutotileOrders.begin(); it != m_lastAutotileOrders.end();) {
-        if (VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key().screenId) == physicalScreenId
             && !keepIds.contains(it.key().screenId)) {
             it = m_lastAutotileOrders.erase(it);
         } else {
@@ -615,7 +615,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // m_windowTrackingAdaptor is constructed later in init() and may be null
     // if the signal somehow fires before construction (e.g. early Settings
     // load); guard those uses individually.
-    const VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
+    const Phosphor::Screens::VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
     // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens

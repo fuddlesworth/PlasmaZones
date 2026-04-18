@@ -7,8 +7,8 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/utils.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreen.h"
+#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../windowthumbnailservice.h"
 #include <QQuickWindow>
 #include <QScreen>

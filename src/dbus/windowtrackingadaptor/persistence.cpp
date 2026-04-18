@@ -8,7 +8,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
@@ -95,7 +95,7 @@ PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
         entry.width = it.value().geometry.width();
         entry.height = it.value().geometry.height();
         if (!it.value().connectorName.isEmpty()) {
-            entry.screenId = VirtualScreenId::isVirtual(it.value().connectorName)
+            entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().connectorName)
                 ? it.value().connectorName
                 : Utils::screenIdForName(it.value().connectorName);
         }

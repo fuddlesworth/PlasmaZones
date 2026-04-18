@@ -8,9 +8,9 @@
 #include <PhosphorZones/Layout.h>
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
 
@@ -67,8 +67,8 @@ bool isStoredScreenValid(const QString& storedScreen)
     if (storedScreen.isEmpty()) {
         return false;
     }
-    if (VirtualScreenId::isVirtual(storedScreen)) {
-        QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+        QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
         if (!Utils::findScreenByIdOrName(physId)) {
             return false;
         }

@@ -27,7 +27,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
-#include "core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
@@ -97,7 +97,7 @@ private Q_SLOTS:
     void testMigrateToVirtual_requiresScreenManager()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
         const QStringList virtualIds = {vs0};
 
         // Assign window to physical screen
@@ -119,8 +119,8 @@ private Q_SLOTS:
     void testMigrateFromVirtual_updatesScreenAssignment()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         // Assign windows to virtual screens directly
         const QString win1 = QStringLiteral("konsole|aaa");
@@ -149,7 +149,7 @@ private Q_SLOTS:
         // "virtual" state by assigning directly to a virtual screen ID,
         // then round-trip: virtual -> physical -> verify zone preserved.
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
 
         const QString windowId = QStringLiteral("kate|round-trip");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
@@ -175,7 +175,7 @@ private Q_SLOTS:
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString otherPhysId = QStringLiteral("LG:27GP850:ABC123");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
         const QStringList virtualIds = {vs0};
 
         // Assign window to a *different* physical screen
@@ -211,8 +211,8 @@ private Q_SLOTS:
     {
         // Set up two virtual screens (left/right 50/50 split) on one physical monitor
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         // Window initially on vs:0 (left half)
         const QString windowId = QStringLiteral("konsole|cross-boundary");
@@ -252,8 +252,8 @@ private Q_SLOTS:
         // reading back gives the same screen ID and zone, which proves WTS
         // does not spontaneously reassign windows when no migration API is called.
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         const QString windowId = QStringLiteral("konsole|config-change");
         m_service->assignWindowToZone(windowId, m_zoneIds[0], vs0, 1);
@@ -283,8 +283,8 @@ private Q_SLOTS:
     void testRemoveAllVirtualScreens_revertToPhysical()
     {
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         // Assign windows to virtual screens
         const QString win1 = QStringLiteral("konsole|revert1");
@@ -322,9 +322,9 @@ private Q_SLOTS:
         // on a second physical monitor must not be touched
         const QString physId1 = QStringLiteral("Dell:U2722D:111111");
         const QString physId2 = QStringLiteral("LG:27GP850:222222");
-        const QString vs1_0 = VirtualScreenId::make(physId1, 0);
-        const QString vs1_1 = VirtualScreenId::make(physId1, 1);
-        const QString vs2_0 = VirtualScreenId::make(physId2, 0);
+        const QString vs1_0 = PhosphorIdentity::VirtualScreenId::make(physId1, 0);
+        const QString vs1_1 = PhosphorIdentity::VirtualScreenId::make(physId1, 1);
+        const QString vs2_0 = PhosphorIdentity::VirtualScreenId::make(physId2, 0);
 
         const QString win1 = QStringLiteral("app1|aaa");
         const QString win2 = QStringLiteral("app2|bbb");
@@ -353,8 +353,8 @@ private Q_SLOTS:
         // independent. Migrating one physical screen doesn't touch the other.
         const QString physId1 = QStringLiteral("Dell:U2722D:111111");
         const QString physId2 = QStringLiteral("LG:27GP850:222222");
-        const QString vs1_0 = VirtualScreenId::make(physId1, 0);
-        const QString vs2_0 = VirtualScreenId::make(physId2, 0);
+        const QString vs1_0 = PhosphorIdentity::VirtualScreenId::make(physId1, 0);
+        const QString vs2_0 = PhosphorIdentity::VirtualScreenId::make(physId2, 0);
 
         const QString win1 = QStringLiteral("app1|aaa");
         const QString win2 = QStringLiteral("app2|bbb");

@@ -11,7 +11,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../autotile/AutotileEngine.h"
 #include <QGuiApplication>
 #include <QScreen>

@@ -9,7 +9,7 @@
 #include "../core/unifiedlayoutlist.h"
 #include "../core/utils.h"
 #include "../core/assignmententry.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "overlayservice/internal.h"
 #include <QGuiApplication>
 #include <QQuickItem>

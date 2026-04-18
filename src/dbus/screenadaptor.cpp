@@ -7,10 +7,10 @@
 #include "../config/settingsconfigstore.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
-#include "../core/virtualscreenswapper.h"
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScreens/Swapper.h>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QJsonArray>
@@ -216,7 +216,7 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
     if (screen) {
         // Use virtual screen geometry if available, otherwise physical
         QRect geom = screen->geometry();
-        if (mgr && VirtualScreenId::isVirtual(screenId)) {
+        if (mgr && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             QRect vsGeom = mgr->screenGeometry(screenId);
             if (vsGeom.isValid()) {
                 geom = vsGeom;
@@ -234,11 +234,11 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         // Scale physical size proportionally for virtual screens.
         // A VS covering width=0.5 of the physical monitor gets half the mm width.
         QSizeF physSize = screen->physicalSize();
-        const bool isVirtual = VirtualScreenId::isVirtual(screenId);
-        const QString physId = isVirtual ? VirtualScreenId::extractPhysicalId(screenId) : QString();
-        const int vsIndex = isVirtual ? VirtualScreenId::extractIndex(screenId) : -1;
-        const VirtualScreenConfig vsConfig =
-            (isVirtual && mgr) ? mgr->virtualScreenConfig(physId) : VirtualScreenConfig();
+        const bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
+        const QString physId = isVirtual ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId) : QString();
+        const int vsIndex = isVirtual ? PhosphorIdentity::VirtualScreenId::extractIndex(screenId) : -1;
+        const Phosphor::Screens::VirtualScreenConfig vsConfig =
+            (isVirtual && mgr) ? mgr->virtualScreenConfig(physId) : Phosphor::Screens::VirtualScreenConfig();
         if (isVirtual && vsIndex >= 0 && vsIndex < vsConfig.screens.size()) {
             const QRectF& region = vsConfig.screens[vsIndex].region;
             physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
@@ -317,7 +317,7 @@ QRect ScreenAdaptor::getAvailableGeometry(const QString& screenId)
 {
     // Virtual screens: use ScreenManager's VS-aware available geometry
     auto* mgr = screenManager();
-    if (mgr && VirtualScreenId::isVirtual(screenId)) {
+    if (mgr && PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return mgr->screenAvailableGeometry(screenId);
     }
 
@@ -354,7 +354,7 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
         qCWarning(lcDbus) << "getVirtualScreenConfig: empty physicalScreenId";
         return QString();
     }
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
         qCWarning(lcDbus) << "getVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
         return QString();
     }
@@ -365,7 +365,7 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
         return QString();
     }
 
-    VirtualScreenConfig config = mgr->virtualScreenConfig(physicalScreenId);
+    Phosphor::Screens::VirtualScreenConfig config = mgr->virtualScreenConfig(physicalScreenId);
 
     QJsonObject root;
     root[JsonKeys::PhysicalScreenId] = physicalScreenId;
@@ -403,7 +403,7 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         qCWarning(lcDbus) << "setVirtualScreenConfig: empty physicalScreenId";
         return;
     }
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
         qCWarning(lcDbus) << "setVirtualScreenConfig: expected physical screen ID, got virtual:" << physicalScreenId;
         return;
     }
@@ -427,28 +427,28 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     // Settings; the daemon's virtualScreenConfigsChanged bridge tears down
     // ScreenManager subdivisions for this physical screen.
     if (screensArr.isEmpty()) {
-        VirtualScreenConfig empty;
+        Phosphor::Screens::VirtualScreenConfig empty;
         empty.physicalScreenId = physicalScreenId;
         m_settings->setVirtualScreenConfig(physicalScreenId, empty);
         return;
     }
 
-    VirtualScreenConfig config;
+    Phosphor::Screens::VirtualScreenConfig config;
     config.physicalScreenId = physicalScreenId;
 
-    // Translate the JSON payload into a VirtualScreenDef list. Do not
+    // Translate the JSON payload into a Phosphor::Screens::VirtualScreenDef list. Do not
     // pre-validate region bounds, indices, or duplicates here — Settings is
     // the single point of admission control and runs the canonical
-    // VirtualScreenConfig::isValid check which covers all those cases. A
+    // Phosphor::Screens::VirtualScreenConfig::isValid check which covers all those cases. A
     // local pre-filter would add a second validation layer with subtly
     // different log messages and rules to keep in sync.
     for (const auto& entry : screensArr) {
         QJsonObject screenObj = entry.toObject();
         QJsonObject regionObj = screenObj[JsonKeys::Region].toObject();
 
-        VirtualScreenDef def;
+        Phosphor::Screens::VirtualScreenDef def;
         def.index = screenObj[JsonKeys::Index].toInt();
-        def.id = VirtualScreenId::make(physicalScreenId, def.index);
+        def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, def.index);
         def.physicalScreenId = physicalScreenId;
         def.displayName = screenObj[JsonKeys::DisplayName].toString();
         def.region = QRectF(regionObj[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
@@ -459,7 +459,7 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 
     // Persist to Settings (the source of truth). Settings::setVirtualScreenConfig
-    // runs VirtualScreenConfig::isValid (region bounds, overlap, coverage,
+    // runs Phosphor::Screens::VirtualScreenConfig::isValid (region bounds, overlap, coverage,
     // duplicate ids/indices, max-per-physical) and emits
     // virtualScreenConfigsChanged on success. Rejected configs return false
     // and log the specific reason; we surface the failure to the caller's
@@ -473,21 +473,24 @@ QString ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtua
 {
     if (!m_settings) {
         qCWarning(lcDbus) << "swapVirtualScreenInDirection: no Settings instance — adaptor was not wired";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::SettingsRejected);
     }
     if (currentVirtualScreenId.isEmpty()) {
         qCDebug(lcDbus) << "swapVirtualScreenInDirection: empty currentVirtualScreenId";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::NotVirtual);
     }
     if (direction != Utils::Direction::Left && direction != Utils::Direction::Right && direction != Utils::Direction::Up
         && direction != Utils::Direction::Down) {
         qCWarning(lcDbus) << "swapVirtualScreenInDirection: invalid direction" << direction;
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::InvalidDirection);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::InvalidDirection);
     }
 
-    VirtualScreenSwapper swapper(m_virtualScreenStore.get());
+    Phosphor::Screens::VirtualScreenSwapper swapper(m_virtualScreenStore.get());
     const auto result = swapper.swapInDirection(currentVirtualScreenId, direction);
-    const QString reason = VirtualScreenSwapper::reasonString(result);
+    const QString reason = Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
     qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->" << reason;
     return reason;
 }
@@ -496,20 +499,23 @@ QString ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, boo
 {
     if (!m_settings) {
         qCWarning(lcDbus) << "rotateVirtualScreens: no Settings instance — adaptor was not wired";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::SettingsRejected);
     }
     if (physicalScreenId.isEmpty()) {
         qCDebug(lcDbus) << "rotateVirtualScreens: empty physicalScreenId";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::NotVirtual);
     }
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
         qCWarning(lcDbus) << "rotateVirtualScreens: expected physical screen ID, got virtual:" << physicalScreenId;
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
+        return Phosphor::Screens::VirtualScreenSwapper::reasonString(
+            Phosphor::Screens::VirtualScreenSwapper::Result::NotVirtual);
     }
 
-    VirtualScreenSwapper swapper(m_virtualScreenStore.get());
+    Phosphor::Screens::VirtualScreenSwapper swapper(m_virtualScreenStore.get());
     const auto result = swapper.rotate(physicalScreenId, clockwise);
-    const QString reason = VirtualScreenSwapper::reasonString(result);
+    const QString reason = Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
     qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->" << reason;
     return reason;
 }

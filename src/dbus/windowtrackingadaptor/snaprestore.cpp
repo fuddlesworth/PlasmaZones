@@ -4,7 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
 #include "../../core/logging.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../snap/SnapEngine.h"

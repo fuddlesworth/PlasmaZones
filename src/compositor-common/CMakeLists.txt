@@ -21,11 +21,8 @@ add_library(plasmazones_compositor_common STATIC
     stagger_timer.h
     trigger_parser.cpp
     trigger_parser.h
-    # screen_id.cpp moved to libs/phosphor-identity (PhosphorIdentity::ScreenId).
-    # `screen_id.h` here is a backward-compat shim that re-exports
-    # PhosphorIdentity::ScreenId as PlasmaZones::ScreenIdUtils so the KWin
-    # effect's existing `#include "screen_id.h"` keeps working.
-    screen_id.h
+    # screen_id.{h,cpp} moved to libs/phosphor-identity (PhosphorIdentity::ScreenId).
+    # Consumers include <PhosphorIdentity/ScreenId.h> directly.
     # window_id moved to libs/phosphor-identity — backward-compat shim
     # `window_id.h` in this directory forwards to <PhosphorIdentity/WindowId.h>
     # so the KWin effect's existing `#include "window_id.h"` keeps working.

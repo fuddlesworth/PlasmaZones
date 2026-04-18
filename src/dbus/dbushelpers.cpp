@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dbushelpers.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/geometryutils.h"
 #include <PhosphorZones/Layout.h>
 #include <QGuiApplication>
@@ -29,7 +29,7 @@ QString resolveScreenId(const QString& screenId)
         }
         return primary ? Utils::screenIdentifier(primary) : QString();
     }
-    return VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    return PhosphorIdentity::VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
 }
 
 QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
@@ -41,7 +41,7 @@ QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& scree
             return GeometryUtils::effectiveScreenGeometry(layout, screenId);
         }
     }
-    QScreen* screen = Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
+    QScreen* screen = Utils::findScreenByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
     if (!screen) {
         screen = resolvePhysicalScreen(screenId);
     }
@@ -60,7 +60,7 @@ QScreen* resolvePhysicalQScreen(const QString& screenId)
             return screen;
         }
     }
-    return Utils::findScreenByIdOrName(VirtualScreenId::extractPhysicalId(screenId));
+    return Utils::findScreenByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 
 } // namespace DbusHelpers

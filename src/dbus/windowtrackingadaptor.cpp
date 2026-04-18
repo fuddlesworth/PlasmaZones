@@ -11,12 +11,12 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
 #include "../core/windowregistry.h"
 #include <QJsonArray>
@@ -355,8 +355,9 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // Only re-resolve via geometry when the physical screens actually differ,
     // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
     QString resolvedNewScreen = newScreenId;
-    if (!VirtualScreenId::isVirtual(newScreenId) && VirtualScreenId::isVirtual(storedScreen)) {
-        QString storedPhysical = VirtualScreenId::extractPhysicalId(storedScreen);
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(newScreenId)
+        && PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+        QString storedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
         if (Utils::screensMatch(storedPhysical, newScreenId)) {
             // Physical parent matches — the window is still on the same monitor,
             // so the stored virtual screen ID is still valid.
@@ -506,19 +507,19 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     // haven't loaded yet.  Resolve to the correct virtual screen using the
     // focused window's daemon-tracked screen assignment as the best hint.
     QString resolvedId = screenId;
-    if (!VirtualScreenId::isVirtual(screenId)) {
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         auto* mgr = screenManager();
         if (mgr && mgr->hasVirtualScreens(screenId)) {
             // Use focused window's tracked screen as hint
             if (m_service && !m_lastActiveWindowId.isEmpty()) {
                 const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
-                if (VirtualScreenId::isVirtual(trackedScreen)
-                    && VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                    && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
                     resolvedId = trackedScreen;
                 }
             }
             // If no window hint, fall back to first virtual screen
-            if (!VirtualScreenId::isVirtual(resolvedId)) {
+            if (!PhosphorIdentity::VirtualScreenId::isVirtual(resolvedId)) {
                 QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
                 if (!vsIds.isEmpty()) {
                     resolvedId = vsIds.first();
@@ -559,10 +560,11 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // effect reports, since the effect may send a physical ID before VS configs load.
     QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
-        if (!VirtualScreenId::isVirtual(screenId) && m_service) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId) && m_service) {
             const QString trackedScreen = m_service->screenAssignments().value(windowId);
-            if (VirtualScreenId::isVirtual(trackedScreen)
-                && VirtualScreenId::extractPhysicalId(trackedScreen) == VirtualScreenId::extractPhysicalId(screenId)) {
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
+                    == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
                 resolvedScreen = trackedScreen;
             }
         }

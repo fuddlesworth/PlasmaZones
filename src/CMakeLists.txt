@@ -57,11 +57,8 @@ set(plasmazones_core_SRCS
     core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
-    # virtualscreenswapper.cpp lifted to libs/phosphor-screens/. The shim
-    # header `core/virtualscreenswapper.h` re-exports
-    # `Phosphor::Screens::VirtualScreenSwapper` as
-    # `PlasmaZones::VirtualScreenSwapper` for existing in-tree callers.
-    core/virtualscreenswapper.h
+    # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h —
+    # callers include <PhosphorScreens/Swapper.h> directly.
     core/screenmoderouter.cpp
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
@@ -88,14 +85,11 @@ set(plasmazones_core_SRCS
     # layersurface + shaderregistry/params moved to PhosphorShell
     core/single_instance_service.cpp
     core/single_instance_service.h
-    # screen_resolver.{h,cpp} lifted to libs/phosphor-screens/Resolver.h —
-    # callers include <PhosphorScreens/Resolver.h> directly.
-    # screenmanager.cpp + screenmanager/panels.cpp + screenmanager/virtualscreens.cpp
-    # lifted to libs/phosphor-screens. The shim header `core/screenmanager.h`
-    # re-exports `Phosphor::Screens::ScreenManager` as
-    # `PlasmaZones::ScreenManager` and pulls in the daemon-side service-
-    # locator (`screenmanagerservice.h`) for in-tree callers.
-    core/screenmanager.h
+    # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
+    # lifted to libs/phosphor-screens. Daemon-side service-locator
+    # (process-global screenManager() accessor + Qt-fallback wrappers)
+    # is in screenmanagerservice.{h,cpp}; in-tree callers include it
+    # directly.
     core/screenmanagerservice.cpp
     core/screenmanagerservice.h
     core/virtualdesktopmanager.cpp

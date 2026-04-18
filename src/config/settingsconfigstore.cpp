@@ -48,8 +48,8 @@ bool SettingsConfigStore::remove(const QString& physicalScreenId)
     if (!m_settings) {
         return false;
     }
-    // Settings treats an empty VirtualScreenConfig as a removal request
-    // (see VirtualScreenConfig::isValid). We never need to send a
+    // Settings treats an empty Phosphor::Screens::VirtualScreenConfig as a removal request
+    // (see Phosphor::Screens::VirtualScreenConfig::isValid). We never need to send a
     // synthetic "delete" payload.
     return m_settings->setVirtualScreenConfig(physicalScreenId, Phosphor::Screens::VirtualScreenConfig{});
 }

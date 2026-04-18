@@ -8,7 +8,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 
 #include "core/logging.h"
-#include "core/screenmanager.h"
+#include "core/screenmanagerservice.h"
 
 #include <dbus_types.h>
 #include <QJsonArray>

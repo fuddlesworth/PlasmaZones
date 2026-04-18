@@ -315,7 +315,7 @@ QString resolveScreenId(const QString& screenId);
  * nullptr so the caller can decide the appropriate fallback behavior.
  *
  * This replaces the duplicated pattern:
- *   if (VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
+ *   if (PhosphorIdentity::VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
  *   if (!screen) { Utils::findScreenByIdOrName(id); }
  */
 QScreen* resolvePhysicalQScreen(const QString& screenId);

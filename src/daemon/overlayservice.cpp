@@ -13,7 +13,7 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../core/unifiedlayoutlist.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
 #include "../core/constants.h"
 
@@ -94,7 +94,7 @@ void cleanupAllScreenStates(QHash<QString, OverlayService::PerScreenOverlayState
 // Release surfaces for state entries whose key starts with @p prefix,
 // then erase those entries from the map.
 //
-// Semantics: prefix is typically `physId + VirtualScreenId::Separator`, so
+// Semantics: prefix is typically `physId + PhosphorIdentity::VirtualScreenId::Separator`, so
 // this function matches ONLY virtual-screen entries (`physId/vs:N`) and
 // deliberately skips the bare-physId entry (`physId`). Callers that need
 // to clean up the bare entry must do so separately — see the
@@ -146,7 +146,7 @@ OverlayService::OverlayService(QObject* parent)
             QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
             if (!physScreen) {
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
-                const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+                const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
                 cleanupVirtualScreenStates(m_screenStates, prefix);
                 // Also clean up the bare physical-ID entry (no /vs:N suffix) —
                 // cleanupVirtualScreenStates only matches entries starting with "physId/",
@@ -952,7 +952,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     const QString physId = Utils::screenIdentifier(screen);
     if (!physId.isEmpty()) {
         for (auto it = m_navigationOsdCreationFailed.begin(); it != m_navigationOsdCreationFailed.end();) {
-            if (it.key() == physId || it.key().startsWith(physId + VirtualScreenId::Separator)) {
+            if (it.key() == physId || it.key().startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator)) {
                 it = m_navigationOsdCreationFailed.erase(it);
             } else {
                 ++it;

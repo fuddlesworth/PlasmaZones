@@ -17,8 +17,8 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "core/screenmanager.h"
-#include "core/virtualscreen.h"
+#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "helpers/VirtualScreenTestHelpers.h"
 
 using namespace PlasmaZones;
@@ -64,7 +64,7 @@ private Q_SLOTS:
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
         QVERIFY(mgr.hasVirtualScreens(physId));
 
-        mgr.setVirtualScreenConfig(physId, VirtualScreenConfig{});
+        mgr.setVirtualScreenConfig(physId, Phosphor::Screens::VirtualScreenConfig{});
         QVERIFY(!mgr.hasVirtualScreens(physId));
     }
 
@@ -92,10 +92,10 @@ private Q_SLOTS:
         ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
-        VirtualScreenConfig config;
+        Phosphor::Screens::VirtualScreenConfig config;
         config.physicalScreenId = physId;
-        config.screens.append(
-            VirtualScreenDef{VirtualScreenId::make(physId, 0), physId, QStringLiteral("Full"), QRectF(0, 0, 1, 1), 0});
+        config.screens.append(Phosphor::Screens::VirtualScreenDef{
+            PhosphorIdentity::VirtualScreenId::make(physId, 0), physId, QStringLiteral("Full"), QRectF(0, 0, 1, 1), 0});
 
         mgr.setVirtualScreenConfig(physId, config);
         // Single screen = no subdivision
@@ -124,8 +124,8 @@ private Q_SLOTS:
 
         QStringList ids = mgr.virtualScreenIdsFor(physId);
         QCOMPARE(ids.size(), 2);
-        QCOMPARE(ids.at(0), VirtualScreenId::make(physId, 0));
-        QCOMPARE(ids.at(1), VirtualScreenId::make(physId, 1));
+        QCOMPARE(ids.at(0), PhosphorIdentity::VirtualScreenId::make(physId, 0));
+        QCOMPARE(ids.at(1), PhosphorIdentity::VirtualScreenId::make(physId, 1));
     }
 
     void testVirtualScreenIdsFor_threeVirtualScreens()
@@ -136,9 +136,9 @@ private Q_SLOTS:
 
         QStringList ids = mgr.virtualScreenIdsFor(physId);
         QCOMPARE(ids.size(), 3);
-        QCOMPARE(ids.at(0), VirtualScreenId::make(physId, 0));
-        QCOMPARE(ids.at(1), VirtualScreenId::make(physId, 1));
-        QCOMPARE(ids.at(2), VirtualScreenId::make(physId, 2));
+        QCOMPARE(ids.at(0), PhosphorIdentity::VirtualScreenId::make(physId, 0));
+        QCOMPARE(ids.at(1), PhosphorIdentity::VirtualScreenId::make(physId, 1));
+        QCOMPARE(ids.at(2), PhosphorIdentity::VirtualScreenId::make(physId, 2));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ private Q_SLOTS:
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
-        mgr.setVirtualScreenConfig(physId, VirtualScreenConfig{});
+        mgr.setVirtualScreenConfig(physId, Phosphor::Screens::VirtualScreenConfig{});
 
         QCOMPARE(spy.count(), 1);
         QCOMPARE(spy.first().first().toString(), physId);
@@ -196,7 +196,7 @@ private Q_SLOTS:
         QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
 
         // Same ids and display names, just a different split point.
-        VirtualScreenConfig edited;
+        Phosphor::Screens::VirtualScreenConfig edited;
         edited.physicalScreenId = physId;
         edited.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 0.7, 1.0)));
         edited.screens.append(makeDef(physId, 1, QStringLiteral("Right"), QRectF(0.7, 0.0, 0.3, 1.0)));
@@ -221,7 +221,7 @@ private Q_SLOTS:
         QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
 
         // Same ids, same regions, just renamed display names.
-        VirtualScreenConfig renamed;
+        Phosphor::Screens::VirtualScreenConfig renamed;
         renamed.physicalScreenId = physId;
         renamed.screens.append(makeDef(physId, 0, QStringLiteral("Primary"), QRectF(0.0, 0.0, 0.5, 1.0)));
         renamed.screens.append(makeDef(physId, 1, QStringLiteral("Secondary"), QRectF(0.5, 0.0, 0.5, 1.0)));
@@ -267,7 +267,7 @@ private Q_SLOTS:
         QVERIFY(mgr.hasVirtualScreens(physB));
 
         // Clear one, the other remains
-        mgr.setVirtualScreenConfig(physA, VirtualScreenConfig{});
+        mgr.setVirtualScreenConfig(physA, Phosphor::Screens::VirtualScreenConfig{});
         QVERIFY(!mgr.hasVirtualScreens(physA));
         QVERIFY(mgr.hasVirtualScreens(physB));
     }
@@ -282,8 +282,8 @@ private Q_SLOTS:
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         // Build a config with two overlapping regions: both start at x=0 and
-        // share a 0.1-wide overlap band, well above VirtualScreenDef::Tolerance.
-        VirtualScreenConfig config;
+        // share a 0.1-wide overlap band, well above Phosphor::Screens::VirtualScreenDef::Tolerance.
+        Phosphor::Screens::VirtualScreenConfig config;
         config.physicalScreenId = physId;
         // Left: [0.0, 0.6) — Right: [0.5, 1.0) — overlap = [0.5, 0.6), width=0.1
         config.screens.append(makeDef(physId, 0, QStringLiteral("Left"), QRectF(0.0, 0.0, 0.6, 1.0)));
@@ -308,7 +308,7 @@ private Q_SLOTS:
         const QString physA = QStringLiteral("Dell:U2722D:111");
         const QString physB = QStringLiteral("LG:27GP850:222");
 
-        QHash<QString, VirtualScreenConfig> configs;
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs;
         configs.insert(physA, makeSplitConfig(physA));
         configs.insert(physB, makeThreeWayConfig(physB));
 
@@ -346,7 +346,7 @@ private Q_SLOTS:
         const auto config = makeSplitConfig(physId);
         mgr.setVirtualScreenConfig(physId, config);
 
-        QHash<QString, VirtualScreenConfig> configs;
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs;
         configs.insert(physId, config);
 
         QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
@@ -370,7 +370,7 @@ private Q_SLOTS:
         mgr.setVirtualScreenConfig(physB, makeSplitConfig(physB));
 
         // New state: A unchanged, B removed, C added
-        QHash<QString, VirtualScreenConfig> configs;
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs;
         configs.insert(physA, makeSplitConfig(physA));
         configs.insert(physC, makeSplitConfig(physC));
 
@@ -412,7 +412,7 @@ private Q_SLOTS:
         // Refresh first (no listener attached). This is the boot-time
         // initial sync — the cache gets populated, virtualScreensChanged
         // fires, but nobody is listening yet.
-        QHash<QString, VirtualScreenConfig> configs{{physId, makeSplitConfig(physId)}};
+        QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs{{physId, makeSplitConfig(physId)}};
         mgr.refreshVirtualConfigs(configs);
         QVERIFY(mgr.hasVirtualScreens(physId));
 
@@ -452,7 +452,7 @@ private Q_SLOTS:
         // Phase 1: create
         {
             QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
-            QHash<QString, VirtualScreenConfig> configs{{physId, config}};
+            QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs{{physId, config}};
             mgr.refreshVirtualConfigs(configs);
             QCOMPARE(spy.count(), 1);
             QVERIFY(mgr.hasVirtualScreens(physId));
@@ -473,14 +473,14 @@ private Q_SLOTS:
         // "physId/vs:1" remains valid after this restoration.
         {
             QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
-            QHash<QString, VirtualScreenConfig> configs{{physId, config}};
+            QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs{{physId, config}};
             mgr.refreshVirtualConfigs(configs);
             QCOMPARE(spy.count(), 1);
             QVERIFY(mgr.hasVirtualScreens(physId));
             QCOMPARE(mgr.virtualScreenIdsFor(physId),
                      QStringList({
-                         VirtualScreenId::make(physId, 0),
-                         VirtualScreenId::make(physId, 1),
+                         PhosphorIdentity::VirtualScreenId::make(physId, 0),
+                         PhosphorIdentity::VirtualScreenId::make(physId, 1),
                      }));
         }
     }

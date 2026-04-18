@@ -33,7 +33,7 @@ static void sortMergedLayoutList(QVariantList& list)
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "dbusutils.h"
 
 #include <PhosphorZones/Layout.h>
@@ -97,17 +97,18 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     }
     return QString();
 }
-/// Convert a QVariantMap (from QML virtual screen editor) to a VirtualScreenDef.
+/// Convert a QVariantMap (from QML virtual screen editor) to a Phosphor::Screens::VirtualScreenDef.
 /// Used by both the save path (staging → KConfig) and the D-Bus apply path.
-VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId, int index)
+Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map,
+                                                                 const QString& physicalScreenId, int index)
 {
-    VirtualScreenDef def;
+    Phosphor::Screens::VirtualScreenDef def;
     def.physicalScreenId = physicalScreenId;
     def.index = index;
     def.displayName = map.value(QStringLiteral("displayName")).toString();
     def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
                         map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
-    def.id = VirtualScreenId::make(physicalScreenId, index);
+    def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, index);
     return def;
 }
 } // anonymous namespace
@@ -543,11 +544,12 @@ void SettingsController::save()
     // so they are written to KConfig on disk, then flush to daemon via D-Bus.
     if (!m_stagedVirtualScreenConfigs.isEmpty()) {
         for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
-            VirtualScreenConfig vsConfig;
+            Phosphor::Screens::VirtualScreenConfig vsConfig;
             vsConfig.physicalScreenId = it.key();
             if (!it.value().isEmpty()) {
                 for (int i = 0; i < it.value().size(); ++i) {
-                    VirtualScreenDef def = variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
+                    Phosphor::Screens::VirtualScreenDef def =
+                        variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
                     if (!def.isValid()) {
                         qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
                                             << "region:" << def.region;
@@ -3494,7 +3496,7 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        Phosphor::Screens::VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
                                 << "region:" << def.region;

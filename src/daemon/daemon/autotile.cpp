@@ -7,7 +7,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layoutworker/layoutcomputeservice.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"

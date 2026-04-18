@@ -23,7 +23,7 @@
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include "../core/windowregistry.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
@@ -32,7 +32,7 @@
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
 #include "../config/settingsconfigstore.h"
-#include "../core/virtualscreenswapper.h"
+#include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
@@ -521,7 +521,7 @@ bool Daemon::init()
     // m_virtualScreenStore is constructed in the initializer list (it's a
     // Config arg for m_screenManager). The swapper is constructed here
     // because navigation handlers don't run before init() returns anyway.
-    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_virtualScreenStore.get());
+    m_virtualScreenSwapper = std::make_unique<Phosphor::Screens::VirtualScreenSwapper>(m_virtualScreenStore.get());
     Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).

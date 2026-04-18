@@ -19,7 +19,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>

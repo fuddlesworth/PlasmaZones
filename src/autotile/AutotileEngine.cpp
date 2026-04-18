@@ -29,8 +29,8 @@
 #include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
-#include "core/screenmanager.h"
-#include "core/virtualscreen.h"
+#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
@@ -157,10 +157,10 @@ void AutotileEngine::connectSignals()
             while (it.hasNext()) {
                 it.next();
                 const QString& sid = it.key().screenId;
-                if (!VirtualScreenId::isVirtual(sid)) {
+                if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
                     continue;
                 }
-                if (VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
+                if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
                     continue;
                 }
                 if (newVsSet.contains(sid)) {
@@ -208,8 +208,8 @@ void AutotileEngine::connectSignals()
             // which reflects mode assignments and may not yet be updated for the new config.
             auto overrideIt = m_screenDesktopOverride.begin();
             while (overrideIt != m_screenDesktopOverride.end()) {
-                if (VirtualScreenId::isVirtual(overrideIt.key())
-                    && VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
+                    && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
                     && !newVsSet.contains(overrideIt.key()))
                     overrideIt = m_screenDesktopOverride.erase(overrideIt);
                 else
@@ -2866,7 +2866,7 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
     }
 
     // Virtual screens: use ScreenManager's virtual-aware geometry
-    if (VirtualScreenId::isVirtual(screenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
@@ -2885,7 +2885,7 @@ bool AutotileEngine::isKnownScreen(const QString& screenId) const
         // Without ScreenManager, skip validation (test environments)
         return true;
     }
-    if (VirtualScreenId::isVirtual(screenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
     }
     return Utils::findScreenByIdOrName(screenId) != nullptr;

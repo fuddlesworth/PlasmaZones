@@ -16,7 +16,7 @@
 #include <PhosphorLayer/Role.h>
 
 #include "overlay_helpers.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/settings_interfaces.h"
 #include "../../core/interfaces.h"
 #include "../../core/shaderregistry.h"

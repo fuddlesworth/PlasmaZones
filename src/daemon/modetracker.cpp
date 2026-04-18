@@ -8,7 +8,7 @@
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 
 namespace PlasmaZones {
 

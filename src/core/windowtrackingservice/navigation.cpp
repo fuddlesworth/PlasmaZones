@@ -8,7 +8,7 @@
 #include "../constants.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
-#include "../screenmanager.h"
+#include "../screenmanagerservice.h"
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"

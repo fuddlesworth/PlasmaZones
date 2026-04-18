@@ -3,8 +3,8 @@
 
 #include "utils.h"
 #include "logging.h"
-#include "screenmanager.h"
-#include "virtualscreen.h"
+#include "screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 
 #include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorIdentity/ScreenId.h>
@@ -70,7 +70,7 @@ bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physi
     // A virtual ID passed as the physical filter is a misuse — the function
     // is "stored belongs to PHYSICAL screen X". Return false rather than
     // silently mis-matching.
-    if (VirtualScreenId::isVirtual(physicalScreenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
         return false;
     }
 
@@ -80,8 +80,8 @@ bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physi
     // name (e.g. "DP-2") and the other an EDID-based ID (e.g.
     // "Dell:U2722D:115107"); both forms can appear in stored window state
     // depending on which code path produced the ID.
-    if (VirtualScreenId::isVirtual(storedScreenId)) {
-        return screensMatch(VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreenId)) {
+        return screensMatch(PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
     }
 
     // Stored ID is physical (or a connector name): defer to screensMatch
@@ -124,7 +124,7 @@ QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
 qreal screenAspectRatio(const QString& screenNameOrId)
 {
     // For virtual screen IDs, use ScreenManager geometry
-    if (VirtualScreenId::isVirtual(screenNameOrId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenNameOrId)) {
         auto* mgr = screenManager();
         if (mgr) {
             QRect geom = mgr->screenGeometry(screenNameOrId);

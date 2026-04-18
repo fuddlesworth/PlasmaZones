@@ -9,8 +9,8 @@
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/VirtualScreen.h>
+#include "../../core/screenmanagerservice.h"
 #include "../../core/shaderregistry.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -142,7 +142,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
         if (it != m_screenStates.constEnd() && it->overlayWindow) {
             continue; // Already correctly keyed with a live window.
         }
-        const QString targetPhys = VirtualScreenId::extractPhysicalId(targetId);
+        const QString targetPhys = PhosphorIdentity::VirtualScreenId::extractPhysicalId(targetId);
         QString donorKey;
         for (auto sit = m_screenStates.constBegin(); sit != m_screenStates.constEnd(); ++sit) {
             if (targetSet.contains(sit.key())) {
@@ -151,7 +151,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
             if (!sit.value().overlayWindow) {
                 continue;
             }
-            if (VirtualScreenId::extractPhysicalId(sit.key()) != targetPhys) {
+            if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sit.key()) != targetPhys) {
                 continue;
             }
             donorKey = sit.key();
@@ -375,7 +375,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // Compute virtual-screen overrides up-front (wlr-layer-shell locks
     // output+anchors at attach).
     const QRect physScreenGeom = physScreen ? physScreen->geometry() : geometry;
-    const bool isVS = VirtualScreenId::isVirtual(screenId);
+    const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
     const auto placement = layerPlacementForVs(isVS ? geometry : QRect(), physScreenGeom);
     std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
     std::optional<QMargins> marginsOverride;
@@ -513,7 +513,7 @@ void OverlayService::dismissOverlayWindow(QScreen* screen)
     // Collect matching overlay keys — may be virtual screen IDs for this physical screen
     QStringList matchingKeys;
     for (auto it = m_screenStates.constBegin(); it != m_screenStates.constEnd(); ++it) {
-        if (VirtualScreenId::extractPhysicalId(it.key()) == physId) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physId) {
             matchingKeys.append(it.key());
         }
     }
@@ -565,8 +565,8 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     // compositor, the overlay keeps rendering across the wrong region.
     // Bail out and let the caller destroy+recreate when the anchor set
     // would have to change.
-    const bool wasVS = VirtualScreenId::isVirtual(oldKey);
-    const bool willBeVS = VirtualScreenId::isVirtual(newKey);
+    const bool wasVS = PhosphorIdentity::VirtualScreenId::isVirtual(oldKey);
+    const bool willBeVS = PhosphorIdentity::VirtualScreenId::isVirtual(newKey);
     if (wasVS != willBeVS) {
         qCInfo(lcOverlay) << "rekeyOverlayState: refusing flavor flip rekey" << oldKey << "->" << newKey
                           << "(anchors would change; some compositors ignore post-attach set_anchor)";
@@ -601,7 +601,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
     }
     QScreen* physScreen = rekeyed.overlayPhysScreen;
     if (physScreen) {
-        const bool isVS = VirtualScreenId::isVirtual(newKey);
+        const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(newKey);
 
         // Re-anchor the live layer surface to the new VS's region. The donor's
         // anchors/margins were baked in at attach time for the old key — if the

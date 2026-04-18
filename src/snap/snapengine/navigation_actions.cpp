@@ -30,14 +30,14 @@
 #include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
 #include "../../dbus/snapnavigationtargets.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include "shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 namespace PlasmaZones {
 
@@ -63,8 +63,8 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
         if (!zoneId.isEmpty()) {
             const QString storedScreen = service->screenAssignments().value(windowId);
             if (!storedScreen.isEmpty()) {
-                if (VirtualScreenId::isVirtual(storedScreen)) {
-                    const QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+                    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
                     QScreen* physScreen = Utils::findScreenByIdOrName(physId);
                     if (physScreen) {
                         auto* mgr = screenManager();

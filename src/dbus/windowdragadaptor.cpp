@@ -15,11 +15,11 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
+#include "../core/screenmanagerservice.h"
 #include "../core/zoneselectorlayout.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
 #include "../autotile/AutotileEngine.h"
@@ -89,7 +89,7 @@ WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPo
 {
     ScreenResolution result;
     result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
-    result.physicalId = VirtualScreenId::extractPhysicalId(result.screenId);
+    result.physicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(result.screenId);
     result.qscreen = resolvePhysicalScreen(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));

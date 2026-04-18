@@ -12,7 +12,7 @@
 #include "../../core/shaderregistry.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../../shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include "pz_i18n.h"
 #include <QDBusConnection>
@@ -39,7 +39,7 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
 {
     m_virtualScreenSize = QSize();
     m_virtualScreenRect = QRect();
-    if (!VirtualScreenId::isVirtual(screenName)) {
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenName)) {
         return;
     }
     QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -51,7 +51,7 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
         QRect geo = qdbus_cast<QRect>(reply.arguments().at(0));
         if (geo.isValid()) {
             m_virtualScreenSize = geo.size();
-            QString physId = VirtualScreenId::extractPhysicalId(screenName);
+            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
             QScreen* physScreen = Utils::findScreenByIdOrName(physId);
             QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
             m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
@@ -83,11 +83,11 @@ QVariantList EditorController::screenModel() const
     for (const QString& screenId : m_availableScreenIds) {
         QVariantMap entry;
         entry[QStringLiteral("name")] = screenId;
-        if (VirtualScreenId::isVirtual(screenId)) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             // Use user-configured display name from VS config, fall back to generic label
             QString vsDisplayName;
-            QString physId = VirtualScreenId::extractPhysicalId(screenId);
-            int vsIndex = VirtualScreenId::extractIndex(screenId);
+            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+            int vsIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenId);
             if (vsIndex >= 0) {
                 if (!vsConfigCache.contains(physId)) {
                     QDBusMessage msg = QDBusMessage::createMethodCall(
@@ -210,7 +210,7 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     // to VS region) and physical-screen (full monitor) cases.
     EditorWindowPlan plan;
     if (m_virtualScreenRect.isValid()) {
-        const QString physId = VirtualScreenId::extractPhysicalId(m_targetScreen);
+        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_targetScreen);
         if (QScreen* physScreen = Utils::findScreenByIdOrName(physId)) {
             plan.screen = physScreen;
             // Absolute VS coordinates = physical screen origin + VS offset.

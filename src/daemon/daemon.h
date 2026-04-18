@@ -16,7 +16,7 @@
 #include "../core/layoutsourcefactory.h"
 #include "../core/screenmanagerservice.h" // ScreenManager alias + service-locator helpers
 #include "../core/types.h"
-#include "../core/virtualscreenswapper.h" // shim → Phosphor::Screens::VirtualScreenSwapper alias
+#include <PhosphorScreens/Swapper.h> // shim → Phosphor::Screens::VirtualScreenSwapper alias
 #include "../autotile/AutotileEngine.h"
 
 namespace Phosphor::Screens {
@@ -428,7 +428,7 @@ private:
     /// Stateless façade over m_virtualScreenStore for VS swap/rotate.
     /// Held as a member rather than reconstructed per-call so navigation
     /// handlers don't need to know about its dependencies.
-    std::unique_ptr<VirtualScreenSwapper> m_virtualScreenSwapper;
+    std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 

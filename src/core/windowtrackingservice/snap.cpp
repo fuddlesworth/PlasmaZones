@@ -10,9 +10,9 @@
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
-#include "../virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../utils.h"
-#include "../screenmanager.h"
+#include "../screenmanagerservice.h"
 #include "../logging.h"
 #include <QGuiApplication>
 #include <QScreen>

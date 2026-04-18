@@ -9,8 +9,8 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreen.h"
+#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <QJsonDocument>
@@ -142,7 +142,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
         // Virtual screens use their full ID directly (e.g., "physId/vs:0");
         // physical screens use the QScreen connector name for KCM parity.
         QString connectorName;
-        if (VirtualScreenId::isVirtual(screenId)) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
             connectorName = screenId;
         } else {
             QScreen* physScreen = Utils::findScreenByIdOrName(screenId);

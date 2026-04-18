@@ -26,7 +26,7 @@
 
 #include <functional>
 
-#include "shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 namespace KWin {
 class OutlinedBorderItem;
@@ -645,7 +645,7 @@ private:
      * definitions; the effect fetches them via D-Bus and resolves positions.
      *
      * Named EffectVirtualScreenDef to avoid collision with the daemon's
-     * VirtualScreenDef (which has many more fields).
+     * Phosphor::Screens::VirtualScreenDef (which has many more fields).
      */
     struct EffectVirtualScreenDef
     {

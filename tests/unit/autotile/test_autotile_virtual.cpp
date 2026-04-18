@@ -21,8 +21,8 @@
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/screenmanager.h"
-#include "core/virtualscreen.h"
+#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/VirtualScreen.h>
 
 #include "../helpers/ScriptedAlgoTestSetup.h"
 #include "../helpers/VirtualScreenTestHelpers.h"
@@ -109,7 +109,7 @@ private Q_SLOTS:
         // cache contains valid entries for the virtual screen IDs.
         ScreenManager screenMgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
         // setVirtualScreenConfig will fail because there's no real QScreen,
         // but the internal m_virtualConfigs cache is still populated before
         // the geometry cache is built. screenGeometry() for VS IDs requires
@@ -120,7 +120,7 @@ private Q_SLOTS:
         // This test verifies the validation path runs without crashing.
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
-        const QString vs0 = VirtualScreenId::make(physId, 0);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
         PhosphorTiles::TilingState* state = engine.stateForScreen(vs0);
 
         // With no real QScreen backing the physical screen, the geometry cache
@@ -175,11 +175,11 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, &screenMgr);
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
 
         // Set up the VS config on ScreenManager so virtualScreenIdsFor works
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
         screenMgr.setVirtualScreenConfig(physId, config);
 
         // Enable autotile on both virtual screens
@@ -217,7 +217,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vsId = VirtualScreenId::make(physId, 0);
+        const QString vsId = PhosphorIdentity::VirtualScreenId::make(physId, 0);
 
         // Configure a single VS covering the full physical screen (no subdivision)
         engine.setAutotileScreens({vsId});
@@ -593,7 +593,7 @@ private Q_SLOTS:
         ScreenManager screenMgr;
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
 
         QSignalSpy vsChangedSpy(&screenMgr, &ScreenManager::virtualScreensChanged);
 
@@ -608,14 +608,14 @@ private Q_SLOTS:
         ScreenManager screenMgr;
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
 
         screenMgr.setVirtualScreenConfig(physId, config);
 
         QSignalSpy vsChangedSpy(&screenMgr, &ScreenManager::virtualScreensChanged);
 
         // Remove by setting empty config
-        VirtualScreenConfig emptyConfig;
+        Phosphor::Screens::VirtualScreenConfig emptyConfig;
         screenMgr.setVirtualScreenConfig(physId, emptyConfig);
 
         QCOMPARE(vsChangedSpy.count(), 1);
@@ -627,14 +627,14 @@ private Q_SLOTS:
         ScreenManager screenMgr;
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
 
         screenMgr.setVirtualScreenConfig(physId, config);
 
         QStringList vsIds = screenMgr.virtualScreenIdsFor(physId);
         QCOMPARE(vsIds.size(), 2);
-        QVERIFY(vsIds.contains(VirtualScreenId::make(physId, 0)));
-        QVERIFY(vsIds.contains(VirtualScreenId::make(physId, 1)));
+        QVERIFY(vsIds.contains(PhosphorIdentity::VirtualScreenId::make(physId, 0)));
+        QVERIFY(vsIds.contains(PhosphorIdentity::VirtualScreenId::make(physId, 1)));
     }
 
     void screenManager_virtualScreenIdsFor_noConfig_returnsPhysicalId()
@@ -653,14 +653,14 @@ private Q_SLOTS:
         ScreenManager screenMgr;
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        VirtualScreenConfig config = makeSplitConfig(physId);
+        Phosphor::Screens::VirtualScreenConfig config = makeSplitConfig(physId);
         screenMgr.setVirtualScreenConfig(physId, config);
 
         // Verify VS IDs exist
         QCOMPARE(screenMgr.virtualScreenIdsFor(physId).size(), 2);
 
         // Remove config
-        VirtualScreenConfig emptyConfig;
+        Phosphor::Screens::VirtualScreenConfig emptyConfig;
         screenMgr.setVirtualScreenConfig(physId, emptyConfig);
 
         // Should fall back to physical ID
@@ -678,9 +678,9 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr);
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
-        const QString vs0 = VirtualScreenId::make(physId, 0);
-        const QString vs1 = VirtualScreenId::make(physId, 1);
-        const QString vs2 = VirtualScreenId::make(physId, 2);
+        const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
+        const QString vs1 = PhosphorIdentity::VirtualScreenId::make(physId, 1);
+        const QString vs2 = PhosphorIdentity::VirtualScreenId::make(physId, 2);
 
         engine.setAutotileScreens({vs0, vs1, vs2});
 

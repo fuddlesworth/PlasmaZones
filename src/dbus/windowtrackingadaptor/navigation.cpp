@@ -6,10 +6,10 @@
 #include "../../core/inavigationactions.h"
 #include "../../core/logging.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/screenmanager.h"
+#include "../../core/screenmanagerservice.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
 #include "../../snap/SnapEngine.h"
 
@@ -157,7 +157,7 @@ QStringList WindowTrackingAdaptor::resolveSnapModeScreensForResnap(const QString
 {
     QStringList candidates;
     if (!screenFilter.isEmpty()) {
-        if (VirtualScreenId::isVirtual(screenFilter)) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)) {
             candidates.append(screenFilter);
         } else if (auto* mgr = screenManager()) {
             candidates = mgr->virtualScreenIdsFor(screenFilter);
