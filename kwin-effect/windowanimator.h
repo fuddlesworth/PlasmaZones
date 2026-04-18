@@ -37,8 +37,10 @@ class WindowAnimator : public PhosphorAnimation::AnimationController<KWin::Effec
 public:
     /// Apply translate offset + scale transform to @p data so the window
     /// renders at the cached visual position/size. No-op when @p window
-    /// has no active animation. The KWin-specific paint hook — every
-    /// other piece of the controller is compositor-agnostic.
+    /// has no active animation, or when the motion is still pending
+    /// (startTime not yet latched — one frame between startAnimation
+    /// and the first advanceAnimations tick). The KWin-specific paint
+    /// hook — every other piece of the controller is compositor-agnostic.
     void applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const;
 
 protected:

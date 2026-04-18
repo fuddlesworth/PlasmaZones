@@ -34,8 +34,9 @@ public:
     mutable int repaintCalls = 0; ///< mutable: onRepaintNeeded is const
     QSet<int> invalidHandles;
 
-    /// Optional hook injected into onAnimationComplete so tests can
-    /// exercise the re-entrancy contract without subclassing again.
+    /// Optional hooks injected into the lifecycle callbacks so tests
+    /// can exercise the re-entrancy contract without subclassing again.
+    std::function<void(int, MockController&)> onStartedCallback;
     std::function<void(int, MockController&)> onCompleteCallback;
 
 protected:
@@ -43,6 +44,9 @@ protected:
     {
         startedHandles.insert(handle);
         startedHandlesOrdered.append(handle);
+        if (onStartedCallback) {
+            onStartedCallback(handle, *this);
+        }
     }
     void onAnimationComplete(int handle, const WindowMotion&) override
     {
@@ -352,7 +356,12 @@ private Q_SLOTS:
         c.advanceAnimations(std::chrono::milliseconds(100));
 
         QVERIFY(!c.hasActiveAnimations());
-        QVERIFY(c.completedHandles.size() >= 1); // first handle fires, second is pre-empted
+        // Exactly one completion fires — the first handle the snapshot
+        // iteration happens to visit. QHash iteration order is
+        // unspecified across Qt versions / platforms, so assert the
+        // invariant (count == 1, one of {1, 2}) rather than the order.
+        QCOMPARE(c.completedHandles.size(), 1);
+        QVERIFY(c.completedHandles.contains(1) || c.completedHandles.contains(2));
     }
 
     void testReentrantStartForNewHandleInsideCompleteHookSurvives()
@@ -415,6 +424,97 @@ private Q_SLOTS:
         MockController c;
         c.setMinDistance(1'000'000);
         QCOMPARE(c.minDistance(), 10000);
+    }
+
+    // ─── Duration clamp ───
+
+    void testSetDurationClampsUpperBound()
+    {
+        // Symmetric with setMinDistance — a huge duration (e.g. 10⁹ ms)
+        // would silently freeze every animation for the rest of the
+        // session. Cap at 10000 ms.
+        MockController c;
+        c.setDuration(1'000'000'000.0);
+        QCOMPARE(c.duration(), 10000.0);
+    }
+
+    void testSetDurationClampsNegativesToZero()
+    {
+        MockController c;
+        c.setDuration(-50.0);
+        QCOMPARE(c.duration(), 0.0);
+    }
+
+    // ─── onAnimationStarted re-entrancy ───
+
+    void testReentrantStartAnimationInsideStartedHookSurvives()
+    {
+        // A hook that calls startAnimation for a different handle inside
+        // onAnimationStarted must not dangle the `const WindowMotion&`
+        // passed to the outer hook. Qt6 QHash uses open addressing, so a
+        // rehash triggered by the re-entrant insert could invalidate any
+        // reference into the hash table. The fix is to pass the local
+        // `*motion` (stack-allocated) to onAnimationStarted rather than
+        // `m_motions[handle]`, so the hook's parameter is immune to rehash.
+        MockController c;
+        c.setCurve(std::make_shared<Easing>());
+
+        bool chained = false;
+        c.onStartedCallback = [&](int handle, MockController& self) {
+            // Chain a second animation for a different handle from inside
+            // the first handle's start hook. Guard against recursion.
+            if (handle == 1 && !chained) {
+                chained = true;
+                self.startAnimation(2, QPointF(0, 0), QSizeF(100, 100), QRect(900, 0, 100, 100));
+            }
+        };
+
+        QVERIFY(c.startAnimation(1, QPointF(0, 0), QSizeF(100, 100), QRect(300, 0, 100, 100)));
+        QVERIFY(chained);
+        QVERIFY(c.hasAnimation(1));
+        QVERIFY(c.hasAnimation(2));
+        QCOMPARE(c.startedHandles.size(), 2);
+    }
+
+    void testReentrantStartAnimationForManyHandlesTriggersRehash()
+    {
+        // Stress the rehash path: start enough handles from inside the
+        // hook to force QHash to grow. If the outer hook's reference
+        // pointed into the hash table, it would be invalidated during
+        // one of these inserts and subsequent reads would be UB. With
+        // the fix (reference points to local `*motion`), this is safe.
+        MockController c;
+        c.setCurve(std::make_shared<Easing>());
+
+        bool chained = false;
+        c.onStartedCallback = [&](int handle, MockController& self) {
+            if (handle == 1 && !chained) {
+                chained = true;
+                for (int i = 100; i < 200; ++i) {
+                    self.startAnimation(i, QPointF(0, 0), QSizeF(100, 100), QRect(300, 0, 100, 100));
+                }
+            }
+        };
+
+        QVERIFY(c.startAnimation(1, QPointF(0, 0), QSizeF(100, 100), QRect(300, 0, 100, 100)));
+        QVERIFY(chained);
+        QVERIFY(c.hasAnimation(1));
+        // 1 + 100 inserts all survived.
+        QCOMPARE(c.startedHandles.size(), 101);
+    }
+
+    // ─── Empty-controller safety ───
+
+    void testScheduleRepaintsOnEmptyControllerIsNoOp()
+    {
+        // scheduleRepaints() is called every postPaintScreen — it must
+        // tolerate being called with no active animations. This is
+        // trivially the case for the current implementation but worth
+        // pinning down so refactors don't regress it.
+        MockController c;
+        QVERIFY(!c.hasActiveAnimations());
+        c.scheduleRepaints();
+        QCOMPARE(c.repaintCalls, 0);
     }
 };
 

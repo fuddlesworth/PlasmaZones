@@ -83,10 +83,11 @@ public:
      *   - `"typeId:params"`  — dispatched to the registered factory
      *   - `"x1,y1,x2,y2"`    — cubic-bezier wire format
      *
-     * Returns `nullptr` only if @p spec is empty. Unknown typeIds fall
-     * through to a best-effort default (cubic-bezier outCubic) with a
-     * warning logged — use `tryCreate()` if you need to distinguish
-     * "valid curve" from "default substituted for bad input".
+     * Never returns `nullptr`. Empty specs, unknown typeIds, and factory
+     * parse failures all fall through to a best-effort default
+     * (cubic-bezier outCubic) with a warning logged for the latter two.
+     * Use `tryCreate()` if you need to distinguish "valid curve" from
+     * "default substituted for bad input".
      */
     std::shared_ptr<const Curve> create(const QString& spec) const;
 

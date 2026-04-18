@@ -84,9 +84,17 @@ public:
         return m_enabled;
     }
 
+    /// Animation length in milliseconds. Clamped to [0, 10000] — same
+    /// rationale as @ref setMinDistance: a pathological config value
+    /// (e.g. 10⁹ ms ≈ 11 days) would silently freeze every animation
+    /// for the remainder of the session. Zero is allowed — it means
+    /// "complete on first update" and short-circuits
+    /// @ref WindowMotion::updateProgress to progress = 1.0. Negative
+    /// values clamp to zero. Callers that want a tighter clamp should
+    /// apply it themselves (the effect's settings loader does).
     void setDuration(qreal ms)
     {
-        m_duration = ms;
+        m_duration = qBound(qreal(0.0), ms, qreal(10000.0));
     }
     qreal duration() const
     {
@@ -149,6 +157,15 @@ public:
      *
      * Otherwise the motion is stored, @ref onAnimationStarted is fired,
      * and the function returns true.
+     *
+     * ## Re-entrancy contract
+     *
+     * @ref onAnimationStarted may call back into the controller —
+     * @ref startAnimation (for any handle), @ref removeAnimation, or
+     * @ref clear are all safe. The hook receives a reference to a local
+     * copy of the just-registered motion, not to the hash slot, so a
+     * QHash rehash triggered by a re-entrant insert for a different
+     * handle cannot dangle the reference passed in.
      */
     bool startAnimation(Handle handle, const QPointF& oldPosition, const QSizeF& oldSize, const QRect& targetGeometry)
     {
@@ -165,8 +182,14 @@ public:
             return false;
         }
 
+        // Store into the hash first, then fire the hook with the local
+        // value `*motion` — NOT a reference into `m_motions`. Qt6 QHash
+        // uses open addressing, so any re-entrant startAnimation from
+        // inside the hook could trigger a rehash and invalidate a
+        // reference into the table. `*motion` lives on the stack for
+        // the duration of this call and is safe against rehash.
         m_motions[handle] = *motion;
-        onAnimationStarted(handle, m_motions[handle]);
+        onAnimationStarted(handle, *motion);
         return true;
     }
 

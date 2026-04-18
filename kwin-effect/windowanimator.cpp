@@ -57,14 +57,17 @@ void WindowAnimator::onAnimationStarted(KWin::EffectWindow* window, const Phosph
                       << "duration:" << motion.duration;
 }
 
-void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window, const PhosphorAnimation::WindowMotion&)
+void WindowAnimator::onAnimationComplete(KWin::EffectWindow*, const PhosphorAnimation::WindowMotion&)
 {
-    // Window is already at its final position (moveResize was called
-    // before the animation started); a final full repaint clears the
-    // residual transform from the last frame.
-    if (window && !window->isDeleted()) {
-        window->addRepaintFull();
-    }
+    // No per-completion work here — the controller fires
+    // onRepaintNeeded(bounds) immediately after this hook returns, and
+    // those bounds already cover the full animation path (start union
+    // target plus any overshoot sampling, widened by expandedPadding for
+    // shadow/decoration bleed). A second addRepaintFull() here would be
+    // redundant: its coverage is a subset of the targeted bounds once
+    // the expanded padding is accounted for. Kept as a hook override so
+    // future adapters can splice in completion-time work without
+    // touching the controller.
     qCDebug(lcEffect) << "Window snap animation complete";
 }
 
