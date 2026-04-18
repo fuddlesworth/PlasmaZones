@@ -361,11 +361,11 @@ void ZoneSelectorController::toggle()
 void ZoneSelectorController::selectLayout(const QString& layoutId)
 {
     if (isScreenLocked()) {
-        qCInfo(lcOverlay) << "PhosphorZones::Layout selection blocked (screen locked):" << layoutId;
+        qCInfo(lcOverlay) << "Layout selection blocked (screen locked):" << layoutId;
         return;
     }
 
-    qCInfo(lcOverlay) << "PhosphorZones::Layout selected=" << layoutId;
+    qCInfo(lcOverlay) << "Layout selected=" << layoutId;
 
     setActiveLayoutId(layoutId);
     Q_EMIT layoutSelected(layoutId);

@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
     if (!qEnvironmentVariableIsEmpty("WAYLAND_DISPLAY") && !PhosphorShell::LayerSurface::isSupported()) {
         qCCritical(lcDaemon) << "Layer-shell QPA plugin did not initialize —"
                              << "overlays will use xdg_toplevel (wrong stacking/anchoring)."
-                             << "PhosphorZones::Zone overlays will appear as regular windows (visible in taskbar,"
+                             << "Zone overlays will appear as regular windows (visible in taskbar,"
                              << "wrong z-order, no keyboard grab). This compositor may not support"
                              << "zwlr_layer_shell_v1 (e.g. GNOME/Mutter)."
                              << "Check that phosphorshell-qpa.so is installed to Qt's"

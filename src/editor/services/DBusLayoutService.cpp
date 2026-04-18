@@ -57,8 +57,7 @@ QDBusInterface* DBusLayoutService::getInterface()
 QString DBusLayoutService::loadLayout(const QString& layoutId)
 {
     if (layoutId.isEmpty()) {
-        Q_EMIT errorOccurred(
-            QCoreApplication::translate("DBusLayoutService", "PhosphorZones::Layout ID cannot be empty"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout ID cannot be empty"));
         return QString();
     }
 
@@ -84,8 +83,7 @@ QString DBusLayoutService::loadLayout(const QString& layoutId)
 QString DBusLayoutService::createLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(
-            QCoreApplication::translate("DBusLayoutService", "PhosphorZones::Layout JSON cannot be empty"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout JSON cannot be empty"));
         return QString();
     }
 
@@ -119,8 +117,7 @@ QString DBusLayoutService::createLayout(const QString& jsonLayout)
 bool DBusLayoutService::updateLayout(const QString& jsonLayout)
 {
     if (jsonLayout.isEmpty()) {
-        Q_EMIT errorOccurred(
-            QCoreApplication::translate("DBusLayoutService", "PhosphorZones::Layout JSON cannot be empty"));
+        Q_EMIT errorOccurred(QCoreApplication::translate("DBusLayoutService", "Layout JSON cannot be empty"));
         return false;
     }
 

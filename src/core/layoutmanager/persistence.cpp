@@ -63,12 +63,12 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 {
     QDir dir(directory);
     if (!dir.exists()) {
-        qCWarning(lcLayout) << "PhosphorZones::Layout directory does not exist:" << directory;
+        qCWarning(lcLayout) << "Layout directory does not exist:" << directory;
         return;
     }
 
     if (!dir.isReadable()) {
-        qCWarning(lcLayout) << "PhosphorZones::Layout directory is not readable:" << directory;
+        qCWarning(lcLayout) << "Layout directory is not readable:" << directory;
         return;
     }
 
@@ -83,7 +83,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
         QFile file(filePath);
 
         if (!file.exists()) {
-            qCWarning(lcLayout) << "PhosphorZones::Layout file does not exist:" << filePath;
+            qCWarning(lcLayout) << "Layout file does not exist:" << filePath;
             continue;
         }
 
@@ -94,7 +94,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 
         const QByteArray data = file.readAll();
         if (data.isEmpty()) {
-            qCWarning(lcLayout) << "PhosphorZones::Layout file is empty:" << filePath;
+            qCWarning(lcLayout) << "Layout file is empty:" << filePath;
             continue;
         }
 
@@ -242,7 +242,7 @@ void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
         int modeInt = grp->readInt(QLatin1String("Mode"), 0);
         entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
         entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
-        entry.tilingAlgorithm = grp->readString(QLatin1String("PhosphorTiles::TilingAlgorithm"));
+        entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
 
         m_assignments[key] = entry;
     }
@@ -530,7 +530,7 @@ void LayoutManager::saveAssignments()
         auto group = m_configBackend->group(groupName);
         group->writeInt(QLatin1String("Mode"), static_cast<int>(entry.mode));
         group->writeString(QLatin1String("SnappingLayout"), entry.snappingLayout);
-        group->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), entry.tilingAlgorithm);
+        group->writeString(QLatin1String("TilingAlgorithm"), entry.tilingAlgorithm);
     }
 
     // Write [QuickLayouts] group

@@ -12,8 +12,7 @@ using namespace PlasmaZones;
 DuplicateZoneCommand::DuplicateZoneCommand(QPointer<ZoneManager> zoneManager, const QString& sourceZoneId,
                                            const QString& duplicatedZoneId, const QVariantMap& duplicatedZoneData,
                                            const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Duplicate PhosphorZones::Zone", "@action") : text,
-                      parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Duplicate Zone", "@action") : text, parent)
     , m_sourceZoneId(sourceZoneId)
     , m_duplicatedZoneId(duplicatedZoneId)
     , m_duplicatedZoneData(duplicatedZoneData)

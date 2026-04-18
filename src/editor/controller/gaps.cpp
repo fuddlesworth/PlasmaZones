@@ -561,7 +561,7 @@ void EditorController::toggleZoneGeometryMode(const QString& zoneId)
 
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for geometry mode toggle:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for geometry mode toggle:" << zoneId;
         return;
     }
 

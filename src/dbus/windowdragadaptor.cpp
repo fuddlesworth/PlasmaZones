@@ -572,7 +572,7 @@ void WindowDragAdaptor::onLayoutChanged()
     // This handles the case where user changes layout via hotkey/GUI while dragging
     // On next dragMoved(), fresh geometry will be calculated from the new layout
     if (!m_draggedWindowId.isEmpty()) {
-        qCInfo(lcDbusWindow) << "PhosphorZones::Layout changed mid-drag, clearing cached zone state";
+        qCInfo(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
         m_currentZoneId.clear();
         m_currentZoneGeometry = QRect();
         m_currentMultiZoneGeometry = QRect();
