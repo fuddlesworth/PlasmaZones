@@ -9,8 +9,20 @@
 namespace PlasmaZones {
 
 LayoutSourceBundle::LayoutSourceBundle() = default;
-LayoutSourceBundle::~LayoutSourceBundle() = default;
 LayoutSourceBundle::LayoutSourceBundle(LayoutSourceBundle&&) noexcept = default;
+
+// Hand-written destructor — a defaulted one would rely on reverse declaration
+// order (composite → autotile → zones) to drop the composite's borrowed
+// pointers before their target objects destruct. That works today, but a
+// future reorder of the struct members would silently reverse the order and
+// introduce a UAF. Clear the composite explicitly here so destruction-order
+// correctness doesn't hinge on member-declaration order staying put.
+LayoutSourceBundle::~LayoutSourceBundle()
+{
+    if (composite) {
+        composite->clearSources();
+    }
+}
 
 // Hand-written move-assign — a defaulted implementation would move
 // `zones`, then `autotile`, then `composite` member-wise, which means the
