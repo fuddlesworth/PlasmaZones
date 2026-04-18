@@ -6,6 +6,8 @@
 #include "PhosphorShortcuts/IBackend.h"
 #include "shortcutslogging.h"
 
+#include <algorithm>
+
 namespace Phosphor::Shortcuts {
 
 Registry::Registry(IBackend* backend, QObject* parent)
@@ -23,13 +25,31 @@ Registry::~Registry() = default;
 void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QString& description,
                     std::function<void()> callback)
 {
-    auto& entry = m_entries[id];
-    entry.binding.id = id;
-    entry.binding.defaultSeq = defaultSeq;
-    entry.binding.currentSeq = defaultSeq;
-    entry.binding.description = description;
-    entry.callback = std::move(callback);
-    entry.dirty = true;
+    auto it = m_entries.find(id);
+    if (it == m_entries.end()) {
+        Entry entry;
+        entry.binding.id = id;
+        entry.binding.defaultSeq = defaultSeq;
+        entry.binding.currentSeq = defaultSeq;
+        entry.binding.description = description;
+        entry.callback = std::move(callback);
+        entry.dirty = true;
+        entry.registered = false;
+        m_entries.insert(id, std::move(entry));
+        return;
+    }
+
+    // Update in place but preserve currentSeq so a prior rebind (e.g. from
+    // the user's config) is not clobbered when consumers re-apply compiled-in
+    // defaults via bind() for a hot-reload.
+    const bool defaultChanged = (it->binding.defaultSeq != defaultSeq);
+    const bool descriptionChanged = (it->binding.description != description);
+    it->binding.defaultSeq = defaultSeq;
+    it->binding.description = description;
+    it->callback = std::move(callback);
+    if (defaultChanged || descriptionChanged) {
+        it->dirty = true;
+    }
 }
 
 void Registry::rebind(const QString& id, const QKeySequence& seq)
@@ -37,6 +57,13 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
     auto it = m_entries.find(id);
     if (it == m_entries.end()) {
         qCWarning(lcPhosphorShortcuts) << "rebind(): unknown shortcut id" << id;
+        return;
+    }
+    if (seq.isEmpty()) {
+        // An empty sequence would otherwise leave the grab registered with no
+        // key (the pre-library stale-Wayland-grab hazard from discussion #155).
+        // Route through unbind() so the backend drops the grab cleanly.
+        unbind(id);
         return;
     }
     if (it->binding.currentSeq == seq) {
@@ -63,11 +90,12 @@ void Registry::flush()
         if (!it->dirty) {
             continue;
         }
-        // First flush for an id is a registerShortcut(); subsequent flushes
-        // are updateShortcut(). The backend distinguishes internally — both
-        // codepaths are idempotent and queue until the batch commit below.
-        m_backend->registerShortcut(it->binding.id, it->binding.currentSeq, it->binding.description);
-        m_backend->updateShortcut(it->binding.id, it->binding.currentSeq);
+        if (!it->registered) {
+            m_backend->registerShortcut(it->binding.id, it->binding.currentSeq, it->binding.description);
+            it->registered = true;
+        } else {
+            m_backend->updateShortcut(it->binding.id, it->binding.currentSeq);
+        }
         it->dirty = false;
     }
 
@@ -90,14 +118,28 @@ QVector<Registry::Binding> Registry::bindings() const
     for (const auto& e : m_entries) {
         out.push_back(e.binding);
     }
+    // QHash iteration order is unspecified — sort by id so consumer UIs
+    // (KCM lists, settings dialogs) get a deterministic, stable order
+    // across runs.
+    std::sort(out.begin(), out.end(), [](const Binding& a, const Binding& b) {
+        return a.id < b.id;
+    });
     return out;
 }
 
 void Registry::onBackendActivated(QString id)
 {
+    // Guard against callbacks that destroy the Registry before we emit
+    // triggered(). Q_EMIT on a dangling `this` is UB; a QPointer-based
+    // check here is cheap and standard Qt hygiene.
+    QPointer<Registry> guard(this);
+
     const auto it = m_entries.constFind(id);
     if (it != m_entries.constEnd() && it->callback) {
         it->callback();
+    }
+    if (!guard) {
+        return;
     }
     Q_EMIT triggered(id);
 }

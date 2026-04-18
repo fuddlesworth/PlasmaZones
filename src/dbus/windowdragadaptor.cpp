@@ -8,7 +8,7 @@
 #include <cmath>
 #include "pz_i18n.h"
 #include "../config/configdefaults.h"
-#include <PhosphorShortcuts/Registry.h>
+#include "../core/ishortcutregistrar.h"
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -285,28 +285,27 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
 {
-    if (!m_shortcutRegistry) {
+    if (!m_shortcutRegistrar) {
         return;
     }
-    m_shortcutRegistry->bind(QString::fromLatin1(kCancelOverlayId), QKeySequence(Qt::Key_Escape),
-                             PzI18n::tr("Cancel Zone Overlay"), [this] {
-                                 cancelSnap();
-                             });
-    m_shortcutRegistry->flush();
+    m_shortcutRegistrar->registerAdhocShortcut(QString::fromLatin1(kCancelOverlayId), QKeySequence(Qt::Key_Escape),
+                                               PzI18n::tr("Cancel Zone Overlay"), [this] {
+                                                   cancelSnap();
+                                               });
 }
 
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
-    if (!m_shortcutRegistry) {
+    if (!m_shortcutRegistrar) {
         return;
     }
-    // unbind() drops both the Registry entry and the compositor-level key
-    // grab. Prior IShortcutBackend-era bug (discussion #155) where setting
-    // an empty QKeySequence left a stale Wayland grab is no longer
-    // expressible with the new API — the only way to release a grab is
-    // unbind, which does it cleanly.
-    m_shortcutRegistry->unbind(QString::fromLatin1(kCancelOverlayId));
-    m_shortcutRegistry->flush();
+    // unregisterAdhocShortcut() drops both the Registry entry and the
+    // compositor-level key grab. Prior IShortcutBackend-era bug (discussion
+    // #155) where setting an empty QKeySequence left a stale Wayland grab is
+    // no longer expressible: rebind() with an empty sequence now routes
+    // through unbind() inside the Registry, and the cancel path always uses
+    // the explicit unregister call below.
+    m_shortcutRegistrar->unregisterAdhocShortcut(QString::fromLatin1(kCancelOverlayId));
 }
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)

@@ -68,8 +68,20 @@ void PortalBackend::registerShortcut(const QString& id, const QKeySequence& pref
 
 void PortalBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)
 {
+    // Only allow update for ids the Registry has previously passed to
+    // registerShortcut — otherwise we'd silently synthesise a registration
+    // with an empty description, which is a spec violation.
+    if (!m_descriptions.contains(id)) {
+        qCWarning(lcPhosphorShortcuts) << "Portal updateShortcut: unknown id" << id
+                                       << "— ignoring (call registerShortcut first)";
+        return;
+    }
+
     auto it = m_pending.find(id);
     if (it == m_pending.end()) {
+        // Already flushed; re-queue so the next flush re-sends with the new
+        // trigger. Description is known because m_descriptions.contains check
+        // above passed.
         Pending p;
         p.preferred = newTrigger;
         p.description = m_descriptions.value(id);
@@ -90,6 +102,15 @@ void PortalBackend::unregisterShortcut(const QString& id)
 
 void PortalBackend::flush()
 {
+    if (m_sessionFailed) {
+        // CreateSession errored earlier. Keep emitting ready() synchronously
+        // so consumers that gate UI on ready() don't hang; the warning makes
+        // the misconfiguration visible in logs.
+        qCWarning(lcPhosphorShortcuts)
+            << "Portal flush(): CreateSession failed earlier — grabs will not work on this session";
+        Q_EMIT ready();
+        return;
+    }
     if (m_sessionHandle.isEmpty()) {
         // Defer until onSessionCreated() runs — ready() fires from there.
         m_flushRequested = true;
@@ -125,7 +146,11 @@ void PortalBackend::onSessionCreated(QDBusPendingCallWatcher* watcher)
     QDBusPendingReply<QDBusObjectPath> reply = *watcher;
     if (reply.isError()) {
         qCWarning(lcPhosphorShortcuts) << "Portal CreateSession failed:" << reply.error().message();
-        // Still emit ready so consumers don't hang waiting for flush().
+        m_sessionFailed = true;
+        // Consume any pending flush that was waiting on us — the warning in
+        // flush() from now on is the consumer-visible signal that something
+        // is wrong.
+        m_flushRequested = false;
         Q_EMIT ready();
         return;
     }
@@ -190,9 +215,24 @@ void PortalBackend::sendBindShortcuts()
     msg.setArguments({QVariant::fromValue(QDBusObjectPath(m_sessionHandle)), QVariant::fromValue(shortcutsArg),
                       QVariant::fromValue(QString()), QVariant::fromValue(QVariantMap{})});
 
-    QDBusConnection::sessionBus().asyncCall(msg);
+    QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
     m_pending.clear();
-    Q_EMIT ready();
+
+    // ready() now means "portal has acknowledged the BindShortcuts batch" —
+    // fire it from the watcher's finished callback rather than immediately
+    // after asyncCall, so consumers that un-grey UI on ready() don't do it
+    // before grabs are actually live.
+    auto* watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
+        watcher->deleteLater();
+        QDBusPendingReply<> reply = *watcher;
+        if (reply.isError()) {
+            qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
+            // Still emit ready() — the consumer needs to progress. The log
+            // is the signal that grabs didn't go through.
+        }
+        Q_EMIT ready();
+    });
 }
 
 void PortalBackend::onActivated(const QDBusObjectPath& /*sessionHandle*/, const QString& shortcutId,

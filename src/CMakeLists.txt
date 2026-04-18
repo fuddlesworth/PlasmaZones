@@ -28,6 +28,7 @@ set(plasmazones_core_SRCS
     # wallpaperprovider moved to PhosphorShell
     core/enums.h
     core/interfaces.h
+    core/ishortcutregistrar.h
     core/interfaces.cpp
     core/inavigationactions.h
     core/iwindowengine.h

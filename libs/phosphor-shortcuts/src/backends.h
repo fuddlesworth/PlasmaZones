@@ -69,6 +69,11 @@ private:
     QString m_sessionToken; // used for session_handle_token — derived from applicationName()
     QString m_sessionHandle; // populated once CreateSession returns
     bool m_flushRequested = false;
+    // Latched true if CreateSession failed. flush() then keeps emitting
+    // ready() synchronously (with a warning) so consumers don't hang waiting
+    // for a signal that will never arrive, while still being able to tell
+    // something is wrong from the logs.
+    bool m_sessionFailed = false;
 
     // Pending set = shortcuts that still need BindShortcuts sent to the portal.
     // On each flush() we send everything in pending and clear; subsequent

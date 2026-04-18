@@ -27,7 +27,9 @@ enum class BackendHint {
     Portal, ///< Force XDG Desktop Portal GlobalShortcuts.
     DBusTrigger, ///< Force D-Bus trigger fallback.
     Native, ///< Reserved for the future INativeGrabber-backed backend.
-            ///< Falls through to DBusTrigger for now.
+            ///< Currently returns nullptr — callers asking explicitly for
+            ///< Native opted in to a backend that doesn't exist yet, so a
+            ///< silent fallback would mask a misconfiguration.
 };
 
 /**

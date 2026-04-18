@@ -110,10 +110,26 @@ public:
     QVector<Binding> bindings() const;
 
 Q_SIGNALS:
-    void triggered(const QString& id);       // fan-out dispatch
+    void triggered(QString id);              // fan-out dispatch (matches IBackend::activated)
     void ready();                            // forwarded from backend
 };
 ```
+
+Contract details worth knowing:
+
+- `bind()` is safe to call multiple times for the same id. The second call
+  updates `defaultSeq`, `description`, and `callback` in place but **preserves
+  `currentSeq`** — any prior `rebind()` (e.g. from user config) is kept.
+- `rebind()` with an empty `QKeySequence` routes through `unbind()` rather
+  than leaving an empty sequence registered. This closes off the
+  stale-Wayland-grab hazard from PlasmaZones discussion #155.
+- `flush()` only calls `IBackend::registerShortcut` once per id (on the
+  first flush after bind). Subsequent sequence changes go through
+  `IBackend::updateShortcut`. Consumers writing backends can rely on
+  register-before-update ordering.
+- `ready()` is emitted after the backend acknowledges the batch. For
+  async backends (Portal) it waits on the D-Bus reply; for synchronous
+  backends (KGlobalAccel, DBusTrigger) it fires immediately.
 
 Consumers pick one of two patterns:
 
@@ -132,7 +148,7 @@ enum class BackendHint {
     KGlobalAccel,
     Portal,
     DBusTrigger,
-    Native,            // future — falls back to DBusTrigger for now
+    Native,            // future — returns nullptr until an INativeGrabber backend lands
 };
 
 std::unique_ptr<IBackend> createBackend(BackendHint hint = BackendHint::Auto,

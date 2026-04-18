@@ -72,6 +72,21 @@ QString snapToZoneId(int slotZeroBased)
     return QStringLiteral("snap_to_zone_%1").arg(slotZeroBased + 1);
 }
 
+// QKeySequence(QString) silently returns an empty sequence on malformed
+// input. Wrap with a warning log so a typo in the config surfaces from the
+// logs instead of silently disabling a shortcut.
+QKeySequence parseSequence(const QString& raw, const QString& contextId)
+{
+    if (raw.isEmpty()) {
+        return {};
+    }
+    QKeySequence seq(raw);
+    if (seq.isEmpty()) {
+        qCWarning(lcShortcuts) << "Failed to parse shortcut sequence for" << contextId << ":" << raw;
+    }
+    return seq;
+}
+
 } // namespace
 
 ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManager, QObject* parent)
@@ -151,6 +166,29 @@ void ShortcutManager::unregisterShortcuts()
     m_entries.clear();
 }
 
+void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
+                                            std::function<void()> callback)
+{
+    if (!m_registry) {
+        return;
+    }
+    m_registry->bind(id, sequence, description, std::move(callback));
+    // If the consumer ever passes a different sequence for the same id
+    // after a prior register, bind() preserves currentSeq per contract,
+    // so apply the requested sequence explicitly via rebind().
+    m_registry->rebind(id, sequence);
+    m_registry->flush();
+}
+
+void ShortcutManager::unregisterAdhocShortcut(const QString& id)
+{
+    if (!m_registry) {
+        return;
+    }
+    m_registry->unbind(id);
+    m_registry->flush();
+}
+
 void ShortcutManager::rebindAll()
 {
     for (const auto& e : std::as_const(m_entries)) {
@@ -170,11 +208,12 @@ void ShortcutManager::buildEntries()
                       const char* i18nText, std::function<void()> fire) {
         Entry e;
         e.id = QString::fromLatin1(id);
-        e.defaultSeq = QKeySequence(defGetter());
+        e.defaultSeq = parseSequence(defGetter(), e.id);
         e.description = PzI18n::tr(i18nText);
         Settings* s = m_settings;
-        e.currentSeq = [s, curGetter] {
-            return QKeySequence((s->*curGetter)());
+        const QString idCopy = e.id;
+        e.currentSeq = [s, curGetter, idCopy] {
+            return parseSequence((s->*curGetter)(), idCopy);
         };
         e.fire = std::move(fire);
         m_entries.push_back(std::move(e));
@@ -207,11 +246,12 @@ void ShortcutManager::buildEntries()
     for (int i = 0; i < 9; ++i) {
         Entry e;
         e.id = quickLayoutId(i);
-        e.defaultSeq = QKeySequence(quickDefaults[i]);
+        e.defaultSeq = parseSequence(quickDefaults[i], e.id);
         e.description = PzI18n::tr("Apply Layout %1").arg(i + 1);
         Settings* s = m_settings;
-        e.currentSeq = [s, i] {
-            return QKeySequence(s->quickLayoutShortcut(i));
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->quickLayoutShortcut(i), idCopy);
         };
         const int slot = i + 1;
         e.fire = [this, slot] {
@@ -326,11 +366,12 @@ void ShortcutManager::buildEntries()
     for (int i = 0; i < 9; ++i) {
         Entry e;
         e.id = snapToZoneId(i);
-        e.defaultSeq = QKeySequence(snapDefaults[i]);
+        e.defaultSeq = parseSequence(snapDefaults[i], e.id);
         e.description = PzI18n::tr("Snap to Zone %1").arg(i + 1);
         Settings* s = m_settings;
-        e.currentSeq = [s, i] {
-            return QKeySequence(s->snapToZoneShortcut(i));
+        const QString idCopy = e.id;
+        e.currentSeq = [s, i, idCopy] {
+            return parseSequence(s->snapToZoneShortcut(i), idCopy);
         };
         const int zoneNumber = i + 1;
         e.fire = [this, zoneNumber] {

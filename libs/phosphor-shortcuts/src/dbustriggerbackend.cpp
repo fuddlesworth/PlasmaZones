@@ -11,8 +11,15 @@ namespace Phosphor::Shortcuts {
 DBusTriggerBackend::DBusTriggerBackend(QObject* parent)
     : IBackend(parent)
 {
-    QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/Phosphor/Shortcuts"), this,
-                                                 QDBusConnection::ExportScriptableSlots);
+    const bool ok = QDBusConnection::sessionBus().registerObject(QStringLiteral("/org/Phosphor/Shortcuts"), this,
+                                                                 QDBusConnection::ExportScriptableSlots);
+    if (!ok) {
+        qCWarning(lcPhosphorShortcuts)
+            << "DBusTrigger backend failed to register /org/Phosphor/Shortcuts on the session bus"
+            << "— another process on this D-Bus service name may already own the path."
+            << "TriggerAction calls will not reach this instance.";
+        return;
+    }
     qCInfo(lcPhosphorShortcuts) << "DBusTrigger backend active — bind shortcuts via:"
                                 << "dbus-send --session --dest=<your-service> /org/Phosphor/Shortcuts"
                                 << "org.Phosphor.Shortcuts.TriggerAction string:\"<id>\"";

@@ -46,8 +46,9 @@ public:
 
     /**
      * Register a shortcut. Safe to call multiple times for the same id —
-     * subsequent calls replace the binding in-place (useful during a
-     * hot-reload of compiled-in defaults). Takes effect after flush().
+     * subsequent calls update the default sequence, description, and callback
+     * in place but PRESERVE the current sequence (any user-applied rebind is
+     * kept). Takes effect after flush().
      *
      * @param callback Optional. Invoked on activation in addition to the
      *                 triggered() signal. Nullptr callbacks are stored but
@@ -59,7 +60,9 @@ public:
 
     /**
      * Change the active binding for an already-registered id. Takes effect
-     * after flush(). Unknown ids are logged and ignored.
+     * after flush(). Unknown ids are logged and ignored. Passing an empty
+     * QKeySequence routes through unbind() — releasing the grab cleanly
+     * rather than leaving an empty sequence registered.
      */
     void rebind(const QString& id, const QKeySequence& seq);
 
@@ -83,8 +86,11 @@ Q_SIGNALS:
     /**
      * Emitted on every activation, regardless of whether the binding has a
      * callback. Use this for centralised dispatch (one slot, switch on id).
+     *
+     * Signature matches IBackend::activated (QString by value) so the two
+     * signals can be cross-connected without adapter slots.
      */
-    void triggered(const QString& id);
+    void triggered(QString id);
 
     /**
      * Forwarded from IBackend::ready().
@@ -101,6 +107,7 @@ private:
         Binding binding;
         std::function<void()> callback;
         bool dirty = true; // needs flush to backend
+        bool registered = false; // has registerShortcut been sent yet?
     };
 
     QPointer<IBackend> m_backend;

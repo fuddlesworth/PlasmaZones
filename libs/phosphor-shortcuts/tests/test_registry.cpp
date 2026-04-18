@@ -74,7 +74,7 @@ class TestRegistry : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
-    void bindThenFlush_queuesRegisterAndUpdate()
+    void bindThenFlush_queuesRegisterOnly()
     {
         FakeBackend backend;
         Registry registry(&backend);
@@ -90,13 +90,34 @@ private Q_SLOTS:
 
         registry.flush();
 
+        // First flush: registerShortcut only. updateShortcut is NOT called
+        // for a fresh registration — the Registry distinguishes internally.
         QCOMPARE(backend.registers.size(), 1);
         QCOMPARE(backend.registers[0].id, QStringLiteral("pz.test"));
         QCOMPARE(backend.registers[0].preferred, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
         QCOMPARE(backend.registers[0].description, QStringLiteral("Test shortcut"));
-        QCOMPARE(backend.updates.size(), 1);
-        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Ctrl+Shift+T")));
+        QCOMPARE(backend.updates.size(), 0);
         QCOMPARE(backend.flushes, 1);
+    }
+
+    void secondFlushAfterRebind_emitsUpdateOnly()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        registry.flush();
+
+        // Subsequent change: updateShortcut only, no re-registration.
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 1);
+        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+2")));
     }
 
     void flushIdempotentWhenClean()
@@ -137,7 +158,7 @@ private Q_SLOTS:
         QCOMPARE(backend.updates.size(), 0);
     }
 
-    void rebindDifferentSequence_queuesUpdate()
+    void rebindEmptySequence_routesThroughUnbind()
     {
         FakeBackend backend;
         Registry registry(&backend);
@@ -147,16 +168,15 @@ private Q_SLOTS:
 
         backend.updates.clear();
 
-        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
-        // Not yet flushed.
+        // Rebind to an empty sequence should NOT leave the grab registered
+        // with an empty key (the pre-library stale-grab hazard). Route
+        // through unbind so the backend drops it cleanly.
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence());
+
+        QCOMPARE(backend.unregisters.size(), 1);
+        QCOMPARE(backend.unregisters[0], QStringLiteral("pz.a"));
         QCOMPARE(backend.updates.size(), 0);
-        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
-
-        registry.flush();
-
-        QCOMPARE(backend.updates.size(), 1);
-        QCOMPARE(backend.updates[0].id, QStringLiteral("pz.a"));
-        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(registry.bindings().size(), 0);
     }
 
     void rebindUnknownId_isIgnored()
@@ -277,7 +297,7 @@ private Q_SLOTS:
         QCOMPARE(readySpy.count(), 1);
     }
 
-    void rebindReplacesCallback()
+    void secondBind_preservesCurrentSequenceAndReplacesCallback()
     {
         FakeBackend backend;
         Registry registry(&backend);
@@ -288,22 +308,29 @@ private Q_SLOTS:
         registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
             ++firstCount;
         });
-        // Second bind() for the same id must replace the callback in place.
-        // This matches the ShortcutManager hot-reload pattern where compiled
-        // defaults are re-applied during registerShortcuts().
+        // Apply a user rebind BEFORE the second bind() comes along — e.g.
+        // from a config-load in ShortcutManager::registerShortcuts().
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+9")));
+
+        // Second bind() for the same id must preserve currentSeq (user's
+        // Meta+9) while replacing description + callback. Previously this
+        // would have clobbered Meta+9 back to Meta+2.
         registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")), QStringLiteral("A updated"), [&] {
             ++secondCount;
         });
         registry.flush();
 
-        backend.activate(QStringLiteral("pz.a"));
+        QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+9")));
 
+        backend.activate(QStringLiteral("pz.a"));
         QCOMPARE(firstCount, 0);
         QCOMPARE(secondCount, 1);
 
         const auto bindings = registry.bindings();
         QCOMPARE(bindings.size(), 1);
         QCOMPARE(bindings[0].description, QStringLiteral("A updated"));
+        QCOMPARE(bindings[0].defaultSeq, QKeySequence(QStringLiteral("Meta+2")));
+        QCOMPARE(bindings[0].currentSeq, QKeySequence(QStringLiteral("Meta+9")));
     }
 
     void shortcut_returnsCurrentSequence()
@@ -318,6 +345,50 @@ private Q_SLOTS:
 
         registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
         QCOMPARE(registry.shortcut(QStringLiteral("pz.a")), QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void bindings_returnsSortedById()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        // Insert in reverse-alpha order so the natural QHash iteration is
+        // unlikely to return them alphabetised by chance.
+        registry.bind(QStringLiteral("pz.c"), QKeySequence(QStringLiteral("Meta+3")));
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.bind(QStringLiteral("pz.b"), QKeySequence(QStringLiteral("Meta+2")));
+
+        const auto bindings = registry.bindings();
+        QCOMPARE(bindings.size(), 3);
+        QCOMPARE(bindings[0].id, QStringLiteral("pz.a"));
+        QCOMPARE(bindings[1].id, QStringLiteral("pz.b"));
+        QCOMPARE(bindings[2].id, QStringLiteral("pz.c"));
+    }
+
+    void callbackThatUnbindsSelf_isSafe()
+    {
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        bool fired = false;
+        // Callback unbinds its own id from inside the Registry::triggered
+        // emit path. The QPointer guard added in onBackendActivated makes
+        // this safe; before the fix, a callback that tore down the Registry
+        // would have caused a use-after-free on the following Q_EMIT.
+        registry.bind(QStringLiteral("pz.self-unbind"), QKeySequence(QStringLiteral("Meta+Q")),
+                      QStringLiteral("Self-unbind"), [&] {
+                          fired = true;
+                          registry.unbind(QStringLiteral("pz.self-unbind"));
+                      });
+        registry.flush();
+
+        QSignalSpy triggeredSpy(&registry, &Registry::triggered);
+
+        backend.activate(QStringLiteral("pz.self-unbind"));
+
+        QVERIFY(fired);
+        QCOMPARE(triggeredSpy.count(), 1);
+        QCOMPARE(registry.bindings().size(), 0);
     }
 };
 

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "../core/ishortcutregistrar.h"
+
 #include <QKeySequence>
 #include <QObject>
 #include <QString>
@@ -40,7 +42,7 @@ enum class NavigationDirection {
  * below. The actual key-grab mechanism (KGlobalAccel / XDG Portal /
  * D-Bus trigger) is selected inside the PhosphorShortcuts library.
  */
-class ShortcutManager : public QObject
+class ShortcutManager : public QObject, public IShortcutRegistrar
 {
     Q_OBJECT
 
@@ -52,12 +54,21 @@ public:
     void updateShortcuts();
     void unregisterShortcuts();
 
-    /// Registry handle for subsystems that need to register their own
-    /// ad-hoc shortcuts (e.g. WindowDragAdaptor for the Escape cancel).
-    Phosphor::Shortcuts::Registry* registry() const
-    {
-        return m_registry.get();
-    }
+    /**
+     * Register an ad-hoc shortcut that lives outside the main settings-driven
+     * table. Used by subsystems that need a transient grab bound to a code
+     * path (e.g. WindowDragAdaptor's Escape cancel during a drag). Batches
+     * with an immediate flush to the backend. Idempotent — re-registering the
+     * same id updates the callback and description in place.
+     */
+    void registerAdhocShortcut(const QString& id, const QKeySequence& sequence, const QString& description,
+                               std::function<void()> callback) override;
+
+    /**
+     * Release an ad-hoc shortcut previously bound via registerAdhocShortcut().
+     * Idempotent; unknown ids are ignored.
+     */
+    void unregisterAdhocShortcut(const QString& id) override;
 
 Q_SIGNALS:
     void openEditorRequested();

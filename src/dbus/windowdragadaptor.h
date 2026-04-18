@@ -14,10 +14,6 @@
 #include <QVector>
 #include <memory>
 
-namespace Phosphor::Shortcuts {
-class Registry;
-} // namespace Phosphor::Shortcuts
-
 class QScreen;
 
 namespace PlasmaZones {
@@ -30,6 +26,7 @@ class Layout;
 class Zone;
 class WindowTrackingAdaptor;
 class AutotileEngine;
+class IShortcutRegistrar;
 
 /**
  * @brief D-Bus adaptor for window drag handling
@@ -65,16 +62,24 @@ public:
     }
 
     /**
-     * @brief Set the shared shortcut registry.
+     * @brief Set the shortcut registrar used to (un)register the Escape
+     *        cancel-overlay shortcut around active drag sessions.
      *
      * Must be called after construction, before any drag operations.
-     * The registry is owned by ShortcutManager — this is a non-owning pointer.
-     * Used to dynamically register/release the Escape cancel-overlay shortcut
-     * around active drag sessions.
+     * The registrar is owned by Daemon — this is a non-owning pointer. Routing
+     * through the interface keeps the underlying Registry private, so the
+     * drag adaptor can't accidentally iterate or flush other consumers'
+     * shortcuts.
+     *
+     * Passing nullptr detaches the adaptor from the registrar; any subsequent
+     * (un)register call becomes a no-op. Daemon::stop() uses this to prevent
+     * late callbacks from touching a destroyed ShortcutManager during
+     * shutdown (member destruction order: unique_ptr members destruct before
+     * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutRegistry(Phosphor::Shortcuts::Registry* registry)
+    void setShortcutRegistrar(IShortcutRegistrar* registrar)
     {
-        m_shortcutRegistry = registry;
+        m_shortcutRegistrar = registrar;
     }
 
 public Q_SLOTS:
@@ -307,7 +312,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    Phosphor::Shortcuts::Registry* m_shortcutRegistry = nullptr; // Non-owning: owned by ShortcutManager
+    IShortcutRegistrar* m_shortcutRegistrar = nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap
     // assist is requested; consumed by computeAndEmitSnapAssist() which runs

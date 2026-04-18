@@ -26,7 +26,12 @@ namespace Phosphor::Shortcuts {
 class KGlobalAccelBackend::Impl
 {
 public:
-    QHash<QString, QAction*> actions;
+    struct Entry
+    {
+        QAction* action = nullptr;
+        bool defaultApplied = false; // true after the first setDefaultShortcut call
+    };
+    QHash<QString, Entry> entries;
 };
 
 KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
@@ -38,58 +43,74 @@ KGlobalAccelBackend::KGlobalAccelBackend(QObject* parent)
 
 KGlobalAccelBackend::~KGlobalAccelBackend()
 {
-    for (auto* action : std::as_const(m_impl->actions)) {
-        if (!action) {
-            continue;
+    // IMPORTANT: do NOT call KGlobalAccel::removeAllShortcuts here.
+    //
+    // removeAllShortcuts purges the binding from the persistent on-disk
+    // registry (kglobalshortcutsrc). On a normal daemon shutdown that would
+    // wipe every user-customised shortcut — users would reset to defaults
+    // on each restart. KGlobalAccel cleans up its in-memory action table
+    // automatically when the QAction is destroyed, so a plain delete is the
+    // correct teardown path.
+    for (auto& entry : m_impl->entries) {
+        if (entry.action) {
+            entry.action->deleteLater();
         }
-        KGlobalAccel::self()->removeAllShortcuts(action);
-        action->deleteLater();
     }
 }
 
 void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence& preferredTrigger,
                                            const QString& description)
 {
-    auto it = m_impl->actions.find(id);
-    QAction* action = (it != m_impl->actions.end()) ? *it : nullptr;
-    if (!action) {
-        action = new QAction(description, this);
-        action->setObjectName(id);
-        action->setProperty("componentName", QCoreApplication::applicationName());
-        connect(action, &QAction::triggered, this, [this, id] {
-            Q_EMIT activated(id);
+    auto& entry = m_impl->entries[id];
+    if (!entry.action) {
+        entry.action = new QAction(description, this);
+        entry.action->setObjectName(id);
+        entry.action->setProperty("componentName", QCoreApplication::applicationName());
+        const QString idCopy = id;
+        connect(entry.action, &QAction::triggered, this, [this, idCopy] {
+            Q_EMIT activated(idCopy);
         });
-        m_impl->actions.insert(id, action);
-    } else if (!description.isEmpty() && action->text() != description) {
-        action->setText(description);
+    } else if (!description.isEmpty() && entry.action->text() != description) {
+        entry.action->setText(description);
     }
 
-    // setDefaultShortcut establishes the "reset to default" binding shown in
-    // System Settings; setShortcut actually grabs the key. The pair mirrors
-    // KF6 examples and survives a KGlobalAccel-side config reset.
-    KGlobalAccel::self()->setDefaultShortcut(action, {preferredTrigger});
-    KGlobalAccel::self()->setShortcut(action, {preferredTrigger});
+    if (!entry.defaultApplied) {
+        // setDefaultShortcut establishes the "reset to default" binding shown
+        // in System Settings. Only needs to happen once per id — repeating it
+        // on every re-register causes extra writes to kglobalshortcutsrc.
+        KGlobalAccel::self()->setDefaultShortcut(entry.action, {preferredTrigger});
+        entry.defaultApplied = true;
+    }
+    // setShortcut actually grabs the key. Uses the default autoloading flag
+    // so any user override persisted in kglobalshortcutsrc wins over the
+    // preferredTrigger passed here.
+    KGlobalAccel::self()->setShortcut(entry.action, {preferredTrigger});
 }
 
 void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)
 {
-    auto it = m_impl->actions.find(id);
-    if (it == m_impl->actions.end() || !*it) {
+    auto it = m_impl->entries.find(id);
+    if (it == m_impl->entries.end() || !it->action) {
         qCWarning(lcPhosphorShortcuts) << "KGlobalAccel updateShortcut: unknown id" << id;
         return;
     }
-    KGlobalAccel::self()->setShortcut(*it, {newTrigger});
+    KGlobalAccel::self()->setShortcut(it->action, {newTrigger});
 }
 
 void KGlobalAccelBackend::unregisterShortcut(const QString& id)
 {
-    auto it = m_impl->actions.find(id);
-    if (it == m_impl->actions.end()) {
+    auto it = m_impl->entries.find(id);
+    if (it == m_impl->entries.end()) {
         return;
     }
-    QAction* action = *it;
-    m_impl->actions.erase(it);
+    QAction* action = it->action;
+    m_impl->entries.erase(it);
     if (action) {
+        // Explicit unregister IS the one path where we want to clear the
+        // persistent binding — the consumer has asked to drop the shortcut
+        // entirely (e.g. WindowDragAdaptor releasing the dynamic Escape
+        // shortcut after a drag ends). Contrast with the destructor, which
+        // preserves the on-disk state.
         KGlobalAccel::self()->removeAllShortcuts(action);
         action->deleteLater();
     }

@@ -164,7 +164,10 @@ configure_package_config_file(
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShortcutsConfigVersion.cmake"
     VERSION ${PHOSPHORSHORTCUTS_VERSION}
-    COMPATIBILITY SameMajorVersion
+    # Pre-1.0: minor-version bumps may break API. Use SameMinorVersion so
+    # consumers don't silently accept incompatible 0.x updates. Bump back to
+    # SameMajorVersion once the library stabilises at 1.0.
+    COMPATIBILITY SameMinorVersion
 )
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorShortcutsConfig.cmake"
