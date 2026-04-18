@@ -61,7 +61,7 @@ public:
     ///                 zones independent of canvas size.
     PhosphorLayout::LayoutPreview previewAt(const QString& id,
                                             int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
-                                            const QSize& canvas = {}) const override;
+                                            const QSize& canvas = {}) override;
 
     /// Drop any cached previews — next query re-runs the algorithms.
     /// Called automatically on registry changes; exposed publicly so

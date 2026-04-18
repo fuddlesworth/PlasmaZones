@@ -285,15 +285,28 @@ void ScriptedAlgorithmLoader::onFileChanged(const QString& path)
 
 void ScriptedAlgorithmLoader::scheduleRefresh()
 {
-    // Debounce rapid changes (e.g., editor auto-save, batch installs)
+    // Debounce rapid changes (e.g., editor auto-save, batch installs).
     if (!m_refreshTimer) {
         m_refreshTimer = new QTimer(this);
         m_refreshTimer->setSingleShot(true);
         m_refreshTimer->setInterval(RefreshDebounceMs);
         connect(m_refreshTimer, &QTimer::timeout, this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
     }
-
     m_refreshTimer->start();
+
+    // Lazily create the follow-up rescan timer the first time we schedule a
+    // refresh. It fires a second rescan FollowupRescanMs after the debounced
+    // rescan; edits that land inside the no-watcher window created by atomic
+    // replace (new inode between onFileChanged dropping the watch and
+    // reWatchFiles() re-adding it) would otherwise be missed until the next
+    // filesystem event.
+    if (!m_followupTimer) {
+        m_followupTimer = new QTimer(this);
+        m_followupTimer->setSingleShot(true);
+        m_followupTimer->setInterval(RefreshDebounceMs + FollowupRescanMs);
+        connect(m_followupTimer, &QTimer::timeout, this, &ScriptedAlgorithmLoader::performDebouncedRefresh);
+    }
+    m_followupTimer->start();
 }
 
 void ScriptedAlgorithmLoader::performDebouncedRefresh()

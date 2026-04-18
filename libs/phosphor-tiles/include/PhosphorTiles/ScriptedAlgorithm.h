@@ -11,14 +11,11 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
-#include <memory>
 #include <type_traits>
 
 class QJSEngine;
 
 namespace PhosphorTiles {
-
-struct WatchdogContext; // defined in ScriptedAlgorithm.cpp (internal implementation detail)
 
 // Note: ScriptedAlgorithm is NOT thread-safe despite the base class const contract.
 // All calls must occur on the main thread. QJSEngine is inherently single-threaded.
@@ -212,12 +209,24 @@ private:
     /// Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;
 
+public:
+    /**
+     * @brief Interrupt the underlying JS engine (called from the shared watchdog thread)
+     *
+     * Forwards to @c QJSEngine::setInterrupted(true). Public because the
+     * shared @ref ScriptedAlgorithmWatchdog singleton invokes it from a
+     * non-main thread when a guarded JS call exceeds its deadline. The
+     * underlying Qt call is documented thread-safe relative to the
+     * main-thread JS evaluation it targets.
+     */
+    void interruptEngine();
+
+private:
     /// Unified with AutotileDefaults::MaxRuntimeTreeDepth to prevent silent truncation
     static constexpr int MaxTreeConversionDepth = AutotileDefaults::MaxRuntimeTreeDepth;
 
     // Owned via QObject parent; mutable because calculateZones() is const but JS evaluation mutates engine state
     mutable QJSEngine* m_engine = nullptr;
-    std::shared_ptr<WatchdogContext> m_watchdog; ///< Consolidated watchdog shared state
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;

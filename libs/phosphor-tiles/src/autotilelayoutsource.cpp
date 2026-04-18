@@ -204,7 +204,12 @@ void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLa
     // windowCount values) while preventing unbounded growth if a caller
     // probes previewAt() with a wide range of window counts.
     const int cap = qMax(10, m_registry ? m_registry->availableAlgorithms().size() * 10 : 10);
-    while (m_cacheOrder.size() >= cap && !m_cacheOrder.isEmpty()) {
+
+    // If the algorithm count shrank since the last insert, m_cache may
+    // already hold more entries than the current cap allows. Prune the
+    // excess (oldest first) before inserting so we never leave the cache
+    // above the cap.
+    while (m_cache.size() >= cap && !m_cacheOrder.isEmpty()) {
         const QString evict = m_cacheOrder.takeFirst();
         m_cache.remove(evict);
     }
@@ -244,7 +249,7 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
 }
 
 PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id, int windowCount,
-                                                              const QSize& /*canvas*/) const
+                                                              const QSize& /*canvas*/)
 {
     if (!m_registry || id.isEmpty()) {
         return {};

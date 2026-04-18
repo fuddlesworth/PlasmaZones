@@ -27,10 +27,13 @@ static QString loadBuiltinJs(const QString& name)
         return QString();
     }
     const QString content = QTextStream(&file).readAll();
+    // Empty content means a build/packaging failure (missing QRC entry).
+    // Warn and return empty rather than Q_ASSERT_X — debug and release must
+    // behave consistently: callers check the returned string and fail the
+    // injection path gracefully rather than crashing a release build.
     if (content.isEmpty()) {
-        qCCritical(PhosphorTiles::lcTilesLib) << "Builtin JS resource is empty:" << name;
+        qCWarning(PhosphorTiles::lcTilesLib) << "Builtin JS resource is empty:" << name;
     }
-    Q_ASSERT_X(!content.isEmpty(), "loadBuiltinJs", qPrintable(QStringLiteral("Missing QRC resource: ") + name));
     return content;
 }
 

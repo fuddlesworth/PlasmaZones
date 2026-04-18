@@ -139,28 +139,45 @@ bool hardenSandbox(QJSEngine* engine)
         }
     }
 
+    // Close Object.constructor -> Function escape route on all major built-in objects.
+    // CRITICAL: `[].constructor.constructor('return process')()` is a sandbox
+    // escape; if this lockdown fails silently, scripts can still reach the
+    // Function constructor via any built-in's .constructor chain. Must run
+    // BEFORE the built-in freeze below — freeze makes the constructors
+    // non-extensible, which would cause defineProperty to throw TypeError.
+    // Constructors not present on the engine (e.g. WeakRef on V4) are skipped
+    // via the `typeof` guard; each defineProperty is wrapped in try/catch so a
+    // single non-configurable descriptor cannot abort the whole lockdown.
+    if (!criticalEval(QStringLiteral("(function() {"
+                                     "  var undef = void 0;"
+                                     "  var names = ['Object','Array','String','Number','Boolean','RegExp',"
+                                     "               'Date','Error','TypeError','RangeError','SyntaxError',"
+                                     "               'ReferenceError','URIError','EvalError','Map','Set',"
+                                     "               'WeakMap','WeakSet','Promise','JSON','Math'];"
+                                     "  names.forEach(function(n) {"
+                                     "    try {"
+                                     "      var C = this[n];"
+                                     "      if (typeof C === 'undefined' || C === null) return;"
+                                     "      var desc = Object.getOwnPropertyDescriptor(C, 'constructor');"
+                                     "      if (desc && desc.configurable === false) return;"
+                                     "      Object.defineProperty(C, 'constructor', "
+                                     "        {value: undef, writable: false, configurable: false});"
+                                     "    } catch (e) { /* best-effort per constructor */ }"
+                                     "  }, this);"
+                                     "}).call(this);"),
+                      QStringLiteral("built-in constructor lockdown"))) {
+        return false;
+    }
+
     // Freeze built-in constructors to prevent scripts from shadowing
-    // Object.freeze, Object.defineProperty, etc.
+    // Object.freeze, Object.defineProperty, etc. Must run AFTER the constructor
+    // lockdown above — freeze marks the constructors non-extensible, which
+    // would cause subsequent defineProperty attempts to throw.
     if (!criticalEval(
             QStringLiteral("Object.freeze(Object); Object.freeze(Array); Object.freeze(JSON); Object.freeze(Math);"),
             QStringLiteral("built-in constructor freeze"))) {
         return false;
     }
-
-    // Close Object.constructor -> Function escape route on all major built-in objects
-    safeEval(QStringLiteral("(function() {"
-                            "  var undef = void 0;"
-                            "  [Object, Array, String, Number, Boolean, RegExp, Date, Error,"
-                            "   TypeError, RangeError, SyntaxError, ReferenceError, URIError, EvalError,"
-                            "   Map, Set, WeakMap, WeakSet, Promise, JSON, Math"
-                            "  ].forEach(function(C) {"
-                            "    if (C && C.constructor) {"
-                            "      try { Object.defineProperty(C, 'constructor', {value: undef, writable: false, "
-                            "configurable: false}); } catch(e) {}"
-                            "    }"
-                            "  });"
-                            "})();"),
-             QStringLiteral("built-in constructor lockdown"));
 
     // Disable Proxy, Reflect, WeakRef, and FinalizationRegistry to prevent sandbox bypass
     {
@@ -177,8 +194,13 @@ bool hardenSandbox(QJSEngine* engine)
         }
     }
 
-    // Disable globalThis to prevent sandbox bypass
-    disableGlobal(QLatin1String("globalThis"));
+    // Disable globalThis to prevent sandbox bypass.
+    // CRITICAL: with globalThis still reachable, scripts can re-acquire
+    // already-disabled globals via `globalThis.Function`, `globalThis.eval`,
+    // etc. — every lockdown above is defeated.
+    if (!disableGlobal(QLatin1String("globalThis"), true)) {
+        return false;
+    }
     // Disable Symbol (critical — prevents Symbol.toPrimitive type-confusion attacks)
     if (!disableGlobal(QLatin1String("Symbol"), true)) {
         return false;

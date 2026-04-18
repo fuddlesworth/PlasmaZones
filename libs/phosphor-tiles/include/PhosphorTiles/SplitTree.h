@@ -205,10 +205,12 @@ public:
      * @return Vector of zone geometries in depth-first left-to-right order
      *
      * @note When gap exceeds available space in a split, the `first` subtree receives
-     * the full parent rect and the `second` subtree collapses to a zero-area rect (its
-     * leaves are effectively dropped). A warning is logged via lcTilesLib. This avoids
-     * the earlier behaviour of returning the parent rect to both children, which
-     * produced overlapping zones.
+     * the full parent rect and each leaf of the `second` subtree is emitted as a
+     * 1×1 rect anchored at the parent's origin. This preserves the invariant that
+     * the returned rect count equals @ref leafCount, which downstream code relies
+     * on to map tiled windows to zones by position. Windows under the degenerate
+     * second subtree land effectively offscreen; this is intentional.
+     * A warning is logged via lcTilesLib.
      */
     QVector<QRect> applyGeometry(const QRect& area, int innerGap) const;
 
@@ -274,11 +276,6 @@ private:
 
     static int subtreeHeight(const SplitNode* node, int depth = 0);
     static void splitLeaf(SplitNode* leaf, const QString& newId, qreal ratio);
-
-    static void collectInternalNodeParams(const SplitNode* node, QVector<qreal>& ratios, QVector<bool>& directions,
-                                          int depth = 0);
-    static int applyInternalNodeParams(SplitNode* node, const QVector<qreal>& ratios, const QVector<bool>& directions,
-                                       int index, int depth = 0);
 
     static constexpr int MaxDeserializationDepth = AutotileDefaults::MaxRuntimeTreeDepth;
     static constexpr int MaxDeserializationNodes = 1024; ///< Limit total nodes to prevent memory exhaustion

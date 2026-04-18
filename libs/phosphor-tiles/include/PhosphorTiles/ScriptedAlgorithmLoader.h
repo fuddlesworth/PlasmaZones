@@ -88,9 +88,15 @@ private:
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;
+    /// Second follow-up rescan that fires @ref FollowupRescanMs after the
+    /// debounced rescan. Catches edits landed inside the no-watcher window
+    /// created by atomic replace (new inode) between onFileChanged dropping
+    /// the watch and reWatchFiles() re-adding it.
+    QTimer* m_followupTimer = nullptr;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
 
     static constexpr int RefreshDebounceMs = 500;
+    static constexpr int FollowupRescanMs = 500;
 };
 
 } // namespace PhosphorTiles

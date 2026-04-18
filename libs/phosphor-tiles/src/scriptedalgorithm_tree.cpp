@@ -50,7 +50,9 @@ QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const 
     if (node->isLeaf()) {
         jsNode.setProperty(QStringLiteral("windowId"), node->windowId);
     } else {
-        const qreal ratio = std::isnan(node->splitRatio) ? 0.5 : std::clamp(node->splitRatio, 0.1, 0.9);
+        const qreal ratio = std::isnan(node->splitRatio)
+            ? AutotileDefaults::DefaultSplitRatio
+            : std::clamp(node->splitRatio, AutotileDefaults::MinSplitRatio, AutotileDefaults::MaxSplitRatio);
         jsNode.setProperty(QStringLiteral("ratio"), ratio);
         jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
         jsNode.setProperty(QStringLiteral("first"),

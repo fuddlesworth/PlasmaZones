@@ -98,7 +98,15 @@ bool parseMetadataBool(QStringView key, QStringView value, const QString& filePa
 ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
 {
     using namespace AutotileDefaults;
-    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*// @(\w+)\s+(.+)$)"));
+    // Accept three leading comment styles:
+    //   // @key value           (line comment)
+    //   /* @key value ...       (block-comment opener)
+    //    * @key value           (block-comment continuation)
+    // The outer loop already limits parsing to the leading comment block (it
+    // breaks on the first non-comment line), so broadening the regex here
+    // just lets multi-line /* ... */ headers expose metadata too. The value
+    // capture strips any trailing `*/` so "/** @name Foo */" yields "Foo".
+    static const QRegularExpression metaRe(QStringLiteral(R"(^\s*(?://|/\*+|\*+)\s*@(\w+)\s+(.+?)(?:\s*\*+/)?\s*$)"));
     static constexpr int MaxMetadataLines = 50;
 
     ScriptMetadata meta;

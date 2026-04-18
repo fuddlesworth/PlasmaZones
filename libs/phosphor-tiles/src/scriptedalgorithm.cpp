@@ -8,6 +8,7 @@
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AutotileConstants.h>
+#include "scriptedalgorithmwatchdog.h"
 #include "tileslogging.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -16,12 +17,8 @@
 #include <QTextStream>
 #include <QThread>
 #include <algorithm>
-#include <chrono>
 #include <cmath>
-#include <condition_variable>
 #include <functional>
-#include <mutex>
-#include <thread>
 
 namespace {
 
@@ -56,30 +53,12 @@ using namespace AutotileDefaults;
 // 100ms watchdog — generous enough for ARM / slow systems where JS evaluation takes longer
 static constexpr int ScriptWatchdogTimeoutMs = 100;
 
-/**
- * @brief Consolidated watchdog thread state shared between the main thread and the persistent watchdog thread
- *
- * All members are mutex-protected so that the destructor can safely
- * signal shutdown to the watchdog thread.
- */
-struct WatchdogContext
-{
-    std::mutex mutex; ///< Guards engine pointer access and condition variable
-    std::condition_variable cv; ///< Used to wake the persistent watchdog thread
-    uint64_t generation{0}; ///< Plain counter — all accesses are under mutex
-    bool pending{false}; ///< True when a new watchdog check is requested
-    bool shutdown{false}; ///< True when the watchdog thread should exit
-    QJSEngine* engine = nullptr; ///< Stable engine pointer shared with watchdog thread
-    std::thread watchdogThread; ///< Persistent watchdog thread (joined on destruction)
-};
-
 // resolveJsOverride<T> / resolveJsOverrideClamped<T> are defined inline in
 // the header so the _hooks.cpp and _tree.cpp TUs can instantiate them.
 
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
-    , m_watchdog(std::make_shared<WatchdogContext>())
 {
     // ScriptedAlgorithmJsBuiltins uses static lazy initialization (function-local
     // statics) that is thread-safe for first-call but not for concurrent QJSEngine
@@ -91,51 +70,30 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
         qCCritical(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm must be constructed on the main thread";
         return;
     }
-    m_watchdog->engine = m_engine;
-    m_watchdog->watchdogThread = std::thread([ctx = m_watchdog]() {
-        while (true) {
-            std::unique_lock<std::mutex> lock(ctx->mutex);
-            // Wait for an arm signal (pending == true) or shutdown
-            ctx->cv.wait(lock, [&ctx]() {
-                return ctx->pending || ctx->shutdown;
-            });
-            if (ctx->shutdown) {
-                return;
-            }
-            ctx->pending = false;
-            const uint64_t gen = ctx->generation;
 
-            // Use cv.wait_for instead of sleep_for so that disarming
-            // (generation change) or shutdown wakes us immediately rather than
-            // sleeping the full timeout duration unconditionally.
-            const bool expired =
-                !ctx->cv.wait_for(lock, std::chrono::milliseconds(ScriptWatchdogTimeoutMs), [&ctx, gen]() {
-                    return ctx->generation != gen || ctx->shutdown;
-                });
-
-            if (ctx->shutdown) {
-                return;
-            }
-            // Only interrupt if we actually timed out (generation unchanged)
-            if (expired && ctx->engine) {
-                ctx->engine->setInterrupted(true);
-            }
-        }
-    });
+    // Watchdog is owned by the process-wide ScriptedAlgorithmWatchdog singleton.
+    // One OS thread services every live algorithm instance — see
+    // scriptedalgorithmwatchdog.h. arm()/disarm() happen per guardedCall().
 
     loadScript(filePath);
 }
 
 ScriptedAlgorithm::~ScriptedAlgorithm()
 {
-    {
-        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
-        m_watchdog->shutdown = true;
-        m_watchdog->engine = nullptr;
-    }
-    m_watchdog->cv.notify_one();
-    if (m_watchdog->watchdogThread.joinable()) {
-        m_watchdog->watchdogThread.join();
+    // Remove ourselves from the shared watchdog's tracking map before
+    // destruction so the watchdog thread cannot interrupt an engine that is
+    // about to disappear. unregister() takes the watchdog mutex, so it
+    // serialises with an in-flight interrupt attempt.
+    ScriptedAlgorithmWatchdog::instance().unregister(this);
+}
+
+void ScriptedAlgorithm::interruptEngine()
+{
+    // Called from the shared watchdog thread when a guarded JS call exceeds
+    // its deadline. QJSEngine::setInterrupted is documented thread-safe
+    // relative to the main-thread evaluation it targets.
+    if (m_engine) {
+        m_engine->setInterrupted(true);
     }
 }
 
@@ -144,44 +102,37 @@ ScriptedAlgorithm::~ScriptedAlgorithm()
 // Returns the QJSValue from fn(), or a synthetic error QJSValue on timeout.
 QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) const
 {
-    // Arm the watchdog
-    {
-        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
-        // Clear any stale interrupt from a previous watchdog race where the main
-        // thread armed+evaluated+disarmed before the watchdog thread woke,
-        // causing a spurious timeout that poisoned the engine's interrupt flag.
-        m_engine->setInterrupted(false);
-        ++(m_watchdog->generation);
-        m_watchdog->pending = true;
-    }
-    m_watchdog->cv.notify_one();
+    auto& watchdog = ScriptedAlgorithmWatchdog::instance();
+
+    // Clear any stale interrupt from a previous race where the main thread
+    // armed+evaluated+disarmed before the watchdog thread checked the deadline,
+    // leaving a spurious interrupt flag set. Safe to clear here because the
+    // watchdog is disarmed for this instance — no thread is about to set it.
+    m_engine->setInterrupted(false);
+
+    // Arm the shared watchdog. After this call returns, the watchdog thread
+    // may interrupt our engine at any moment if the deadline passes before
+    // disarm() runs.
+    watchdog.arm(const_cast<ScriptedAlgorithm*>(this), ScriptWatchdogTimeoutMs);
 
     // Execute the guarded operation
     const QJSValue result = fn();
 
-    // Disarm the watchdog by advancing generation and atomically check for timeout.
-    // setInterrupted(false) MUST be inside the lock to prevent the watchdog
-    // thread from firing between unlock and the clear.
-    bool wasInterrupted;
-    {
-        std::lock_guard<std::mutex> lock(m_watchdog->mutex);
-        ++(m_watchdog->generation);
-        wasInterrupted = m_engine->isInterrupted();
-        if (wasInterrupted) {
-            m_engine->setInterrupted(false);
-        }
-    }
-    // collectGarbage() moved outside the mutex — generation is already advanced
-    // and the interrupt flag is cleared, so the watchdog cannot fire on stale state.
-    if (wasInterrupted) {
-        m_engine->collectGarbage();
-    }
-    // Notify the watchdog so it wakes from wait_for immediately on disarm
-    // instead of sleeping until the full timeout expires.
-    m_watchdog->cv.notify_one();
+    // Disarm the watchdog first so the watchdog thread can no longer fire a
+    // late interrupt. The disarm() call holds the watchdog mutex while it
+    // bumps our generation; any interrupt the watchdog was about to issue for
+    // the previous generation is therefore suppressed. After this returns the
+    // only interrupt flag we could observe is one the watchdog already set
+    // before disarm() took the mutex, so checking/clearing below is race-free.
+    watchdog.disarm(const_cast<ScriptedAlgorithm*>(this));
 
+    const bool wasInterrupted = m_engine->isInterrupted();
     if (wasInterrupted) {
-        // Signal timeout via flag instead of evaluating JS on a just-interrupted engine
+        m_engine->setInterrupted(false);
+        // Running GC here is safe: the watchdog is disarmed (no interrupt
+        // can land while we GC), and collectGarbage tidies up any
+        // half-evaluated state left by the interrupted script.
+        m_engine->collectGarbage();
         m_lastCallTimedOut = true;
         return QJSValue(QStringLiteral("Script execution timed out"));
     }
@@ -263,30 +214,18 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     }
 
     // Inject frozen constants so JS helpers and user scripts can reference them.
-    // Check return values — if the engine is broken these would silently be
-    // undefined and every helper using them would produce NaN.
     //
-    // Floating-point constants must use QString::number(v, 'g', 17) instead of
-    // QString::arg(qreal), which is locale-dependent and would emit "0,5" under
-    // de_DE (comma decimal separator), producing a JS syntax error.
-    const QJSValue constResult1 = m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = ")
-                                                         + QString::number(MinZoneSizePx) + QStringLiteral(";"),
-                                                     QStringLiteral("builtin:constants"));
-    const QJSValue constResult2 =
-        m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = ")
-                               + QString::number(static_cast<double>(MinSplitRatio), 'g', 17) + QStringLiteral(";"),
-                           QStringLiteral("builtin:constants"));
-    const QJSValue constResult3 =
-        m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = ")
-                               + QString::number(static_cast<double>(MaxSplitRatio), 'g', 17) + QStringLiteral(";"),
-                           QStringLiteral("builtin:constants"));
-    const QJSValue constResult4 = m_engine->evaluate(QStringLiteral("var MAX_TREE_DEPTH = ")
-                                                         + QString::number(MaxRuntimeTreeDepth) + QStringLiteral(";"),
-                                                     QStringLiteral("builtin:constants"));
-    if (constResult1.isError() || constResult2.isError() || constResult3.isError() || constResult4.isError()) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
-        return false;
-    }
+    // Constants are set directly as properties on the global object via
+    // QJSValue::setProperty rather than stitched into JS source. The
+    // stitched-source approach was locale-dependent (qreal formatting could
+    // emit "0,5" under de_DE) and fragile to type changes on the C++ side;
+    // binding via setProperty bypasses the JS parser entirely and
+    // round-trips the native numeric value.
+    QJSValue globalObj = m_engine->globalObject();
+    globalObj.setProperty(QStringLiteral("PZ_MIN_ZONE_SIZE"), static_cast<int>(MinZoneSizePx));
+    globalObj.setProperty(QStringLiteral("PZ_MIN_SPLIT"), static_cast<double>(MinSplitRatio));
+    globalObj.setProperty(QStringLiteral("PZ_MAX_SPLIT"), static_cast<double>(MaxSplitRatio));
+    globalObj.setProperty(QStringLiteral("MAX_TREE_DEPTH"), static_cast<int>(MaxRuntimeTreeDepth));
 
     // Freeze constants immediately so builtin helper scripts cannot reassign them.
     // The frozenGlobals loop below will re-freeze them (harmless no-op on already-frozen properties).
@@ -443,14 +382,18 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     }
 
     // Use guardedCall helper for watchdog arm-evaluate-disarm-check pattern.
-    // Wrap user script in an IIFE that shadows eval/Function with undefined via
-    // parameter binding. This is defense-in-depth: QJSEngine V4 treats direct
-    // eval() as a language-level built-in that bypasses Object.defineProperty on
-    // the global, so property-level lockdown alone is insufficient. The IIFE
-    // scoping ensures eval/Function resolve to undefined in the user script scope.
+    // Wrap user script in an IIFE that shadows eval/Function (and the three
+    // generator/async constructors) with undefined via parameter binding. This
+    // is defense-in-depth: QJSEngine V4 treats direct eval() as a language-level
+    // built-in that bypasses Object.defineProperty on the global, so
+    // property-level lockdown alone is insufficient. The IIFE scoping ensures
+    // these names resolve to undefined (bound to `void 0`) in the user script
+    // scope — attempting to call any of them throws "undefined is not a
+    // function", defeating prototype-chain re-acquisition of the constructors.
     // Exported globals (calculateZones, optional overrides) are re-attached to
     // the global object after the IIFE body executes.
-    static const QString wrapPrefix = QStringLiteral("(function(eval, Function) {");
+    static const QString wrapPrefix =
+        QStringLiteral("(function(eval, Function, AsyncFunction, GeneratorFunction, AsyncGeneratorFunction) {");
     static const QString wrapSuffix = QStringLiteral(
         "\nif (typeof calculateZones === 'function') this.calculateZones = calculateZones;"
         "if (typeof masterZoneIndex === 'function') this.masterZoneIndex = masterZoneIndex;"
@@ -462,7 +405,7 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         "if (typeof producesOverlappingZones === 'function') this.producesOverlappingZones = "
         "producesOverlappingZones;"
         "if (typeof centerLayout === 'function') this.centerLayout = centerLayout;"
-        "}).call(this, void 0, void 0);\n");
+        "}).call(this, void 0, void 0, void 0, void 0, void 0);\n");
     const QString wrappedSource = wrapPrefix + source + wrapSuffix;
     const QJSValue result = guardedCall([this, &wrappedSource, &filePath]() {
         return m_engine->evaluate(wrappedSource, filePath);

@@ -30,10 +30,10 @@ function dwindleLayout(area, count, splitRatio, innerGap, minSizes) {
         const minDimArr = isWidth ? remainingMinW : remainingMinH;
         const minProp = isWidth ? 'w' : 'h';
         if (minSizes && minSizes.length > 0 && i < minSizes.length
-            && minSizes[i][minProp] > 0) {
+            && minSizes[i] && minSizes[i][minProp] > 0) {
             windowDim = Math.max(windowDim, minSizes[i][minProp]);
         }
-        if (minSizes && minSizes.length > 0 && minDimArr[i + 1] > 0) {
+        if (minSizes && minSizes.length > 0 && minDimArr && minDimArr[i + 1] > 0) {
             windowDim = Math.min(windowDim, contentDim - minDimArr[i + 1]);
         }
         windowDim = Math.max(1, Math.min(windowDim, contentDim - 1));

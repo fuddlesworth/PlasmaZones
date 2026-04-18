@@ -124,26 +124,39 @@ bool TilingState::moveWindow(int fromIndex, int toIndex)
         return true; // No-op is still success
     }
 
-    // Fast-path: an adjacent move is identical to a swap of the two neighbours,
-    // so we can avoid the O(N) rebuildFromOrder() and mutate two leaves in
-    // place. For non-adjacent moves, QList::move rotates intermediate slots
-    // and the tree must be rebuilt in order.
+    // All observers re-enter the tree and the order list between signal
+    // emissions. If we mutate m_windowOrder first and later the swap/rebuild
+    // throws or fails, we leave the state half-reordered — signal handlers
+    // that run before the failure see drift between tree and order.
+    //
+    // Restructure as: decide the plan → apply atomically → emit once.
     const bool adjacent = (std::abs(fromIndex - toIndex) == 1);
     const QString srcId = m_windowOrder.at(fromIndex);
     const QString dstId = m_windowOrder.at(toIndex);
 
-    m_windowOrder.move(fromIndex, toIndex);
+    // Stage the new order into a local copy; don't mutate m_windowOrder yet.
+    QStringList newOrder = m_windowOrder;
+    newOrder.move(fromIndex, toIndex);
+
+    // Decide tree plan on the old state. Only the fast-path swap can fail in
+    // a way we'd need to roll back — rebuildSplitTree always succeeds.
+    const bool fastPathCandidate = adjacent && m_splitTree && !m_floatingWindows.contains(srcId)
+        && !m_floatingWindows.contains(dstId) && m_splitTree->leafForWindow(srcId) && m_splitTree->leafForWindow(dstId);
 
     bool fastPathDone = false;
-    if (adjacent && m_splitTree && !m_floatingWindows.contains(srcId) && !m_floatingWindows.contains(dstId)) {
-        // Both windows must already exist as leaves in the tree — if either is
-        // missing (floating transition not yet synced, lazy tree creation, etc)
-        // we fall back to the full rebuild.
-        if (m_splitTree->leafForWindow(srcId) && m_splitTree->leafForWindow(dstId)) {
-            fastPathDone = m_splitTree->swapLeaves(srcId, dstId);
-        }
+    if (fastPathCandidate) {
+        // swapLeaves only mutates two windowId strings on existing leaves —
+        // no allocation, no shape change. If it returns false the tree is
+        // untouched, so we can fall back to a full rebuild without a
+        // revert step.
+        fastPathDone = m_splitTree->swapLeaves(srcId, dstId);
     }
 
+    // At this point either:
+    //   (a) fastPathDone — the tree already reflects the new order, or
+    //   (b) !fastPathDone — tree is in the old shape, will be rebuilt.
+    // Commit the staged order now, then reconcile the tree.
+    m_windowOrder = std::move(newOrder);
     if (!fastPathDone) {
         rebuildSplitTree();
     }

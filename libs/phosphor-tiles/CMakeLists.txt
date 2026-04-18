@@ -86,6 +86,8 @@ set(phosphortiles_SRCS
     src/scriptedalgorithmjsbuiltins.cpp
     src/scriptedalgorithmloader.cpp
     src/scriptedalgorithmsandbox.cpp
+    src/scriptedalgorithmwatchdog.h
+    src/scriptedalgorithmwatchdog.cpp
     src/tileslogging.h
     src/tileslogging.cpp
     # Builtin JS helpers compiled into the binary as Qt resources.

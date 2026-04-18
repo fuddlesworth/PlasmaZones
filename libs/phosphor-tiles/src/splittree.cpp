@@ -408,16 +408,25 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
         if (contentSize <= 0) {
             // Gap exceeds available space — collapsing both children onto the
             // full parent rect produces overlapping zones, which defeats the
-            // entire point of tiling. Instead give the `first` subtree the
-            // full parent rect and collapse the `second` subtree into an
-            // empty/zero-area rect so its leaves are effectively dropped.
-            // Callers downstream already tolerate zero-area zones.
+            // entire point of tiling. Give the `first` subtree the full parent
+            // rect. The `second` subtree cannot be silently dropped: downstream
+            // code indexes tiledWindows() by leaf position and expects
+            // rects.count() == leafCount(), so dropping leaves shifts every
+            // subsequent window to the wrong zone.
+            //
+            // Instead, emit a 1×1 rect anchored at the parent's origin for
+            // each leaf under the second subtree. The windows land offscreen
+            // (or overlap the origin pixel) but the rect-count invariant is
+            // preserved and the window→zone mapping stays coherent.
             qCWarning(PhosphorTiles::lcTilesLib)
                 << "splitDimension: innerGap=" << innerGap << "exceeds available size=" << totalSize
-                << "— collapsing second subtree to avoid overlap";
+                << "— second subtree collapsed to 1x1 origin rects (mapping preserved)";
             applyGeometryRecursive(node->first.get(), rect, 0, zones, depth + 1);
-            const QRect emptyRect(rect.x(), rect.y(), 0, 0);
-            applyGeometryRecursive(node->second.get(), emptyRect, 0, zones, depth + 1);
+            const QRect originRect(rect.x(), rect.y(), 1, 1);
+            const int secondLeaves = countLeaves(node->second.get());
+            for (int i = 0; i < secondLeaves; ++i) {
+                zones.append(originRect);
+            }
             return;
         }
 
@@ -528,7 +537,7 @@ const SplitNode* SplitTree::rightmostLeaf(const SplitNode* node) const
     }
     const SplitNode* current = node;
     int iterations = 0;
-    while (!current->isLeaf() && iterations < MaxRuntimeTreeDepth) {
+    while (!current->isLeaf() && iterations <= MaxRuntimeTreeDepth) {
         const SplitNode* next = current->second ? current->second.get() : current->first.get();
         if (!next)
             break; // corrupt internal node -- treat current as leaf
