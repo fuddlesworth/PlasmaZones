@@ -314,7 +314,11 @@ public:
     // flags. This is intentionally different from LayoutAdaptor::getLayoutPreview's
     // D-Bus JSON, which is a separate projection optimised for wire transfer.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
-    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
+    // Non-const: ILayoutSource::previewAt is non-const so implementations
+    // can populate a query cache (scripted autotile algorithms would be
+    // prohibitively expensive to re-run on every picker redraw). Changing
+    // this invoker to const would silently dodge that cache.
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
     int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;

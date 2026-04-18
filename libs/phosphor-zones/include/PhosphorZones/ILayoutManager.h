@@ -9,8 +9,7 @@
 // to depend on; new code should prefer the narrower sibling
 // interfaces:
 //
-//   ILayoutCatalog      — read-only enumeration
-//   ILayoutRegistry     — add/remove/duplicate/active-layout
+//   ILayoutRegistry     — enumeration + add/remove/duplicate/active-layout
 //   ILayoutAssignments  — per-context (screen/desktop/activity) routing
 //   IQuickLayouts       — numbered 1..9 shortcut slots
 //   IBuiltInLayouts     — bundled system templates
@@ -39,50 +38,19 @@ namespace PhosphorZones {
 class Layout;
 
 /**
- * @brief Read-only catalog of manual zone layouts.
- *
- * Minimal ISP-compliant subset used by consumers that only need to
- * enumerate and look up layouts — e.g. @c ZonesLayoutSource or any UI
- * that paints previews without mutating state. Fixture tests can stub
- * this two-method interface instead of carrying the full
- * @c ILayoutManager surface.
- *
- * Lives in this header rather than its own so consumers can
- * `#include <PhosphorZones/ILayoutManager.h>` to pick up every
- * interface in one shot; minimal-dependency consumers should prefer
- * the narrower sibling headers.
- */
-class PHOSPHORZONES_EXPORT ILayoutCatalog
-{
-public:
-    ILayoutCatalog() = default;
-    virtual ~ILayoutCatalog();
-
-    /// Enumerate every known layout. Borrowed pointers — owned by the
-    /// concrete catalog (typically @c LayoutManager). Order is the
-    /// catalog's natural iteration order.
-    virtual QVector<Layout*> layouts() const = 0;
-
-    /// Resolve a layout by its stable UUID. Returns nullptr when no
-    /// layout with that id is known to the catalog.
-    virtual Layout* layoutById(const QUuid& id) const = 0;
-
-protected:
-    ILayoutCatalog(const ILayoutCatalog&) = default;
-    ILayoutCatalog& operator=(const ILayoutCatalog&) = default;
-};
-
-/**
  * @brief Full layout-management umbrella interface.
  *
  * Concrete @c LayoutManager implements this by providing every method
- * across the six sibling contracts. Callers that need the full
+ * across the five sibling contracts. Callers that need the full
  * surface (e.g. D-Bus adaptors that route to every capability) type
  * against @c ILayoutManager*; narrower callers should type against
- * the specific interface they use so fixture tests stay small.
+ * the specific interface they use so fixture tests stay small. In
+ * particular, components that only need to enumerate / look up
+ * layouts should type against @c ILayoutRegistry — it now covers the
+ * read-only surface that used to live on the removed
+ * @c ILayoutCatalog.
  */
-class PHOSPHORZONES_EXPORT ILayoutManager : public ILayoutCatalog,
-                                            public ILayoutRegistry,
+class PHOSPHORZONES_EXPORT ILayoutManager : public ILayoutRegistry,
                                             public ILayoutAssignments,
                                             public IQuickLayouts,
                                             public IBuiltInLayouts,

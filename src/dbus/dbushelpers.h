@@ -161,10 +161,10 @@ template<typename LogCategory>
 PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
-    // Takes the full ILayoutManager here (rather than ILayoutCatalog +
-    // ILayoutRegistry separately) because the active-layout-first
-    // search walks both capabilities — splitting would force callers
-    // to pass two pointers to a single helper.
+    // Takes the full ILayoutManager here (rather than ILayoutRegistry
+    // alone) because the active-layout-first search walks the full
+    // assignment + enumeration surface that callers already hold via
+    // the manager.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;

@@ -140,7 +140,14 @@ Layout& Layout::operator=(const Layout& other)
         bool screensChanged = m_allowedScreens != other.m_allowedScreens;
         bool desktopsChanged = m_allowedDesktops != other.m_allowedDesktops;
         bool activitiesChanged = m_allowedActivities != other.m_allowedActivities;
-        const bool sourcePathDiff = !m_sourcePath.isEmpty() || !m_systemSourcePath.isEmpty();
+        // Snapshot the pre-assignment source paths so we can compare against
+        // the post-assignment values (both cleared, per the copy-assign
+        // contract — see class comment above the copy constructor). Emitting
+        // sourcePathChanged only when at least one member actually changed
+        // value matches the "compare old vs new" pattern used for every
+        // other Q_PROPERTY in this function.
+        const QString oldSourcePath = m_sourcePath;
+        const QString oldSystemSourcePath = m_systemSourcePath;
 
         m_name = other.m_name;
         m_description = other.m_description;
@@ -203,7 +210,7 @@ Layout& Layout::operator=(const Layout& other)
             Q_EMIT useFullScreenGeometryChanged();
         if (arChanged)
             Q_EMIT aspectRatioClassChanged();
-        if (sourcePathDiff)
+        if (oldSourcePath != m_sourcePath || oldSystemSourcePath != m_systemSourcePath)
             Q_EMIT sourcePathChanged();
 
         m_dirty = true;
@@ -436,8 +443,16 @@ void Layout::addZone(Zone* zone)
 {
     if (zone && !m_zones.contains(zone)) {
         zone->setParent(this);
-        zone->setZoneNumber(m_zones.size() + 1);
+        // Append first so slots reacting to zoneNumberChanged see a
+        // consistent zones() container that already includes `zone`.
         m_zones.append(zone);
+        // Respect a pre-set zone number (e.g. from deserialization) — only
+        // assign the default 1-based position when the zone has no valid
+        // number yet. Callers that add freshly-constructed zones (number 0)
+        // still get the "next available slot" behaviour.
+        if (zone->zoneNumber() <= 0) {
+            zone->setZoneNumber(m_zones.size());
+        }
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
         Q_EMIT zoneAdded(zone);
         Q_EMIT zonesChanged();
@@ -449,9 +464,12 @@ void Layout::removeZone(Zone* zone)
 {
     if (zone && m_zones.removeOne(zone)) {
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        // Renumber BEFORE emitting zoneRemoved so observers see a coherent
+        // post-state: the removed zone is detached and the remaining zones
+        // already carry their final 1..N numbers.
+        renumberZones();
         Q_EMIT zoneRemoved(zone);
         zone->deleteLater();
-        renumberZones();
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
     }
@@ -462,9 +480,9 @@ void Layout::removeZoneAt(int index)
     if (index >= 0 && index < m_zones.size()) {
         auto zone = m_zones.takeAt(index);
         m_lastRecalcGeometry = QRectF(); // Invalidate geometry cache
+        renumberZones();
         Q_EMIT zoneRemoved(zone);
         zone->deleteLater();
-        renumberZones();
         Q_EMIT zonesChanged();
         emitModifiedIfNotBatched();
     }

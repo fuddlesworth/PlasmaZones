@@ -20,7 +20,6 @@ namespace PhosphorZones {
 // ISettings + IOverlayService destructors live in src/core/interfaces.cpp
 // — those interfaces stay in PZ.
 
-ILayoutCatalog::~ILayoutCatalog() = default;
 ILayoutRegistry::~ILayoutRegistry() = default;
 ILayoutAssignments::~ILayoutAssignments() = default;
 IQuickLayouts::~IQuickLayouts() = default;

@@ -9,7 +9,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 namespace PhosphorZones {
-class ILayoutCatalog;
+class ILayoutRegistry;
 class Layout;
 }
 
@@ -23,16 +23,16 @@ namespace PhosphorZones {
 /// hold a Layout* can build a preview without going through ILayoutSource.
 PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout);
 
-/// ILayoutSource adapter wrapping an ILayoutCatalog.
+/// ILayoutSource adapter wrapping an ILayoutRegistry.
 ///
 /// Implements PhosphorLayout::ILayoutSource so editor / settings / overlay
 /// code can render manual-layout previews uniformly with autotile-algorithm
 /// previews (the latter coming from PhosphorTiles::AutotileLayoutSource).
 ///
-/// @note ILayoutCatalog is not a QObject (see PhosphorZones::ILayoutManager
+/// @note ILayoutRegistry is not a QObject (see PhosphorZones::ILayoutManager
 /// for the rationale — signal shadowing in abstract-interface hierarchies).
 /// Callers that want this source to emit @c contentsChanged when their
-/// underlying catalog changes must wire the catalog's change signal
+/// underlying registry changes must wire the registry's change signal
 /// explicitly to @c notifyContentsChanged:
 ///
 /// @code
@@ -40,17 +40,18 @@ PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZon
 ///           zonesSource,   &ZonesLayoutSource::notifyContentsChanged);
 /// @endcode
 ///
-/// Borrows the catalog — caller owns it and must keep it alive for this
-/// source's lifetime.  Taking ILayoutCatalog* rather than
-/// ILayoutManager* means fixture tests can stub just two methods
-/// (layouts() + layoutById()) instead of the full manager contract.
+/// Borrows the registry — caller owns it and must keep it alive for this
+/// source's lifetime.  Taking ILayoutRegistry* rather than
+/// ILayoutManager* means fixture tests can stub just the enumeration
+/// surface (layouts() + layoutById()) instead of the full manager
+/// contract.
 class PHOSPHORZONES_EXPORT ZonesLayoutSource : public PhosphorLayout::ILayoutSource
 {
     Q_OBJECT
 public:
-    /// Construct over a borrowed layout catalog. Caller owns @p catalog
+    /// Construct over a borrowed layout registry. Caller owns @p registry
     /// and must keep it alive for the source's lifetime.
-    explicit ZonesLayoutSource(PhosphorZones::ILayoutCatalog* catalog, QObject* parent = nullptr);
+    explicit ZonesLayoutSource(PhosphorZones::ILayoutRegistry* registry, QObject* parent = nullptr);
     ~ZonesLayoutSource() override;
 
     QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override;
@@ -60,7 +61,7 @@ public:
     /// to set @c LayoutPreview::recommended for aspect-ratio filtering.
     PhosphorLayout::LayoutPreview previewAt(const QString& id,
                                             int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
-                                            const QSize& canvas = {}) const override;
+                                            const QSize& canvas = {}) override;
 
 public Q_SLOTS:
     /// Caller-driven re-emit of @c contentsChanged. Hook this into the
@@ -68,7 +69,7 @@ public Q_SLOTS:
     void notifyContentsChanged();
 
 private:
-    PhosphorZones::ILayoutCatalog* m_catalog;
+    PhosphorZones::ILayoutRegistry* m_registry;
 };
 
 } // namespace PhosphorZones

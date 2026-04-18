@@ -469,6 +469,14 @@ public:
 private:
     void emitModifiedIfNotBatched();
 
+    /// Populate this layout in-place from a JSON object. Called by
+    /// @c fromJson after constructing a blank Layout; keeps the raw
+    /// member pokes confined to the class's own implementation so
+    /// the serialization TU isn't a friend of every Q_PROPERTY.
+    /// Use @c addZone for zone insertion so @c zoneAdded / @c zonesChanged
+    /// fire naturally during deserialization.
+    void initFromJson(const QJsonObject& json);
+
     QUuid m_id;
     QString m_name;
     QString m_description;
@@ -524,5 +532,3 @@ private:
 };
 
 } // namespace PhosphorZones
-
-Q_DECLARE_METATYPE(PhosphorZones::LayoutCategory)

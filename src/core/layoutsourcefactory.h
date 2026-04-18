@@ -22,7 +22,7 @@
 #include <memory>
 
 namespace PhosphorZones {
-class ILayoutCatalog;
+class ILayoutRegistry;
 class ZonesLayoutSource;
 }
 
@@ -52,16 +52,16 @@ struct PLASMAZONES_EXPORT LayoutSourceBundle
     std::unique_ptr<PhosphorLayout::CompositeLayoutSource> composite;
 };
 
-/// Build the standard {zones → autotile} composite over @p catalog.
+/// Build the standard {zones → autotile} composite over @p registry.
 ///
-/// @p catalog is the manual-layout catalog (typically a LayoutManager);
+/// @p registry is the manual-layout registry (typically a LayoutManager);
 /// caller owns it and must keep it alive for the bundle's lifetime.
 ///
 /// The autotile source binds to @c AlgorithmRegistry::instance()
-/// automatically. Caller is responsible for wiring the catalog's
+/// automatically. Caller is responsible for wiring the registry's
 /// "layouts changed" signal to @c bundle.zones->notifyContentsChanged()
 /// if reactive refresh is desired (the bundle can't do this itself
-/// without knowing the concrete catalog type).
-PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutCatalog* catalog);
+/// without knowing the concrete registry type).
+PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutRegistry* registry);
 
 } // namespace PlasmaZones

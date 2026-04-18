@@ -126,13 +126,11 @@ constexpr qreal kExpansionOverlapThreshold = 0.5;
 // The bounding rect grows iteratively so transitive gaps get filled
 // (e.g. painting zones 2 and 4 in dwindle fills zone 5 via zone 3).
 //
-// Complexity: O(n² · maxIter) where n = layout zone count. Each iteration
-// re-scans every zone in @p layout against the growing bounding rect, and
-// the loop is capped at maxIterations = 100 (see below). There is no
-// hard zone-count short-circuit, so very large layouts will hit the
-// iteration cap rather than scale gracefully. Acceptable in practice:
-// zone counts beyond a handful trigger the cap warning and the result
-// is still a superset of the seed zones.
+// Complexity: O(n²) where n = layout zone count. The selectedZones set
+// grows monotonically — each iteration that finds a new zone adds at
+// least one entry and no zone can be re-added, so the loop is bounded
+// by the number of layout zones. Each iteration re-scans every zone in
+// @p layout against the growing bounding rect.
 QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones)
 {
     if (!layout || seedZones.isEmpty()) {
@@ -161,14 +159,17 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
         return QVector<Zone*>();
     }
 
-    // Iteratively expand to include all zones that intersect the bounding rect
+    // Iteratively expand to include all zones that intersect the bounding
+    // rect. The loop is naturally bounded by the zone count — selectedZones
+    // grows monotonically and no zone can be inserted twice, so once every
+    // eligible zone has been absorbed no further iteration adds to the set
+    // and foundNew goes false.
     bool foundNew = true;
     int iterations = 0;
-    const int maxIterations = 100;
 
-    while (foundNew && iterations < maxIterations) {
+    while (foundNew) {
         foundNew = false;
-        iterations++;
+        ++iterations;
         QRectF currentRect = boundingRect;
 
         for (auto* zone : allZones) {
@@ -191,10 +192,16 @@ QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& s
                 }
             }
         }
-    }
 
-    if (iterations >= maxIterations) {
-        qCWarning(PhosphorZones::lcZonesLib) << "Zone expansion: max iterations reached, possible infinite loop";
+        // Monotonic-growth sanity check: an iteration that runs past the
+        // layout's zone count means our convergence invariant is broken.
+        // If this fires, a zone is being re-inserted or the set is
+        // shrinking — both are bugs. Log and break rather than spin.
+        if (iterations > allZones.size()) {
+            qCWarning(PhosphorZones::lcZonesLib) << "Zone expansion: iterations exceed zone count (" << iterations
+                                                 << ">" << allZones.size() << "), convergence invariant broken";
+            break;
+        }
     }
 
     // Preserve layout order for consistent output
@@ -255,7 +262,11 @@ Zone* ZoneDetector::resolveOverlappingZone(const QPointF& point) const
         qreal score = nx * nx + ny * ny; // Squared normalized distance, 0 at center
 
         qreal area = geom.width() * geom.height();
-        if (score < bestScore || (score == bestScore && area < bestArea)) {
+        // Shift by +1.0 so qFuzzyCompare handles near-zero scores
+        // correctly (the concentric-zones tiebreaker fires when the
+        // cursor sits exactly at a shared centre, where both scores
+        // are ~0 and strict == would miss the "equal" case).
+        if (score < bestScore || (qFuzzyCompare(score + 1.0, bestScore + 1.0) && area < bestArea)) {
             bestScore = score;
             bestArea = area;
             best = zone;

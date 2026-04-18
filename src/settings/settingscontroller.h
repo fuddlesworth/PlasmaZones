@@ -246,7 +246,11 @@ public:
     // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
     // shape, which is optimised for wire transfer.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
-    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
+    // Non-const: ILayoutSource::previewAt is non-const so implementations
+    // can populate a query cache (scripted autotile algorithms would be
+    // prohibitively expensive to re-run on every picker redraw). Changing
+    // this invoker to const would silently dodge that cache.
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
     QVariantList screens() const
@@ -871,6 +875,18 @@ private:
     QVariantList m_layouts;
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
+
+    // Suppresses the local-path layoutsChanged emit while a D-Bus
+    // getLayoutList round-trip is in flight. Without this gate, every
+    // loadLayoutsAsync() emits twice: once synchronously from the
+    // LayoutManager::layoutsChanged lambda (local composite) and once
+    // from the async D-Bus reply lambda (daemon-enriched list). Set true
+    // right before the D-Bus asyncCall dispatch; cleared in the reply
+    // lambda's entry (before any early-return on error, so the local
+    // fallback emit resumes if the daemon is unreachable). Only relevant
+    // when the daemon is available — when the D-Bus call errors out, the
+    // local path's emit remains the authoritative refresh.
+    bool m_awaitingDaemonLayouts = false;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // LayoutManager opens its own assignments backend + scans the standard

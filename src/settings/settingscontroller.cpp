@@ -81,8 +81,8 @@ namespace {
 
 QString userAlgorithmsDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir + QLatin1Char('/');
 }
 
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
@@ -183,7 +183,15 @@ SettingsController::SettingsController(QObject* parent)
         if (!localLayouts.isEmpty()) {
             sortMergedLayoutList(localLayouts);
             m_layouts = std::move(localLayouts);
-            Q_EMIT layoutsChanged();
+            // Suppress the local-path emit while a D-Bus getLayoutList
+            // call is in flight — the async reply lambda will emit once
+            // it replaces m_layouts with the daemon-enriched view. If the
+            // daemon is unreachable or the call errors, the gate is
+            // cleared in the reply lambda's head and subsequent local
+            // emits run normally (fallback behaviour).
+            if (!m_awaitingDaemonLayouts) {
+                Q_EMIT layoutsChanged();
+            }
         }
     });
 
@@ -198,7 +206,7 @@ SettingsController::SettingsController(QObject* parent)
     // The daemon also creates its own PhosphorTiles::ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate
     // the shared PhosphorTiles::AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QStringLiteral("plasmazones/algorithms"), this);
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir), this);
     scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
@@ -748,10 +756,18 @@ void SettingsController::loadLayoutsAsync()
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
+    // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
+    // on LayoutManager::layoutsChanged). The reply lambda clears this
+    // unconditionally so any subsequent local-only refresh (daemon down)
+    // emits as usual.
+    m_awaitingDaemonLayouts = true;
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // Clear the gate first so any local-path emit that arrives after
+        // an error reply (or after a successful one) runs normally.
+        m_awaitingDaemonLayouts = false;
 
         QDBusPendingReply<QStringList> reply = *w;
         if (reply.isError()) {
@@ -819,7 +835,7 @@ void SettingsController::recalcLocalLayouts()
     }
 }
 
-QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount) const
+QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
 {
     if (id.isEmpty() || !m_localSources.composite) {
         return {};
@@ -2559,8 +2575,8 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
 
 void SettingsController::openAlgorithmsFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir;
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -2577,8 +2593,8 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     if (!source.exists() || !source.isFile())
         return false;
 
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
+    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir;
     QDir dir(destDir);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -2964,7 +2980,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
             QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   QStringLiteral("plasmazones/algorithms/") + baseTemplate + QStringLiteral(".js"));
+                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".js"));
 
         if (!templateFile.isEmpty()) {
             QFile file(templateFile);

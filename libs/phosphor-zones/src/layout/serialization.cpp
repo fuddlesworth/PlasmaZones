@@ -10,6 +10,7 @@
 #include "../zoneslogging.h"
 #include <PhosphorZones/Zone.h>
 #include <QJsonArray>
+#include <QStandardPaths>
 
 namespace PhosphorZones {
 
@@ -18,10 +19,10 @@ QVariantList Layout::appRulesVariant() const
     QVariantList result;
     for (const auto& rule : m_appRules) {
         QVariantMap map;
-        map[QString(::PhosphorZones::ZoneJsonKeys::Pattern)] = rule.pattern;
-        map[QString(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = rule.zoneNumber;
+        map[::PhosphorZones::ZoneJsonKeys::Pattern] = rule.pattern;
+        map[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = rule.zoneNumber;
         if (!rule.targetScreen.isEmpty()) {
-            map[QString(::PhosphorZones::ZoneJsonKeys::TargetScreen)] = rule.targetScreen;
+            map[::PhosphorZones::ZoneJsonKeys::TargetScreen] = rule.targetScreen;
         }
         result.append(map);
     }
@@ -34,9 +35,9 @@ void Layout::setAppRulesVariant(const QVariantList& rules)
     for (const auto& item : rules) {
         QVariantMap map = item.toMap();
         AppRule rule;
-        rule.pattern = map.value(QString(::PhosphorZones::ZoneJsonKeys::Pattern)).toString();
-        rule.zoneNumber = map.value(QString(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt();
-        rule.targetScreen = map.value(QString(::PhosphorZones::ZoneJsonKeys::TargetScreen)).toString();
+        rule.pattern = map.value(::PhosphorZones::ZoneJsonKeys::Pattern).toString();
+        rule.zoneNumber = map.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
+        rule.targetScreen = map.value(::PhosphorZones::ZoneJsonKeys::TargetScreen).toString();
         if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
             newRules.append(rule);
         }
@@ -185,73 +186,111 @@ QJsonObject Layout::toJson() const
 
 Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 {
-    auto layout = new Layout(parent);
+    // Allocate a blank Layout and delegate population to a private member
+    // method. This scopes the raw-member pokes to the class's own
+    // implementation so future setter validation (e.g. name trimming)
+    // lands naturally without needing to extend friendship to this TU.
+    auto* layout = new Layout(parent);
+    layout->initFromJson(json);
+    return layout;
+}
 
-    layout->m_id = QUuid::fromString(json[::PhosphorZones::ZoneJsonKeys::Id].toString());
-    if (layout->m_id.isNull()) {
-        layout->m_id = QUuid::createUuid();
+void Layout::initFromJson(const QJsonObject& json)
+{
+    m_id = QUuid::fromString(json[::PhosphorZones::ZoneJsonKeys::Id].toString());
+    if (m_id.isNull()) {
+        m_id = QUuid::createUuid();
     }
 
-    layout->m_name = json[::PhosphorZones::ZoneJsonKeys::Name].toString();
+    m_name = json[::PhosphorZones::ZoneJsonKeys::Name].toString();
     // Note: "type" key is silently ignored for backward compatibility
-    layout->m_description = json[::PhosphorZones::ZoneJsonKeys::Description].toString();
+    m_description = json[::PhosphorZones::ZoneJsonKeys::Description].toString();
     // Gap overrides: -1 means use global setting (key absent = no override)
-    layout->m_zonePadding = json.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)
+    m_zonePadding = json.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding)
         ? json[::PhosphorZones::ZoneJsonKeys::ZonePadding].toInt(-1)
         : -1;
-    layout->m_outerGap = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGap)
+    m_outerGap = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGap)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGap].toInt(-1)
         : -1;
     // Per-side outer gap overrides
-    layout->m_usePerSideOuterGap = json[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap].toBool(false);
-    layout->m_outerGapTop = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapTop)
+    m_usePerSideOuterGap = json[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap].toBool(false);
+    m_outerGapTop = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapTop)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGapTop].toInt(-1)
         : -1;
-    layout->m_outerGapBottom = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)
+    m_outerGapBottom = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapBottom)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGapBottom].toInt(-1)
         : -1;
-    layout->m_outerGapLeft = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)
+    m_outerGapLeft = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapLeft)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGapLeft].toInt(-1)
         : -1;
-    layout->m_outerGapRight = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapRight)
+    m_outerGapRight = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapRight)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGapRight].toInt(-1)
         : -1;
-    layout->m_showZoneNumbers = json[::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers].toBool(true);
-    layout->m_overlayDisplayMode = json.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)
+    m_showZoneNumbers = json[::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers].toBool(true);
+    m_overlayDisplayMode = json.contains(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode)
         ? json[::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode].toInt(-1)
         : -1;
-    layout->m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(999);
+    m_defaultOrder = json[::PhosphorZones::ZoneJsonKeys::DefaultOrder].toInt(999);
     // Note: sourcePath is set by LayoutManager after loading, not from JSON
     // But systemSourcePath IS persisted in user JSON for system override restoration
-    layout->m_systemSourcePath = json[::PhosphorZones::ZoneJsonKeys::SystemSourcePath].toString();
+    m_systemSourcePath = json[::PhosphorZones::ZoneJsonKeys::SystemSourcePath].toString();
+
+    // Sanity-check the persisted systemSourcePath: it must resolve under a
+    // known system data prefix (the OS-level GenericDataLocation list,
+    // minus the writable user dir). If the value doesn't match any prefix,
+    // a stale or hand-edited config can leak an arbitrary path into the
+    // "restore system original" code path — drop it with a warning.
+    //
+    // Skip the check entirely when no prefixes are configured (headless
+    // test environments), so fixture tests stay portable. Also skip when
+    // the path is empty (no override tracked).
+    if (!m_systemSourcePath.isEmpty()) {
+        const QStringList systemPrefixes = QStandardPaths::standardLocations(QStandardPaths::GenericDataLocation);
+        const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+        bool valid = false;
+        bool anyPrefix = false;
+        for (const QString& prefix : systemPrefixes) {
+            if (prefix.isEmpty() || prefix == userDataPath) {
+                continue; // user dir isn't a "system" prefix
+            }
+            anyPrefix = true;
+            if (m_systemSourcePath.startsWith(prefix)) {
+                valid = true;
+                break;
+            }
+        }
+        if (anyPrefix && !valid) {
+            qCWarning(lcLayoutLib) << "dropping invalid systemSourcePath" << m_systemSourcePath;
+            m_systemSourcePath.clear();
+        }
+    }
 
     // Shader support
-    layout->m_shaderId = json[::PhosphorZones::ZoneJsonKeys::ShaderId].toString();
+    m_shaderId = json[::PhosphorZones::ZoneJsonKeys::ShaderId].toString();
     if (json.contains(::PhosphorZones::ZoneJsonKeys::ShaderParams)) {
-        layout->m_shaderParams = json[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap();
+        m_shaderParams = json[::PhosphorZones::ZoneJsonKeys::ShaderParams].toObject().toVariantMap();
     }
 
     // App-to-zone rules
     if (json.contains(::PhosphorZones::ZoneJsonKeys::AppRules)) {
-        layout->m_appRules = AppRule::fromJsonArray(json[::PhosphorZones::ZoneJsonKeys::AppRules].toArray());
+        m_appRules = AppRule::fromJsonArray(json[::PhosphorZones::ZoneJsonKeys::AppRules].toArray());
     }
 
     // Auto-assign
-    layout->m_autoAssign = json[::PhosphorZones::ZoneJsonKeys::AutoAssign].toBool(false);
+    m_autoAssign = json[::PhosphorZones::ZoneJsonKeys::AutoAssign].toBool(false);
 
     // Full screen geometry mode
-    layout->m_useFullScreenGeometry = json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false);
+    m_useFullScreenGeometry = json[::PhosphorZones::ZoneJsonKeys::UseFullScreenGeometry].toBool(false);
 
     // Aspect ratio classification
-    layout->m_aspectRatioClass = ::PhosphorLayout::ScreenClassification::fromString(
+    m_aspectRatioClass = ::PhosphorLayout::ScreenClassification::fromString(
         json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toString());
-    layout->m_minAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MinAspectRatio].toDouble(0.0);
-    layout->m_maxAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MaxAspectRatio].toDouble(0.0);
+    m_minAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MinAspectRatio].toDouble(0.0);
+    m_maxAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MaxAspectRatio].toDouble(0.0);
 
     // Visibility filtering
-    layout->m_hiddenFromSelector = json[::PhosphorZones::ZoneJsonKeys::HiddenFromSelector].toBool(false);
-    LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops,
-                                       layout->m_allowedActivities);
+    m_hiddenFromSelector = json[::PhosphorZones::ZoneJsonKeys::HiddenFromSelector].toBool(false);
+    LayoutUtils::deserializeAllowLists(json, m_allowedScreens, m_allowedDesktops, m_allowedActivities);
 
     // Translate any legacy connector names ("DP-2") in allowedScreens to the
     // application's stable screen identifier ("LG:Model:Serial") if a
@@ -260,21 +299,35 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     // resolver unset and the strings pass through verbatim. Equality-path
     // matches (same connector on both sides) still work without a resolver.
     if (const auto& resolver = Layout::screenIdResolver(); resolver) {
-        for (int i = 0; i < layout->m_allowedScreens.size(); ++i) {
-            const QString resolved = resolver(layout->m_allowedScreens[i]);
+        for (int i = 0; i < m_allowedScreens.size(); ++i) {
+            const QString resolved = resolver(m_allowedScreens[i]);
             if (!resolved.isEmpty()) {
-                layout->m_allowedScreens[i] = resolved;
+                m_allowedScreens[i] = resolved;
             }
         }
     }
 
+    // Route zones through addZone() so zoneAdded / zonesChanged fire
+    // naturally during deserialization. addZone respects a pre-set
+    // zoneNumber (>0) — the number was read by Zone::fromJson — and
+    // only auto-assigns the next slot when the incoming zone lacks one.
+    //
+    // Wrap the loop in batchModify so the individual per-zone
+    // emitModifiedIfNotBatched() calls coalesce into a single
+    // layoutModified after construction — the layout was just loaded
+    // from disk, not edited, so any listener that wires up after
+    // fromJson returns sees a clean-but-populated container.
     const auto zonesArray = json[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
+    beginBatchModify();
     for (const auto& zoneValue : zonesArray) {
-        auto zone = Zone::fromJson(zoneValue.toObject(), layout);
-        layout->m_zones.append(zone);
+        auto* zone = Zone::fromJson(zoneValue.toObject(), this);
+        addZone(zone);
     }
-
-    return layout;
+    endBatchModify();
+    // Drop the dirty flag: deserialization isn't a user edit, and a stale
+    // dirty flag would trick any future isDirty() probe into saving the
+    // just-loaded contents back to disk.
+    clearDirty();
 }
 
 } // namespace PhosphorZones

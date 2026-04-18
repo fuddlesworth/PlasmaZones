@@ -13,10 +13,10 @@ LayoutSourceBundle::~LayoutSourceBundle() = default;
 LayoutSourceBundle::LayoutSourceBundle(LayoutSourceBundle&&) noexcept = default;
 LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&&) noexcept = default;
 
-LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutCatalog* catalog)
+LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutRegistry* registry)
 {
     LayoutSourceBundle bundle;
-    bundle.zones = std::make_unique<PhosphorZones::ZonesLayoutSource>(catalog);
+    bundle.zones = std::make_unique<PhosphorZones::ZonesLayoutSource>(registry);
     // Autotile source defaults to AlgorithmRegistry::instance() — no need
     // to thread the singleton through every construction site.
     bundle.autotile = std::make_unique<PhosphorTiles::AutotileLayoutSource>();
@@ -24,8 +24,9 @@ LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutCatalog* catalog
     // Source order is significant for ID-namespace precedence (manual
     // layouts use bare UUIDs; autotile uses the `autotile:` prefix, so in
     // practice IDs don't collide — but keep the well-known order anyway).
-    bundle.composite->addSource(bundle.zones.get());
-    bundle.composite->addSource(bundle.autotile.get());
+    // setSources emits contentsChanged exactly once; incremental addSource
+    // calls would fire N times during bulk wiring.
+    bundle.composite->setSources({bundle.zones.get(), bundle.autotile.get()});
     return bundle;
 }
 

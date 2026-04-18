@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorZones/ILayoutManager.h>
+#include <PhosphorZones/ILayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
@@ -54,9 +54,9 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
 
 // ─── ZonesLayoutSource ──────────────────────────────────────────────────────
 
-ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutCatalog* catalog, QObject* parent)
+ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutRegistry* registry, QObject* parent)
     : PhosphorLayout::ILayoutSource(parent)
-    , m_catalog(catalog)
+    , m_registry(registry)
 {
 }
 
@@ -65,14 +65,14 @@ ZonesLayoutSource::~ZonesLayoutSource() = default;
 QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() const
 {
     QVector<PhosphorLayout::LayoutPreview> result;
-    // m_catalog is borrowed; caller contract says it must outlive this
+    // m_registry is borrowed; caller contract says it must outlive this
     // source (see header). Null here means the source was constructed
-    // without a catalog — treat as empty rather than crash.
-    if (!m_catalog) {
+    // without a registry — treat as empty rather than crash.
+    if (!m_registry) {
         return result;
     }
 
-    const auto layouts = m_catalog->layouts();
+    const auto layouts = m_registry->layouts();
     result.reserve(layouts.size());
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout) {
@@ -84,9 +84,9 @@ QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() con
 }
 
 PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, int /*windowCount*/,
-                                                           const QSize& /*canvas*/) const
+                                                           const QSize& /*canvas*/)
 {
-    if (!m_catalog || id.isEmpty()) {
+    if (!m_registry || id.isEmpty()) {
         return {};
     }
     // Explicit classifier — keeps parity with AutotileLayoutSource and makes
@@ -98,7 +98,7 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
     if (uuid.isNull()) {
         return {};
     }
-    PhosphorZones::Layout* layout = m_catalog->layoutById(uuid);
+    PhosphorZones::Layout* layout = m_registry->layoutById(uuid);
     return layout ? previewFromLayout(layout) : PhosphorLayout::LayoutPreview{};
 }
 

@@ -62,7 +62,7 @@ EditorController::EditorController(QObject* parent)
     // AlgorithmRegistry singleton so standalone editor launches (daemon down)
     // still surface them in layout pickers. The loader also sets up a
     // QFileSystemWatcher so hot-edits roll through automatically.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QStringLiteral("plasmazones/algorithms"), this);
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir), this);
     scriptLoader->scanAndRegister();
     connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &EditorController::reloadLocalLayouts);
@@ -236,7 +236,7 @@ QVariantList EditorController::localLayoutPreviews() const
     return list;
 }
 
-QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount) const
+QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount)
 {
     if (id.isEmpty() || !m_localSources.composite) {
         return {};
