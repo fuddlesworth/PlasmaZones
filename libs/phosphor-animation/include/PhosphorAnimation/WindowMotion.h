@@ -4,6 +4,7 @@
 #pragma once
 
 #include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QPointF>
@@ -165,8 +166,12 @@ struct PHOSPHORANIMATION_EXPORT AnimationConfig
     qreal duration = 150.0;
     Easing easing;
     int minDistance = 0;
-    int sequenceMode = 0; ///< 0 = all at once, 1 = one by one in zone order
-    int staggerInterval = 30; ///< ms between cascade starts when sequenceMode == 1
+    /// Cascade vs simultaneous. Stored as strongly typed enum — callers
+    /// loading raw integers from config/D-Bus should `static_cast` with
+    /// explicit range checking at the boundary rather than through a
+    /// magic int.
+    SequenceMode sequenceMode = SequenceMode::AllAtOnce;
+    int staggerInterval = 30; ///< ms between cascade starts when sequenceMode == Cascade
 };
 
 } // namespace PhosphorAnimation

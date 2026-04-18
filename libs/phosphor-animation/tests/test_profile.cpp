@@ -11,6 +11,7 @@
 using PhosphorAnimation::Curve;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::Profile;
+using PhosphorAnimation::SequenceMode;
 using PhosphorAnimation::Spring;
 
 class TestProfile : public QObject
@@ -19,16 +20,41 @@ class TestProfile : public QObject
 
 private Q_SLOTS:
 
-    void testDefaults()
+    void testDefaultAllOptionalsUnset()
     {
         Profile p;
         QVERIFY(p.curve == nullptr); // null = "inherit"
-        QCOMPARE(p.duration, 150.0);
-        QCOMPARE(p.minDistance, 0);
-        QCOMPARE(p.sequenceMode, 0);
-        QCOMPARE(p.staggerInterval, 30);
+        QVERIFY(!p.duration.has_value());
+        QVERIFY(!p.minDistance.has_value());
+        QVERIFY(!p.sequenceMode.has_value());
+        QVERIFY(!p.staggerInterval.has_value());
         QVERIFY(p.presetName.isEmpty());
     }
+
+    void testEffectiveGettersUseLibraryDefaults()
+    {
+        // An unset Profile reads the library defaults through the
+        // effective* accessors — so consumers never see a raw nullopt.
+        Profile p;
+        QCOMPARE(p.effectiveDuration(), Profile::DefaultDuration);
+        QCOMPARE(p.effectiveMinDistance(), Profile::DefaultMinDistance);
+        QCOMPARE(p.effectiveSequenceMode(), Profile::DefaultSequenceMode);
+        QCOMPARE(p.effectiveStaggerInterval(), Profile::DefaultStaggerInterval);
+    }
+
+    void testWithDefaultsFillsAllOptionals()
+    {
+        Profile empty;
+        const Profile filled = empty.withDefaults();
+        QVERIFY(filled.duration.has_value());
+        QVERIFY(filled.minDistance.has_value());
+        QVERIFY(filled.sequenceMode.has_value());
+        QVERIFY(filled.staggerInterval.has_value());
+        // curve stays null — runtime can substitute default Easing if needed.
+        QVERIFY(filled.curve == nullptr);
+    }
+
+    // ─── Equality ───
 
     void testEqualityWithSameValues()
     {
@@ -58,6 +84,18 @@ private Q_SLOTS:
         QVERIFY(a != b);
     }
 
+    void testEqualityUnsetVsExplicitDefault()
+    {
+        // A Profile with duration unset is NOT equal to one with
+        // duration explicitly set to the default. This is the whole
+        // point of optional-based fields — "I didn't say" and "I said
+        // the default" are different.
+        Profile unset;
+        Profile explicitDefault;
+        explicitDefault.duration = Profile::DefaultDuration;
+        QVERIFY(unset != explicitDefault);
+    }
+
     void testEqualityFieldsOnly()
     {
         Profile a;
@@ -68,16 +106,49 @@ private Q_SLOTS:
         QCOMPARE(a, b);
     }
 
+    void testEqualityPolymorphicCurveUsesTightComparison()
+    {
+        // Two Easings differing below toString() precision (0.005) must
+        // compare unequal through the polymorphic curve->equals() path,
+        // not equal via a lossy string round-trip.
+        auto a = std::make_shared<Easing>();
+        a->type = Easing::Type::ElasticOut;
+        a->amplitude = 1.003;
+        auto b = std::make_shared<Easing>();
+        b->type = Easing::Type::ElasticOut;
+        b->amplitude = 1.006;
+
+        Profile pa;
+        pa.curve = a;
+        Profile pb;
+        pb.curve = b;
+        QVERIFY(pa != pb);
+    }
+
     // ─── Serialization ───
 
-    void testToJsonOmitsNullCurveAndEmptyPreset()
+    void testToJsonOmitsUnsetFields()
     {
         Profile p;
         const QJsonObject obj = p.toJson();
-        QVERIFY(!obj.contains(QLatin1String("curve"))); // null curve omitted
-        QVERIFY(!obj.contains(QLatin1String("presetName"))); // empty omitted
+        // Every optional field is unset → omitted. Only an empty object.
+        QVERIFY(!obj.contains(QLatin1String("curve")));
+        QVERIFY(!obj.contains(QLatin1String("duration")));
+        QVERIFY(!obj.contains(QLatin1String("minDistance")));
+        QVERIFY(!obj.contains(QLatin1String("sequenceMode")));
+        QVERIFY(!obj.contains(QLatin1String("staggerInterval")));
+        QVERIFY(!obj.contains(QLatin1String("presetName")));
+    }
+
+    void testToJsonIncludesExplicitlySetDefault()
+    {
+        // "duration = 150" (explicitly set, even if equal to library
+        // default) MUST appear in JSON — otherwise the override is
+        // silently dropped and the parent wins when reloaded.
+        Profile p;
+        p.duration = Profile::DefaultDuration;
+        const QJsonObject obj = p.toJson();
         QVERIFY(obj.contains(QLatin1String("duration")));
-        QVERIFY(obj.contains(QLatin1String("staggerInterval")));
     }
 
     void testRoundTripEasing()
@@ -86,7 +157,7 @@ private Q_SLOTS:
         original.curve = std::make_shared<Easing>();
         original.duration = 250.0;
         original.minDistance = 15;
-        original.sequenceMode = 1;
+        original.sequenceMode = SequenceMode::Cascade;
         original.staggerInterval = 45;
         original.presetName = QStringLiteral("My Fast");
 
@@ -107,15 +178,24 @@ private Q_SLOTS:
         QVERIFY(restored.curve->equals(*original.curve));
     }
 
-    void testFromJsonMissingFieldsUsesDefaults()
+    void testFromJsonMissingFieldsLeaveUnset()
     {
         QJsonObject obj;
         obj.insert(QLatin1String("duration"), 999.0);
         const Profile p = Profile::fromJson(obj);
-        QCOMPARE(p.duration, 999.0);
-        QCOMPARE(p.minDistance, 0);
-        QCOMPARE(p.staggerInterval, 30);
+        QCOMPARE(*p.duration, 999.0);
+        QVERIFY(!p.minDistance.has_value());
+        QVERIFY(!p.staggerInterval.has_value());
         QVERIFY(p.curve == nullptr);
+    }
+
+    void testFromJsonSequenceModeClamps()
+    {
+        // Unknown integer values fall back to the library default enum.
+        QJsonObject obj;
+        obj.insert(QLatin1String("sequenceMode"), 99);
+        const Profile p = Profile::fromJson(obj);
+        QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
     }
 };
 

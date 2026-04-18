@@ -20,7 +20,7 @@ namespace PhosphorAnimation {
  * (see ProfilePaths.h) to Profile overrides, plus a single baseline
  * profile stored at the root. Clients look up per-event config via
  * `resolve(path)`, which returns the merged effective Profile after
- * walking the inheritance chain.
+ * walking the inheritance chain and filling library defaults.
  *
  * ## Inheritance semantics
  *
@@ -28,13 +28,16 @@ namespace PhosphorAnimation {
  *
  *   1. `"window.open"`   (explicit leaf override)
  *   2. `"window"`        (category override)
- *   3. `"global"`        (root)
- *   4. library default   (fallback if everything above is empty)
+ *   3. `"global"`        (baseline)
+ *   4. library default   (fallback for any still-unset field)
  *
- * Each step **supplies missing fields**: if `"window.open"` sets only
- * `duration = 300`, the curve / stagger / mode fields are inherited
- * from `"window"` if present there, else `"global"`, else library
- * defaults. A null `curve` is the sentinel for "inherit".
+ * At each step, any **engaged** optional in the override replaces the
+ * corresponding field in the accumulator. A `std::nullopt` field is a
+ * "no opinion here" marker and leaves the accumulator alone. This is
+ * the mechanism that lets a child explicitly reset a field to the
+ * library default (set it to the default value explicitly) while a
+ * silent child inherits the parent. See `Profile` for the full
+ * rationale.
  *
  * ## Why a sparse tree, not a fixed enum
  *
@@ -65,13 +68,12 @@ public:
     /**
      * @brief Resolve the effective Profile for @p path.
      *
-     * Walks path segments right-to-left, merging fields from child
-     * toward root. Missing fields (null curve, zero duration, etc.) in
-     * a level are filled from the next parent up. A path with no
-     * override anywhere resolves to the library default Profile
-     * (outCubic bezier, 150 ms, no stagger, all-at-once).
-     *
-     * Always returns a valid Profile — never null.
+     * Walks path segments root-to-leaf, overlaying each override's
+     * engaged fields onto the accumulator. Any field still unset after
+     * the chain walk is filled from `Profile::Default*`. Always returns
+     * a fully-populated Profile — every optional field in the result is
+     * engaged (except `curve`, which may still be null if no chain
+     * member supplied one).
      */
     Profile resolve(const QString& path) const;
 
@@ -79,8 +81,8 @@ public:
      * @brief Explicit Profile override at @p path, if any.
      *
      * Unlike `resolve()`, this does NOT walk parents. Returns a default
-     * Profile (all zero / null) when @p path has no direct override;
-     * use `hasOverride()` to distinguish absent from zero-valued.
+     * Profile (every field unset) when @p path has no direct override;
+     * use `hasOverride()` to distinguish absent from all-unset.
      */
     Profile override_(const QString& path) const;
 
@@ -114,11 +116,10 @@ public:
     /**
      * @brief The baseline profile returned when nothing overrides a path.
      *
-     * This is the "global" profile — equivalent to `setOverride("global",
-     * profile)` but stored separately so it always participates in
-     * resolution regardless of whether callers explicitly add `"global"`
-     * to the override map. Changing the baseline affects every path
-     * that doesn't have a full chain of overrides above it.
+     * This is the "global" profile — logically equivalent to
+     * `setOverride("global", profile)` but stored separately so it
+     * always participates in resolution regardless of whether callers
+     * explicitly add `"global"` to the override map.
      */
     Profile baseline() const
     {
@@ -135,22 +136,23 @@ public:
      * @code
      *   {
      *     "baseline":   { Profile-JSON },
-     *     "overrides":  {
-     *         "window":        { Profile-JSON },
-     *         "window.open":   { Profile-JSON },
-     *         "zone.snapIn":   { Profile-JSON },
-     *         …
-     *     }
+     *     "overrides":  [
+     *         { "path": "window",        "profile": { Profile-JSON } },
+     *         { "path": "window.open",   "profile": { Profile-JSON } },
+     *         { "path": "zone.snapIn",   "profile": { Profile-JSON } }
+     *     ]
      *   }
      * @endcode
      *
-     * The `overrides` map keys are dot-paths; values are per-path
-     * Profile JSON (see Profile::toJson()).
+     * The `overrides` value is a JSON array (not object) so insertion
+     * order round-trips losslessly — `QJsonObject` would sort keys
+     * alphabetically and reshuffle the settings-UI ordering.
      */
     QJsonObject toJson() const;
 
-    /// Parse a tree from the shape above. Unknown keys are ignored.
-    /// Invalid Profile entries within `overrides` fall back to defaults.
+    /// Parse a tree from the shape above. Invalid Profile entries fall
+    /// back to a default-constructed Profile (every field unset), and
+    /// entries with empty path strings are dropped.
     static ProfileTree fromJson(const QJsonObject& obj);
 
     // ─────── Equality ───────
@@ -162,10 +164,9 @@ public:
     }
 
 private:
-    /// Merge non-default fields from @p src into @p dst.
-    /// @p dst is the child (higher priority); @p src is the parent.
-    /// Only fields that equal the Profile default in @p dst get filled.
-    static void mergeFromParent(Profile& dst, const Profile& src);
+    /// Overlay @p src onto @p dst: every engaged field in src replaces
+    /// the corresponding field in dst. Unset fields in src are ignored.
+    static void overlay(Profile& dst, const Profile& src);
 
     Profile m_baseline;
     QHash<QString, Profile> m_overrides;

@@ -9,7 +9,6 @@
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
-#include <QLineF>
 #include <QMarginsF>
 #include <QVarLengthArray>
 
@@ -34,39 +33,28 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* window) const
 bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QSizeF& oldSize,
                                     const QRect& targetGeometry)
 {
-    if (!window || !m_enabled) {
+    if (!window) {
         return false;
     }
 
-    // Skip degenerate targets
-    if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
+    // All the skip-or-accept logic lives in AnimationMath::createSnapMotion
+    // — DRY with every other PhosphorAnimation consumer and guarantees
+    // that "worth animating?" decisions stay in one place.
+    PhosphorAnimation::AnimationConfig config;
+    config.enabled = m_enabled;
+    config.duration = m_duration;
+    config.easing = m_easing;
+    config.minDistance = m_minDistance;
+    auto motion = PhosphorAnimation::AnimationMath::createSnapMotion(oldPosition, oldSize, targetGeometry, config);
+    if (!motion) {
         return false;
     }
 
-    // Skip if position change is below the minimum distance threshold
-    // and size isn't changing either
-    const QPointF newPos = targetGeometry.topLeft();
-    const qreal dist = QLineF(oldPosition, newPos).length();
-    const bool sizeChanging =
-        qAbs(oldSize.width() - targetGeometry.width()) > 1.0 || qAbs(oldSize.height() - targetGeometry.height()) > 1.0;
-    if (dist < qMax(1.0, qreal(m_minDistance)) && !sizeChanging) {
-        return false;
-    }
-
-    PhosphorAnimation::WindowMotion anim;
-    anim.startPosition = oldPosition;
-    anim.startSize = oldSize;
-    anim.targetGeometry = targetGeometry;
-    anim.duration = m_duration;
-    anim.easing = m_easing;
-    // startTime is -1 (pending); latched to presentTime on first advanceAnimations()
-    m_animations[window] = anim;
-
+    m_animations[window] = *motion;
     window->addRepaintFull();
 
-    qCDebug(lcEffect) << "Started animation from" << oldPosition << oldSize << "to" << newPos << targetGeometry.size()
-                      << "distance:" << dist << "scale:" << sizeChanging << "duration:" << m_duration
-                      << "easing:" << m_easing.toString();
+    qCDebug(lcEffect) << "Started animation from" << oldPosition << oldSize << "to" << targetGeometry.topLeft()
+                      << targetGeometry.size() << "duration:" << m_duration << "easing:" << m_easing.toString();
     return true;
 }
 

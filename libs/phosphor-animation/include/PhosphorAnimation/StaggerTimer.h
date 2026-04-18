@@ -20,6 +20,11 @@ namespace PhosphorAnimation {
  * tiling shells. Otherwise all calls are immediate and @p onComplete
  * fires synchronously at the end.
  *
+ * The integer @p sequenceMode matches `PhosphorAnimation::SequenceMode`
+ * (0 = AllAtOnce, 1 = Cascade). The int signature is preserved here so
+ * D-Bus/config integers can flow straight through without translation;
+ * higher-level API surfaces (Profile, AnimationConfig) use the enum.
+ *
  * @param parent          QObject that owns the QTimer context.
  * @param count           Number of items to process.
  * @param sequenceMode    `0` = all at once; `1` = cascade.

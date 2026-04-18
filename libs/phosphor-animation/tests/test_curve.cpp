@@ -44,25 +44,73 @@ private Q_SLOTS:
         QVERIFY(!s1.equals(e1));
     }
 
+    void testPolymorphicEqualsIsTight()
+    {
+        // Parameters below the 2-decimal toString() precision must not
+        // be smoothed by Curve::equals() — Easing and Spring override
+        // it to delegate to the tight operator==.
+        Easing a;
+        a.type = Easing::Type::ElasticOut;
+        a.amplitude = 1.003;
+        Easing b;
+        b.type = Easing::Type::ElasticOut;
+        b.amplitude = 1.006;
+        QVERIFY(!a.equals(b));
+
+        Spring s1(12.001, 0.8);
+        Spring s2(12.005, 0.8);
+        QVERIFY(!s1.equals(s2));
+    }
+
     void testDefaultStepForStatelessCurve()
     {
-        // Curve::step() default implementation uses evaluate() under the
-        // hood for stateless curves. Advance across t=[0,1] in small
-        // increments and verify state.value tracks evaluate(t) within
-        // floating-point tolerance.
+        // Curve::step() default: state.value = lerp(startValue, target,
+        // evaluate(t)). Start at 0, target 1 — after a full run, value
+        // should have traversed from 0 to ~1.
         Easing e;
         CurveState state;
         const qreal dt = 1.0 / 60.0;
         const qreal target = 1.0;
 
-        qreal t = 0.0;
         for (int i = 0; i < 60; ++i) {
             e.step(dt, state, target);
-            t += dt;
         }
-        // By t ≈ 1, default step() should have walked state.value to
-        // evaluate(1.0) ≈ 1.0 (modulo cumulative float drift).
         QVERIFY(qAbs(state.value - 1.0) < 0.05);
+    }
+
+    void testDefaultStepHonorsStartValueForRetarget()
+    {
+        // Retarget mid-flight: set startValue=current, reset time, pick
+        // new target. The next step MUST produce continuous motion
+        // starting from state.value, not jump to evaluate(t)*newTarget.
+        Easing e;
+        CurveState state;
+        state.value = 0.5;
+        state.startValue = 0.5;
+        state.time = 0.0;
+
+        // Take one small step toward 2.0. The default step lerps from
+        // startValue (0.5) to target (2.0) via evaluate(tiny) ≈ 0, so
+        // the new value should be very close to 0.5 — NOT a jump.
+        e.step(1.0 / 120.0, state, 2.0);
+        QVERIFY(qAbs(state.value - 0.5) < 0.1);
+    }
+
+    void testDefaultStepLerpArrivesAtTarget()
+    {
+        // After a full animation (state.time reaches 1.0), state.value
+        // reaches target regardless of startValue.
+        Easing e;
+        CurveState state;
+        state.value = 0.3;
+        state.startValue = 0.3;
+        const qreal target = 0.9;
+        const qreal dt = 1.0 / 60.0;
+
+        for (int i = 0; i < 120; ++i) {
+            e.step(dt, state, target);
+        }
+        QVERIFY(qAbs(state.value - target) < 0.01);
     }
 
     void testCurveStateDefaults()
@@ -71,11 +119,11 @@ private Q_SLOTS:
         QCOMPARE(s.value, 0.0);
         QCOMPARE(s.velocity, 0.0);
         QCOMPARE(s.time, 0.0);
+        QCOMPARE(s.startValue, 0.0);
     }
 
     void testMultipleRefsShareCurve()
     {
-        // Multiple owners share the same immutable curve — intended usage.
         auto s1 = std::make_shared<const Spring>(Spring::snappy());
         std::shared_ptr<const Curve> ref1 = s1;
         std::shared_ptr<const Curve> ref2 = s1;

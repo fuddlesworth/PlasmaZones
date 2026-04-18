@@ -229,13 +229,30 @@ dodge static-destruction ordering pitfalls with Qt plugin teardown.
 ### `Profile.h` — single-event configuration
 
 ```cpp
-struct Profile {
-    std::shared_ptr<const Curve> curve;  // null = inherit
-    qreal duration = 150.0;               // ms; parametric curves only
-    int minDistance = 0;                  // skip threshold in px
-    int sequenceMode = 0;                 // 0 = all-at-once, 1 = cascade
-    int staggerInterval = 30;             // ms between cascade starts
-    QString presetName;                   // UI-only label
+enum class SequenceMode : int {
+    AllAtOnce = 0,
+    Cascade = 1,
+};
+
+class Profile {
+public:
+    static constexpr qreal DefaultDuration = 150.0;
+    static constexpr int DefaultMinDistance = 0;
+    static constexpr SequenceMode DefaultSequenceMode = SequenceMode::AllAtOnce;
+    static constexpr int DefaultStaggerInterval = 30;
+
+    std::shared_ptr<const Curve> curve;         // null = inherit
+    std::optional<qreal> duration;              // unset = inherit
+    std::optional<int> minDistance;             // unset = inherit
+    std::optional<SequenceMode> sequenceMode;   // unset = inherit
+    std::optional<int> staggerInterval;         // unset = inherit
+    QString presetName;                         // "" = unset
+
+    qreal effectiveDuration() const;
+    int effectiveMinDistance() const;
+    SequenceMode effectiveSequenceMode() const;
+    int effectiveStaggerInterval() const;
+    Profile withDefaults() const;
 
     QJsonObject toJson() const;
     static Profile fromJson(const QJsonObject& obj);
@@ -243,9 +260,19 @@ struct Profile {
 };
 ```
 
-A null `curve` is the sentinel for "inherit from parent" in
-`ProfileTree::resolve`. JSON serialization omits the `curve` key when
-null and `presetName` when empty, so partial overrides are expressible.
+Every field uses `std::optional` (or a nullable `shared_ptr` for the
+curve) to distinguish "I didn't say" from "I explicitly set the
+default value". Sentinel-based inheritance — e.g. "treat `staggerInterval
+== 30` as unset" — is fundamentally broken for any override that wants
+to force a child back to the library default even though the parent
+differs. A leaf with `duration = 150` MUST win over a parent with
+`duration = 300`, and only an optional can express that.
+
+JSON serialization omits unset fields and the empty `presetName`. A
+`duration` field explicitly set to the library default is still written
+out so the override survives round-trip. `SequenceMode` is a strongly
+typed enum; unknown integer values in JSON clamp to the default
+enumerator for forward-compatibility.
 
 ### `ProfilePaths.h` — named event path constants
 
@@ -296,11 +323,16 @@ public:
 ```
 
 Resolution semantics: `resolve(path)` walks `path` up through parent
-segments (via `ProfilePaths::parentPath`), overlays each explicit
-override onto an `effective` Profile initialized from the baseline,
-and returns the merged result. A leaf override that only sets
-`duration` inherits `curve`, `staggerInterval`, etc. from the category
-or baseline.
+segments (via `ProfilePaths::parentPath`), starts from the baseline,
+and overlays each explicit override in root-to-leaf order. At each
+overlay, only the override's **engaged** optionals replace the
+accumulator; `std::nullopt` fields are skipped and the accumulator is
+left alone. After the chain walk, any still-unset field is filled from
+the library defaults, so the returned Profile is always fully
+populated. A leaf override that only sets `duration` inherits `curve`,
+`staggerInterval`, etc. from the category or baseline; a leaf override
+that sets `duration = 150` (the library default) correctly wins over a
+parent with `duration = 300`.
 
 JSON shape uses an **array** for overrides (not an object) because
 `QJsonObject` alphabetically sorts keys on serialization, which would
@@ -316,8 +348,10 @@ silently reshuffle user-visible UI ordering:
 }
 ```
 
-`fromJson` accepts either the canonical array shape or a legacy object
-shape (for any pre-array configs), but writes always produce the array.
+`fromJson` accepts the canonical array shape only. There is no
+speculative legacy-object fallback: the library is brand new and has no
+prior persisted format, so per CLAUDE.md's "no ad-hoc migration code"
+rule, reads and writes share the same shape.
 
 ### `WindowMotion.h` — per-window snap animation state
 
@@ -345,7 +379,7 @@ struct AnimationConfig {
     qreal duration = 150.0;
     Easing easing;
     int minDistance = 0;
-    int sequenceMode = 0;
+    SequenceMode sequenceMode = SequenceMode::AllAtOnce;
     int staggerInterval = 30;
 };
 ```

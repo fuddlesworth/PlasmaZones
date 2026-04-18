@@ -12,6 +12,7 @@
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::Profile;
 using PhosphorAnimation::ProfileTree;
+using PhosphorAnimation::SequenceMode;
 using PhosphorAnimation::Spring;
 
 namespace PP = PhosphorAnimation::ProfilePaths;
@@ -43,7 +44,17 @@ private Q_SLOTS:
 
     // ─── Resolve walk-up ───
 
-    void testResolveEmptyTreeReturnsBaseline()
+    void testResolveEmptyTreeReturnsLibraryDefaults()
+    {
+        ProfileTree tree;
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        // No override, no baseline → library defaults filled by withDefaults().
+        QCOMPARE(*resolved.duration, Profile::DefaultDuration);
+        QCOMPARE(*resolved.staggerInterval, Profile::DefaultStaggerInterval);
+        QVERIFY(resolved.curve == nullptr);
+    }
+
+    void testResolveBaselineFillsGaps()
     {
         ProfileTree tree;
         Profile baseline;
@@ -52,11 +63,13 @@ private Q_SLOTS:
         tree.setBaseline(baseline);
 
         const Profile resolved = tree.resolve(PP::WindowOpen);
-        QCOMPARE(resolved.duration, 400.0);
+        QCOMPARE(*resolved.duration, 400.0);
         QVERIFY(resolved.curve != nullptr);
+        // Fields not in baseline fill from library defaults.
+        QCOMPARE(*resolved.staggerInterval, Profile::DefaultStaggerInterval);
     }
 
-    void testResolveLeafOverride()
+    void testResolveLeafOverrideWinsOverBaseline()
     {
         ProfileTree tree;
         Profile baseline;
@@ -69,7 +82,7 @@ private Q_SLOTS:
         tree.setOverride(PP::WindowOpen, leaf);
 
         const Profile resolved = tree.resolve(PP::WindowOpen);
-        QCOMPARE(resolved.duration, 80.0);
+        QCOMPARE(*resolved.duration, 80.0);
         QCOMPARE(resolved.curve->typeId(), QStringLiteral("spring"));
     }
 
@@ -81,9 +94,8 @@ private Q_SLOTS:
         category.duration = 200.0;
         tree.setOverride(PP::Window, category);
 
-        // Any window.* leaf without its own override inherits from "window".
         const Profile resolved = tree.resolve(PP::WindowOpen);
-        QCOMPARE(resolved.duration, 200.0);
+        QCOMPARE(*resolved.duration, 200.0);
     }
 
     void testResolveLeafFillsFromCategoryThenBaseline()
@@ -103,9 +115,39 @@ private Q_SLOTS:
         tree.setOverride(PP::WindowClose, leaf);
 
         const Profile resolved = tree.resolve(PP::WindowClose);
-        QCOMPARE(resolved.duration, 99.0); // from leaf
-        QCOMPARE(resolved.staggerInterval, 60); // from category
+        QCOMPARE(*resolved.duration, 99.0); // from leaf
+        QCOMPARE(*resolved.staggerInterval, 60); // from category
         QVERIFY(resolved.curve != nullptr); // from baseline
+    }
+
+    void testResolveLeafCanResetToLibraryDefault()
+    {
+        // REGRESSION: with sentinel-based inheritance, setting a child
+        // override field to the same value as the library default was
+        // silently treated as "unset" and the parent's value leaked
+        // through. With std::optional fields, an explicitly-set default
+        // value MUST win over the parent.
+        ProfileTree tree;
+
+        Profile baseline;
+        baseline.duration = 500.0;
+        baseline.staggerInterval = 75;
+        baseline.minDistance = 25;
+        baseline.sequenceMode = SequenceMode::Cascade;
+        tree.setBaseline(baseline);
+
+        Profile leaf;
+        leaf.duration = Profile::DefaultDuration; // 150
+        leaf.staggerInterval = Profile::DefaultStaggerInterval; // 30
+        leaf.minDistance = Profile::DefaultMinDistance; // 0
+        leaf.sequenceMode = Profile::DefaultSequenceMode; // AllAtOnce
+        tree.setOverride(PP::WindowOpen, leaf);
+
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QCOMPARE(*resolved.duration, Profile::DefaultDuration);
+        QCOMPARE(*resolved.staggerInterval, Profile::DefaultStaggerInterval);
+        QCOMPARE(*resolved.minDistance, Profile::DefaultMinDistance);
+        QCOMPARE(*resolved.sequenceMode, Profile::DefaultSequenceMode);
     }
 
     // ─── Mutation ───
@@ -119,11 +161,10 @@ private Q_SLOTS:
 
         QCOMPARE(tree.overriddenPaths().size(), 1);
 
-        // Updating an existing override must not duplicate the path.
         p.duration = 300.0;
         tree.setOverride(PP::WindowOpen, p);
         QCOMPARE(tree.overriddenPaths().size(), 1);
-        QCOMPARE(tree.override_(PP::WindowOpen).duration, 300.0);
+        QCOMPARE(*tree.override_(PP::WindowOpen).duration, 300.0);
     }
 
     void testClearOverride()
@@ -138,7 +179,6 @@ private Q_SLOTS:
         QVERIFY(!tree.hasOverride(PP::ZoneSnapIn));
         QVERIFY(tree.overriddenPaths().isEmpty());
 
-        // Second clear is a no-op.
         QVERIFY(!tree.clearOverride(PP::ZoneSnapIn));
     }
 
@@ -156,8 +196,7 @@ private Q_SLOTS:
 
         tree.clearAllOverrides();
         QVERIFY(tree.overriddenPaths().isEmpty());
-        // Baseline survives.
-        QCOMPARE(tree.baseline().duration, 123.0);
+        QCOMPARE(*tree.baseline().duration, 123.0);
     }
 
     void testSetOverrideRejectsEmptyPath()
@@ -186,7 +225,7 @@ private Q_SLOTS:
 
         Profile overrideB;
         overrideB.curve = std::make_shared<Easing>();
-        overrideB.sequenceMode = 1;
+        overrideB.sequenceMode = SequenceMode::Cascade;
         original.setOverride(PP::ZoneSnapIn, overrideB);
 
         const QJsonObject encoded = original.toJson();
@@ -205,6 +244,21 @@ private Q_SLOTS:
         const QStringList before = original.overriddenPaths();
         const ProfileTree restored = ProfileTree::fromJson(original.toJson());
         QCOMPARE(restored.overriddenPaths(), before);
+    }
+
+    void testJsonExplicitDefaultSurvivesRoundTrip()
+    {
+        // REGRESSION: a Profile with duration set to the library default
+        // must survive the JSON round-trip with the field still engaged.
+        ProfileTree original;
+        Profile leaf;
+        leaf.duration = Profile::DefaultDuration;
+        original.setOverride(PP::WindowOpen, leaf);
+
+        const ProfileTree restored = ProfileTree::fromJson(original.toJson());
+        const Profile restoredLeaf = restored.override_(PP::WindowOpen);
+        QVERIFY(restoredLeaf.duration.has_value());
+        QCOMPARE(*restoredLeaf.duration, Profile::DefaultDuration);
     }
 };
 

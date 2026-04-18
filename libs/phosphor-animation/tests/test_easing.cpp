@@ -63,6 +63,17 @@ private Q_SLOTS:
         QCOMPARE(curve.type, Easing::Type::CubicBezier);
     }
 
+    void testFromStringBezierPartialParamsLogsAndFallsBack()
+    {
+        // "bezier:0.5,0.5" is only 2 of 4 params — must fall back to the
+        // default curve rather than silently accepting a half-configured one.
+        Easing curve = Easing::fromString(QStringLiteral("bezier:0.5,0.5"));
+        QCOMPARE(curve.type, Easing::Type::CubicBezier);
+        // Defaults: x1=0.33, y1=1.0, x2=0.68, y2=1.0
+        QVERIFY(qAbs(curve.x1 - 0.33) < 0.01);
+        QVERIFY(qAbs(curve.y1 - 1.00) < 0.01);
+    }
+
     void testFromStringScientificNotNamed()
     {
         // Numeric strings with 'e' exponent must NOT be misclassified as named.

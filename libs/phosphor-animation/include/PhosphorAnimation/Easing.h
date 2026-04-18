@@ -65,8 +65,12 @@ public:
     qreal evaluate(qreal x) const override;
     QString toString() const override;
     std::unique_ptr<Curve> clone() const override;
-    // equals() uses Curve::equals() default (typeId + toString round-trip).
-    // Not overridden — string form is lossless within our 2-decimal format.
+
+    /// Overrides `Curve::equals()` to delegate to the tight
+    /// `operator==`. The base default compares `toString()` forms,
+    /// which are 2-decimal-rounded and would call curves equal that
+    /// differ by up to 0.005 in any parameter.
+    bool equals(const Curve& other) const override;
 
     // ─────── Easing-specific API ───────
 

@@ -9,16 +9,42 @@
 
 namespace PhosphorAnimation {
 
+Profile Profile::withDefaults() const
+{
+    Profile out = *this;
+    if (!out.duration) {
+        out.duration = DefaultDuration;
+    }
+    if (!out.minDistance) {
+        out.minDistance = DefaultMinDistance;
+    }
+    if (!out.sequenceMode) {
+        out.sequenceMode = DefaultSequenceMode;
+    }
+    if (!out.staggerInterval) {
+        out.staggerInterval = DefaultStaggerInterval;
+    }
+    return out;
+}
+
 QJsonObject Profile::toJson() const
 {
     QJsonObject obj;
     if (curve) {
         obj.insert(QLatin1String("curve"), curve->toString());
     }
-    obj.insert(QLatin1String("duration"), duration);
-    obj.insert(QLatin1String("minDistance"), minDistance);
-    obj.insert(QLatin1String("sequenceMode"), sequenceMode);
-    obj.insert(QLatin1String("staggerInterval"), staggerInterval);
+    if (duration) {
+        obj.insert(QLatin1String("duration"), *duration);
+    }
+    if (minDistance) {
+        obj.insert(QLatin1String("minDistance"), *minDistance);
+    }
+    if (sequenceMode) {
+        obj.insert(QLatin1String("sequenceMode"), static_cast<int>(*sequenceMode));
+    }
+    if (staggerInterval) {
+        obj.insert(QLatin1String("staggerInterval"), *staggerInterval);
+    }
     if (!presetName.isEmpty()) {
         obj.insert(QLatin1String("presetName"), presetName);
     }
@@ -37,16 +63,21 @@ Profile Profile::fromJson(const QJsonObject& obj)
     }
 
     if (obj.contains(QLatin1String("duration"))) {
-        p.duration = obj.value(QLatin1String("duration")).toDouble(150.0);
+        p.duration = obj.value(QLatin1String("duration")).toDouble(DefaultDuration);
     }
     if (obj.contains(QLatin1String("minDistance"))) {
-        p.minDistance = obj.value(QLatin1String("minDistance")).toInt(0);
+        p.minDistance = obj.value(QLatin1String("minDistance")).toInt(DefaultMinDistance);
     }
     if (obj.contains(QLatin1String("sequenceMode"))) {
-        p.sequenceMode = obj.value(QLatin1String("sequenceMode")).toInt(0);
+        const int raw = obj.value(QLatin1String("sequenceMode")).toInt(static_cast<int>(DefaultSequenceMode));
+        // Clamp to a valid enumerator; unknown values fall back to the default
+        // to keep forward-compat with any future additions written by a newer
+        // client. Current enum has only {0, 1}.
+        p.sequenceMode =
+            (raw == static_cast<int>(SequenceMode::Cascade)) ? SequenceMode::Cascade : SequenceMode::AllAtOnce;
     }
     if (obj.contains(QLatin1String("staggerInterval"))) {
-        p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(30);
+        p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(DefaultStaggerInterval);
     }
     if (obj.contains(QLatin1String("presetName"))) {
         p.presetName = obj.value(QLatin1String("presetName")).toString();
@@ -64,9 +95,8 @@ bool Profile::operator==(const Profile& other) const
     if (!curvesEqual) {
         return false;
     }
-    return qFuzzyCompare(1.0 + duration, 1.0 + other.duration) && minDistance == other.minDistance
-        && sequenceMode == other.sequenceMode && staggerInterval == other.staggerInterval
-        && presetName == other.presetName;
+    return duration == other.duration && minDistance == other.minDistance && sequenceMode == other.sequenceMode
+        && staggerInterval == other.staggerInterval && presetName == other.presetName;
 }
 
 } // namespace PhosphorAnimation

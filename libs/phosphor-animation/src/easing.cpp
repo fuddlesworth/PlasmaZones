@@ -223,7 +223,12 @@ Easing Easing::fromString(const QString& str)
                         curve.y1 = qBound(-1.0, y1v, 2.0);
                         curve.x2 = qBound(0.0, x2v, 1.0);
                         curve.y2 = qBound(-1.0, y2v, 2.0);
+                    } else {
+                        qCWarning(lcEasing) << "bezier params parse failure in" << str << "- using default curve";
                     }
+                } else {
+                    qCWarning(lcEasing) << "bezier expects 4 comma-separated params, got" << parts.size() << "in" << str
+                                        << "- using default curve";
                 }
             } else {
                 if (parts.size() >= 1) {
@@ -287,6 +292,20 @@ bool Easing::operator==(const Easing& other) const
     }
     // Bounce*: amplitude + bounces
     return qFuzzyCompare(1.0 + amplitude, 1.0 + other.amplitude) && bounces == other.bounces;
+}
+
+bool Easing::equals(const Curve& other) const
+{
+    // Delegate to operator== so polymorphic equality matches the
+    // value-type comparison exactly (no drift from lossy toString()).
+    if (typeId() != other.typeId()) {
+        return false;
+    }
+    const Easing* rhs = dynamic_cast<const Easing*>(&other);
+    if (!rhs) {
+        return false;
+    }
+    return *this == *rhs;
 }
 
 } // namespace PhosphorAnimation

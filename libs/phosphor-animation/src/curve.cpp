@@ -7,25 +7,27 @@ namespace PhosphorAnimation {
 
 void Curve::step(qreal dt, CurveState& state, qreal target) const
 {
-    // Default: advance state.time by dt and recompute value parametrically
-    // using a duration of 1.0. Callers of stateless curves are expected to
-    // pre-scale dt by 1/duration before calling step() — the curve itself
-    // has no duration knowledge.
+    // Default: advance state.time by dt and lerp from state.startValue
+    // to target via the parametric evaluate(t). Callers of stateless
+    // curves are expected to pre-scale dt by 1/duration before calling
+    // so state.time reaches 1 at animation end.
     //
-    // Numerical velocity is the approximate derivative across this step,
-    // preserved so spring-style retargets can ingest parametric predecessors
+    // Numerical velocity is the derivative across this step, preserved
+    // so stateful-curve retargets can ingest parametric predecessors
     // without a velocity discontinuity.
     const qreal prevValue = state.value;
     state.time += dt;
     const qreal t = qBound(0.0, state.time, 1.0);
-    state.value = evaluate(t) * target;
+    const qreal progress = evaluate(t);
+    state.value = state.startValue + progress * (target - state.startValue);
     state.velocity = (dt > 0.0) ? (state.value - prevValue) / dt : 0.0;
 }
 
 bool Curve::equals(const Curve& other) const
 {
-    // Fallback equality via string round-trip. Subclasses override when
-    // their toString() form is lossy (e.g. floating-point truncation).
+    // Fallback equality via string round-trip. Subclasses with
+    // floating-point parameters that get rounded by toString()
+    // (Easing / Spring) override this for tight comparison.
     return typeId() == other.typeId() && toString() == other.toString();
 }
 

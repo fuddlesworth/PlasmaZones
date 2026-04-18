@@ -34,8 +34,13 @@ namespace AnimationMath {
  * Returns `std::nullopt` when:
  *   - the AnimationConfig is disabled,
  *   - the target geometry is degenerate (zero or negative size),
- *   - the position change is below `config.minDistance` AND size isn't
- *     changing (the animation wouldn't be visible).
+ *   - the position change is below `max(1, config.minDistance)` pixels
+ *     AND size isn't changing (the animation wouldn't be visible).
+ *
+ * @note `config.minDistance == 0` is treated as "1 pixel" — a 0-pixel
+ * move with no size change is a no-op and always gets skipped. Callers
+ * that want every movement animated should request explicit motion via
+ * a different entry point rather than rely on `minDistance = 0`.
  *
  * Otherwise returns a populated WindowMotion with `startTime` still
  * pending — the first `updateProgress()` call latches it.

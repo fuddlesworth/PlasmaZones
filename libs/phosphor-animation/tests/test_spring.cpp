@@ -115,6 +115,22 @@ private Q_SLOTS:
         }
     }
 
+    void testEvaluateNearCriticalNumericallyStable()
+    {
+        // Zeta very close to 1.0 used to route through the underdamped
+        // branch where sqrt(1-zeta²) approached 0, giving ill-conditioned
+        // division. The critical-damping band is widened to cover this.
+        for (qreal zeta : {0.9995, 0.9999, 1.0, 1.0001, 1.0005}) {
+            Spring s(12.0, zeta);
+            for (int i = 0; i <= 50; ++i) {
+                const qreal t = qreal(i) / 50.0;
+                const qreal v = s.evaluate(t);
+                QVERIFY(qIsFinite(v));
+                QVERIFY(v > -2.0 && v < 3.0); // sane magnitude
+            }
+        }
+    }
+
     // ─── step (physics) ───
 
     void testStepConvergesToTarget()

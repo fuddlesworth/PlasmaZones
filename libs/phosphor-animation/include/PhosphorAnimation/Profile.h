@@ -11,8 +11,22 @@
 #include <QtGlobal>
 
 #include <memory>
+#include <optional>
 
 namespace PhosphorAnimation {
+
+/**
+ * @brief How a batch of animations starts.
+ *
+ * Strongly typed so callers cannot confuse it with @c staggerInterval
+ * or other int fields. Numeric values match the historical wire format
+ * (0 = AllAtOnce, 1 = Cascade) so existing D-Bus / config integers can
+ * be `static_cast` without a translation table.
+ */
+enum class SequenceMode : int {
+    AllAtOnce = 0, ///< Every target begins simultaneously
+    Cascade = 1, ///< Targets begin one after another via StaggerTimer
+};
 
 /**
  * @brief Configuration for a single animation event.
@@ -22,35 +36,46 @@ namespace PhosphorAnimation {
  * code resolves a Profile via `ProfileTree::resolve(path)` and feeds it
  * to WindowMotion / AnimationController / higher-level runners.
  *
- * ## Fields
+ * ## "Set" vs "unset" semantics
  *
- * - `curve`            the Curve to evaluate (Easing, Spring, user type)
- * - `duration`         animation length in milliseconds (parametric use)
- * - `minDistance`      skip threshold in pixels (no animation if the
- *                      window moves less than this and doesn't resize)
- * - `sequenceMode`     0 = all targets start simultaneously,
- *                      1 = cascade via stagger timer
- * - `staggerInterval`  ms between cascade starts (sequenceMode == 1)
- * - `presetName`       optional user-readable name (e.g., "My Bouncy"),
- *                      used by the settings UI for preset management
- *                      and not consumed by the runtime
+ * Every field is `std::optional<T>` (or a nullable shared_ptr for the
+ * curve). This is load-bearing for `ProfileTree` inheritance: a child
+ * override with `duration.reset()` means "inherit duration from the
+ * parent", while `duration = 150` means "explicitly use 150 at this
+ * path, even if the parent says otherwise". A sentinel-based design
+ * (e.g., "treat 0 as unset") can't distinguish the user-chose-default
+ * case from the user-said-nothing case, so an optional is the only
+ * correct representation.
  *
- * ## Defaults
+ * Callers that want the effective runtime value (with library defaults
+ * filled in for any unset field) use the `effective*()` getters or
+ * `withDefaults()` which returns a `Profile` where every optional is
+ * guaranteed to be engaged.
  *
- * Default construction yields: Easing outCubic (0.33, 1.0, 0.68, 1.0),
- * 150 ms, zero min-distance, all-at-once, 30 ms stagger interval. These
- * match the pre-library animation defaults shipped in Settings.
+ * ## Library defaults
+ *
+ * The library-wide fallbacks are exposed as `DefaultDuration` etc.
+ * below so callers and unit tests don't need to hardcode the numbers.
+ * `ProfileTree::resolve()` fills any still-unset field after chain
+ * resolution with these defaults.
  *
  * ## Immutability of curve
  *
  * The `curve` pointer is `shared_ptr<const Curve>`. Profiles are
  * typically mutated by swapping the pointer; direct curve mutation is
- * forbidden (immutable curve contract). Multiple Profiles can safely
- * share a curve instance.
+ * forbidden by the Curve contract. Multiple Profiles can safely share
+ * a curve instance.
  */
 class PHOSPHORANIMATION_EXPORT Profile
 {
 public:
+    // ─────── Library defaults ───────
+
+    static constexpr qreal DefaultDuration = 150.0;
+    static constexpr int DefaultMinDistance = 0;
+    static constexpr SequenceMode DefaultSequenceMode = SequenceMode::AllAtOnce;
+    static constexpr int DefaultStaggerInterval = 30;
+
     Profile() = default;
 
     Profile(const Profile&) = default;
@@ -60,58 +85,85 @@ public:
 
     // ─────── Fields (public — Profile is a value aggregate) ───────
 
-    /// The curve evaluated for this event. Null = use the library
-    /// default curve (outCubic bezier) at runtime; callers should treat
-    /// null as "inherit from parent" when walking a ProfileTree.
+    /// The curve evaluated for this event. `nullptr` = inherit from
+    /// parent in a ProfileTree, or library default (outCubic bezier)
+    /// if no parent supplies one.
     std::shared_ptr<const Curve> curve;
 
     /// Animation length in milliseconds. Used only by parametric curves
     /// (Easing). Spring curves derive their own settle time; this value
     /// can still be supplied as an upper bound (hinted via ProfileTree).
-    qreal duration = 150.0;
+    /// `std::nullopt` = inherit / use `DefaultDuration`.
+    std::optional<qreal> duration;
 
     /// Skip threshold in pixels. If the window moves less than this
     /// distance AND its size does not change, the animation is skipped.
-    int minDistance = 0;
+    /// `std::nullopt` = inherit / use `DefaultMinDistance`.
+    std::optional<int> minDistance;
 
-    /// 0 = all targets run simultaneously.
-    /// 1 = cascade start via StaggerTimer with `staggerInterval` between
-    ///     adjacent targets (visually: windows animate one after another).
-    int sequenceMode = 0;
+    /// Whether cascade or simultaneous start.
+    /// `std::nullopt` = inherit / use `DefaultSequenceMode`.
+    std::optional<SequenceMode> sequenceMode;
 
-    /// Milliseconds between cascade starts when `sequenceMode == 1`.
-    int staggerInterval = 30;
+    /// Milliseconds between cascade starts when `sequenceMode ==
+    /// SequenceMode::Cascade`. `std::nullopt` = inherit / use
+    /// `DefaultStaggerInterval`.
+    std::optional<int> staggerInterval;
 
     /// Optional user-assigned preset name. Purely decorative for UI —
-    /// the runtime never branches on this.
+    /// the runtime never branches on this. Empty string means no name.
     QString presetName;
+
+    // ─────── Effective getters (optional + library default) ───────
+
+    qreal effectiveDuration() const
+    {
+        return duration.value_or(DefaultDuration);
+    }
+    int effectiveMinDistance() const
+    {
+        return minDistance.value_or(DefaultMinDistance);
+    }
+    SequenceMode effectiveSequenceMode() const
+    {
+        return sequenceMode.value_or(DefaultSequenceMode);
+    }
+    int effectiveStaggerInterval() const
+    {
+        return staggerInterval.value_or(DefaultStaggerInterval);
+    }
+
+    /**
+     * @brief Return a copy with every unset field filled from library
+     * defaults. `curve` is left null if still unset — callers can then
+     * substitute a default-constructed `Easing` if needed.
+     */
+    Profile withDefaults() const;
 
     // ─────── Serialization ───────
 
     /**
      * @brief Serialize to a JSON object.
      *
-     * Shape:
+     * Only set fields are emitted; unset fields are omitted so a
+     * reader can tell "inherit" from "explicitly X". Shape:
      * @code
      *   {
-     *     "curve":          "spring:12.0,0.8",
-     *     "duration":       150,
-     *     "minDistance":    0,
-     *     "sequenceMode":   0,
-     *     "staggerInterval": 30,
-     *     "presetName":     "My Spring"   // omitted if empty
+     *     "curve":           "spring:12.0,0.8",   // omitted if null
+     *     "duration":        150,                  // omitted if unset
+     *     "minDistance":     0,                    // omitted if unset
+     *     "sequenceMode":    0,                    // omitted if unset
+     *     "staggerInterval": 30,                   // omitted if unset
+     *     "presetName":      "My Spring"           // omitted if empty
      *   }
      * @endcode
-     *
-     * When `curve` is null, the "curve" key is omitted — callers reading
-     * back get a null curve (meaning "inherit"). This is the mechanism
-     * ProfileTree uses to distinguish partial overrides.
      */
     QJsonObject toJson() const;
 
-    /// Parse from a JSON object. Missing fields fall back to defaults.
-    /// The `curve` string is parsed via CurveRegistry::create(), so any
-    /// registered (including third-party) curve type is supported.
+    /// Parse from a JSON object. Missing keys produce unset fields
+    /// (@c std::nullopt / null curve). The `curve` string is parsed via
+    /// `CurveRegistry::create()`, so any registered (including
+    /// third-party) curve type is supported.
     static Profile fromJson(const QJsonObject& obj);
 
     // ─────── Equality ───────

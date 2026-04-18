@@ -24,6 +24,12 @@ static constexpr qreal MaxSettleSeconds = 30.0;
 static constexpr qreal ConvergeValueEps = 1.0e-4;
 static constexpr qreal ConvergeVelEps = 1.0e-3;
 
+// Near-unity damping tolerance — values of zeta within this window of
+// 1.0 are treated as critically damped. A tighter qFuzzyCompare tolerance
+// (~2e-12) would route zeta = 0.999 into the underdamped branch, where
+// sqrt(1 - zeta²) ≈ 0.045 causes numerically ill-conditioned division.
+static constexpr qreal CriticalDampingEpsilon = 1.0e-3;
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Construction
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,25 +53,29 @@ qreal Spring::evaluate(qreal t) const
 {
     if (t <= 0.0)
         return 0.0;
-    if (t >= 1.0)
-        return 1.0;
 
     // Map normalized t to real seconds via the settle-time domain. The
     // spring's analytical position at real-time τ is evaluated here; at
-    // t==1 we've reached settle time and the function approaches 1.0 by
-    // construction (though transient overshoot in the middle is kept).
+    // t==1 we've reached settle time and the function is within the 2%
+    // settle band (see settleTime()). The analytical step response is
+    // evaluated all the way through t=1 — no special cased "if (t >=
+    // 1.0) return 1.0;" — so there is no visible step-to-unity
+    // discontinuity near the endpoint.
     const qreal tau = t * settleTime();
 
-    if (zeta < 1.0) {
+    if (zeta < 1.0 - CriticalDampingEpsilon) {
         // Underdamped: classic bouncy step response.
-        const qreal omegaD = omega * qSqrt(1.0 - zeta * zeta);
+        const qreal oneMinusZetaSq = 1.0 - zeta * zeta;
+        const qreal omegaD = omega * qSqrt(oneMinusZetaSq);
         const qreal envelope = qExp(-zeta * omega * tau);
         const qreal phase = omegaD * tau;
-        const qreal ratio = zeta / qSqrt(1.0 - zeta * zeta);
+        const qreal ratio = zeta / qSqrt(oneMinusZetaSq);
         return 1.0 - envelope * (qCos(phase) + ratio * qSin(phase));
     }
-    if (qFuzzyCompare(1.0 + zeta, 1.0 + 1.0)) {
-        // Critically damped: no oscillation, fastest settle.
+    if (zeta <= 1.0 + CriticalDampingEpsilon) {
+        // Critically (or near-critically) damped: no oscillation, fastest
+        // settle. Widening the band avoids ill-conditioned division at
+        // zeta very close to 1.
         const qreal envelope = qExp(-omega * tau);
         return 1.0 - envelope * (1.0 + omega * tau);
     }
@@ -123,10 +133,10 @@ qreal Spring::settleTime() const
     const qreal lnTarget = -qLn(target); // ≈ 3.912
 
     qreal seconds;
-    if (zeta < 1.0) {
+    if (zeta < 1.0 - CriticalDampingEpsilon) {
         const qreal denom = qMax(1.0e-3, zeta * omega);
         seconds = lnTarget / denom;
-    } else if (qFuzzyCompare(1.0 + zeta, 1.0 + 1.0)) {
+    } else if (zeta <= 1.0 + CriticalDampingEpsilon) {
         seconds = 5.0 / qMax(1.0e-3, omega);
     } else {
         const qreal disc = qSqrt(zeta * zeta - 1.0);
@@ -204,6 +214,20 @@ Spring Spring::bouncy()
 bool Spring::operator==(const Spring& other) const
 {
     return qFuzzyCompare(1.0 + omega, 1.0 + other.omega) && qFuzzyCompare(1.0 + zeta, 1.0 + other.zeta);
+}
+
+bool Spring::equals(const Curve& other) const
+{
+    // Delegate to operator== so polymorphic equality matches the
+    // value-type comparison exactly (no drift from lossy toString()).
+    if (typeId() != other.typeId()) {
+        return false;
+    }
+    const Spring* rhs = dynamic_cast<const Spring*>(&other);
+    if (!rhs) {
+        return false;
+    }
+    return *this == *rhs;
 }
 
 } // namespace PhosphorAnimation

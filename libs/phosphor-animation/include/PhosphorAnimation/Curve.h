@@ -32,6 +32,14 @@ struct PHOSPHORANIMATION_EXPORT CurveState
     /// Elapsed time since start, in seconds. Parametric curves advance
     /// this via step() and evaluate(time/duration) under the hood.
     qreal time = 0.0;
+    /// Value at the start of the current animation segment. Used by the
+    /// default `Curve::step()` to produce `lerp(startValue, target,
+    /// evaluate(t))` so stateless curves respect whatever value the
+    /// caller held when the animation began — and so retarget-by-reset
+    /// (set `startValue = value; time = 0;` then pass the new target)
+    /// produces continuous motion. Stateful subclasses like Spring
+    /// ignore this and derive continuity from `value`/`velocity` alone.
+    qreal startValue = 0.0;
 };
 
 /**
@@ -44,28 +52,39 @@ struct PHOSPHORANIMATION_EXPORT CurveState
  * Quickshell-level customization where users define their own curves in
  * config and the shell looks them up by name.
  *
- * Curves are **immutable** after construction. Pass by
- * `std::shared_ptr<const Curve>` — cheap copy, safe to share across
- * threads, and multiple AnimatedValues / WindowMotions / Profiles can
- * reference the same curve definition.
+ * ## Immutability through the polymorphic path
+ *
+ * The shared call path is `std::shared_ptr<const Curve>` — holding one
+ * forbids mutation through the base pointer. Concrete subclasses like
+ * `Easing` and `Spring` also support value-type semantics so legacy
+ * callers can keep them inline in structs (e.g., `AnimationConfig`); a
+ * value-held instance is mutable by its owner, but it must not be
+ * mutated after being wrapped in a `shared_ptr`. In practice the only
+ * safe mutation pattern is "build then freeze": construct, configure,
+ * hand the finished object to a shared_ptr, done.
  *
  * ## Two progression models
  *
- * - **Parametric** (evaluate): `evaluate(t)` returns the curve's value at
- *   normalized time `t ∈ [0, 1]`. Suitable for fixed-duration animations
- *   where the caller owns the clock. Easing curves are pure parametric.
+ * - **Parametric** (evaluate): `evaluate(t)` returns the curve's value
+ *   at normalized time `t ∈ [0, 1]`. Suitable for fixed-duration
+ *   animations where the caller owns the clock. Easing curves are
+ *   pure parametric.
  *
  * - **Stateful** (step): `step(dt, state, target)` advances `state` by
  *   `dt` seconds toward `target`. Used for true physics integration
- *   (spring with real velocity continuity under retarget). Stateless
- *   curves provide a default `step()` that falls back to evaluate().
+ *   (spring with real velocity continuity under retarget). The default
+ *   base implementation maps to parametric evaluation with `startValue`
+ *   held in `CurveState`, so stateless curves can also drive `step()`
+ *   based animations if callers reset `startValue` + `time` on
+ *   retarget.
  *
  * ## Thread safety
  *
- * Curve subclasses must be immutable after construction. `evaluate()`,
- * `toString()`, `typeId()`, `clone()`, `equals()`, `isStateful()`, and
- * `settleTime()` are all safe to call from any thread. `step()` mutates
- * the caller-owned `CurveState&` — the curve itself is untouched.
+ * Curve subclasses must be immutable after construction (see above).
+ * `evaluate()`, `toString()`, `typeId()`, `clone()`, `equals()`,
+ * `isStateful()`, and `settleTime()` are all safe to call from any
+ * thread. `step()` mutates the caller-owned `CurveState&` — the curve
+ * itself is untouched.
  */
 class PHOSPHORANIMATION_EXPORT Curve
 {
@@ -103,13 +122,16 @@ public:
      * and velocity is preserved.
      *
      * The default implementation is for stateless curves: it increments
-     * `state.time` by `dt`, recomputes `state.value = evaluate(t)` using
-     * a duration of 1.0 (so callers must scale `dt` by 1/duration before
-     * calling), and computes `state.velocity` as the approximate
-     * numerical derivative.
+     * `state.time` by `dt`, then sets `state.value = lerp(state.startValue,
+     * target, evaluate(t))` where `t = state.time` clamped to [0, 1].
+     * Callers must pre-scale `dt` by `1 / duration` so `time` reaches 1
+     * at the end of the animation.
      *
-     * @note Subclasses that override `step()` should consult their own
-     * `settleTime()` to decide when `state.value` has converged.
+     * For **retarget** with a stateless curve: set `state.startValue =
+     * state.value` and `state.time = 0` before changing `target`. That
+     * mid-flight reset produces continuous motion because the new
+     * segment starts at the current value. Stateful curves handle
+     * retarget implicitly and ignore `startValue`.
      */
     virtual void step(qreal dt, CurveState& state, qreal target) const;
 
@@ -154,20 +176,29 @@ public:
      * `"elastic-out:1.0,0.3"`, `"spring:12.0,0.8"`), or the bare
      * `"x1,y1,x2,y2"` legacy format for cubic-bezier back-compat.
      *
-     * Round-trips through CurveRegistry::create() → curve → toString().
+     * The string form uses 2-decimal float precision for human
+     * readability — that makes the round-trip **lossy**. `Easing` and
+     * `Spring` therefore override `equals()` to forward to their own
+     * tight float comparisons; do the same in any subclass whose
+     * `toString()` is similarly rounded, or else two visually-distinct
+     * curves with parameters differing below 0.005 will compare equal.
      */
     virtual QString toString() const = 0;
 
     /// Deep copy. Returns an owned mutable snapshot with identical params.
+    /// Callers who want to keep the clone immutable should wrap it in a
+    /// `std::shared_ptr<const Curve>` themselves.
     virtual std::unique_ptr<Curve> clone() const = 0;
 
     /**
      * @brief Equality: same typeId + same subclass-relevant parameters.
      *
-     * Default implementation compares `typeId()` and `toString()` — safe
-     * fallback for any subclass whose toString() round-trip is lossless.
-     * Subclasses with non-lossless string forms (e.g., floating-point
-     * parameters that serialize with reduced precision) should override.
+     * Default implementation compares `typeId()` and `toString()` —
+     * a safe fallback, but the string form is 2-decimal-rounded so the
+     * default is **not** tight enough to distinguish curves differing
+     * only below that precision. Subclasses with precise float
+     * parameters SHOULD override this to forward to their value-type
+     * `operator==`, as `Easing` and `Spring` do.
      */
     virtual bool equals(const Curve& other) const;
 

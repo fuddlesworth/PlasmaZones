@@ -17,12 +17,8 @@ namespace PhosphorAnimation {
 
 Profile ProfileTree::resolve(const QString& path) const
 {
-    // Start from defaults, fill from the deepest explicit override upward.
-    // This order makes "child wins for fields it specifies; parent fills
-    // gaps" natural: we walk parent-chain top-down into an empty Profile,
-    // then overlay the more-specific overrides last.
-    //
-    // Build the chain first (root → leaf) so we can apply in order.
+    // Build the path chain from closest-to-root down to the leaf, so we
+    // can overlay in that order — later overlays win.
     QStringList chain;
     QString cursor = path;
     while (!cursor.isEmpty()) {
@@ -30,51 +26,28 @@ Profile ProfileTree::resolve(const QString& path) const
         cursor = ProfilePaths::parentPath(cursor);
     }
 
-    Profile effective; // library defaults
-
-    // Baseline (global) is implicit — always the first thing overlaid.
-    // It lives outside m_overrides so callers can edit it without having
-    // to explicitly insert a "global" key into the override map.
-    mergeFromParent(effective, m_baseline);
-    // Note: because m_baseline is a user-visible non-default, we treat it
-    // as always-present — its fields overwrite library defaults below.
-    effective = m_baseline;
+    // Start from the baseline (logical "global" level) and overlay each
+    // matching override in chain order. Every overlay copies only the
+    // fields that are explicitly set in the source, so a child with only
+    // `duration` engaged correctly inherits curve / stagger / mode from
+    // its parent — and a child with `duration = DefaultDuration` still
+    // wins over a parent's different duration (the point of optionals).
+    Profile effective = m_baseline;
 
     for (const QString& step : chain) {
         auto it = m_overrides.constFind(step);
         if (it == m_overrides.constEnd()) {
             continue;
         }
-        // Overlay this step's override onto effective: each non-default
-        // field in the override wins; defaults inherit from effective.
-        const Profile& ov = it.value();
-        if (ov.curve) {
-            effective.curve = ov.curve;
-        }
-        if (!qFuzzyCompare(1.0 + ov.duration, 1.0 + 150.0) || !effective.curve) {
-            // Sentinel: only overwrite duration if override explicitly set
-            // something other than the library default. This keeps "I only
-            // changed the curve" overrides from stamping duration back to
-            // 150 when the parent had 300.
-            if (!qFuzzyCompare(1.0 + ov.duration, 1.0 + 150.0)) {
-                effective.duration = ov.duration;
-            }
-        }
-        if (ov.minDistance != 0) {
-            effective.minDistance = ov.minDistance;
-        }
-        if (ov.sequenceMode != 0) {
-            effective.sequenceMode = ov.sequenceMode;
-        }
-        if (ov.staggerInterval != 30) {
-            effective.staggerInterval = ov.staggerInterval;
-        }
-        if (!ov.presetName.isEmpty()) {
-            effective.presetName = ov.presetName;
-        }
+        overlay(effective, it.value());
     }
 
-    return effective;
+    // Final pass: fill any still-unset field with the library default
+    // so consumers get a fully-populated Profile and never have to check
+    // the optionals themselves. `curve` stays null if no chain member
+    // supplied one; runtime callers that need a concrete curve should
+    // substitute a default Easing at that point.
+    return effective.withDefaults();
 }
 
 Profile ProfileTree::override_(const QString& path) const
@@ -128,29 +101,29 @@ void ProfileTree::setBaseline(const Profile& profile)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Merge helper
+// Overlay helper
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void ProfileTree::mergeFromParent(Profile& dst, const Profile& src)
+void ProfileTree::overlay(Profile& dst, const Profile& src)
 {
-    // Fill fields in @p dst that still hold the library default from
-    // values in @p src. Child wins; parent fills gaps.
-    if (!dst.curve && src.curve) {
+    // Every engaged optional in src replaces dst. Unset (nullopt) fields
+    // in src leave dst alone — that's the inheritance mechanism.
+    if (src.curve) {
         dst.curve = src.curve;
     }
-    if (qFuzzyCompare(1.0 + dst.duration, 1.0 + 150.0)) {
+    if (src.duration) {
         dst.duration = src.duration;
     }
-    if (dst.minDistance == 0) {
+    if (src.minDistance) {
         dst.minDistance = src.minDistance;
     }
-    if (dst.sequenceMode == 0) {
+    if (src.sequenceMode) {
         dst.sequenceMode = src.sequenceMode;
     }
-    if (dst.staggerInterval == 30) {
+    if (src.staggerInterval) {
         dst.staggerInterval = src.staggerInterval;
     }
-    if (dst.presetName.isEmpty()) {
+    if (!src.presetName.isEmpty()) {
         dst.presetName = src.presetName;
     }
 }
@@ -164,11 +137,8 @@ QJsonObject ProfileTree::toJson() const
     QJsonObject root;
     root.insert(QLatin1String("baseline"), m_baseline.toJson());
 
-    // QJsonObject keys are alphabetically sorted on serialization — using
-    // an object for `overrides` would silently reshuffle user-visible
-    // ordering. Emit as an array of {path, profile} pairs so iteration
-    // order round-trips losslessly. This matches the order the settings
-    // UI shows when users add/remove overrides.
+    // Array shape preserves user-visible ordering — QJsonObject keys are
+    // alphabetically sorted on serialization.
     QJsonArray overrides;
     for (const QString& path : m_insertionOrder) {
         auto it = m_overrides.constFind(path);
@@ -193,29 +163,14 @@ ProfileTree ProfileTree::fromJson(const QJsonObject& obj)
         tree.m_baseline = Profile::fromJson(obj.value(QLatin1String("baseline")).toObject());
     }
 
-    // Accept either the current array shape (order-preserving) or the
-    // legacy object shape (alphabetically sorted) for read compatibility
-    // with any pre-array configs. New writes always produce the array.
-    const QJsonValue overridesValue = obj.value(QLatin1String("overrides"));
-    if (overridesValue.isArray()) {
-        const QJsonArray arr = overridesValue.toArray();
-        for (const QJsonValue& v : arr) {
-            const QJsonObject entry = v.toObject();
-            const QString path = entry.value(QLatin1String("path")).toString();
-            if (path.isEmpty()) {
-                continue;
-            }
-            tree.setOverride(path, Profile::fromJson(entry.value(QLatin1String("profile")).toObject()));
+    const QJsonArray arr = obj.value(QLatin1String("overrides")).toArray();
+    for (const QJsonValue& v : arr) {
+        const QJsonObject entry = v.toObject();
+        const QString path = entry.value(QLatin1String("path")).toString();
+        if (path.isEmpty()) {
+            continue;
         }
-    } else if (overridesValue.isObject()) {
-        const QJsonObject legacy = overridesValue.toObject();
-        for (auto it = legacy.constBegin(); it != legacy.constEnd(); ++it) {
-            const QString path = it.key();
-            if (path.isEmpty()) {
-                continue;
-            }
-            tree.setOverride(path, Profile::fromJson(it.value().toObject()));
-        }
+        tree.setOverride(path, Profile::fromJson(entry.value(QLatin1String("profile")).toObject()));
     }
 
     return tree;

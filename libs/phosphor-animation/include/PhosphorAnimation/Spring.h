@@ -74,6 +74,12 @@ public:
     QString toString() const override;
     std::unique_ptr<Curve> clone() const override;
 
+    /// Overrides `Curve::equals()` to delegate to the tight
+    /// `operator==`. The base default compares `toString()` forms,
+    /// which are 2-decimal-rounded and would call springs equal that
+    /// differ by up to 0.005 in omega or zeta.
+    bool equals(const Curve& other) const override;
+
     // ─────── Spring-specific API ───────
 
     /// Parse from `"spring:omega,zeta"` or `"omega,zeta"`. Returns the
