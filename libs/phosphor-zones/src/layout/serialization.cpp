@@ -16,36 +16,10 @@
 
 namespace PhosphorZones {
 
-QVariantList Layout::appRulesVariant() const
-{
-    QVariantList result;
-    for (const auto& rule : m_appRules) {
-        QVariantMap map;
-        map[::PhosphorZones::ZoneJsonKeys::Pattern] = rule.pattern;
-        map[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = rule.zoneNumber;
-        if (!rule.targetScreen.isEmpty()) {
-            map[::PhosphorZones::ZoneJsonKeys::TargetScreen] = rule.targetScreen;
-        }
-        result.append(map);
-    }
-    return result;
-}
-
-void Layout::setAppRulesVariant(const QVariantList& rules)
-{
-    QVector<AppRule> newRules;
-    for (const auto& item : rules) {
-        QVariantMap map = item.toMap();
-        AppRule rule;
-        rule.pattern = map.value(::PhosphorZones::ZoneJsonKeys::Pattern).toString();
-        rule.zoneNumber = map.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber).toInt();
-        rule.targetScreen = map.value(::PhosphorZones::ZoneJsonKeys::TargetScreen).toString();
-        if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
-            newRules.append(rule);
-        }
-    }
-    setAppRules(newRules);
-}
+// JSON is the canonical shape for AppRule (disk persistence, import/export,
+// wire format). The QVariantList accessors below exist only to satisfy the
+// Qt property / QML binding path — they route through the JSON form so there
+// is a single source of truth for keys, defaults, and validation rules.
 
 QJsonObject AppRule::toJson() const
 {
@@ -78,6 +52,25 @@ QVector<AppRule> AppRule::fromJsonArray(const QJsonArray& array)
         }
     }
     return rules;
+}
+
+QVariantList Layout::appRulesVariant() const
+{
+    QVariantList result;
+    result.reserve(m_appRules.size());
+    for (const auto& rule : m_appRules) {
+        result.append(rule.toJson().toVariantMap());
+    }
+    return result;
+}
+
+void Layout::setAppRulesVariant(const QVariantList& rules)
+{
+    QJsonArray array;
+    for (const auto& item : rules) {
+        array.append(QJsonObject::fromVariantMap(item.toMap()));
+    }
+    setAppRules(AppRule::fromJsonArray(array));
 }
 
 QJsonObject Layout::toJson() const

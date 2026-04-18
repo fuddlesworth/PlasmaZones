@@ -20,8 +20,10 @@ namespace PhosphorZones {
  * Relative: 0.0–1.0 normalized coordinates (default, resolution-independent).
  * Fixed:    Absolute pixel coordinates relative to reference screen origin.
  *
- * Owned by phosphor-zones because it's a per-zone shape.  Mirrored into
- * src/core/constants.h via a using-alias for PlasmaZones-side callers.
+ * Owned by phosphor-zones because it's a per-zone shape; the former
+ * PlasmaZones-side using-alias in src/core/ was removed when the decoupling
+ * sweep landed — all callers now reference @c PhosphorZones::ZoneGeometryMode
+ * directly.
  */
 enum class ZoneGeometryMode {
     Relative = 0,
