@@ -34,6 +34,10 @@ void ZoneDetector::setLayout(Layout* layout)
         // Connect to new layout's destroyed signal to prevent dangling pointer
         if (m_layout) {
             qCInfo(PhosphorZones::lcZonesLib) << "Layout set with" << m_layout->zones().size() << "zones";
+            // The lambda captures `this` and dereferences `m_highlighter`. Safe
+            // because `m_highlighter` is a unique_ptr member whose lifetime
+            // strictly follows ZoneDetector's — `this` cannot outlive the
+            // highlighter, so the deref can never dangle.
             connect(m_layout, &QObject::destroyed, this, [this]() {
                 qCDebug(PhosphorZones::lcZonesLib) << "Layout destroyed, clearing";
                 m_layout = nullptr;
@@ -121,6 +125,14 @@ constexpr qreal kExpansionOverlapThreshold = 0.5;
 // Used by paint-to-span to fill gaps between user-painted zones.
 // The bounding rect grows iteratively so transitive gaps get filled
 // (e.g. painting zones 2 and 4 in dwindle fills zone 5 via zone 3).
+//
+// Complexity: O(n² · maxIter) where n = layout zone count. Each iteration
+// re-scans every zone in @p layout against the growing bounding rect, and
+// the loop is capped at maxIterations = 100 (see below). There is no
+// hard zone-count short-circuit, so very large layouts will hit the
+// iteration cap rather than scale gracefully. Acceptable in practice:
+// zone counts beyond a handful trigger the cap warning and the result
+// is still a superset of the seed zones.
 QVector<Zone*> expandZonesByIntersection(Layout* layout, const QVector<Zone*>& seedZones)
 {
     if (!layout || seedZones.isEmpty()) {

@@ -254,6 +254,19 @@ Q_SIGNALS:
     void layoutChanged(const QString& layoutJson);
 
     /**
+     * @brief Cheap active-layout-switch notification.
+     *
+     * Emitted alongside @c layoutChanged(json) on every active-layout switch,
+     * but carries only the layout UUID instead of the full JSON payload.
+     * Subscribers that re-load from disk (e.g. the editor's
+     * reloadLocalLayouts) can bind to this signal and avoid paying the
+     * 5–20 KB marshalling cost of @c layoutChanged every time the user
+     * flips contexts. Additive: @c layoutChanged(json) remains for
+     * compatibility with existing consumers.
+     */
+    void activeLayoutChanged(const QString& layoutId);
+
+    /**
      * @brief Compact property-level change notification.
      *
      * Emitted when a single scalar property on a layout is mutated without

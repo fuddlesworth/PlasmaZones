@@ -447,6 +447,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>
         </signal>
+        <signal name="activeLayoutChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Cheap context-switch notification: emitted alongside layoutChanged(json) on every active-layout switch, but carries only the layout UUID instead of the full JSON payload. Subscribers that re-load from disk (e.g. the editor) can bind to this signal and ignore the heavier layoutChanged emit."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the newly active layout."/>
+            </arg>
+        </signal>
         <signal name="layoutPropertyChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Compact per-property change notification. Replaces layoutChanged(json) for setLayoutHidden, setLayoutAutoAssign, and setLayoutAspectRatioClass. Subscribers that want the full shape should pull it via getLayout(layoutId) — the adaptor's cache is invalidated before the signal fires."/>
             <arg name="layoutId" type="s">
