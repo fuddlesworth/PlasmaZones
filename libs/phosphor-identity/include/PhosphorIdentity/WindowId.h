@@ -63,11 +63,21 @@ inline QString deriveShortName(const QString& windowClass)
     if (windowClass.isEmpty()) {
         return QString();
     }
-    int dotIdx = windowClass.lastIndexOf(QLatin1Char('.'));
-    if (dotIdx >= 0 && dotIdx < windowClass.length() - 1) {
-        return windowClass.mid(dotIdx + 1);
+    // Strip a trailing dot first so "org.kde.foo." behaves the same as
+    // "org.kde.foo" — the dot would otherwise short-circuit the segment
+    // extraction below into returning the original string verbatim.
+    QStringView trimmed(windowClass);
+    while (!trimmed.isEmpty() && trimmed.back() == QLatin1Char('.')) {
+        trimmed.chop(1);
     }
-    return windowClass;
+    if (trimmed.isEmpty()) {
+        return QString();
+    }
+    const int dotIdx = trimmed.lastIndexOf(QLatin1Char('.'));
+    if (dotIdx >= 0 && dotIdx < trimmed.length() - 1) {
+        return trimmed.mid(dotIdx + 1).toString();
+    }
+    return trimmed.toString();
 }
 
 /**

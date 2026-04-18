@@ -155,6 +155,12 @@ struct LayoutPreview
     /// @c zoneNumbers is empty.
     bool isValid() const noexcept
     {
+        // Negative zoneCount has no meaning in either bounded or unlimited
+        // semantics — reject it explicitly so a stray negative doesn't
+        // sneak past the > 0 bounded check below.
+        if (zoneCount < UnlimitedZoneCount) {
+            return false;
+        }
         if (zoneCount > UnlimitedZoneCount && zones.size() != zoneCount) {
             return false;
         }

@@ -1125,9 +1125,12 @@ private Q_SLOTS:
 
     void testDeriveShortNameTrailingDot()
     {
-        // Dot at end position: dotIdx == length()-1, guard (dotIdx < length()-1) is false
-        // so it returns the full string unchanged
-        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("org.kde."));
+        // Trailing dots are stripped before segment extraction so a typo'd
+        // reverse-DNS like "org.kde." normalises to the same short name as
+        // "org.kde". A string of nothing-but-dots collapses to empty.
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde.")), QStringLiteral("kde"));
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("org.kde...")), QStringLiteral("kde"));
+        QCOMPARE(::PhosphorIdentity::WindowId::deriveShortName(QStringLiteral("...")), QString());
     }
 
     // =================================================================

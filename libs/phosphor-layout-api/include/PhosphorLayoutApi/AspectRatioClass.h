@@ -5,6 +5,8 @@
 
 #include <QString>
 
+#include <cmath>
+
 namespace PhosphorLayout {
 
 /**
@@ -39,6 +41,13 @@ constexpr qreal SuperUltrawideMin = 2.8; ///< AR >= 2.8 → super-ultrawide
 
 inline AspectRatioClass classify(qreal aspectRatio)
 {
+    // NaN never compares true under <, which would silently fall through every
+    // branch and land at SuperUltrawide. Treat non-finite as "no classification"
+    // so callers that compute aspect ratios from suspect inputs get a stable
+    // sentinel rather than a wildly wrong category.
+    if (!std::isfinite(aspectRatio) || aspectRatio <= 0.0) {
+        return AspectRatioClass::Any;
+    }
     if (aspectRatio < PortraitMax) {
         return AspectRatioClass::Portrait;
     }

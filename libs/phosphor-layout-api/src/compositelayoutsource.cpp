@@ -87,6 +87,23 @@ void CompositeLayoutSource::removeSource(ILayoutSource* source)
 
 void CompositeLayoutSource::setSources(QVector<ILayoutSource*> sources)
 {
+    // Filter the candidate set to its de-duplicated, non-null shape so we can
+    // diff against the current m_sources. Skipping the contentsChanged emit
+    // on a true no-op honours the project-wide "only emit when value changes"
+    // rule (CLAUDE.md) and keeps consumers from spuriously rebuilding their
+    // mirrors when a caller re-passes the same vector.
+    QVector<ILayoutSource*> filtered;
+    filtered.reserve(sources.size());
+    for (ILayoutSource* source : sources) {
+        if (!source || filtered.contains(source)) {
+            continue;
+        }
+        filtered.append(source);
+    }
+    if (filtered == m_sources) {
+        return;
+    }
+
     // Tear down every existing connection first — incremental disconnect +
     // append would emit one signal per step, which is exactly what this
     // batch API exists to avoid.
@@ -97,10 +114,7 @@ void CompositeLayoutSource::setSources(QVector<ILayoutSource*> sources)
     }
     m_sources.clear();
 
-    for (ILayoutSource* source : sources) {
-        if (!source || m_sources.contains(source)) {
-            continue;
-        }
+    for (ILayoutSource* source : filtered) {
         m_sources.append(source);
         connectSource(source);
     }

@@ -49,6 +49,13 @@ inline QString extractAlgorithmId(const QString& id)
 
 inline QString makeAutotileId(const QString& algorithmId)
 {
+    if (algorithmId.isEmpty()) {
+        // Producing the bare prefix would round-trip through isAutotile(true)
+        // → extractAlgorithmId("") which downstream code can't act on. Surface
+        // the misuse loudly while staying graceful (empty return is testable).
+        qWarning("PhosphorLayout::LayoutId::makeAutotileId called with empty algorithmId");
+        return QString();
+    }
     return AutotilePrefix + algorithmId;
 }
 
