@@ -30,7 +30,13 @@
 
 #include "../../../src/core/utils.h"
 
+#include <PhosphorIdentity/WindowId.h>
+
+using PhosphorIdentity::WindowId::appIdMatches;
+using PhosphorIdentity::WindowId::buildCompositeId;
+using PhosphorIdentity::WindowId::deriveShortName;
 using PhosphorIdentity::WindowId::extractAppId;
+using PhosphorIdentity::WindowId::extractInstanceId;
 
 class TestWindowIdentity : public QObject
 {
@@ -190,6 +196,128 @@ private Q_SLOTS:
         QString appId = extractAppId(windowId);
 
         QCOMPARE(appId, QString());
+    }
+
+    // =====================================================================
+    // buildCompositeId — symmetry with extractAppId / extractInstanceId
+    // =====================================================================
+
+    void testBuildCompositeId_roundtrip()
+    {
+        const QString appId = QStringLiteral("org.kde.konsole");
+        const QString instanceId = QStringLiteral("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+        const QString composite = buildCompositeId(appId, instanceId);
+
+        QCOMPARE(composite, appId + QLatin1Char('|') + instanceId);
+        QCOMPARE(extractAppId(composite), appId);
+        QCOMPARE(extractInstanceId(composite), instanceId);
+    }
+
+    void testBuildCompositeId_emptyInstance_yieldsBareAppId()
+    {
+        // Symmetric with extractAppId's passthrough on bare strings — an empty
+        // instance id must not leave a dangling separator, otherwise the
+        // round-trip extractInstanceId(buildCompositeId(a, "")) would return
+        // an empty string that subsequent matchers treat as a valid instance.
+        const QString composite = buildCompositeId(QStringLiteral("firefox"), QString());
+        QCOMPARE(composite, QStringLiteral("firefox"));
+        QCOMPARE(extractAppId(composite), QStringLiteral("firefox"));
+    }
+
+    void testBuildCompositeId_emptyAppId_preservesSeparator()
+    {
+        // An empty appId with a non-empty instance id must still produce a
+        // composite that extractInstanceId can recover — otherwise a window
+        // that briefly has no app class can't be disambiguated.
+        const QString composite = buildCompositeId(QString(), QStringLiteral("uuid-1"));
+        QCOMPARE(composite, QStringLiteral("|uuid-1"));
+        QCOMPARE(extractInstanceId(composite), QStringLiteral("uuid-1"));
+    }
+
+    // =====================================================================
+    // appIdMatches — segment-aware pattern matching used by Layout::matchAppRule
+    //
+    // The semantics here are subtle enough that the inline header comment
+    // is the spec; these tests pin it so future refactors can't quietly
+    // widen or narrow the match.
+    // =====================================================================
+
+    void testAppIdMatches_exactIgnoresCase()
+    {
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("firefox")));
+        QVERIFY(appIdMatches(QStringLiteral("Firefox"), QStringLiteral("firefox")));
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("FIREFOX")));
+    }
+
+    void testAppIdMatches_trailingDotSegment()
+    {
+        // Reverse-DNS appId matched by bare last-segment pattern.
+        QVERIFY(appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("firefox")));
+        // And the reverse direction: bare appId matched by reverse-DNS pattern.
+        QVERIFY(appIdMatches(QStringLiteral("firefox"), QStringLiteral("org.mozilla.firefox")));
+    }
+
+    void testAppIdMatches_rejectsShortPrefixCollision()
+    {
+        // The header's key invariant: 4-char "fire" must not match any form
+        // of "firefox". Asymmetric gating (prefix candidate ≥ 5 chars) is
+        // what enforces this.
+        QVERIFY(!appIdMatches(QStringLiteral("fire"), QStringLiteral("firefox")));
+        QVERIFY(!appIdMatches(QStringLiteral("firefox"), QStringLiteral("fire")));
+        QVERIFY(!appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("fire")));
+        QVERIFY(!appIdMatches(QStringLiteral("fire"), QStringLiteral("org.mozilla.firefox")));
+    }
+
+    void testAppIdMatches_lastSegmentPrefix()
+    {
+        // "systemsettings" is a 14-char prefix candidate, so it passes the
+        // ≥5 gate and matches "org.kde.systemsettings5" via its last segment.
+        QVERIFY(appIdMatches(QStringLiteral("org.kde.systemsettings5"), QStringLiteral("systemsettings")));
+        // Reverse direction — bare appId prefixes the pattern's last segment.
+        QVERIFY(appIdMatches(QStringLiteral("systemsettings"), QStringLiteral("org.kde.systemsettings5")));
+    }
+
+    void testAppIdMatches_emptyInputsReturnFalse()
+    {
+        QVERIFY(!appIdMatches(QString(), QStringLiteral("firefox")));
+        QVERIFY(!appIdMatches(QStringLiteral("firefox"), QString()));
+        QVERIFY(!appIdMatches(QString(), QString()));
+    }
+
+    void testAppIdMatches_noCrossSegmentMatch()
+    {
+        // "mozilla" is a middle segment, not a trailing one, so it must not
+        // match — prevents rules scoped to "firefox" from catching "thunderbird"
+        // just because both are under "org.mozilla".
+        QVERIFY(!appIdMatches(QStringLiteral("org.mozilla.firefox"), QStringLiteral("mozilla")));
+    }
+
+    // =====================================================================
+    // deriveShortName — icon / display-name helper
+    // =====================================================================
+
+    void testDeriveShortName_reverseDns()
+    {
+        QCOMPARE(deriveShortName(QStringLiteral("org.kde.dolphin")), QStringLiteral("dolphin"));
+        QCOMPARE(deriveShortName(QStringLiteral("com.example.app")), QStringLiteral("app"));
+    }
+
+    void testDeriveShortName_bareName()
+    {
+        QCOMPARE(deriveShortName(QStringLiteral("firefox")), QStringLiteral("firefox"));
+    }
+
+    void testDeriveShortName_trailingDotStrippedBeforeSegmentExtraction()
+    {
+        // Documented behaviour: trailing dots are chopped first so the
+        // segment lookup doesn't degenerate into returning the full string.
+        QCOMPARE(deriveShortName(QStringLiteral("org.kde.foo.")), QStringLiteral("foo"));
+    }
+
+    void testDeriveShortName_emptyAndDotOnly()
+    {
+        QCOMPARE(deriveShortName(QString()), QString());
+        QCOMPARE(deriveShortName(QStringLiteral("....")), QString());
     }
 };
 

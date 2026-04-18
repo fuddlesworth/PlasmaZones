@@ -1492,7 +1492,7 @@ QString PlasmaZonesEffect::getWindowId(KWin::EffectWindow* w) const
     }
     const QString instanceId = window->internalId().toString(QUuid::WithoutBraces);
     const QString appId = getWindowAppId(w);
-    const QString result = appId + QLatin1Char('|') + instanceId;
+    const QString result = ::PhosphorIdentity::WindowId::buildCompositeId(appId, instanceId);
     m_windowIdCache.insert(w, result);
     m_windowIdReverse.insert(result, const_cast<KWin::EffectWindow*>(w));
     return result;

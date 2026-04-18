@@ -23,6 +23,33 @@ namespace PhosphorIdentity {
 namespace WindowId {
 
 /**
+ * @brief Build a composite window id from its appId + instance parts.
+ *
+ * Symmetric counterpart to @c extractAppId / @c extractInstanceId — together
+ * these three helpers make this header the single source of truth for the
+ * wire format. Callers should prefer this over hand-rolled
+ * `appId + "|" + instanceId` concatenation so the separator choice stays in
+ * exactly one place.
+ *
+ * Either part may be empty; the result is always formed, with the separator
+ * preserved when @p instanceId is non-empty. An empty @p instanceId yields a
+ * bare @p appId (no trailing separator), which matches what
+ * @c extractAppId would reconstruct.
+ */
+inline QString buildCompositeId(QStringView appId, QStringView instanceId)
+{
+    if (instanceId.isEmpty()) {
+        return appId.toString();
+    }
+    QString out;
+    out.reserve(appId.size() + 1 + instanceId.size());
+    out.append(appId);
+    out.append(QLatin1Char('|'));
+    out.append(instanceId);
+    return out;
+}
+
+/**
  * @brief Extract app identity from window ID (portion before the '|' separator)
  * Format: "appId|internalUuid" → returns "appId"
  */
@@ -58,6 +85,11 @@ inline QString extractInstanceId(const QString& windowId)
  * @brief Derive short name from app ID for icon/app display
  * Reverse-DNS: "org.kde.dolphin" → last dot-segment (e.g., "dolphin")
  * Simple name: "firefox" → as-is
+ *
+ * @warning Operates on a bare appId, not a composite window id. If you hold a
+ * composite `appId|instanceId`, run it through @c extractAppId first — passing
+ * the composite in directly would make the '|'-separated instance id look
+ * like a trailing segment and produce that as the short name.
  */
 inline QString deriveShortName(const QString& windowClass)
 {
