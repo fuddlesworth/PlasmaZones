@@ -49,6 +49,12 @@ public:
     /// authoritative and fully replace any prior cache.
     virtual QHash<QString, VirtualScreenConfig> loadAll() const = 0;
 
+    /// Single-key read for callers that only need one entry (e.g. the
+    /// VirtualScreenSwapper, which mutates one physical screen at a time).
+    /// Returns an empty config if no entry exists for @p physicalScreenId —
+    /// callers can distinguish via `isEmpty()`.
+    virtual VirtualScreenConfig get(const QString& physicalScreenId) const = 0;
+
     /// Persist @p config for @p physicalScreenId. An empty config is a
     /// removal request; implementations should drop the entry rather than
     /// store an empty marker.

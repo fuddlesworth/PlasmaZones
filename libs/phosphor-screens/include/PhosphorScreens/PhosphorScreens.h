@@ -13,13 +13,13 @@
 // ones already migrated:
 //
 //   #include <PhosphorScreens/Manager.h>         // ScreenManager  (next)
-//   #include <PhosphorScreens/Swapper.h>         // VirtualScreenSwapper
 
 #include <PhosphorScreens/IConfigStore.h>
-#include <PhosphorScreens/InMemoryConfigStore.h>
 #include <PhosphorScreens/IPanelSource.h>
+#include <PhosphorScreens/InMemoryConfigStore.h>
 #include <PhosphorScreens/NoOpPanelSource.h>
 #include <PhosphorScreens/Resolver.h>
+#include <PhosphorScreens/Swapper.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
 namespace Phosphor::Screens {

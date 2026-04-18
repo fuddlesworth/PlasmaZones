@@ -4,6 +4,7 @@
 #include "screenadaptor.h"
 #include "dbushelpers.h"
 #include "../config/settings.h"
+#include "../config/settingsconfigstore.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
@@ -19,6 +20,8 @@
 #include <QTimer>
 
 namespace PlasmaZones {
+
+ScreenAdaptor::~ScreenAdaptor() = default;
 
 ScreenAdaptor::ScreenAdaptor(QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -387,6 +390,11 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
 void ScreenAdaptor::setSettings(Settings* settings)
 {
     m_settings = settings;
+    // Build the IConfigStore facade lazily here — ScreenAdaptor is
+    // constructed before Settings exists, so we can't wire this in the
+    // ctor. Reset rather than reuse to handle a (rare but possible) re-wire
+    // in tests.
+    m_virtualScreenStore = settings ? std::make_unique<SettingsConfigStore>(settings) : nullptr;
 }
 
 void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
@@ -477,7 +485,7 @@ QString ScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVirtua
         return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::InvalidDirection);
     }
 
-    VirtualScreenSwapper swapper(m_settings);
+    VirtualScreenSwapper swapper(m_virtualScreenStore.get());
     const auto result = swapper.swapInDirection(currentVirtualScreenId, direction);
     const QString reason = VirtualScreenSwapper::reasonString(result);
     qCDebug(lcDbus) << "swapVirtualScreenInDirection:" << currentVirtualScreenId << direction << "->" << reason;
@@ -499,7 +507,7 @@ QString ScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId, boo
         return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
     }
 
-    VirtualScreenSwapper swapper(m_settings);
+    VirtualScreenSwapper swapper(m_virtualScreenStore.get());
     const auto result = swapper.rotate(physicalScreenId, clockwise);
     const QString reason = VirtualScreenSwapper::reasonString(result);
     qCDebug(lcDbus) << "rotateVirtualScreens:" << physicalScreenId << "cw=" << clockwise << "->" << reason;

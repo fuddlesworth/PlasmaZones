@@ -15,6 +15,7 @@
 #include "shortcutmanager.h"
 #include "../core/layoutsourcefactory.h"
 #include "../core/types.h"
+#include "../core/virtualscreenswapper.h" // shim → Phosphor::Screens::VirtualScreenSwapper alias
 #include "../autotile/AutotileEngine.h"
 
 #include <PhosphorConfig/IBackend.h>
@@ -50,8 +51,8 @@ class AutotileEngine;
 class IEngineLifecycle;
 class AutotileNavigationAdapter;
 class ScreenModeRouter;
+class SettingsConfigStore;
 class SnapNavigationAdapter;
-class VirtualScreenSwapper;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
@@ -410,9 +411,14 @@ private:
     /// and AutotileEngine owns the autotile ones.
     std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
     std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
-    /// Stateless façade over m_settings for VS swap/rotate. Held as a
-    /// member rather than reconstructed per-call so navigation handlers
-    /// don't need to know about its dependencies.
+    /// Settings-backed Phosphor::Screens::IConfigStore facade, lifetimed
+    /// to outlast m_virtualScreenSwapper (declaration order matters for
+    /// destruction). The swapper holds a non-owning IConfigStore* into
+    /// this store, so the store must be destroyed *after* the swapper.
+    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
+    /// Stateless façade over m_virtualScreenStore for VS swap/rotate.
+    /// Held as a member rather than reconstructed per-call so navigation
+    /// handlers don't need to know about its dependencies.
     std::unique_ptr<VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;

@@ -57,7 +57,10 @@ set(plasmazones_core_SRCS
     core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
-    core/virtualscreenswapper.cpp
+    # virtualscreenswapper.cpp lifted to libs/phosphor-screens/. The shim
+    # header `core/virtualscreenswapper.h` re-exports
+    # `Phosphor::Screens::VirtualScreenSwapper` as
+    # `PlasmaZones::VirtualScreenSwapper` for existing in-tree callers.
     core/virtualscreenswapper.h
     core/screenmoderouter.cpp
     core/screenmoderouter.h
@@ -109,6 +112,8 @@ set(plasmazones_core_SRCS
     config/configdefaults.cpp
     config/configbackends.h
     config/configbackends.cpp
+    config/settingsconfigstore.cpp
+    config/settingsconfigstore.h
     config/perscreenresolver.h
     config/perscreenresolver.cpp
     config/settingsschema.h

@@ -10,12 +10,14 @@
 #include <QRect>
 #include <QStringList>
 #include <functional>
+#include <memory>
 
 class QScreen;
 
 namespace PlasmaZones {
 
 class Settings;
+class SettingsConfigStore;
 
 /**
  * @brief D-Bus adaptor for screen management operations
@@ -33,7 +35,7 @@ class PLASMAZONES_EXPORT ScreenAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit ScreenAdaptor(QObject* parent = nullptr);
-    ~ScreenAdaptor() override = default;
+    ~ScreenAdaptor() override; // out-of-line for unique_ptr<SettingsConfigStore>
 
     /// Wire the authoritative Settings instance for VS config writes.
     /// Late-wired after construction because the adaptor is instantiated
@@ -104,6 +106,13 @@ private:
 
     QString m_primaryScreenOverride;
     Settings* m_settings = nullptr;
+    /// Phosphor::Screens::IConfigStore facade over m_settings, lazily
+    /// constructed in setSettings(). Owned here so the two D-Bus methods
+    /// that drive a VirtualScreenSwapper share one adapter (vs. one
+    /// stack-allocated per call) and the IConfigStore::changed →
+    /// Settings::virtualScreenConfigsChanged forwarding connection only
+    /// gets wired once.
+    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
 
     /// Last effective screen ID list emitted by the deferred timer, used to
     /// suppress duplicate emissions during rapid hot-plug sequences.

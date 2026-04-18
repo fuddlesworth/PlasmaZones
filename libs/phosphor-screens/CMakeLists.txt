@@ -51,15 +51,23 @@ set(phosphorscreens_public_HDRS
     include/PhosphorScreens/NoOpPanelSource.h
     include/PhosphorScreens/PhosphorScreens.h
     include/PhosphorScreens/Resolver.h
+    include/PhosphorScreens/Swapper.h
     include/PhosphorScreens/VirtualScreen.h
+)
+
+set(phosphorscreens_private_HDRS
+    src/screenslogging.h
 )
 
 set(phosphorscreens_SRCS
     src/resolver.cpp
+    src/screenslogging.cpp
+    src/swapper.cpp
 )
 
 add_library(PhosphorScreens SHARED
     ${phosphorscreens_public_HDRS}
+    ${phosphorscreens_private_HDRS}
     ${phosphorscreens_SRCS}
 )
 

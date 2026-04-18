@@ -24,6 +24,7 @@
 #include "core/virtualscreen.h"
 #include "core/virtualscreenswapper.h"
 #include "config/settings.h"
+#include "config/settingsconfigstore.h"
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/VirtualScreenTestHelpers.h"
 
@@ -67,7 +68,8 @@ private Q_SLOTS:
         const QString leftId = VirtualScreenId::make(physId, 0);
         const QString rightId = VirtualScreenId::make(physId, 1);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(leftId, Utils::Direction::Right), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
@@ -92,7 +94,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         // Left VS — "left" has no sibling in that direction.
         QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Left),
                  Result::NoSiblingInDirection);
@@ -111,7 +114,8 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(physId, Utils::Direction::Right), Result::NotVirtual);
     }
 
@@ -120,7 +124,8 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         Settings settings; // no VS configured
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         // Looks like a virtual id, but its physical screen has no entry in
         // Settings — the helper falls through to the size-check failure.
         QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Utils::Direction::Right), Result::NoSubdivision);
@@ -136,7 +141,8 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         // Index 7 is out-of-range; id format still parses as virtual.
         QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 7), Utils::Direction::Right),
                  Result::UnknownVirtualScreen);
@@ -149,7 +155,8 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), QString()), Result::InvalidDirection);
     }
 
@@ -160,7 +167,8 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physId, 0), Utils::Direction::Right), Result::Ok);
 
         QString err;
@@ -179,7 +187,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physB, makeSplitConfig(physB));
         const VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.swapInDirection(VirtualScreenId::make(physA, 0), Utils::Direction::Right), Result::Ok);
 
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
@@ -217,7 +226,8 @@ private Q_SLOTS:
         const QRectF r1 = before.screens[1].region; // Center
         const QRectF r2 = before.screens[2].region; // Right
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
@@ -240,7 +250,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeSplitConfig(physId));
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         const VirtualScreenConfig afterRotate = settings.virtualScreenConfig(physId);
@@ -266,7 +277,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, cfg);
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
@@ -282,7 +294,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         for (int i = 0; i < 3; ++i) {
             QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
@@ -297,7 +310,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         QCOMPARE(swapper.rotate(physId, false), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physId), before);
@@ -321,7 +335,8 @@ private Q_SLOTS:
         const QRectF bl = before.screens[2].region; // BL
         const QRectF br = before.screens[3].region; // BR
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         const VirtualScreenConfig after = settings.virtualScreenConfig(physId);
@@ -343,7 +358,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physId, makeTwoByTwoGrid(physId));
         const VirtualScreenConfig before = settings.virtualScreenConfig(physId);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         for (int i = 0; i < 4; ++i) {
             QCOMPARE(swapper.rotate(physId, true), Result::Ok);
         }
@@ -355,7 +371,8 @@ private Q_SLOTS:
         IsolatedConfigGuard guard;
         Settings settings; // no VS configured
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(QStringLiteral("DP-1"), true), Result::NoSubdivision);
     }
 
@@ -366,7 +383,8 @@ private Q_SLOTS:
         Settings settings;
         settings.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(VirtualScreenId::make(physId, 0), true), Result::NotVirtual);
     }
 
@@ -381,7 +399,8 @@ private Q_SLOTS:
         settings.setVirtualScreenConfig(physB, makeThreeWayConfig(physB));
         const VirtualScreenConfig bBefore = settings.virtualScreenConfig(physB);
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physA, true), Result::Ok);
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);
     }
@@ -413,7 +432,8 @@ private Q_SLOTS:
         const QRectF bl = before.screens[2].region;
         const QRectF br = before.screens[3].region;
 
-        VirtualScreenSwapper swapper(&settings);
+        SettingsConfigStore swapStore(&settings);
+        VirtualScreenSwapper swapper(&swapStore);
         QCOMPARE(swapper.rotate(physId, /*clockwise=*/true), Result::Ok);
 
         // If the 2D centroid path was taken, the ring order is

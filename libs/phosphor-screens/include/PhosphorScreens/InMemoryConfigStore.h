@@ -31,6 +31,11 @@ public:
         return m_configs;
     }
 
+    VirtualScreenConfig get(const QString& physicalScreenId) const override
+    {
+        return m_configs.value(physicalScreenId);
+    }
+
     bool save(const QString& physicalScreenId, const VirtualScreenConfig& config) override
     {
         if (config.isEmpty()) {

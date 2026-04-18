@@ -31,6 +31,7 @@
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
+#include "../config/settingsconfigstore.h"
 #include "../core/virtualscreenswapper.h"
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
@@ -504,7 +505,8 @@ bool Daemon::init()
     // throwaway swappers per call. Constructed unconditionally during init
     // so downstream handlers (handleSwapVirtualScreen / handleRotateVirtualScreens)
     // can assume the pointer is non-null for the remainder of the daemon's lifetime.
-    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_settings.get());
+    m_virtualScreenStore = std::make_unique<SettingsConfigStore>(m_settings.get());
+    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_virtualScreenStore.get());
     Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
