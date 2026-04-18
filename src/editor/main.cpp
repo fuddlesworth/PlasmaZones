@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
     parser.addVersionOption();
 
     QCommandLineOption layoutIdOption(QStringList{QStringLiteral("l"), QStringLiteral("layout")},
-                                      PzI18n::tr("Layout ID to edit"), QStringLiteral("uuid"));
+                                      PzI18n::tr("PhosphorZones::Layout ID to edit"), QStringLiteral("uuid"));
     QCommandLineOption screenOption(QStringList{QStringLiteral("s"), QStringLiteral("screen")},
                                     PzI18n::tr("Target screen name"), QStringLiteral("name"));
     QCommandLineOption newLayoutOption(QStringList{QStringLiteral("n"), QStringLiteral("new")},

@@ -84,7 +84,8 @@ private Q_SLOTS:
         QVariantMap overrides = settings.getPerScreenAutotileSettings(screen);
         // Key is stored in short form ("MasterCount") after normalization
         int stored = overrides.value(QStringLiteral("MasterCount")).toInt();
-        QVERIFY2(stored >= AutotileDefaults::MinMasterCount && stored <= AutotileDefaults::MaxMasterCount,
+        QVERIFY2(stored >= PhosphorTiles::AutotileDefaults::MinMasterCount
+                     && stored <= PhosphorTiles::AutotileDefaults::MaxMasterCount,
                  "Per-screen autotile value must be clamped to valid range");
     }
 
@@ -118,7 +119,7 @@ private Q_SLOTS:
         QCOMPARE(settings.labelFontWeight(), ConfigDefaults::labelFontWeight());
         QVERIFY(qFuzzyCompare(settings.labelFontSizeScale(), ConfigDefaults::labelFontSizeScale()));
 
-        // Zone geometry defaults
+        // PhosphorZones::Zone geometry defaults
         QCOMPARE(settings.zonePadding(), ConfigDefaults::zonePadding());
         QCOMPARE(settings.outerGap(), ConfigDefaults::outerGap());
         QCOMPARE(settings.adjacentThreshold(), ConfigDefaults::adjacentThreshold());
@@ -130,7 +131,7 @@ private Q_SLOTS:
         QCOMPARE(settings.restoreOriginalSizeOnUnsnap(), ConfigDefaults::restoreOriginalSizeOnUnsnap());
         QCOMPARE(settings.excludeTransientWindows(), ConfigDefaults::excludeTransientWindows());
 
-        // Zone selector defaults
+        // PhosphorZones::Zone selector defaults
         QCOMPARE(settings.zoneSelectorEnabled(), ConfigDefaults::zoneSelectorEnabled());
         QCOMPARE(settings.zoneSelectorTriggerDistance(), ConfigDefaults::triggerDistance());
         QCOMPARE(settings.zoneSelectorGridColumns(), ConfigDefaults::gridColumns());

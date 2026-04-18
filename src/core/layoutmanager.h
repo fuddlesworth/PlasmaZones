@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 #include "interfaces.h"
 #include "assignmententry.h"
 
@@ -23,15 +23,15 @@ namespace PlasmaZones {
  * Central component for zone layouts: loading/saving, screen/desktop/activity
  * assignment, keyboard shortcuts, and built-in templates.
  *
- * Inherits QObject for signals and ILayoutManager for the interface contract.
- * ILayoutManager avoids QObject to prevent signal shadowing issues.
+ * Inherits QObject for signals and PhosphorZones::ILayoutManager for the interface contract.
+ * PhosphorZones::ILayoutManager avoids QObject to prevent signal shadowing issues.
  */
-class PLASMAZONES_EXPORT LayoutManager : public QObject, public ILayoutManager
+class PLASMAZONES_EXPORT LayoutManager : public QObject, public PhosphorZones::ILayoutManager
 {
     Q_OBJECT
 
     Q_PROPERTY(int layoutCount READ layoutCount NOTIFY layoutsChanged)
-    Q_PROPERTY(Layout* activeLayout READ activeLayout NOTIFY activeLayoutChanged)
+    Q_PROPERTY(PhosphorZones::Layout* activeLayout READ activeLayout NOTIFY activeLayoutChanged)
     Q_PROPERTY(QString layoutDirectory READ layoutDirectory WRITE setLayoutDirectory NOTIFY layoutDirectoryChanged)
 
 public:
@@ -41,7 +41,7 @@ public:
 
     // No singleton - use dependency injection instead
 
-    // ILayoutManager interface implementation
+    // PhosphorZones::ILayoutManager interface implementation
     QString layoutDirectory() const override
     {
         return m_layoutDirectory;
@@ -52,38 +52,38 @@ public:
     {
         return m_layouts.size();
     }
-    QVector<Layout*> layouts() const override
+    QVector<PhosphorZones::Layout*> layouts() const override
     {
         return m_layouts;
     }
-    Layout* layout(int index) const override;
-    Layout* layoutById(const QUuid& id) const override;
-    Layout* layoutByName(const QString& name) const override;
+    PhosphorZones::Layout* layout(int index) const override;
+    PhosphorZones::Layout* layoutById(const QUuid& id) const override;
+    PhosphorZones::Layout* layoutByName(const QString& name) const override;
 
-    Q_INVOKABLE void addLayout(Layout* layout) override;
-    Q_INVOKABLE void removeLayout(Layout* layout) override;
+    Q_INVOKABLE void addLayout(PhosphorZones::Layout* layout) override;
+    Q_INVOKABLE void removeLayout(PhosphorZones::Layout* layout) override;
     Q_INVOKABLE void removeLayoutById(const QUuid& id) override;
-    Q_INVOKABLE Layout* duplicateLayout(Layout* source) override;
+    Q_INVOKABLE PhosphorZones::Layout* duplicateLayout(PhosphorZones::Layout* source) override;
 
-    Layout* activeLayout() const override
+    PhosphorZones::Layout* activeLayout() const override
     {
         return m_activeLayout;
     }
-    Layout* defaultLayout() const override;
+    PhosphorZones::Layout* defaultLayout() const override;
     /**
      * @brief Get the layout that was active before the most recent switch
      * @return Previous layout. On first setActiveLayout, equals activeLayout.
      * @note Used for resnap-to-new-layout: windows from previous layout are remapped to current
      */
-    Layout* previousLayout() const
+    PhosphorZones::Layout* previousLayout() const
     {
         return m_previousLayout;
     }
-    Q_INVOKABLE void setActiveLayout(Layout* layout) override;
+    Q_INVOKABLE void setActiveLayout(PhosphorZones::Layout* layout) override;
     Q_INVOKABLE void setActiveLayoutById(const QUuid& id) override;
 
     Q_INVOKABLE void assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
-                                  Layout* layout) override;
+                                  PhosphorZones::Layout* layout) override;
     Q_INVOKABLE void assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                       const QString& layoutId) override;
 
@@ -95,8 +95,8 @@ public:
      */
     void setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
                                   const AssignmentEntry& entry);
-    Q_INVOKABLE Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
-                                        const QString& activity = QString()) const override;
+    Q_INVOKABLE PhosphorZones::Layout* layoutForScreen(const QString& screenId, int virtualDesktop = 0,
+                                                       const QString& activity = QString()) const override;
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,
                                      const QString& activity = QString()) override;
 
@@ -114,7 +114,7 @@ public:
      * @brief Get the raw assignment ID for a screen (may be UUID or autotile ID)
      *
      * Same fallback cascade as layoutForScreen() but returns the raw assignment
-     * string instead of resolving it to a Layout*. Use this when you need to
+     * string instead of resolving it to a PhosphorZones::Layout*. Use this when you need to
      * distinguish autotile assignments from manual ones.
      *
      * @param screenId Stable EDID-based screen ID (or connector name fallback)
@@ -123,7 +123,7 @@ public:
      * @return Raw assignment string (UUID or "autotile:*"), or empty if no assignment
      */
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
-                                  const QString& activity = QString()) const;
+                                  const QString& activity = QString()) const override;
 
     /**
      * @brief Get the full AssignmentEntry for a screen/desktop/activity
@@ -180,7 +180,7 @@ public:
      */
     void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments) override;
 
-    Q_INVOKABLE Layout* layoutForShortcut(int number) const override;
+    Q_INVOKABLE PhosphorZones::Layout* layoutForShortcut(int number) const override;
     Q_INVOKABLE void applyQuickLayout(int number, const QString& screenId) override;
     void setQuickLayoutSlot(int number, const QString& layoutId) override;
     void setAllQuickLayoutSlots(const QHash<int, QString>& slots) override; // Batch set - saves once
@@ -189,7 +189,7 @@ public:
         return m_quickLayoutShortcuts;
     }
 
-    // Layout cycling
+    // PhosphorZones::Layout cycling
     Q_INVOKABLE void cycleToPreviousLayout(const QString& screenId);
     Q_INVOKABLE void cycleToNextLayout(const QString& screenId);
 
@@ -212,16 +212,16 @@ public:
     }
 
     Q_INVOKABLE void createBuiltInLayouts() override;
-    QVector<Layout*> builtInLayouts() const override;
+    QVector<PhosphorZones::Layout*> builtInLayouts() const override;
 
     Q_INVOKABLE void loadLayouts() override;
     void setSettings(ISettings* settings);
     Q_INVOKABLE void saveLayouts() override;
-    void saveLayout(Layout* layout) override;
+    void saveLayout(PhosphorZones::Layout* layout) override;
     Q_INVOKABLE void loadAssignments() override;
     Q_INVOKABLE void saveAssignments() override;
     Q_INVOKABLE void importLayout(const QString& filePath) override;
-    Q_INVOKABLE void exportLayout(Layout* layout, const QString& filePath) override;
+    Q_INVOKABLE void exportLayout(PhosphorZones::Layout* layout, const QString& filePath) override;
 
     // Autotile layout overrides (per-algorithm gap, visibility, shader settings)
     void saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides);
@@ -240,12 +240,12 @@ public:
     QHash<QPair<QString, QString>, QString> activityAssignments() const;
 
 Q_SIGNALS:
-    // Signals declared here only (ILayoutManager is a pure interface without signals)
+    // Signals declared here only (PhosphorZones::ILayoutManager is a pure interface without signals)
     void layoutsChanged();
-    void layoutAdded(Layout* layout);
-    void layoutRemoved(Layout* layout);
-    void activeLayoutChanged(Layout* layout);
-    void layoutAssigned(const QString& screenId, int virtualDesktop, Layout* layout);
+    void layoutAdded(PhosphorZones::Layout* layout);
+    void layoutRemoved(PhosphorZones::Layout* layout);
+    void activeLayoutChanged(PhosphorZones::Layout* layout);
+    void layoutAssigned(const QString& screenId, int virtualDesktop, PhosphorZones::Layout* layout);
     void layoutDirectoryChanged();
     void layoutsLoaded();
     void layoutsSaved();
@@ -253,11 +253,11 @@ Q_SIGNALS:
 private:
     void ensureLayoutDirectory();
     void loadLayoutsFromDirectory(const QString& directory);
-    Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
+    PhosphorZones::Layout* restoreSystemLayout(const QUuid& id, const QString& systemPath);
     QString layoutFilePath(const QUuid& id) const;
     void readAssignmentGroups(PhosphorConfig::IBackend* backend);
     void readQuickLayouts(PhosphorConfig::IBackend* backend);
-    Layout* cycleLayoutImpl(const QString& screenId, int direction);
+    PhosphorZones::Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
     QJsonObject loadAllAutotileOverrides() const;
@@ -266,9 +266,10 @@ private:
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
     QString m_layoutDirectory;
-    QVector<Layout*> m_layouts;
-    Layout* m_activeLayout = nullptr;
-    Layout* m_previousLayout = nullptr; ///< Layout active before last setActiveLayout (for resnap)
+    QVector<PhosphorZones::Layout*> m_layouts;
+    PhosphorZones::Layout* m_activeLayout = nullptr;
+    PhosphorZones::Layout* m_previousLayout =
+        nullptr; ///< PhosphorZones::Layout active before last setActiveLayout (for resnap)
     QHash<LayoutAssignmentKey, AssignmentEntry> m_assignments;
     QHash<int, QString> m_quickLayoutShortcuts; // number -> layout ID
     int m_currentVirtualDesktop = 1;

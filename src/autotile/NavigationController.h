@@ -8,10 +8,13 @@
 #include <QStringList>
 #include <functional>
 
+namespace PhosphorTiles {
+class TilingState;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
-class TilingState;
 
 /**
  * @brief Handles navigation, focus cycling, and ratio/count adjustments
@@ -74,12 +77,12 @@ private:
     QString resolveActiveScreen() const;
 
     /**
-     * @brief Resolve the TilingState for the currently focused screen
+     * @brief Resolve the PhosphorTiles::TilingState for the currently focused screen
      *
      * Returns nullptr if no active screen or no state exists for it.
      * Sets outScreenId to the resolved screen identifier.
      */
-    TilingState* resolveActiveState(QString& outScreenId) const;
+    PhosphorTiles::TilingState* resolveActiveState(QString& outScreenId) const;
 
     /**
      * @brief Helper to emit focus request for a window at calculated index
@@ -89,12 +92,12 @@ private:
     /**
      * @brief Helper to get tiled windows and state for focus operations
      */
-    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, TilingState*& outState);
+    QStringList tiledWindowsForFocusedScreen(QString& outScreenId, PhosphorTiles::TilingState*& outState);
 
     /**
      * @brief Helper to apply an operation to all screen states
      */
-    void applyToAllStates(const std::function<void(TilingState*)>& operation);
+    void applyToAllStates(const std::function<void(PhosphorTiles::TilingState*)>& operation);
 
     AutotileEngine* m_engine = nullptr;
 };

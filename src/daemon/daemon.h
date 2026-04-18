@@ -13,18 +13,22 @@
 #include <memory>
 
 #include "shortcutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/types.h"
 #include "../autotile/AutotileEngine.h"
 
 #include <PhosphorConfig/IBackend.h>
 
+namespace PhosphorZones {
+class Layout;
+class ZoneDetector;
+}
+
 namespace PlasmaZones {
 
 enum class DisabledReason;
-class Layout;
 class LayoutManager;
 class LayoutComputeService;
-class ZoneDetector;
 class Settings;
 class OverlayService;
 class ScreenManager;
@@ -48,10 +52,16 @@ class AutotileNavigationAdapter;
 class ScreenModeRouter;
 class SnapNavigationAdapter;
 class VirtualScreenSwapper;
-class ScriptedAlgorithmLoader;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
+} // namespace PlasmaZones
+
+namespace PhosphorTiles {
+class ScriptedAlgorithmLoader;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief Main daemon for PlasmaZones
@@ -79,13 +89,29 @@ public:
     {
         return m_layoutManager.get();
     }
-    ZoneDetector* zoneDetector() const
+    PhosphorZones::ZoneDetector* zoneDetector() const
     {
         return m_zoneDetector.get();
     }
     Settings* settings() const
     {
         return m_settings.get();
+    }
+
+    /**
+     * @brief Unified layout-preview source (manual zones + autotile algorithms).
+     *
+     * Returns a composite that aggregates PhosphorZones::ZonesLayoutSource
+     * (over m_layoutManager) and PhosphorTiles::AutotileLayoutSource (over
+     * the in-process PhosphorTiles::AlgorithmRegistry singleton).  Daemon-internal
+     * consumers — overlay layout picker, snap-assist preview thumbnails,
+     * the layout adaptor's D-Bus surface — see one ILayoutSource* and
+     * branch on `LayoutPreview::isAutotile` rather than on which
+     * concrete provider produced an entry.
+     */
+    PhosphorLayout::ILayoutSource* layoutSource() const
+    {
+        return m_layoutSources.composite.get();
     }
     OverlayService* overlayService() const
     {
@@ -118,7 +144,7 @@ public:
     Q_INVOKABLE bool isOverlayVisible() const;
 
     // OSD notifications
-    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showLockedOsd(const QString& screenId);
     void showLockedPreviewOsd(const QString& screenId);
     void showContextDisabledOsd(const QString& screenId, int desktop, const QString& activity, DisabledReason reason);
@@ -224,7 +250,7 @@ private:
     /**
      * @brief Capture autotile window order for all autotile screens
      *
-     * Must be called BEFORE any mode switch that destroys TilingState
+     * Must be called BEFORE any mode switch that destroys PhosphorTiles::TilingState
      * (e.g. applyLayoutById, handleAutotileDisabled, updateAutotileScreens).
      *
      * @return Map of (screen, desktop, activity) -> ordered window IDs (master first)
@@ -235,7 +261,7 @@ private:
      * @brief Restore pre-tile geometry for autotile-only windows
      *
      * Iterates m_lastAutotileOrders and calls applyGeometryForFloat for each
-     * window that has no zone assignment (never manually snapped). Zone-snapped
+     * window that has no zone assignment (never manually snapped). PhosphorZones::Zone-snapped
      * windows are already handled by resnapCurrentAssignments.
      */
     void restoreAutotileOnlyGeometries(const QSet<QString>& excludeWindows = {}, int desktop = -1,
@@ -329,9 +355,14 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
+    // Manual layouts + autotile algorithms composed behind layoutSource().
+    // The bundle owns all three objects so destruction is deterministic
+    // (composite first, then the child sources it borrows from). See
+    // layoutsourcefactory.h for the construction contract.
+    LayoutSourceBundle m_layoutSources;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
-    std::unique_ptr<ZoneDetector> m_zoneDetector;
+    std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
     // Single source of truth for live-window instance identity + metadata.
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
@@ -348,7 +379,7 @@ private:
     LayoutAdaptor* m_layoutAdaptor = nullptr;
     SettingsAdaptor* m_settingsAdaptor = nullptr;
     OverlayAdaptor* m_overlayAdaptor = nullptr; // Overlay visibility only
-    ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // Zone detection queries
+    ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr; // PhosphorZones::Zone detection queries
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
@@ -360,7 +391,7 @@ private:
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
     // Scripted algorithm loader (file watcher for user-defined JS algorithms)
-    std::unique_ptr<ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
+    std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines
     std::unique_ptr<AutotileEngine> m_autotileEngine;

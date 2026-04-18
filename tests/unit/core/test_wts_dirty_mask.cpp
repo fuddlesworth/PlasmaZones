@@ -8,7 +8,7 @@
  * Pins the contract between WTS mutators and the delta-persistence path
  * in WindowTrackingAdaptor::saveState():
  *
- *  1. Zone-assignment mutations set DirtyZoneAssignments (+ DirtyLastUsedZone
+ *  1. PhosphorZones::Zone-assignment mutations set DirtyZoneAssignments (+ DirtyLastUsedZone
  *     when the last-used-zone tracking is cleared as a side effect).
  *  2. Pre-tile geometry store/clear sets DirtyPreTileGeometries — not the
  *     rest of the mask.
@@ -31,11 +31,11 @@
 #include <QSignalSpy>
 #include <QRect>
 
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/StubZoneDetector.h"
@@ -57,11 +57,11 @@ private Q_SLOTS:
         m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
 
-        m_layout = new Layout(QStringLiteral("TestLayout"));
-        auto* zone1 = new Zone(QRectF(0.0, 0.0, 0.5, 1.0));
+        m_layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"));
+        auto* zone1 = new PhosphorZones::Zone(QRectF(0.0, 0.0, 0.5, 1.0));
         zone1->setZoneNumber(1);
         m_layout->addZone(zone1);
-        auto* zone2 = new Zone(QRectF(0.5, 0.0, 0.5, 1.0));
+        auto* zone2 = new PhosphorZones::Zone(QRectF(0.5, 0.0, 0.5, 1.0));
         zone2->setZoneNumber(2);
         m_layout->addZone(zone2);
         m_layoutManager->addLayout(m_layout);
@@ -317,7 +317,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
     WindowTrackingService* m_service = nullptr;
     QString m_zone1Id;
 };

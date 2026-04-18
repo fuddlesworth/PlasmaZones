@@ -27,12 +27,12 @@
 #include "../../dbus/autotileadaptor.h"
 #include "../../dbus/snapadaptor.h"
 #include "../../autotile/AutotileEngine.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
-#include "../../autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../../snap/SnapEngine.h"
 #include "../../core/shaderregistry.h"
-#include "../../core/zonedetector.h"
+#include <PhosphorZones/ZoneDetector.h>
 #include <QProcess>
 #include <QPointer>
 #include "../config/settings.h"
@@ -98,7 +98,7 @@ void Daemon::connectScreenSignals()
         const QString activity =
             m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
         for (const QString& sid : vsIds) {
-            Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+            PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
                 LayoutComputeService::recalculateSync(screenLayout,
                                                       GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
@@ -118,7 +118,7 @@ void Daemon::connectScreenSignals()
 
         // Clean stale entries from layout visibility restrictions
         // Check both screen ID (new) and connector name (legacy)
-        for (Layout* layout : m_layoutManager->layouts()) {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             QStringList allowed = layout->allowedScreens();
             if (allowed.isEmpty())
                 continue;
@@ -169,7 +169,7 @@ void Daemon::connectDesktopActivity()
         }
         // Desktop switch invalidates the TilingStateKey context — cancel any
         // active drag-insert preview before the engine's desktop changes,
-        // otherwise cancel/commit would operate on the wrong TilingState.
+        // otherwise cancel/commit would operate on the wrong PhosphorTiles::TilingState.
         if (m_autotileEngine && m_autotileEngine->hasDragInsertPreview()) {
             m_autotileEngine->cancelDragInsertPreview();
         }
@@ -202,7 +202,7 @@ void Daemon::connectDesktopActivity()
         showDesktopSwitchOsd(desktop, currentActivity());
     });
 
-    // Prune stale TilingState entries and disabled-desktop numbers when desktops are removed
+    // Prune stale PhosphorTiles::TilingState entries and disabled-desktop numbers when desktops are removed
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::desktopCountChanged, this, [this](int newCount) {
         // Prune stale disabled-desktop entries (desktop numbers > newCount no longer exist).
         // NOTE: KDE Plasma renumbers desktops when one in the middle is removed (e.g.
@@ -251,7 +251,7 @@ void Daemon::connectDesktopActivity()
     if (ActivityManager::isAvailable()) {
         m_activityManager->start();
 
-        // Prune stale TilingState entries and disabled-activity IDs when activities are added/removed
+        // Prune stale PhosphorTiles::TilingState entries and disabled-activity IDs when activities are added/removed
         connect(m_activityManager.get(), &ActivityManager::activitiesChanged, this, [this]() {
             if (!m_activityManager) {
                 return;
@@ -445,7 +445,7 @@ void Daemon::connectShortcutSignals()
         handleSnapAll();
     });
 
-    // Layout picker shortcut (interactive layout browser + resnap)
+    // PhosphorZones::Layout picker shortcut (interactive layout browser + resnap)
     // Capture screen name at open time so it's still valid after the picker closes.
     connect(m_shortcutManager.get(), &ShortcutManager::layoutPickerRequested, this, [this]() {
         if (!m_unifiedLayoutController) {
@@ -507,7 +507,7 @@ void Daemon::connectShortcutSignals()
         }
 
         if (wasLocked) {
-            Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+            PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 showLayoutOsd(layout, screenId);
             }
@@ -618,7 +618,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     const VirtualScreenConfig config = m_screenManager->virtualScreenConfig(physicalScreenId);
 
     // Recalculate zone geometries inline for the affected screens FIRST so
-    // that any TilingState created by the upcoming updateAutotileScreens
+    // that any PhosphorTiles::TilingState created by the upcoming updateAutotileScreens
     // call (and the resnap below) reads fresh zone bounds. The screenAdded
     // handler does the same inline recalc for newly-added physical screens.
     const int desktop = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
@@ -628,7 +628,7 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
         ? m_screenManager->virtualScreenIdsFor(physicalScreenId)
         : QStringList{physicalScreenId};
     for (const QString& sid : affectedScreenIds) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             LayoutComputeService::recalculateSync(screenLayout,
                                                   GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
@@ -699,7 +699,7 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
         m_activityManager && ActivityManager::isAvailable() ? m_activityManager->currentActivity() : QString();
     const QStringList affectedScreenIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
     for (const QString& sid : affectedScreenIds) {
-        Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
+        PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
             LayoutComputeService::recalculateSync(screenLayout,
                                                   GeometryUtils::effectiveScreenGeometry(screenLayout, sid));

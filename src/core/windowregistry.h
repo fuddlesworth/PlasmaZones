@@ -110,7 +110,7 @@ public:
     /**
      * @brief Convenience: current appId for an instance, or empty if unknown.
      *
-     * Use this in place of every Utils::extractAppId(windowId) call site.
+     * Use this in place of every PhosphorIdentity::WindowId::extractAppId(windowId) call site.
      * Unknown windows return QString() — callers must handle that case.
      */
     QString appIdFor(const QString& instanceId) const;

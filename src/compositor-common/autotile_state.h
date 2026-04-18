@@ -30,7 +30,7 @@ struct BorderState
     QHash<QString, QSet<QString>> borderlessWindowsByScreen;
     /// Same shape for the full tiled set (superset of borderless).
     QHash<QString, QSet<QString>> tiledWindowsByScreen;
-    /// Zone geometries remain windowId-keyed — a window only lives in
+    /// PhosphorZones::Zone geometries remain windowId-keyed — a window only lives in
     /// one zone at a time, regardless of which screen owns it.
     QHash<QString, QRect> zoneGeometries;
     bool hideTitleBars = false;

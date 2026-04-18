@@ -4,10 +4,10 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
-#include "../../core/zone.h"
-#include "../../core/layoututils.h"
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
 #include "../../core/screenmanager.h"
 #include "../../core/utils.h"
@@ -141,7 +141,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Update settings-based properties
     if (m_settings) {
         writeColorSettings(window, m_settings);
-        // Zone appearance settings for scaled preview (global)
+        // PhosphorZones::Zone appearance settings for scaled preview (global)
         writeQmlProperty(window, QStringLiteral("zonePadding"), m_settings->zonePadding());
         writeQmlProperty(window, QStringLiteral("zoneBorderWidth"), m_settings->borderWidth());
         writeQmlProperty(window, QStringLiteral("zoneBorderRadius"), m_settings->borderRadius());
@@ -163,7 +163,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     // Set active layout ID for this screen
     // Per-screen assignment takes priority so each monitor highlights its own layout
     QString activeLayoutId;
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
     if (screenLayout) {
         activeLayoutId = screenLayout->id().toString();
     }

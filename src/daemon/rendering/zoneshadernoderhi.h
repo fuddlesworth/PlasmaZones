@@ -25,9 +25,9 @@ namespace PlasmaZones {
  *
  * This subclass adds zone-specific state:
  * - Labels texture at binding 1 (via setExtraBinding)
- * - Zone count / highlighted count in BaseUniforms::appField0/appField1
+ * - PhosphorZones::Zone count / highlighted count in BaseUniforms::appField0/appField1
  *
- * Zone UBO data (rects, colors, params) is written by ZoneUniformExtension,
+ * PhosphorZones::Zone UBO data (rects, colors, params) is written by ZoneUniformExtension,
  * which is OWNED by ZoneShaderItem — the item registers it via
  * ShaderEffect::setUniformExtension() and drives updates directly. The node
  * does not hold a QVector<ZoneData> cache; it only reports counts to the

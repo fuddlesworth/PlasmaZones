@@ -280,7 +280,7 @@ Flickable {
                                         spacing: 2
 
                                         Label {
-                                            text: delegateRoot.model.name
+                                            text: delegateRoot.model.displayName
                                             elide: Text.ElideRight
                                             Layout.fillWidth: true
                                         }
@@ -327,7 +327,7 @@ Flickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index - 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move up")
-                                        Accessible.name: i18n("Move %1 up", delegateRoot.model.name)
+                                        Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
                                             NumberAnimation {
@@ -349,7 +349,7 @@ Flickable {
                                         onClicked: root.moveLocal(delegateRoot.index, delegateRoot.index + 1)
                                         ToolTip.visible: hovered
                                         ToolTip.text: i18n("Move down")
-                                        Accessible.name: i18n("Move %1 down", delegateRoot.model.name)
+                                        Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
                                             NumberAnimation {

@@ -5,9 +5,9 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
@@ -32,13 +32,13 @@ private:
     QRect m_screenGeometry{0, 0, ScreenWidth, ScreenHeight};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* cornerMaster()
+    PhosphorTiles::TilingAlgorithm* cornerMaster()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("corner-master"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("corner-master"));
     }
-    TilingAlgorithm* quadrantPriority()
+    PhosphorTiles::TilingAlgorithm* quadrantPriority()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("quadrant-priority"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("quadrant-priority"));
     }
 
 private Q_SLOTS:
@@ -55,15 +55,17 @@ private Q_SLOTS:
 
     void testCornerMaster_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
-        QVERIFY(
-            cornerMaster()->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0))).isEmpty());
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        QVERIFY(cornerMaster()
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
+                    .isEmpty());
     }
 
     void testCornerMaster_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones = cornerMaster()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -74,9 +76,10 @@ private Q_SLOTS:
 
     void testCornerMaster_twoWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -89,9 +92,10 @@ private Q_SLOTS:
 
     void testCornerMaster_threeWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -112,9 +116,10 @@ private Q_SLOTS:
 
     void testCornerMaster_fourWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -122,9 +127,10 @@ private Q_SLOTS:
 
     void testCornerMaster_fiveWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -136,9 +142,10 @@ private Q_SLOTS:
 
     void testCornerMaster_masterTopLeft()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones[0].x(), 0);
         QCOMPARE(zones[0].y(), 0);
     }
@@ -149,15 +156,15 @@ private Q_SLOTS:
 
     void testCornerMaster_splitRatioAffectsMasterSize()
     {
-        TilingState smallRatioState(QStringLiteral("test"));
+        PhosphorTiles::TilingState smallRatioState(QStringLiteral("test"));
         smallRatioState.setSplitRatio(0.3);
-        auto smallZones =
-            cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &smallRatioState, 0, EdgeGaps::uniform(0)));
+        auto smallZones = cornerMaster()->calculateZones(
+            makeParams(3, m_screenGeometry, &smallRatioState, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
 
-        TilingState largeRatioState(QStringLiteral("test"));
+        PhosphorTiles::TilingState largeRatioState(QStringLiteral("test"));
         largeRatioState.setSplitRatio(0.7);
-        auto largeZones =
-            cornerMaster()->calculateZones(makeParams(3, m_screenGeometry, &largeRatioState, 0, EdgeGaps::uniform(0)));
+        auto largeZones = cornerMaster()->calculateZones(
+            makeParams(3, m_screenGeometry, &largeRatioState, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
 
         // Larger splitRatio should produce a wider and taller master
         QVERIFY2(largeZones[0].width() > smallZones[0].width(),
@@ -176,9 +183,10 @@ private Q_SLOTS:
 
     void testCornerMaster_gapsNoOverlap()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto zones = cornerMaster()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
+        auto zones = cornerMaster()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -190,10 +198,11 @@ private Q_SLOTS:
 
     void testCornerMaster_tinyScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
         QRect tiny(0, 0, 50, 50);
-        auto zones = cornerMaster()->calculateZones(makeParams(3, tiny, &state, 10, EdgeGaps::uniform(0)));
+        auto zones =
+            cornerMaster()->calculateZones(makeParams(3, tiny, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);
@@ -221,17 +230,17 @@ private Q_SLOTS:
 
     void testQuadrantPriority_zeroWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         QVERIFY(quadrantPriority()
-                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)))
+                    ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
     }
 
     void testQuadrantPriority_singleWindow()
     {
-        TilingState state(QStringLiteral("test"));
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(1, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
         QCOMPARE(zones[0], m_screenGeometry);
     }
@@ -242,10 +251,10 @@ private Q_SLOTS:
 
     void testQuadrantPriority_twoWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(2, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -256,10 +265,10 @@ private Q_SLOTS:
 
     void testQuadrantPriority_threeWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -267,10 +276,10 @@ private Q_SLOTS:
 
     void testQuadrantPriority_fourWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(4, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -278,10 +287,10 @@ private Q_SLOTS:
 
     void testQuadrantPriority_fiveWindows()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(5, m_screenGeometry, &state, 0, EdgeGaps::uniform(0)));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 5);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -293,15 +302,15 @@ private Q_SLOTS:
 
     void testQuadrantPriority_splitRatioAffectsMasterSize()
     {
-        TilingState smallState(QStringLiteral("test"));
+        PhosphorTiles::TilingState smallState(QStringLiteral("test"));
         smallState.setSplitRatio(0.3);
-        auto smallZones =
-            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &smallState, 0, EdgeGaps::uniform(0)));
+        auto smallZones = quadrantPriority()->calculateZones(
+            makeParams(3, m_screenGeometry, &smallState, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
 
-        TilingState largeState(QStringLiteral("test"));
+        PhosphorTiles::TilingState largeState(QStringLiteral("test"));
         largeState.setSplitRatio(0.7);
-        auto largeZones =
-            quadrantPriority()->calculateZones(makeParams(3, m_screenGeometry, &largeState, 0, EdgeGaps::uniform(0)));
+        auto largeZones = quadrantPriority()->calculateZones(
+            makeParams(3, m_screenGeometry, &largeState, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
 
         QVERIFY2(largeZones[0].width() > smallZones[0].width(),
                  qPrintable(QStringLiteral("Large ratio master width (%1) should be > small ratio (%2)")
@@ -315,10 +324,10 @@ private Q_SLOTS:
 
     void testQuadrantPriority_gapsNoOverlap()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
-        auto zones =
-            quadrantPriority()->calculateZones(makeParams(4, m_screenGeometry, &state, 10, EdgeGaps::uniform(0)));
+        auto zones = quadrantPriority()->calculateZones(
+            makeParams(4, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
         QVERIFY(noOverlaps(zones));
         QVERIFY(allWithinBounds(zones, m_screenGeometry));
@@ -330,10 +339,11 @@ private Q_SLOTS:
 
     void testQuadrantPriority_tinyScreen()
     {
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.6);
         QRect tiny(0, 0, 50, 50);
-        auto zones = quadrantPriority()->calculateZones(makeParams(3, tiny, &state, 10, EdgeGaps::uniform(0)));
+        auto zones =
+            quadrantPriority()->calculateZones(makeParams(3, tiny, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
         for (const QRect& zone : zones) {
             QVERIFY(zone.width() > 0);

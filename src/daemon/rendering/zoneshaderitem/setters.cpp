@@ -14,7 +14,7 @@
 namespace PlasmaZones {
 
 // ============================================================================
-// Zone Data Setters
+// PhosphorZones::Zone Data Setters
 // ============================================================================
 
 void ZoneShaderItem::setZones(const QVariantList& zones)

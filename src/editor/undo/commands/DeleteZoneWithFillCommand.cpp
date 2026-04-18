@@ -11,7 +11,7 @@ DeleteZoneWithFillCommand::DeleteZoneWithFillCommand(QPointer<ZoneManager> zoneM
                                                      const QVariantMap& deletedZoneData, const QVariantList& oldZones,
                                                      const QVariantList& newZones, const QString& text,
                                                      QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Delete Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Delete PhosphorZones::Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_deletedZoneData(deletedZoneData)
     , m_oldZones(oldZones)

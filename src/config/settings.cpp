@@ -22,7 +22,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <QUuid>
-#include "../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../autotile/AutotileConfig.h"
 
 namespace PlasmaZones {
@@ -639,7 +639,7 @@ PZ_STORE_GET(int, minimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplay
 PZ_STORE_SET_INT(setMinimumZoneDisplaySizePx, performanceGroup, minimumZoneDisplaySizePxKey,
                  minimumZoneDisplaySizePxChanged)
 
-// ── Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
+// ── PhosphorZones::Zone geometry (PhosphorConfig::Store-backed) ────────────────────────────
 // Inner/outer gaps (uniform + per-side) plus adjacency threshold. Schema
 // clampInt validators enforce the same ranges readValidatedInt used to.
 
@@ -1003,7 +1003,7 @@ PZ_STORE_SET_INT(setMinimumWindowWidth, exclusionsGroup, minimumWindowWidthKey, 
 PZ_STORE_GET(int, minimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, int)
 PZ_STORE_SET_INT(setMinimumWindowHeight, exclusionsGroup, minimumWindowHeightKey, minimumWindowHeightChanged)
 
-// ── Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
+// ── PhosphorZones::Zone Selector (PhosphorConfig::Store-backed) ────────────────────────────
 // Three enum-ints exposed via both the typed setter and an Int adapter for
 // QML binding. Stored as int, the schema clamps the range.
 
@@ -1385,7 +1385,7 @@ void Settings::setSnapAssistTriggers(const QVariantList& triggers)
 
 // ── Autotiling (PhosphorConfig::Store-backed) ──────────────────────────────
 // Largest group — seven sub-groups. defaultAutotileAlgorithm passes through
-// AlgorithmRegistry for validation; per-algorithm settings round-trip as a
+// PhosphorTiles::AlgorithmRegistry for validation; per-algorithm settings round-trip as a
 // JSON string and sanitize via AutotileConfig::perAlgoFromVariantMap.
 
 PZ_STORE_GET(bool, autotileEnabled, tilingGroup, enabledKey, bool)
@@ -1398,9 +1398,10 @@ QString Settings::defaultAutotileAlgorithm() const
 void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
     QString validated = algorithm;
-    if (!algorithm.startsWith(QLatin1String("script:")) && !AlgorithmRegistry::instance()->algorithm(algorithm)) {
+    if (!algorithm.startsWith(QLatin1String("script:"))
+        && !PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithm)) {
         qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
-        validated = AlgorithmRegistry::defaultAlgorithmId();
+        validated = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
     if (defaultAutotileAlgorithm() == validated) {
         return;
@@ -2052,15 +2053,15 @@ void Settings::applySystemColorScheme()
     const QPalette pal = QGuiApplication::palette();
 
     QColor highlight = pal.color(QPalette::Active, QPalette::Highlight);
-    highlight.setAlpha(Defaults::HighlightAlpha);
+    highlight.setAlpha(::PhosphorZones::ZoneDefaults::HighlightAlpha);
     setHighlightColor(highlight);
 
     QColor inactive = pal.color(QPalette::Active, QPalette::Text);
-    inactive.setAlpha(Defaults::InactiveAlpha);
+    inactive.setAlpha(::PhosphorZones::ZoneDefaults::InactiveAlpha);
     setInactiveColor(inactive);
 
     QColor border = pal.color(QPalette::Active, QPalette::Text);
-    border.setAlpha(Defaults::BorderAlpha);
+    border.setAlpha(::PhosphorZones::ZoneDefaults::BorderAlpha);
     setBorderColor(border);
 
     const QColor fontColor = pal.color(QPalette::Active, QPalette::Text);

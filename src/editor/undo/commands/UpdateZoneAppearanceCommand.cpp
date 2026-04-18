@@ -12,7 +12,8 @@ UpdateZoneAppearanceCommand::UpdateZoneAppearanceCommand(QPointer<ZoneManager> z
                                                          const QString& propertyName, const QVariant& oldValue,
                                                          const QVariant& newValue, const QString& text,
                                                          QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Change Zone Appearance", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager,
+                      text.isEmpty() ? PzI18n::tr("Change PhosphorZones::Zone Appearance", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_propertyName(propertyName)
     , m_oldValue(oldValue)

@@ -11,12 +11,15 @@
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/zonedetector.h"
+#include <PhosphorZones/ZoneDetector.h>
 #include "../../autotile/AutotileEngine.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "helpers.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingState.h"
+#include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotilePreviewRender.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "../config/settings.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
@@ -81,7 +84,7 @@ void Daemon::clearHighlight()
     m_zoneDetector->clearHighlights();
 }
 
-void Daemon::showLayoutOsd(Layout* layout, const QString& screenId)
+void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId)
 {
     if (!layout) {
         return;
@@ -99,7 +102,7 @@ void Daemon::showLayoutOsd(Layout* layout, const QString& screenId)
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
+        QString displayText = PzI18n::tr("PhosphorZones::Layout: %1").arg(layoutName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for layout=" << layoutName;
     } break;
@@ -123,7 +126,7 @@ void Daemon::showLockedOsd(const QString& screenId)
         return;
     }
 
-    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("Layout Locked"));
+    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("PhosphorZones::Layout Locked"));
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
@@ -137,7 +140,8 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
         const QString resolvedId = Utils::screenIdForName(screenId);
-        Layout* layout = m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
+        PhosphorZones::Layout* layout =
+            m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
             m_overlayService->showLockedLayoutOsd(layout, resolvedId.isEmpty() ? screenId : resolvedId);
             return;
@@ -210,7 +214,7 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
-    auto* algo = AlgorithmRegistry::instance()->algorithm(algorithmId);
+    auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -234,17 +238,42 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             int windowCount = 0;
             int masterCount = 1;
             if (m_autotileEngine) {
-                TilingState* state = m_autotileEngine->stateForScreen(screenId);
+                PhosphorTiles::TilingState* state = m_autotileEngine->stateForScreen(screenId);
                 if (state) {
                     windowCount = state->tiledWindowCount();
                     masterCount = state->masterCount();
                 }
             }
-            QVariantList zones = AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
-            QString layoutId = LayoutId::makeAutotileId(algorithmId);
-            m_overlayService->showLayoutOsd(layoutId, displayName, zones, static_cast<int>(LayoutCategory::Autotile),
-                                            false, screenId, algo->supportsMasterCount(),
-                                            algo->producesOverlappingZones(), algo->zoneNumberDisplay(), masterCount);
+            // Build the OSD QVariantList from the canonical preview. The QML
+            // overlay expects `{zoneNumber, relativeGeometry:{x,y,w,h},
+            // id, name, useCustomColors}` — we project the preview's zones
+            // directly without going through a second preview-generation path.
+            const PhosphorLayout::LayoutPreview preview =
+                PhosphorTiles::previewFromAlgorithm(algorithmId, algo, windowCount > 0 ? windowCount : -1);
+            QVariantList zones;
+            zones.reserve(preview.zones.size());
+            for (int i = 0; i < preview.zones.size(); ++i) {
+                const QRectF& rel = preview.zones.at(i);
+                QVariantMap relGeo;
+                relGeo[QLatin1String("x")] = rel.x();
+                relGeo[QLatin1String("y")] = rel.y();
+                relGeo[QLatin1String("width")] = rel.width();
+                relGeo[QLatin1String("height")] = rel.height();
+
+                QVariantMap zoneMap;
+                zoneMap[QLatin1String("zoneNumber")] =
+                    (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
+                zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+                zoneMap[QLatin1String("id")] = QString::number(i);
+                zoneMap[QLatin1String("name")] = QString();
+                zoneMap[QLatin1String("useCustomColors")] = false;
+                zones.append(zoneMap);
+            }
+            QString layoutId = PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
+            m_overlayService->showLayoutOsd(layoutId, displayName, zones,
+                                            static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId,
+                                            algo->supportsMasterCount(), algo->producesOverlappingZones(),
+                                            algo->zoneNumberDisplay(), masterCount);
             qCInfo(lcDaemon) << "Preview OSD: algorithm=" << displayName << "screen=" << screenId;
         } else {
             qCWarning(lcDaemon) << "Overlay service not available for preview OSD";
@@ -258,7 +287,7 @@ void Daemon::showLayoutOsdDeferred(const QUuid& layoutId, const QString& screenI
     // Defer OSD display so first-time QML compilation of LayoutOsd.qml (~100-300ms)
     // doesn't block the daemon event loop during layout switches.
     QTimer::singleShot(0, this, [this, layoutId, screenId]() {
-        Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
+        PhosphorZones::Layout* l = m_layoutManager ? m_layoutManager->layoutById(layoutId) : nullptr;
         if (l) {
             showLayoutOsd(l, screenId);
         }
@@ -293,7 +322,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         if (!focusedScreenId.isEmpty()) {
             // Per-screen filter: only check the focused screen's mode
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
-            if (LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else {
                 manualActive = true;
@@ -303,7 +332,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (LayoutId::isAutotile(assignmentId)) {
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
                 } else {
                     manualActive = true;
@@ -323,7 +352,8 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile);
     }
 
-    qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual << "autotile=" << includeAutotile
+    qCDebug(lcDaemon) << "PhosphorZones::Layout filter updated: manual=" << includeManual
+                      << "autotile=" << includeAutotile
                       << "screen=" << (focusedScreenId.isEmpty() ? QStringLiteral("all") : focusedScreenId);
 }
 
@@ -367,8 +397,9 @@ void Daemon::syncModeFromAssignments()
             // should trigger resnap via the global active layout signal. KCM saves
             // use populateResnapBufferForAllScreens() + resnapToNewLayout()
             // (per-screen, independent of global active layout) instead.
-            if (!LayoutId::isAutotile(focusedAssignmentId)) {
-                Layout* desktopLayout = m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
+            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)) {
+                PhosphorZones::Layout* desktopLayout =
+                    m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
                     QSignalBlocker blocker(m_layoutManager.get());
                     m_layoutManager->setActiveLayout(desktopLayout);
@@ -417,13 +448,13 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
             continue;
         }
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (LayoutId::isAutotile(assignmentId)) {
-            const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
-            auto* algo = AlgorithmRegistry::instance()->algorithm(algoId);
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
+            auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algoId);
             const QString displayName = algo ? algo->name() : algoId;
             showAlgorithmOsdDeferred(algoId, displayName, screenId);
         } else {
-            Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+            PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
             if (layout) {
                 showLayoutOsdDeferred(layout->id(), screenId);
             }

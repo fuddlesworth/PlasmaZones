@@ -112,7 +112,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: Kirigami.Units.smallSpacing
-        text: root.layout ? (root.layout.name || i18n("Unnamed")) : ""
+        text: root.layout ? (root.layout.displayName || i18n("Unnamed")) : ""
         font.pixelSize: Kirigami.Theme.smallFont.pixelSize
         font.weight: isSelected ? Font.DemiBold : Font.Normal
         elide: Text.ElideRight

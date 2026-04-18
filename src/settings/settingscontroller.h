@@ -15,6 +15,8 @@
 #include "screenhelper.h"
 #include "../core/constants.h"
 #include "../core/enums.h"
+#include "../core/layoutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/modifierutils.h"
 
 #include <QHash>
@@ -48,7 +50,7 @@ class SettingsController : public QObject
     Q_PROPERTY(bool hasUnseenWhatsNew READ hasUnseenWhatsNew NOTIFY lastSeenWhatsNewVersionChanged)
     Q_PROPERTY(QVariantList whatsNewEntries READ whatsNewEntries CONSTANT)
 
-    // Layout management
+    // PhosphorZones::Layout management
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
 
     // Screen management
@@ -222,11 +224,33 @@ public:
     }
     Q_INVOKABLE void markWhatsNewSeen();
 
-    // Layout accessors
+    // PhosphorZones::Layout accessors
     QVariantList layouts() const
     {
         return m_layouts;
     }
+
+    // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
+    //
+    // Settings runs in its own process, separate from the daemon. The legacy
+    // path fetches the layout list over D-Bus (getLayoutList) which only
+    // works while the daemon is running. The methods below load the SAME
+    // on-disk layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource,
+    // so QML preview-rendering paths can render layouts even when the
+    // daemon isn't up (early settings launch, daemon crashed, etc.).
+    //
+    // Returns the QML-facing projection produced by
+    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
+    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
+    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
+    // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
+    // shape, which is optimised for wire transfer.
+    Q_INVOKABLE QVariantList localLayoutPreviews() const;
+    // Non-const: ILayoutSource::previewAt is non-const so implementations
+    // can populate a query cache (scripted autotile algorithms would be
+    // prohibitively expensive to re-run on every picker redraw). Changing
+    // this invoker to const would silently dodge that cache.
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
 
     // Screen accessors
     QVariantList screens() const
@@ -263,7 +287,7 @@ public:
         return m_currentActivity;
     }
 
-    // Layout CRUD (D-Bus to daemon)
+    // PhosphorZones::Layout CRUD (D-Bus to daemon)
     Q_INVOKABLE void createNewLayout();
     Q_INVOKABLE bool createNewLayout(const QString& name, const QString& type, int aspectRatioClass, bool openInEditor);
     Q_INVOKABLE QString createNewAlgorithm(const QString& name, const QString& baseTemplate, bool supportsMasterCount,
@@ -792,6 +816,12 @@ private Q_SLOTS:
     void onExternalSettingsChanged();
     void onSettingsPropertyChanged();
     void loadLayoutsAsync();
+    // Debounce slot: all layout-mutation D-Bus signals (layoutCreated,
+    // layoutDeleted, layoutChanged, layoutPropertyChanged, layoutListChanged)
+    // route here so bursts coalesce into one loadLayoutsAsync() on the
+    // 50 ms m_layoutLoadTimer. Reachable by SLOT() because it's a
+    // private slot.
+    void scheduleLayoutLoad();
     void onVirtualDesktopsChanged();
     void onActivitiesChanged();
     void onScreenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
@@ -816,7 +846,6 @@ private:
     QHash<QString, std::shared_ptr<QMetaObject::Connection>> m_algorithmWatchers;
 
     void setNeedsSave(bool needs);
-    void scheduleLayoutLoad();
     void refreshVirtualDesktops();
     void refreshActivities();
 
@@ -842,10 +871,39 @@ private:
     bool m_saving = false;
     bool m_loading = false;
 
-    // Layout state
+    // PhosphorZones::Layout state
     QVariantList m_layouts;
     QTimer m_layoutLoadTimer;
     QString m_pendingSelectLayoutId;
+
+    // Suppresses the local-path layoutsChanged emit while a D-Bus
+    // getLayoutList round-trip is in flight. Without this gate, every
+    // loadLayoutsAsync() emits twice: once synchronously from the
+    // LayoutManager::layoutsChanged lambda (local composite) and once
+    // from the async D-Bus reply lambda (daemon-enriched list). Set true
+    // right before the D-Bus asyncCall dispatch; cleared in the reply
+    // lambda's entry (before any early-return on error, so the local
+    // fallback emit resumes if the daemon is unreachable). Only relevant
+    // when the daemon is available — when the D-Bus call errors out, the
+    // local path's emit remains the authoritative refresh.
+    bool m_awaitingDaemonLayouts = false;
+
+    // Daemon-independent layout source — see localLayoutPreviews() doc.
+    // LayoutManager opens its own assignments backend + scans the standard
+    // layouts directory; the bundle's composite aggregates manual + autotile
+    // entries so consumers query a single ILayoutSource and never branch on
+    // id-prefix. Declaration order matters — m_localLayoutManager must
+    // outlive the bundle (its zones source borrows the manager).
+    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    LayoutSourceBundle m_localSources;
+
+    /// Recompute zone geometry for every manual layout in
+    /// @c m_localLayoutManager against the primary screen so
+    /// @c ZonesLayoutSource::previewFromLayout gets a populated
+    /// @c lastRecalcGeometry() — without this, fixed-geometry layouts
+    /// report @c referenceAspectRatio == 0 and zones render as zero-size
+    /// rects.
+    void recalcLocalLayouts();
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;

@@ -9,23 +9,31 @@
 #include <QDBusVariant>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
 #include <QUuid>
 #include <QHash>
 #include <optional>
+
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
+namespace PhosphorZones {
+class Layout;
+}
 
 namespace PlasmaZones {
 
 class LayoutManager; // Concrete type needed for signal connections
 class VirtualDesktopManager;
 class ActivityManager;
-class Layout;
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for layout management operations
  *
  * Provides D-Bus interface: org.plasmazones.LayoutManager
- *  Layout CRUD and assignment operations
+ *  PhosphorZones::Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {
@@ -41,13 +49,48 @@ public:
     void setActivityManager(ActivityManager* am);
     void setSettings(ISettings* settings);
 
+    /**
+     * @brief Wire in the source-agnostic ILayoutSource bridge.
+     *
+     * Backs the @c getLayoutPreviewList / @c getLayoutPreview slots. When
+     * unset, those slots return empty JSON — clients should call them only
+     * after the daemon has finished init(). Accepts the abstract base so
+     * the future autotile preview source (or a composite) can plug in
+     * without changing the adaptor.
+     */
+    void setLayoutSource(PhosphorLayout::ILayoutSource* source);
+
 public Q_SLOTS:
-    // Layout queries
+    // PhosphorZones::Layout queries
     QString getActiveLayout();
     QStringList getLayoutList();
     QString getLayout(const QString& id);
 
-    // Layout management
+    /**
+     * @brief Source-agnostic preview list (manual layouts today, autotile
+     *        algorithms once phosphor-tile-algo lands).
+     *
+     * Returns a JSON array. Each entry is a serialized
+     * PhosphorLayout::LayoutPreview (id, displayName, zones in 0–1
+     * relative coords, isAutotile, optional algorithm metadata).
+     * Renderers consume this uniformly without branching on whether
+     * the entry is manual or autotile.
+     *
+     * Returns "[]" when no source is wired (early startup).
+     */
+    QString getLayoutPreviewList();
+
+    /**
+     * @brief Source-agnostic preview for one entry.
+     *
+     * @p id from getLayoutPreviewList. @p windowCount is honoured by
+     * autotile sources (algorithm runs at that count); manual sources
+     * ignore it. Returns "{}" when @p id is unknown to the wired
+     * source or no source is set.
+     */
+    QString getLayoutPreview(const QString& id, int windowCount);
+
+    // PhosphorZones::Layout management
     void setActiveLayout(const QString& id);
     void applyQuickLayout(int number, const QString& screenId);
     QString createLayout(const QString& name, const QString& type);
@@ -211,6 +254,19 @@ Q_SIGNALS:
     void layoutChanged(const QString& layoutJson);
 
     /**
+     * @brief Cheap active-layout-switch notification.
+     *
+     * Emitted alongside @c layoutChanged(json) on every active-layout switch,
+     * but carries only the layout UUID instead of the full JSON payload.
+     * Subscribers that re-load from disk (e.g. the editor's
+     * reloadLocalLayouts) can bind to this signal and avoid paying the
+     * 5–20 KB marshalling cost of @c layoutChanged every time the user
+     * flips contexts. Additive: @c layoutChanged(json) remains for
+     * compatibility with existing consumers.
+     */
+    void activeLayoutChanged(const QString& layoutId);
+
+    /**
      * @brief Compact property-level change notification.
      *
      * Emitted when a single scalar property on a layout is mutated without
@@ -229,6 +285,26 @@ Q_SIGNALS:
     void layoutPropertyChanged(const QString& layoutId, const QString& property, const QDBusVariant& value);
 
     void layoutListChanged();
+
+    /**
+     * @brief Emitted when a new layout is created.
+     *
+     * Fires alongside @c layoutListChanged from createLayout,
+     * createLayoutFromJson, duplicateLayout, and importLayout so subscribers
+     * that only care about additions (e.g. the settings list-view auto-select
+     * path) can react without parsing the full list diff.
+     */
+    void layoutCreated(const QString& layoutId);
+
+    /**
+     * @brief Emitted when a layout is deleted.
+     *
+     * Fires alongside @c layoutListChanged from deleteLayout so subscribers
+     * can evict stale per-layout state keyed by the UUID before the list
+     * refresh round-trip completes.
+     */
+    void layoutDeleted(const QString& layoutId);
+
     void screenLayoutChanged(const QString& screenId, const QString& layoutId, int virtualDesktop);
     void virtualDesktopCountChanged(int count);
 
@@ -272,9 +348,9 @@ Q_SIGNALS:
 private Q_SLOTS:
     // String-based connection slots for LayoutManager signals
     // (LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
-    void onActiveLayoutChanged(Layout* layout);
+    void onActiveLayoutChanged(PhosphorZones::Layout* layout);
     void onLayoutsChanged();
-    void onLayoutAssigned(const QString& screen, int virtualDesktop, Layout* layout);
+    void onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout);
 
 public:
     void invalidateCache();
@@ -292,6 +368,16 @@ private:
     void connectVirtualDesktopSignals();
     void connectActivitySignals();
 
+    /**
+     * @brief One-time setup for the ILayoutSource coalesce timer.
+     *
+     * Configures @c m_layoutSourceCoalesce (single-shot, 200 ms interval)
+     * and wires its @c timeout into a single @c layoutListChanged emission.
+     * Called from every public constructor so the init lives in exactly
+     * one place — see constructor bodies in layoutadaptor.cpp.
+     */
+    void initCoalesceTimer();
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════
@@ -308,11 +394,11 @@ private:
      * @brief Get layout by ID string with full validation
      * @param id UUID string
      * @param operation Description for error logging
-     * @return Layout pointer or nullptr on failure (logs warning)
+     * @return PhosphorZones::Layout pointer or nullptr on failure (logs warning)
      *
      * Consolidates parseUuid + layoutById + error logging.
      */
-    Layout* getValidatedLayout(const QString& id, const QString& operation);
+    PhosphorZones::Layout* getValidatedLayout(const QString& id, const QString& operation);
 
     /**
      * @brief Validate that a required string parameter is not empty
@@ -347,7 +433,7 @@ private:
 
     /**
      * @brief Drop any cached JSON for @p uuid so the next getLayout call
-     * re-serializes from the live Layout. Also clears the active-layout
+     * re-serializes from the live PhosphorZones::Layout. Also clears the active-layout
      * cache slot when the modified layout happens to be the active one,
      * otherwise getActiveLayout would keep serving the stale entry.
      * Centralizes cache invalidation for all per-layout mutation paths.
@@ -358,6 +444,7 @@ private:
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     ISettings* m_settings = nullptr;
+    PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
 
     // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
     // the KCM initiated the change and doesn't need the echo back.
@@ -371,6 +458,13 @@ private:
     QString m_cachedActiveLayoutJson;
     QUuid m_cachedActiveLayoutId;
     QHash<QUuid, QString> m_cachedLayoutJson; // Cache for individual layouts
+
+    // Coalesces bursts of ILayoutSource::contentsChanged into a single
+    // layoutListChanged D-Bus emission. Autotile algorithm registration can
+    // fire contentsChanged several times during startup / script hot-reload;
+    // without debouncing, each hit would wake every KCM/editor client on
+    // the bus. 200 ms is well under any human-visible refresh latency.
+    QTimer m_layoutSourceCoalesce;
 };
 
 } // namespace PlasmaZones

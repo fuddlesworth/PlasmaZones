@@ -22,7 +22,7 @@ namespace PzRoles {
 inline const PhosphorLayer::Role Overlay =
     PhosphorLayer::Roles::FullscreenOverlay.withScopePrefix(QStringLiteral("plasmazones-overlay"));
 
-/// Zone selector: Top layer so pointer events route to it ahead of the
+/// PhosphorZones::Zone selector: Top layer so pointer events route to it ahead of the
 /// main overlay.
 ///
 /// **Anchors are consumer-mandatory.** The preset ships `AnchorNone` but
@@ -39,7 +39,7 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
                                                                     QMargins(),
                                                                     QStringLiteral("plasmazones-zone-selector")};
 
-/// OSD base shape shared by Layout OSD and Navigation OSD. Both use the
+/// OSD base shape shared by PhosphorZones::Layout OSD and Navigation OSD. Both use the
 /// `FullscreenOverlay` primitive: AnchorAll so the compositor ignores
 /// x/y hints and honours the margins we write dynamically via the
 /// transport handle (see `centerLayerWindowOnScreen` in osd.cpp) to
@@ -48,7 +48,7 @@ inline const PhosphorLayer::Role ZoneSelector = PhosphorLayer::Role{PhosphorLaye
 /// exclusive-zone change, keyboard-mode flip) only needs updating once.
 inline const PhosphorLayer::Role OsdBase = PhosphorLayer::Roles::FullscreenOverlay;
 
-/// Layout OSD (transient visual preview on layout switch).
+/// PhosphorZones::Layout OSD (transient visual preview on layout switch).
 inline const PhosphorLayer::Role LayoutOsd = OsdBase.withScopePrefix(QStringLiteral("plasmazones-layout-osd"));
 
 /// Navigation OSD (keyboard-nav feedback). Byte-identical to LayoutOsd
@@ -61,7 +61,7 @@ inline const PhosphorLayer::Role NavigationOsd = OsdBase.withScopePrefix(QString
 inline const PhosphorLayer::Role SnapAssist =
     PhosphorLayer::Roles::CenteredModal.withScopePrefix(QStringLiteral("plasmazones-snap-assist"));
 
-/// Layout picker (interactive layout browser). Singleton modal with
+/// PhosphorZones::Layout picker (interactive layout browser). Singleton modal with
 /// exclusive keyboard. Shape matches SnapAssist but distinct scope so
 /// the compositor keeps them independent.
 inline const PhosphorLayer::Role LayoutPicker =

@@ -60,7 +60,7 @@ void EditorLaunchController::applyLaunchArgs(const QString& screenId, const QStr
         // per-screen geometry and virtual-screen context against the target
         // screen rather than whatever was current before the forward.
         maybeSwitchScreen(screenId, /*loadAssignedLayout*/ false);
-        m_controller->setPreviewMode(preview || LayoutId::isAutotile(layoutId));
+        m_controller->setPreviewMode(preview || PhosphorLayout::LayoutId::isAutotile(layoutId));
         m_controller->loadLayout(layoutId);
     } else {
         m_controller->setPreviewMode(false);

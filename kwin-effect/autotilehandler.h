@@ -335,7 +335,7 @@ private:
     /// frame instantly when the window leaves autotile mode (untile, mode
     /// switch, screen change) without waiting on a D-Bus round-trip.
     ///
-    /// Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
+    /// PhosphorZones::Layout: per-screen bucket mirrors `BorderState` so swap/rotate and
     /// cross-screen moves can transplant or drop a window's record by
     /// looking only at the source screen's bucket — see
     /// `transferPreAutotileGeometry()` in autotilehandler.cpp.

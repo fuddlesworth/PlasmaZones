@@ -14,8 +14,8 @@
 #include <vector>
 
 #include "core/layoutmanager.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -26,10 +26,10 @@ class TestLayoutManagerCycling : public QObject
     Q_OBJECT
 
 private:
-    Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
+    PhosphorZones::Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, parent);
-        auto* zone = new Zone();
+        auto* layout = new PhosphorZones::Layout(name, parent);
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);
         return layout;
@@ -55,7 +55,7 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P1: Layout cycling
+    // P1: PhosphorZones::Layout cycling
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testLayoutManager_cycleLayout_skipsHiddenLayouts()
@@ -77,7 +77,7 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("screen1"), 0, QString(), visible1);
 
         mgr->cycleToNextLayout(QStringLiteral("screen1"));
-        Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
+        PhosphorZones::Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
         QVERIFY(current != nullptr);
         QVERIFY(current != hidden);
         QCOMPARE(current->name(), QStringLiteral("Visible2"));
@@ -98,7 +98,7 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("HDMI-1"), 0, QString(), layoutAll);
 
         mgr->cycleToNextLayout(QStringLiteral("HDMI-1"));
-        Layout* current = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
+        PhosphorZones::Layout* current = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
         QCOMPARE(current->name(), QStringLiteral("AllScreens"));
     }
 
@@ -133,7 +133,7 @@ private Q_SLOTS:
         mgr->setActiveLayout(l3);
 
         mgr->cycleToNextLayout(QStringLiteral("screen1"));
-        Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
+        PhosphorZones::Layout* current = mgr->layoutForScreen(QStringLiteral("screen1"));
         QCOMPARE(current->name(), QStringLiteral("L1"));
     }
 

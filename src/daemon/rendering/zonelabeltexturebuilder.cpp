@@ -51,11 +51,11 @@ QImage ZoneLabelTextureBuilder::build(const QVariantList& zones, const QSize& si
 
     for (const QVariant& zoneVar : zones) {
         const QVariantMap z = zoneVar.toMap();
-        const qreal x = z.value(QLatin1String(JsonKeys::X), 0).toDouble();
-        const qreal y = z.value(QLatin1String(JsonKeys::Y), 0).toDouble();
-        const qreal w = z.value(QLatin1String(JsonKeys::Width), 0).toDouble();
-        const qreal h = z.value(QLatin1String(JsonKeys::Height), 0).toDouble();
-        const int zoneNumber = z.value(QLatin1String(JsonKeys::ZoneNumber), 0).toInt();
+        const qreal x = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::X), 0).toDouble();
+        const qreal y = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Y), 0).toDouble();
+        const qreal w = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Width), 0).toDouble();
+        const qreal h = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::Height), 0).toDouble();
+        const int zoneNumber = z.value(QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber), 0).toInt();
 
         if (w <= 0 || h <= 0) {
             continue;

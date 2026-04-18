@@ -18,8 +18,8 @@
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "dbus/windowtrackingadaptor.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -36,49 +36,49 @@ using PlasmaZones::TestHelpers::IsolatedConfigGuard;
 using StubSettingsConvenience = StubSettings;
 
 // =========================================================================
-// Stub Zone Detector
+// Stub PhosphorZones::Zone Detector
 // =========================================================================
 
-class StubZoneDetectorConvenience : public IZoneDetector
+class StubZoneDetectorConvenience : public PhosphorZones::IZoneDetector
 {
     Q_OBJECT
 public:
     explicit StubZoneDetectorConvenience(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -86,18 +86,18 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 // =========================================================================
 // Helpers
 // =========================================================================
 
-static Layout* createTestLayout(int zoneCount, QObject* parent)
+static PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
+    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
         qreal x = static_cast<qreal>(i) / zoneCount;
         qreal w = 1.0 / zoneCount;
         zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));
@@ -132,7 +132,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
 
@@ -386,7 +386,7 @@ private:
     StubZoneDetectorConvenience* m_zoneDetector = nullptr;
     QObject* m_parent = nullptr;
     WindowTrackingAdaptor* m_wta = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
     QString m_screenId;
 };

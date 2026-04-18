@@ -3,13 +3,13 @@
 
 #include "../SnapEngine.h"
 #include "core/geometryutils.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
 #include "core/types.h"
 #include "core/utils.h"
 #include "core/windowtrackingservice.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 
@@ -40,7 +40,7 @@ void SnapEngine::resnapToNewLayout()
     QVector<ZoneAssignmentEntry> resnapEntries = m_windowTracker->calculateResnapFromPreviousLayout();
 
     if (resnapEntries.isEmpty()) {
-        Layout* layout = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* layout = m_layoutManager->activeLayout();
         if (!layout) {
             qCWarning(lcCore) << "resnapToNewLayout: no active layout";
             Q_EMIT navigationFeedback(false, QStringLiteral("resnap"), QStringLiteral("no_active_layout"), QString(),

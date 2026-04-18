@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "AutotileConfig.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
 #include <QRegularExpression>
 #include <QtMath>
@@ -11,8 +12,8 @@
 namespace PlasmaZones {
 
 // Use shared JSON keys and defaults from constants.h
-using namespace AutotileJsonKeys;
-using namespace AutotileDefaults;
+using namespace PhosphorTiles::AutotileJsonKeys;
+using namespace PhosphorTiles::AutotileDefaults;
 
 namespace {
 // Helper functions for InsertPosition serialization
@@ -76,15 +77,15 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
         if (!validAlgoId.match(it.key()).hasMatch())
             continue;
         const QVariantMap entry = it.value().toMap();
-        const QVariant ratioVar = entry.value(PerAlgoKeys::SplitRatio);
+        const QVariant ratioVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
         const qreal ratio = std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : ConfigDefaults::autotileSplitRatio(),
                                        MinSplitRatio, MaxSplitRatio);
-        const QVariant mcVar = entry.value(PerAlgoKeys::MasterCount);
+        const QVariant mcVar = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount);
         const int masterCount = std::clamp(mcVar.isValid() ? mcVar.toInt() : ConfigDefaults::autotileMasterCount(),
                                            MinMasterCount, MaxMasterCount);
         AlgorithmSettings settings{ratio, masterCount, {}};
         // Load custom params if present
-        const QVariant customVar = entry.value(PerAlgoKeys::CustomParams);
+        const QVariant customVar = entry.value(PhosphorTiles::AutotileJsonKeys::CustomParams);
         if (customVar.isValid() && customVar.typeId() == QMetaType::QVariantMap) {
             settings.customParams = customVar.toMap();
         }
@@ -98,10 +99,10 @@ QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, AlgorithmSe
     QVariantMap result;
     for (auto it = hash.constBegin(); it != hash.constEnd(); ++it) {
         QVariantMap entry;
-        entry[PerAlgoKeys::SplitRatio] = it.value().splitRatio;
-        entry[PerAlgoKeys::MasterCount] = it.value().masterCount;
+        entry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = it.value().splitRatio;
+        entry[PhosphorTiles::AutotileJsonKeys::MasterCount] = it.value().masterCount;
         if (!it.value().customParams.isEmpty()) {
-            entry[PerAlgoKeys::CustomParams] = it.value().customParams;
+            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
         }
         result[it.key()] = entry;
     }
@@ -141,12 +142,12 @@ QJsonObject AutotileConfig::toJson() const
     }
     json[InnerGap] = innerGap;
     json[OuterGap] = outerGap;
-    json[AutotileJsonKeys::UsePerSideOuterGap] = usePerSideOuterGap;
-    json[AutotileJsonKeys::OuterGapTop] = outerGapTop;
-    json[AutotileJsonKeys::OuterGapBottom] = outerGapBottom;
-    json[AutotileJsonKeys::OuterGapLeft] = outerGapLeft;
-    json[AutotileJsonKeys::OuterGapRight] = outerGapRight;
-    json[AutotileJsonKeys::InsertPosition] = insertPositionToString(insertPosition);
+    json[PhosphorTiles::AutotileJsonKeys::UsePerSideOuterGap] = usePerSideOuterGap;
+    json[PhosphorTiles::AutotileJsonKeys::OuterGapTop] = outerGapTop;
+    json[PhosphorTiles::AutotileJsonKeys::OuterGapBottom] = outerGapBottom;
+    json[PhosphorTiles::AutotileJsonKeys::OuterGapLeft] = outerGapLeft;
+    json[PhosphorTiles::AutotileJsonKeys::OuterGapRight] = outerGapRight;
+    json[PhosphorTiles::AutotileJsonKeys::InsertPosition] = insertPositionToString(insertPosition);
     json[FocusFollowsMouse] = focusFollowsMouse;
     json[FocusNewWindows] = focusNewWindows;
     json[SmartGaps] = smartGaps;
@@ -188,26 +189,29 @@ AutotileConfig AutotileConfig::fromJson(const QJsonObject& json)
         config.outerGap = json[OuterGap].toInt(config.outerGap);
         config.outerGap = std::clamp(config.outerGap, MinGap, MaxGap);
     }
-    if (json.contains(AutotileJsonKeys::UsePerSideOuterGap)) {
-        config.usePerSideOuterGap = json[AutotileJsonKeys::UsePerSideOuterGap].toBool(config.usePerSideOuterGap);
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::UsePerSideOuterGap)) {
+        config.usePerSideOuterGap =
+            json[PhosphorTiles::AutotileJsonKeys::UsePerSideOuterGap].toBool(config.usePerSideOuterGap);
     }
-    if (json.contains(AutotileJsonKeys::OuterGapTop)) {
-        config.outerGapTop = std::clamp(json[AutotileJsonKeys::OuterGapTop].toInt(config.outerGapTop), MinGap, MaxGap);
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::OuterGapTop)) {
+        config.outerGapTop =
+            std::clamp(json[PhosphorTiles::AutotileJsonKeys::OuterGapTop].toInt(config.outerGapTop), MinGap, MaxGap);
     }
-    if (json.contains(AutotileJsonKeys::OuterGapBottom)) {
-        config.outerGapBottom =
-            std::clamp(json[AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::OuterGapBottom)) {
+        config.outerGapBottom = std::clamp(
+            json[PhosphorTiles::AutotileJsonKeys::OuterGapBottom].toInt(config.outerGapBottom), MinGap, MaxGap);
     }
-    if (json.contains(AutotileJsonKeys::OuterGapLeft)) {
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::OuterGapLeft)) {
         config.outerGapLeft =
-            std::clamp(json[AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
+            std::clamp(json[PhosphorTiles::AutotileJsonKeys::OuterGapLeft].toInt(config.outerGapLeft), MinGap, MaxGap);
     }
-    if (json.contains(AutotileJsonKeys::OuterGapRight)) {
-        config.outerGapRight =
-            std::clamp(json[AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::OuterGapRight)) {
+        config.outerGapRight = std::clamp(
+            json[PhosphorTiles::AutotileJsonKeys::OuterGapRight].toInt(config.outerGapRight), MinGap, MaxGap);
     }
-    if (json.contains(AutotileJsonKeys::InsertPosition)) {
-        config.insertPosition = stringToInsertPosition(json[AutotileJsonKeys::InsertPosition].toString());
+    if (json.contains(PhosphorTiles::AutotileJsonKeys::InsertPosition)) {
+        config.insertPosition =
+            stringToInsertPosition(json[PhosphorTiles::AutotileJsonKeys::InsertPosition].toString());
     }
     if (json.contains(FocusFollowsMouse)) {
         config.focusFollowsMouse = json[FocusFollowsMouse].toBool(config.focusFollowsMouse);

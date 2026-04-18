@@ -22,7 +22,7 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
     for (WindowHandle wh : allWindows) {
         if (wh && bridge->shouldHandleWindow(wh)) {
             QString otherId = bridge->windowId(wh);
-            QString appId = WindowIdUtils::extractAppId(otherId);
+            QString appId = ::PhosphorIdentity::WindowId::extractAppId(otherId);
             ++appIdCounts[appId];
         }
     }
@@ -46,7 +46,7 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
         // If this app is snapped (by appId), skip unless there are multiple windows of this app
         bool snappedByAppId = false;
         for (const QString& snappedId : snappedWindowIds) {
-            if (WindowIdUtils::extractAppId(snappedId) == info.appId) {
+            if (::PhosphorIdentity::WindowId::extractAppId(snappedId) == info.appId) {
                 snappedByAppId = true;
                 break;
             }
@@ -64,7 +64,8 @@ SnapAssistCandidateList buildCandidates(ICompositorBridge* bridge, const QString
 
         // Prefer windowClass (WM_CLASS) for icon name; fall back to appId for XWayland
         // apps where windowClass may be empty.
-        QString iconName = WindowIdUtils::deriveShortName(info.windowClass.isEmpty() ? info.appId : info.windowClass);
+        QString iconName =
+            ::PhosphorIdentity::WindowId::deriveShortName(info.windowClass.isEmpty() ? info.appId : info.windowClass);
         if (iconName.isEmpty()) {
             iconName = QStringLiteral("application-x-executable");
         }

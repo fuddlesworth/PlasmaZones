@@ -31,7 +31,7 @@ void EditorController::copyZones(const QStringList& zoneIds)
 {
     if (!m_zoneManager) {
         qCWarning(lcEditor) << "ZoneManager not initialized";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PzI18n::tr("PhosphorZones::Zone manager not initialized", "@info"));
         return;
     }
 
@@ -46,7 +46,7 @@ void EditorController::copyZones(const QStringList& zoneIds)
 
     for (const QVariant& zoneVar : allZones) {
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (zoneIds.contains(zoneId)) {
             zonesToCopy.append(zone);
         }
@@ -104,7 +104,7 @@ QStringList EditorController::pasteZones(bool withOffset)
 {
     if (!m_undoController || !m_zoneManager) {
         qCWarning(lcEditor) << "pasteZones: undo controller or zone manager is null";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PzI18n::tr("PhosphorZones::Zone manager not initialized", "@info"));
         return QStringList();
     }
 
@@ -140,7 +140,7 @@ QStringList EditorController::pasteZones(bool withOffset)
 
         // Generate new ID
         QString newId = QUuid::createUuid().toString();
-        zone[JsonKeys::Id] = newId;
+        zone[::PhosphorZones::ZoneJsonKeys::Id] = newId;
 
         if (ZoneManager::isFixedMode(zone) && withOffset) {
             // Fixed mode: offset fixed pixel coords, skip 0-1 clamping for fixed keys
@@ -150,32 +150,32 @@ QStringList EditorController::pasteZones(bool withOffset)
             fg.setWidth(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.width()));
             fg.setHeight(qMax(static_cast<qreal>(EditorConstants::MinFixedZoneSize), fg.height()));
 
-            zone[JsonKeys::FixedX] = fg.x();
-            zone[JsonKeys::FixedY] = fg.y();
-            zone[JsonKeys::FixedWidth] = fg.width();
-            zone[JsonKeys::FixedHeight] = fg.height();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedX] = fg.x();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedY] = fg.y();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = fg.width();
+            zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = fg.height();
 
             // Update relative fallback from fixed coords
             QSizeF ss = m_zoneManager->effectiveScreenSizeF();
-            zone[JsonKeys::X] = fg.x() / ss.width();
-            zone[JsonKeys::Y] = fg.y() / ss.height();
-            zone[JsonKeys::Width] = fg.width() / ss.width();
-            zone[JsonKeys::Height] = fg.height() / ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::X] = fg.x() / ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::Y] = fg.y() / ss.height();
+            zone[::PhosphorZones::ZoneJsonKeys::Width] = fg.width() / ss.width();
+            zone[::PhosphorZones::ZoneJsonKeys::Height] = fg.height() / ss.height();
         } else {
             // Relative mode (or fixed without offset): apply relative offset and clamp
-            qreal x = zone[JsonKeys::X].toDouble() + offsetX;
-            qreal y = zone[JsonKeys::Y].toDouble() + offsetY;
-            qreal width = zone[JsonKeys::Width].toDouble();
-            qreal height = zone[JsonKeys::Height].toDouble();
+            qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble() + offsetX;
+            qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble() + offsetY;
+            qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
             x = qBound(0.0, x, 1.0 - width);
             y = qBound(0.0, y, 1.0 - height);
 
-            zone[JsonKeys::X] = x;
-            zone[JsonKeys::Y] = y;
+            zone[::PhosphorZones::ZoneJsonKeys::X] = x;
+            zone[::PhosphorZones::ZoneJsonKeys::Y] = y;
         }
 
-        zone[JsonKeys::ZoneNumber] = newZoneNumber++;
+        zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = newZoneNumber++;
 
         newZoneIds.append(newId);
         preparedZones.append(zone);

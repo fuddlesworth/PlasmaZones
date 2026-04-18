@@ -35,9 +35,9 @@
 
 #include "dbus/settingsadaptor.h"
 #include "dbus/layoutadaptor.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -60,9 +60,9 @@ private Q_SLOTS:
         m_settingsAdaptor = new SettingsAdaptor(m_settings, m_parent);
 
         m_layoutManager = new LayoutManager(m_parent);
-        auto* layout = new Layout(QStringLiteral("BenchLayout"));
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("BenchLayout"));
         for (int i = 0; i < 4; ++i) {
-            auto* zone = new Zone(QRectF(0.25 * i, 0.0, 0.25, 1.0));
+            auto* zone = new PhosphorZones::Zone(QRectF(0.25 * i, 0.0, 0.25, 1.0));
             zone->setZoneNumber(i + 1);
             layout->addZone(zone);
         }
@@ -158,7 +158,7 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // Layout: setLayoutHidden full emission path.
+    // PhosphorZones::Layout: setLayoutHidden full emission path.
     //
     // Before Phase 1.2 this emitted layoutChanged (full JSON, 5–20KB in
     // prod) AND layoutListChanged; after Phase 1.2 only layoutChanged
@@ -191,7 +191,7 @@ private Q_SLOTS:
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // Layout: getLayout for a known id. Before Phase 1.3 the JSON
+    // PhosphorZones::Layout: getLayout for a known id. Before Phase 1.3 the JSON
     // cache is populated but never invalidated after property mutations,
     // so stale JSON can be served. This bench pins the cached-path cost.
     // ─────────────────────────────────────────────────────────────────

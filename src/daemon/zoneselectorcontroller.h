@@ -5,7 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
 #include <QTimer>
@@ -19,7 +19,7 @@
 namespace PlasmaZones {
 
 /**
- * @brief Controller for the Zone Selector UI component
+ * @brief Controller for the PhosphorZones::Zone Selector UI component
  *
  * Manages the zone selector that slides in from the top of the screen
  * when the user drags a window near the top edge. Similar to KZones
@@ -45,7 +45,7 @@ class PLASMAZONES_EXPORT ZoneSelectorController : public QObject
     Q_PROPERTY(qreal cursorProximity READ cursorProximity NOTIFY cursorProximityChanged)
     Q_PROPERTY(QPointF cursorPosition READ cursorPosition NOTIFY cursorPositionChanged)
 
-    // Layout data
+    // PhosphorZones::Layout data
     Q_PROPERTY(QVariantList layouts READ layouts NOTIFY layoutsChanged)
     Q_PROPERTY(QString activeLayoutId READ activeLayoutId WRITE setActiveLayoutId NOTIFY activeLayoutIdChanged)
     Q_PROPERTY(QString hoveredLayoutId READ hoveredLayoutId WRITE setHoveredLayoutId NOTIFY hoveredLayoutIdChanged)
@@ -93,7 +93,7 @@ public:
         return m_cursorPosition;
     }
 
-    // Layout data
+    // PhosphorZones::Layout data
     QVariantList layouts() const;
     QString activeLayoutId() const
     {
@@ -130,7 +130,7 @@ public:
     }
     void setSelectorGeometry(const QRectF& geometry);
 
-    // Layout management (concrete type for signal connections)
+    // PhosphorZones::Layout management (concrete type for signal connections)
     void setLayoutManager(LayoutManager* layoutManager);
     void setSettings(ISettings* settings);
 
@@ -163,7 +163,7 @@ public:
         return m_currentActivity;
     }
 
-    // Layout type filter (set by Daemon based on tiling mode + feature gate)
+    // PhosphorZones::Layout type filter (set by Daemon based on tiling mode + feature gate)
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
     // Drag state management
@@ -184,7 +184,7 @@ public:
     Q_INVOKABLE void expand();
     Q_INVOKABLE void toggle();
 
-    // Layout selection
+    // PhosphorZones::Layout selection
     Q_INVOKABLE void selectLayout(const QString& layoutId);
     Q_INVOKABLE void hoverLayout(const QString& layoutId);
 
@@ -212,7 +212,7 @@ Q_SIGNALS:
     void edgeTriggerZoneChanged(int zone);
     void selectorGeometryChanged(const QRectF& geometry);
 
-    // Layout selection signal (for external handlers)
+    // PhosphorZones::Layout selection signal (for external handlers)
     void layoutSelected(const QString& layoutId);
     void layoutHovered(const QString& layoutId);
 
@@ -244,7 +244,7 @@ private:
     // Selector geometry (global coordinates, set from QML)
     QRectF m_selectorGeometry;
 
-    // Layout data
+    // PhosphorZones::Layout data
     QString m_activeLayoutId;
     QString m_hoveredLayoutId;
 

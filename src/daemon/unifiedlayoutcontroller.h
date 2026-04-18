@@ -3,24 +3,28 @@
 
 #pragma once
 
-#include "../core/layoututils.h"
+#include "../core/unifiedlayoutlist.h"
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QObject>
 #include <QPointer>
 #include <QString>
+
+namespace PhosphorZones {
+class Layout;
+}
 
 namespace PlasmaZones {
 
 class AutotileEngine;
 class LayoutManager;
 class Settings;
-class Layout;
 
 /**
  * @brief Controller for unified layout management (manual layouts)
  *
  * Handles:
  * - Quick layout switching (Meta+1-9)
- * - Layout cycling (Meta+[/])
+ * - PhosphorZones::Layout cycling (Meta+[/])
  * - ID-based layout tracking
  *
  * Usage:
@@ -44,7 +48,7 @@ public:
     ~UnifiedLayoutController() override;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout access
+    // PhosphorZones::Layout access
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -58,16 +62,16 @@ public:
     /**
      * @brief Get the full unified layout list
      */
-    QVector<UnifiedLayoutEntry> layouts() const;
+    QVector<PhosphorLayout::LayoutPreview> layouts() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout application
+    // PhosphorZones::Layout application
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * @brief Apply layout by number (1-based, for Meta+1-9 shortcuts)
      *
-     * @param number Layout number (1 = first layout)
+     * @param number PhosphorZones::Layout number (1 = first layout)
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutByNumber(int number);
@@ -75,7 +79,7 @@ public:
     /**
      * @brief Apply layout by ID
      *
-     * @param layoutId Layout UUID
+     * @param layoutId PhosphorZones::Layout UUID
      * @return true if layout was applied successfully
      */
     Q_INVOKABLE bool applyLayoutById(const QString& layoutId);
@@ -89,7 +93,7 @@ public:
     Q_INVOKABLE bool applyLayoutByIndex(int index);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Layout cycling
+    // PhosphorZones::Layout cycling
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -160,7 +164,7 @@ Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
      */
-    void layoutApplied(Layout* layout);
+    void layoutApplied(PhosphorZones::Layout* layout);
 
     /**
      * @brief Emitted when an autotile algorithm is applied
@@ -171,9 +175,9 @@ Q_SIGNALS:
 
 private:
     /**
-     * @brief Apply a unified layout entry
+     * @brief Apply a unified layout preview
      */
-    bool applyEntry(const UnifiedLayoutEntry& entry);
+    bool applyEntry(const PhosphorLayout::LayoutPreview& preview);
 
     /**
      * @brief Update current layout ID and emit signal
@@ -195,7 +199,7 @@ private:
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
-    mutable QVector<UnifiedLayoutEntry> m_cachedLayouts;
+    mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
 };
 

@@ -11,7 +11,7 @@ using namespace PlasmaZones;
 UpdateZoneGeometryCommand::UpdateZoneGeometryCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                                      const QRectF& oldGeometry, const QRectF& newGeometry,
                                                      const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Move Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Move PhosphorZones::Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldGeometry(oldGeometry)
     , m_newGeometry(newGeometry)

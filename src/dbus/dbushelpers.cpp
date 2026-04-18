@@ -6,7 +6,7 @@
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "../core/geometryutils.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include <QGuiApplication>
 #include <QScreen>
 
@@ -32,7 +32,7 @@ QString resolveScreenId(const QString& screenId)
     return VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
 }
 
-QRectF resolveScreenGeometry(Layout* layout, const QString& screenId)
+QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
 {
     auto* mgr = ScreenManager::instance();
     if (mgr) {

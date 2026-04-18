@@ -5,14 +5,14 @@
 #include "zonedetectionadaptor.h"
 
 #include "../core/interfaces.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "../core/windowtrackingservice.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Zone.h>
 
 #include <QRect>
 #include <QStringList>
@@ -435,8 +435,8 @@ MoveTargetResult SnapNavigationTargetResolver::getSnapToZoneByNumberTarget(const
         return moveResult(false, QStringLiteral("no_active_layout"), QString(), QRect(), QString(), screenId);
     }
 
-    Zone* targetZone = nullptr;
-    for (Zone* zone : layout->zones()) {
+    PhosphorZones::Zone* targetZone = nullptr;
+    for (PhosphorZones::Zone* zone : layout->zones()) {
         if (zone->zoneNumber() == zoneNumber) {
             targetZone = zone;
             break;

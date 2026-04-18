@@ -182,7 +182,7 @@ private Q_SLOTS:
     void testRecoverIfRoom_purgesExternallyUnfloated()
     {
         OverflowManager mgr;
-        // Window is in TilingState but NOT floating (externally unfloated)
+        // Window is in PhosphorTiles::TilingState but NOT floating (externally unfloated)
         mgr.markOverflow(kWin2, kScreen1);
 
         QStringList recovered = mgr.recoverIfRoom(

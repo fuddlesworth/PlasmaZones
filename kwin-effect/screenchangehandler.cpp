@@ -169,7 +169,7 @@ void ScreenChangeHandler::applyWindowGeometries(const WindowGeometryList& geomet
             continue;
         }
         QString fullId = m_effect->getWindowId(w);
-        QString appId = WindowIdUtils::extractAppId(fullId);
+        QString appId = ::PhosphorIdentity::WindowId::extractAppId(fullId);
         windowByFullId.insert(fullId, w);
         if (!windowByAppId.contains(appId)) {
             windowByAppId.insert(appId, w);
@@ -195,7 +195,7 @@ void ScreenChangeHandler::applyWindowGeometries(const WindowGeometryList& geomet
 
         KWin::EffectWindow* window = windowByFullId.value(entry.windowId);
         if (!window) {
-            window = windowByAppId.value(WindowIdUtils::extractAppId(entry.windowId));
+            window = windowByAppId.value(::PhosphorIdentity::WindowId::extractAppId(entry.windowId));
         }
         if (window && m_effect->shouldHandleWindow(window)) {
             const QString winScreenId = m_effect->getWindowScreenId(window);

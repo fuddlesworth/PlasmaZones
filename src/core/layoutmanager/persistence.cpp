@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// Layout file I/O: loading, saving, importing, exporting.
+// PhosphorZones::Layout file I/O: loading, saving, importing, exporting.
 // Part of LayoutManager — split from layoutmanager.cpp for SRP.
 
 #include "../layoutmanager.h"
@@ -41,13 +41,13 @@ void LayoutManager::loadLayouts()
     qCInfo(lcLayout) << "Total layouts=" << m_layouts.size();
 
     // Sort by defaultOrder (from layout JSON) so the preferred default is first when defaultLayoutId is empty
-    std::stable_sort(m_layouts.begin(), m_layouts.end(), [](Layout* a, Layout* b) {
+    std::stable_sort(m_layouts.begin(), m_layouts.end(), [](PhosphorZones::Layout* a, PhosphorZones::Layout* b) {
         return (a ? a->defaultOrder() : 999) < (b ? b->defaultOrder() : 999);
     });
 
     // Set initial active layout if none set: use defaultLayout() (settings-based fallback)
     if (!m_activeLayout && !m_layouts.isEmpty()) {
-        Layout* initial = defaultLayout();
+        PhosphorZones::Layout* initial = defaultLayout();
         if (initial) {
             qCInfo(lcLayout) << "Active layout name=" << initial->name() << "id=" << initial->id().toString()
                              << "zones=" << initial->zoneCount();
@@ -63,12 +63,12 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 {
     QDir dir(directory);
     if (!dir.exists()) {
-        qCWarning(lcLayout) << "Layout directory does not exist:" << directory;
+        qCWarning(lcLayout) << "PhosphorZones::Layout directory does not exist:" << directory;
         return;
     }
 
     if (!dir.isReadable()) {
-        qCWarning(lcLayout) << "Layout directory is not readable:" << directory;
+        qCWarning(lcLayout) << "PhosphorZones::Layout directory is not readable:" << directory;
         return;
     }
 
@@ -83,7 +83,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
         QFile file(filePath);
 
         if (!file.exists()) {
-            qCWarning(lcLayout) << "Layout file does not exist:" << filePath;
+            qCWarning(lcLayout) << "PhosphorZones::Layout file does not exist:" << filePath;
             continue;
         }
 
@@ -94,7 +94,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 
         const QByteArray data = file.readAll();
         if (data.isEmpty()) {
-            qCWarning(lcLayout) << "Layout file is empty:" << filePath;
+            qCWarning(lcLayout) << "PhosphorZones::Layout file is empty:" << filePath;
             continue;
         }
 
@@ -106,7 +106,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
             continue;
         }
 
-        auto layout = Layout::fromJson(doc.object(), this);
+        auto layout = PhosphorZones::Layout::fromJson(doc.object(), this);
         if (!layout) {
             qCWarning(lcLayout) << "Failed to create layout from JSON:" << filePath;
             continue;
@@ -118,11 +118,11 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 
         if (!layout->name().isEmpty() && layout->zoneCount() > 0) {
             // Check for duplicate IDs
-            Layout* existing = layoutById(layout->id());
+            PhosphorZones::Layout* existing = layoutById(layout->id());
             if (!existing) {
                 // No duplicate - add the layout
                 m_layouts.append(layout);
-                connect(layout, &Layout::layoutModified, this, [this, layout]() {
+                connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
                     saveLayout(layout);
                 });
                 qCInfo(lcLayout) << "Loaded layout name=" << layout->name() << "zones=" << layout->zoneCount()
@@ -139,9 +139,9 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                         layout->setDefaultOrder(existing->defaultOrder());
                     }
                     int index = m_layouts.indexOf(existing);
-                    disconnect(existing, &Layout::layoutModified, this, nullptr);
+                    disconnect(existing, &PhosphorZones::Layout::layoutModified, this, nullptr);
                     m_layouts.replace(index, layout);
-                    connect(layout, &Layout::layoutModified, this, [this, layout]() {
+                    connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
                         saveLayout(layout);
                     });
                     delete existing;
@@ -165,7 +165,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
     }
 }
 
-void LayoutManager::saveLayout(Layout* layout)
+void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || !layout->isDirty()) {
         return;
@@ -242,7 +242,7 @@ void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
         int modeInt = grp->readInt(QLatin1String("Mode"), 0);
         entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile : AssignmentEntry::Snapping;
         entry.snappingLayout = grp->readString(QLatin1String("SnappingLayout"));
-        entry.tilingAlgorithm = grp->readString(QLatin1String("TilingAlgorithm"));
+        entry.tilingAlgorithm = grp->readString(QLatin1String("PhosphorTiles::TilingAlgorithm"));
 
         m_assignments[key] = entry;
     }
@@ -327,7 +327,7 @@ void LayoutManager::loadAssignments()
                             // Old single layoutId format
                             const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
                             QString normalizedId = layoutIdStr;
-                            if (!LayoutId::isAutotile(layoutIdStr)) {
+                            if (!PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
                                 const QUuid uuid = QUuid::fromString(layoutIdStr);
                                 if (uuid.isNull())
                                     continue;
@@ -339,11 +339,12 @@ void LayoutManager::loadAssignments()
                             auto shadowIt = oldShadows.constFind(key);
                             if (shadowIt != oldShadows.constEnd()) {
                                 if (entry.mode == AssignmentEntry::Autotile
-                                    && !LayoutId::isAutotile(shadowIt.value())) {
+                                    && !PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
                                     entry.snappingLayout = shadowIt.value();
                                 } else if (entry.mode == AssignmentEntry::Snapping
-                                           && LayoutId::isAutotile(shadowIt.value())) {
-                                    entry.tilingAlgorithm = LayoutId::extractAlgorithmId(shadowIt.value());
+                                           && PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
+                                    entry.tilingAlgorithm =
+                                        PhosphorLayout::LayoutId::extractAlgorithmId(shadowIt.value());
                                 }
                             }
                         }
@@ -361,7 +362,7 @@ void LayoutManager::loadAssignments()
                             if (!ok)
                                 continue;
                             const QString layoutIdStr = it.value().toString();
-                            if (LayoutId::isAutotile(layoutIdStr)) {
+                            if (PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
                                 m_quickLayoutShortcuts[number] = layoutIdStr;
                             } else {
                                 const QUuid uuid = QUuid::fromString(layoutIdStr);
@@ -529,7 +530,7 @@ void LayoutManager::saveAssignments()
         auto group = m_configBackend->group(groupName);
         group->writeInt(QLatin1String("Mode"), static_cast<int>(entry.mode));
         group->writeString(QLatin1String("SnappingLayout"), entry.snappingLayout);
-        group->writeString(QLatin1String("TilingAlgorithm"), entry.tilingAlgorithm);
+        group->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), entry.tilingAlgorithm);
     }
 
     // Write [QuickLayouts] group
@@ -578,17 +579,17 @@ void LayoutManager::importLayout(const QString& filePath)
         return;
     }
 
-    auto* parsed = Layout::fromJson(doc.object(), this);
+    auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!parsed) {
         qCWarning(lcLayout) << "Failed to create layout from imported JSON:" << filePath;
         return;
     }
 
     // Regenerate IDs if UUID collides with an existing layout
-    Layout* layout = parsed;
+    PhosphorZones::Layout* layout = parsed;
     if (layoutById(parsed->id())) {
         qCInfo(lcLayout) << "importLayout: UUID collision, regenerating IDs";
-        layout = new Layout(*parsed);
+        layout = new PhosphorZones::Layout(*parsed);
         delete parsed;
     }
 
@@ -603,7 +604,7 @@ void LayoutManager::importLayout(const QString& filePath)
     qCInfo(lcLayout) << "Imported layout:" << layout->name() << "from" << filePath;
 }
 
-void LayoutManager::exportLayout(Layout* layout, const QString& filePath)
+void LayoutManager::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {
         qCWarning(lcLayout) << "Cannot export layout: layout is null";
@@ -636,7 +637,7 @@ void LayoutManager::exportLayout(Layout* layout, const QString& filePath)
     qCInfo(lcLayout) << "Exported layout:" << layout->name() << "to" << filePath;
 }
 
-Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& systemPath)
+PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& systemPath)
 {
     if (systemPath.isEmpty() || layoutById(id)) {
         return nullptr;
@@ -655,7 +656,7 @@ Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& syste
         return nullptr;
     }
 
-    auto* layout = Layout::fromJson(doc.object(), this);
+    auto* layout = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!layout || layout->id() != id) {
         delete layout;
         return nullptr;
@@ -663,7 +664,7 @@ Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& syste
 
     layout->setSourcePath(systemPath);
     m_layouts.append(layout);
-    connect(layout, &Layout::layoutModified, this, [this, layout]() {
+    connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
         saveLayout(layout);
     });
     Q_EMIT layoutAdded(layout);

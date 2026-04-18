@@ -113,7 +113,7 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::swapWindowUpShortcutChanged, this, &ShortcutManager::updateSwapWindowUpShortcut);
     connect(m_settings, &Settings::swapWindowDownShortcutChanged, this, &ShortcutManager::updateSwapWindowDownShortcut);
 
-    // Snap to Zone by Number shortcuts (1-9)
+    // Snap to PhosphorZones::Zone by Number shortcuts (1-9)
     connect(m_settings, &Settings::snapToZone1ShortcutChanged, this, [this]() {
         updateSnapToZoneShortcut(0);
     });
@@ -148,23 +148,23 @@ ShortcutManager::ShortcutManager(Settings* settings, LayoutManager* layoutManage
     connect(m_settings, &Settings::rotateWindowsCounterclockwiseShortcutChanged, this,
             &ShortcutManager::updateRotateWindowsCounterclockwiseShortcut);
 
-    // Cycle Windows in Zone shortcuts
+    // Cycle Windows in PhosphorZones::Zone shortcuts
     connect(m_settings, &Settings::cycleWindowForwardShortcutChanged, this,
             &ShortcutManager::updateCycleWindowForwardShortcut);
     connect(m_settings, &Settings::cycleWindowBackwardShortcutChanged, this,
             &ShortcutManager::updateCycleWindowBackwardShortcut);
 
-    // Resnap to New Layout shortcut
+    // Resnap to New PhosphorZones::Layout shortcut
     connect(m_settings, &Settings::resnapToNewLayoutShortcutChanged, this,
             &ShortcutManager::updateResnapToNewLayoutShortcut);
 
     // Snap All Windows shortcut
     connect(m_settings, &Settings::snapAllWindowsShortcutChanged, this, &ShortcutManager::updateSnapAllWindowsShortcut);
 
-    // Layout Picker shortcut
+    // PhosphorZones::Layout Picker shortcut
     connect(m_settings, &Settings::layoutPickerShortcutChanged, this, &ShortcutManager::updateLayoutPickerShortcut);
 
-    // Toggle Layout Lock shortcut
+    // Toggle PhosphorZones::Layout Lock shortcut
     connect(m_settings, &Settings::toggleLayoutLockShortcutChanged, this,
             &ShortcutManager::updateToggleLayoutLockShortcut);
 
@@ -309,7 +309,7 @@ void ShortcutManager::updateShortcuts()
     updateSwapWindowUpShortcut();
     updateSwapWindowDownShortcut();
 
-    // Snap to Zone shortcuts (0-8 internally, 1-9 for users)
+    // Snap to PhosphorZones::Zone shortcuts (0-8 internally, 1-9 for users)
     for (int i = 0; i < 9; ++i) {
         updateSnapToZoneShortcut(i);
     }
@@ -318,20 +318,20 @@ void ShortcutManager::updateShortcuts()
     updateRotateWindowsClockwiseShortcut();
     updateRotateWindowsCounterclockwiseShortcut();
 
-    // Resnap to New Layout shortcut
+    // Resnap to New PhosphorZones::Layout shortcut
     updateResnapToNewLayoutShortcut();
 
-    // Cycle Windows in Zone shortcuts
+    // Cycle Windows in PhosphorZones::Zone shortcuts
     updateCycleWindowForwardShortcut();
     updateCycleWindowBackwardShortcut();
 
     // Snap All Windows shortcut
     updateSnapAllWindowsShortcut();
 
-    // Layout Picker shortcut
+    // PhosphorZones::Layout Picker shortcut
     updateLayoutPickerShortcut();
 
-    // Toggle Layout Lock shortcut
+    // Toggle PhosphorZones::Layout Lock shortcut
     updateToggleLayoutLockShortcut();
 
     // Virtual Screen Swap shortcuts
@@ -404,7 +404,7 @@ void ShortcutManager::unregisterShortcuts()
     DELETE_SHORTCUT(m_rotateVirtualScreensClockwiseAction);
     DELETE_SHORTCUT(m_rotateVirtualScreensCounterclockwiseAction);
 
-    // Snap to Zone actions
+    // Snap to PhosphorZones::Zone actions
     qDeleteAll(m_snapToZoneActions);
     m_snapToZoneActions.clear();
 
@@ -412,20 +412,20 @@ void ShortcutManager::unregisterShortcuts()
     DELETE_SHORTCUT(m_rotateWindowsClockwiseAction);
     DELETE_SHORTCUT(m_rotateWindowsCounterclockwiseAction);
 
-    // Cycle Windows in Zone actions
+    // Cycle Windows in PhosphorZones::Zone actions
     DELETE_SHORTCUT(m_cycleWindowForwardAction);
     DELETE_SHORTCUT(m_cycleWindowBackwardAction);
 
-    // Resnap to New Layout action
+    // Resnap to New PhosphorZones::Layout action
     DELETE_SHORTCUT(m_resnapToNewLayoutAction);
 
     // Snap All Windows action
     DELETE_SHORTCUT(m_snapAllWindowsAction);
 
-    // Layout Picker action
+    // PhosphorZones::Layout Picker action
     DELETE_SHORTCUT(m_layoutPickerAction);
 
-    // Toggle Layout Lock action
+    // Toggle PhosphorZones::Layout Lock action
     DELETE_SHORTCUT(m_toggleLayoutLockAction);
 
     // Autotile actions
@@ -445,7 +445,7 @@ void ShortcutManager::unregisterShortcuts()
 
 void ShortcutManager::setupEditorShortcut()
 {
-    SETUP_SHORTCUT(m_editorAction, "Open Zone Editor", "open_editor", openEditorShortcut,
+    SETUP_SHORTCUT(m_editorAction, "Open PhosphorZones::Zone Editor", "open_editor", openEditorShortcut,
                    &ShortcutManager::onOpenEditor);
 }
 
@@ -457,9 +457,9 @@ void ShortcutManager::setupSettingsShortcut()
 
 void ShortcutManager::setupCyclingShortcuts()
 {
-    SETUP_SHORTCUT(m_previousLayoutAction, "Previous Layout", "previous_layout", previousLayoutShortcut,
+    SETUP_SHORTCUT(m_previousLayoutAction, "Previous PhosphorZones::Layout", "previous_layout", previousLayoutShortcut,
                    &ShortcutManager::onPreviousLayout);
-    SETUP_SHORTCUT(m_nextLayoutAction, "Next Layout", "next_layout", nextLayoutShortcut,
+    SETUP_SHORTCUT(m_nextLayoutAction, "Next PhosphorZones::Layout", "next_layout", nextLayoutShortcut,
                    &ShortcutManager::onNextLayout);
 }
 
@@ -477,7 +477,7 @@ void ShortcutManager::setupQuickLayoutShortcuts()
         ConfigDefaults::quickLayout9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
-        auto* quickAction = new QAction(PzI18n::tr("Apply Layout %1").arg(i + 1), this);
+        auto* quickAction = new QAction(PzI18n::tr("Apply PhosphorZones::Layout %1").arg(i + 1), this);
         quickAction->setObjectName(QStringLiteral("quick_layout_%1").arg(i + 1));
         m_shortcutBackend->setDefaultShortcut(quickAction, QKeySequence(quickLayoutDefaults[i]));
         m_shortcutBackend->setGlobalShortcut(quickAction, QKeySequence(m_settings->quickLayoutShortcut(i)));
@@ -503,19 +503,19 @@ void ShortcutManager::setupNavigationShortcuts()
     SETUP_SHORTCUT(m_moveWindowDownAction, "Move Window Down", "move_window_down", moveWindowDownShortcut,
                    &ShortcutManager::onMoveWindowDown);
 
-    // Focus Zone shortcuts
-    SETUP_SHORTCUT(m_focusZoneLeftAction, "Focus Zone Left", "focus_zone_left", focusZoneLeftShortcut,
+    // Focus PhosphorZones::Zone shortcuts
+    SETUP_SHORTCUT(m_focusZoneLeftAction, "Focus PhosphorZones::Zone Left", "focus_zone_left", focusZoneLeftShortcut,
                    &ShortcutManager::onFocusZoneLeft);
-    SETUP_SHORTCUT(m_focusZoneRightAction, "Focus Zone Right", "focus_zone_right", focusZoneRightShortcut,
-                   &ShortcutManager::onFocusZoneRight);
-    SETUP_SHORTCUT(m_focusZoneUpAction, "Focus Zone Up", "focus_zone_up", focusZoneUpShortcut,
+    SETUP_SHORTCUT(m_focusZoneRightAction, "Focus PhosphorZones::Zone Right", "focus_zone_right",
+                   focusZoneRightShortcut, &ShortcutManager::onFocusZoneRight);
+    SETUP_SHORTCUT(m_focusZoneUpAction, "Focus PhosphorZones::Zone Up", "focus_zone_up", focusZoneUpShortcut,
                    &ShortcutManager::onFocusZoneUp);
-    SETUP_SHORTCUT(m_focusZoneDownAction, "Focus Zone Down", "focus_zone_down", focusZoneDownShortcut,
+    SETUP_SHORTCUT(m_focusZoneDownAction, "Focus PhosphorZones::Zone Down", "focus_zone_down", focusZoneDownShortcut,
                    &ShortcutManager::onFocusZoneDown);
 
     // Additional navigation shortcuts
-    SETUP_SHORTCUT(m_pushToEmptyZoneAction, "Move Window to Empty Zone", "push_to_empty_zone", pushToEmptyZoneShortcut,
-                   &ShortcutManager::onPushToEmptyZone);
+    SETUP_SHORTCUT(m_pushToEmptyZoneAction, "Move Window to Empty PhosphorZones::Zone", "push_to_empty_zone",
+                   pushToEmptyZoneShortcut, &ShortcutManager::onPushToEmptyZone);
     SETUP_SHORTCUT(m_restoreWindowSizeAction, "Restore Window Size", "restore_window_size", restoreWindowSizeShortcut,
                    &ShortcutManager::onRestoreWindowSize);
     SETUP_SHORTCUT(m_toggleWindowFloatAction, "Toggle Window Floating", "toggle_window_float",
@@ -551,7 +551,7 @@ void ShortcutManager::setupSnapToZoneShortcuts()
                                           ConfigDefaults::snapToZone9Shortcut()};
 
     for (int i = 0; i < 9; ++i) {
-        auto* snapAction = new QAction(PzI18n::tr("Snap to Zone %1").arg(i + 1), this);
+        auto* snapAction = new QAction(PzI18n::tr("Snap to PhosphorZones::Zone %1").arg(i + 1), this);
         snapAction->setObjectName(QStringLiteral("snap_to_zone_%1").arg(i + 1));
         m_shortcutBackend->setDefaultShortcut(snapAction, QKeySequence(snapToZoneDefaults[i]));
         m_shortcutBackend->setGlobalShortcut(snapAction, QKeySequence(m_settings->snapToZoneShortcut(i)));
@@ -606,9 +606,9 @@ void ShortcutManager::setupRotateVirtualScreensShortcuts()
 
 void ShortcutManager::setupCycleWindowsShortcuts()
 {
-    SETUP_SHORTCUT(m_cycleWindowForwardAction, "Cycle Window Forward in Zone", "cycle_window_forward",
+    SETUP_SHORTCUT(m_cycleWindowForwardAction, "Cycle Window Forward in PhosphorZones::Zone", "cycle_window_forward",
                    cycleWindowForwardShortcut, &ShortcutManager::onCycleWindowForward);
-    SETUP_SHORTCUT(m_cycleWindowBackwardAction, "Cycle Window Backward in Zone", "cycle_window_backward",
+    SETUP_SHORTCUT(m_cycleWindowBackwardAction, "Cycle Window Backward in PhosphorZones::Zone", "cycle_window_backward",
                    cycleWindowBackwardShortcut, &ShortcutManager::onCycleWindowBackward);
 
     qCInfo(lcShortcuts) << "Cycle windows shortcuts registered (Meta+Alt+. / Meta+Alt+,)";
@@ -616,7 +616,7 @@ void ShortcutManager::setupCycleWindowsShortcuts()
 
 void ShortcutManager::setupResnapToNewLayoutShortcut()
 {
-    SETUP_SHORTCUT(m_resnapToNewLayoutAction, "Reapply Layout to Windows", "resnap_to_new_layout",
+    SETUP_SHORTCUT(m_resnapToNewLayoutAction, "Reapply PhosphorZones::Layout to Windows", "resnap_to_new_layout",
                    resnapToNewLayoutShortcut, &ShortcutManager::onResnapToNewLayout);
 
     qCInfo(lcShortcuts) << "Resnap to new layout shortcut registered:" << m_settings->resnapToNewLayoutShortcut();
@@ -632,16 +632,16 @@ void ShortcutManager::setupSnapAllWindowsShortcut()
 
 void ShortcutManager::setupLayoutPickerShortcut()
 {
-    SETUP_SHORTCUT(m_layoutPickerAction, "Open Layout Picker", "layout_picker", layoutPickerShortcut,
+    SETUP_SHORTCUT(m_layoutPickerAction, "Open PhosphorZones::Layout Picker", "layout_picker", layoutPickerShortcut,
                    &ShortcutManager::onLayoutPicker);
 
-    qCInfo(lcShortcuts) << "Layout picker shortcut registered:" << m_settings->layoutPickerShortcut();
+    qCInfo(lcShortcuts) << "PhosphorZones::Layout picker shortcut registered:" << m_settings->layoutPickerShortcut();
 }
 
 void ShortcutManager::setupToggleLayoutLockShortcut()
 {
-    SETUP_SHORTCUT(m_toggleLayoutLockAction, "Toggle Layout Lock", "toggle_layout_lock", toggleLayoutLockShortcut,
-                   &ShortcutManager::onToggleLayoutLock);
+    SETUP_SHORTCUT(m_toggleLayoutLockAction, "Toggle PhosphorZones::Layout Lock", "toggle_layout_lock",
+                   toggleLayoutLockShortcut, &ShortcutManager::onToggleLayoutLock);
 
     qCInfo(lcShortcuts) << "Toggle layout lock shortcut registered:" << m_settings->toggleLayoutLockShortcut();
 }

@@ -12,6 +12,10 @@
 #include <QString>
 #include <QStringList>
 
+namespace PhosphorZones {
+class Zone;
+}
+
 namespace PlasmaZones {
 
 class WindowTrackingAdaptor;
@@ -19,7 +23,6 @@ class LayoutAdaptor;
 class AutotileEngine;
 class LayoutManager;
 class ScreenManager;
-class Zone;
 
 /**
  * @brief D-Bus adaptor for high-level convenience API
@@ -50,7 +53,7 @@ public Q_SLOTS:
     /**
      * @brief Snap a window to a specific zone in a layout
      * @param windowId Window to snap
-     * @param zoneNumber Zone number (1-indexed)
+     * @param zoneNumber PhosphorZones::Zone number (1-indexed)
      * @param screenId Screen for geometry resolution (empty = primary)
      * @note Resolves the zone from the screen's current layout
      */

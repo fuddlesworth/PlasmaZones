@@ -13,7 +13,7 @@ using namespace PlasmaZones;
 SplitZoneCommand::SplitZoneCommand(QPointer<ZoneManager> zoneManager, const QString& originalZoneId,
                                    const QVariantMap& originalZoneData, const QVariantList& newZonesData,
                                    const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Split Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Split PhosphorZones::Zone", "@action") : text, parent)
     , m_originalZoneId(originalZoneId)
     , m_originalZoneData(originalZoneData)
     , m_newZonesData(newZonesData)
@@ -27,17 +27,19 @@ void SplitZoneCommand::undo()
     }
 
     // Validate original zone data
-    if (!m_originalZoneData.contains(JsonKeys::Id) || !m_originalZoneData.contains(JsonKeys::X)
-        || !m_originalZoneData.contains(JsonKeys::Y) || !m_originalZoneData.contains(JsonKeys::Width)
-        || !m_originalZoneData.contains(JsonKeys::Height)) {
+    if (!m_originalZoneData.contains(::PhosphorZones::ZoneJsonKeys::Id)
+        || !m_originalZoneData.contains(::PhosphorZones::ZoneJsonKeys::X)
+        || !m_originalZoneData.contains(::PhosphorZones::ZoneJsonKeys::Y)
+        || !m_originalZoneData.contains(::PhosphorZones::ZoneJsonKeys::Width)
+        || !m_originalZoneData.contains(::PhosphorZones::ZoneJsonKeys::Height)) {
         qCWarning(lcEditorUndo) << "Original zone data is invalid, missing required fields";
         return;
     }
 
     // Ensure original zone ID is correct
     QVariantMap originalZone = m_originalZoneData;
-    if (originalZone[JsonKeys::Id].toString() != m_originalZoneId) {
-        originalZone[JsonKeys::Id] = m_originalZoneId;
+    if (originalZone[::PhosphorZones::ZoneJsonKeys::Id].toString() != m_originalZoneId) {
+        originalZone[::PhosphorZones::ZoneJsonKeys::Id] = m_originalZoneId;
     }
 
     // Get current zones list
@@ -53,7 +55,7 @@ void SplitZoneCommand::undo()
         if (!zoneVar.canConvert<QVariantMap>())
             continue;
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (!zoneId.isEmpty()) {
             newZoneIds.insert(zoneId);
         }
@@ -62,7 +64,7 @@ void SplitZoneCommand::undo()
     // Add all existing zones except the ones that were created/modified by the split
     for (const QVariant& zoneVar : currentZones) {
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (!newZoneIds.contains(zoneId)) {
             newZonesList.append(zone);
         }
@@ -96,7 +98,7 @@ void SplitZoneCommand::redo()
         if (!zoneVar.canConvert<QVariantMap>())
             continue;
         QVariantMap zone = zoneVar.toMap();
-        QString id = zone[JsonKeys::Id].toString();
+        QString id = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (!id.isEmpty()) {
             replacedIds.insert(id);
         }
@@ -106,7 +108,7 @@ void SplitZoneCommand::redo()
     QVariantList newZonesList;
     for (const QVariant& zoneVar : currentZones) {
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (!replacedIds.contains(zoneId)) {
             newZonesList.append(zone);
         }

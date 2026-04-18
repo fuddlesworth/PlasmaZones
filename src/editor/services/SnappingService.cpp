@@ -99,7 +99,7 @@ qreal SnappingService::snapValueToGrid(qreal value, qreal interval) const
 SnappingService::EdgeLists SnappingService::collectZoneEdges(const QVariantList& allZones,
                                                              const QString& excludeZoneId) const
 {
-    using namespace PlasmaZones::JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     EdgeLists edges;
     edges.vertical = {0.0, 1.0};
@@ -125,7 +125,7 @@ SnappingService::EdgeLists SnappingService::collectZoneEdges(const QVariantList&
 QVariantMap SnappingService::snapGeometry(qreal x, qreal y, qreal width, qreal height, const QVariantList& allZones,
                                           const QString& excludeZoneId)
 {
-    using namespace PlasmaZones::JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     // Validate input geometry
     if (!validateGeometry(x, y, width, height)) {
@@ -273,7 +273,7 @@ QVariantMap SnappingService::snapGeometrySelective(qreal x, qreal y, qreal width
                                                    const QVariantList& allZones, const QString& excludeZoneId,
                                                    bool snapLeft, bool snapRight, bool snapTop, bool snapBottom)
 {
-    using namespace PlasmaZones::JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
 
     // Validate input geometry
     if (!validateGeometry(x, y, width, height)) {

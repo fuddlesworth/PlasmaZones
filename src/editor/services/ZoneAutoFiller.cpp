@@ -38,7 +38,7 @@ bool ZoneAutoFiller::isRectangleEmpty(const QRectF& rect, const QString& exclude
 
     for (const QVariant& zoneVar : zones) {
         QVariantMap zone = zoneVar.toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
         if (!excludeZoneId.isEmpty() && zoneId == excludeZoneId) {
             continue;
@@ -141,7 +141,7 @@ QVariantMap ZoneAutoFiller::findAdjacentZones(const QString& zoneId, qreal thres
             continue;
 
         QVariantMap zone = zones[i].toMap();
-        QString otherZoneId = zone[JsonKeys::Id].toString();
+        QString otherZoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         QRectF zoneRect = m_manager->extractZoneGeometry(zone);
 
         // Check vertical overlap
@@ -200,7 +200,7 @@ QRectF ZoneAutoFiller::findBestEmptyRegion(qreal targetX, qreal targetY, int exc
 
     QString excludeZoneId;
     if (excludeZoneIndex >= 0 && excludeZoneIndex < zones.size()) {
-        excludeZoneId = zones[excludeZoneIndex].toMap()[JsonKeys::Id].toString();
+        excludeZoneId = zones[excludeZoneIndex].toMap()[::PhosphorZones::ZoneJsonKeys::Id].toString();
     }
 
     for (int i = 0; i < zones.size(); ++i) {
@@ -269,7 +269,7 @@ bool ZoneAutoFiller::expandToFillSpace(const QString& zoneId, qreal mouseX, qrea
 {
     auto zoneOpt = m_manager->getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "Zone not found for expansion:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for expansion:" << zoneId;
         return false;
     }
 
@@ -391,10 +391,10 @@ QVariantMap ZoneAutoFiller::calculateFillRegion(const QString& zoneId, qreal mou
     }
 
     QVariantMap result;
-    result[JsonKeys::X] = bestRegion.x();
-    result[JsonKeys::Y] = bestRegion.y();
-    result[JsonKeys::Width] = bestRegion.width();
-    result[JsonKeys::Height] = bestRegion.height();
+    result[::PhosphorZones::ZoneJsonKeys::X] = bestRegion.x();
+    result[::PhosphorZones::ZoneJsonKeys::Y] = bestRegion.y();
+    result[::PhosphorZones::ZoneJsonKeys::Width] = bestRegion.width();
+    result[::PhosphorZones::ZoneJsonKeys::Height] = bestRegion.height();
     return result;
 }
 
@@ -490,7 +490,7 @@ void ZoneAutoFiller::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 {
     auto zoneOpt = m_manager->getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "Zone not found for deletion:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for deletion:" << zoneId;
         return;
     }
 

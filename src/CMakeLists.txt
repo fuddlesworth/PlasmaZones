@@ -29,6 +29,11 @@ set(plasmazones_core_SRCS
     core/enums.h
     core/interfaces.h
     core/interfaces.cpp
+    # ilayoutmanager / izonedetector shims removed — consumers include
+    # <PhosphorZones/ILayoutManager.h> / <PhosphorZones/IZoneDetector.h>
+    # directly.
+    core/ioverlayservice.h
+    core/isettings.h
     core/inavigationactions.h
     core/iwindowengine.h
     core/settings_interfaces.h
@@ -58,12 +63,8 @@ set(plasmazones_core_SRCS
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    core/zone.cpp
-    core/zone.h
-    core/layout.cpp
-    core/layout/serialization.cpp
-    core/layout/factories.cpp
-    core/layout.h
+    # zone, layout, layoututils, zonedetector, zonehighlighter live in
+    # libs/phosphor-zones/ — consumers include <PhosphorZones/...> directly.
     core/layoutmanager.cpp
     core/layoutmanager/persistence.cpp
     core/layoutmanager/assignments.cpp
@@ -73,8 +74,12 @@ set(plasmazones_core_SRCS
     core/layoutworker/layoutcomputeservice.cpp
     core/layoutworker/layoutcomputeservice.h
     core/layoutworker/types.h
-    core/layoututils.cpp
-    core/layoututils.h
+    core/unifiedlayoutlist.cpp
+    core/unifiedlayoutlist.h
+    core/layoutsourcefactory.cpp
+    core/layoutsourcefactory.h
+    common/layoutpreviewserialize.cpp
+    common/layoutpreviewserialize.h
     core/supportreport.cpp
     core/supportreport.h
     # layersurface + shaderregistry/params moved to PhosphorShell
@@ -90,10 +95,6 @@ set(plasmazones_core_SRCS
     core/virtualdesktopmanager.h
     core/activitymanager.cpp
     core/activitymanager.h
-    core/zonedetector.cpp
-    core/zonedetector.h
-    core/zonehighlighter.cpp
-    core/zonehighlighter.h
     core/shaderregistry.h  # PlasmaZones subclass (singleton + paths)
     # shaderregistry.cpp + shaderincluderesolver moved to PhosphorShell
     core/modifierutils.cpp
@@ -160,17 +161,9 @@ set(plasmazones_core_SRCS
     dbus/autotileadaptor.h
     dbus/snapadaptor.cpp
     dbus/snapadaptor.h
-    autotile/TilingAlgorithm.cpp
-    autotile/TilingAlgorithm.h
-    autotile/TilingState.cpp
-    autotile/TilingStateSerialization.cpp
-    autotile/TilingState.h
-    autotile/SplitTree.cpp
-    autotile/SplitTreeRebuild.cpp
-    autotile/SplitTreeSerializer.cpp
-    autotile/SplitTree.h
-    autotile/AlgorithmRegistry.cpp
-    autotile/AlgorithmRegistry.h
+    # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
+    # machinery live in libs/phosphor-tiles/. Consumers include canonical
+    # <PhosphorTiles/...> headers directly; no forwarding shims remain.
     autotile/AutotileConfig.cpp
     autotile/AutotileConfig.h
     autotile/AutotileEngine.cpp
@@ -185,18 +178,7 @@ set(plasmazones_core_SRCS
     autotile/SettingsBridge.h
     autotile/OverflowManager.cpp
     autotile/OverflowManager.h
-    autotile/algorithms/ScriptedAlgorithm.cpp
-    autotile/algorithms/ScriptedAlgorithm.h
-    autotile/algorithms/ScriptedAlgorithmHelpers.cpp
-    autotile/algorithms/ScriptedAlgorithmHelpers.h
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.cpp
-    autotile/algorithms/ScriptedAlgorithmJsBuiltins.h
-    autotile/algorithms/ScriptedAlgorithmLoader.cpp
-    # Builtin JS helpers compiled into the binary as Qt resources
-    autotile/algorithms/builtins.qrc
-    autotile/algorithms/ScriptedAlgorithmLoader.h
-    autotile/algorithms/ScriptedAlgorithmSandbox.cpp
-    autotile/algorithms/ScriptedAlgorithmSandbox.h
+    # ScriptedAlgorithm machinery + builtins.qrc moved to libs/phosphor-tiles/.
     snap/SnapEngine.cpp
     snap/SnapEngine.h
     snap/snapnavigationadapter.cpp
@@ -243,7 +225,11 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
+        PhosphorIdentity::PhosphorIdentity
+        PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorShell::PhosphorShell
+        PhosphorTiles::PhosphorTiles
+        PhosphorZones::PhosphorZones
     PRIVATE
         Wayland::Client
         Qt6::Concurrent

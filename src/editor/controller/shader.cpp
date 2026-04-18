@@ -44,20 +44,21 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
     if (zones.isEmpty()) {
         // Fallback: single zone filling the preview area
         QVariantMap out;
-        out[QLatin1String(JsonKeys::Id)] = QStringLiteral("{00000000-0000-0000-0000-000000000001}");
-        out[QLatin1String(JsonKeys::X)] = 4.0;
-        out[QLatin1String(JsonKeys::Y)] = 4.0;
-        out[QLatin1String(JsonKeys::Width)] = resW - 8.0;
-        out[QLatin1String(JsonKeys::Height)] = resH - 8.0;
-        out[QLatin1String(JsonKeys::ZoneNumber)] = 1;
-        out[QLatin1String(JsonKeys::IsHighlighted)] = false;
-        const QColor fc = Defaults::HighlightColor;
-        const qreal a = Defaults::Opacity;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] =
+            QStringLiteral("{00000000-0000-0000-0000-000000000001}");
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = 4.0;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = 4.0;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = resW - 8.0;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = resH - 8.0;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = 1;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] = false;
+        const QColor fc = ::PhosphorZones::ZoneDefaults::HighlightColor;
+        const qreal a = ::PhosphorZones::ZoneDefaults::Opacity;
         out[QLatin1String("fillR")] = fc.redF() * a;
         out[QLatin1String("fillG")] = fc.greenF() * a;
         out[QLatin1String("fillB")] = fc.blueF() * a;
         out[QLatin1String("fillA")] = a;
-        const QColor bc = Defaults::BorderColor;
+        const QColor bc = ::PhosphorZones::ZoneDefaults::BorderColor;
         out[QLatin1String("borderR")] = bc.redF();
         out[QLatin1String("borderG")] = bc.greenF();
         out[QLatin1String("borderB")] = bc.blueF();
@@ -83,43 +84,46 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
         qreal px, py, pw, ph;
         if (isFixed) {
             // Fixed geometry: pixel coords relative to screen, scale to preview
-            px = zone.value(JsonKeys::FixedX, 0.0).toReal() / screenW * resW;
-            py = zone.value(JsonKeys::FixedY, 0.0).toReal() / screenH * resH;
-            pw = zone.value(JsonKeys::FixedWidth, 100.0).toReal() / screenW * resW;
-            ph = zone.value(JsonKeys::FixedHeight, 100.0).toReal() / screenH * resH;
+            px = zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toReal() / screenW * resW;
+            py = zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toReal() / screenH * resH;
+            pw = zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 100.0).toReal() / screenW * resW;
+            ph = zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 100.0).toReal() / screenH * resH;
         } else {
             // Relative geometry: fractional 0-1, scale to preview
-            px = zone.value(JsonKeys::X).toReal() * resW;
-            py = zone.value(JsonKeys::Y).toReal() * resH;
-            pw = zone.value(JsonKeys::Width).toReal() * resW;
-            ph = zone.value(JsonKeys::Height).toReal() * resH;
+            px = zone.value(::PhosphorZones::ZoneJsonKeys::X).toReal() * resW;
+            py = zone.value(::PhosphorZones::ZoneJsonKeys::Y).toReal() * resH;
+            pw = zone.value(::PhosphorZones::ZoneJsonKeys::Width).toReal() * resW;
+            ph = zone.value(::PhosphorZones::ZoneJsonKeys::Height).toReal() * resH;
         }
 
         QVariantMap out;
-        out[QLatin1String(JsonKeys::Id)] = zone.value(JsonKeys::Id);
-        out[QLatin1String(JsonKeys::X)] = px;
-        out[QLatin1String(JsonKeys::Y)] = py;
-        out[QLatin1String(JsonKeys::Width)] = pw;
-        out[QLatin1String(JsonKeys::Height)] = ph;
-        out[QLatin1String(JsonKeys::ZoneNumber)] = zone.value(JsonKeys::ZoneNumber);
-        out[QLatin1String(JsonKeys::IsHighlighted)] = zone.value(JsonKeys::IsHighlighted, false);
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = zone.value(::PhosphorZones::ZoneJsonKeys::Id);
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = px;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = py;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = pw;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = ph;
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] =
+            zone.value(::PhosphorZones::ZoneJsonKeys::ZoneNumber);
+        out[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsHighlighted)] =
+            zone.value(::PhosphorZones::ZoneJsonKeys::IsHighlighted, false);
 
         // Fill color from zone appearance (or defaults)
-        const bool useCustom = zone.value(JsonKeys::UseCustomColors).toBool();
-        QColor fillColor(zone.value(JsonKeys::HighlightColor).toString());
+        const bool useCustom = zone.value(::PhosphorZones::ZoneJsonKeys::UseCustomColors).toBool();
+        QColor fillColor(zone.value(::PhosphorZones::ZoneJsonKeys::HighlightColor).toString());
         if (!useCustom || !fillColor.isValid())
-            fillColor = Defaults::HighlightColor;
-        const qreal alpha =
-            useCustom ? zone.value(JsonKeys::ActiveOpacity, Defaults::Opacity).toReal() : Defaults::Opacity;
+            fillColor = ::PhosphorZones::ZoneDefaults::HighlightColor;
+        const qreal alpha = useCustom
+            ? zone.value(::PhosphorZones::ZoneJsonKeys::ActiveOpacity, ::PhosphorZones::ZoneDefaults::Opacity).toReal()
+            : ::PhosphorZones::ZoneDefaults::Opacity;
         out[QLatin1String("fillR")] = fillColor.redF() * alpha;
         out[QLatin1String("fillG")] = fillColor.greenF() * alpha;
         out[QLatin1String("fillB")] = fillColor.blueF() * alpha;
         out[QLatin1String("fillA")] = alpha;
 
         // Border color
-        QColor borderColor(zone.value(JsonKeys::BorderColor).toString());
+        QColor borderColor(zone.value(::PhosphorZones::ZoneJsonKeys::BorderColor).toString());
         if (!useCustom || !borderColor.isValid())
-            borderColor = Defaults::BorderColor;
+            borderColor = ::PhosphorZones::ZoneDefaults::BorderColor;
         out[QLatin1String("borderR")] = borderColor.redF();
         out[QLatin1String("borderG")] = borderColor.greenF();
         out[QLatin1String("borderB")] = borderColor.blueF();
@@ -127,11 +131,13 @@ QVariantList EditorController::zonesForShaderPreview(int width, int height) cons
 
         // Border dimensions
         out[QLatin1String("shaderBorderRadius")] = useCustom
-            ? zone.value(JsonKeys::BorderRadius, Defaults::BorderRadius).toReal()
-            : static_cast<qreal>(Defaults::BorderRadius);
+            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderRadius, ::PhosphorZones::ZoneDefaults::BorderRadius)
+                  .toReal()
+            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderRadius);
         out[QLatin1String("shaderBorderWidth")] = useCustom
-            ? zone.value(JsonKeys::BorderWidth, Defaults::BorderWidth).toReal()
-            : static_cast<qreal>(Defaults::BorderWidth);
+            ? zone.value(::PhosphorZones::ZoneJsonKeys::BorderWidth, ::PhosphorZones::ZoneDefaults::BorderWidth)
+                  .toReal()
+            : static_cast<qreal>(::PhosphorZones::ZoneDefaults::BorderWidth);
 
         result.append(out);
     }
@@ -163,9 +169,9 @@ bool EditorController::saveShaderPreset(const QString& filePath, const QString& 
     }
 
     QJsonObject obj;
-    obj[QLatin1String(JsonKeys::Name)] = name;
-    obj[QLatin1String(JsonKeys::ShaderId)] = shaderId;
-    obj[QLatin1String(JsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
+    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = name;
+    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
+    obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = QJsonObject::fromVariantMap(shaderParams);
 
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -220,7 +226,7 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     }
 
     QJsonObject obj = doc.object();
-    QString shaderId = obj[QLatin1String(JsonKeys::ShaderId)].toString();
+    QString shaderId = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)].toString();
     if (shaderId.isEmpty()) {
         QString error = PzI18n::tr("Preset file missing shader ID", "@info");
         Q_EMIT shaderPresetLoadFailed(error);
@@ -245,13 +251,14 @@ QVariantMap EditorController::loadShaderPreset(const QString& filePath)
     }
 
     QVariantMap shaderParams;
-    if (obj.contains(QLatin1String(JsonKeys::ShaderParams))) {
-        shaderParams = obj[QLatin1String(JsonKeys::ShaderParams)].toObject().toVariantMap();
+    if (obj.contains(QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams))) {
+        shaderParams = obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)].toObject().toVariantMap();
     }
 
-    result[QLatin1String(JsonKeys::Name)] = obj[QLatin1String(JsonKeys::Name)].toString();
-    result[QLatin1String(JsonKeys::ShaderId)] = shaderId;
-    result[QLatin1String(JsonKeys::ShaderParams)] = shaderParams;
+    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+        obj[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)].toString();
+    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderId)] = shaderId;
+    result[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShaderParams)] = shaderParams;
 
     return result;
 }

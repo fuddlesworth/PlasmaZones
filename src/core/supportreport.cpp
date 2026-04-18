@@ -5,8 +5,8 @@
 #include "logging.h"
 #include "screenmanager.h"
 #include "layoutmanager.h"
-#include "layout.h"
-#include "zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "version.h"
 #include "../config/configdefaults.h"
 #include "../autotile/AutotileEngine.h"
@@ -71,10 +71,10 @@ SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenMana
 
     if (layoutManager) {
         snap.hasLayoutManager = true;
-        const QList<Layout*> layouts = layoutManager->layouts();
-        const Layout* active = layoutManager->activeLayout();
+        const QList<PhosphorZones::Layout*> layouts = layoutManager->layouts();
+        const PhosphorZones::Layout* active = layoutManager->activeLayout();
         snap.layouts.reserve(layouts.size());
-        for (Layout* layout : layouts) {
+        for (PhosphorZones::Layout* layout : layouts) {
             Snapshot::LayoutInfo info;
             info.name = layout->name();
             info.id = layout->id().toString();

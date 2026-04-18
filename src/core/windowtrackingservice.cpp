@@ -4,10 +4,10 @@
 #include "windowtrackingservice.h"
 #include "constants.h"
 #include "interfaces.h"
-#include "layout.h"
+#include <PhosphorZones/Layout.h>
 #include "screenmanager.h"
 #include "virtualscreen.h"
-#include "zone.h"
+#include <PhosphorZones/Zone.h>
 #include "layoutmanager.h"
 #include "virtualdesktopmanager.h"
 #include "utils.h"
@@ -20,7 +20,7 @@
 
 namespace PlasmaZones {
 
-WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
+WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
@@ -35,7 +35,7 @@ WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, IZone
     // Note: No save timer needed - persistence handled by WindowTrackingAdaptor via KConfig
     // Service just emits stateChanged() signal when state changes
     //
-    // Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
+    // PhosphorZones::Layout change handling: WindowTrackingAdaptor connects to activeLayoutChanged and calls
     // onLayoutChanged(). Do NOT connect here - duplicate invocation would clear m_resnapBuffer
     // on the second run (after assignments were already removed), causing no_windows_to_resnap.
 
@@ -56,13 +56,13 @@ QString WindowTrackingService::currentAppIdFor(const QString& anyWindowId) const
         return QString();
     }
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
         const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
         if (!fromRegistry.isEmpty()) {
             return fromRegistry;
         }
     }
-    return Utils::extractAppId(anyWindowId);
+    return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
 }
 
 QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId) const
@@ -77,7 +77,7 @@ QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Assignment Management
+// PhosphorZones::Zone Assignment Management
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void WindowTrackingService::assignWindowToZone(const QString& windowId, const QString& zoneId, const QString& screenId,
@@ -694,22 +694,22 @@ bool WindowTrackingService::isWindowSticky(const QString& windowId) const
 // Shared Helpers
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void WindowTrackingService::sortZonesByNumber(QVector<Zone*>& zones)
+void WindowTrackingService::sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones)
 {
-    std::stable_sort(zones.begin(), zones.end(), [](Zone* a, Zone* b) {
+    std::stable_sort(zones.begin(), zones.end(), [](PhosphorZones::Zone* a, PhosphorZones::Zone* b) {
         if (a->zoneNumber() != b->zoneNumber())
             return a->zoneNumber() < b->zoneNumber();
         return a->id() < b->id();
     });
 }
 
-QHash<QString, int> WindowTrackingService::buildZonePositionMap(Layout* layout)
+QHash<QString, int> WindowTrackingService::buildZonePositionMap(PhosphorZones::Layout* layout)
 {
     QHash<QString, int> map;
     if (!layout) {
         return map;
     }
-    QVector<Zone*> zones = layout->zones();
+    QVector<PhosphorZones::Zone*> zones = layout->zones();
     sortZonesByNumber(zones);
     for (int i = 0; i < zones.size(); ++i) {
         map[zones[i]->id().toString()] = i + 1;

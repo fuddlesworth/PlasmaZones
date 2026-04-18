@@ -125,7 +125,7 @@ WindowInfo KWinCompositorBridge::windowInfo(WindowHandle w) const
 
     info.handle = w;
     info.windowId = m_effect->getWindowId(ew);
-    info.appId = WindowIdUtils::extractAppId(info.windowId);
+    info.appId = ::PhosphorIdentity::WindowId::extractAppId(info.windowId);
     info.windowClass = ew->windowClass();
     info.screenId = m_effect->getWindowScreenId(ew);
     info.caption = ew->caption();

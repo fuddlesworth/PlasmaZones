@@ -3,7 +3,7 @@
 
 #include "modetracker.h"
 
-#include "../autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
@@ -54,7 +54,7 @@ bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) cons
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);
-        if (LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             return true;
         }
     }
@@ -72,13 +72,14 @@ QString ModeTracker::lastManualLayoutId() const
 QString ModeTracker::lastAutotileAlgorithm() const
 {
     if (!m_layoutManager || m_screenId.isEmpty()) {
-        return m_settings ? m_settings->defaultAutotileAlgorithm() : AlgorithmRegistry::defaultAlgorithmId();
+        return m_settings ? m_settings->defaultAutotileAlgorithm()
+                          : PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
     QString algo = m_layoutManager->tilingAlgorithmForScreen(m_screenId, m_desktop, m_activity);
     if (algo.isEmpty() && m_settings) {
         algo = m_settings->defaultAutotileAlgorithm();
     }
-    return algo.isEmpty() ? AlgorithmRegistry::defaultAlgorithmId() : algo;
+    return algo.isEmpty() ? PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId() : algo;
 }
 
 } // namespace PlasmaZones

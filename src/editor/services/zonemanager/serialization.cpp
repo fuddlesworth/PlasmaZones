@@ -26,17 +26,19 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
     }
 
     // Validate required fields
-    if (!zoneData.contains(JsonKeys::Id) || !zoneData.contains(JsonKeys::X) || !zoneData.contains(JsonKeys::Y)
-        || !zoneData.contains(JsonKeys::Width) || !zoneData.contains(JsonKeys::Height)) {
-        qCWarning(lcEditorZone) << "Zone data: invalid, missing required fields";
+    if (!zoneData.contains(::PhosphorZones::ZoneJsonKeys::Id) || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::X)
+        || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Y)
+        || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Width)
+        || !zoneData.contains(::PhosphorZones::ZoneJsonKeys::Height)) {
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone data: invalid, missing required fields";
         return QString();
     }
 
     // Validate geometry based on geometry mode
-    qreal x = zoneData[JsonKeys::X].toDouble();
-    qreal y = zoneData[JsonKeys::Y].toDouble();
-    qreal width = zoneData[JsonKeys::Width].toDouble();
-    qreal height = zoneData[JsonKeys::Height].toDouble();
+    qreal x = zoneData[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    qreal y = zoneData[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    qreal width = zoneData[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    qreal height = zoneData[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     if (isFixedMode(zoneData)) {
         // Fixed mode: validate fixed pixel coords
@@ -56,7 +58,7 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
     }
 
     // Use provided ID or generate new one
-    QString zoneId = zoneData[JsonKeys::Id].toString();
+    QString zoneId = zoneData[::PhosphorZones::ZoneJsonKeys::Id].toString();
     int existingIndex = -1;
     if (zoneId.isEmpty()) {
         // ID is empty, generate new one
@@ -78,63 +80,75 @@ QString ZoneManager::addZoneFromMap(const QVariantMap& zoneData, bool allowIdReu
     }
 
     // Create zone with all properties from zoneData
-    QString name = zoneData.contains(JsonKeys::Name) ? zoneData[JsonKeys::Name].toString() : QString();
-    int zoneNumber =
-        zoneData.contains(JsonKeys::ZoneNumber) ? zoneData[JsonKeys::ZoneNumber].toInt() : m_zones.size() + 1;
+    QString name = zoneData.contains(::PhosphorZones::ZoneJsonKeys::Name)
+        ? zoneData[::PhosphorZones::ZoneJsonKeys::Name].toString()
+        : QString();
+    int zoneNumber = zoneData.contains(::PhosphorZones::ZoneJsonKeys::ZoneNumber)
+        ? zoneData[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt()
+        : m_zones.size() + 1;
 
     QVariantMap zone = createZone(name, zoneNumber, x, y, width, height);
 
     // Update ID (createZone generates new ID, but we want to preserve paste ID)
-    zone[JsonKeys::Id] = zoneId;
+    zone[::PhosphorZones::ZoneJsonKeys::Id] = zoneId;
 
     // Copy all appearance properties
-    if (zoneData.contains(JsonKeys::HighlightColor)) {
-        zone[JsonKeys::HighlightColor] = zoneData[JsonKeys::HighlightColor].toString();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::HighlightColor)) {
+        zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
     }
-    if (zoneData.contains(JsonKeys::InactiveColor)) {
-        zone[JsonKeys::InactiveColor] = zoneData[JsonKeys::InactiveColor].toString();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::InactiveColor)) {
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveColor] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::InactiveColor].toString();
     }
-    if (zoneData.contains(JsonKeys::BorderColor)) {
-        zone[JsonKeys::BorderColor] = zoneData[JsonKeys::BorderColor].toString();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::BorderColor)) {
+        zone[::PhosphorZones::ZoneJsonKeys::BorderColor] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::BorderColor].toString();
     }
-    if (zoneData.contains(JsonKeys::ActiveOpacity)) {
-        zone[JsonKeys::ActiveOpacity] = zoneData[JsonKeys::ActiveOpacity].toDouble();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::ActiveOpacity)) {
+        zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::ActiveOpacity].toDouble();
     }
-    if (zoneData.contains(JsonKeys::InactiveOpacity)) {
-        zone[JsonKeys::InactiveOpacity] = zoneData[JsonKeys::InactiveOpacity].toDouble();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::InactiveOpacity)) {
+        zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::InactiveOpacity].toDouble();
     }
-    if (zoneData.contains(JsonKeys::BorderWidth)) {
-        zone[JsonKeys::BorderWidth] = zoneData[JsonKeys::BorderWidth].toInt();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::BorderWidth)) {
+        zone[::PhosphorZones::ZoneJsonKeys::BorderWidth] = zoneData[::PhosphorZones::ZoneJsonKeys::BorderWidth].toInt();
     }
-    if (zoneData.contains(JsonKeys::BorderRadius)) {
-        zone[JsonKeys::BorderRadius] = zoneData[JsonKeys::BorderRadius].toInt();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::BorderRadius)) {
+        zone[::PhosphorZones::ZoneJsonKeys::BorderRadius] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::BorderRadius].toInt();
     }
 
-    QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
+    QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
     if (zoneData.contains(useCustomColorsKey)) {
         zone[useCustomColorsKey] = zoneData[useCustomColorsKey].toBool();
     }
 
     // Copy geometry mode and fixed geometry
-    if (zoneData.contains(JsonKeys::GeometryMode)) {
-        zone[JsonKeys::GeometryMode] = zoneData[JsonKeys::GeometryMode].toInt();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::GeometryMode)) {
+        zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::GeometryMode].toInt();
     }
-    if (zoneData.contains(JsonKeys::FixedX)) {
-        zone[JsonKeys::FixedX] = zoneData[JsonKeys::FixedX].toDouble();
-        zone[JsonKeys::FixedY] = zoneData[JsonKeys::FixedY].toDouble();
-        zone[JsonKeys::FixedWidth] = zoneData[JsonKeys::FixedWidth].toDouble();
-        zone[JsonKeys::FixedHeight] = zoneData[JsonKeys::FixedHeight].toDouble();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
+        zone[::PhosphorZones::ZoneJsonKeys::FixedX] = zoneData[::PhosphorZones::ZoneJsonKeys::FixedX].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedY] = zoneData[::PhosphorZones::ZoneJsonKeys::FixedY].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::FixedWidth].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] =
+            zoneData[::PhosphorZones::ZoneJsonKeys::FixedHeight].toDouble();
     }
     // For fixed zones, ensure relative fallback is in sync with fixed coords
-    if (isFixedMode(zone) && zone.contains(JsonKeys::FixedX)) {
+    if (isFixedMode(zone) && zone.contains(::PhosphorZones::ZoneJsonKeys::FixedX)) {
         syncRelativeFromFixed(zone);
     }
 
     // Copy z-order if present, otherwise set to end
-    if (zoneData.contains(JsonKeys::ZOrder)) {
-        zone[JsonKeys::ZOrder] = zoneData[JsonKeys::ZOrder].toInt();
+    if (zoneData.contains(::PhosphorZones::ZoneJsonKeys::ZOrder)) {
+        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = zoneData[::PhosphorZones::ZoneJsonKeys::ZOrder].toInt();
     } else {
-        zone[JsonKeys::ZOrder] = m_zones.size();
+        zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size();
     }
 
     if (existingIndex >= 0 && allowIdReuse) {
@@ -196,7 +210,7 @@ void ZoneManager::setZoneData(const QString& zoneId, const QVariantMap& zoneData
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for setZoneData:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for setZoneData:" << zoneId;
         return;
     }
 
@@ -223,17 +237,18 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         QVariantMap zone = zoneVar.toMap();
 
         // Validate required fields
-        if (!zone.contains(JsonKeys::Id) || !zone.contains(JsonKeys::X) || !zone.contains(JsonKeys::Y)
-            || !zone.contains(JsonKeys::Width) || !zone.contains(JsonKeys::Height)) {
+        if (!zone.contains(::PhosphorZones::ZoneJsonKeys::Id) || !zone.contains(::PhosphorZones::ZoneJsonKeys::X)
+            || !zone.contains(::PhosphorZones::ZoneJsonKeys::Y) || !zone.contains(::PhosphorZones::ZoneJsonKeys::Width)
+            || !zone.contains(::PhosphorZones::ZoneJsonKeys::Height)) {
             qCWarning(lcEditorZone) << "restoreZones: invalid zone data, missing required fields";
             return; // Don't restore if invalid
         }
 
         // Validate geometry based on geometry mode
-        qreal x = zone[JsonKeys::X].toDouble();
-        qreal y = zone[JsonKeys::Y].toDouble();
-        qreal width = zone[JsonKeys::Width].toDouble();
-        qreal height = zone[JsonKeys::Height].toDouble();
+        qreal x = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        qreal y = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        qreal width = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        qreal height = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         if (isFixedMode(zone)) {
             // Fixed mode: validate relative fallback is present and fixed pixel data is sane
@@ -258,7 +273,7 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         }
 
         // Check for duplicate IDs — skip duplicates, keep first occurrence
-        QString zoneId = zone[JsonKeys::Id].toString();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
         if (zoneId.isEmpty()) {
             qCWarning(lcEditorZone) << "Empty zone ID in restoreZones";
             return; // Don't restore if invalid
@@ -271,7 +286,7 @@ void ZoneManager::restoreZones(const QVariantList& zones)
         zoneIds.insert(zoneId);
 
         // Check for duplicate numbers (warn but don't fail - numbers can be renumbered)
-        int zoneNumber = zone[JsonKeys::ZoneNumber].toInt();
+        int zoneNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (zoneNumber > 0 && zoneNumbers.contains(zoneNumber)) {
             qCWarning(lcEditorZone) << "Duplicate zone number in restoreZones:" << zoneNumber << "(will be renumbered)";
         }

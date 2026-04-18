@@ -20,19 +20,23 @@ using namespace PlasmaZones;
 
 QRectF ZoneManager::extractZoneGeometry(const QVariantMap& zone) const
 {
-    return QRectF(zone[JsonKeys::X].toDouble(), zone[JsonKeys::Y].toDouble(), zone[JsonKeys::Width].toDouble(),
-                  zone[JsonKeys::Height].toDouble());
+    return QRectF(zone[::PhosphorZones::ZoneJsonKeys::X].toDouble(), zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                  zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                  zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble());
 }
 
 QRectF ZoneManager::extractFixedGeometry(const QVariantMap& zone) const
 {
-    return QRectF(zone.value(JsonKeys::FixedX, 0.0).toDouble(), zone.value(JsonKeys::FixedY, 0.0).toDouble(),
-                  zone.value(JsonKeys::FixedWidth, 0.0).toDouble(), zone.value(JsonKeys::FixedHeight, 0.0).toDouble());
+    return QRectF(zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 0.0).toDouble(),
+                  zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 0.0).toDouble());
 }
 
 bool ZoneManager::isFixedMode(const QVariantMap& zone)
 {
-    return zone.value(JsonKeys::GeometryMode, 0).toInt() == static_cast<int>(ZoneGeometryMode::Fixed);
+    return zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt()
+        == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed);
 }
 
 QSizeF ZoneManager::effectiveScreenSizeF() const
@@ -101,19 +105,23 @@ ZoneManager::ValidatedFixedGeometry ZoneManager::validateAndClampFixedGeometry(q
 void ZoneManager::syncFixedFromRelative(QVariantMap& zone) const
 {
     QSizeF ss = effectiveScreenSizeF();
-    zone[JsonKeys::FixedX] = zone[JsonKeys::X].toDouble() * ss.width();
-    zone[JsonKeys::FixedY] = zone[JsonKeys::Y].toDouble() * ss.height();
-    zone[JsonKeys::FixedWidth] = zone[JsonKeys::Width].toDouble() * ss.width();
-    zone[JsonKeys::FixedHeight] = zone[JsonKeys::Height].toDouble() * ss.height();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedX] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble() * ss.width();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedY] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble() * ss.height();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] =
+        zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble() * ss.width();
+    zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] =
+        zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble() * ss.height();
 }
 
 void ZoneManager::syncRelativeFromFixed(QVariantMap& zone) const
 {
     QSizeF ss = effectiveScreenSizeF();
-    zone[JsonKeys::X] = zone[JsonKeys::FixedX].toDouble() / ss.width();
-    zone[JsonKeys::Y] = zone[JsonKeys::FixedY].toDouble() / ss.height();
-    zone[JsonKeys::Width] = zone[JsonKeys::FixedWidth].toDouble() / ss.width();
-    zone[JsonKeys::Height] = zone[JsonKeys::FixedHeight].toDouble() / ss.height();
+    zone[::PhosphorZones::ZoneJsonKeys::X] = zone[::PhosphorZones::ZoneJsonKeys::FixedX].toDouble() / ss.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = zone[::PhosphorZones::ZoneJsonKeys::FixedY].toDouble() / ss.height();
+    zone[::PhosphorZones::ZoneJsonKeys::Width] =
+        zone[::PhosphorZones::ZoneJsonKeys::FixedWidth].toDouble() / ss.width();
+    zone[::PhosphorZones::ZoneJsonKeys::Height] =
+        zone[::PhosphorZones::ZoneJsonKeys::FixedHeight].toDouble() / ss.height();
 }
 
 bool ZoneManager::applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qreal width, qreal height) const
@@ -123,25 +131,25 @@ bool ZoneManager::applyGeometryToZoneMap(QVariantMap& zone, qreal x, qreal y, qr
         if (!geom.isValid) {
             return false;
         }
-        zone[JsonKeys::FixedX] = geom.x;
-        zone[JsonKeys::FixedY] = geom.y;
-        zone[JsonKeys::FixedWidth] = geom.width;
-        zone[JsonKeys::FixedHeight] = geom.height;
+        zone[::PhosphorZones::ZoneJsonKeys::FixedX] = geom.x;
+        zone[::PhosphorZones::ZoneJsonKeys::FixedY] = geom.y;
+        zone[::PhosphorZones::ZoneJsonKeys::FixedWidth] = geom.width;
+        zone[::PhosphorZones::ZoneJsonKeys::FixedHeight] = geom.height;
         // Update relative fallback so previews render correctly
         QSizeF ss = effectiveScreenSizeF();
-        zone[JsonKeys::X] = geom.x / ss.width();
-        zone[JsonKeys::Y] = geom.y / ss.height();
-        zone[JsonKeys::Width] = geom.width / ss.width();
-        zone[JsonKeys::Height] = geom.height / ss.height();
+        zone[::PhosphorZones::ZoneJsonKeys::X] = geom.x / ss.width();
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = geom.y / ss.height();
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = geom.width / ss.width();
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = geom.height / ss.height();
     } else {
         ValidatedGeometry geom = validateAndClampGeometry(x, y, width, height);
         if (!geom.isValid) {
             return false;
         }
-        zone[JsonKeys::X] = geom.x;
-        zone[JsonKeys::Y] = geom.y;
-        zone[JsonKeys::Width] = geom.width;
-        zone[JsonKeys::Height] = geom.height;
+        zone[::PhosphorZones::ZoneJsonKeys::X] = geom.x;
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = geom.y;
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = geom.width;
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = geom.height;
     }
     return true;
 }
@@ -206,7 +214,7 @@ void ZoneManager::updateAllZOrderValues()
 {
     for (int i = 0; i < m_zones.size(); ++i) {
         QVariantMap zoneMap = m_zones[i].toMap();
-        zoneMap[JsonKeys::ZOrder] = i;
+        zoneMap[::PhosphorZones::ZoneJsonKeys::ZOrder] = i;
         m_zones[i] = zoneMap;
     }
 }
@@ -227,31 +235,31 @@ ZoneManager::ZoneManager(QObject* parent)
 QVariantMap ZoneManager::createZone(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
     QVariantMap zone;
-    zone[JsonKeys::Id] = QUuid::createUuid().toString();
-    zone[JsonKeys::Name] = name;
-    zone[JsonKeys::ZoneNumber] = number;
-    zone[JsonKeys::X] = x;
-    zone[JsonKeys::Y] = y;
-    zone[JsonKeys::Width] = width;
-    zone[JsonKeys::Height] = height;
-    zone[JsonKeys::ZOrder] = m_zones.size(); // New zones go on top
+    zone[::PhosphorZones::ZoneJsonKeys::Id] = QUuid::createUuid().toString();
+    zone[::PhosphorZones::ZoneJsonKeys::Name] = name;
+    zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = number;
+    zone[::PhosphorZones::ZoneJsonKeys::X] = x;
+    zone[::PhosphorZones::ZoneJsonKeys::Y] = y;
+    zone[::PhosphorZones::ZoneJsonKeys::Width] = width;
+    zone[::PhosphorZones::ZoneJsonKeys::Height] = height;
+    zone[::PhosphorZones::ZoneJsonKeys::ZOrder] = m_zones.size(); // New zones go on top
     // Use settable defaults (theme-based if set, otherwise fallback to constants)
-    zone[JsonKeys::HighlightColor] = m_defaultHighlightColor.isEmpty()
+    zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] = m_defaultHighlightColor.isEmpty()
         ? QString::fromLatin1(EditorConstants::DefaultHighlightColor)
         : m_defaultHighlightColor;
-    zone[JsonKeys::InactiveColor] = m_defaultInactiveColor.isEmpty()
+    zone[::PhosphorZones::ZoneJsonKeys::InactiveColor] = m_defaultInactiveColor.isEmpty()
         ? QString::fromLatin1(EditorConstants::DefaultInactiveColor)
         : m_defaultInactiveColor;
-    zone[JsonKeys::BorderColor] = m_defaultBorderColor.isEmpty()
+    zone[::PhosphorZones::ZoneJsonKeys::BorderColor] = m_defaultBorderColor.isEmpty()
         ? QString::fromLatin1(EditorConstants::DefaultBorderColor)
         : m_defaultBorderColor;
     // Initialize appearance properties with defaults
-    zone[JsonKeys::ActiveOpacity] = Defaults::Opacity;
-    zone[JsonKeys::InactiveOpacity] = Defaults::InactiveOpacity;
-    zone[JsonKeys::BorderWidth] = Defaults::BorderWidth;
-    zone[JsonKeys::BorderRadius] = Defaults::BorderRadius;
-    zone[JsonKeys::UseCustomColors] = false; // New zones use theme colors by default
-    zone[JsonKeys::GeometryMode] = 0; // Default to Relative geometry mode
+    zone[::PhosphorZones::ZoneJsonKeys::ActiveOpacity] = ::PhosphorZones::ZoneDefaults::Opacity;
+    zone[::PhosphorZones::ZoneJsonKeys::InactiveOpacity] = ::PhosphorZones::ZoneDefaults::InactiveOpacity;
+    zone[::PhosphorZones::ZoneJsonKeys::BorderWidth] = ::PhosphorZones::ZoneDefaults::BorderWidth;
+    zone[::PhosphorZones::ZoneJsonKeys::BorderRadius] = ::PhosphorZones::ZoneDefaults::BorderRadius;
+    zone[::PhosphorZones::ZoneJsonKeys::UseCustomColors] = false; // New zones use theme colors by default
+    zone[::PhosphorZones::ZoneJsonKeys::GeometryMode] = 0; // Default to Relative geometry mode
     return zone;
 }
 
@@ -268,9 +276,9 @@ QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
     }
 
     int zoneNumber = m_zones.size() + 1;
-    QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
+    QString zoneName = QStringLiteral("PhosphorZones::Zone %1").arg(zoneNumber);
     QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
-    QString zoneId = zone[JsonKeys::Id].toString();
+    QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     m_zones.append(zone);
     emitZoneSignal(SignalType::ZoneAdded, zoneId);
@@ -287,7 +295,7 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for geometry update:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for geometry update:" << zoneId;
         return;
     }
 
@@ -335,12 +343,12 @@ void ZoneManager::updateZoneName(const QString& zoneId, const QString& name)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for name update:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for name update:" << zoneId;
         return;
     }
 
     QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::Name] = name;
+    zone[::PhosphorZones::ZoneJsonKeys::Name] = name;
     m_zones.replace(index, zone);
 
     emitZoneSignal(SignalType::NameChanged, zoneId);
@@ -355,12 +363,12 @@ void ZoneManager::updateZoneNumber(const QString& zoneId, int number)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for number update:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for number update:" << zoneId;
         return;
     }
 
     QVariantMap zone = m_zones[index].toMap();
-    zone[JsonKeys::ZoneNumber] = number;
+    zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = number;
     m_zones.replace(index, zone);
 
     emitZoneSignal(SignalType::NumberChanged, zoneId);
@@ -375,7 +383,7 @@ void ZoneManager::updateZoneColor(const QString& zoneId, const QString& colorTyp
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for color update:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for color update:" << zoneId;
         return;
     }
 
@@ -395,7 +403,7 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for appearance update:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for appearance update:" << zoneId;
         return;
     }
 
@@ -403,22 +411,22 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
 
     // Normalize property name to use JsonKeys constants (must match save/load)
     QString normalizedKey = propertyName;
-    QString useCustomColorsKey = QString::fromLatin1(JsonKeys::UseCustomColors);
+    QString useCustomColorsKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::UseCustomColors);
 
     // Normalize known appearance property names to use JsonKeys constants
     if (propertyName.compare(QLatin1String("useCustomColors"), Qt::CaseInsensitive) == 0
         || propertyName == useCustomColorsKey) {
         normalizedKey = useCustomColorsKey;
     } else if (propertyName.compare(QLatin1String("activeOpacity"), Qt::CaseInsensitive) == 0) {
-        normalizedKey = QString::fromLatin1(JsonKeys::ActiveOpacity);
+        normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::ActiveOpacity);
     } else if (propertyName.compare(QLatin1String("inactiveOpacity"), Qt::CaseInsensitive) == 0) {
-        normalizedKey = QString::fromLatin1(JsonKeys::InactiveOpacity);
+        normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::InactiveOpacity);
     } else if (propertyName.compare(QLatin1String("borderWidth"), Qt::CaseInsensitive) == 0) {
-        normalizedKey = QString::fromLatin1(JsonKeys::BorderWidth);
+        normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::BorderWidth);
     } else if (propertyName.compare(QLatin1String("borderRadius"), Qt::CaseInsensitive) == 0) {
-        normalizedKey = QString::fromLatin1(JsonKeys::BorderRadius);
+        normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::BorderRadius);
     } else if (propertyName.compare(QLatin1String("overlayDisplayMode"), Qt::CaseInsensitive) == 0) {
-        normalizedKey = QString::fromLatin1(JsonKeys::OverlayDisplayMode);
+        normalizedKey = QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode);
     }
 
     zone[normalizedKey] = value;
@@ -427,11 +435,11 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
     // so they match what the KCM/global settings show (not the hardcoded constants)
     if (normalizedKey == useCustomColorsKey && value.toBool()) {
         if (!m_defaultHighlightColor.isEmpty())
-            zone[QString::fromLatin1(JsonKeys::HighlightColor)] = m_defaultHighlightColor;
+            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::HighlightColor)] = m_defaultHighlightColor;
         if (!m_defaultInactiveColor.isEmpty())
-            zone[QString::fromLatin1(JsonKeys::InactiveColor)] = m_defaultInactiveColor;
+            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::InactiveColor)] = m_defaultInactiveColor;
         if (!m_defaultBorderColor.isEmpty())
-            zone[QString::fromLatin1(JsonKeys::BorderColor)] = m_defaultBorderColor;
+            zone[QString::fromLatin1(::PhosphorZones::ZoneJsonKeys::BorderColor)] = m_defaultBorderColor;
     }
 
     m_zones.replace(index, zone);
@@ -449,7 +457,7 @@ void ZoneManager::deleteZone(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "Zone not found for deletion:" << zoneId;
+        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for deletion:" << zoneId;
         return;
     }
 
@@ -485,7 +493,7 @@ int ZoneManager::findZoneIndex(const QString& zoneId) const
 {
     for (int i = 0; i < m_zones.size(); ++i) {
         QVariantMap zone = m_zones[i].toMap();
-        if (zone[JsonKeys::Id].toString() == zoneId) {
+        if (zone[::PhosphorZones::ZoneJsonKeys::Id].toString() == zoneId) {
             return i;
         }
     }
@@ -496,12 +504,12 @@ void ZoneManager::renumberZones()
 {
     for (int i = 0; i < m_zones.size(); ++i) {
         QVariantMap zone = m_zones[i].toMap();
-        QString zoneId = zone[JsonKeys::Id].toString();
-        int oldNumber = zone[JsonKeys::ZoneNumber].toInt();
+        QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
+        int oldNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         int newNumber = i + 1;
 
         if (oldNumber != newNumber) {
-            zone[JsonKeys::ZoneNumber] = newNumber;
+            zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = newNumber;
             m_zones[i] = zone;
             Q_EMIT zoneNumberChanged(zoneId);
         }

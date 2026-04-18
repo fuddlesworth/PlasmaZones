@@ -24,10 +24,14 @@
 
 #include <QHashFunctions>
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
 /**
- * @brief Composite key for per-desktop/activity TilingState lookup
+ * @brief Composite key for per-desktop/activity PhosphorTiles::TilingState lookup
  *
  * desktop=1 (matching m_currentDesktop default) and empty activity represent
  * the initial desktop/activity context. Always uses explicit desktop numbers.
@@ -75,26 +79,31 @@ struct PendingAutotileRestore
 constexpr int MaxPendingRestoresPerApp = 16;
 
 class AutotileConfig;
-class Layout;
 class LayoutManager;
 class NavigationController;
 class PerScreenConfigResolver;
 class ScreenManager;
 class Settings;
 class SettingsBridge;
-class TilingAlgorithm;
-class TilingState;
 class WindowRegistry;
 class WindowTrackingService;
+} // namespace PlasmaZones
+
+namespace PhosphorTiles {
+class TilingAlgorithm;
+class TilingState;
+}
+
+namespace PlasmaZones {
 
 /**
  * @brief Core engine for automatic window tiling.
  *
- * Coordinates per-screen TilingState, invokes tiling algorithms (Master-Stack,
+ * Coordinates per-screen PhosphorTiles::TilingState, invokes tiling algorithms (Master-Stack,
  * Columns, BSP), and applies calculated zone geometries to window positions.
  * Only tiles windows on screens where autotiling is enabled.
  *
- * @see TilingAlgorithm, TilingState, AlgorithmRegistry
+ * @see PhosphorTiles::TilingAlgorithm, PhosphorTiles::TilingState, PhosphorTiles::AlgorithmRegistry
  */
 class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IEngineLifecycle
 {
@@ -115,12 +124,12 @@ public:
      * @brief Wire up the shared WindowRegistry.
      *
      * Optional — tests construct the engine without a registry and fall back
-     * to string parsing (Utils::extractAppId). Production daemons set this to
+     * to string parsing (PhosphorIdentity::WindowId::extractAppId). Production daemons set this to
      * the daemon-root registry so class lookups return the latest value after
      * an Electron/CEF app renames itself mid-session.
      *
-     * Side effect: installs a live-class resolver on every TilingAlgorithm in
-     * the AlgorithmRegistry so ScriptedAlgorithm's lifecycle hooks see the
+     * Side effect: installs a live-class resolver on every PhosphorTiles::TilingAlgorithm in
+     * the PhosphorTiles::AlgorithmRegistry so PhosphorTiles::ScriptedAlgorithm's lifecycle hooks see the
      * current appId on each tiled window. Future algorithm registrations
      * (hot-reloaded JS algorithms) pick up the resolver from the
      * algorithmRegistered signal bound inside this method.
@@ -146,15 +155,15 @@ public:
      * Used by the daemon's desktop-count-changed handler to find stale
      * desktops (states on desktop > newCount) so they can be pruned via
      * pruneStatesForDesktop(). Replaces an older screenStates() accessor
-     * that returned a const-ref to a QHash<TilingStateKey, TilingState*>
-     * — that accessor leaked mutable TilingState pointers via the
+     * that returned a const-ref to a QHash<TilingStateKey, PhosphorTiles::TilingState*>
+     * — that accessor leaked mutable PhosphorTiles::TilingState pointers via the
      * const-reference loophole (const on the hash doesn't propagate to the
      * pointed-to values), for a single caller that only needed desktop
      * numbers.
      *
      * Callers that need the raw state map should add a purpose-built
      * query method rather than iterating private state. The intent here
-     * is that external consumers can't iterate or mutate TilingState
+     * is that external consumers can't iterate or mutate PhosphorTiles::TilingState
      * objects through any public accessor — that's why screenStates()
      * is private.
      */
@@ -223,7 +232,7 @@ public:
     /**
      * @brief Set the current virtual desktop for per-desktop tiling state
      *
-     * Swaps the active TilingState set without releasing windows. Must be
+     * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
      * called BEFORE updateAutotileScreens() on desktop switch so the engine
      * resolves states for the correct desktop.
      *
@@ -234,7 +243,7 @@ public:
     /**
      * @brief Set the current activity for per-activity tiling state
      *
-     * Swaps the active TilingState set without releasing windows. Must be
+     * Swaps the active PhosphorTiles::TilingState set without releasing windows. Must be
      * called BEFORE updateAutotileScreens() on activity switch so the engine
      * resolves states for the correct activity.
      *
@@ -259,7 +268,7 @@ public:
     void updateStickyScreenPins(const std::function<bool(const QString&)>& isWindowSticky);
 
     /**
-     * @brief Prune TilingState and saved floating entries for a removed desktop
+     * @brief Prune PhosphorTiles::TilingState and saved floating entries for a removed desktop
      *
      * Removes all states where key.desktop == removedDesktop. Called when a
      * virtual desktop is deleted so stale entries don't accumulate.
@@ -267,7 +276,7 @@ public:
     void pruneStatesForDesktop(int removedDesktop);
 
     /**
-     * @brief Prune TilingState entries for activities not in the given set
+     * @brief Prune PhosphorTiles::TilingState entries for activities not in the given set
      *
      * Removes states whose activity is non-empty and not in validActivities.
      * Called when activities change so stale entries don't accumulate.
@@ -305,7 +314,7 @@ public:
      *
      * If the algorithm ID is invalid, falls back to the default algorithm.
      *
-     * @param algorithmId Algorithm identifier from AlgorithmRegistry
+     * @param algorithmId Algorithm identifier from PhosphorTiles::AlgorithmRegistry
      */
     void setAlgorithm(const QString& algorithmId);
 
@@ -313,7 +322,7 @@ public:
      * @brief Get the current algorithm instance
      * @return Pointer to algorithm, or nullptr if none set
      */
-    TilingAlgorithm* currentAlgorithm() const;
+    PhosphorTiles::TilingAlgorithm* currentAlgorithm() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Tiling state access
@@ -325,9 +334,9 @@ public:
      * Creates the state if it doesn't exist.
      *
      * @param screenId Screen identifier
-     * @return Pointer to TilingState (owned by engine)
+     * @return Pointer to PhosphorTiles::TilingState (owned by engine)
      */
-    TilingState* stateForScreen(const QString& screenId);
+    PhosphorTiles::TilingState* stateForScreen(const QString& screenId);
 
     /**
      * @brief Get the autotile configuration
@@ -391,7 +400,7 @@ public:
      * @brief Adopt an untracked window as floating on an autotile screen
      *
      * Used when a window is dragged from a snap screen to an autotile screen.
-     * Adds the window to the TilingState as floating so subsequent
+     * Adds the window to the PhosphorTiles::TilingState as floating so subsequent
      * toggleWindowFloat/setWindowFloat calls can find and manage it.
      * No-op if the window is already tracked or the screen isn't autotile.
      */
@@ -453,13 +462,13 @@ public:
     // Effective per-screen values — forwarded to PerScreenConfigResolver
     int effectiveInnerGap(const QString& screenId) const;
     int effectiveOuterGap(const QString& screenId) const;
-    EdgeGaps effectiveOuterGaps(const QString& screenId) const;
+    ::PhosphorLayout::EdgeGaps effectiveOuterGaps(const QString& screenId) const;
     bool effectiveSmartGaps(const QString& screenId) const;
     bool effectiveRespectMinimumSize(const QString& screenId) const;
     int effectiveMaxWindows(const QString& screenId) const;
     qreal effectiveSplitRatioStep(const QString& screenId) const;
     QString effectiveAlgorithmId(const QString& screenId) const;
-    TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
+    PhosphorTiles::TilingAlgorithm* effectiveAlgorithm(const QString& screenId) const;
 
     /**
      * @brief Connect to Settings change signals for live updates
@@ -554,7 +563,7 @@ public:
      * @brief Notify the engine that a window has been focused
      *
      * Called by D-Bus adaptor when KWin reports a window focus change.
-     * Updates the focused window in the appropriate TilingState.
+     * Updates the focused window in the appropriate PhosphorTiles::TilingState.
      *
      * @param windowId Window ID that gained focus
      */
@@ -729,7 +738,7 @@ public:
     Q_INVOKABLE void unfloatWindow(const QString& windowId);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone-ordered window transitions (snapping ↔ autotile)
+    // PhosphorZones::Zone-ordered window transitions (snapping ↔ autotile)
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
@@ -739,7 +748,7 @@ public:
      * order (focus-based). This method stores a zone-ordered list so that insertWindow()
      * can place windows in the correct autotile positions (zone 1 → master, etc.).
      *
-     * Only takes effect when the screen's TilingState is empty (no prior windows from
+     * Only takes effect when the screen's PhosphorTiles::TilingState is empty (no prior windows from
      * session restore). The pending order is consumed as windows are inserted.
      *
      * @param screenId Screen to set initial order for
@@ -769,7 +778,7 @@ public:
      *
      * Returns the autotile engine's tiled window list for deterministic
      * autotile → snapping transitions. Call BEFORE switching layouts so
-     * the TilingState still exists.
+     * the PhosphorTiles::TilingState still exists.
      *
      * @param screenId Screen to query
      * @return Ordered list of tiled window IDs (master first), or empty if no state
@@ -859,7 +868,7 @@ public:
     /**
      * @brief Update the target insert index for the active drag preview.
      *
-     * Moves the dragged window within TilingState to the new index (clamped
+     * Moves the dragged window within PhosphorTiles::TilingState to the new index (clamped
      * to [0, tiledWindowCount()-1]) and retiles. No-op if the index hasn't
      * changed from the last update.
      */
@@ -973,7 +982,7 @@ Q_SIGNALS:
      * @brief Emitted to sync WTS floating state without restoring geometry
      *
      * Passive state-sync semantics: used when the engine's internal
-     * TilingState::isFloating diverges from WindowTrackingService's view
+     * PhosphorTiles::TilingState::isFloating diverges from WindowTrackingService's view
      * (e.g. a newly-inserted window carries stale snap-mode float state).
      * The downstream handler updates WTS bookkeeping but must NOT call
      * applyGeometryForFloat — the window already has a valid position
@@ -1051,7 +1060,7 @@ private Q_SLOTS:
     void onWindowRemoved(const QString& windowId);
     void onWindowFocused(const QString& windowId);
     void onScreenGeometryChanged(const QString& screenId);
-    void onLayoutChanged(Layout* layout);
+    void onLayoutChanged(PhosphorZones::Layout* layout);
 
 private:
     void connectSignals();
@@ -1087,13 +1096,13 @@ private:
     }
 
     /**
-     * @brief Get TilingState for an explicit key (bypasses current desktop/activity)
+     * @brief Get PhosphorTiles::TilingState for an explicit key (bypasses current desktop/activity)
      *
      * Creates the state if it doesn't exist. Used by loadState() to restore states
      * for arbitrary desktop/activity combinations without temporarily mutating
      * m_currentDesktop/m_currentActivity.
      */
-    TilingState* stateForKey(const TilingStateKey& key);
+    PhosphorTiles::TilingState* stateForKey(const TilingStateKey& key);
 
     /**
      * @brief Reset maxWindows when switching algorithms (DRY helper)
@@ -1102,7 +1111,8 @@ private:
      * it to the new algorithm's default. Shared by setAlgorithm() and
      * syncFromSettings().
      */
-    void resetMaxWindowsForAlgorithmSwitch(TilingAlgorithm* oldAlgo, TilingAlgorithm* newAlgo);
+    void resetMaxWindowsForAlgorithmSwitch(PhosphorTiles::TilingAlgorithm* oldAlgo,
+                                           PhosphorTiles::TilingAlgorithm* newAlgo);
 
     /**
      * @brief Propagate global split ratio to screens without per-screen overrides
@@ -1165,7 +1175,7 @@ private:
      * @brief Check if all pending initial-order windows are resolved for a screen
      *
      * Returns true if every window in the pending order for the given screen
-     * is already present in the screen's TilingState. If all resolved,
+     * is already present in the screen's PhosphorTiles::TilingState. If all resolved,
      * removes the pending order entry. Used by insertWindow() and removeWindow().
      *
      * @param screenId Screen whose pending order to check
@@ -1201,7 +1211,7 @@ private:
 
     /**
      * @brief Normalize a window id received from D-Bus to the canonical key
-     *        used by internal storage (m_windowToStateKey, TilingState::m_windowOrder, …).
+     *        used by internal storage (m_windowToStateKey, PhosphorTiles::TilingState::m_windowOrder, …).
      *
      * Why this exists: KWin apps like Emby (CEF/Electron) mutate their
      * resourceClass / desktopFileName after the surface is already mapped, so
@@ -1241,7 +1251,7 @@ private:
      * hit the most recent value. Falls back to parsing the composite form
      * when no registry is attached (unit tests, legacy callers).
      *
-     * Use this anywhere you'd otherwise call Utils::extractAppId(windowId)
+     * Use this anywhere you'd otherwise call PhosphorIdentity::WindowId::extractAppId(windowId)
      * on the canonical form — the canonical string is frozen at first
      * observation, so parsing it returns a stale class after mutation.
      */
@@ -1262,18 +1272,18 @@ private:
      *
      * Toggles the floating state, retiles, and emits windowFloatingChanged.
      */
-    void performToggleFloat(TilingState* state, const QString& windowId, const QString& screenId);
+    void performToggleFloat(PhosphorTiles::TilingState* state, const QString& windowId, const QString& screenId);
 
     /**
-     * @brief Get TilingState for a window by looking up its screen
+     * @brief Get PhosphorTiles::TilingState for a window by looking up its screen
      *
      * Consolidates the common pattern of m_windowToStateKey lookup + state resolution.
      *
      * @param windowId Window ID to look up
      * @param outScreenId If non-null, receives the screen ID
-     * @return TilingState pointer or nullptr if window not tracked/screen invalid
+     * @return PhosphorTiles::TilingState pointer or nullptr if window not tracked/screen invalid
      */
-    TilingState* stateForWindow(const QString& windowId, QString* outScreenId = nullptr);
+    PhosphorTiles::TilingState* stateForWindow(const QString& windowId, QString* outScreenId = nullptr);
 
     LayoutManager* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
@@ -1293,7 +1303,7 @@ private:
     QString m_algorithmId;
     bool m_algorithmEverSet = false; ///< True after first successful setAlgorithm() call
     QString m_activeScreen; // Last-focused screen (updated by onWindowFocused)
-    QHash<TilingStateKey, TilingState*> m_screenStates; // Owned via Qt parent (this)
+    QHash<TilingStateKey, PhosphorTiles::TilingState*> m_screenStates; // Owned via Qt parent (this)
 
     QHash<QString, TilingStateKey> m_windowToStateKey; // windowId -> owning state key
     QHash<QString, QSize> m_windowMinSizes; // windowId -> minimum size from KWin
@@ -1307,7 +1317,7 @@ private:
     // The canonical form is the FIRST windowId string we saw for a given
     // instance id. Subsequent arrivals with a mutated appId (Electron/CEF
     // apps that swap WM_CLASS mid-session) resolve back to that canonical
-    // form so every map/TilingState key in the engine stays consistent.
+    // form so every map/PhosphorTiles::TilingState key in the engine stays consistent.
     QHash<QString, QString> m_canonicalByInstance;
 
     // Current desktop/activity context — used by stateForScreen() to construct
@@ -1321,7 +1331,7 @@ private:
     // "virtualdesktopsonlyonprimary" pins all secondary-screen windows to all
     // desktops, the TilingStateKey desktop dimension becomes meaningless for
     // those screens. This map pins such screens to their original desktop so
-    // currentKeyForScreen() returns the key of the existing TilingState rather
+    // currentKeyForScreen() returns the key of the existing PhosphorTiles::TilingState rather
     // than a new (empty) key after a desktop switch.
     QHash<QString, int> m_screenDesktopOverride;
 
@@ -1398,7 +1408,7 @@ private:
 
         // Prior-state restoration info (used on cancel)
         bool hadPriorState = false; // True if m_windowToStateKey contained windowId at begin
-        TilingStateKey priorKey; // Key of the prior TilingState (meaningful iff hadPriorState)
+        TilingStateKey priorKey; // Key of the prior PhosphorTiles::TilingState (meaningful iff hadPriorState)
         int priorRawIndex = -1; // Raw index in priorState->windowOrder() at begin
         bool priorFloating = false; // Prior floating flag in priorState
         bool priorSameScreen = false; // priorKey == currentKeyForScreen(targetScreenId)

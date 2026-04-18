@@ -18,7 +18,7 @@
 #include <PhosphorLayer/Role.h>
 
 #include "../core/interfaces.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "vulkan_support.h"
 
 class QQmlEngine;
@@ -31,6 +31,10 @@ class SurfaceFactory;
 // Role is a value type — full definition pulled in via Role.h above.
 } // namespace PhosphorLayer
 
+namespace PhosphorZones {
+class Zone;
+}
+
 namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
@@ -40,8 +44,6 @@ class QScreen;
 class QTimer;
 
 namespace PlasmaZones {
-
-class Zone;
 
 /**
  * @brief Manages zone overlay windows
@@ -105,11 +107,11 @@ public:
     void hide() override;
     void toggle() override;
 
-    void updateLayout(Layout* layout) override;
+    void updateLayout(PhosphorZones::Layout* layout) override;
     void updateSettings(ISettings* settings) override;
     void updateGeometries() override;
 
-    // Zone highlighting for overlay display (IOverlayService interface)
+    // PhosphorZones::Zone highlighting for overlay display (IOverlayService interface)
     void highlightZone(const QString& zoneId) override;
     void highlightZones(const QStringList& zoneIds) override;
     void clearHighlight() override;
@@ -119,14 +121,14 @@ public:
     void refreshFromIdle() override;
 
     // Additional methods
-    void setLayout(Layout* layout);
-    Layout* layout() const
+    void setLayout(PhosphorZones::Layout* layout);
+    PhosphorZones::Layout* layout() const
     {
         return m_layout;
     }
 
     void setSettings(ISettings* settings);
-    void setLayoutManager(ILayoutManager* layoutManager);
+    void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -155,7 +157,7 @@ public:
     void handleScreenAdded(QScreen* screen);
     void handleScreenRemoved(QScreen* screen);
 
-    // Zone selector management (IOverlayService interface)
+    // PhosphorZones::Zone selector management (IOverlayService interface)
     bool isZoneSelectorVisible() const override;
     void showZoneSelector(const QString& targetScreenId = QString()) override;
     void hideZoneSelector() override;
@@ -182,18 +184,18 @@ public:
     QRect getSelectedZoneGeometry(const QString& screenId) const override;
     void clearSelectedZone() override;
 
-    // Layout OSD (visual preview when switching layouts)
+    // PhosphorZones::Layout OSD (visual preview when switching layouts)
     // screenId: target screen (empty = screen under cursor, fallback to primary)
-    void showLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
                        bool autoAssign = false, const QString& screenId = QString(), bool showMasterDot = false,
                        bool producesOverlappingZones = false, const QString& zoneNumberDisplay = QStringLiteral("all"),
                        int masterCount = 1);
-    void showLockedLayoutOsd(Layout* layout, const QString& screenId = QString());
+    void showLockedLayoutOsd(PhosphorZones::Layout* layout, const QString& screenId = QString());
     void showDisabledOsd(const QString& reason, const QString& screenId = QString());
 
     /**
-     * @brief Pre-create Layout OSD QML windows for all connected screens.
+     * @brief Pre-create PhosphorZones::Layout OSD QML windows for all connected screens.
      *
      * First-time QML compilation of LayoutOsd.qml takes ~100-300ms (component
      * loading, scene graph creation, Wayland layer-shell registration).  Call
@@ -242,7 +244,7 @@ public:
     bool isSnapAssistVisible() const override;
     void setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl) override;
 
-    // Layout Picker overlay (interactive layout browser + resnap)
+    // PhosphorZones::Layout Picker overlay (interactive layout browser + resnap)
     void showLayoutPicker(const QString& screenId = QString());
     bool isLayoutPickerVisible() const;
 
@@ -275,16 +277,16 @@ private:
     // Skips hidden windows — showZoneSelector()/show() refresh before showing.
     void refreshVisibleWindows();
 
-    // Connect to a Layout's layoutModified signal so live edits from the editor
+    // Connect to a PhosphorZones::Layout's layoutModified signal so live edits from the editor
     // (shader id/params, zone geometry, appearance) propagate to the live overlay
     // without waiting for a layout switch or daemon restart.
-    void observeLayoutForLiveEdits(Layout* layout);
+    void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
     // Stop observing a layout (e.g. because LayoutManager just removed it).
     // Disconnects the per-layout layoutModified signal and erases the entry
     // from m_observedLayouts. Idempotent — calling for an unobserved layout
     // is a no-op.
-    void stopObservingLayout(Layout* layout);
+    void stopObservingLayout(PhosphorZones::Layout* layout);
 
     // Hide overlay/selector windows on screens where the current context is disabled,
     // then update remaining visible windows. Used by setCurrentVirtualDesktop/Activity.
@@ -338,21 +340,22 @@ private:
     void applyIdleStateForCursor(const QString& activeEffectiveId, bool showOnAllMonitors);
 
     void updateLabelsTextureForWindow(QQuickWindow* window, const QVariantList& patched, QScreen* screen,
-                                      Layout* screenLayout);
+                                      PhosphorZones::Layout* screenLayout);
     QVariantList buildZonesList(QScreen* screen) const;
     QVariantList buildZonesList(const QString& screenId, QScreen* physScreen) const;
     QVariantList buildLayoutsList(const QString& screenId = QString()) const;
-    QVariantMap zoneToVariantMap(Zone* zone, QScreen* screen, Layout* layout = nullptr) const;
-    QVariantMap zoneToVariantMap(Zone* zone, const QString& screenId, QScreen* physScreen, const QRect& overlayGeometry,
-                                 Layout* layout = nullptr) const;
+    QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, QScreen* screen,
+                                 PhosphorZones::Layout* layout = nullptr) const;
+    QVariantMap zoneToVariantMap(PhosphorZones::Zone* zone, const QString& screenId, QScreen* physScreen,
+                                 const QRect& overlayGeometry, PhosphorZones::Layout* layout = nullptr) const;
 
     /**
      * @brief Resolve the layout for a given screen with fallback chain
      *
      * Tries: per-screen assignment → activeLayout → m_layout
      */
-    Layout* resolveScreenLayout(QScreen* screen) const;
-    Layout* resolveScreenLayout(const QString& screenId) const;
+    PhosphorZones::Layout* resolveScreenLayout(QScreen* screen) const;
+    PhosphorZones::Layout* resolveScreenLayout(const QString& screenId) const;
 
     std::unique_ptr<QQmlEngine> m_engine;
 
@@ -365,10 +368,10 @@ private:
     std::unique_ptr<PhosphorLayer::SurfaceFactory> m_surfaceFactory;
 
     QHash<QString, PerScreenOverlayState> m_screenStates;
-    QPointer<Layout> m_layout;
+    QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    ILayoutManager* m_layoutManager = nullptr;
-    QList<QPointer<Layout>> m_observedLayouts; ///< Layouts we watch for live edits
+    PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
+    QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 
     // Precise disconnect handles for signal sources whose slots are lambdas
     // (disconnect(src, sig, this, nullptr) would sever ALL slots matching —
@@ -389,12 +392,12 @@ private:
         false; // Guard against re-entrant showZoneSelector during deferred recreation
     QString m_currentOverlayScreenId; // Effective screen ID overlay is shown on (single-monitor mode, for #136)
 
-    // Zone selector selection tracking
+    // PhosphorZones::Zone selector selection tracking
     QString m_selectedLayoutId;
     int m_selectedZoneIndex = -1;
     QRectF m_selectedZoneRelGeo;
 
-    // Layout OSD and Navigation OSD windows are stored in m_screenStates
+    // PhosphorZones::Layout OSD and Navigation OSD windows are stored in m_screenStates
 
     // Shader preview overlay (editor dialog)
     PhosphorLayer::Surface* m_shaderPreviewSurface = nullptr;
@@ -412,7 +415,7 @@ private:
     QVariantList m_snapAssistCandidates; // Mutable copy for async thumbnail updates
     QStringList m_thumbnailCaptureQueue; // Sequential capture to avoid overwhelming KWin
     QHash<QString, QString> m_thumbnailCache; // compositorHandle -> dataUrl; reused across continuation
-    // Layout Picker overlay (interactive layout browser)
+    // PhosphorZones::Layout Picker overlay (interactive layout browser)
     PhosphorLayer::Surface* m_layoutPickerSurface = nullptr;
     QQuickWindow* m_layoutPickerWindow = nullptr;
     QPointer<QScreen> m_layoutPickerScreen;
@@ -450,7 +453,7 @@ private:
     void createZoneSelectorWindow(const QString& screenId, QScreen* physScreen, const QRect& geom);
     void destroyZoneSelectorWindow(const QString& screenId);
     void updateZoneSelectorWindow(const QString& screenId);
-    void showLayoutOsdImpl(Layout* layout, const QString& screenId, bool locked);
+    void showLayoutOsdImpl(PhosphorZones::Layout* layout, const QString& screenId, bool locked);
     void createLayoutOsdWindow(const QString& screenId, QScreen* physScreen);
     void destroyLayoutOsdWindow(const QString& screenId);
     void createNavigationOsdWindow(const QString& screenId, QScreen* physScreen);
@@ -572,10 +575,10 @@ private:
     // CAVA audio visualization
     std::unique_ptr<CavaService> m_cavaService;
 
-    // Zone data version for shader synchronization
+    // PhosphorZones::Zone data version for shader synchronization
     int m_zoneDataVersion = 0;
 
-    // Layout filter: which types to include in zone picker (set by Daemon)
+    // PhosphorZones::Layout filter: which types to include in zone picker (set by Daemon)
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
 

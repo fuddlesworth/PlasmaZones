@@ -25,7 +25,7 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
 
     // Check maximum length
     if (name.length() > 100) {
-        return PzI18n::tr("Zone name cannot exceed 100 characters");
+        return PzI18n::tr("PhosphorZones::Zone name cannot exceed 100 characters");
     }
 
     // Check for invalid characters (allow alphanumeric, spaces, hyphens, underscores)
@@ -34,7 +34,7 @@ QString EditorController::validateZoneName(const QString& zoneId, const QString&
     QRegularExpression invalidChars(QStringLiteral("[<>\"'\\\\]"));
     QRegularExpressionMatch match = invalidChars.match(name);
     if (match.hasMatch()) {
-        return PzI18n::tr("Zone name contains invalid characters: < > \" ' \\");
+        return PzI18n::tr("PhosphorZones::Zone name contains invalid characters: < > \" ' \\");
     }
 
     // Check for duplicate names (excluding the current zone)
@@ -65,10 +65,10 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
 {
     // Check range
     if (number < 1) {
-        return PzI18n::tr("Zone number must be at least 1");
+        return PzI18n::tr("PhosphorZones::Zone number must be at least 1");
     }
     if (number > 99) {
-        return PzI18n::tr("Zone number cannot exceed 99");
+        return PzI18n::tr("PhosphorZones::Zone number cannot exceed 99");
     }
 
     // Check for duplicate numbers
@@ -79,16 +79,16 @@ QString EditorController::validateZoneNumber(const QString& zoneId, int number)
     QVariantList zones = m_zoneManager->zones();
     for (const QVariant& zoneVar : zones) {
         QVariantMap zone = zoneVar.toMap();
-        QString otherZoneId = zone[JsonKeys::Id].toString();
+        QString otherZoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
         // Skip the zone being updated
         if (otherZoneId == zoneId) {
             continue;
         }
 
-        int otherNumber = zone[JsonKeys::ZoneNumber].toInt();
+        int otherNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
         if (otherNumber == number) {
-            return PzI18n::tr("Zone number %1 is already in use").arg(number);
+            return PzI18n::tr("PhosphorZones::Zone number %1 is already in use").arg(number);
         }
     }
 

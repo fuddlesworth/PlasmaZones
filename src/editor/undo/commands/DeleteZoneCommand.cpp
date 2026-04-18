@@ -11,7 +11,7 @@ using namespace PlasmaZones;
 
 DeleteZoneCommand::DeleteZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                      const QVariantMap& zoneData, const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Delete Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Delete PhosphorZones::Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_zoneData(zoneData)
 {

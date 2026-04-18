@@ -29,10 +29,10 @@ inline QJsonArray toJsonArray(const QStringList& list)
 inline QJsonObject rectToJsonObject(const QRect& rect)
 {
     QJsonObject obj;
-    obj[JsonKeys::X] = rect.x();
-    obj[JsonKeys::Y] = rect.y();
-    obj[JsonKeys::Width] = rect.width();
-    obj[JsonKeys::Height] = rect.height();
+    obj[::PhosphorZones::ZoneJsonKeys::X] = rect.x();
+    obj[::PhosphorZones::ZoneJsonKeys::Y] = rect.y();
+    obj[::PhosphorZones::ZoneJsonKeys::Width] = rect.width();
+    obj[::PhosphorZones::ZoneJsonKeys::Height] = rect.height();
     return obj;
 }
 
@@ -105,10 +105,10 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         }
         QJsonObject obj;
         obj[QLatin1String("windowId")] = it.key();
-        obj[JsonKeys::X] = it.value().geometry.x();
-        obj[JsonKeys::Y] = it.value().geometry.y();
-        obj[JsonKeys::Width] = it.value().geometry.width();
-        obj[JsonKeys::Height] = it.value().geometry.height();
+        obj[::PhosphorZones::ZoneJsonKeys::X] = it.value().geometry.x();
+        obj[::PhosphorZones::ZoneJsonKeys::Y] = it.value().geometry.y();
+        obj[::PhosphorZones::ZoneJsonKeys::Width] = it.value().geometry.width();
+        obj[::PhosphorZones::ZoneJsonKeys::Height] = it.value().geometry.height();
         if (!it.value().connectorName.isEmpty()) {
             obj[QLatin1String("screen")] = VirtualScreenId::isVirtual(it.value().connectorName)
                 ? it.value().connectorName

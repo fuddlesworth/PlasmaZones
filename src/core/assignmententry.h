@@ -72,7 +72,7 @@ inline size_t qHash(const LayoutAssignmentKey& key, size_t seed = 0)
  * @brief Explicit per-context assignment entry storing both mode fields
  *
  * Each screen/desktop/activity context stores an explicit Mode, SnappingLayout (UUID),
- * and TilingAlgorithm. Toggling between modes only flips the mode field —
+ * and PhosphorTiles::TilingAlgorithm. Toggling between modes only flips the mode field —
  * the other field is preserved, eliminating the need for shadow assignments.
  */
 struct AssignmentEntry
@@ -89,9 +89,9 @@ struct AssignmentEntry
     {
         if (mode == Autotile) {
             // Return autotile prefix even with empty algorithm — signals "autotile mode,
-            // use default algorithm." Callers use LayoutId::isAutotile() to detect mode
+            // use default algorithm." Callers use PhosphorLayout::LayoutId::isAutotile() to detect mode
             // and extractAlgorithmId() to get the algorithm (empty = use default).
-            return LayoutId::makeAutotileId(tilingAlgorithm);
+            return PhosphorLayout::LayoutId::makeAutotileId(tilingAlgorithm);
         }
         return snappingLayout;
     }
@@ -112,9 +112,9 @@ struct AssignmentEntry
     static AssignmentEntry fromLayoutId(const QString& layoutId, const AssignmentEntry& existing)
     {
         AssignmentEntry entry = existing;
-        if (LayoutId::isAutotile(layoutId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
-            entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;
@@ -125,9 +125,9 @@ struct AssignmentEntry
     static AssignmentEntry fromLayoutId(const QString& layoutId)
     {
         AssignmentEntry entry;
-        if (LayoutId::isAutotile(layoutId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             entry.mode = Autotile;
-            entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+            entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         } else {
             entry.mode = Snapping;
             entry.snappingLayout = layoutId;

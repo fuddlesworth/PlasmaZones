@@ -5,8 +5,8 @@
 #include "internal.h"
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
 #include "../../core/screenmanager.h"
 #include "../../core/logging.h"
@@ -204,7 +204,7 @@ void WindowTrackingAdaptor::onLayoutChanged()
     // After layout becomes available, check if we have pending restores
     if (!m_service->pendingRestoreQueues().isEmpty()) {
         m_hasPendingRestores = true;
-        qCDebug(lcDbusWindow) << "Layout available with" << m_service->pendingRestoreQueues().size()
+        qCDebug(lcDbusWindow) << "PhosphorZones::Layout available with" << m_service->pendingRestoreQueues().size()
                               << "pending restores, checking if panel geometry is ready";
         tryEmitPendingRestoresAvailable();
     }
@@ -264,7 +264,8 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
     const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
     for (const QString& sid : effectiveIds) {
-        Layout* layout = m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
+        PhosphorZones::Layout* layout =
+            m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
         if (layout && layout->zoneById(*zoneUuid)) {
             return sid;
         }
@@ -276,7 +277,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     if (!layout) {
         return QString();
     }
-    Zone* zone = layout->zoneById(*zoneUuid);
+    PhosphorZones::Zone* zone = layout->zoneById(*zoneUuid);
     if (!zone) {
         return QString();
     }

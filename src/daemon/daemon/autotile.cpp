@@ -19,8 +19,8 @@
 #include "../../dbus/windowtrackingadaptor.h"
 #include "../../autotile/AutotileEngine.h"
 #include "../../autotile/AutotileConfig.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <QGuiApplication>
 #include <memory>
 #include <QScreen>
@@ -55,16 +55,16 @@ void Daemon::updateAutotileScreens()
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);
-            QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+            QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
             if (!algoId.isEmpty()) {
                 screenAlgorithms[screenId] = algoId;
             }
         }
     }
 
-    // Capture window order for screens LEAVING autotile before TilingState is destroyed.
+    // Capture window order for screens LEAVING autotile before PhosphorTiles::TilingState is destroyed.
     // This preserves the tiling arrangement so re-entering autotile (e.g. cycling back)
     // restores the same window positions. Without this, only the settingsChanged path
     // (handleAutotileDisabled) captured orders — layout cycling lost them.
@@ -119,8 +119,8 @@ void Daemon::updateAutotileScreens()
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithm();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
-                    auto* screenAlgoPtr = AlgorithmRegistry::instance()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = AlgorithmRegistry::instance()->algorithm(globalAlgo);
+                    auto* screenAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
@@ -217,7 +217,7 @@ void Daemon::handleAutotileDisabled()
         const QString activity = currentActivity();
         const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
 
-        Layout* fallbackLayout = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* fallbackLayout = m_layoutManager->activeLayout();
         if (!fallbackLayout && !m_layoutManager->layouts().isEmpty()) {
             fallbackLayout = m_layoutManager->layouts().first();
         }
@@ -226,7 +226,7 @@ void Daemon::handleAutotileDisabled()
             QSignalBlocker blocker(m_layoutManager.get());
             for (const QString& screenId : effectiveIds) {
                 const QString existingSnapId = m_layoutManager->snappingLayoutForScreen(screenId, desktop, activity);
-                Layout* existing =
+                PhosphorZones::Layout* existing =
                     existingSnapId.isEmpty() ? nullptr : m_layoutManager->layoutById(QUuid::fromString(existingSnapId));
                 if (existing) {
                     continue; // Per-screen snap layout already valid — don't overwrite.
@@ -276,9 +276,9 @@ void Daemon::handleSnappingToAutotile()
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
     QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
-        algoId = AlgorithmRegistry::defaultAlgorithmId();
+        algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
-    const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
+    const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 
     if (m_autotileEngine) {
         m_autotileEngine->setAlgorithm(algoId);
@@ -297,7 +297,7 @@ void Daemon::handleSnappingToAutotile()
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
         const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (!LayoutId::isAutotile(existing)) {
+        if (!PhosphorLayout::LayoutId::isAutotile(existing)) {
             screensToConvert.append(screenId);
         }
     }
@@ -498,7 +498,7 @@ void Daemon::processPendingGeometryUpdates()
     using PendingKey = QPair<QString, QUuid>;
     auto pending = std::make_shared<QSet<PendingKey>>();
 
-    auto requestFor = [this, pending](Layout* layout, const QString& screenId, const QRectF& geom) {
+    auto requestFor = [this, pending](PhosphorZones::Layout* layout, const QString& screenId, const QRectF& geom) {
         if (!layout) {
             return;
         }
@@ -508,7 +508,7 @@ void Daemon::processPendingGeometryUpdates()
     };
 
     for (const QString& screenId : screenIds) {
-        Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
             requestFor(layout, screenId, GeometryUtils::effectiveScreenGeometry(layout, screenId));
             processedLayouts.insert(layout->id());
@@ -518,7 +518,7 @@ void Daemon::processPendingGeometryUpdates()
     // Also recalculate layouts not currently assigned to any screen
     // to prevent stale geometries when the user switches layouts.
     // Use primary screen geometry as fallback reference.
-    const QVector<Layout*> allLayouts = m_layoutManager->layouts();
+    const QVector<PhosphorZones::Layout*> allLayouts = m_layoutManager->layouts();
     for (auto* layout : allLayouts) {
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
@@ -543,22 +543,23 @@ void Daemon::processPendingGeometryUpdates()
     // keys not in `pending` are ignored, so a concurrent async caller
     // cannot drain our barrier prematurely. We key off the signal's
     // `layoutId` (not `layout->id()`), so the barrier still drains when
-    // a tracked Layout is destroyed mid-compute — LayoutComputeService
+    // a tracked PhosphorZones::Layout is destroyed mid-compute — LayoutComputeService
     // emits with layout==nullptr in that case.
     auto conn = std::make_shared<QMetaObject::Connection>();
-    *conn = connect(m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
-                    [this, pending, conn](const QString& screenId, const QUuid& layoutId, Layout* /*layout*/) {
-                        const PendingKey key{screenId, layoutId};
-                        if (!pending->remove(key)) {
-                            return; // not one of ours
-                        }
-                        if (pending->isEmpty()) {
-                            QObject::disconnect(*conn);
-                            m_overlayService->updateGeometries();
-                            m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
-                            m_reapplyGeometriesTimer.start();
-                        }
-                    });
+    *conn = connect(
+        m_layoutComputeService.get(), &LayoutComputeService::geometriesComputed, this,
+        [this, pending, conn](const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* /*layout*/) {
+            const PendingKey key{screenId, layoutId};
+            if (!pending->remove(key)) {
+                return; // not one of ours
+            }
+            if (pending->isEmpty()) {
+                QObject::disconnect(*conn);
+                m_overlayService->updateGeometries();
+                m_reapplyGeometriesTimer.setInterval(REAPPLY_DELAY_MS);
+                m_reapplyGeometriesTimer.start();
+            }
+        });
 
     // Re-query panel geometry once after a delay to pick up settled state (e.g. panel editor close).
     // That completion emits availableGeometryChanged → debounce → processPendingGeometryUpdates → reapply.

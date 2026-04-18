@@ -10,7 +10,7 @@
 #include "../config/configbackends.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
@@ -26,7 +26,7 @@
 
 namespace PlasmaZones {
 
-WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, IZoneDetector* zoneDetector,
+WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
                                              ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
                                              QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -432,7 +432,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     // disappear signal fires synchronously from remove() and subscribers may
     // still call canonicalizeForLookup on their way out.
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(windowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         m_windowRegistry->remove(instanceId);
         m_windowRegistry->releaseCanonical(instanceId);
     }
@@ -643,7 +643,7 @@ QString WindowTrackingAdaptor::getLastUsedZoneId()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Zone Geometry Queries - Delegate to Service
+// PhosphorZones::Zone Geometry Queries - Delegate to Service
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QString WindowTrackingAdaptor::findEmptyZone()
