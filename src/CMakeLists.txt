@@ -85,7 +85,9 @@ set(plasmazones_core_SRCS
     # layersurface + shaderregistry/params moved to PhosphorShell
     core/single_instance_service.cpp
     core/single_instance_service.h
-    core/screen_resolver.cpp
+    # screen_resolver.cpp lifted to libs/phosphor-screens/. The shim header
+    # `core/screen_resolver.h` re-exports `Phosphor::Screens::ScreenResolver`
+    # as `PlasmaZones::ScreenResolver` for existing in-tree callers.
     core/screen_resolver.h
     core/screenmanager.cpp
     core/screenmanager/panels.cpp
@@ -225,6 +227,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
+        PhosphorScreens::PhosphorScreens
         PhosphorShell::PhosphorShell
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones

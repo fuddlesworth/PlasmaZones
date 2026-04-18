@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "screen_resolver.h"
-
-#include "constants.h"
+#include "PhosphorScreens/Resolver.h"
 
 #include <QCursor>
 #include <QDBusConnection>
@@ -13,9 +11,9 @@
 #include <QPoint>
 #include <QScreen>
 
-namespace PlasmaZones {
+namespace Phosphor::Screens {
 
-QString ScreenResolver::effectiveScreenAt(const QPoint& pos, int daemonTimeoutMs)
+QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpoint& endpoint, int timeoutMs)
 {
     // Ask the daemon first — it's the only component that knows about
     // virtual-screen carve-outs and disambiguates identical monitors via
@@ -25,15 +23,13 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, int daemonTimeoutMs
     // run before the daemon — e.g. `plasmazones-editor --help`).
     auto bus = QDBusConnection::sessionBus();
     auto* busIface = bus.interface();
-    const bool daemonOnBus =
-        bus.isConnected() && busIface && busIface->isServiceRegistered(QString::fromLatin1(DBus::ServiceName));
+    const bool daemonOnBus = bus.isConnected() && busIface && busIface->isServiceRegistered(endpoint.service);
     if (daemonOnBus) {
-        QDBusMessage msg = QDBusMessage::createMethodCall(
-            QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-            QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getEffectiveScreenAt"));
+        QDBusMessage msg =
+            QDBusMessage::createMethodCall(endpoint.service, endpoint.path, endpoint.interfaceName, endpoint.method);
         msg.setAutoStartService(false);
         msg << pos.x() << pos.y();
-        QDBusMessage reply = bus.call(msg, QDBus::Block, daemonTimeoutMs);
+        QDBusMessage reply = bus.call(msg, QDBus::Block, timeoutMs);
         if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
             const QString daemonId = reply.arguments().at(0).toString();
             if (!daemonId.isEmpty()) {
@@ -53,9 +49,9 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, int daemonTimeoutMs
     return screen ? screen->name() : QString();
 }
 
-QString ScreenResolver::effectiveScreenAtCursor(int daemonTimeoutMs)
+QString ScreenResolver::effectiveScreenAtCursor(const ResolverEndpoint& endpoint, int timeoutMs)
 {
-    return effectiveScreenAt(QCursor::pos(), daemonTimeoutMs);
+    return effectiveScreenAt(QCursor::pos(), endpoint, timeoutMs);
 }
 
-} // namespace PlasmaZones
+} // namespace Phosphor::Screens
