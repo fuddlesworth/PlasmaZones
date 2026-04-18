@@ -31,7 +31,7 @@ Registry::Registry(IBackend* backend, QObject* parent)
 Registry::~Registry() = default;
 
 void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QString& description,
-                    std::function<void()> callback)
+                    std::function<void()> callback, bool persistent)
 {
     auto it = m_entries.find(id);
     if (it == m_entries.end()) {
@@ -41,27 +41,26 @@ void Registry::bind(const QString& id, const QKeySequence& defaultSeq, const QSt
         entry.binding.currentSeq = defaultSeq;
         entry.binding.description = description;
         entry.callback = std::move(callback);
-        // Mark dirty only if we actually have a key to grab. A bind() with an
-        // empty default would otherwise hit flush() with an empty currentSeq
-        // and on KGlobalAccel that re-introduces the stale-grab hazard from
-        // discussion #155. A later rebind() with a non-empty seq flips dirty.
-        entry.dirty = !defaultSeq.isEmpty();
-        entry.registered = false;
+        entry.persistent = persistent;
+        // lastSent* stay empty; flush() compares against the binding's current
+        // values to decide what to send. A bind() with an empty default stays
+        // out of the backend (see flush()) until a later rebind() supplies a
+        // non-empty sequence — that closes the stale-grab hazard from
+        // discussion #155 at the bind entry point.
         m_entries.insert(id, std::move(entry));
         return;
     }
 
     // Update in place but preserve currentSeq so a prior rebind (e.g. from
     // the user's config) is not clobbered when consumers re-apply compiled-in
-    // defaults via bind() for a hot-reload.
-    const bool defaultChanged = (it->binding.defaultSeq != defaultSeq);
-    const bool descriptionChanged = (it->binding.description != description);
+    // defaults via bind() for a hot-reload. Description is stored but only
+    // propagated to the backend on the next registerShortcut call (it's not
+    // carried by updateShortcut); callers that rely on live description edits
+    // should unbind + bind.
     it->binding.defaultSeq = defaultSeq;
     it->binding.description = description;
     it->callback = std::move(callback);
-    if (defaultChanged || descriptionChanged) {
-        it->dirty = true;
-    }
+    it->persistent = persistent;
 }
 
 void Registry::rebind(const QString& id, const QKeySequence& seq)
@@ -82,7 +81,6 @@ void Registry::rebind(const QString& id, const QKeySequence& seq)
         return;
     }
     it->binding.currentSeq = seq;
-    it->dirty = true;
 }
 
 void Registry::unbind(const QString& id)
@@ -99,31 +97,36 @@ void Registry::flush()
     }
 
     for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
-        if (!it->dirty) {
-            continue;
-        }
-        if (it->binding.currentSeq.isEmpty()) {
+        auto& entry = *it;
+        if (entry.binding.currentSeq.isEmpty()) {
             // Don't ask the backend to grab nothing — skips the stale-grab
             // hazard on KGlobalAccel. Entry stays in the registry (so a
-            // later rebind() to a non-empty seq will register it) but clears
-            // dirty to avoid hitting this branch on every flush.
-            it->dirty = false;
+            // later rebind() to a non-empty seq will register it) and we
+            // don't mark it sent because nothing has been sent.
             continue;
         }
-        if (!it->registered) {
-            // First flush for this id: pass both the compiled-in default
-            // (for KGlobalAccel's setDefaultShortcut / portal's
-            // preferred_trigger) AND the current user value (what actually
-            // gets grabbed). Conflating the two — which an earlier version
-            // of this code did — broke "Reset to default" in System Settings
-            // once a user had customised the shortcut.
-            m_backend->registerShortcut(it->binding.id, it->binding.defaultSeq, it->binding.currentSeq,
-                                        it->binding.description);
-            it->registered = true;
-        } else {
-            m_backend->updateShortcut(it->binding.id, it->binding.currentSeq);
+
+        const bool needsRegister = !entry.registered || entry.lastSentDefault != entry.binding.defaultSeq;
+        if (needsRegister) {
+            // First flush for this id, OR the compiled-in default has changed
+            // since the last send. Call registerShortcut in both cases: on the
+            // first flush it's the only way to hand both the compiled-in
+            // default (for KGlobalAccel's setDefaultShortcut / portal's
+            // preferred_trigger) and the current user value (what actually
+            // gets grabbed) to the backend in one shot. On a default change,
+            // re-calling registerShortcut lets the backend refresh its
+            // "reset to default" target — KGlobalAccelBackend and
+            // PortalBackend both handle this idempotently.
+            m_backend->registerShortcut(entry.binding.id, entry.binding.defaultSeq, entry.binding.currentSeq,
+                                        entry.binding.description);
+            entry.registered = true;
+            entry.lastSentDefault = entry.binding.defaultSeq;
+            entry.lastSentCurrent = entry.binding.currentSeq;
+        } else if (entry.lastSentCurrent != entry.binding.currentSeq) {
+            m_backend->updateShortcut(entry.binding.id, entry.binding.currentSeq);
+            entry.lastSentCurrent = entry.binding.currentSeq;
         }
-        it->dirty = false;
+        // else: nothing changed for this id since the last flush — skip.
     }
 
     m_backend->flush();
@@ -138,11 +141,14 @@ QKeySequence Registry::shortcut(const QString& id) const
     return it->binding.currentSeq;
 }
 
-QVector<Registry::Binding> Registry::bindings() const
+QVector<Registry::Binding> Registry::bindings(bool persistentOnly) const
 {
     QVector<Binding> out;
     out.reserve(m_entries.size());
     for (const auto& e : m_entries) {
+        if (persistentOnly && !e.persistent) {
+            continue;
+        }
         out.push_back(e.binding);
     }
     // QHash iteration order is unspecified — sort by id so consumer UIs

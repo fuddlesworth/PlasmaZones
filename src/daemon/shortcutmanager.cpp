@@ -175,7 +175,15 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     if (!m_registry) {
         return;
     }
-    m_registry->bind(id, sequence, description, std::move(callback));
+    // Adhoc registration during the initial settings-driven batch would race
+    // the batched BindShortcuts on the Portal backend (the per-batch Request
+    // subscription gets torn down mid-flight when the adhoc flush fires).
+    // All adhoc callers today register post-init in response to user actions
+    // (drag start); crash here instead of letting the race manifest as a
+    // silent grab-missing bug in production.
+    Q_ASSERT_X(!m_registrationInProgress, "ShortcutManager::registerAdhocShortcut",
+               "must not be called during initial shortcut registration");
+    m_registry->bind(id, sequence, description, std::move(callback), /*persistent=*/false);
     // If the consumer ever passes a different sequence for the same id
     // after a prior register, bind() preserves currentSeq per contract,
     // so apply the requested sequence explicitly via rebind().

@@ -9,7 +9,6 @@
 
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
-#include <QDBusInterface>
 
 namespace Phosphor::Shortcuts {
 
@@ -17,8 +16,6 @@ namespace {
 
 const QString kKGlobalAccelService = QStringLiteral("org.kde.kglobalaccel");
 const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
-const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
-const QString kPortalInterface = QStringLiteral("org.freedesktop.portal.GlobalShortcuts");
 
 std::unique_ptr<IBackend> makeDBusTrigger(QObject* parent)
 {
@@ -41,12 +38,15 @@ std::unique_ptr<IBackend> autoSelect(QObject* parent)
     }
 #endif
 
+    // Trust isServiceRegistered — constructing a QDBusInterface here would
+    // issue a synchronous Introspect call, stalling daemon startup by a
+    // full D-Bus round-trip when the portal is slow. If the service is
+    // registered but the GlobalShortcuts interface is missing, PortalBackend
+    // will detect that via its CreateSession reply and latch m_sessionFailed,
+    // keeping ready() firing so consumers don't hang.
     if (bus->isServiceRegistered(kPortalService)) {
-        QDBusInterface portalCheck(kPortalService, kPortalPath, kPortalInterface, QDBusConnection::sessionBus());
-        if (portalCheck.isValid()) {
-            qCInfo(lcPhosphorShortcuts) << "Selected backend: Portal";
-            return std::make_unique<PortalBackend>(parent);
-        }
+        qCInfo(lcPhosphorShortcuts) << "Selected backend: Portal";
+        return std::make_unique<PortalBackend>(parent);
     }
 
     return makeDBusTrigger(parent);

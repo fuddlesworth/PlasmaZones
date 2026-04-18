@@ -54,9 +54,17 @@ public:
      *                 triggered() signal. Nullptr callbacks are stored but
      *                 never invoked; consumers relying purely on the signal
      *                 can omit the argument.
+     * @param persistent If false, the binding is considered transient (e.g. a
+     *                   grab bound around a specific UI state) and is excluded
+     *                   from bindings(true) enumeration. Does not affect
+     *                   backend behaviour. Defaults to true.
+     *
+     * Note: descriptions are captured at first-flush time and NOT forwarded on
+     * subsequent bind() calls — IBackend::updateShortcut doesn't carry a
+     * description argument. Description changes at runtime are local-only.
      */
     void bind(const QString& id, const QKeySequence& defaultSeq, const QString& description = {},
-              std::function<void()> callback = {});
+              std::function<void()> callback = {}, bool persistent = true);
 
     /**
      * Change the active binding for an already-registered id. Takes effect
@@ -83,7 +91,17 @@ public:
     void flush();
 
     QKeySequence shortcut(const QString& id) const;
-    QVector<Binding> bindings() const;
+
+    /**
+     * Enumerate registered bindings, sorted by id for deterministic output.
+     *
+     * @param persistentOnly If true, transient bindings (those registered with
+     *                       persistent=false) are excluded. Intended for
+     *                       settings UIs that should not expose internal
+     *                       ad-hoc grabs to the user. Defaults to false so
+     *                       tests and library-internal callers see everything.
+     */
+    QVector<Binding> bindings(bool persistentOnly = false) const;
 
 Q_SIGNALS:
     /**
@@ -109,8 +127,13 @@ private:
     {
         Binding binding;
         std::function<void()> callback;
-        bool dirty = true; // needs flush to backend
+        // Last values successfully pushed to the backend. Used to decide
+        // whether flush() should re-register (default changed) or update-only
+        // (current changed), and to short-circuit no-op flushes.
+        QKeySequence lastSentDefault;
+        QKeySequence lastSentCurrent;
         bool registered = false; // has registerShortcut been sent yet?
+        bool persistent = true; // surfaces in bindings(persistentOnly=true)
     };
 
     QPointer<IBackend> m_backend;

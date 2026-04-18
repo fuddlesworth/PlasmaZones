@@ -58,6 +58,11 @@ public:
      * Change the active binding for an already-registered id. Only affects
      * the currently-grabbed key; the compiled-in default established by
      * registerShortcut is left intact. Takes effect after the next flush().
+     *
+     * Does NOT carry a description — description updates require a fresh
+     * registerShortcut call (Registry re-invokes registerShortcut when the
+     * default changes, which is the natural point to refresh description
+     * on the backend side).
      */
     virtual void updateShortcut(const QString& id, const QKeySequence& newTrigger) = 0;
 
@@ -65,6 +70,13 @@ public:
      * Release the key grab for an id. Idempotent; unknown ids are ignored.
      * This call is NOT queued — backends apply it immediately (subject to
      * per-backend semantics; see PortalBackend notes in the .cpp).
+     *
+     * PortalBackend caveat: XDG GlobalShortcuts has no per-id release, so
+     * this is a LOCAL-ONLY clear on that backend (onActivated will drop
+     * the event, but the key stays grabbed compositor-side until the
+     * session closes). Consumers needing truly transient grabs on Portal
+     * compositors should bind once and gate via a flag inside the
+     * callback. See docs/phosphor-shortcuts-api.md for details.
      */
     virtual void unregisterShortcut(const QString& id) = 0;
 

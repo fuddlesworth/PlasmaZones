@@ -82,9 +82,28 @@ Implementation notes per backend:
 
 | Backend | Behaviour |
 |---------|-----------|
-| KGlobalAccelBackend | Wraps a private `QHash<QString, QAction*>`. The QAction is internal; consumers never see it. `defaultSeq` → `setDefaultShortcut`, `currentSeq` → `setShortcut`. |
-| PortalShortcutBackend | Uses `BindShortcuts(o, a(sa{sv}), s, a{sv})`. Sends `defaultSeq` as `preferred_trigger` — the compositor treats it as advisory and assigns the actual key. `currentSeq` is ignored because user customisation happens compositor-side, not in consumer config. |
+| KGlobalAccelBackend | Wraps a private `QHash<QString, QAction*>`. The QAction is internal; consumers never see it. `defaultSeq` → `setDefaultShortcut` (only when the compiled-in default actually changes — tracked internally to avoid redundant kglobalshortcutsrc writes), `currentSeq` → `setShortcut`. |
+| PortalShortcutBackend | Uses `BindShortcuts(o, a(sa{sv}), s, a{sv})`. Sends `defaultSeq` as `preferred_trigger` — the compositor treats it as advisory and assigns the actual key. `currentSeq` is supplied by the Registry but the Portal backend doesn't forward it: Portal-based compositors expose their own key-rebinding UI and we cannot override the user's choice from the client side. Pass whatever you read from config as `currentSeq` — it's used transparently on KGlobalAccel and harmless on Portal. |
 | DBusTriggerBackend | Ignores both sequences; exposes `TriggerAction(id)` at `/org/Phosphor/Shortcuts`. Users bind keybinds compositor-side. |
+
+#### Unregister semantics (Portal caveat)
+
+`unregisterShortcut` / `Registry::unbind` releases the grab cleanly on
+KGlobalAccel (`removeAllShortcuts` on the internal QAction) and on
+DBusTrigger (object path is re-available). **On the Portal backend the
+release is partial**: the XDG `GlobalShortcuts` interface has no per-id
+unbind — `BindShortcuts` is additive by spec, and the only way to drop a
+grab is to close the entire session. `PortalBackend::unregisterShortcut`
+clears the local registration so `onActivated` drops the event, but the
+key stays routed to the session until `PortalBackend` is destroyed.
+
+Consumers that need genuinely transient grabs (e.g. bind on drag start,
+release on drag end) on Portal-based compositors should bind the
+shortcut once at app startup and gate activation via a boolean inside
+the callback rather than rely on bind/unbind cycles. The Registry
+accepts a `persistent=false` flag on `bind()` so the adhoc id is
+excluded from `bindings(persistentOnly=true)` enumeration regardless of
+which backend is active.
 
 ### `Registry` — consumer-facing facade
 
@@ -134,17 +153,33 @@ Contract details worth knowing:
   from either entry point.
 - `rebind()` with an empty `QKeySequence` routes through `unbind()` rather
   than leaving an empty sequence registered.
-- `flush()` only calls `IBackend::registerShortcut` once per id (on the
-  first flush after bind). Subsequent sequence changes go through
-  `IBackend::updateShortcut`. Consumers writing backends can rely on
-  register-before-update ordering.
+- `flush()` picks between `IBackend::registerShortcut` and
+  `IBackend::updateShortcut` per id by comparing the current default / current
+  sequences against the last values pushed to the backend. First flush after
+  bind → `registerShortcut`. Subsequent `defaultSeq` change → another
+  `registerShortcut` so the backend can refresh its "reset to default" target
+  (KGlobalAccel's `setDefaultShortcut`, Portal's `preferred_trigger`) —
+  backend implementations handle repeated `registerShortcut` idempotently.
+  Subsequent `currentSeq`-only change → `updateShortcut`.
+- **Description changes are local-only.** The `updateShortcut` signature has
+  no description argument; a `bind()` that updates only the description
+  reaches the Registry (visible via `bindings()`) but does not roundtrip
+  through the backend. Callers that need user-facing description edits
+  should unbind + bind.
 - `unbind()` applies immediately — it is NOT batched until the next flush.
   Backends' unregister paths all run synchronously or with trivial state,
   and a deferred release would be surprising for a "release this grab now"
-  API.
+  API. See the Portal caveat above for what "release" means on that backend.
+- `persistent=false` on `bind()` marks a binding as transient for
+  `bindings(persistentOnly=true)` enumeration. It does not affect backend
+  behaviour — the grab is still registered normally.
 - `ready()` is emitted after the backend acknowledges the batch. For
   async backends (Portal) it waits on the D-Bus reply; for synchronous
   backends (KGlobalAccel, DBusTrigger) it fires immediately.
+- Activation order: on every backend activation, `Registry` invokes the
+  per-binding callback first, then emits `triggered()`. Consumers that
+  mutate state in the callback and read it from a `triggered` slot can
+  rely on this ordering.
 
 Consumers pick one of two patterns:
 
@@ -172,6 +207,25 @@ affected; the destructor deliberately does NOT call `removeAllShortcuts`.
 If a consumer needs user-customisable bindings for a transient id, keep
 the Registry entry bound for the process lifetime and toggle the callback
 instead of re-binding.
+
+### Portal Response handling
+
+`PortalBackend` subscribes once to
+`org.freedesktop.portal.Request::Response` at construction time with **no
+path filter** and demultiplexes signals inside the slot by comparing
+`QDBusMessage::path()` against the tracked Request paths for the in-flight
+`CreateSession` and `BindShortcuts` requests. This closes a race the spec
+explicitly permits: a portal may emit `Response` as soon as the Request
+object is created, which can happen before the caller's async-call reply
+lands — and if the portal picks a Request path format that differs from
+the spec's example convention, a pre-subscribe-on-predicted-path approach
+would miss the signal entirely. The path-less subscription never misses;
+path matching happens once the signal is already in hand.
+
+The tradeoff is that our slot is invoked for every Response signal the
+portal emits to our bus connection, including replays and Responses for
+previously-superseded Requests. Each unknown-path signal is dropped with
+a `qCDebug` log — cheap, and easier to diagnose than a silent hang.
 
 ### `Factory` — runtime backend selection
 

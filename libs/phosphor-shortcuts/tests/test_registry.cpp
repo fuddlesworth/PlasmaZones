@@ -460,6 +460,134 @@ private Q_SLOTS:
         QCOMPARE(triggeredSpy.count(), 1);
         QCOMPARE(registry.bindings().size(), 0);
     }
+
+    void defaultChangeAfterFirstFlush_reRegisters()
+    {
+        // Pins the fix for the silent-drop regression: once an id was
+        // registered, a subsequent bind() with a NEW defaultSeq has to
+        // refresh the backend's "reset to default" target. Prior Registry
+        // behaviour only ever called registerShortcut once per id and used
+        // updateShortcut for everything after, so a default hot-reload
+        // would reach the Registry but never reach KGlobalAccel /
+        // preferred_trigger.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+1")));
+        backend.registers.clear();
+
+        // Same id, new default. Registry must re-invoke registerShortcut on
+        // the backend so the compiled-in default propagates.
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+F1")), QStringLiteral("A"));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 1);
+        QCOMPARE(backend.registers[0].defaultSeq, QKeySequence(QStringLiteral("Meta+F1")));
+        // currentSeq preserved because no rebind happened between the two
+        // binds — bind() never clobbers a user-applied rebind.
+        QCOMPARE(backend.registers[0].currentSeq, QKeySequence(QStringLiteral("Meta+1")));
+        QCOMPARE(backend.updates.size(), 0);
+    }
+
+    void defaultUnchanged_plusCurrentChange_emitsUpdateOnly()
+    {
+        // Counterpart to the test above: when only currentSeq changed,
+        // updateShortcut is the right backend call — registerShortcut would
+        // be a D-Bus round-trip + kglobalshortcutsrc write for no gain.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")));
+        registry.flush();
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.rebind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+2")));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 1);
+        QCOMPARE(backend.updates[0].newTrigger, QKeySequence(QStringLiteral("Meta+2")));
+    }
+
+    void bindings_persistentOnly_filtersTransient()
+    {
+        // Adhoc / transient bindings (persistent=false) must not surface in
+        // bindings(persistentOnly=true). Consumer KCMs use that overload to
+        // enumerate user-visible shortcuts and shouldn't see internal
+        // ad-hoc grabs like the drag-cancel Escape.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.user"), QKeySequence(QStringLiteral("Meta+U")), QStringLiteral("User"));
+        registry.bind(QStringLiteral("pz.adhoc"), QKeySequence(QStringLiteral("Esc")), QStringLiteral("Adhoc"), {},
+                      /*persistent=*/false);
+
+        const auto all = registry.bindings();
+        QCOMPARE(all.size(), 2);
+
+        const auto userFacing = registry.bindings(/*persistentOnly=*/true);
+        QCOMPARE(userFacing.size(), 1);
+        QCOMPARE(userFacing[0].id, QStringLiteral("pz.user"));
+    }
+
+    void callbackRunsBeforeTriggeredSignal()
+    {
+        // Documented contract: Registry::onBackendActivated invokes the
+        // per-binding callback first, then Q_EMIT triggered. Consumers that
+        // depend on "slot has synchronous read of mutated state" rely on
+        // this ordering.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        QVector<QString> events;
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"), [&] {
+            events.push_back(QStringLiteral("callback"));
+        });
+        registry.flush();
+
+        connect(&registry, &Registry::triggered, [&](const QString&) {
+            events.push_back(QStringLiteral("signal"));
+        });
+
+        backend.activate(QStringLiteral("pz.a"));
+
+        QCOMPARE(events.size(), 2);
+        QCOMPARE(events[0], QStringLiteral("callback"));
+        QCOMPARE(events[1], QStringLiteral("signal"));
+    }
+
+    void descriptionChange_isLocalOnly()
+    {
+        // A re-bind that only changes the description is stored in the
+        // Registry but does NOT trigger a backend register/update — the
+        // IBackend::updateShortcut signature has no description slot, so
+        // there's nothing to propagate. Documented in Registry.h and the
+        // API docs.
+        FakeBackend backend;
+        Registry registry(&backend);
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A"));
+        registry.flush();
+        backend.registers.clear();
+        backend.updates.clear();
+
+        registry.bind(QStringLiteral("pz.a"), QKeySequence(QStringLiteral("Meta+1")), QStringLiteral("A (renamed)"));
+        registry.flush();
+
+        QCOMPARE(backend.registers.size(), 0);
+        QCOMPARE(backend.updates.size(), 0);
+
+        // Local state DOES reflect the new description — consumers can
+        // read it via bindings() for non-backend-facing uses.
+        const auto bindings = registry.bindings();
+        QCOMPARE(bindings.size(), 1);
+        QCOMPARE(bindings[0].description, QStringLiteral("A (renamed)"));
+    }
 };
 
 } // namespace Phosphor::Shortcuts::tests

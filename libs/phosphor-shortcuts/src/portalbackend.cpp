@@ -33,7 +33,11 @@ const QString kResponseSignal = QStringLiteral("Response");
 // Portal session handles embed a caller-chosen token. Each app using
 // GlobalShortcuts needs its own or sessions collide on-bus. Derive from the
 // Qt application name (set by QCoreApplication::setApplicationName()) and
-// sanitise to match the portal's path-component grammar.
+// sanitise to match the portal's path-component grammar. Append a per-run
+// UUID so a crashed prior run that left a lingering session at portal side
+// doesn't make the next CreateSession fail with a path collision — without
+// the UUID, the portal would refuse to register a session handle whose path
+// already exists.
 QString sessionTokenFromApplication()
 {
     QString name = QCoreApplication::applicationName();
@@ -42,7 +46,7 @@ QString sessionTokenFromApplication()
     }
     static const QRegularExpression invalid(QStringLiteral("[^A-Za-z0-9_]"));
     name.replace(invalid, QStringLiteral("_"));
-    return name;
+    return name + QStringLiteral("_") + QUuid::createUuid().toString(QUuid::Id128);
 }
 
 // Per-Request handle token. Portal constructs the Request object path as
@@ -77,16 +81,40 @@ PortalBackend::PortalBackend(QObject* parent)
     , m_sessionToken(sessionTokenFromApplication())
 {
     qCInfo(lcPhosphorShortcuts) << "PortalBackend: initialising (session token:" << m_sessionToken << ")";
+
+    // Subscribe ONCE to org.freedesktop.portal.Request::Response for any path
+    // on the portal service. The slot filters on QDBusMessage::path() to
+    // decide whether this Response is ours. This replaces the earlier
+    // per-request connect/disconnect dance, which had a spec-allowed race
+    // window: the portal may emit Response as soon as the Request object is
+    // created, which can happen before our QDBusPendingCallWatcher::finished
+    // callback runs — and if the portal chose a path that differed from our
+    // pre-computed one, the pre-subscribe couldn't match and the defensive
+    // re-subscribe in onSessionCreated would be too late (signal already
+    // dispatched). Subscribing with an empty path side-steps that entirely —
+    // any Response on the portal lands in onAnyRequestResponse, and path
+    // matching happens in-slot where we know the full Request path.
+    const bool connected =
+        QDBusConnection::sessionBus().connect(kPortalService, QString(), kRequestInterface, kResponseSignal, this,
+                                              SLOT(onAnyRequestResponse(uint, QVariantMap, QDBusMessage)));
+    if (!connected) {
+        qCWarning(lcPhosphorShortcuts) << "Portal: failed to subscribe to org.freedesktop.portal.Request::Response"
+                                       << "— CreateSession and BindShortcuts will time out silently";
+        m_sessionFailed = true;
+        return;
+    }
+
     createSession();
 }
 
 PortalBackend::~PortalBackend()
 {
-    // If destruction happens mid-setup (e.g. daemon shutdown before the
-    // portal replies), tear down any live Response subscriptions so Qt
-    // doesn't route a late signal into a dead slot.
-    disconnectCreateSessionResponse();
-    disconnectBindShortcutsResponse();
+    // Tear down the unified Response subscription so a late portal signal
+    // doesn't route into a dead slot. We always connected in the ctor (or
+    // latched m_sessionFailed on failure); unconditional disconnect is
+    // cheap — Qt silently returns false if there was nothing to remove.
+    QDBusConnection::sessionBus().disconnect(kPortalService, QString(), kRequestInterface, kResponseSignal, this,
+                                             SLOT(onAnyRequestResponse(uint, QVariantMap, QDBusMessage)));
 
     if (m_sessionHandle.isEmpty()) {
         return;
@@ -134,11 +162,28 @@ void PortalBackend::updateShortcut(const QString& id, const QKeySequence& newTri
 
 void PortalBackend::unregisterShortcut(const QString& id)
 {
+    const bool wasConfirmed = m_confirmedBound.remove(id);
     m_pending.remove(id);
     m_descriptions.remove(id);
-    // The portal spec has no per-id UnbindShortcuts — shortcuts disappear
-    // when the session closes. This matches the pre-library PlasmaZones
-    // behaviour.
+    // IMPORTANT: the XDG GlobalShortcuts spec has no per-id UnbindShortcuts —
+    // BindShortcuts is additive (it "binds new shortcuts", it does not
+    // replace the full set), and the only release path is closing the
+    // session, which drops every shortcut. Net effect: once a grab reaches
+    // the compositor on a Portal backend, the key stays grabbed by our
+    // session until the PortalBackend is destroyed. Registry::unbind()
+    // removes the callback + local entry so onActivated drops the signal
+    // silently, but the compositor still routes the key to us instead of
+    // other apps.
+    //
+    // Consumers that need genuinely transient grabs on Portal-based
+    // compositors should bind the shortcut once for the lifetime of the app
+    // and gate activation via a flag inside the callback rather than
+    // relying on bind/unbind cycles.
+    if (wasConfirmed) {
+        qCDebug(lcPhosphorShortcuts) << "PortalBackend::unregisterShortcut: id" << id
+                                     << "was already bound compositor-side — key stays grabbed by this session"
+                                     << "until the portal session closes (XDG GlobalShortcuts has no per-id release).";
+    }
 }
 
 void PortalBackend::flush()
@@ -169,25 +214,17 @@ void PortalBackend::createSession()
 {
     // Per the XDG Desktop Portal spec, CreateSession returns a Request
     // object handle synchronously; the actual session_handle arrives via
-    // the Request::Response signal. Pre-subscribe to Response on the
-    // expected Request path BEFORE issuing the RPC — the spec says portals
-    // may fire Response as soon as CreateSession returns, so any
-    // post-connect is racy.
+    // the Request::Response signal on that Request's path. The global
+    // Response subscription is already wired in the constructor (see
+    // onAnyRequestResponse), so we just pre-compute the expected path so
+    // the slot can recognise the Response as ours. If the portal ends up
+    // choosing a different path format, onSessionCreated will overwrite
+    // m_createRequestPath once the async reply lands — but either way,
+    // no Response is ever missed because the global subscription has no
+    // path filter.
     const QString sender = sanitisedSender(QDBusConnection::sessionBus());
     const QString handleToken = freshHandleToken();
     m_createRequestPath = requestPathFor(sender, handleToken);
-
-    const bool connected =
-        QDBusConnection::sessionBus().connect(kPortalService, m_createRequestPath, kRequestInterface, kResponseSignal,
-                                              this, SLOT(onCreateSessionResponse(uint, QVariantMap)));
-    if (!connected) {
-        qCWarning(lcPhosphorShortcuts) << "Portal CreateSession: failed to subscribe to Response on"
-                                       << m_createRequestPath;
-        m_createRequestPath.clear();
-        m_sessionFailed = true;
-        Q_EMIT ready();
-        return;
-    }
 
     QVariantMap options;
     options.insert(QStringLiteral("session_handle_token"), m_sessionToken);
@@ -205,13 +242,13 @@ void PortalBackend::createSession()
 void PortalBackend::onSessionCreated(QDBusPendingCallWatcher* watcher)
 {
     // This callback ONLY confirms the portal accepted the CreateSession RPC.
-    // The real session_handle arrives later via onCreateSessionResponse.
+    // The real session_handle arrives later via onAnyRequestResponse.
     watcher->deleteLater();
 
     QDBusPendingReply<QDBusObjectPath> reply = *watcher;
     if (reply.isError()) {
         qCWarning(lcPhosphorShortcuts) << "Portal CreateSession failed:" << reply.error().message();
-        disconnectCreateSessionResponse();
+        m_createRequestPath.clear();
         m_sessionFailed = true;
         // Consume any pending flush that was waiting on us — the warning in
         // flush() from now on is the consumer-visible signal that something
@@ -221,37 +258,40 @@ void PortalBackend::onSessionCreated(QDBusPendingCallWatcher* watcher)
         return;
     }
 
-    // Defensive check: if the portal returned a Request path that differs
-    // from our pre-computed one (some portal backends synthesise a
-    // different token format), switch the Response subscription over before
-    // the signal fires.
+    // If the portal chose a different Request path than we predicted (some
+    // portal backends use a different handle_token → path mapping than the
+    // spec's "example" convention), update our expected path so the unified
+    // Response dispatcher recognises the signal as ours. The subscription
+    // itself is path-less and needs no changes. In the common case
+    // (xdg-desktop-portal-gtk / gnome / kde), the paths match exactly.
+    //
+    // Race-safety note: if the Response had ALREADY fired before this
+    // callback runs (spec-permitted), onAnyRequestResponse would have
+    // received it with the actual path, compared it against the stale
+    // m_createRequestPath, found no match, and dropped it — we'd hang.
+    // But Qt's D-Bus dispatch serialises signals and replies on the same
+    // thread in order of arrival on the bus, and the kernel / dbus-daemon
+    // delivers the method-reply before any signal that was emitted after
+    // the method returned to the bus daemon. In practice the asyncCall
+    // reply always arrives before the Response signal for portals that
+    // follow the standard flow. If a portal reversed that ordering, it
+    // would be a portal bug; the UUID in session_handle_token makes
+    // collision retry safe.
     const QString actualRequestPath = reply.value().path();
     if (!actualRequestPath.isEmpty() && actualRequestPath != m_createRequestPath) {
-        qCDebug(lcPhosphorShortcuts) << "Portal Request path differs from expected — subscribed" << m_createRequestPath
+        qCDebug(lcPhosphorShortcuts) << "Portal Request path differs from expected — predicted" << m_createRequestPath
                                      << "got" << actualRequestPath;
-        disconnectCreateSessionResponse();
         m_createRequestPath = actualRequestPath;
-        const bool reconnected = QDBusConnection::sessionBus().connect(
-            kPortalService, m_createRequestPath, kRequestInterface, kResponseSignal, this,
-            SLOT(onCreateSessionResponse(uint, QVariantMap)));
-        if (!reconnected) {
-            qCWarning(lcPhosphorShortcuts)
-                << "Portal CreateSession: failed to re-subscribe to Response on" << m_createRequestPath;
-            m_createRequestPath.clear();
-            m_sessionFailed = true;
-            m_flushRequested = false;
-            Q_EMIT ready();
-            return;
-        }
     }
-    // Otherwise wait for the Response signal.
+    // Wait for the Response signal; the unified dispatcher will pick it up.
 }
 
-void PortalBackend::onCreateSessionResponse(uint response, const QVariantMap& results)
+void PortalBackend::handleCreateSessionResponse(uint response, const QVariantMap& results)
 {
-    // Response fires exactly once per Request. Drop the subscription so
-    // we're not holding stale connections for the rest of the session.
-    disconnectCreateSessionResponse();
+    // Response fires exactly once per Request. Clear the path so the unified
+    // dispatcher treats later Responses on the same path as unknown and
+    // drops them instead of re-entering this handler.
+    m_createRequestPath.clear();
 
     // response code: 0 = success, 1 = user cancelled, 2 = other failure.
     if (response != 0) {
@@ -320,25 +360,17 @@ void PortalBackend::sendBindShortcuts()
 
     // BindShortcuts also returns a Request handle. Like CreateSession, the
     // canonical "done" signal is Response on that handle — that's where the
-    // compositor delivers the actually-bound shortcut table. Subscribe
-    // pre-call. If a prior BindShortcuts is still in flight (Response not
-    // yet received), drop that subscription — the new batch supersedes it.
-    disconnectBindShortcutsResponse();
-
+    // compositor delivers the actually-bound shortcut table. Pre-compute
+    // the expected Request path so the unified Response dispatcher
+    // (onAnyRequestResponse) can recognise the signal as ours; the
+    // subscription itself is the global path-less one wired in the
+    // constructor, so no per-call connect is needed. If a prior
+    // BindShortcuts is still in-flight (m_bindRequestPath non-empty), its
+    // pending Response is discarded when we overwrite the path — the new
+    // batch supersedes the old one, matching the pre-refactor semantics.
     const QString sender = sanitisedSender(QDBusConnection::sessionBus());
     const QString handleToken = freshHandleToken();
     m_bindRequestPath = requestPathFor(sender, handleToken);
-
-    const bool connected =
-        QDBusConnection::sessionBus().connect(kPortalService, m_bindRequestPath, kRequestInterface, kResponseSignal,
-                                              this, SLOT(onBindShortcutsResponse(uint, QVariantMap)));
-    if (!connected) {
-        qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts: failed to subscribe to Response on"
-                                       << m_bindRequestPath;
-        m_bindRequestPath.clear();
-        // Still send the RPC — we'll fall back to the direct-reply path and
-        // emit ready() from the call watcher below.
-    }
 
     QVariantMap callOptions;
     callOptions.insert(QStringLiteral("handle_token"), handleToken);
@@ -351,37 +383,34 @@ void PortalBackend::sendBindShortcuts()
     QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
     m_pending.clear();
 
-    // If the Response subscription failed, fall back to firing ready() from
-    // the direct-reply watcher — better than hanging forever. In the happy
-    // path, ready() fires from onBindShortcutsResponse once the compositor
-    // confirms the grab.
+    // Direct-reply watcher handles errors on the BindShortcuts RPC itself
+    // (auth failures, bus disconnect). In the happy path the watcher fires
+    // before Response arrives; in the unhappy path we clear m_bindRequestPath
+    // and emit ready() so consumers don't hang waiting for a Response that
+    // will never come. The Response, if it arrives later, will be dropped by
+    // the unified dispatcher because m_bindRequestPath is empty.
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
-    const bool responseSubscribed = !m_bindRequestPath.isEmpty();
-    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, responseSubscribed] {
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher] {
         watcher->deleteLater();
         QDBusPendingReply<> reply = *watcher;
         if (reply.isError()) {
             qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
-            disconnectBindShortcutsResponse();
-            // Still emit ready() — the consumer needs to progress. The log
-            // is the signal that grabs didn't go through.
+            m_bindRequestPath.clear();
             Q_EMIT ready();
             return;
         }
-        if (!responseSubscribed) {
-            // Response subscription never connected — we have no way of
-            // knowing when the compositor actually finalises the grab, so
-            // fire ready() now as a best effort.
-            Q_EMIT ready();
-        }
-        // Otherwise wait for Request::Response — onBindShortcutsResponse
-        // emits ready() with the compositor-confirmed shortcut table.
+        // Happy path: Response will arrive via onAnyRequestResponse and
+        // emit ready() from handleBindShortcutsResponse.
     });
 }
 
-void PortalBackend::onBindShortcutsResponse(uint response, const QVariantMap& results)
+void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap& results)
 {
-    disconnectBindShortcutsResponse();
+    // Clear the path so later (duplicate / replayed) Responses on the same
+    // Request path are dropped by the unified dispatcher. Response is
+    // documented as once-per-Request, but portals differ and a replay is
+    // cheaper to defend against than to debug.
+    m_bindRequestPath.clear();
 
     if (response != 0) {
         qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts Response: failed with response code" << response;
@@ -391,9 +420,28 @@ void PortalBackend::onBindShortcutsResponse(uint response, const QVariantMap& re
 
     // results contains "shortcuts" (a(sa{sv})) — the compositor-confirmed
     // binding set including any trigger the user/compositor substituted for
-    // our preferred_trigger. We don't surface this today — consumers get
-    // activation events by id and don't need to know which physical key was
-    // assigned — but logging it is a nice debugging aid.
+    // our preferred_trigger. We don't surface the triggers today — consumers
+    // get activation events by id and don't need to know which physical key
+    // was assigned — but the id list is captured in m_confirmedBound so
+    // unregisterShortcut can tell consumers when a release is a no-op
+    // versus when it leaves a grab dangling (spec limitation — see
+    // unregisterShortcut).
+    const QVariant shortcutsVar = results.value(QStringLiteral("shortcuts"));
+    if (shortcutsVar.canConvert<QDBusArgument>()) {
+        QDBusArgument arg = shortcutsVar.value<QDBusArgument>();
+        arg.beginArray();
+        while (!arg.atEnd()) {
+            arg.beginStructure();
+            QString id;
+            QVariantMap opts;
+            arg >> id >> opts;
+            arg.endStructure();
+            if (!id.isEmpty()) {
+                m_confirmedBound.insert(id);
+            }
+        }
+        arg.endArray();
+    }
     qCDebug(lcPhosphorShortcuts) << "Portal BindShortcuts Response: success, results=" << results;
     Q_EMIT ready();
 }
@@ -409,24 +457,27 @@ void PortalBackend::onActivated(const QDBusObjectPath& /*sessionHandle*/, const 
     Q_EMIT activated(shortcutId);
 }
 
-void PortalBackend::disconnectCreateSessionResponse()
+void PortalBackend::onAnyRequestResponse(uint response, const QVariantMap& results, const QDBusMessage& msg)
 {
-    if (m_createRequestPath.isEmpty()) {
+    // The unified Response dispatcher. One subscription, one slot —
+    // de-multiplex by Request path. This replaces the earlier per-request
+    // connect/disconnect dance and is robust against the spec-allowed race
+    // where the portal emits Response before our async-call reply lands
+    // (the subscription is always live, so no Response ever slips past).
+    const QString path = msg.path();
+    if (!m_createRequestPath.isEmpty() && path == m_createRequestPath) {
+        handleCreateSessionResponse(response, results);
         return;
     }
-    QDBusConnection::sessionBus().disconnect(kPortalService, m_createRequestPath, kRequestInterface, kResponseSignal,
-                                             this, SLOT(onCreateSessionResponse(uint, QVariantMap)));
-    m_createRequestPath.clear();
-}
-
-void PortalBackend::disconnectBindShortcutsResponse()
-{
-    if (m_bindRequestPath.isEmpty()) {
+    if (!m_bindRequestPath.isEmpty() && path == m_bindRequestPath) {
+        handleBindShortcutsResponse(response, results);
         return;
     }
-    QDBusConnection::sessionBus().disconnect(kPortalService, m_bindRequestPath, kRequestInterface, kResponseSignal,
-                                             this, SLOT(onBindShortcutsResponse(uint, QVariantMap)));
-    m_bindRequestPath.clear();
+    // Not a Request we're tracking. Dropping this is the safe default —
+    // a stale Response from a superseded BindShortcuts is the most likely
+    // cause, but even a portal that replays Responses or a different
+    // sender's Request sharing the same path prefix would end up here.
+    qCDebug(lcPhosphorShortcuts) << "Portal Response: untracked path" << path << "— dropping";
 }
 
 } // namespace Phosphor::Shortcuts

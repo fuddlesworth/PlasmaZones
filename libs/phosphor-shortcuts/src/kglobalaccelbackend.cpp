@@ -29,7 +29,13 @@ public:
     struct Entry
     {
         QAction* action = nullptr;
-        bool defaultApplied = false; // true after the first setDefaultShortcut call
+        // Last values forwarded to KGlobalAccel. Kept so registerShortcut can
+        // skip redundant setDefaultShortcut / setShortcut calls when neither
+        // sequence has changed — each setShortcut otherwise costs a D-Bus
+        // round-trip and a write into kglobalshortcutsrc. Empty QKeySequence
+        // means "nothing sent yet".
+        QKeySequence lastDefault;
+        QKeySequence lastCurrent;
     };
     QHash<QString, Entry> entries;
 };
@@ -74,20 +80,23 @@ void KGlobalAccelBackend::registerShortcut(const QString& id, const QKeySequence
         entry.action->setText(description);
     }
 
-    if (!entry.defaultApplied) {
-        // setDefaultShortcut establishes the "reset to default" binding shown
-        // in System Settings. Must be called with the compiled-in default
-        // (NOT the user's current value) so "Reset to default" actually
-        // resets to the factory default. Only needs to happen once per id —
-        // repeating it on every re-register causes extra writes to
-        // kglobalshortcutsrc.
+    // setDefaultShortcut establishes the "reset to default" binding shown in
+    // System Settings. Must be called with the compiled-in default (NOT the
+    // user's current value) so "Reset to default" actually resets to the
+    // factory default. Skip the call when the compiled-in default hasn't
+    // changed since the last send — each call otherwise costs a D-Bus
+    // round-trip and a kglobalshortcutsrc write.
+    if (entry.lastDefault != defaultSeq) {
         KGlobalAccel::self()->setDefaultShortcut(entry.action, {defaultSeq});
-        entry.defaultApplied = true;
+        entry.lastDefault = defaultSeq;
     }
     // setShortcut actually grabs the key. Uses the default autoloading flag
     // so any user override persisted in kglobalshortcutsrc wins over the
-    // currentSeq passed here.
-    KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
+    // currentSeq passed here. Same "only if changed" gate as above.
+    if (entry.lastCurrent != currentSeq) {
+        KGlobalAccel::self()->setShortcut(entry.action, {currentSeq});
+        entry.lastCurrent = currentSeq;
+    }
 }
 
 void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& newTrigger)
@@ -97,7 +106,11 @@ void KGlobalAccelBackend::updateShortcut(const QString& id, const QKeySequence& 
         qCWarning(lcPhosphorShortcuts) << "KGlobalAccel updateShortcut: unknown id" << id;
         return;
     }
+    if (it->lastCurrent == newTrigger) {
+        return;
+    }
     KGlobalAccel::self()->setShortcut(it->action, {newTrigger});
+    it->lastCurrent = newTrigger;
 }
 
 void KGlobalAccelBackend::unregisterShortcut(const QString& id)

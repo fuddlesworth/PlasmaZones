@@ -10,10 +10,12 @@
 
 #include <QHash>
 #include <QKeySequence>
+#include <QSet>
 #include <QString>
 
 class QDBusPendingCallWatcher;
 class QDBusObjectPath;
+class QDBusMessage;
 
 namespace Phosphor::Shortcuts {
 
@@ -56,13 +58,16 @@ public:
 
 private Q_SLOTS:
     void onSessionCreated(QDBusPendingCallWatcher* watcher);
-    // Portal Request::Response for the CreateSession request. Per spec,
-    // CreateSession returns a Request handle synchronously; the actual
-    // session_handle only arrives here.
-    void onCreateSessionResponse(uint response, const QVariantMap& results);
-    // Portal Request::Response for each BindShortcuts batch. Fires ready()
-    // once the portal confirms the grab is live.
-    void onBindShortcutsResponse(uint response, const QVariantMap& results);
+    // Unified dispatcher for every org.freedesktop.portal.Request::Response
+    // signal from the portal service, regardless of Request path. The trailing
+    // QDBusMessage carries the signal path, which tells us whether this
+    // Response belongs to our in-flight CreateSession, our in-flight
+    // BindShortcuts, or neither (other processes' or already-consumed
+    // Responses — dropped). Subscribing with an empty path eliminates the
+    // race where the portal fires Response before our QDBusPendingCallWatcher
+    // finishes and before we could switch subscriptions to the actual
+    // Request path the portal picked.
+    void onAnyRequestResponse(uint response, const QVariantMap& results, const QDBusMessage& msg);
     void onActivated(const QDBusObjectPath& sessionHandle, const QString& shortcutId, qulonglong timestamp,
                      const QVariantMap& options);
 
@@ -75,15 +80,18 @@ private:
 
     void createSession();
     void sendBindShortcuts();
-    void disconnectCreateSessionResponse();
-    void disconnectBindShortcutsResponse();
+    // Called from onAnyRequestResponse once the Response has been identified
+    // as belonging to the CreateSession / BindShortcuts request by path.
+    void handleCreateSessionResponse(uint response, const QVariantMap& results);
+    void handleBindShortcutsResponse(uint response, const QVariantMap& results);
 
     QString m_sessionToken; // used for session_handle_token — derived from applicationName()
     QString m_sessionHandle; // populated once Request::Response delivers session_handle
-    // Request path currently subscribed for CreateSession's Response (empty
-    // once that subscription has been torn down after the signal fired).
+    // Request paths we're currently expecting Response on. Cleared the moment
+    // the matching Response arrives OR the request fails, so later Responses
+    // can't re-enter the same handler and the unified slot knows when to drop
+    // unknown-path signals.
     QString m_createRequestPath;
-    // Same, for the in-flight BindShortcuts Response (at most one at a time).
     QString m_bindRequestPath;
     bool m_flushRequested = false;
     // Latched true if CreateSession failed. flush() then keeps emitting
@@ -99,6 +107,13 @@ private:
 
     // Full table of known ids + descriptions, kept for bookkeeping + logs.
     QHash<QString, QString> m_descriptions;
+
+    // Ids the compositor has confirmed bound (BindShortcuts Response success).
+    // Used by unregisterShortcut to distinguish "never reached the compositor"
+    // (local-only cleanup, no user-visible effect) from "still grabbed
+    // compositor-side" (the spec limitation where the key stays routed to us
+    // until session close — see unregisterShortcut for the full rationale).
+    QSet<QString> m_confirmedBound;
 };
 
 #ifdef PHOSPHORSHORTCUTS_HAVE_KGLOBALACCEL
