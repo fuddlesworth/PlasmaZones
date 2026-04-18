@@ -73,8 +73,15 @@ public:
     ///
     /// Returns a default-constructed preview (empty @c id) when @p id is
     /// not known to this source. Caller checks `result.id.isEmpty()`.
+    ///
+    /// @note Non-const because implementations are expected to populate
+    /// a preview cache here (re-running a scripted algorithm on every
+    /// picker redraw would be prohibitive). Callers holding a
+    /// `const ILayoutSource*` cannot query previews — which matches the
+    /// intent: querying a preview is an observable-effect operation on
+    /// the source.
     virtual LayoutPreview previewAt(const QString& id, int windowCount = DefaultPreviewWindowCount,
-                                    const QSize& canvas = {}) const = 0;
+                                    const QSize& canvas = {}) = 0;
 
 Q_SIGNALS:
     /// Emitted whenever the set of layouts this source reports has

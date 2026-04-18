@@ -14,16 +14,13 @@ CompositeLayoutSource::CompositeLayoutSource(QObject* parent)
 
 CompositeLayoutSource::~CompositeLayoutSource() = default;
 
-void CompositeLayoutSource::addSource(ILayoutSource* source)
+void CompositeLayoutSource::connectSource(ILayoutSource* source)
 {
-    if (!source || m_sources.contains(source)) {
-        return;
-    }
-    m_sources.append(source);
     // Forward child's contentsChanged so callers only need to listen at
     // the composite level. AutoConnection — direct within the same thread,
     // which is the only supported topology for ILayoutSource today.
-    connect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
+    QMetaObject::Connection changed =
+        connect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
     // Auto-drop the entry if the caller deletes the source without calling
     // removeSource() first. The documented contract says callers keep
     // sources alive, but a dangling raw pointer here would turn a caller
@@ -31,17 +28,49 @@ void CompositeLayoutSource::addSource(ILayoutSource* source)
     // for a one-line safety net. The QObject is partially destroyed at this
     // point, so compare by pointer identity without dereferencing through
     // the ILayoutSource subobject.
-    connect(source, &QObject::destroyed, this, [this](QObject* obj) {
+    QMetaObject::Connection destroyed = connect(source, &QObject::destroyed, this, [this](QObject* obj) {
         const auto before = m_sources.size();
         m_sources.erase(std::remove_if(m_sources.begin(), m_sources.end(),
                                        [obj](ILayoutSource* s) {
                                            return static_cast<QObject*>(s) == obj;
                                        }),
                         m_sources.end());
+        // Drop the connection-handles entry too — key compared by pointer
+        // identity, QObject subobject not dereferenced.
+        for (auto it = m_connections.begin(); it != m_connections.end();) {
+            if (static_cast<QObject*>(it.key()) == obj) {
+                it = m_connections.erase(it);
+            } else {
+                ++it;
+            }
+        }
         if (m_sources.size() != before) {
             Q_EMIT contentsChanged();
         }
     });
+    m_connections.insert(source, {changed, destroyed});
+}
+
+void CompositeLayoutSource::disconnectSource(ILayoutSource* source)
+{
+    auto it = m_connections.find(source);
+    if (it == m_connections.end()) {
+        return;
+    }
+    // Handle-based disconnect is safe on mid-destruction objects — Qt tracks
+    // the connection internally without needing to dereference `source`.
+    QObject::disconnect(it.value().first);
+    QObject::disconnect(it.value().second);
+    m_connections.erase(it);
+}
+
+void CompositeLayoutSource::addSource(ILayoutSource* source)
+{
+    if (!source || m_sources.contains(source)) {
+        return;
+    }
+    m_sources.append(source);
+    connectSource(source);
     Q_EMIT contentsChanged();
 }
 
@@ -50,10 +79,32 @@ void CompositeLayoutSource::removeSource(ILayoutSource* source)
     if (!source) {
         return;
     }
-    disconnect(source, nullptr, this, nullptr);
+    disconnectSource(source);
     if (m_sources.removeAll(source) > 0) {
         Q_EMIT contentsChanged();
     }
+}
+
+void CompositeLayoutSource::setSources(QVector<ILayoutSource*> sources)
+{
+    // Tear down every existing connection first — incremental disconnect +
+    // append would emit one signal per step, which is exactly what this
+    // batch API exists to avoid.
+    for (ILayoutSource* source : std::as_const(m_sources)) {
+        if (source) {
+            disconnectSource(source);
+        }
+    }
+    m_sources.clear();
+
+    for (ILayoutSource* source : sources) {
+        if (!source || m_sources.contains(source)) {
+            continue;
+        }
+        m_sources.append(source);
+        connectSource(source);
+    }
+    Q_EMIT contentsChanged();
 }
 
 void CompositeLayoutSource::clearSources()
@@ -63,7 +114,7 @@ void CompositeLayoutSource::clearSources()
     }
     for (ILayoutSource* source : std::as_const(m_sources)) {
         if (source) {
-            disconnect(source, nullptr, this, nullptr);
+            disconnectSource(source);
         }
     }
     m_sources.clear();
@@ -86,7 +137,7 @@ QVector<LayoutPreview> CompositeLayoutSource::availableLayouts() const
     return result;
 }
 
-LayoutPreview CompositeLayoutSource::previewAt(const QString& id, int windowCount, const QSize& canvas) const
+LayoutPreview CompositeLayoutSource::previewAt(const QString& id, int windowCount, const QSize& canvas)
 {
     for (ILayoutSource* source : m_sources) {
         if (!source) {

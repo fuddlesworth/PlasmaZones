@@ -5,7 +5,6 @@
 
 #include <QLatin1String>
 #include <QString>
-#include <QStringLiteral>
 #include <QStringView>
 
 namespace PhosphorLayout {

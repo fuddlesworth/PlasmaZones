@@ -34,8 +34,21 @@ inline constexpr int DefaultPreviewWindowCount = 4;
 /// the "preview" geometry is computed for some specific window count (see
 /// @c ILayoutSource::previewAt) — different counts yield different
 /// previews from the same algorithm.
+///
+/// @c zoneCount carries a logical "this layout supports N windows" value
+/// that's distinct from @c zones.size(). The sentinel @c UnlimitedZoneCount
+/// (== 0) means "no hard limit" and is used by unlimited autotile
+/// algorithms whose rendered preview still contains a fixed example
+/// geometry. Consumers validate the shape via @c isValid().
 struct LayoutPreview
 {
+    /// Sentinel for @c zoneCount meaning "no hard limit on window count"
+    /// (typical for unlimited autotile algorithms). Distinct from a
+    /// partially-populated preview — @c isValid checks the relationship
+    /// between @c zoneCount and @c zones.size() rather than the sentinel
+    /// itself.
+    static constexpr int UnlimitedZoneCount = 0;
+
     /// Stable identifier for this layout entry. For manual layouts this is
     /// the layout's UUID string (with braces); for autotile entries it's
     /// the prefixed form `"autotile:<algorithmId>"` so manual + autotile
@@ -127,6 +140,28 @@ struct LayoutPreview
     bool isAutotile() const noexcept
     {
         return algorithm.has_value();
+    }
+
+    /// Structural consistency check.  Returns true when:
+    ///   - @c zoneCount is @c UnlimitedZoneCount, or matches @c zones.size()
+    ///     (a bounded-count preview renders exactly as many rects as it
+    ///     claims to support);
+    ///   - @c zoneNumbers is either empty (unnumbered — typical for
+    ///     autotile algorithms that only emit a count) or exactly matches
+    ///     @c zones.size() (1:1 parallel arrays).
+    ///
+    /// Empty previews (default-constructed, used by ILayoutSource to signal
+    /// "id not mine") are valid — @c zones is empty, @c zoneCount is 0, and
+    /// @c zoneNumbers is empty.
+    bool isValid() const noexcept
+    {
+        if (zoneCount > UnlimitedZoneCount && zones.size() != zoneCount) {
+            return false;
+        }
+        if (!zoneNumbers.isEmpty() && zoneNumbers.size() != zones.size()) {
+            return false;
+        }
+        return true;
     }
 };
 

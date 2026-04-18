@@ -110,9 +110,12 @@ inline qreal aspectRatioForClass(AspectRatioClass cls, qreal fallback = 16.0 / 9
     case AspectRatioClass::Portrait:
         return 9.0 / 16.0;
     case AspectRatioClass::Any:
-    default:
         return fallback;
     }
+    // Unreachable under @c -Wswitch (every enumerator handled above). Kept
+    // to satisfy compilers that still warn about control reaching the end
+    // of a non-void function when the enum-covering switch exits the path.
+    return fallback;
 }
 
 /**

@@ -77,10 +77,13 @@ inline QString deriveShortName(const QString& windowClass)
  * - Exact match (case-insensitive): "firefox" == "Firefox"
  * - Trailing dot-segment: "org.mozilla.firefox" matches pattern "firefox"
  * - Reverse trailing: pattern "org.mozilla.firefox" matches appId "firefox"
- * - Last-segment prefix (pattern >= 5 chars): "systemsettings" matches "systemsettings5"
+ * - Last-segment prefix (prefix >= 5 chars): "systemsettings" matches "systemsettings5"
  *
- * The 5-char minimum on prefix matching prevents short false positives
- * like "fire" matching "firefox".
+ * The 5-char minimum always applies to the *prefix* candidate — whichever
+ * operand is the shorter one in the prefix/full-segment relationship. This
+ * prevents short false positives like appId "fire" matching pattern
+ * "org.mozilla.firefox" (the "firefox" last-segment would otherwise start
+ * with "fire").
  */
 inline bool appIdMatches(const QString& appId, const QString& pattern)
 {
@@ -100,18 +103,22 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
         && pattern.endsWith(appId, Qt::CaseInsensitive)) {
         return true;
     }
-    // Last-segment prefix: "systemsettings" matches start of last segment "systemsettings5"
-    // Only for patterns >= 5 chars to prevent short false positives like "fire" → "firefox"
+    // Last-segment prefix: pattern "systemsettings" matches start of appId's
+    // last segment "systemsettings5". Here `pattern` is the prefix candidate,
+    // so gate on its length.
     if (pattern.length() >= 5) {
-        int lastDot = appId.lastIndexOf(QLatin1Char('.'));
+        const int lastDot = appId.lastIndexOf(QLatin1Char('.'));
         if (lastDot >= 0) {
             QStringView lastSeg = QStringView(appId).mid(lastDot + 1);
             if (lastSeg.startsWith(pattern, Qt::CaseInsensitive) && lastSeg.length() != pattern.length()) {
                 return true;
             }
         }
-        // Reverse: appId matches start of pattern's last segment
-        lastDot = pattern.lastIndexOf(QLatin1Char('.'));
+    }
+    // Reverse: appId matches start of pattern's last segment. Here `appId`
+    // is the prefix candidate, so gate on its length (not pattern's).
+    if (appId.length() >= 5) {
+        const int lastDot = pattern.lastIndexOf(QLatin1Char('.'));
         if (lastDot >= 0) {
             QStringView lastSeg = QStringView(pattern).mid(lastDot + 1);
             if (lastSeg.startsWith(appId, Qt::CaseInsensitive) && lastSeg.length() != appId.length()) {

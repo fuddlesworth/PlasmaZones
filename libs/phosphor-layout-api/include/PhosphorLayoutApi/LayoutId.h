@@ -32,14 +32,12 @@ inline bool isAutotile(const QString& id)
 
 /// Extract the algorithm id portion from an autotile preview id.
 /// Callers are expected to check @c isAutotile first — passing a non-autotile
-/// id here is a contract violation. In debug builds this fires an assert; in
-/// release builds we warn and return an empty string so the misuse is loud
-/// rather than silent.
+/// id here is a contract violation. We warn and return an empty string so
+/// the misuse is loud rather than silent, but remain graceful in release
+/// (no assert — the empty return gives callers a testable signal).
 inline QString extractAlgorithmId(const QString& id)
 {
     if (!isAutotile(id)) {
-        Q_ASSERT_X(false, "PhosphorLayout::LayoutId::extractAlgorithmId",
-                   "passed a non-autotile id — call isAutotile() first");
         qWarning("PhosphorLayout::LayoutId::extractAlgorithmId called with non-autotile id: %s", qUtf8Printable(id));
         return QString();
     }
