@@ -39,11 +39,14 @@ void ScriptedAlgorithmWatchdog::arm(ScriptedAlgorithm* algo, int timeoutMs)
     if (!algo || timeoutMs <= 0) {
         return;
     }
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
     {
         std::lock_guard<std::mutex> lock(m_mutex);
+        // Compute the deadline *inside* the locked section. If we captured
+        // now() before acquiring the mutex, a stall on lock contention could
+        // push the stored deadline into the past and the watchdog would fire
+        // immediately on a script that never actually timed out.
         Entry& entry = m_entries[algo];
-        entry.deadline = deadline;
+        entry.deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
         ++entry.generation;
     }
     m_cv.notify_all();

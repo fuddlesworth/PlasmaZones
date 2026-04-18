@@ -167,6 +167,10 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* reg
     , m_registry(registry ? registry : PhosphorTiles::AlgorithmRegistry::instance())
 {
     if (m_registry) {
+        // Seed the algorithm-count cache — insertCacheEntry() relies on it
+        // for its FIFO cap, and the first invalidation signal may not fire
+        // until long after the first availableLayouts() call.
+        m_algorithmCountCache = m_registry->availableAlgorithms().size();
         // Every invalidation path must emit contentsChanged — wire all three
         // registry signals to the same slot so the emit is owned by a single
         // function (invalidateCache) instead of duplicated in each lambda.
@@ -192,6 +196,12 @@ void AutotileLayoutSource::invalidateCache()
 {
     m_cache.clear();
     m_cacheOrder.clear();
+    // Refresh the cached algorithm count at the same time — the registry's
+    // algorithm set is exactly what just changed, and this is the only path
+    // where the count can drift. availableAlgorithms() allocates a fresh
+    // QStringList so we pay the cost here (on change) rather than on every
+    // insertCacheEntry().
+    m_algorithmCountCache = m_registry ? m_registry->availableAlgorithms().size() : 0;
     // All invalidation paths converge here, so emitting once guarantees no
     // listener misses a rebuild regardless of which signal fired.
     Q_EMIT contentsChanged();
@@ -203,7 +213,7 @@ void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLa
     // the layout-picker UI (one preview per algorithm × a handful of
     // windowCount values) while preventing unbounded growth if a caller
     // probes previewAt() with a wide range of window counts.
-    const int cap = qMax(10, m_registry ? m_registry->availableAlgorithms().size() * 10 : 10);
+    const int cap = qMax(10, m_algorithmCountCache * 10);
 
     // If the algorithm count shrank since the last insert, m_cache may
     // already hold more entries than the current cap allows. Prune the

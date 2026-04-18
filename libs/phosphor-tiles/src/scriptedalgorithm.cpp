@@ -50,8 +50,9 @@ namespace PhosphorTiles {
 
 using namespace AutotileDefaults;
 
-// 100ms watchdog — generous enough for ARM / slow systems where JS evaluation takes longer
-static constexpr int ScriptWatchdogTimeoutMs = 100;
+// ScriptWatchdogTimeoutMs is defined in AutotileConstants.h (inside the
+// AutotileDefaults namespace). The `using namespace AutotileDefaults;`
+// above brings it into scope; no local duplicate needed.
 
 // resolveJsOverride<T> / resolveJsOverrideClamped<T> are defined inline in
 // the header so the _hooks.cpp and _tree.cpp TUs can instantiate them.
@@ -213,6 +214,21 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
         return false;
     }
 
+    // Shared freeze helper — locks a global so subsequent code (later
+    // builtins, the user script) cannot redefine or reassign it. This is
+    // the sandbox's core integrity guarantee: any name left writable is a
+    // potential escape vector.
+    auto freezeGlobal = [this, &filePath](QLatin1String name, const QString& context) -> bool {
+        QJSValue r = m_engine->evaluate(
+            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
+        if (r.isError()) {
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "Failed to freeze global:" << name << "context=" << context << "file=" << filePath << r.toString();
+            return false;
+        }
+        return true;
+    };
+
     // Inject frozen constants so JS helpers and user scripts can reference them.
     //
     // Constants are set directly as properties on the global object via
@@ -221,163 +237,134 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // emit "0,5" under de_DE) and fragile to type changes on the C++ side;
     // binding via setProperty bypasses the JS parser entirely and
     // round-trips the native numeric value.
+    //
+    // Each constant is frozen immediately after being set so a later helper
+    // or user script cannot shadow it via `this.PZ_MIN_SPLIT = ...`.
     QJSValue globalObj = m_engine->globalObject();
-    globalObj.setProperty(QStringLiteral("PZ_MIN_ZONE_SIZE"), static_cast<int>(MinZoneSizePx));
-    globalObj.setProperty(QStringLiteral("PZ_MIN_SPLIT"), static_cast<double>(MinSplitRatio));
-    globalObj.setProperty(QStringLiteral("PZ_MAX_SPLIT"), static_cast<double>(MaxSplitRatio));
-    globalObj.setProperty(QStringLiteral("MAX_TREE_DEPTH"), static_cast<int>(MaxRuntimeTreeDepth));
-
-    // Freeze constants immediately so builtin helper scripts cannot reassign them.
-    // The frozenGlobals loop below will re-freeze them (harmless no-op on already-frozen properties).
-    static const QLatin1String earlyFreezeConstants[] = {
-        QLatin1String("PZ_MIN_ZONE_SIZE"),
-        QLatin1String("PZ_MIN_SPLIT"),
-        QLatin1String("PZ_MAX_SPLIT"),
-        QLatin1String("MAX_TREE_DEPTH"),
+    struct Constant
+    {
+        QLatin1String name;
+        QJSValue value;
     };
-    for (const auto& name : earlyFreezeConstants) {
-        QJSValue r = m_engine->evaluate(
-            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
-        if (r.isError()) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "Failed to early-freeze constant:" << name << r.toString();
+    const Constant constants[] = {
+        {QLatin1String("PZ_MIN_ZONE_SIZE"), QJSValue(static_cast<int>(MinZoneSizePx))},
+        {QLatin1String("PZ_MIN_SPLIT"), QJSValue(static_cast<double>(MinSplitRatio))},
+        {QLatin1String("PZ_MAX_SPLIT"), QJSValue(static_cast<double>(MaxSplitRatio))},
+        {QLatin1String("MAX_TREE_DEPTH"), QJSValue(static_cast<int>(MaxRuntimeTreeDepth))},
+    };
+    for (const auto& c : constants) {
+        globalObj.setProperty(QString(c.name), c.value);
+        if (!freezeGlobal(c.name, QStringLiteral("constant"))) {
             return false;
         }
     }
 
-    // Inject built-in helpers from ScriptedAlgorithmHelpers and JsBuiltins.
-    // NOTE: Each helper's exported global name(s) must also appear in the
-    // frozenGlobals[] array below — a missing entry is a sandbox escape.
-    auto injectBuiltin = [this, &filePath](const QString& source, const QString& label) -> bool {
+    // Inject each builtin helper and immediately freeze its exported
+    // global names before the next helper runs. Freezing in one batch at
+    // the end would leave a window where an already-injected helper could
+    // be silently shadowed by a later one via plain `this.X = ...`
+    // assignment — the trusted builtin set makes that a latent hazard
+    // today, but the per-step freeze closes the gap so adding a new helper
+    // can't regress the invariant.
+    //
+    // NOTE: Each entry's `exports` list must name every global the helper
+    // defines. A missing name is a sandbox escape — user scripts could
+    // overwrite the helper. User-exported functions (calculateZones, etc.)
+    // are intentionally NOT frozen.
+    auto injectAndFreeze = [this, &filePath, &freezeGlobal](const QString& source, QLatin1String label,
+                                                            std::initializer_list<QLatin1String> exports) -> bool {
         if (source.isEmpty()) {
             qCWarning(PhosphorTiles::lcTilesLib)
                 << "ScriptedAlgorithm: empty builtin source for" << label << "file=" << filePath;
             return false;
         }
-        const QJSValue result = m_engine->evaluate(source, label);
+        const QJSValue result = m_engine->evaluate(source, QString(label));
         if (result.isError()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: builtin injection failed for" << label
                                                  << "error=" << result.toString() << "file=" << filePath;
             return false;
+        }
+        for (QLatin1String exp : exports) {
+            if (!freezeGlobal(exp, QString(label))) {
+                return false;
+            }
         }
         return true;
     };
 
     // Injection order matters: each helper must be injected after its dependencies.
     // Dependency graph (arrows mean "depends on"):
+    //   clampSplitRatio    (standalone, utility)
     //   applyTreeGeometry  (standalone)
     //   lShapeLayout       (standalone)
-    //   deckLayout          → fillArea
-    //   distributeEvenly    (standalone)
-    //   distributeWithGaps  (standalone)
+    //   distributeEvenly   (standalone)
+    //   distributeWithGaps (standalone)
     //   distributeWithMinSizes → distributeWithGaps
     //   distributeWithOptionalMins → distributeWithGaps, distributeWithMinSizes
-    //   solveTwoPart        (standalone)
-    //   solveThreeColumn    (standalone, uses PZ_* constants)
+    //   solveTwoPart       (standalone)
+    //   solveThreeColumn   (standalone, uses PZ_* constants)
     //   computeCumulativeMinDims (standalone)
     //   appendGracefulDegradation → distributeWithGaps
-    //   dwindleLayout       → computeCumulativeMinDims, appendGracefulDegradation
-    //   extractMinDims      (standalone)
-    //   interleaveStacks    (standalone)
+    //   dwindleLayout      → computeCumulativeMinDims, appendGracefulDegradation
+    //   extractMinDims     (standalone) — exports extractMinWidths/Heights/_extractMinDims
+    //   interleaveStacks   (standalone) — exports 4 helpers
     //   applyPerWindowMinSize (standalone)
-    //   extractRegionMaxMin  (standalone)
-    //   fillRegion           (standalone)
-    //   fillArea             → fillRegion
-    //   masterStackLayout   → fillArea, extractRegionMaxMin, solveTwoPart,
-    //                         extractMinDims, distributeWithOptionalMins
-    //   equalColumnsLayout  → extractMinDims, distributeWithOptionalMins
-    //   threeColumnLayout   → fillArea, extractRegionMaxMin, solveThreeColumn,
-    //                         extractMinDims, interleaveStacks, distributeWithOptionalMins
-    if (!injectBuiltin(ScriptedHelpers::clampSplitRatioJs(), QStringLiteral("builtin:clampSplitRatio"))
-        || !injectBuiltin(ScriptedHelpers::applyTreeGeometryJs(), QStringLiteral("builtin:applyTreeGeometry"))
-        || !injectBuiltin(ScriptedHelpers::lShapeLayoutJs(), QStringLiteral("builtin:lShapeLayout"))
-        || !injectBuiltin(ScriptedHelpers::distributeEvenlyJs(), QStringLiteral("builtin:distributeEvenly"))
-        || !injectBuiltin(ScriptedHelpers::distributeWithGapsJs(), QStringLiteral("builtin:distributeWithGaps"))
-        || !injectBuiltin(ScriptedHelpers::distributeWithMinSizesJs(), QStringLiteral("builtin:distributeWithMinSizes"))
-        || !injectBuiltin(ScriptedHelpers::distributeWithOptionalMinsJs(),
-                          QStringLiteral("builtin:distributeWithOptionalMins"))
-        || !injectBuiltin(ScriptedHelpers::solveTwoPartJs(), QStringLiteral("builtin:solveTwoPart"))
-        || !injectBuiltin(ScriptedHelpers::solveThreeColumnJs(), QStringLiteral("builtin:solveThreeColumn"))
-        || !injectBuiltin(ScriptedHelpers::cumulativeMinDimsJs(), QStringLiteral("builtin:computeCumulativeMinDims"))
-        || !injectBuiltin(ScriptedHelpers::gracefulDegradationJs(), QStringLiteral("builtin:appendGracefulDegradation"))
-        || !injectBuiltin(ScriptedHelpers::dwindleLayoutJs(), QStringLiteral("builtin:dwindleLayout"))
-        || !injectBuiltin(ScriptedHelpers::extractMinDimsJs(), QStringLiteral("builtin:extractMinDims"))
-        || !injectBuiltin(ScriptedHelpers::interleaveStacksJs(), QStringLiteral("builtin:interleaveStacks"))
-        || !injectBuiltin(ScriptedHelpers::applyPerWindowMinSizeJs(), QStringLiteral("builtin:applyPerWindowMinSize"))
-        || !injectBuiltin(ScriptedHelpers::extractRegionMaxMinJs(), QStringLiteral("builtin:extractRegionMaxMin"))
-        || !injectBuiltin(ScriptedHelpers::fillRegionJs(), QStringLiteral("builtin:fillRegion"))
-        || !injectBuiltin(ScriptedHelpers::fillAreaJs(), QStringLiteral("builtin:fillArea"))
-        || !injectBuiltin(ScriptedHelpers::deckLayoutJs(), QStringLiteral("builtin:deckLayout"))
-        || !injectBuiltin(ScriptedHelpers::masterStackLayoutJs(), QStringLiteral("builtin:masterStackLayout"))
-        || !injectBuiltin(ScriptedHelpers::equalColumnsLayoutJs(), QStringLiteral("builtin:equalColumnsLayout"))
-        || !injectBuiltin(ScriptedHelpers::threeColumnLayoutJs(), QStringLiteral("builtin:threeColumnLayout"))) {
-        return false;
-    }
-
-    // Freeze helper globals and constants so user scripts cannot overwrite them.
-    // This must happen after injection since hardenSandbox's freezeGlobal calls
-    // ran before the helpers existed.
-    //
-    // IMPORTANT: Every global name injected by builtinHelpers must appear here.
-    // A missing entry is a sandbox escape — user scripts could overwrite the helper.
-    // Update the static_assert count below when adding/removing builtins.
-    // User-exported functions (calculateZones, etc.) are intentionally
-    // NOT frozen. When adding a new builtin helper, add its exported
-    // global name(s) here.
-    static const QLatin1String frozenGlobals[] = {
-        // ── Group 1: Injected C++ constants (4 entries, running total: 4) ──
-        QLatin1String("PZ_MIN_ZONE_SIZE"),
-        QLatin1String("PZ_MIN_SPLIT"),
-        QLatin1String("PZ_MAX_SPLIT"),
-        QLatin1String("MAX_TREE_DEPTH"),
-        // ── Group 2: Standalone layout helpers (3 entries, running total: 7) ──
-        QLatin1String("applyTreeGeometry"),
-        QLatin1String("lShapeLayout"),
-        QLatin1String("deckLayout"),
-        // ── Group 3: distribute* helpers (4 entries, running total: 11) ──
-        QLatin1String("distributeEvenly"),
-        QLatin1String("distributeWithGaps"),
-        QLatin1String("distributeWithMinSizes"),
-        QLatin1String("distributeWithOptionalMins"),
-        // ── Group 4: Solver / min-dim helpers (4 entries, running total: 15) ──
-        QLatin1String("solveTwoPart"),
-        QLatin1String("solveThreeColumn"),
-        QLatin1String("computeCumulativeMinDims"),
-        QLatin1String("appendGracefulDegradation"),
-        // ── Group 5: dwindle + extractMinDims exports (4 entries, running total: 19) ──
-        QLatin1String("dwindleLayout"),
-        QLatin1String("extractMinWidths"), // from extractMinDims
-        QLatin1String("extractMinHeights"), // from extractMinDims
-        QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
-        // ── Group 6: interleaveStacks exports (4 entries, running total: 23) ──
-        QLatin1String("buildStackIsLeft"), // from interleaveStacks
-        QLatin1String("interleaveMinWidths"), // from interleaveStacks
-        QLatin1String("interleaveMinHeights"), // from interleaveStacks
-        QLatin1String("assignInterleavedStacks"), // from interleaveStacks
-        // ── Group 7: Per-window / region helpers (4 entries, running total: 27) ──
-        QLatin1String("applyPerWindowMinSize"),
-        QLatin1String("extractRegionMaxMin"),
-        QLatin1String("fillRegion"),
-        QLatin1String("fillArea"),
-        // ── Group 8: High-level layouts (3 entries, running total: 30) ──
-        QLatin1String("masterStackLayout"),
-        QLatin1String("equalColumnsLayout"),
-        QLatin1String("threeColumnLayout"),
-        // ── Group 9: Shared utilities (1 entry, running total: 31) ──
-        QLatin1String("clampSplitRatio"),
-    };
-    static_assert(std::size(frozenGlobals) == 31, "frozenGlobals count mismatch — did you add a new builtin?");
-    bool freezeFailed = false;
-    for (const auto& name : frozenGlobals) {
-        QJSValue freezeResult = m_engine->evaluate(
-            QStringLiteral("Object.defineProperty(this, '%1', {writable: false, configurable: false});").arg(name));
-        if (freezeResult.isError()) {
-            qCWarning(PhosphorTiles::lcTilesLib) << "Failed to freeze global:" << name << freezeResult.toString();
-            freezeFailed = true;
-        }
-    }
-    if (freezeFailed) {
-        qCWarning(PhosphorTiles::lcTilesLib)
-            << "ScriptedAlgorithm: aborting load — global freeze failed, file=" << filePath;
+    //   extractRegionMaxMin (standalone)
+    //   fillRegion         (standalone)
+    //   fillArea           → fillRegion
+    //   deckLayout         → fillArea
+    //   masterStackLayout  → fillArea, extractRegionMaxMin, solveTwoPart, extractMinDims, distributeWithOptionalMins
+    //   equalColumnsLayout → extractMinDims, distributeWithOptionalMins
+    //   threeColumnLayout  → fillArea, extractRegionMaxMin, solveThreeColumn, extractMinDims, interleaveStacks,
+    //                        distributeWithOptionalMins
+    const bool ok = injectAndFreeze(ScriptedHelpers::clampSplitRatioJs(), QLatin1String("builtin:clampSplitRatio"),
+                                    {QLatin1String("clampSplitRatio")})
+        && injectAndFreeze(ScriptedHelpers::applyTreeGeometryJs(), QLatin1String("builtin:applyTreeGeometry"),
+                           {QLatin1String("applyTreeGeometry")})
+        && injectAndFreeze(ScriptedHelpers::lShapeLayoutJs(), QLatin1String("builtin:lShapeLayout"),
+                           {QLatin1String("lShapeLayout")})
+        && injectAndFreeze(ScriptedHelpers::distributeEvenlyJs(), QLatin1String("builtin:distributeEvenly"),
+                           {QLatin1String("distributeEvenly")})
+        && injectAndFreeze(ScriptedHelpers::distributeWithGapsJs(), QLatin1String("builtin:distributeWithGaps"),
+                           {QLatin1String("distributeWithGaps")})
+        && injectAndFreeze(ScriptedHelpers::distributeWithMinSizesJs(), QLatin1String("builtin:distributeWithMinSizes"),
+                           {QLatin1String("distributeWithMinSizes")})
+        && injectAndFreeze(ScriptedHelpers::distributeWithOptionalMinsJs(),
+                           QLatin1String("builtin:distributeWithOptionalMins"),
+                           {QLatin1String("distributeWithOptionalMins")})
+        && injectAndFreeze(ScriptedHelpers::solveTwoPartJs(), QLatin1String("builtin:solveTwoPart"),
+                           {QLatin1String("solveTwoPart")})
+        && injectAndFreeze(ScriptedHelpers::solveThreeColumnJs(), QLatin1String("builtin:solveThreeColumn"),
+                           {QLatin1String("solveThreeColumn")})
+        && injectAndFreeze(ScriptedHelpers::cumulativeMinDimsJs(), QLatin1String("builtin:computeCumulativeMinDims"),
+                           {QLatin1String("computeCumulativeMinDims")})
+        && injectAndFreeze(ScriptedHelpers::gracefulDegradationJs(), QLatin1String("builtin:appendGracefulDegradation"),
+                           {QLatin1String("appendGracefulDegradation")})
+        && injectAndFreeze(ScriptedHelpers::dwindleLayoutJs(), QLatin1String("builtin:dwindleLayout"),
+                           {QLatin1String("dwindleLayout")})
+        && injectAndFreeze(ScriptedHelpers::extractMinDimsJs(), QLatin1String("builtin:extractMinDims"),
+                           {QLatin1String("extractMinWidths"), QLatin1String("extractMinHeights"),
+                            QLatin1String("_extractMinDims")})
+        && injectAndFreeze(ScriptedHelpers::interleaveStacksJs(), QLatin1String("builtin:interleaveStacks"),
+                           {QLatin1String("buildStackIsLeft"), QLatin1String("interleaveMinWidths"),
+                            QLatin1String("interleaveMinHeights"), QLatin1String("assignInterleavedStacks")})
+        && injectAndFreeze(ScriptedHelpers::applyPerWindowMinSizeJs(), QLatin1String("builtin:applyPerWindowMinSize"),
+                           {QLatin1String("applyPerWindowMinSize")})
+        && injectAndFreeze(ScriptedHelpers::extractRegionMaxMinJs(), QLatin1String("builtin:extractRegionMaxMin"),
+                           {QLatin1String("extractRegionMaxMin")})
+        && injectAndFreeze(ScriptedHelpers::fillRegionJs(), QLatin1String("builtin:fillRegion"),
+                           {QLatin1String("fillRegion")})
+        && injectAndFreeze(ScriptedHelpers::fillAreaJs(), QLatin1String("builtin:fillArea"),
+                           {QLatin1String("fillArea")})
+        && injectAndFreeze(ScriptedHelpers::deckLayoutJs(), QLatin1String("builtin:deckLayout"),
+                           {QLatin1String("deckLayout")})
+        && injectAndFreeze(ScriptedHelpers::masterStackLayoutJs(), QLatin1String("builtin:masterStackLayout"),
+                           {QLatin1String("masterStackLayout")})
+        && injectAndFreeze(ScriptedHelpers::equalColumnsLayoutJs(), QLatin1String("builtin:equalColumnsLayout"),
+                           {QLatin1String("equalColumnsLayout")})
+        && injectAndFreeze(ScriptedHelpers::threeColumnLayoutJs(), QLatin1String("builtin:threeColumnLayout"),
+                           {QLatin1String("threeColumnLayout")});
+    if (!ok) {
         return false;
     }
 

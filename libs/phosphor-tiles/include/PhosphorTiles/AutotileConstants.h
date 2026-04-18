@@ -70,6 +70,12 @@ constexpr int MinAnimationDuration = 50;
 constexpr int MaxAnimationDuration = 500;
 constexpr int MinAnimationStaggerIntervalMs = 10;
 constexpr int MaxAnimationStaggerIntervalMs = 200;
+/// Watchdog deadline for a single JS evaluation guarded by
+/// ScriptedAlgorithm::guardedCall(). Generous enough for ARM / slow
+/// systems where JS startup and first-call JIT warmup can take tens of
+/// milliseconds. Exposed here so operators tuning for their target
+/// hardware don't need to recompile the scriptedalgorithm TU.
+constexpr int ScriptWatchdogTimeoutMs = 100;
 
 /// Returns true if typeId is a numeric QMetaType (Double, Float, Int, UInt, LongLong, ULongLong).
 /// Used for fuzzy-comparing QVariant values after JSON round-trip type drift.
