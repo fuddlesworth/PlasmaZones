@@ -407,7 +407,12 @@ public:
     /// Passing a default-constructed function clears the resolver.
     using ScreenIdResolver = std::function<QString(const QString&)>;
     static void setScreenIdResolver(ScreenIdResolver resolver);
-    static const ScreenIdResolver& screenIdResolver();
+    /// Returns a copy of the currently-installed resolver (empty if none).
+    /// Returning a copy rather than a reference keeps readers race-free
+    /// against a concurrent setScreenIdResolver on another thread — the
+    /// resolver itself is guarded internally, and the returned copy can
+    /// be invoked without holding the lock.
+    static ScreenIdResolver screenIdResolver();
 
     // Predefined layouts (templates)
     static Layout* createColumnsLayout(int columns, QObject* parent = nullptr);

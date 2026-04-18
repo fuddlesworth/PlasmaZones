@@ -11,7 +11,7 @@
 
 namespace PhosphorZones {
 
-PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
+PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, const QSize& canvas)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!layout) {
@@ -28,16 +28,23 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
     // Manual preview — leave preview.algorithm as std::nullopt so
     // isAutotile() returns false.
 
-    if (layout->hasFixedGeometryZones()) {
-        const QRectF refGeo = layout->lastRecalcGeometry();
-        if (refGeo.height() > 0) {
-            preview.referenceAspectRatio = refGeo.width() / refGeo.height();
-        }
+    // Reference geometry for fixed-pixel zones. Prefer the caller's
+    // canvas when provided so the projection is deterministic per-call;
+    // fall back to Layout::lastRecalcGeometry() when the caller didn't
+    // pass one (the historical single-screen path). The canvas parameter
+    // lets two callers on different screens share a Layout* without one
+    // poisoning the other's projection via the shared last-recalc cache.
+    const QRectF refGeo = !canvas.isEmpty()
+        ? QRectF(0, 0, canvas.width(), canvas.height())
+        : (layout->hasFixedGeometryZones() ? layout->lastRecalcGeometry() : QRectF());
+
+    if (layout->hasFixedGeometryZones() && refGeo.height() > 0) {
+        preview.referenceAspectRatio = refGeo.width() / refGeo.height();
     }
 
     // Zone projection: relative geometry + 1-based zone numbers. Caller
     // (renderer) scales the relative rects into whatever canvas it has.
-    const QRectF refGeo = layout->hasFixedGeometryZones() ? layout->lastRecalcGeometry() : QRectF();
+    const QRectF projectRef = layout->hasFixedGeometryZones() ? refGeo : QRectF();
     const auto zones = layout->zones();
     preview.zones.reserve(zones.size());
     preview.zoneNumbers.reserve(zones.size());
@@ -45,7 +52,7 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
         if (!zone) {
             continue;
         }
-        preview.zones.append(zone->normalizedGeometry(refGeo));
+        preview.zones.append(zone->normalizedGeometry(projectRef));
         preview.zoneNumbers.append(zone->zoneNumber());
     }
 
@@ -83,8 +90,7 @@ QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() con
     return result;
 }
 
-PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, int /*windowCount*/,
-                                                           const QSize& /*canvas*/)
+PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, int /*windowCount*/, const QSize& canvas)
 {
     if (!m_registry || id.isEmpty()) {
         return {};
@@ -99,7 +105,10 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
         return {};
     }
     PhosphorZones::Layout* layout = m_registry->layoutById(uuid);
-    return layout ? previewFromLayout(layout) : PhosphorLayout::LayoutPreview{};
+    // Thread the caller-supplied canvas through so fixed-pixel zones
+    // project against the caller's screen rather than whichever screen
+    // last triggered a recalc on the shared Layout*.
+    return layout ? previewFromLayout(layout, canvas) : PhosphorLayout::LayoutPreview{};
 }
 
 void ZonesLayoutSource::notifyContentsChanged()

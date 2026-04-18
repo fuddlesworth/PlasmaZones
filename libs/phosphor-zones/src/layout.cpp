@@ -9,10 +9,23 @@
 #include <QStandardPaths>
 #include <algorithm>
 #include <limits>
+#include <mutex>
 
 namespace PhosphorZones {
 
 namespace {
+// Screen-id resolver state. The resolver is installed by the daemon / editor /
+// settings at startup and read by Layout::fromJson, which can run on any
+// thread — the QFileSystemWatcher worker in particular services layout-file
+// change notifications off the main thread. A plain static std::function is
+// subject to torn reads when set() races with an ongoing get(); guard it with
+// a mutex and return copies so readers never outlive the stored callable.
+std::mutex& resolverMutex()
+{
+    static std::mutex m;
+    return m;
+}
+
 Layout::ScreenIdResolver& mutableScreenIdResolver()
 {
     static Layout::ScreenIdResolver s_resolver;
@@ -22,11 +35,13 @@ Layout::ScreenIdResolver& mutableScreenIdResolver()
 
 void Layout::setScreenIdResolver(ScreenIdResolver resolver)
 {
+    std::lock_guard<std::mutex> lock(resolverMutex());
     mutableScreenIdResolver() = std::move(resolver);
 }
 
-const Layout::ScreenIdResolver& Layout::screenIdResolver()
+Layout::ScreenIdResolver Layout::screenIdResolver()
 {
+    std::lock_guard<std::mutex> lock(resolverMutex());
     return mutableScreenIdResolver();
 }
 

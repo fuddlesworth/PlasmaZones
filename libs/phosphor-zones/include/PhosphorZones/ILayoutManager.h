@@ -49,6 +49,20 @@ class Layout;
  * layouts should type against @c ILayoutRegistry — it now covers the
  * read-only surface that used to live on the removed
  * @c ILayoutCatalog.
+ *
+ * @note Inheritance model: non-virtual multiple inheritance of the five
+ * sibling interfaces. The siblings share no state (none of them define
+ * member variables), so virtual bases are unnecessary and would only
+ * cost an extra indirection. Consequences for callers:
+ *   - Upcasting `ILayoutManager*` to any one sibling is free and
+ *     unambiguous.
+ *   - Downcasting a sibling pointer (e.g. `ILayoutRegistry*`) back to
+ *     `ILayoutManager*` is **not** supported via `static_cast` — use
+ *     `dynamic_cast` and be aware of cross-SO `typeinfo` availability,
+ *     or restructure the call site to keep the wide pointer directly.
+ *   - No sibling may grow member state without promoting to virtual
+ *     inheritance; adding state silently multiplies the base subobject
+ *     in the derived class and breaks the "upcast is free" invariant.
  */
 class PHOSPHORZONES_EXPORT ILayoutManager : public ILayoutRegistry,
                                             public ILayoutAssignments,

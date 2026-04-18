@@ -4,6 +4,7 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 #include <PhosphorZones/ZoneDefaults.h>
+#include "zoneslogging.h"
 #include <QJsonArray>
 #include <cmath>
 
@@ -287,6 +288,15 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
         const auto fixedGeo = json[FixedGeometry].toObject();
         zone->m_fixedGeometry = QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(),
                                        qMax(0.0, fixedGeo[Width].toDouble()), qMax(0.0, fixedGeo[Height].toDouble()));
+    } else if (zone->m_geometryMode == ZoneGeometryMode::Fixed) {
+        // GeometryMode=Fixed but no FixedGeometry payload — a hand-edited /
+        // partial JSON would otherwise silently produce an invisible zone
+        // anchored at the screen origin that swallows snap targets. Drop
+        // back to Relative so the zone renders with its authored
+        // relativeGeometry instead.
+        qCWarning(lcZonesLib) << "Zone::fromJson: GeometryMode=Fixed but FixedGeometry missing for zone"
+                              << zone->m_id.toString() << "— downgrading to Relative";
+        zone->m_geometryMode = ZoneGeometryMode::Relative;
     }
 
     // Appearance — colours fall back to ZoneDefaults when missing or invalid so

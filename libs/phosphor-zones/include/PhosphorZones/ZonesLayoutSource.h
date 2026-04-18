@@ -21,7 +21,16 @@ namespace PhosphorZones {
 /// have a fixed shape, so the @c windowCount param from ILayoutSource is
 /// ignored here. Provided as a free function so consumers that already
 /// hold a Layout* can build a preview without going through ILayoutSource.
-PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout);
+///
+/// @p canvas (optional) — reference geometry used when projecting zones
+/// that were authored in fixed-pixel mode. When empty (the default), the
+/// projection falls back to @c Layout::lastRecalcGeometry(), which holds
+/// whichever screen most recently triggered a recalc — fine for caller
+/// topologies with a single monitor, but stale if two different screens
+/// share a Layout* and query their previews in alternation. Passing the
+/// caller's own canvas makes the projection deterministic per-call.
+PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout,
+                                                                     const QSize& canvas = {});
 
 /// ILayoutSource adapter wrapping an ILayoutRegistry.
 ///

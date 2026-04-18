@@ -228,8 +228,13 @@ void Layout::initFromJson(const QJsonObject& json)
     m_outerGap = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGap)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGap].toInt(-1)
         : -1;
-    // Per-side outer gap overrides
-    m_usePerSideOuterGap = json[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap].toBool(false);
+    // Per-side outer gap overrides. The `contains()` check mirrors the
+    // adjacent gap-override deserialisation pattern — absent key means
+    // "no override", not "explicit false" — so the read shape stays
+    // uniform across every gap-related field.
+    m_usePerSideOuterGap = json.contains(::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap)
+        ? json[::PhosphorZones::ZoneJsonKeys::UsePerSideOuterGap].toBool(false)
+        : false;
     m_outerGapTop = json.contains(::PhosphorZones::ZoneJsonKeys::OuterGapTop)
         ? json[::PhosphorZones::ZoneJsonKeys::OuterGapTop].toInt(-1)
         : -1;
@@ -327,7 +332,10 @@ void Layout::initFromJson(const QJsonObject& json)
     // that walks QGuiApplication::screens(); headless contexts leave the
     // resolver unset and the strings pass through verbatim. Equality-path
     // matches (same connector on both sides) still work without a resolver.
-    if (const auto& resolver = Layout::screenIdResolver(); resolver) {
+    // Take a copy (not a reference) — the resolver accessor is guarded
+    // internally and returns by value. Copying once here lets us invoke
+    // without re-locking per allowedScreens entry.
+    if (const auto resolver = Layout::screenIdResolver(); resolver) {
         for (int i = 0; i < m_allowedScreens.size(); ++i) {
             const QString resolved = resolver(m_allowedScreens[i]);
             if (!resolved.isEmpty()) {
