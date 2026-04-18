@@ -35,7 +35,12 @@ public:
     /**
      * Register a new shortcut id.
      *
-     * @param id          Stable string id (e.g. "pz.move-window-left").
+     * @param id          Stable string id. The library imposes no prefix
+     *                    convention — PlasmaZones uses plain snake_case ids
+     *                    like "move_window_left" because KGlobalAccel and
+     *                    XDG Portal persist the id verbatim; renaming is an
+     *                    on-disk rename users pay for. Pick a scheme that
+     *                    won't need to churn.
      * @param defaultSeq  Compiled-in default key sequence — the "factory"
      *                    value a user can reset to. KGlobalAccel records
      *                    this via setDefaultShortcut so System Settings'

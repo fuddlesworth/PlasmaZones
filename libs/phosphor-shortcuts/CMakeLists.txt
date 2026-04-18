@@ -126,6 +126,12 @@ set_target_properties(PhosphorShortcuts PROPERTIES
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
+    # Force AUTOMOC/AUTORCC on the target so the library builds as a
+    # subdirectory of a parent project that doesn't set CMAKE_AUTOMOC
+    # globally. backends.h contains Q_OBJECT classes and must be moc'd;
+    # relying on CMAKE_AUTOMOC from the top-level project (see the
+    # standalone branch above) would silently break sub-project builds.
+    AUTOMOC ON
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

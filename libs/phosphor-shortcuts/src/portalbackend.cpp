@@ -436,7 +436,13 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
             QVariantMap opts;
             arg >> id >> opts;
             arg.endStructure();
-            if (!id.isEmpty()) {
+            // Filter against m_descriptions: if the id was unregisterShortcut'd
+            // between the BindShortcuts call and this Response, it's gone from
+            // m_descriptions. Reinserting into m_confirmedBound would leak a
+            // stale id that no consumer can clean up (only cosmetic — affects
+            // the "still grabbed compositor-side" log in unregisterShortcut —
+            // but cheap to avoid).
+            if (!id.isEmpty() && m_descriptions.contains(id)) {
                 m_confirmedBound.insert(id);
             }
         }

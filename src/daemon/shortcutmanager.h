@@ -103,8 +103,6 @@ Q_SIGNALS:
     void swapVirtualScreenRequested(NavigationDirection direction);
     void rotateVirtualScreensRequested(bool clockwise);
 
-    void shortcutsRegistered();
-
 private:
     struct Entry
     {

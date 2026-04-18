@@ -134,7 +134,6 @@ void ShortcutManager::registerShortcuts()
         [this] {
             m_registrationInProgress = false;
             qCInfo(lcShortcuts) << "Registered" << m_entries.size() << "shortcuts";
-            Q_EMIT shortcutsRegistered();
             if (m_settingsDirty) {
                 m_settingsDirty = false;
                 updateShortcuts();
@@ -177,16 +176,24 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     }
     // Adhoc registration during the initial settings-driven batch would race
     // the batched BindShortcuts on the Portal backend (the per-batch Request
-    // subscription gets torn down mid-flight when the adhoc flush fires).
-    // All adhoc callers today register post-init in response to user actions
-    // (drag start); crash here instead of letting the race manifest as a
-    // silent grab-missing bug in production.
-    Q_ASSERT_X(!m_registrationInProgress, "ShortcutManager::registerAdhocShortcut",
-               "must not be called during initial shortcut registration");
+    // subscription gets torn down mid-flight when the adhoc flush fires,
+    // leaving m_confirmedBound out of sync with the compositor). Real-world
+    // callers (WindowDragAdaptor Escape grab) all fire in response to user
+    // actions post-init — reject the call loudly if something changes that
+    // assumption rather than racing silently. Q_ASSERT_X would only fire in
+    // debug; use a runtime warning so release builds are protected too.
+    if (m_registrationInProgress) {
+        qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
+                               << "): called during initial registration — ignoring (would race BindShortcuts)";
+        return;
+    }
     m_registry->bind(id, sequence, description, std::move(callback), /*persistent=*/false);
-    // If the consumer ever passes a different sequence for the same id
-    // after a prior register, bind() preserves currentSeq per contract,
-    // so apply the requested sequence explicitly via rebind().
+    // Re-register path: a prior adhoc with the same id would have set
+    // currentSeq via bind() already; a second bind() preserves currentSeq by
+    // contract (to protect user rebinds on the settings-driven table), so
+    // force the requested sequence here for the adhoc case where the caller
+    // wants the new sequence to win. For a fresh id the rebind is a same-
+    // sequence short-circuit inside Registry.
     m_registry->rebind(id, sequence);
     m_registry->flush();
 }

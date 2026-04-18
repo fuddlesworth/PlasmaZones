@@ -29,7 +29,10 @@ enum class BackendHint {
     Native, ///< Reserved for the future INativeGrabber-backed backend.
             ///< Currently returns nullptr — callers asking explicitly for
             ///< Native opted in to a backend that doesn't exist yet, so a
-            ///< silent fallback would mask a misconfiguration.
+            ///< silent fallback would mask a misconfiguration. Callers
+            ///< MUST null-check the createBackend() return value; passing
+            ///< a null backend into Registry is a programming error
+            ///< (asserted in debug, logged and dropped in release).
 };
 
 /**

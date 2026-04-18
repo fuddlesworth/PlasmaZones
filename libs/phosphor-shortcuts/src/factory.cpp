@@ -72,7 +72,12 @@ std::unique_ptr<IBackend> createBackend(BackendHint hint, QObject* parent)
     case BackendHint::DBusTrigger:
         return makeDBusTrigger(parent);
     case BackendHint::Native:
-        qCWarning(lcPhosphorShortcuts)
+        // Deliberately a hard nullptr (no fallback): a caller that asked
+        // specifically for Native opted in to a not-yet-implemented backend,
+        // and silently swapping in DBusTrigger would mask a misconfiguration.
+        // Null-check the return value; docs on BackendHint::Native call this
+        // out.
+        qCCritical(lcPhosphorShortcuts)
             << "Native backend is reserved for a future INativeGrabber implementation and is not available yet —"
             << "createBackend(Native) returns nullptr. Callers that want automatic fallback should pass Auto.";
         return nullptr;

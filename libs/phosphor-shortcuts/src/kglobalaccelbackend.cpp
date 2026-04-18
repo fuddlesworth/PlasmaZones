@@ -57,10 +57,14 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // on each restart. KGlobalAccel cleans up its in-memory action table
     // automatically when the QAction is destroyed, so a plain delete is the
     // correct teardown path.
+    //
+    // The QActions are parented to `this`, so Qt's ~QObject cleanup would
+    // destroy them anyway. We delete explicitly to clear the hash table's
+    // pointers in the right order (action gone, entry cleared) and avoid
+    // relying on implicit child-destruction ordering.
     for (auto& entry : m_impl->entries) {
-        if (entry.action) {
-            entry.action->deleteLater();
-        }
+        delete entry.action;
+        entry.action = nullptr;
     }
 }
 
