@@ -130,7 +130,7 @@ PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr
 
     auto* zone = layout->zoneById(*uuidOpt);
     if (!zone) {
-        qCWarning(category) << "PhosphorZones::Zone not found for" << operation << ":" << zoneId;
+        qCWarning(category) << "Zone not found for" << operation << ":" << zoneId;
         return nullptr;
     }
 
@@ -194,7 +194,7 @@ PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, con
     }
 
     if (!zone) {
-        qCWarning(category) << "PhosphorZones::Zone not found in any layout for" << operation << ":" << zoneId;
+        qCWarning(category) << "Zone not found in any layout for" << operation << ":" << zoneId;
     }
 
     return zone;

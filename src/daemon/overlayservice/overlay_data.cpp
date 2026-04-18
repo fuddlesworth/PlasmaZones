@@ -227,9 +227,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     const QString physId = Utils::screenIdentifier(screen);
     auto* mgr = ScreenManager::instance();
     if (mgr && mgr->hasVirtualScreens(physId)) {
-        qCWarning(lcOverlay)
-            << "zoneToVariantMap(PhosphorZones::Zone*, QScreen*, PhosphorZones::Layout*): physical screen" << physId
-            << "has virtual screens configured — caller should use QString overload.";
+        qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
+                             << "has virtual screens configured — caller should use QString overload.";
     }
 
     const QPoint screenCenter = screen->geometry().center();
@@ -247,7 +246,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
 
     // Null check to prevent SIGSEGV
     if (!zone) {
-        qCWarning(lcOverlay) << "PhosphorZones::Zone is null";
+        qCWarning(lcOverlay) << "Zone is null";
         return map;
     }
 

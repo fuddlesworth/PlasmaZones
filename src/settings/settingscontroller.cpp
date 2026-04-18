@@ -849,7 +849,7 @@ QVariantMap SettingsController::localLayoutPreview(const QString& id, int window
 
 void SettingsController::createNewLayout()
 {
-    createNewLayout(QStringLiteral("New PhosphorZones::Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -857,7 +857,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = QStringLiteral("New PhosphorZones::Layout");
+        sanitizedName = QStringLiteral("New Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -2721,7 +2721,7 @@ void SettingsController::openLayoutFile(const QString& layoutId)
     const QString located =
         QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
     if (located.isEmpty()) {
-        qCWarning(lcCore) << "PhosphorZones::Layout file not found:" << filename;
+        qCWarning(lcCore) << "Layout file not found:" << filename;
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(located));
@@ -3362,7 +3362,7 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
         QJsonObject pzLayout;
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported PhosphorZones::Layout"));
+            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
         pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
@@ -3399,8 +3399,7 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
             QJsonObject pzZone;
             pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
             pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
-                QStringLiteral("PhosphorZones::Zone %1").arg(zoneNum);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
             relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;

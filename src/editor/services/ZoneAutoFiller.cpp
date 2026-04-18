@@ -269,7 +269,7 @@ bool ZoneAutoFiller::expandToFillSpace(const QString& zoneId, qreal mouseX, qrea
 {
     auto zoneOpt = m_manager->getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for expansion:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for expansion:" << zoneId;
         return false;
     }
 
@@ -490,7 +490,7 @@ void ZoneAutoFiller::deleteZoneWithFill(const QString& zoneId, bool autoFill)
 {
     auto zoneOpt = m_manager->getValidatedZone(zoneId);
     if (!zoneOpt) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for deletion:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for deletion:" << zoneId;
         return;
     }
 

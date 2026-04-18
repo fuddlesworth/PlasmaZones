@@ -102,7 +102,7 @@ void Daemon::showLayoutOsd(PhosphorZones::Layout* layout, const QString& screenI
         return;
 
     case OsdStyle::Text: {
-        QString displayText = PzI18n::tr("PhosphorZones::Layout: %1").arg(layoutName);
+        QString displayText = PzI18n::tr("Layout: %1").arg(layoutName);
         showKdeTextOsd(QStringLiteral("plasmazones"), displayText);
         qCInfo(lcDaemon) << "Showing text OSD for layout=" << layoutName;
     } break;
@@ -126,7 +126,7 @@ void Daemon::showLockedOsd(const QString& screenId)
         return;
     }
 
-    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("PhosphorZones::Layout Locked"));
+    showKdeTextOsd(QStringLiteral("object-locked"), PzI18n::tr("Layout Locked"));
     qCInfo(lcDaemon) << "Showing locked text OSD for screen=" << screenId;
 }
 
@@ -352,8 +352,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         m_unifiedLayoutController->setLayoutFilter(includeManual, includeAutotile);
     }
 
-    qCDebug(lcDaemon) << "PhosphorZones::Layout filter updated: manual=" << includeManual
-                      << "autotile=" << includeAutotile
+    qCDebug(lcDaemon) << "Layout filter updated: manual=" << includeManual << "autotile=" << includeAutotile
                       << "screen=" << (focusedScreenId.isEmpty() ? QStringLiteral("all") : focusedScreenId);
 }
 

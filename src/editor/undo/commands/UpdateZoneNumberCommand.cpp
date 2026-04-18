@@ -13,8 +13,7 @@ namespace PlasmaZones {
 UpdateZoneNumberCommand::UpdateZoneNumberCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId,
                                                  int oldNumber, int newNumber, const QString& text,
                                                  QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Change PhosphorZones::Zone Number", "@action") : text,
-                      parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Change Zone Number", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldNumber(oldNumber)
     , m_newNumber(newNumber)

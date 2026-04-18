@@ -210,7 +210,7 @@ QString ZoneDetectionAdaptor::getAdjacentZone(const QString& currentZoneId, cons
     // Get the layout containing this zone
     PhosphorZones::Layout* layout = qobject_cast<PhosphorZones::Layout*>(currentZone->parent());
     if (!layout) {
-        qCWarning(lcDbus) << "PhosphorZones::Zone has no parent layout:" << currentZoneId;
+        qCWarning(lcDbus) << "Zone has no parent layout:" << currentZoneId;
         return QString();
     }
 

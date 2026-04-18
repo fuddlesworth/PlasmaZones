@@ -31,7 +31,7 @@ void EditorController::copyZones(const QStringList& zoneIds)
 {
     if (!m_zoneManager) {
         qCWarning(lcEditor) << "ZoneManager not initialized";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("PhosphorZones::Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
         return;
     }
 
@@ -104,7 +104,7 @@ QStringList EditorController::pasteZones(bool withOffset)
 {
     if (!m_undoController || !m_zoneManager) {
         qCWarning(lcEditor) << "pasteZones: undo controller or zone manager is null";
-        Q_EMIT clipboardOperationFailed(PzI18n::tr("PhosphorZones::Zone manager not initialized", "@info"));
+        Q_EMIT clipboardOperationFailed(PzI18n::tr("Zone manager not initialized", "@info"));
         return QStringList();
     }
 

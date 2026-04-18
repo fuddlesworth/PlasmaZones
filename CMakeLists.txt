@@ -316,6 +316,7 @@ add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migr
 add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
+add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
 
 # Source directories
 add_subdirectory(src)

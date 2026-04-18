@@ -10,7 +10,7 @@ using namespace PlasmaZones;
 
 FillZoneCommand::FillZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QRectF& oldGeometry,
                                  const QRectF& newGeometry, const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Fill PhosphorZones::Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Fill Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_oldGeometry(oldGeometry)
     , m_newGeometry(newGeometry)

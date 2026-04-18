@@ -221,7 +221,7 @@ private Q_SLOTS:
                      QStringLiteral("[Assignment:eDP-1:Desktop:1:Activity:abc-123]\n"
                                     "Mode=0\n"
                                     "SnappingLayout={uuid-here}\n"
-                                    "PhosphorTiles::TilingAlgorithm=bsp\n"));
+                                    "TilingAlgorithm=bsp\n"));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -237,7 +237,7 @@ private Q_SLOTS:
 
         QJsonObject assignment = assignRoot.value(groupName).toObject();
         QCOMPARE(assignment.value(QStringLiteral("Mode")).toInt(), 0);
-        QCOMPARE(assignment.value(QStringLiteral("PhosphorTiles::TilingAlgorithm")).toString(), QStringLiteral("bsp"));
+        QCOMPARE(assignment.value(QStringLiteral("TilingAlgorithm")).toString(), QStringLiteral("bsp"));
     }
 
     void testMigrateAssignmentGroups_readableByBackend()
@@ -246,7 +246,7 @@ private Q_SLOTS:
         writeIniFile(ConfigDefaults::legacyConfigFilePath(),
                      QStringLiteral("[Assignment:eDP-1:Desktop:1]\n"
                                     "Mode=1\n"
-                                    "PhosphorTiles::TilingAlgorithm=dwindle\n"));
+                                    "TilingAlgorithm=dwindle\n"));
 
         QVERIFY(ConfigMigration::ensureJsonConfig());
 
@@ -258,7 +258,7 @@ private Q_SLOTS:
         // Reading via group() should work
         auto g = backend->group(QStringLiteral("Assignment:eDP-1:Desktop:1"));
         QCOMPARE(g->readInt(QStringLiteral("Mode")), 1);
-        QCOMPARE(g->readString(QStringLiteral("PhosphorTiles::TilingAlgorithm")), QStringLiteral("dwindle"));
+        QCOMPARE(g->readString(QStringLiteral("TilingAlgorithm")), QStringLiteral("dwindle"));
     }
 
     void testMigrateNumericValues()

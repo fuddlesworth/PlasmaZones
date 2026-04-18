@@ -24,8 +24,8 @@ using namespace PlasmaZones::TestHelpers;
 static void verifyAllZonesPositive(const QVector<QRect>& zones)
 {
     for (const QRect& zone : zones) {
-        QVERIFY2(zone.width() > 0, qPrintable(QStringLiteral("PhosphorZones::Zone width was %1").arg(zone.width())));
-        QVERIFY2(zone.height() > 0, qPrintable(QStringLiteral("PhosphorZones::Zone height was %1").arg(zone.height())));
+        QVERIFY2(zone.width() > 0, qPrintable(QStringLiteral("Zone width was %1").arg(zone.width())));
+        QVERIFY2(zone.height() > 0, qPrintable(QStringLiteral("Zone height was %1").arg(zone.height())));
     }
 }
 
@@ -64,7 +64,7 @@ private:
     static QString fullMetadataScript()
     {
         return QStringLiteral(
-            "// @name Test PhosphorZones::Layout\n"
+            "// @name Test Layout\n"
             "// @description A test tiling layout\n"
             "// @supportsMasterCount true\n"
             "// @supportsSplitRatio true\n"
@@ -145,7 +145,7 @@ private Q_SLOTS:
 
         PhosphorTiles::ScriptedAlgorithm algo(path);
         QVERIFY(algo.isValid());
-        QCOMPARE(algo.name(), QStringLiteral("Test PhosphorZones::Layout"));
+        QCOMPARE(algo.name(), QStringLiteral("Test Layout"));
         QCOMPARE(algo.description(), QStringLiteral("A test tiling layout"));
         QVERIFY(algo.supportsMasterCount());
         QVERIFY(algo.supportsSplitRatio());

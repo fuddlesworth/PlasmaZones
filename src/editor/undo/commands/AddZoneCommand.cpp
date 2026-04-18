@@ -13,7 +13,7 @@ namespace PlasmaZones {
 
 AddZoneCommand::AddZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QVariantMap& zoneData,
                                const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Add PhosphorZones::Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Add Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_zoneData(zoneData)
 {

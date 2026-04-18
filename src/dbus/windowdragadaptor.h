@@ -5,7 +5,6 @@
 
 #include "plasmazones_export.h"
 #include <dbus_types.h>
-#include <QAction>
 #include <QDBusAbstractAdaptor>
 #include <QObject>
 #include <QString>
@@ -17,6 +16,10 @@
 
 class QScreen;
 
+namespace Phosphor::Shortcuts::Integration {
+class IAdhocRegistrar;
+}
+
 namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
@@ -25,7 +28,6 @@ class Zone;
 
 namespace PlasmaZones {
 
-class IShortcutBackend;
 class IOverlayService;
 class LayoutManager; // Concrete type needed for signal connections
 class ISettings;
@@ -67,14 +69,24 @@ public:
     }
 
     /**
-     * @brief Set the shortcut backend for registering/unregistering shortcuts
+     * @brief Set the shortcut registrar used to (un)register the Escape
+     *        cancel-overlay shortcut around active drag sessions.
      *
      * Must be called after construction, before any drag operations.
-     * The backend is owned by ShortcutManager — this is a non-owning pointer.
+     * The registrar is owned by Daemon — this is a non-owning pointer. Routing
+     * through the interface keeps the underlying Registry private, so the
+     * drag adaptor can't accidentally iterate or flush other consumers'
+     * shortcuts.
+     *
+     * Passing nullptr detaches the adaptor from the registrar; any subsequent
+     * (un)register call becomes a no-op. Daemon::stop() uses this to prevent
+     * late callbacks from touching a destroyed ShortcutManager during
+     * shutdown (member destruction order: unique_ptr members destruct before
+     * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutBackend(IShortcutBackend* backend)
+    void setShortcutRegistrar(Phosphor::Shortcuts::Integration::IAdhocRegistrar* registrar)
     {
-        m_shortcutBackend = backend;
+        m_shortcutRegistrar = registrar;
     }
 
 public Q_SLOTS:
@@ -307,7 +319,8 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    IShortcutBackend* m_shortcutBackend = nullptr; // Non-owning: owned by ShortcutManager
+    Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
+        nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap
     // assist is requested; consumed by computeAndEmitSnapAssist() which runs
@@ -389,8 +402,9 @@ private:
     QSet<QUuid> m_paintedZoneIds; // Accumulates zones during paint-to-span drag
     bool m_modifierConflictWarned = false; // Logged once per drag, reset on next dragStarted
 
-    // Escape shortcut to cancel overlay during drag (registered on drag start, unregistered on drag end)
-    QAction* m_cancelOverlayAction = nullptr;
+    // Escape cancel-overlay shortcut is registered/unregistered dynamically
+    // via the PhosphorShortcuts Registry around drag sessions — no QAction
+    // member needed (the Registry owns everything).
 
     // Pre-parsed trigger caches (populated on dragStarted, used on every dragMoved tick)
     QVector<ParsedTrigger> m_cachedActivationTriggers;

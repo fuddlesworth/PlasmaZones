@@ -515,7 +515,7 @@ void Daemon::connectLayoutSignals()
                 if (!m_unifiedLayoutController->applyLayoutById(layoutId)) {
                     return;
                 }
-                qCInfo(lcDaemon) << "PhosphorZones::Zone selector: manual layout selected, layout=" << layoutId
+                qCInfo(lcDaemon) << "Zone selector: manual layout selected, layout=" << layoutId
                                  << "screen=" << screenId;
                 resnapIfManualMode();
             });

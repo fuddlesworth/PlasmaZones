@@ -276,7 +276,7 @@ QString ZoneManager::addZone(qreal x, qreal y, qreal width, qreal height)
     }
 
     int zoneNumber = m_zones.size() + 1;
-    QString zoneName = QStringLiteral("PhosphorZones::Zone %1").arg(zoneNumber);
+    QString zoneName = QStringLiteral("Zone %1").arg(zoneNumber);
     QVariantMap zone = createZone(zoneName, zoneNumber, geom.x, geom.y, geom.width, geom.height);
     QString zoneId = zone[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
@@ -295,7 +295,7 @@ void ZoneManager::updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qr
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for geometry update:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for geometry update:" << zoneId;
         return;
     }
 
@@ -343,7 +343,7 @@ void ZoneManager::updateZoneName(const QString& zoneId, const QString& name)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for name update:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for name update:" << zoneId;
         return;
     }
 
@@ -363,7 +363,7 @@ void ZoneManager::updateZoneNumber(const QString& zoneId, int number)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for number update:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for number update:" << zoneId;
         return;
     }
 
@@ -383,7 +383,7 @@ void ZoneManager::updateZoneColor(const QString& zoneId, const QString& colorTyp
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for color update:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for color update:" << zoneId;
         return;
     }
 
@@ -403,7 +403,7 @@ void ZoneManager::updateZoneAppearance(const QString& zoneId, const QString& pro
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for appearance update:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for appearance update:" << zoneId;
         return;
     }
 
@@ -457,7 +457,7 @@ void ZoneManager::deleteZone(const QString& zoneId)
 
     int index = findZoneIndex(zoneId);
     if (index < 0 || index >= m_zones.size()) {
-        qCWarning(lcEditorZone) << "PhosphorZones::Zone not found for deletion:" << zoneId;
+        qCWarning(lcEditorZone) << "Zone not found for deletion:" << zoneId;
         return;
     }
 

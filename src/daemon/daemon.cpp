@@ -404,9 +404,11 @@ bool Daemon::init()
     // PhosphorZones::Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
 
-    // Give the window drag adaptor access to the shortcut backend for
-    // registering/unregistering the Escape cancel shortcut during drags
-    m_windowDragAdaptor->setShortcutBackend(m_shortcutManager->shortcutBackend());
+    // Give the window drag adaptor access to the shortcut manager for
+    // registering/unregistering the Escape cancel shortcut during drags.
+    // Routed through the Phosphor::Shortcuts::Integration::IAdhocRegistrar interface so the underlying
+    // Registry stays private to ShortcutManager.
+    m_windowDragAdaptor->setShortcutRegistrar(m_shortcutManager.get());
 
     // When the compositor bridge re-registers (e.g. KWin reloaded the effect,
     // effect process restarted, or daemon itself restarted mid-drag), any drag
@@ -794,8 +796,13 @@ void Daemon::stop()
     }
 
     // Null the WindowDragAdaptor's engine pointer for the same reason.
+    // Also null its ShortcutRegistrar pointer: m_shortcutManager (a unique_ptr
+    // member) is destroyed before ~QObject runs, so it dies before the
+    // adaptor itself. Any late event reaching the adaptor between those two
+    // moments would otherwise deref a dead ShortcutManager.
     if (m_windowDragAdaptor) {
         m_windowDragAdaptor->setAutotileEngine(nullptr);
+        m_windowDragAdaptor->setShortcutRegistrar(nullptr);
     }
 
     // Clear engine references before destruction

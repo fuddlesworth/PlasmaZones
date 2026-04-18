@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "windowdragadaptor.h"
-#include <QAction>
 #include <QGuiApplication>
 #include <QKeySequence>
 #include <QScreen>
 #include <cmath>
 #include "pz_i18n.h"
 #include "../config/configdefaults.h"
-#include "../daemon/shortcutbackend.h"
+#include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
@@ -26,6 +25,13 @@
 #include "../autotile/AutotileEngine.h"
 
 namespace PlasmaZones {
+
+// Stable id for the Escape cancel-overlay shortcut bound dynamically during
+// a drag. Matches the pre-library object name so kglobalshortcutsrc entries
+// created by earlier installs continue to resolve. QLatin1String is constexpr-
+// constructible from a string literal in Qt 6, so we pay zero per-call
+// conversion at the Integration::IAdhocRegistrar boundary (QString accepts it implicitly).
+static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
                                      LayoutManager* layoutManager, ISettings* settings,
@@ -60,10 +66,9 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
         onLayoutChanged();
     });
 
-    // Escape shortcut to cancel overlay during drag (registered when drag starts, unregistered when drag ends)
-    m_cancelOverlayAction = new QAction(PzI18n::tr("Cancel PhosphorZones::Zone Overlay"), this);
-    m_cancelOverlayAction->setObjectName(QStringLiteral("cancel_overlay_during_drag"));
-    connect(m_cancelOverlayAction, &QAction::triggered, this, &WindowDragAdaptor::cancelSnap);
+    // Escape shortcut to cancel overlay during drag: bound into the Registry
+    // on drag start (see registerCancelOverlayShortcut) and released on end
+    // so the global Escape grab doesn't persist between drags.
 
     // When snap assist is dismissed (selection, timeout, etc.), unregister the Escape shortcut
     // that was kept alive during dragStopped() for the snap assist phase
@@ -283,20 +288,27 @@ void WindowDragAdaptor::handleWindowClosed(const QString& windowId)
 
 void WindowDragAdaptor::registerCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction && m_shortcutBackend) {
-        m_shortcutBackend->setGlobalShortcut(m_cancelOverlayAction, QKeySequence(Qt::Key_Escape));
+    if (!m_shortcutRegistrar) {
+        return;
     }
+    m_shortcutRegistrar->registerAdhocShortcut(kCancelOverlayId, QKeySequence(Qt::Key_Escape),
+                                               PzI18n::tr("Cancel Zone Overlay"), [this] {
+                                                   cancelSnap();
+                                               });
 }
 
 void WindowDragAdaptor::unregisterCancelOverlayShortcut()
 {
-    if (m_cancelOverlayAction && m_shortcutBackend) {
-        // removeAllShortcuts() fully deregisters the action from the backend,
-        // releasing the compositor-level key grab. The previous approach of setting an empty
-        // QKeySequence left the action registered with a stale grab on Wayland, causing Escape
-        // to remain intercepted system-wide after every window drag (see discussion #155).
-        m_shortcutBackend->removeAllShortcuts(m_cancelOverlayAction);
+    if (!m_shortcutRegistrar) {
+        return;
     }
+    // unregisterAdhocShortcut() drops both the Registry entry and the
+    // compositor-level key grab. Prior IShortcutBackend-era bug (discussion
+    // #155) where setting an empty QKeySequence left a stale Wayland grab is
+    // no longer expressible: rebind() with an empty sequence now routes
+    // through unbind() inside the Registry, and the cancel path always uses
+    // the explicit unregister call below.
+    m_shortcutRegistrar->unregisterAdhocShortcut(kCancelOverlayId);
 }
 
 void WindowDragAdaptor::checkZoneSelectorTrigger(int cursorX, int cursorY)
@@ -560,7 +572,7 @@ void WindowDragAdaptor::onLayoutChanged()
     // This handles the case where user changes layout via hotkey/GUI while dragging
     // On next dragMoved(), fresh geometry will be calculated from the new layout
     if (!m_draggedWindowId.isEmpty()) {
-        qCInfo(lcDbusWindow) << "PhosphorZones::Layout changed mid-drag, clearing cached zone state";
+        qCInfo(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
         m_currentZoneId.clear();
         m_currentZoneGeometry = QRect();
         m_currentMultiZoneGeometry = QRect();

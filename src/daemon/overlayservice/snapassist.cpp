@@ -618,7 +618,7 @@ void OverlayService::destroyLayoutPickerWindow()
 
 void OverlayService::onLayoutPickerSelected(const QString& layoutId)
 {
-    qCInfo(lcOverlay) << "PhosphorZones::Layout picker selected=" << layoutId;
+    qCInfo(lcOverlay) << "Layout picker selected=" << layoutId;
     hideLayoutPicker();
     Q_EMIT layoutPickerSelected(layoutId);
 }

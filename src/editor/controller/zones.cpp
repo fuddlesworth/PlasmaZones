@@ -102,8 +102,8 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
     // Get current zone data to check geometry mode
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for geometry update:" << zoneId;
-        Q_EMIT layoutSaveFailed(PzI18n::tr("PhosphorZones::Zone not found", "@info"));
+        qCWarning(lcEditor) << "Zone not found for geometry update:" << zoneId;
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -208,8 +208,8 @@ void EditorController::updateZoneName(const QString& zoneId, const QString& name
     // Get current name for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for name update:" << zoneId;
-        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("PhosphorZones::Zone not found", "@info"));
+        qCWarning(lcEditor) << "Zone not found for name update:" << zoneId;
+        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -244,8 +244,8 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
     // Get current zone number for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for number update:" << zoneId;
-        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("PhosphorZones::Zone not found", "@info"));
+        qCWarning(lcEditor) << "Zone not found for number update:" << zoneId;
+        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
         return;
     }
 
@@ -274,7 +274,7 @@ void EditorController::updateZoneColor(const QString& zoneId, const QString& col
     // Get current value for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for color update:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for color update:" << zoneId;
         return;
     }
 
@@ -297,7 +297,7 @@ void EditorController::updateZoneAppearance(const QString& zoneId, const QString
     // Get current value for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for appearance update:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for appearance update:" << zoneId;
         return;
     }
 
@@ -323,8 +323,8 @@ void EditorController::deleteZone(const QString& zoneId)
     // Get zone data for undo
     QVariantMap zoneData = m_zoneManager->getZoneById(zoneId);
     if (zoneData.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for deletion:" << zoneId;
-        Q_EMIT layoutSaveFailed(PzI18n::tr("PhosphorZones::Zone not found", "@info"));
+        qCWarning(lcEditor) << "Zone not found for deletion:" << zoneId;
+        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
         return;
     }
 

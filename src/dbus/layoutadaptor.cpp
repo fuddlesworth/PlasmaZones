@@ -311,7 +311,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
 
     auto* layout = m_layoutManager->layoutById(uuid);
     if (!layout) {
-        qCWarning(lcDbusLayout) << "PhosphorZones::Layout not found:" << id;
+        qCWarning(lcDbusLayout) << "Layout not found:" << id;
         return QString();
     }
 

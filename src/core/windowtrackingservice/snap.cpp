@@ -428,8 +428,8 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
                             qCWarning(lcCore) << "zone-number fallback:" << appId << "partial match, requested"
                                               << savedNumbers.size() << "zones, matched" << fallbackIds.size();
                         }
-                        qCInfo(lcCore) << "PhosphorZones::Zone-number fallback for" << appId
-                                       << "numbers:" << savedNumbers << "->" << fallbackIds;
+                        qCInfo(lcCore) << "Zone-number fallback for" << appId << "numbers:" << savedNumbers << "->"
+                                       << fallbackIds;
                     }
                 }
             }

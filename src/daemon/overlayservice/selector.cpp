@@ -529,12 +529,10 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
     // Route to the correct signal based on whether this is an autotile algorithm or manual layout
     if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
-        qCInfo(lcOverlay) << "PhosphorZones::Zone selector: autotile algorithm selected, algoId=" << algoId
-                          << "screen=" << screenId;
+        qCInfo(lcOverlay) << "Zone selector: autotile algorithm selected, algoId=" << algoId << "screen=" << screenId;
         Q_EMIT autotileLayoutSelected(algoId, screenId);
     } else {
-        qCInfo(lcOverlay) << "PhosphorZones::Zone selector: layout selected, layoutId=" << layoutId
-                          << "screen=" << screenId;
+        qCInfo(lcOverlay) << "Zone selector: layout selected, layoutId=" << layoutId << "screen=" << screenId;
         Q_EMIT manualLayoutSelected(layoutId, screenId);
     }
 }

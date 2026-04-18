@@ -10,7 +10,7 @@ using namespace PlasmaZones;
 
 UpdateLayoutNameCommand::UpdateLayoutNameCommand(QPointer<EditorController> editorController, const QString& oldName,
                                                  const QString& newName, const QString& text, QUndoCommand* parent)
-    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Rename PhosphorZones::Layout", "@action") : text, parent)
+    : QUndoCommand(text.isEmpty() ? PzI18n::tr("Rename Layout", "@action") : text, parent)
     , m_editorController(editorController)
     , m_oldName(oldName)
     , m_newName(newName)

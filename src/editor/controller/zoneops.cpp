@@ -53,7 +53,7 @@ bool EditorController::expandToFillSpace(const QString& zoneId, qreal mouseX, qr
     // Get old geometry for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for fill:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for fill:" << zoneId;
         return false;
     }
 
@@ -112,7 +112,7 @@ void EditorController::deleteZoneWithFill(const QString& zoneId, bool autoFill)
     // Get deleted zone data
     QVariantMap deletedZoneData = m_zoneManager->getZoneById(zoneId);
     if (deletedZoneData.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for deletion with fill:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for deletion with fill:" << zoneId;
         return;
     }
 
@@ -389,7 +389,7 @@ QString EditorController::splitZone(const QString& zoneId, bool horizontal)
     // Get original zone data before split
     QVariantMap originalZoneData = m_zoneManager->getZoneById(zoneId);
     if (originalZoneData.isEmpty()) {
-        qCWarning(lcEditor) << "PhosphorZones::Zone not found for split:" << zoneId;
+        qCWarning(lcEditor) << "Zone not found for split:" << zoneId;
         return QString();
     }
 

@@ -453,7 +453,7 @@ private Q_SLOTS:
             {
                 auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
                 grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
-                grp->writeString(QStringLiteral("PhosphorTiles::TilingAlgorithm"), QStringLiteral("dwindle"));
+                grp->writeString(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
                 // SnappingLayout intentionally empty
             }
             // Write old ModeTracking group with the manual layout ID
@@ -606,13 +606,13 @@ private Q_SLOTS:
                 auto g = configBackend->group(QStringLiteral("Assignment:eDP-1"));
                 g->writeInt(QLatin1String("Mode"), 0);
                 g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{aaaa-bbbb}"));
-                g->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), QStringLiteral("dwindle"));
+                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("dwindle"));
             }
             {
                 auto g = configBackend->group(QStringLiteral("Assignment:HDMI-A-1:Desktop:2"));
                 g->writeInt(QLatin1String("Mode"), 1);
                 g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{cccc-dddd}"));
-                g->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), QStringLiteral("bsp"));
+                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("bsp"));
             }
             {
                 auto g = configBackend->group(ConfigDefaults::quickLayoutsGroup());

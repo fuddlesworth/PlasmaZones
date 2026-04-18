@@ -181,8 +181,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     qreal layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << (locked ? "Locked" : "PhosphorZones::Layout") << "OSD: layout=" << layout->name()
-                      << "screen=" << screenId;
+    qCInfo(lcOverlay) << (locked ? "Locked" : "Layout") << "OSD: layout=" << layout->name() << "screen=" << screenId;
 }
 
 void OverlayService::showLayoutOsd(const QString& id, const QString& name, const QVariantList& zones, int category,
@@ -232,7 +231,7 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
 
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
-    qCInfo(lcOverlay) << "PhosphorZones::Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
+    qCInfo(lcOverlay) << "Layout OSD: name=" << name << "category=" << category << "screen=" << screenId;
 }
 
 void OverlayService::showDisabledOsd(const QString& reason, const QString& screenId)
@@ -325,8 +324,7 @@ void OverlayService::warmUpLayoutOsd()
         }
     }
     m_layoutOsdWarmed = true;
-    qCInfo(lcOverlay) << "Pre-warmed PhosphorZones::Layout OSD windows for" << effectiveIds.size()
-                      << "effective screens";
+    qCInfo(lcOverlay) << "Pre-warmed Layout OSD windows for" << effectiveIds.size() << "effective screens";
 
     ensureOsdScreenAddedConnected();
 }
