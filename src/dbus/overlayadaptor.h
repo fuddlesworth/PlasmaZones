@@ -10,7 +10,7 @@
 #include <QString>
 
 namespace PhosphorZones {
-class ILayoutManager;
+class ILayoutRegistry;
 class IZoneDetector;
 }
 
@@ -37,7 +37,7 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                            PhosphorZones::ILayoutManager* layoutManager, ISettings* settings,
+                            PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings,
                             QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
 
@@ -80,7 +80,9 @@ Q_SIGNALS:
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
-    PhosphorZones::ILayoutManager* m_layoutManager; // Interface type (DIP) - needed for highlightZone by ID
+    // Narrow to ILayoutRegistry — overlay adaptor only reads the active
+    // layout, never per-context assignments / quick slots / persistence.
+    PhosphorZones::ILayoutRegistry* m_layoutRegistry;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 };
 

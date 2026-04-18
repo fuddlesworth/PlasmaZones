@@ -972,12 +972,11 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
     // whether to show manual layouts, autotile algorithms, or both.
     bool includeManual = m_includeManualLayouts;
     bool includeAutotile = m_includeAutotileLayouts;
-    auto* layoutManager = dynamic_cast<LayoutManager*>(m_layoutManager);
-    if (layoutManager) {
+    if (m_layoutManager) {
         const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
         if (!resolvedId.isEmpty()) {
             const QString assignmentId =
-                layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+                m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
             if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 includeManual = false;
                 includeAutotile = true;

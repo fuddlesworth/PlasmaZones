@@ -58,7 +58,12 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZoneHighlighter.h
     include/PhosphorZones/LayoutUtils.h
     include/PhosphorZones/IZoneDetector.h
+    include/PhosphorZones/IBuiltInLayouts.h
+    include/PhosphorZones/ILayoutAssignments.h
     include/PhosphorZones/ILayoutManager.h
+    include/PhosphorZones/ILayoutPersistence.h
+    include/PhosphorZones/ILayoutRegistry.h
+    include/PhosphorZones/IQuickLayouts.h
     include/PhosphorZones/ZonesLayoutSource.h
 )
 

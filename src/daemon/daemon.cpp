@@ -19,6 +19,7 @@
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include "../core/windowregistry.h"
@@ -50,7 +51,6 @@
 #include "../autotile/AutotileEngine.h"
 #include "../autotile/autotilenavigationadapter.h"
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
 
@@ -124,12 +124,12 @@ Daemon::Daemon(QObject* parent)
     // lazily on first availableLayouts() call: the layout manager has loaded
     // from disk by then, and the algorithm registry is populated by the
     // PhosphorTiles::ScriptedAlgorithmLoader during init().
-    m_zonesLayoutSource = std::make_unique<PhosphorZones::ZonesLayoutSource>(m_layoutManager.get());
-    m_autotileLayoutSource =
-        std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance());
-    m_layoutSource = std::make_unique<PhosphorLayout::CompositeLayoutSource>();
-    m_layoutSource->addSource(m_zonesLayoutSource.get());
-    m_layoutSource->addSource(m_autotileLayoutSource.get());
+    m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get());
+    // Forward the manager's layouts-changed signal into the zones source so
+    // the composite's contentsChanged fires when manual layouts are added /
+    // removed / renamed. Autotile side self-wires to AlgorithmRegistry.
+    connect(m_layoutManager.get(), &LayoutManager::layoutsChanged, m_layoutSources.zones.get(),
+            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
 }
 
 Daemon::~Daemon()
@@ -355,7 +355,7 @@ bool Daemon::init()
     m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
-    m_layoutAdaptor->setLayoutSource(m_layoutSource.get());
+    m_layoutAdaptor->setLayoutSource(m_layoutSources.composite.get());
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);

@@ -16,12 +16,9 @@
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
-
-#include <PhosphorLayoutApi/CompositeLayoutSource.h>
-#include <PhosphorTiles/AutotileLayoutSource.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <memory>
 
@@ -895,15 +892,18 @@ private:
     // for QML preview rendering paths that don't need the daemon (template
     // gallery, layout-import preview thumbnails, etc.).
     //
-    // CompositeLayoutSource aggregates manual layouts (m_localZonesSource
-    // over m_localLayoutManager) and autotile previews (m_localAutotileSource
-    // over the AlgorithmRegistry singleton). Consumers query exclusively
-    // through m_localSource and never branch on id-prefix — the composite
-    // dispatches internally.
+    // The bundle aggregates manual layouts (over m_localLayoutManager) and
+    // autotile previews (over the AlgorithmRegistry singleton) behind a
+    // single ILayoutSource. Declaration order matters — the LayoutManager
+    // must outlive the bundle's zones source that borrows its catalog.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localZonesSource;
-    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
-    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_localSource;
+    LayoutSourceBundle m_localSources;
+
+    /// Recompute zone geometry for every manual layout against the
+    /// primary screen so ZonesLayoutSource previews render fixed-geometry
+    /// zones at their authored dimensions — see SettingsController for
+    /// the matching implementation.
+    void recalcLocalLayouts();
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

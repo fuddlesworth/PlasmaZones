@@ -5,10 +5,14 @@
 
 namespace PhosphorLayout {
 
-// Out-of-line virtual destructor anchors the vtable in this TU. Without
-// it every consumer .cpp that includes ILayoutSource.h would emit its
-// own copy of the vtable as a weak symbol, bloating debug info and
-// risking link-time duplicate-vtable warnings.
+ILayoutSource::ILayoutSource(QObject* parent)
+    : QObject(parent)
+{
+}
+
+// Out-of-line destructor anchors the vtable in this TU so every consumer
+// .cpp that includes ILayoutSource.h doesn't emit its own copy as a weak
+// symbol.
 ILayoutSource::~ILayoutSource() = default;
 
 } // namespace PhosphorLayout

@@ -46,6 +46,11 @@ QString makePreviewId(const QString& algorithmId)
     return PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
 }
 
+QString cacheKey(const QString& algorithmId, int windowCount)
+{
+    return algorithmId + QLatin1Char('|') + QString::number(windowCount);
+}
+
 } // namespace
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
@@ -115,12 +120,30 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
 
-AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry)
-    : m_registry(registry)
+AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry, QObject* parent)
+    : PhosphorLayout::ILayoutSource(parent)
+    , m_registry(registry ? registry : PhosphorTiles::AlgorithmRegistry::instance())
 {
+    if (m_registry) {
+        const auto onRegistered = [this](const QString&) {
+            invalidateCache();
+            Q_EMIT contentsChanged();
+        };
+        const auto onUnregistered = [this](const QString&, bool /*replacing*/) {
+            invalidateCache();
+            Q_EMIT contentsChanged();
+        };
+        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, onRegistered);
+        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, onUnregistered);
+    }
 }
 
 AutotileLayoutSource::~AutotileLayoutSource() = default;
+
+void AutotileLayoutSource::invalidateCache()
+{
+    m_cache.clear();
+}
 
 QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() const
 {
@@ -139,7 +162,12 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
         if (!algorithm) {
             continue;
         }
-        result.append(previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount));
+        const QString key = cacheKey(id, PhosphorLayout::DefaultPreviewWindowCount);
+        auto it = m_cache.constFind(key);
+        if (it == m_cache.constEnd()) {
+            it = m_cache.insert(key, previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount));
+        }
+        result.append(it.value());
     }
     return result;
 }
@@ -155,8 +183,18 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
         return {};
     }
     const QString algorithmId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
+    const QString key = cacheKey(algorithmId, windowCount);
+    auto it = m_cache.constFind(key);
+    if (it != m_cache.constEnd()) {
+        return it.value();
+    }
     PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(algorithmId);
-    return algorithm ? previewFromAlgorithm(algorithmId, algorithm, windowCount) : PhosphorLayout::LayoutPreview{};
+    if (!algorithm) {
+        return {};
+    }
+    PhosphorLayout::LayoutPreview preview = previewFromAlgorithm(algorithmId, algorithm, windowCount);
+    m_cache.insert(key, preview);
+    return preview;
 }
 
 } // namespace PhosphorTiles

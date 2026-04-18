@@ -13,13 +13,11 @@
 #include <memory>
 
 #include "shortcutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/types.h"
 #include "../autotile/AutotileEngine.h"
 
 #include <PhosphorConfig/IBackend.h>
-#include <PhosphorLayoutApi/CompositeLayoutSource.h>
-#include <PhosphorTiles/AutotileLayoutSource.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
 
 namespace PhosphorZones {
 class Layout;
@@ -113,7 +111,7 @@ public:
      */
     PhosphorLayout::ILayoutSource* layoutSource() const
     {
-        return m_layoutSource.get();
+        return m_layoutSources.composite.get();
     }
     OverlayService* overlayService() const
     {
@@ -357,16 +355,11 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
-    // The two concrete layout sources composed behind layoutSource(): manual
-    // layouts via PhosphorZones::ZonesLayoutSource (over m_layoutManager) and autotile
-    // algorithm previews via AutotileLayoutSource (over the in-process
-    // PhosphorTiles::AlgorithmRegistry singleton).  Owned separately because the composite
-    // borrows their pointers and we need their lifetimes pinned to Daemon.
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_zonesLayoutSource;
-    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_autotileLayoutSource;
-    // Composite that aggregates m_zonesLayoutSource + m_autotileLayoutSource
-    // behind one PhosphorLayout::ILayoutSource — see layoutSource() doc.
-    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_layoutSource;
+    // Manual layouts + autotile algorithms composed behind layoutSource().
+    // The bundle owns all three objects so destruction is deterministic
+    // (composite first, then the child sources it borrows from). See
+    // layoutsourcefactory.h for the construction contract.
+    LayoutSourceBundle m_layoutSources;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;

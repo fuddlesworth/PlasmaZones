@@ -14,13 +14,25 @@
 //   * LayoutAdaptor — getLayoutList / getLayoutPreviewList: D-Bus JSON
 //
 // Canonical shape (all keys always present unless marked optional):
-//   id, displayName, description?, zoneCount, zones[], isAutotile,
-//   recommended, autoAssign, aspectRatioClass (int 0-4),
-//   referenceAspectRatio?, sectionKey?, sectionLabel?, sectionOrder?,
-//   algorithm?{supportsMasterCount, supportsSplitRatio,
-//              producesOverlappingZones, supportsCustomParams,
-//              supportsMemory, isScripted, isUserScript, isSystemEntry,
-//              zoneNumberDisplay?}
+//   id, displayName, description?, zoneCount, zones[], isAutotile, isSystem,
+//   recommended, autoAssign, aspectRatioClass (string tag: "any" /
+//   "standard" / "ultrawide" / "super-ultrawide" / "portrait"),
+//   referenceAspectRatio?, sectionKey?, sectionLabel?, sectionOrder?
+//
+// When the preview backs an autotile algorithm (@c isAutotile == true)
+// the algorithm metadata fields are flattened into the SAME top-level
+// object (not a nested `algorithm` sub-object):
+//   supportsMasterCount, supportsSplitRatio, producesOverlappingZones,
+//   supportsCustomParams, supportsMemory, isScripted, isUserScript,
+//   zoneNumberDisplay?
+//
+// Rationale: QML delegates bind to flat scalar properties naturally;
+// nesting adds one `.algorithm.` step everywhere without buying
+// disambiguation (manual previews simply lack the flag fields).
+// Consumers that care about system-entry classification read the
+// top-level @c isSystem (populated by the producer via
+// @c AlgorithmMetadata::isSystemEntry for autotile previews, and via
+// @c Layout::isSystemLayout for manual previews).
 //
 // Each zone in `zones` is flat: {x, y, width, height, zoneNumber}.
 

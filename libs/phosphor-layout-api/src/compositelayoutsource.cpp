@@ -5,13 +5,23 @@
 
 namespace PhosphorLayout {
 
+CompositeLayoutSource::CompositeLayoutSource(QObject* parent)
+    : ILayoutSource(parent)
+{
+}
+
 CompositeLayoutSource::~CompositeLayoutSource() = default;
 
 void CompositeLayoutSource::addSource(ILayoutSource* source)
 {
-    if (source) {
-        m_sources.append(source);
+    if (!source || m_sources.contains(source)) {
+        return;
     }
+    m_sources.append(source);
+    // Forward child's contentsChanged so callers only need to listen at
+    // the composite level. Q_EMIT-by-signal-to-signal connect preserves
+    // the default direct-connection semantics.
+    connect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
 }
 
 void CompositeLayoutSource::removeSource(ILayoutSource* source)
@@ -19,11 +29,17 @@ void CompositeLayoutSource::removeSource(ILayoutSource* source)
     if (!source) {
         return;
     }
+    disconnect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
     m_sources.removeAll(source);
 }
 
 void CompositeLayoutSource::clearSources()
 {
+    for (ILayoutSource* source : std::as_const(m_sources)) {
+        if (source) {
+            disconnect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
+        }
+    }
     m_sources.clear();
 }
 

@@ -123,7 +123,7 @@ public:
      * @return Raw assignment string (UUID or "autotile:*"), or empty if no assignment
      */
     QString assignmentIdForScreen(const QString& screenId, int virtualDesktop = 0,
-                                  const QString& activity = QString()) const;
+                                  const QString& activity = QString()) const override;
 
     /**
      * @brief Get the full AssignmentEntry for a screen/desktop/activity

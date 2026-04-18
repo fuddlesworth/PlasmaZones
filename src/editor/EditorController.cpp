@@ -11,14 +11,17 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
-#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
+#include "../core/geometryutils.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QClipboard>
 #include <QDBusConnection>
@@ -53,14 +56,8 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localZonesSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
-    , m_localAutotileSource(
-          std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
-    , m_localSource(std::make_unique<PhosphorLayout::CompositeLayoutSource>())
+    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get()))
 {
-    m_localSource->addSource(m_localZonesSource.get());
-    m_localSource->addSource(m_localAutotileSource.get());
-
     // Discover + register user-authored scripted algorithms in the shared
     // AlgorithmRegistry singleton so standalone editor launches (daemon down)
     // still surface them in layout pickers. The loader also sets up a
@@ -75,6 +72,13 @@ EditorController::EditorController(QObject* parent)
     // LayoutManager installs a QFileSystemWatcher so subsequent disk
     // changes (daemon writes, settings creates, hand edits) auto-reload.
     m_localLayoutManager->loadLayouts();
+    // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
+    // emits non-empty zones + a real referenceAspectRatio — see the matching
+    // comment in SettingsController.
+    recalcLocalLayouts();
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
+            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
 
     // Subscribe to the daemon's layout-change D-Bus signals and force
     // a local-source reload when any fire. Belt-and-suspenders alongside
@@ -212,10 +216,10 @@ QVariantList EditorController::zones() const
 QVariantList EditorController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (!m_localSource) {
+    if (!m_localSources.composite) {
         return list;
     }
-    const auto previews = m_localSource->availableLayouts();
+    const auto previews = m_localSources.composite->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
         list.append(toVariantMap(preview));
@@ -225,10 +229,10 @@ QVariantList EditorController::localLayoutPreviews() const
 
 QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount) const
 {
-    if (id.isEmpty() || !m_localSource) {
+    if (id.isEmpty() || !m_localSources.composite) {
         return {};
     }
-    const auto preview = m_localSource->previewAt(id, windowCount);
+    const auto preview = m_localSources.composite->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }
@@ -242,6 +246,23 @@ void EditorController::reloadLocalLayouts()
     // diff-checks file mtimes / hashes internally).
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
+    }
+}
+
+void EditorController::recalcLocalLayouts()
+{
+    if (!m_localLayoutManager) {
+        return;
+    }
+    QScreen* primary = Utils::primaryScreen();
+    if (!primary) {
+        return;
+    }
+    for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+        if (!layout) {
+            continue;
+        }
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
     }
 }
 QString EditorController::selectedZoneId() const

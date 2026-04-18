@@ -16,11 +16,8 @@
 #include "../core/constants.h"
 #include "../core/enums.h"
 #include "../core/layoutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/modifierutils.h"
-
-#include <PhosphorLayoutApi/CompositeLayoutSource.h>
-#include <PhosphorTiles/AutotileLayoutSource.h>
-#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <QHash>
 #include <QObject>
@@ -872,13 +869,20 @@ private:
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // LayoutManager opens its own assignments backend + scans the standard
-    // layouts directory; the composite aggregates manual (ZonesLayoutSource)
-    // + autotile (AutotileLayoutSource) so consumers query a single
-    // ILayoutSource and never branch on id-prefix.
+    // layouts directory; the bundle's composite aggregates manual + autotile
+    // entries so consumers query a single ILayoutSource and never branch on
+    // id-prefix. Declaration order matters — m_localLayoutManager must
+    // outlive the bundle (its zones source borrows the manager).
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localZonesSource;
-    std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
-    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_localSource;
+    LayoutSourceBundle m_localSources;
+
+    /// Recompute zone geometry for every manual layout in
+    /// @c m_localLayoutManager against the primary screen so
+    /// @c ZonesLayoutSource::previewFromLayout gets a populated
+    /// @c lastRecalcGeometry() — without this, fixed-geometry layouts
+    /// report @c referenceAspectRatio == 0 and zones render as zero-size
+    /// rects.
+    void recalcLocalLayouts();
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;

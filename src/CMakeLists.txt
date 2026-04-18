@@ -76,6 +76,8 @@ set(plasmazones_core_SRCS
     core/layoutworker/types.h
     core/unifiedlayoutlist.cpp
     core/unifiedlayoutlist.h
+    core/layoutsourcefactory.cpp
+    core/layoutsourcefactory.h
     common/layoutpreviewserialize.cpp
     common/layoutpreviewserialize.h
     core/supportreport.cpp

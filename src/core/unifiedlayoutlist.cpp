@@ -8,12 +8,8 @@
 #include "pz_i18n.h"
 #include "utils.h"
 
-#include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/AspectRatioClass.h>
-#include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
-#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
@@ -77,17 +73,18 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
 
 void appendAutotilePreviews(QVector<LayoutPreview>& list)
 {
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-    if (!registry) {
-        return;
-    }
-    const QStringList algoIds = registry->availableAlgorithms();
-    for (const QString& algoId : algoIds) {
-        PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algoId);
-        if (!algo) {
-            continue;
-        }
-        list.append(PhosphorTiles::previewFromAlgorithm(algoId, algo, PhosphorLayout::DefaultPreviewWindowCount));
+    // Delegate to phosphor-tiles' AutotileLayoutSource so autotile
+    // composition is owned in one place. The temporary source binds to
+    // AlgorithmRegistry::instance() in its constructor; its internal
+    // preview cache is per-instance and discarded at the end of this
+    // call (cheap — just the QHash). Long-lived consumers that hold a
+    // persistent source (daemon, editor, settings) benefit from the
+    // cross-call cache directly.
+    PhosphorTiles::AutotileLayoutSource source;
+    const auto previews = source.availableLayouts();
+    list.reserve(list.size() + previews.size());
+    for (const auto& preview : previews) {
+        list.append(preview);
     }
 }
 

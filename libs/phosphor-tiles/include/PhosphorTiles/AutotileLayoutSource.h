@@ -8,6 +8,8 @@
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
+#include <QHash>
+
 namespace PhosphorTiles {
 class AlgorithmRegistry;
 class TilingAlgorithm;
@@ -33,7 +35,7 @@ previewFromAlgorithm(const QString& algorithmId, PhosphorTiles::TilingAlgorithm*
 
 /// Convenience overload that reverse-looks-up the algorithm id via the
 /// default AlgorithmRegistry singleton. Prefer the id-taking form on hot
-/// paths — the reverse lookup is O(N) per call.
+/// paths — the reverse lookup is O(N) per call and emits a qCWarning.
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
 previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm,
                      int windowCount = PhosphorLayout::DefaultPreviewWindowCount);
@@ -46,16 +48,24 @@ previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm,
 /// LayoutPreview shape, so consumers branch on @c LayoutPreview::isAutotile
 /// rather than on which concrete source they hold.
 ///
-/// Borrows the registry — caller (typically the singleton itself, via
+/// Caches previews keyed on (algorithmId, windowCount) so repeated
+/// queries (typical for the layout-picker UI) don't re-execute scripted
+/// (JS) algorithms. The cache is invalidated when the registry emits
+/// @c algorithmRegistered / @c algorithmUnregistered, at which point the
+/// source also emits @c contentsChanged.
+///
+/// Borrows the registry — caller (typically the default singleton,
 /// `AlgorithmRegistry::instance()`) owns it and outlives this source.
-/// Source is non-copyable (matches ILayoutSource's contract).
+/// Source is non-copyable (inherited from ILayoutSource).
 class PHOSPHORTILES_EXPORT AutotileLayoutSource : public PhosphorLayout::ILayoutSource
 {
+    Q_OBJECT
 public:
-    /// Construct over a borrowed algorithm registry.  Caller owns @p registry
-    /// and must keep it alive for the source's lifetime.  @p registry may be
-    /// nullptr — the source then returns empty previews for every call.
-    explicit AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry);
+    /// Construct over a borrowed algorithm registry.  Pass nullptr (the
+    /// default) to bind to @c AlgorithmRegistry::instance() — this is the
+    /// normal production path. Passing an explicit registry is reserved
+    /// for tests that want an isolated instance.
+    explicit AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry = nullptr, QObject* parent = nullptr);
     ~AutotileLayoutSource() override;
 
     QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override;
@@ -69,8 +79,16 @@ public:
                                             int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
                                             const QSize& canvas = {}) const override;
 
+    /// Drop any cached previews — next query re-runs the algorithms.
+    /// Called automatically on registry changes; exposed publicly so
+    /// tests / advanced callers can trigger an explicit flush.
+    void invalidateCache();
+
 private:
     PhosphorTiles::AlgorithmRegistry* m_registry;
+    /// Cache key is `"<algorithmId>|<windowCount>"`. Hash preserves
+    /// insertion-order-independent lookup semantics.
+    mutable QHash<QString, PhosphorLayout::LayoutPreview> m_cache;
 };
 
 } // namespace PhosphorTiles

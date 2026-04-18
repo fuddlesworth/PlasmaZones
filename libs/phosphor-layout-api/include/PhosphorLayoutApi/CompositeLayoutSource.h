@@ -23,19 +23,24 @@ namespace PhosphorLayout {
 /// `previewAt(id, ...)` walks the children in order and returns the first
 /// non-empty result (children return an empty preview when they don't
 /// know the id, per the `ILayoutSource` contract).  Two sources reporting
-/// the same id is a configuration bug — the first one wins.
+/// the same id is a configuration bug — in practice the namespaces are
+/// disjoint (UUID vs `autotile:...`) so this doesn't occur in-tree.
+///
+/// The composite forwards each child's `contentsChanged` signal, so
+/// callers can listen at the composite level only.
 ///
 /// Borrows the child sources — caller owns each one and must keep them
-/// alive for the composite's lifetime.
+/// alive for the composite's lifetime. @c addSource is idempotent (adding
+/// the same pointer twice is a no-op).
 class PHOSPHORLAYOUTAPI_EXPORT CompositeLayoutSource : public ILayoutSource
 {
+    Q_OBJECT
 public:
-    CompositeLayoutSource() = default;
+    explicit CompositeLayoutSource(QObject* parent = nullptr);
     ~CompositeLayoutSource() override;
 
-    /// Append a child source to the aggregation.  Pass nullptr is harmless
-    /// (the slot is skipped at query time) — keeps construction sites
-    /// terse when a child source is conditionally available.
+    /// Append a child source to the aggregation.  Passing nullptr, or a
+    /// source already added, is a harmless no-op.
     void addSource(ILayoutSource* source);
 
     /// Remove @p source from the aggregation.  No-op if @p source was never

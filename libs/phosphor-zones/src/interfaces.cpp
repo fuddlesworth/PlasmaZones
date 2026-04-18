@@ -1,7 +1,12 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorZones/IBuiltInLayouts.h>
+#include <PhosphorZones/ILayoutAssignments.h>
 #include <PhosphorZones/ILayoutManager.h>
+#include <PhosphorZones/ILayoutPersistence.h>
+#include <PhosphorZones/ILayoutRegistry.h>
+#include <PhosphorZones/IQuickLayouts.h>
 #include <PhosphorZones/IZoneDetector.h>
 
 namespace PhosphorZones {
@@ -16,6 +21,11 @@ namespace PhosphorZones {
 // — those interfaces stay in PZ.
 
 ILayoutCatalog::~ILayoutCatalog() = default;
+ILayoutRegistry::~ILayoutRegistry() = default;
+ILayoutAssignments::~ILayoutAssignments() = default;
+IQuickLayouts::~IQuickLayouts() = default;
+IBuiltInLayouts::~IBuiltInLayouts() = default;
+ILayoutPersistence::~ILayoutPersistence() = default;
 ILayoutManager::~ILayoutManager() = default;
 
 IZoneDetection::~IZoneDetection() = default;

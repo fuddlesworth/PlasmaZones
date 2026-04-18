@@ -21,6 +21,10 @@ if(NOT PROJECT_VERSION)
     project(PhosphorLayoutApi VERSION ${PHOSPHORLAYOUTAPI_VERSION} LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    # ILayoutSource + CompositeLayoutSource now carry Q_OBJECT so AUTOMOC
+    # must run standalone too. In-tree builds inherit the top-level
+    # project's CMAKE_AUTOMOC setting.
+    set(CMAKE_AUTOMOC ON)
 endif()
 
 include(GenerateExportHeader)

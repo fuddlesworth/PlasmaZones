@@ -87,7 +87,7 @@ inline std::optional<QUuid> parseAndValidateUuid(const QString& id, const QStrin
  *   if (!layout) { qCWarning() << "no active layout"; return; }
  */
 template<typename LogCategory>
-PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::ILayoutManager* mgr, const QString& operation,
+PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::ILayoutRegistry* mgr, const QString& operation,
                                              LogCategory category)
 {
     if (!mgr) {
@@ -115,7 +115,7 @@ PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::ILayoutManager* mgr,
  * Combines UUID validation + active layout check + zone lookup.
  */
 template<typename LogCategory>
-PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
+PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr, const QString& zoneId,
                                              const QString& operation, LogCategory category)
 {
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
@@ -140,7 +140,7 @@ PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutManager* mgr,
 /**
  * @brief Overload using default lcDbus category
  */
-inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
+inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr, const QString& zoneId,
                                                     const QString& operation)
 {
     return getZoneFromActiveLayout(mgr, zoneId, operation, lcDbus);
@@ -161,6 +161,10 @@ template<typename LogCategory>
 PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
+    // Takes the full ILayoutManager here (rather than ILayoutCatalog +
+    // ILayoutRegistry separately) because the active-layout-first
+    // search walks both capabilities — splitting would force callers
+    // to pass two pointers to a single helper.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;

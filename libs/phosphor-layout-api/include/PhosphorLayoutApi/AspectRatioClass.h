@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <phosphorlayoutapi_export.h>
-
 #include <QLatin1String>
 #include <QString>
 

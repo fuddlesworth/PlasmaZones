@@ -7,6 +7,7 @@
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
+#include <QObject>
 #include <QSize>
 #include <QString>
 #include <QVector>
@@ -15,10 +16,10 @@ namespace PhosphorLayout {
 
 /// Abstract producer of LayoutPreview values.
 ///
-/// Implemented by phosphor-zones (manual zone layouts) and the future
-/// phosphor-tile-algo (autotile algorithms). Editor / settings / overlay
-/// code holds an @c ILayoutSource* and renders previews uniformly without
-/// branching on the underlying source.
+/// Implemented by phosphor-zones (manual zone layouts) and phosphor-tiles
+/// (autotile algorithms). Editor / settings / overlay code holds an
+/// @c ILayoutSource* and renders previews uniformly without branching on
+/// the underlying source.
 ///
 /// Two-method contract:
 ///   1. @c availableLayouts — enumerate everything the source can show
@@ -33,12 +34,21 @@ namespace PhosphorLayout {
 /// Sources are expected to be cheap to query — the layout-picker UI may
 /// call @c availableLayouts after every layout-set change, and
 /// @c previewAt once per visible row. Sources that need expensive work
-/// (e.g. running a JS algorithm) should cache results internally rather
-/// than expecting consumers to debounce.
-class PHOSPHORLAYOUTAPI_EXPORT ILayoutSource
+/// (e.g. running a JS algorithm) are expected to cache results internally
+/// and emit @c contentsChanged when their cached output becomes stale.
+///
+/// @note Per-source contract details:
+///   - Manual sources (e.g. ZonesLayoutSource) ignore @p windowCount and
+///     @p canvas — authored zones have a fixed shape.
+///   - Autotile sources (e.g. AutotileLayoutSource) honour @p windowCount
+///     (they re-run the algorithm at that count) but currently ignore
+///     @p canvas (algorithms emit relative zones independent of canvas
+///     size).
+class PHOSPHORLAYOUTAPI_EXPORT ILayoutSource : public QObject
 {
+    Q_OBJECT
 public:
-    virtual ~ILayoutSource();
+    ~ILayoutSource() override;
 
     /// Enumerate every layout this source can render. The returned
     /// previews are populated enough for the picker UI to render rows
@@ -66,13 +76,20 @@ public:
     virtual LayoutPreview previewAt(const QString& id, int windowCount = DefaultPreviewWindowCount,
                                     const QSize& canvas = {}) const = 0;
 
-protected:
-    ILayoutSource() = default;
+Q_SIGNALS:
+    /// Emitted whenever the set of layouts this source reports has
+    /// changed (entries added, removed, or mutated — e.g. a scripted
+    /// algorithm registered, a layout file saved). Consumers refresh
+    /// their local views on this signal. A CompositeLayoutSource
+    /// forwards every child's @c contentsChanged, so callers can listen
+    /// at the composite level and ignore the underlying sources.
+    void contentsChanged();
 
-    // Non-copyable — sources are typically owned services that expose
-    // pointers to consumers. Avoid accidental slicing.
-    ILayoutSource(const ILayoutSource&) = delete;
-    ILayoutSource& operator=(const ILayoutSource&) = delete;
+protected:
+    explicit ILayoutSource(QObject* parent = nullptr);
+
+    // Non-copyable inherited from QObject — sources are owned services
+    // exposed as pointers to consumers.
 };
 
 } // namespace PhosphorLayout

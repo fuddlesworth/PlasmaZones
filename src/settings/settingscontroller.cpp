@@ -29,10 +29,15 @@ static void sortMergedLayoutList(QVariantList& list)
 } // namespace PlasmaZones
 #include "../core/constants.h"
 #include "version.h"
+#include "../core/geometryutils.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "dbusutils.h"
+
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -143,14 +148,8 @@ SettingsController::SettingsController(QObject* parent)
     : QObject((ensureScreenIdResolver(), parent))
     , m_screenHelper(&m_settings, this)
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localZonesSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
-    , m_localAutotileSource(
-          std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
-    , m_localSource(std::make_unique<PhosphorLayout::CompositeLayoutSource>())
+    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get()))
 {
-    m_localSource->addSource(m_localZonesSource.get());
-    m_localSource->addSource(m_localAutotileSource.get());
-
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
     // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
@@ -158,27 +157,32 @@ SettingsController::SettingsController(QObject* parent)
     // and installs a QFileSystemWatcher so any subsequent disk changes
     // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
     m_localLayoutManager->loadLayouts();
-    // When the file watcher detects a layout change on disk, re-bias
-    // m_layouts from the local source so QML rebinds even if the daemon
-    // isn't broadcasting D-Bus signals (or is down). The async refresh
-    // through scheduleLayoutLoad() / loadLayoutsAsync() also fires from
-    // daemon-side D-Bus signals to bring in autotile entries — these
-    // two paths converge at m_layouts.
+    // Force a synchronous recalc over the primary screen so manual layouts
+    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
+    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
+    // referenceAspectRatio. Without this, settings-process previews render
+    // with zero-size rects for authored-pixel layouts. Daemon runs the
+    // same recalc in Daemon::init(); settings does it here because it owns
+    // an in-process LayoutManager independent of the daemon.
+    recalcLocalLayouts();
+    // Forward manager layouts-changed into the source so composite
+    // consumers (if any) see contentsChanged. Also re-run the recalc so
+    // future reads through the local source pick up current geometry.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
+            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    // When the file watcher detects a layout change on disk, refresh
+    // m_layouts from the local composite (manual + autotile) so QML
+    // rebinds even if the daemon isn't broadcasting D-Bus signals (or is
+    // down). The async refresh through scheduleLayoutLoad() /
+    // loadLayoutsAsync() also fires from daemon-side D-Bus signals and
+    // replaces m_layouts with the D-Bus-enriched view when the daemon is
+    // up — these two paths converge at m_layouts.
     connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
+        recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
         if (!localLayouts.isEmpty()) {
-            // Preserve any autotile entries already merged in by the
-            // D-Bus refresh — re-merge the local manual list with the
-            // surviving autotile slots so QML doesn't lose algorithm
-            // entries when only manual-layout files change.
-            QVariantList merged = std::move(localLayouts);
-            for (const QVariant& v : std::as_const(m_layouts)) {
-                if (v.toMap().value(QStringLiteral("isAutotile")).toBool()) {
-                    merged.append(v);
-                }
-            }
-            sortMergedLayoutList(merged);
-            m_layouts = std::move(merged);
+            sortMergedLayoutList(localLayouts);
+            m_layouts = std::move(localLayouts);
             Q_EMIT layoutsChanged();
         }
     });
@@ -723,12 +727,13 @@ void SettingsController::loadLayoutsAsync()
         m_localLayoutManager->loadLayouts();
     }
 
-    // Step 1: instant paint from the in-process PhosphorZones::ZonesLayoutSource so the
-    // layouts page renders manual previews before D-Bus has even round-
-    // tripped — and continues to work entirely if the daemon isn't
-    // running. Autotile algorithm entries land later via the async D-Bus
-    // call below (or never, in the daemon-down case — manual previews
-    // still render).
+    // Step 1: instant paint from the in-process composite source so the
+    // layouts page renders previews before D-Bus has even round-tripped —
+    // and continues to work entirely if the daemon isn't running. The
+    // composite already contains both manual zones (from the local
+    // LayoutManager) and autotile entries (from the shared
+    // AlgorithmRegistry singleton), so this view is self-sufficient.
+    recalcLocalLayouts();
     QVariantList localLayouts = localLayoutPreviews();
     if (!localLayouts.isEmpty()) {
         sortMergedLayoutList(localLayouts);
@@ -736,9 +741,10 @@ void SettingsController::loadLayoutsAsync()
         Q_EMIT layoutsChanged();
     }
 
-    // Step 2: async D-Bus call for the full picture (adds autotile algorithm
-    // entries the local manual-only source can't produce). On reply the
-    // full list replaces m_layouts; if the call errors we keep the local
+    // Step 2: async D-Bus call to pick up daemon-side enrichment
+    // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)
+    // that the local composite can't know about. On reply the enriched
+    // list replaces m_layouts; if the call errors we keep the local
     // previews from Step 1 visible rather than blanking the page.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
@@ -787,10 +793,10 @@ void SettingsController::loadLayoutsAsync()
 QVariantList SettingsController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (!m_localSource) {
+    if (!m_localSources.composite) {
         return list;
     }
-    const auto previews = m_localSource->availableLayouts();
+    const auto previews = m_localSources.composite->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
         list.append(toVariantMap(preview));
@@ -798,12 +804,29 @@ QVariantList SettingsController::localLayoutPreviews() const
     return list;
 }
 
+void SettingsController::recalcLocalLayouts()
+{
+    if (!m_localLayoutManager) {
+        return;
+    }
+    QScreen* primary = Utils::primaryScreen();
+    if (!primary) {
+        return;
+    }
+    for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+        if (!layout) {
+            continue;
+        }
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+    }
+}
+
 QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount) const
 {
-    if (id.isEmpty() || !m_localSource) {
+    if (id.isEmpty() || !m_localSources.composite) {
         return {};
     }
-    const auto preview = m_localSource->previewAt(id, windowCount);
+    const auto preview = m_localSources.composite->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }

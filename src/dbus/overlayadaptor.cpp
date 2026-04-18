@@ -4,6 +4,7 @@
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
+#include <PhosphorZones/ILayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
@@ -16,16 +17,16 @@
 namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               PhosphorZones::ILayoutManager* layoutManager, ISettings* settings, QObject* parent)
+                               PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
-    , m_layoutManager(layoutManager)
+    , m_layoutRegistry(layoutRegistry)
     , m_settings(settings)
 {
     Q_ASSERT(overlay);
     Q_ASSERT(detector);
-    Q_ASSERT(layoutManager);
+    Q_ASSERT(layoutRegistry);
     Q_ASSERT(settings);
 
     connect(m_overlayService, &IOverlayService::visibilityChanged, this, &OverlayAdaptor::overlayVisibilityChanged);
@@ -63,7 +64,7 @@ bool OverlayAdaptor::isOverlayVisible()
 
 void OverlayAdaptor::highlightZone(const QString& zoneId)
 {
-    auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutManager, zoneId, QStringLiteral("highlight zone"));
+    auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutRegistry, zoneId, QStringLiteral("highlight zone"));
     if (!zone) {
         return;
     }
@@ -79,7 +80,7 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
         return;
     }
 
-    if (!m_layoutManager || !m_layoutManager->activeLayout()) {
+    if (!m_layoutRegistry || !m_layoutRegistry->activeLayout()) {
         qCWarning(lcDbus) << "highlightZones: no active layout";
         return;
     }
@@ -88,7 +89,7 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
     for (const auto& id : zoneIds) {
         auto uuidOpt = Utils::parseUuid(id);
         if (uuidOpt) {
-            auto* zone = m_layoutManager->activeLayout()->zoneById(*uuidOpt);
+            auto* zone = m_layoutRegistry->activeLayout()->zoneById(*uuidOpt);
             if (zone) {
                 zones.append(zone);
             }

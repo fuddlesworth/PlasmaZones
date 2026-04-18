@@ -53,8 +53,9 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
 
 // ─── ZonesLayoutSource ──────────────────────────────────────────────────────
 
-ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutCatalog* catalog)
-    : m_catalog(catalog)
+ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutCatalog* catalog, QObject* parent)
+    : PhosphorLayout::ILayoutSource(parent)
+    , m_catalog(catalog)
 {
 }
 
@@ -63,6 +64,9 @@ ZonesLayoutSource::~ZonesLayoutSource() = default;
 QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() const
 {
     QVector<PhosphorLayout::LayoutPreview> result;
+    // m_catalog is borrowed; caller contract says it must outlive this
+    // source (see header). Null here means the source was constructed
+    // without a catalog — treat as empty rather than crash.
     if (!m_catalog) {
         return result;
     }
@@ -90,6 +94,11 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
     }
     PhosphorZones::Layout* layout = m_catalog->layoutById(uuid);
     return layout ? previewFromLayout(layout) : PhosphorLayout::LayoutPreview{};
+}
+
+void ZonesLayoutSource::notifyContentsChanged()
+{
+    Q_EMIT contentsChanged();
 }
 
 } // namespace PhosphorZones
