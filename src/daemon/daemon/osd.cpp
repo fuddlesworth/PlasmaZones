@@ -15,7 +15,10 @@
 #include "../../autotile/AutotileEngine.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include "helpers.h"
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include "../config/settings.h"
 #include <QDBusConnection>
@@ -241,8 +244,31 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
                     masterCount = state->masterCount();
                 }
             }
-            QVariantList zones =
-                PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
+            // Build the OSD QVariantList from the canonical preview. The QML
+            // overlay expects `{zoneNumber, relativeGeometry:{x,y,w,h},
+            // id, name, useCustomColors}` — we project the preview's zones
+            // directly without going through a second preview-generation path.
+            const PhosphorLayout::LayoutPreview preview =
+                PhosphorTiles::previewFromAlgorithm(algorithmId, algo, windowCount > 0 ? windowCount : -1);
+            QVariantList zones;
+            zones.reserve(preview.zones.size());
+            for (int i = 0; i < preview.zones.size(); ++i) {
+                const QRectF& rel = preview.zones.at(i);
+                QVariantMap relGeo;
+                relGeo[QLatin1String("x")] = rel.x();
+                relGeo[QLatin1String("y")] = rel.y();
+                relGeo[QLatin1String("width")] = rel.width();
+                relGeo[QLatin1String("height")] = rel.height();
+
+                QVariantMap zoneMap;
+                zoneMap[QLatin1String("zoneNumber")] =
+                    (i < preview.zoneNumbers.size()) ? preview.zoneNumbers.at(i) : (i + 1);
+                zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+                zoneMap[QLatin1String("id")] = QString::number(i);
+                zoneMap[QLatin1String("name")] = QString();
+                zoneMap[QLatin1String("useCustomColors")] = false;
+                zones.append(zoneMap);
+            }
             QString layoutId = PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones,
                                             static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId,

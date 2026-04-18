@@ -38,7 +38,10 @@ class PHOSPHORZONES_EXPORT ZoneDetector : public IZoneDetector
 {
     Q_OBJECT
 
-    Q_PROPERTY(Layout* layout READ layout WRITE setLayout NOTIFY layoutChanged)
+    // Fully-qualified property type so moc's NOTIFY-signal validity check
+    // (a global-namespace namespace block that references the property
+    // type by its textual spelling) can resolve the type.
+    Q_PROPERTY(PhosphorZones::Layout* layout READ layout WRITE setLayout NOTIFY layoutChanged)
 
 public:
     explicit ZoneDetector(QObject* parent = nullptr);
@@ -90,10 +93,12 @@ public:
     Q_INVOKABLE void highlightZones(const QVector<Zone*>& zones) override;
     Q_INVOKABLE void clearHighlights() override;
 
-Q_SIGNALS:
-    void layoutChanged();
-    void zoneHighlighted(Zone* zone);
-    void highlightsCleared();
+    // Signals (layoutChanged, zoneHighlighted, highlightsCleared) are
+    // inherited from IZoneDetector. Redeclaring them here would make moc
+    // generate a second metaObject entry for each, causing connections
+    // established through IZoneDetector* to fire a different slot from
+    // connections made through ZoneDetector* — exactly the "signal
+    // shadowing" pitfall that ILayoutManager.h warns against.
 
 private:
     QRectF combineZoneGeometries(const QVector<Zone*>& zones) const;

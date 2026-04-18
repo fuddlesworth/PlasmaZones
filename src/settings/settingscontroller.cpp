@@ -2522,7 +2522,14 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
         return {};
     }
 
-    const int previewSize = 1000;
+    // Custom-param-aware preview: the settings KCM's preview slider passes
+    // live master/split values without persisting them, and bundles saved
+    // custom params for the algorithm. That path diverges from
+    // previewFromAlgorithm (which reads the registry's configured params),
+    // so we build the TilingParams explicitly here. The relative-space
+    // projection mirrors LayoutPreview's contract (0..1 against the shared
+    // preview canvas size).
+    const int previewSize = PhosphorTiles::AlgorithmRegistry::PreviewCanvasSize;
     const QRect previewRect(0, 0, previewSize, previewSize);
 
     PhosphorTiles::TilingState state(QStringLiteral("preview"));
@@ -2531,13 +2538,25 @@ QVariantList SettingsController::generateAlgorithmPreview(const QString& algorit
 
     const int count = qMax(1, windowCount);
     PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(count, previewRect, &state);
-
-    // Include saved custom params so preview reflects user configuration
     params.customParams = savedCustomParams(algorithmId);
 
-    QVector<QRect> zones = algo->calculateZones(params);
+    const QVector<QRect> zones = algo->calculateZones(params);
 
-    return PhosphorTiles::AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+    QVariantList result;
+    result.reserve(zones.size());
+    for (int i = 0; i < zones.size(); ++i) {
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewSize;
+        relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewSize;
+        relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewSize;
+        relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewSize;
+
+        QVariantMap zoneMap;
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        result.append(zoneMap);
+    }
+    return result;
 }
 
 void SettingsController::openAlgorithmsFolder()

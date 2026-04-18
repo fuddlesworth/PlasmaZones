@@ -251,8 +251,10 @@ QString LayoutAdaptor::getLayout(const QString& id)
             qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
             return QString();
         }
-        PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(
-            algoId, algo, PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo));
+        // previewFromAlgorithm applies configured params (active-algorithm
+        // maxWindows, master-count, split-ratio) when the caller passes a
+        // non-positive windowCount, so no adapter helper is needed here.
+        PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(algoId, algo, -1);
         QJsonObject json = PlasmaZones::toJson(preview);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);

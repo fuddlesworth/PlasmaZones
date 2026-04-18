@@ -188,6 +188,26 @@ public:
     }
 
     /**
+     * @brief The id this algorithm is registered under.
+     *
+     * Populated by @c AlgorithmRegistry::registerAlgorithm at registration
+     * time and unset when the algorithm is removed. Empty for algorithms
+     * that exist but aren't currently registered (fixture stubs, transient
+     * instances). Lets callers that have only a TilingAlgorithm* recover
+     * the id without the O(N) reverse lookup through the registry.
+     */
+    QString registryId() const
+    {
+        return m_registryId;
+    }
+    /// Registry-internal setter. Not intended for direct use; @c AlgorithmRegistry
+    /// calls this from registerAlgorithm / unregisterAlgorithm.
+    void setRegistryId(const QString& id)
+    {
+        m_registryId = id;
+    }
+
+    /**
      * @brief Human-readable name of the algorithm
      * @return Algorithm name (e.g., "Master + Stack", "BSP")
      */
@@ -454,6 +474,11 @@ protected:
     // is an empty std::function; appIdResolver() returns a no-op lambda in
     // that case so call sites can invoke it unconditionally.
     std::function<QString(const QString&)> m_appIdResolver;
+
+    // Registry id — populated by AlgorithmRegistry at registration time so
+    // preview / serialisation code holding only a TilingAlgorithm* can
+    // recover the id without walking the registry.
+    QString m_registryId;
 
     /**
      * @brief Distribute a total evenly among N parts with pixel-perfect remainder handling

@@ -4,12 +4,10 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
-#include <PhosphorTiles/TilingState.h>
 #include "tileslogging.h"
 
 #include <QCoreApplication>
 #include <QDebug>
-#include <QRect>
 #include <QThread>
 #include <algorithm>
 
@@ -104,8 +102,8 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
 
     // Check if this algorithm pointer is already registered under a different ID
     // to prevent double-free issues. Don't delete - it's still owned under the original ID.
-    const QString existingId = findAlgorithmId(algorithm);
-    if (!existingId.isEmpty() && existingId != id) {
+    const QString existingId = algorithm->registryId();
+    if (!existingId.isEmpty() && existingId != id && m_algorithms.value(existingId) == algorithm) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "AlgorithmRegistry: algorithm" << algorithm->name() << "is already registered as" << existingId
             << "- cannot register as" << id;
@@ -121,6 +119,7 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     // Register the new algorithm BEFORE emitting signals so that signal handlers
     // querying the registry see the new algorithm already in place.
     algorithm->setParent(this);
+    algorithm->setRegistryId(id);
     m_algorithms.insert(id, algorithm);
     if (oldIndex >= 0) {
         m_registrationOrder.insert(oldIndex, id);
@@ -138,16 +137,6 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     } else {
         Q_EMIT algorithmRegistered(id);
     }
-}
-
-QString AlgorithmRegistry::findAlgorithmId(TilingAlgorithm* algorithm) const
-{
-    for (auto it = m_algorithms.constBegin(); it != m_algorithms.constEnd(); ++it) {
-        if (it.value() == algorithm) {
-            return it.key();
-        }
-    }
-    return QString();
 }
 
 TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
@@ -192,6 +181,7 @@ void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
     //   1. The algorithm was already removed from m_algorithms by
     //      removeAlgorithmInternal(), so cleanup() won't see it.
     //   2. deleteLater() ensures the QObject event loop handles final deletion.
+    algo->setRegistryId(QString());
     algo->setParent(nullptr);
     algo->deleteLater();
 }
@@ -264,123 +254,19 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
-QVariantList AlgorithmRegistry::zonesToRelativeGeometry(const QVector<QRect>& zones, const QRect& previewRect)
-{
-    if (!previewRect.isValid() || previewRect.width() == 0 || previewRect.height() == 0) {
-        return {};
-    }
-
-    QVariantList result;
-    for (int i = 0; i < zones.size(); ++i) {
-        QVariantMap zoneMap;
-        zoneMap[QLatin1String("zoneNumber")] = i + 1;
-
-        QVariantMap relGeo;
-        relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewRect.width();
-        relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewRect.height();
-        relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewRect.width();
-        relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewRect.height();
-        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
-
-        result.append(zoneMap);
-    }
-
-    return result;
-}
-
 void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
 {
-    instance()->m_previewParams = params;
+    auto* inst = instance();
+    if (inst->m_previewParams == params) {
+        return;
+    }
+    inst->m_previewParams = params;
+    Q_EMIT inst->previewParamsChanged();
 }
 
 const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
 {
     return instance()->m_previewParams;
-}
-
-int AlgorithmRegistry::configuredMaxWindows()
-{
-    return instance()->m_previewParams.maxWindows;
-}
-
-int AlgorithmRegistry::effectiveMaxWindows(TilingAlgorithm* algorithm)
-{
-    const auto& params = instance()->m_previewParams;
-    if (!algorithm) {
-        return params.maxWindows;
-    }
-    // Use the user-configured maxWindows only for the active algorithm.
-    // Other algorithms use their own default so each preview is representative.
-    if (params.maxWindows > 0 && !params.algorithmId.isEmpty()) {
-        if (instance()->algorithm(params.algorithmId) == algorithm) {
-            return params.maxWindows;
-        }
-    }
-    return algorithm->defaultMaxWindows();
-}
-
-QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm, int windowCount)
-{
-    if (!algorithm) {
-        return {};
-    }
-
-    // Use explicit override, then configured setting, then algorithm default
-    int count = windowCount;
-    if (count <= 0) {
-        count = effectiveMaxWindows(algorithm);
-    }
-
-    // Apply configured params: active algorithm uses global masterCount/splitRatio,
-    // other algorithms check savedAlgorithmSettings for per-algorithm overrides,
-    // and fall back to their own defaults.
-    auto* inst = instance();
-    const auto& params = inst->m_previewParams;
-    const bool isActive = !params.algorithmId.isEmpty() && inst->algorithm(params.algorithmId) == algorithm;
-
-    int masterCount = 1;
-    qreal splitRatio = algorithm->defaultSplitRatio();
-    if (isActive) {
-        if (params.masterCount > 0)
-            masterCount = params.masterCount;
-        if (params.splitRatio > 0)
-            splitRatio = params.splitRatio;
-    } else {
-        // Look up per-algorithm saved settings from the generalized map
-        const QString algoId = inst->findAlgorithmId(algorithm);
-        const auto it = params.savedAlgorithmSettings.constFind(algoId);
-        if (it != params.savedAlgorithmSettings.constEnd()) {
-            const QVariantMap& saved = it.value();
-            const int savedMasterCount = saved.value(AutotileJsonKeys::MasterCount, -1).toInt();
-            const qreal savedSplitRatio = saved.value(AutotileJsonKeys::SplitRatio, -1.0).toDouble();
-            if (savedMasterCount > 0)
-                masterCount = savedMasterCount;
-            if (savedSplitRatio > 0)
-                splitRatio = savedSplitRatio;
-        }
-    }
-
-    // Generate preview zones for a representative window count
-    const QRect previewRect(0, 0, AlgorithmRegistry::PreviewCanvasSize, AlgorithmRegistry::PreviewCanvasSize);
-
-    TilingState previewState(QStringLiteral("preview"));
-    previewState.setMasterCount(masterCount);
-    previewState.setSplitRatio(splitRatio);
-
-    QVector<QRect> zones = algorithm->calculateZones(TilingParams::forPreview(count, previewRect, &previewState));
-
-    QVariantList list = zonesToRelativeGeometry(zones, previewRect);
-
-    // Enrich with extra fields needed by zone selector / layout cards
-    for (int i = 0; i < list.size(); ++i) {
-        QVariantMap zoneMap = list[i].toMap();
-        zoneMap[QLatin1String("id")] = QString::number(i);
-        zoneMap[QLatin1String("name")] = QString();
-        zoneMap[QLatin1String("useCustomColors")] = false;
-        list[i] = zoneMap;
-    }
-
-    return list;
 }
 
 } // namespace PhosphorTiles

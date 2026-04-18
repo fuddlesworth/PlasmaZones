@@ -22,6 +22,14 @@ void CompositeLayoutSource::addSource(ILayoutSource* source)
     // the composite level. Q_EMIT-by-signal-to-signal connect preserves
     // the default direct-connection semantics.
     connect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
+    // Auto-drop the entry if the caller deletes the source without calling
+    // removeSource() first. The documented contract says callers keep
+    // sources alive, but a dangling raw pointer here would turn a caller
+    // bug into a UAF on the next availableLayouts() — too steep a cost
+    // for a one-line safety net.
+    connect(source, &QObject::destroyed, this, [this](QObject* obj) {
+        m_sources.removeAll(static_cast<ILayoutSource*>(obj));
+    });
 }
 
 void CompositeLayoutSource::removeSource(ILayoutSource* source)
@@ -29,7 +37,7 @@ void CompositeLayoutSource::removeSource(ILayoutSource* source)
     if (!source) {
         return;
     }
-    disconnect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
+    disconnect(source, nullptr, this, nullptr);
     m_sources.removeAll(source);
 }
 
@@ -37,7 +45,7 @@ void CompositeLayoutSource::clearSources()
 {
     for (ILayoutSource* source : std::as_const(m_sources)) {
         if (source) {
-            disconnect(source, &ILayoutSource::contentsChanged, this, &ILayoutSource::contentsChanged);
+            disconnect(source, nullptr, this, nullptr);
         }
     }
     m_sources.clear();

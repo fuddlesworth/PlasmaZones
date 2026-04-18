@@ -19,9 +19,8 @@ namespace PhosphorTiles {
 
 namespace {
 
-// Match the canvas size used by AlgorithmRegistry::generatePreviewZones so
-// that previews coming through this adapter are pixel-identical to those
-// rendered by the existing daemon-side D-Bus path.
+// Shared canvas edge length — every preview path in-tree scales against
+// this value, so consumers can render against any pixel rect without drift.
 constexpr int PreviewCanvasSize = PhosphorTiles::AlgorithmRegistry::PreviewCanvasSize;
 
 PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* algorithm)
@@ -61,10 +60,51 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
         return preview;
     }
 
-    const int effectiveCount = windowCount > 0 ? windowCount : algorithm->defaultMaxWindows();
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 
+    // Seed preview params from the registry's configured values so previews
+    // reflect the user's saved master-count / split-ratio / max-windows
+    // tuning. Active algorithm gets the global configured values; other
+    // algorithms fall back to their per-algorithm saved entry, then to the
+    // algorithm's own defaults.
+    int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
+    qreal splitRatio = algorithm->defaultSplitRatio();
+    int effectiveCount = windowCount;
+    if (auto* registry = PhosphorTiles::AlgorithmRegistry::instance()) {
+        const auto& params = PhosphorTiles::AlgorithmRegistry::configuredPreviewParams();
+        const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
+        if (isActive) {
+            if (params.masterCount > 0) {
+                masterCount = params.masterCount;
+            }
+            if (params.splitRatio > 0.0) {
+                splitRatio = params.splitRatio;
+            }
+            if (effectiveCount <= 0 && params.maxWindows > 0) {
+                effectiveCount = params.maxWindows;
+            }
+        } else {
+            auto it = params.savedAlgorithmSettings.constFind(algorithmId);
+            if (it != params.savedAlgorithmSettings.constEnd()) {
+                const QVariantMap& saved = it.value();
+                const int savedMaster = saved.value(PhosphorTiles::AutotileJsonKeys::MasterCount, -1).toInt();
+                const qreal savedRatio = saved.value(PhosphorTiles::AutotileJsonKeys::SplitRatio, -1.0).toDouble();
+                if (savedMaster > 0) {
+                    masterCount = savedMaster;
+                }
+                if (savedRatio > 0.0) {
+                    splitRatio = savedRatio;
+                }
+            }
+        }
+    }
+    if (effectiveCount <= 0) {
+        effectiveCount = algorithm->defaultMaxWindows();
+    }
+
     PhosphorTiles::TilingState previewState(QStringLiteral("preview"));
+    previewState.setMasterCount(masterCount);
+    previewState.setSplitRatio(splitRatio);
     PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(effectiveCount, canvas, &previewState);
 
     const QVector<QRect> rects = algorithm->calculateZones(params);
@@ -75,7 +115,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     preview.zoneCount = rects.size();
     // Setting preview.algorithm = ... makes isAutotile() return true.
     preview.algorithm = buildMetadata(algorithm);
-    preview.isSystem = preview.algorithm->isSystemEntry();
+    // Built-in C++ algorithms and system-installed scripts are system
+    // entries; user scripts are not. Consumers should not recompute this
+    // — they treat LayoutPreview::isSystem as authoritative.
+    preview.isSystem = !preview.algorithm->isScripted || !preview.algorithm->isUserScript;
 
     preview.zones.reserve(rects.size());
     preview.zoneNumbers.reserve(rects.size());
@@ -98,24 +141,17 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
     if (!algorithm) {
         return {};
     }
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-    if (!registry) {
+    // The algorithm carries its own id now (populated by AlgorithmRegistry
+    // at registration). Empty registryId means the algorithm exists but
+    // isn't currently registered — preview would have no stable id to
+    // reference, so bail out.
+    const QString id = algorithm->registryId();
+    if (id.isEmpty()) {
         qCWarning(PhosphorTiles::lcTilesLib)
-            << "previewFromAlgorithm: no AlgorithmRegistry available — preview will be empty";
+            << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
         return {};
     }
-    // Recover this algorithm's id by reverse lookup — the algorithm itself
-    // doesn't expose it, the registry owns the mapping. O(N); prefer the id
-    // overload on hot paths where the caller already has the id.
-    const auto ids = registry->availableAlgorithms();
-    for (const QString& candidate : ids) {
-        if (registry->algorithm(candidate) == algorithm) {
-            return previewFromAlgorithm(candidate, algorithm, windowCount);
-        }
-    }
-    qCWarning(PhosphorTiles::lcTilesLib)
-        << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
-    return {};
+    return previewFromAlgorithm(id, algorithm, windowCount);
 }
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
@@ -135,6 +171,13 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* reg
         };
         connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, onRegistered);
         connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, onUnregistered);
+        // User-tuned master-count / split-ratio updates must invalidate the
+        // preview cache — otherwise the next availableLayouts() returns
+        // geometry rendered against the old state.
+        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::previewParamsChanged, this, [this]() {
+            invalidateCache();
+            Q_EMIT contentsChanged();
+        });
     }
 }
 

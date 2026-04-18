@@ -214,7 +214,7 @@ void SettingsBridge::syncFromSettings(Settings* settings)
 
     // Update PhosphorTiles::AlgorithmRegistry so preview generation uses the configured values.
     // Per-algorithm settings are stored in the savedAlgorithmSettings map so
-    // generatePreviewZones() can look up any algorithm's saved params generically.
+    // previewFromAlgorithm can look up any algorithm's saved params generically.
     PhosphorTiles::AlgorithmRegistry::PreviewParams previewParams;
     previewParams.algorithmId = m_engine->m_algorithmId;
     previewParams.maxWindows = cfg->maxWindows;

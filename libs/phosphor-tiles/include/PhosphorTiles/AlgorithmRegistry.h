@@ -47,6 +47,13 @@ class TilingAlgorithm;
  *       Registration/unregistration should only occur during initialization
  *       or from the main thread.
  *
+ * @note Process scope: the singleton lives per-process. Daemon, editor, and
+ *       settings each hold their own instance — registered algorithms and
+ *       configured preview params do not cross process boundaries. Callers
+ *       that need cross-process state (e.g. SettingsBridge seeding preview
+ *       params on settings change) must invoke setConfiguredPreviewParams
+ *       in each process that will render previews.
+ *
  * @see TilingAlgorithm for the algorithm interface
  * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
  */
@@ -147,39 +154,11 @@ public:
     // overlay service, daemon OSD, and KCM algorithm preview)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    /// Canvas edge length used by @c generatePreviewZones and by every other
-    /// preview path that converts algorithm output into relative (0.0–1.0)
-    /// geometry. Exposed publicly so external sources (e.g.
-    /// @c AutotileLayoutSource) can scale against the same canvas without
-    /// drift.
+    /// Canvas edge length used by every preview path that converts algorithm
+    /// output into relative (0.0–1.0) geometry. Exposed publicly so external
+    /// callers (e.g. @c AutotileLayoutSource, SettingsController's live-param
+    /// preview) scale against the same canvas without drift.
     static constexpr int PreviewCanvasSize = 1000;
-
-    /**
-     * @brief Convert pixel zones to relative geometry
-     *
-     * Shared utility for both generatePreviewZones() (layout cards/selector)
-     * and KCMPlasmaZones::generateAlgorithmPreview() (live algorithm preview).
-     * Detects monocle-style layouts (all zones identical) and applies centered
-     * diagonal offsets so stacked windows are visually distinguishable.
-     *
-     * @param zones Pixel-coordinate zones from TilingAlgorithm::calculateZones()
-     * @param previewRect The rect used for calculateZones (for normalization)
-     * @return QVariantList of zone maps with zoneNumber and relativeGeometry
-     */
-    static QVariantList zonesToRelativeGeometry(const QVector<QRect>& zones, const QRect& previewRect);
-
-    /**
-     * @brief Generate preview zones for an algorithm as QVariantList
-     *
-     * Uses the configured max windows (setConfiguredMaxWindows) when set,
-     * otherwise falls back to the algorithm's defaultMaxWindows().
-     * Used by zone selector, layout OSD, and layout cards.
-     *
-     * @param algorithm The tiling algorithm to preview
-     * @param windowCount Explicit override (-1 = use configured or algorithm default)
-     * @return QVariantList of zone maps with relativeGeometry (0.0-1.0)
-     */
-    static QVariantList generatePreviewZones(TilingAlgorithm* algorithm, int windowCount = -1);
 
     /**
      * @brief Tiling parameters that affect algorithm preview generation
@@ -208,15 +187,13 @@ public:
     };
 
     /**
-     * @brief Get effective max windows for an algorithm, using configured or default
-     */
-    static int effectiveMaxWindows(TilingAlgorithm* algorithm);
-
-    /**
      * @brief Set the user-configured tiling parameters for preview generation
      *
-     * When set, generatePreviewZones() uses these values instead of
-     * hardcoded defaults. Call this when the user's tiling settings change.
+     * Call this when the user's tiling settings change — the next
+     * @c previewFromAlgorithm invocation will apply the updated master-count
+     * / split-ratio / max-windows values for the active algorithm and consult
+     * the per-algorithm saved entries for others. Emits @c previewParamsChanged
+     * if the value differs from the currently configured one.
      */
     static void setConfiguredPreviewParams(const PreviewParams& params);
 
@@ -224,11 +201,6 @@ public:
      * @brief Get the configured preview parameters
      */
     static const PreviewParams& configuredPreviewParams();
-
-    /**
-     * @brief Get the configured max windows, or -1 if not set
-     */
-    static int configuredMaxWindows();
 
 Q_SIGNALS:
     /**
@@ -253,6 +225,15 @@ Q_SIGNALS:
      */
     void algorithmUnregistered(const QString& id, bool replacing);
 
+    /**
+     * @brief Emitted when the configured preview params change
+     *
+     * Fired from @c setConfiguredPreviewParams so preview caches
+     * (AutotileLayoutSource) can invalidate and re-render with the new
+     * master-count / split-ratio / per-algorithm saved values.
+     */
+    void previewParamsChanged();
+
 private:
     explicit AlgorithmRegistry(QObject* parent = nullptr);
     ~AlgorithmRegistry() override;
@@ -263,14 +244,6 @@ private:
      * Called automatically during construction.
      */
     void registerBuiltInAlgorithms();
-
-    /**
-     * @brief Find if an algorithm pointer is already registered
-     *
-     * @param algorithm Pointer to check
-     * @return ID of existing registration, or empty string if not found
-     */
-    QString findAlgorithmId(TilingAlgorithm* algorithm) const;
 
     /**
      * @brief Remove algorithm from internal data structures
