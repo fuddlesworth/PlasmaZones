@@ -5,7 +5,7 @@
 #include "plasmazoneseffect.h"
 
 #include "geometry_helpers.h"
-#include "window_id.h"
+#include <PhosphorIdentity/WindowId.h>
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>

@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <easingcurve.h>
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/WindowMotion.h>
 
 #include <QObject>
 #include <QHash>
@@ -14,9 +15,6 @@ class WindowPaintData;
 }
 
 namespace PlasmaZones {
-
-// EasingCurve, WindowAnimation, and AnimationConfig are now in
-// src/compositor-common/easingcurve.h (shared across compositor plugins).
 
 /**
  * @brief Manages window snap animations (translate + scale)
@@ -56,11 +54,11 @@ public:
     {
         return m_duration;
     }
-    void setEasingCurve(const EasingCurve& curve)
+    void setEasingCurve(const PhosphorAnimation::Easing& curve)
     {
         m_easing = curve;
     }
-    const EasingCurve& easingCurve() const
+    const PhosphorAnimation::Easing& easingCurve() const
     {
         return m_easing;
     }
@@ -110,10 +108,10 @@ public:
     QRectF animationBounds(KWin::EffectWindow* window) const;
 
 private:
-    QHash<KWin::EffectWindow*, WindowAnimation> m_animations;
+    QHash<KWin::EffectWindow*, PhosphorAnimation::WindowMotion> m_animations;
     bool m_enabled = true;
     qreal m_duration = 150.0;
-    EasingCurve m_easing;
+    PhosphorAnimation::Easing m_easing;
     int m_minDistance = 0;
 };
 

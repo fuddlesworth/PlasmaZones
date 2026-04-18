@@ -5,7 +5,7 @@
 
 #include "compositor_bridge.h"
 #include "dbus_types.h"
-#include "window_id.h"
+#include <PhosphorIdentity/WindowId.h>
 
 #include <QSet>
 #include <QString>

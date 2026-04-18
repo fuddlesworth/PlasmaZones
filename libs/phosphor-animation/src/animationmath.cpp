@@ -1,18 +1,15 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "animation_math.h"
+#include <PhosphorAnimation/AnimationMath.h>
 
-namespace PlasmaZones {
+namespace PhosphorAnimation {
 namespace AnimationMath {
 
-std::optional<WindowAnimation> createSnapAnimation(const QPointF& oldPosition, const QSizeF& oldSize,
-                                                   const QRect& targetGeometry, const AnimationConfig& config)
+std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
+                                             const QRect& targetGeometry, qreal duration, const Easing& easing,
+                                             int minDistance)
 {
-    if (!config.enabled) {
-        return std::nullopt;
-    }
-
     if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
         return std::nullopt;
     }
@@ -21,21 +18,21 @@ std::optional<WindowAnimation> createSnapAnimation(const QPointF& oldPosition, c
     const qreal dist = QLineF(oldPosition, newPos).length();
     const bool sizeChanging =
         qAbs(oldSize.width() - targetGeometry.width()) > 1.0 || qAbs(oldSize.height() - targetGeometry.height()) > 1.0;
-    if (dist < qMax(1.0, qreal(config.minDistance)) && !sizeChanging) {
+    if (dist < qMax(1.0, qreal(minDistance)) && !sizeChanging) {
         return std::nullopt;
     }
 
-    WindowAnimation anim;
-    anim.startPosition = oldPosition;
-    anim.startSize = oldSize;
-    anim.targetGeometry = targetGeometry;
-    anim.duration = config.duration;
-    anim.easing = config.easing;
-    return anim;
+    WindowMotion motion;
+    motion.startPosition = oldPosition;
+    motion.startSize = oldSize;
+    motion.targetGeometry = targetGeometry;
+    motion.duration = duration;
+    motion.easing = easing;
+    return motion;
 }
 
-QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, const QRect& targetGeometry,
-                              const EasingCurve& easing, const QMarginsF& padding)
+QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRect& targetGeometry,
+                     const Easing& easing, const QMarginsF& padding)
 {
     QRectF atTarget(targetGeometry.x() - padding.left(), targetGeometry.y() - padding.top(),
                     targetGeometry.width() + padding.left() + padding.right(),
@@ -46,13 +43,14 @@ QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, 
 
     QRectF bounds = atTarget.united(atStart);
 
-    const bool isBounce = (easing.type == EasingCurve::Type::BounceIn || easing.type == EasingCurve::Type::BounceOut
-                           || easing.type == EasingCurve::Type::BounceInOut);
-    const bool needsSampling =
-        (easing.type == EasingCurve::Type::ElasticIn || easing.type == EasingCurve::Type::ElasticOut
-         || easing.type == EasingCurve::Type::ElasticInOut)
+    // Curves that overshoot the unit interval need sampling: otherwise
+    // we'd under-invalidate mid-animation and leave painting artifacts.
+    const bool isBounce = (easing.type == Easing::Type::BounceIn || easing.type == Easing::Type::BounceOut
+                           || easing.type == Easing::Type::BounceInOut);
+    const bool needsSampling = (easing.type == Easing::Type::ElasticIn || easing.type == Easing::Type::ElasticOut
+                                || easing.type == Easing::Type::ElasticInOut)
         || (isBounce && easing.amplitude > 1.0)
-        || (easing.type == EasingCurve::Type::CubicBezier
+        || (easing.type == Easing::Type::CubicBezier
             && (easing.y1 < 0.0 || easing.y1 > 1.0 || easing.y2 < 0.0 || easing.y2 > 1.0));
 
     if (needsSampling) {
@@ -61,6 +59,12 @@ QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, 
         const qreal dw = startSize.width() - targetGeometry.width();
         const qreal dh = startSize.height() - targetGeometry.height();
 
+        // 50 samples ≈ one sample every 20 ms at the typical 1000 ms
+        // upper bound on snap durations — fine for the parameter ranges
+        // these curves clamp to (elastic amplitude ≤ 3, bounce count ≤ 8,
+        // bezier y ∈ [-1, 2]). Bounce-out with N=8 still gets ~6 samples
+        // per sub-bounce, enough to capture each peak. Longer / wilder
+        // curves should drive their own per-frame repaint instead.
         constexpr int nSamples = 50;
         for (int i = 1; i < nSamples; ++i) {
             qreal p = easing.evaluate(qreal(i) / nSamples);
@@ -73,9 +77,10 @@ QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, 
         }
     }
 
+    // 2 px slack for subpixel damage that QRectF union alone misses.
     bounds.adjust(-2.0, -2.0, 2.0, 2.0);
     return bounds;
 }
 
 } // namespace AnimationMath
-} // namespace PlasmaZones
+} // namespace PhosphorAnimation

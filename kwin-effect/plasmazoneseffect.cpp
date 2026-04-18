@@ -3,11 +3,13 @@
 
 #include "plasmazoneseffect.h"
 
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/StaggerTimer.h>
+
 #include <dbus_helpers.h>
 #include <dbus_types.h>
 #include <PhosphorIdentity/ScreenId.h>
-#include <stagger_timer.h>
-#include <window_id.h>
+#include <PhosphorIdentity/WindowId.h>
 
 #include <algorithm>
 #include <memory>
@@ -1094,8 +1096,15 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
                                                   const std::function<void()>& onComplete)
 {
-    PlasmaZones::applyStaggeredOrImmediate(this, count, m_cachedAnimationSequenceMode, m_cachedAnimationStaggerInterval,
-                                           applyFn, onComplete);
+    // Convert the D-Bus-sourced int to the typed enum at this boundary;
+    // the library API only accepts SequenceMode. Unknown ints fall back
+    // to AllAtOnce — same behaviour as Profile::fromJson.
+    const PhosphorAnimation::SequenceMode mode =
+        (m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
+        ? PhosphorAnimation::SequenceMode::Cascade
+        : PhosphorAnimation::SequenceMode::AllAtOnce;
+    PhosphorAnimation::applyStaggeredOrImmediate(this, count, mode, m_cachedAnimationStaggerInterval, applyFn,
+                                                 onComplete);
 }
 
 void PlasmaZonesEffect::slotDaemonReady()
@@ -1745,7 +1754,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationDuration = d;
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
-        m_windowAnimator->setEasingCurve(EasingCurve::fromString(v.toString()));
+        m_windowAnimator->setEasingCurve(PhosphorAnimation::Easing::fromString(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));

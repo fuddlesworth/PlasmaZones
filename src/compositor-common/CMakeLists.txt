@@ -2,32 +2,33 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 #
 # Compositor-agnostic shared library for PlasmaZones compositor plugins.
-# Contains easing curves, animation math, D-Bus helpers, JSON parsing,
-# trigger parsing, and other portable code shared by KWin effect,
-# Wayfire plugin, and future compositor integrations.
+# Contains D-Bus helpers, JSON parsing, trigger marshalling, and other
+# portable code shared by the KWin effect, Wayfire plugin, and future
+# compositor integrations.
+#
+# Animation primitives (EasingCurve, WindowAnimation, AnimationConfig,
+# AnimationMath, applyStaggeredOrImmediate) moved to PhosphorAnimation.
+# Callers include <PhosphorAnimation/…> headers directly; this library
+# transitively exposes them via its PUBLIC link to PhosphorAnimation.
 
 # NOTE: If this ever becomes a shared (SHARED) library, all public API types
-# (BorderState, WindowInfo, EasingCurve, etc.) will need PLASMAZONES_EXPORT macros.
+# (BorderState, WindowInfo, etc.) will need PLASMAZONES_EXPORT macros.
 add_library(plasmazones_compositor_common STATIC
     logging.cpp
     logging.h
-    easingcurve.cpp
-    easingcurve.h
-    animation_math.cpp
-    animation_math.h
     snap_assist_filter.cpp
     snap_assist_filter.h
-    stagger_timer.cpp
-    stagger_timer.h
     trigger_parser.cpp
     trigger_parser.h
     # screen_id.{h,cpp} moved to libs/phosphor-identity (PhosphorIdentity::ScreenId).
-    # Consumers include <PhosphorIdentity/ScreenId.h> directly.
-    # window_id moved to libs/phosphor-identity — backward-compat shim
-    # `window_id.h` in this directory forwards to <PhosphorIdentity/WindowId.h>
-    # so the KWin effect's existing `#include "window_id.h"` keeps working.
-    # The shim is header-only; it's reachable via the public include-dir
-    # wired below and does not need to be listed as a source.
+    # Consumers include <PhosphorIdentity/ScreenId.h> directly — no forwarding shim.
+    #
+    # window_id moved to libs/phosphor-identity. Consumers include
+    # <PhosphorIdentity/WindowId.h> directly — no forwarding shim.
+    #
+    # Animation primitives moved to libs/phosphor-animation. Consumers
+    # include <PhosphorAnimation/{Easing,WindowMotion,AnimationMath,
+    # StaggerTimer}.h> directly — no forwarding shim.
     autotile_state.h
     compositor_bridge.h
     dbus_types.cpp
@@ -48,6 +49,7 @@ target_link_libraries(plasmazones_compositor_common PUBLIC
     Qt6::Gui
     Qt6::DBus
     PhosphorIdentity::PhosphorIdentity
+    PhosphorAnimation::PhosphorAnimation
 )
 
 # C++20 required for std::chrono features

@@ -317,7 +317,8 @@ add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
-add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision (scaffold)
+add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
+add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision
 
 # Source directories
 add_subdirectory(src)
