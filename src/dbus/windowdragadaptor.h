@@ -20,14 +20,17 @@ namespace Phosphor::Shortcuts {
 class IAdhocRegistrar;
 }
 
+namespace PhosphorZones {
+class IZoneDetector;
+class Layout;
+class Zone;
+}
+
 namespace PlasmaZones {
 
 class IOverlayService;
-class IZoneDetector;
 class LayoutManager; // Concrete type needed for signal connections
 class ISettings;
-class Layout;
-class Zone;
 class WindowTrackingAdaptor;
 class AutotileEngine;
 
@@ -38,7 +41,7 @@ class AutotileEngine;
  *
  * Receives drag events from KWin script and handles:
  * - Modifier key detection (works on Wayland via QGuiApplication)
- * - Zone detection and highlighting
+ * - PhosphorZones::Zone detection and highlighting
  * - Overlay visibility based on modifiers
  * - Window snapping via KWin D-Bus
  */
@@ -48,8 +51,9 @@ class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowDrag")
 
 public:
-    explicit WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
-                               ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
+    explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                               LayoutManager* layoutManager, ISettings* settings, WindowTrackingAdaptor* windowTracking,
+                               QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
 
     /**
@@ -289,12 +293,12 @@ private:
     // Returns layout for the screen at (x,y), or nullptr if screen disabled/no layout.
     // Shows overlay if not visible. Sets outScreen to the resolved physical screen
     // and outScreenId to the virtual-aware screen identifier.
-    Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId);
+    PhosphorZones::Layout* prepareHandlerContext(int x, int y, QScreen*& outScreen, QString& outScreenId);
 
     // Compute bounding rectangle of multiple zones with gaps applied
     // screenId is the virtual-aware screen identifier for gap/padding lookups.
-    QRectF computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
-                                       const QString& screenId) const;
+    QRectF computeCombinedZoneGeometry(const QVector<PhosphorZones::Zone*>& zones, QScreen* screen,
+                                       PhosphorZones::Layout* layout, const QString& screenId) const;
 
     // Convert zone UUIDs to string list (for overlay service)
     static QStringList zoneIdsToStringList(const QVector<QUuid>& ids);
@@ -310,7 +314,7 @@ private:
     void clearOverlayForTriggerRelease();
 
     IOverlayService* m_overlayService;
-    IZoneDetector* m_zoneDetector;
+    PhosphorZones::IZoneDetector* m_zoneDetector;
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
@@ -389,7 +393,8 @@ private:
     bool m_wasSnapped = false; // True if window was snapped to a zone when drag started
 
     // Multi-zone state
-    QVector<QUuid> m_currentAdjacentZoneIds; // Zone IDs (not pointers - zones owned by Layout)
+    QVector<QUuid>
+        m_currentAdjacentZoneIds; // PhosphorZones::Zone IDs (not pointers - zones owned by PhosphorZones::Layout)
     bool m_isMultiZoneMode = false;
     QRect m_currentMultiZoneGeometry; // Combined geometry for multi-zone
 
@@ -425,7 +430,7 @@ private:
     void registerCancelOverlayShortcut();
     void unregisterCancelOverlayShortcut();
 
-    // Zone selector methods
+    // PhosphorZones::Zone selector methods
     void checkZoneSelectorTrigger(int cursorX, int cursorY);
     bool isNearTriggerEdge(QScreen* screen, int cursorX, int cursorY, const QString& screenId = QString()) const;
 

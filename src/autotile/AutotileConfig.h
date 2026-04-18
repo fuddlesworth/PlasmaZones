@@ -4,6 +4,7 @@
 #pragma once
 
 #include "plasmazones_export.h"
+#include <PhosphorTiles/AutotileConstants.h>
 #include "config/configdefaults.h"
 #include "core/enums.h"
 #include <QColor>
@@ -43,8 +44,8 @@ struct AlgorithmSettings
             }
             const QVariant& a = it.value();
             const QVariant& b = oit.value();
-            const bool aNumeric = AutotileDefaults::isNumericMetaType(a.typeId());
-            const bool bNumeric = AutotileDefaults::isNumericMetaType(b.typeId());
+            const bool aNumeric = PhosphorTiles::AutotileDefaults::isNumericMetaType(a.typeId());
+            const bool bNumeric = PhosphorTiles::AutotileDefaults::isNumericMetaType(b.typeId());
             const bool aBool = a.typeId() == QMetaType::Bool;
             const bool bBool = b.typeId() == QMetaType::Bool;
             if (aNumeric && bNumeric) {
@@ -73,8 +74,10 @@ struct AlgorithmSettings
  * This is a value type (not QObject) for easy copying and comparison.
  * It can be stored per-layout or as global defaults.
  *
- * @note Default values here must match AutotileDefaults in constants.h.
- *       Validation and clamping use those shared constants.
+ * @note Default values are sourced from `ConfigDefaults::autotile*()` accessors,
+ *       which delegate to `PhosphorTiles::AutotileDefaults` for the algorithm
+ *       constants. Do not hand-mirror values here — keep the delegation chain
+ *       intact so library and config defaults stay in lock-step.
  */
 struct PLASMAZONES_EXPORT AutotileConfig
 {
@@ -86,7 +89,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * @brief ID of the tiling algorithm to use
      *
      * Common values: "master-stack", "bsp", "columns", "dwindle", "spiral", "monocle"
-     * See AlgorithmRegistry for available algorithms.
+     * See PhosphorTiles::AlgorithmRegistry for available algorithms.
      */
     QString algorithmId = ConfigDefaults::defaultAutotileAlgorithm();
 
@@ -226,7 +229,7 @@ struct PLASMAZONES_EXPORT AutotileConfig
      * Float (default): auto-float excess windows via OverflowManager.
      * Unlimited: ignore the cap and tile every window — the
      * `effectiveMaxWindows` path returns
-     * `AutotileDefaults::UnlimitedMaxWindowsSentinel` so the std::min clamp
+     * `PhosphorTiles::AutotileDefaults::UnlimitedMaxWindowsSentinel` so the std::min clamp
      * in recalculateLayout becomes idempotent and onWindowAdded's gate is
      * always open. A per-screen MaxWindows override (if present) still wins
      * over Unlimited so users can clamp individual screens.

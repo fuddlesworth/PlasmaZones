@@ -6,7 +6,7 @@
 #include "../cavaservice.h"
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
@@ -94,7 +94,7 @@ void OverlayService::setSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
+void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManager)
 {
     // Disconnect from old layout manager if exists
     if (m_layoutManager) {
@@ -106,10 +106,10 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             disconnect(oldManager, &LayoutManager::layoutRemoved, this, nullptr);
         }
     }
-    // Disconnect any per-Layout connections to active layouts the previous manager owned
-    for (const QPointer<Layout>& layout : std::as_const(m_observedLayouts)) {
+    // Disconnect any per-PhosphorZones::Layout connections to active layouts the previous manager owned
+    for (const QPointer<PhosphorZones::Layout>& layout : std::as_const(m_observedLayouts)) {
         if (layout) {
-            disconnect(layout, &Layout::layoutModified, this, nullptr);
+            disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
         }
     }
     m_observedLayouts.clear();
@@ -117,25 +117,25 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     m_layoutManager = layoutManager;
 
     // Connect to layout change signals from the concrete LayoutManager
-    // ILayoutManager is a pure interface without signals, so we need to cast
+    // PhosphorZones::ILayoutManager is a pure interface without signals, so we need to cast
     if (m_layoutManager) {
         auto* manager = dynamic_cast<LayoutManager*>(m_layoutManager);
         if (manager) {
             // Update visible zone selector and overlay windows when layout changes.
             // Hidden windows are skipped — showZoneSelector()/show() refresh before showing.
-            connect(manager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+            connect(manager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
                 observeLayoutForLiveEdits(layout);
                 refreshVisibleWindows();
             });
             connect(manager, &LayoutManager::layoutAssigned, this,
-                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, Layout* layout) {
+                    [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                         observeLayoutForLiveEdits(layout);
                         refreshVisibleWindows();
                     });
             // Observe newly-created layouts so edits reach the overlay before
             // the layout is ever activated/assigned (e.g. user creates a new
             // layout in the editor and immediately tweaks its shader).
-            connect(manager, &LayoutManager::layoutAdded, this, [this](Layout* layout) {
+            connect(manager, &LayoutManager::layoutAdded, this, [this](PhosphorZones::Layout* layout) {
                 observeLayoutForLiveEdits(layout);
             });
             // Drop per-layout connections + the m_observedLayouts entry when
@@ -153,7 +153,7 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
             // take effect. Observing the whole set is cheap (one signal
             // connection per layout) and idempotent thanks to the dedupe
             // pass in observeLayoutForLiveEdits.
-            for (Layout* layout : manager->layouts()) {
+            for (PhosphorZones::Layout* layout : manager->layouts()) {
                 observeLayoutForLiveEdits(layout);
             }
             // Redundant after the loop, but keeps the intent obvious in case
@@ -164,12 +164,12 @@ void OverlayService::setLayoutManager(ILayoutManager* layoutManager)
     }
 }
 
-void OverlayService::observeLayoutForLiveEdits(Layout* layout)
+void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
 {
     if (!layout) {
         return;
     }
-    // Walk the list, skipping null QPointers (entries auto-cleared on Layout destroy).
+    // Walk the list, skipping null QPointers (entries auto-cleared on PhosphorZones::Layout destroy).
     // Compact stale entries while we're at it so the list doesn't grow without bound.
     for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
         if (it->isNull()) {
@@ -180,7 +180,7 @@ void OverlayService::observeLayoutForLiveEdits(Layout* layout)
             ++it;
         }
     }
-    // Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
+    // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
     // shaderParams, zones, appearance, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
     // restart, since LayoutManager::activeLayoutChanged only fires on switch.
@@ -189,7 +189,7 @@ void OverlayService::observeLayoutForLiveEdits(Layout* layout)
     // layoutModified dozens of times per second; refreshVisibleWindows is
     // the expensive path (rebuilds zone variant lists + uploads labels).
     // The shim schedules a single refresh at the next event-loop tick.
-    connect(layout, &Layout::layoutModified, this, [this]() {
+    connect(layout, &PhosphorZones::Layout::layoutModified, this, [this]() {
         if (m_refreshCoalescePending) {
             return;
         }
@@ -202,15 +202,15 @@ void OverlayService::observeLayoutForLiveEdits(Layout* layout)
             refreshVisibleWindows();
         });
     });
-    m_observedLayouts.append(QPointer<Layout>(layout));
+    m_observedLayouts.append(QPointer<PhosphorZones::Layout>(layout));
 }
 
-void OverlayService::stopObservingLayout(Layout* layout)
+void OverlayService::stopObservingLayout(PhosphorZones::Layout* layout)
 {
     if (!layout) {
         return;
     }
-    disconnect(layout, &Layout::layoutModified, this, nullptr);
+    disconnect(layout, &PhosphorZones::Layout::layoutModified, this, nullptr);
     for (auto it = m_observedLayouts.begin(); it != m_observedLayouts.end();) {
         if (it->isNull() || it->data() == layout) {
             it = m_observedLayouts.erase(it);

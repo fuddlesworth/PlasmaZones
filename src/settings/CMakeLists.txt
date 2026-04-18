@@ -16,6 +16,8 @@ set(plasmazones_settings_SRCS
     # DaemonController — daemon lifecycle management (start/stop/status)
     ${CMAKE_SOURCE_DIR}/src/common/daemoncontroller.h
     ${CMAKE_SOURCE_DIR}/src/common/daemoncontroller.cpp
+    # LayoutPreview ↔ JSON/QVariantMap: provided by plasmazones_core
+    # (was duplicated here previously; consolidated to avoid ODR drift).
     # Qt-only utilities (standalone-only, no KDE Framework deps)
     screenhelper.h
     screenhelper.cpp

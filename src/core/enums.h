@@ -46,7 +46,7 @@ enum class ZoneSelectorPosition {
 };
 
 /**
- * @brief Layout mode options for the zone selector
+ * @brief PhosphorZones::Layout mode options for the zone selector
  */
 enum class ZoneSelectorLayoutMode {
     Grid = 0, ///< Grid layout with configurable columns

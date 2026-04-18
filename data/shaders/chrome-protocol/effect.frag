@@ -11,548 +11,806 @@ layout(location = 0) out vec4 fragColor;
 #include <common.glsl>
 #include <audio.glsl>
 
-/*
- * CHROME PROTOCOL — Weapon Targeting HUD
- * Inspired by VIPER / Chrome Protocol album
- * "They didn't raise her. They compiled her."
- *
- * Not a circuit board — a weapon's eye view. Rotating acquisition rings,
- * frequency analyzer bars, threat scanlines, and ghost data fragments
- * bleeding through the sterile surface.
- */
+// CHROME PROTOCOL — 3D Stacked Targeting Array
+// Faithful port of the Shadertoy 7-ring raymarched operator console,
+// wrapped in per-zone rendering with full audio reactivity. The 7 ring
+// SDFs are preserved verbatim from the reference; on top of that the
+// thickness cycle, camera orbit, and overlay panels are driven by real
+// audio bands (uAudioSpectrum) instead of mod-timers.
 
-// ═══════════════════════════════════════════════════════════════════════
-// Noise
-// ═══════════════════════════════════════════════════════════════════════
+// ── SDF / rotation primitives ─────────────────────────────────────
+float sdBox(vec2 p, vec2 s) { return max(abs(p.x) - s.x, abs(p.y) - s.y); }
+float sdTri(vec2 p, vec2 s, float a) {
+    return max(-dot(p, vec2(cos(-a), sin(-a))),
+           max( dot(p, vec2(cos( a), sin( a))), sdBox(p, s)));
+}
+mat2 Rot(float a)   { return mat2(cos(a), -sin(a), sin(a), cos(a)); }
+mat2 SkewX(float a) { return mat2(1.0, tan(a), 0.0, 1.0); }
 
-// NOTE: fbm(vec2, int) is duplicated in neon-venom/effect.frag. The two shaders
-// use slightly different fbm signatures (neon-venom adds rotAngle), so
-// deduplication into common.glsl needs more thought before attempting.
-float fbm(vec2 p, int octaves) {
-    float f = 0.0;
-    float amp = 0.5;
-    mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
-    for (int i = 0; i < octaves; i++) {
-        f += amp * noise2D(p);
-        p = rot * p * 2.0;
-        amp *= 0.5;
+// Domain folding — polar-symmetry helper from original (DF macro).
+vec2 DF(vec2 a, float b) {
+    float segs = b * 8.0;
+    float lookup = mod(atan(a.y, a.x) + TAU / segs, TAU / (segs * 0.5))
+                 + (b - 1.0) * TAU / segs;
+    return length(a) * vec2(cos(lookup), cos(lookup + 11.0));
+}
+
+float cubicInOut(float t) {
+    return t < 0.5 ? 4.0 * t * t * t : 0.5 * pow(2.0 * t - 2.0, 3.0) + 1.0;
+}
+float getTime(float t, float duration) { return clamp(t, 0.0, duration) / duration; }
+
+// ── 7-segment digits ──────────────────────────────────────────────
+float segBase(vec2 p) {
+    vec2 g = mod(p, 0.05) - 0.025;
+    float grid = min(abs(g.x) - 0.005, abs(g.y) - 0.005);
+    float d = sdBox(p, vec2(0.075, 0.125));
+    vec2 cp = vec2(abs(p.x) - 0.1, abs(p.y) - 0.05);
+    d = max(dot(cp, vec2(0.7071, 0.7071)), d);
+    return max(-grid, d);
+}
+float seg0(vec2 p) { return max(-sdBox(p, vec2(0.03, 0.081)), segBase(p)); }
+float seg1(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p + vec2(0.03, 0.03), vec2(0.06, 0.111)), d);
+    return max(-sdBox(p + vec2(0.054, -0.105), vec2(0.03)), d);
+}
+float seg2(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p + vec2(0.03, -0.05), vec2(0.06, 0.03)), d);
+    return max(-sdBox(p - vec2(0.03, -0.05), vec2(0.06, 0.03)), d);
+}
+float seg3(vec2 p) {
+    float d = segBase(p);
+    vec2 q = vec2(p.x, abs(p.y));
+    d = max(-sdBox(q + vec2(0.03, -0.05), vec2(0.06, 0.03)), d);
+    return max(-sdBox(p + vec2(0.05, 0.0), vec2(0.03)), d);
+}
+float seg4(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p + vec2(0.03, 0.08), vec2(0.06, 0.06)), d);
+    return max(-sdBox(p + vec2(0.0, -0.08), vec2(0.03, 0.06)), d);
+}
+float seg5(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p - vec2(0.03, 0.05), vec2(0.06, 0.03)), d);
+    return max(-sdBox(p + vec2(0.03, 0.05), vec2(0.06, 0.03)), d);
+}
+float seg6(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p - vec2(0.03, 0.05), vec2(0.06, 0.03)), d);
+    return max(-sdBox(p - vec2(0.0, -0.05), vec2(0.03)), d);
+}
+float seg7(vec2 p) { return max(-sdBox(p + vec2(0.03, 0.03), vec2(0.06, 0.111)), segBase(p)); }
+float seg8(vec2 p) {
+    float d = segBase(p);
+    vec2 q = vec2(p.x, abs(p.y));
+    return max(-sdBox(q - vec2(0.0, 0.05), vec2(0.03)), d);
+}
+float seg9(vec2 p) {
+    float d = segBase(p);
+    d = max(-sdBox(p - vec2(0.0, 0.05), vec2(0.03)), d);
+    return max(-sdBox(p + vec2(0.03, -0.05), vec2(0.06, 0.03)), d);
+}
+float segDP(vec2 p) { return max(sdBox(p + vec2(0.0, 0.1), vec2(0.028)), segBase(p)); }
+
+float drawFont(vec2 p, int ch) {
+    p *= 2.0;
+    if (ch == 0) return seg0(p);
+    if (ch == 1) return seg1(p);
+    if (ch == 2) return seg2(p);
+    if (ch == 3) return seg3(p);
+    if (ch == 4) return seg4(p);
+    if (ch == 5) return seg5(p);
+    if (ch == 6) return seg6(p);
+    if (ch == 7) return seg7(p);
+    if (ch == 8) return seg8(p);
+    if (ch == 9) return seg9(p);
+    if (ch == 39) return segDP(p);
+    return 10.0;
+}
+
+// ──
+// 7 ring SDFs — PRESERVED VERBATIM from the original Shadertoy source.
+// Each ring is a 2D slice; the raymarcher extrudes in Z (see GetDist).
+// ──
+
+float ring0(vec2 p) {
+    vec2 prevP = p;
+    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p = DF(p, 16.0);
+    p -= vec2(0.35);
+    float d = sdBox(p * Rot(radians(45.0)), vec2(0.005, 0.03));
+    p = prevP;
+    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    float deg = 165.0;
+    d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+
+    p = prevP;
+    p *= Rot(radians(iTime * 30.0 + 30.0));
+    float d2 = abs(length(p) - 0.55) - 0.015;
+    d2 = max(-(abs(p.x) - 0.4), d2);
+    d = min(d, d2);
+    p = prevP;
+    d = min(d, abs(length(p) - 0.55) - 0.001);
+
+    p = prevP;
+    p *= Rot(radians(-iTime * 50.0 + 30.0));
+    p += sin(p * 25.0 - radians(iTime * 80.0)) * 0.01;
+    d = min(d, abs(length(p) - 0.65) - 0.0001);
+
+    p = prevP;
+    float a = radians(-sin(iTime * 1.2)) * 120.0 + radians(-70.0);
+    p.x += cos(a) * 0.58;
+    p.y += sin(a) * 0.58;
+    d = min(d, abs(sdTri(p * Rot(-a) * Rot(radians(90.0)), vec2(0.03), radians(45.0))) - 0.003);
+
+    p = prevP;
+    a = radians(sin(iTime * 1.3)) * 100.0 + radians(-10.0);
+    p.x += cos(a) * 0.58;
+    p.y += sin(a) * 0.58;
+    d = min(d, abs(sdTri(p * Rot(-a) * Rot(radians(90.0)), vec2(0.03), radians(45.0))) - 0.003);
+    return d;
+}
+
+float ring1(vec2 p) {
+    vec2 prevP = p;
+    float size = 0.45, deg = 140.0, thick = 0.02;
+    float d = abs(length(p) - size) - thick;
+    p *= Rot(radians(iTime * 60.0));
+    d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    return min(d, abs(length(prevP) - size) - 0.001);
+}
+
+float ring2(vec2 p) {
+    float size = 0.3, deg = 120.0, thick = 0.02;
+    p *= Rot(-radians(sin(iTime * 2.0) * 90.0));
+    float d = abs(length(p) - size) - thick;
+    d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    float d2 = abs(length(p) - size) - thick;
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    return min(d, d2);
+}
+
+float ring3(vec2 p) {
+    p *= Rot(radians(-iTime * 80.0 - 120.0));
+    vec2 prevP = p;
+    float deg = 140.0;
+    p = DF(p, 6.0);
+    p -= vec2(0.3);
+    float d = abs(sdBox(p * Rot(radians(45.0)), vec2(0.03, 0.025))) - 0.003;
+    p = prevP;
+    d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+
+    p = prevP;
+    p = DF(p, 6.0);
+    p -= vec2(0.3);
+    float d2 = abs(sdBox(p * Rot(radians(45.0)), vec2(0.03, 0.025))) - 0.003;
+    p = prevP;
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    return min(d, d2);
+}
+
+float ring4(vec2 p) {
+    p *= Rot(radians(iTime * 75.0 - 220.0));
+    float deg = 20.0;
+    float d = abs(length(p) - 0.25) - 0.01;
+    p = DF(p, 2.0);
+    p -= vec2(0.1);
+    d = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    d = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    return d;
+}
+
+float ring5(vec2 p) {
+    p *= Rot(radians(-iTime * 70.0 + 170.0));
+    vec2 prevP = p;
+    float deg = 150.0;
+    float d = abs(length(p) - 0.16) - 0.02;
+    d = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    d = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    p = prevP;
+    p *= Rot(radians(-30.0));
+    float d2 = abs(length(p) - 0.136) - 0.02;
+    deg = 60.0;
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    return min(d, d2);
+}
+
+float ring6(vec2 p) {
+    vec2 prevP = p;
+    p *= Rot(radians(iTime * 72.0 + 110.0));
+    float d = abs(length(p) - 0.95) - 0.001;
+    d = max(-(abs(p.x) - 0.4), d);
+    d = max(-(abs(p.y) - 0.4), d);
+
+    p = prevP;
+    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    p = DF(p, 16.0);
+    p -= vec2(0.6);
+    float d2 = sdBox(p * Rot(radians(45.0)), vec2(0.02, 0.03));
+    p = prevP;
+    p *= Rot(radians(-iTime * 30.0 + 50.0));
+    float deg = 155.0;
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    return min(d, d2);
+}
+
+// ──
+// 3D composition — 7 rings stacked along Z, audio drives thickness
+// ──
+
+float GetDist(vec3 p, float thickness) {
+    p.z += 0.7;
+    float d  = max(abs(p.z) - thickness, ring0(p.xy)); p.z -= 0.2;
+    float d2 = max(abs(p.z) - thickness, ring1(p.xy)); d = min(d, d2); p.z -= 0.2;
+    d2       = max(abs(p.z) - thickness, ring2(p.xy)); d = min(d, d2); p.z -= 0.2;
+    d2       = max(abs(p.z) - thickness, ring3(p.xy)); d = min(d, d2); p.z -= 0.2;
+    d2       = max(abs(p.z) - thickness, ring4(p.xy)); d = min(d, d2); p.z -= 0.2;
+    d2       = max(abs(p.z) - thickness, ring5(p.xy)); d = min(d, d2); p.z -= 0.2;
+    d2       = max(abs(p.z) - thickness, ring6(p.xy)); return min(d, d2);
+}
+
+// Alpha-accumulating raymarch: accumulates glow proportional to how
+// close each step comes to the ring surface (from original RayMarch).
+vec3 RayMarchT(vec3 ro, vec3 rd, int stepCount, float glowVal, float thickness) {
+    float alpha = 0.0;
+    float t = 0.0;
+    const float tmax = 5.0;
+    for (int i = 0; i < stepCount; i++) {
+        vec3 pos = ro + rd * t;
+        float d = GetDist(pos, thickness);
+        if (t > tmax) break;
+        alpha += 1.0 - smoothstep(0.0, glowVal, d);
+        t += max(0.0001, abs(d) * 0.6);
     }
-    return f;
+    alpha /= float(stepCount);
+    return vec3(alpha * 1.5);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Acquisition rings: rotating concentric targeting with glow, data arcs,
-// traveling energy pulses, and bass-reactive expansion
-// ═══════════════════════════════════════════════════════════════════════
-
-// Single ring with inner glow, tick marks, and traveling pulse
-float acquisitionRing(vec2 uv, vec2 center, float radius, float width,
-                      int ticks, float rotation, float activeFrac, float t) {
-    vec2 delta = uv - center;
-    float dist = length(delta);
-    float angle = atan(delta.y, delta.x);
-
-    // Ring body with soft glow falloff (not just a hard line)
-    float ringDist = abs(dist - radius);
-    float ring = smoothstep(width, width * 0.15, ringDist);
-    float ringGlow = exp(-ringDist / (width * 4.0)) * 0.4; // Soft bloom around ring
-
-    // Tick marks — extend outward from ring
-    float tickSpacing = TAU / float(ticks);
-    float tickAngle = mod(angle + rotation, tickSpacing);
-    float tickMark = smoothstep(0.02, 0.005, tickAngle)
-                   + smoothstep(tickSpacing - 0.02, tickSpacing - 0.005, tickAngle);
-    float tickRadial = smoothstep(radius + width * 5.0, radius + width, dist)
-                     * smoothstep(radius - width * 5.0, radius - width, dist);
-    tickMark *= tickRadial;
-
-    // Major ticks (every 4th) are brighter and longer
-    float majorTickId = mod(floor((angle + rotation) / tickSpacing), 4.0);
-    float majorTick = step(0.5, 1.0 - majorTickId / 4.0); // every 4th
-    tickMark *= 0.5 + majorTick * 0.5;
-
-    // Segmented activation with smooth edges (not hard step)
-    float segAngle = mod(angle + rotation * 0.5, TAU);
-    float segActive = smoothstep(activeFrac * TAU + 0.1, activeFrac * TAU, segAngle);
-    // Gap pattern — some segments off for mechanical feel
-    float gapId = floor(segAngle / tickSpacing);
-    float gapOn = step(0.25, hash11(gapId * 127.1 + floor(t * 0.4)));
-
-    // Traveling energy pulse around the ring circumference
-    float pulseAngle = mod(angle - t * 2.0, TAU);
-    float pulse = exp(-pulseAngle * 1.5) * 0.8; // Bright head, exponential tail
-    float pulseAngle2 = mod(angle + t * 1.5 + PI, TAU);
-    float pulse2 = exp(-pulseAngle2 * 2.0) * 0.5; // Counter-rotating dimmer pulse
-
-    float ringResult = ring * gapOn * segActive + ringGlow * segActive;
-    ringResult += tickMark * 0.7;
-    ringResult += (pulse + pulse2) * ring * 0.6;
-
-    return ringResult;
+// Look-at camera ray (from original R helper).
+vec3 CameraRay(vec2 uv, vec3 ro, vec3 la, float zoom) {
+    vec3 f = normalize(la - ro);
+    vec3 r = normalize(cross(vec3(0, 1, 0), f));
+    vec3 u = cross(f, r);
+    vec3 c = ro + f * zoom;
+    vec3 i = c + uv.x * r + uv.y * u;
+    return normalize(i - ro);
 }
 
-// Data arc: thin partial arc with readout hash (fills space between rings)
-float dataArc(vec2 uv, vec2 center, float radius, float startAngle,
-              float arcLen, float t) {
-    vec2 delta = uv - center;
-    float dist = length(delta);
-    float angle = atan(delta.y, delta.x);
+// ──
+// Background hex grid (preserved from original bg(), thinned slightly
+// so it reads as background texture instead of competing with rings)
+// ──
+float bg(vec2 p) {
+    p.y -= iTime * 0.1;
+    vec2 prevP = p;
+    p *= 2.8;
+    vec2 gv  = fract(p) - 0.5;
+    vec2 gv2 = fract(p * 3.0) - 0.5;
+    vec2 id  = floor(p);
 
-    float ringDist = abs(dist - radius);
-    float arc = smoothstep(0.001, 0.0003, ringDist);
+    float d = min(sdBox(gv2, vec2(0.02, 0.09)), sdBox(gv2, vec2(0.09, 0.02)));
+    float n = hash21(id);
+    gv += vec2(0.166, 0.17);
+    float d2 = abs(sdBox(gv, vec2(0.169))) - 0.004;
 
-    // Arc mask: only visible within the arc span
-    float a = mod(angle - startAngle, TAU);
-    float arcMask = smoothstep(0.0, 0.05, a) * smoothstep(arcLen, arcLen - 0.05, a);
-
-    // Data readout: hash-based brightness variation along the arc
-    float dataId = floor(a * 20.0 + t);
-    float dataOn = step(0.3, hash11(dataId * 43.7));
-
-    return arc * arcMask * (0.3 + dataOn * 0.7);
-}
-
-float targetingSystem(vec2 uv, vec2 center, float scale, float t,
-                      float bassLvl, float midsLvl, float audioReact) {
-    float result = 0.0;
-
-    // Bass expands rings slightly (breathing effect)
-    float breathe = 1.0 + bassLvl * audioReact * 0.08;
-
-    // Outer ring — slow rotation, bass responsive
-    float outerR = 0.38 * scale * breathe;
-    float outerActive = 0.6 + bassLvl * audioReact * 0.4;
-    result += acquisitionRing(uv, center, outerR, 0.002, 24,
-                              t * 0.3, outerActive, t) * 0.6;
-
-    // Middle ring — counter-rotation, mids responsive
-    float midR = 0.28 * scale * breathe;
-    float midActive = 0.5 + midsLvl * audioReact * 0.5;
-    result += acquisitionRing(uv, center, midR, 0.0018, 16,
-                              -t * 0.5, midActive, t) * 0.5;
-
-    // Inner ring — fast rotation
-    float innerR = 0.15 * scale * breathe;
-    result += acquisitionRing(uv, center, innerR, 0.0012, 8,
-                              t * 0.8, 0.85, t) * 0.4;
-
-    // Data arcs between rings (rotating readout displays)
-    result += dataArc(uv, center, (outerR + midR) * 0.5, t * 0.2, 1.5, t * 2.0) * 0.25;
-    result += dataArc(uv, center, (midR + innerR) * 0.5, -t * 0.35 + PI, 1.2, t * 1.5) * 0.2;
-
-    // Radial scan lines (like radar sweep spokes)
-    vec2 cd = uv - center;
-    float spokeA = atan(cd.y, cd.x);
-    float spoke1 = exp(-mod(spokeA - t * 0.6, TAU) * 3.0) * 0.2;
-    float spoke2 = exp(-mod(spokeA + t * 0.4 + PI * 0.5, TAU) * 4.0) * 0.15;
-    float spokeMask = smoothstep(innerR * 0.5, innerR, length(cd))
-                    * smoothstep(outerR + 0.02, outerR, length(cd));
-    result += (spoke1 + spoke2) * spokeMask;
-
-    // Center crosshair with animated dashes
-    vec2 absCD = abs(cd);
-    float dashH = step(mod(absCD.x * 80.0 + t * 3.0, 2.0), 1.2); // dashed line
-    float dashV = step(mod(absCD.y * 80.0 - t * 2.0, 2.0), 1.2);
-    float crossH = step(absCD.y, 0.001) * smoothstep(0.08 * scale, 0.015 * scale, absCD.x) * dashH;
-    float crossV = step(absCD.x, 0.001) * smoothstep(0.08 * scale, 0.015 * scale, absCD.y) * dashV;
-    float centerGap = smoothstep(0.012 * scale, 0.018 * scale, length(cd));
-    result += (crossH + crossV) * 0.35 * centerGap;
-
-    // Center dot with pulse
-    float dotPulse = 0.7 + 0.3 * sin(t * 4.0);
-    result += smoothstep(0.006 * scale, 0.002 * scale, length(cd)) * 0.5 * dotPulse;
-
-    return clamp(result, 0.0, 1.0);
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// Frequency analyzer: vertical bars responding to audio spectrum
-// Positioned along zone edges like a HUD readout
-// ═══════════════════════════════════════════════════════════════════════
-
-float frequencyBars(vec2 uv, float t, float sensitivity) {
-    if (iAudioSpectrumSize <= 0) return 0.0;
-
-    float result = 0.0;
-    int barCount = min(iAudioSpectrumSize, 32);
-    float barWidth = 1.0 / float(barCount);
-
-    // Bottom-edge analyzer
-    for (int i = 0; i < barCount; i++) {
-        float barX = (float(i) + 0.5) * barWidth;
-        float barVal = audioBar(i) * sensitivity;
-        float xDist = abs(uv.x - barX);
-        if (xDist > barWidth * 0.6) continue;
-
-        float barMask = smoothstep(barWidth * 0.45, barWidth * 0.35, xDist);
-        float barHeight = barVal * 0.15;
-        float yMask = smoothstep(0.0, 0.005, uv.y) * (1.0 - smoothstep(barHeight, barHeight + 0.005, uv.y));
-
-        // Peak hold: bright tip
-        float peak = smoothstep(barHeight - 0.008, barHeight - 0.003, uv.y) * yMask;
-
-        result += barMask * yMask * 0.6 + peak * 0.4;
+    if (n < 0.3) {
+        gv *= Rot(radians(iTime * 60.0));
+        d2 = max(-(abs(gv.x) - 0.08), d2);
+        d2 = max(-(abs(gv.y) - 0.08), d2);
+        d = min(d, d2);
+    } else if (n < 0.6) {
+        gv *= Rot(radians(-iTime * 60.0));
+        d2 = max(-(abs(gv.x) - 0.08), d2);
+        d2 = max(-(abs(gv.y) - 0.08), d2);
+        d = min(d, d2);
+    } else {
+        gv *= Rot(radians(iTime * 60.0) + n);
+        d2 = abs(length(gv) - 0.1) - 0.025;
+        d2 = max(-(abs(gv.x) - 0.03), d2);
+        d = min(d, abs(d2) - 0.003);
     }
-
-    // Right-edge analyzer (rotated — reads top to bottom)
-    for (int i = 0; i < barCount; i++) {
-        float barY = (float(i) + 0.5) * barWidth;
-        float barVal = audioBar(i) * sensitivity;
-        float yDist = abs(uv.y - barY);
-        if (yDist > barWidth * 0.6) continue;
-
-        float barMask = smoothstep(barWidth * 0.45, barWidth * 0.35, yDist);
-        float barExtent = barVal * 0.1;
-        float xMask = smoothstep(1.0, 1.0 - 0.005, uv.x) * (1.0 - smoothstep(1.0 - barExtent, 1.0 - barExtent - 0.005, uv.x));
-
-        result += barMask * xMask * 0.4;
-    }
-
-    return clamp(result, 0.0, 1.0);
+    p = prevP;
+    p = mod(p, 0.02) - 0.01;
+    return min(d, sdBox(p, vec2(0.001)));
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Threat scanline: horizontal sweep with data readout trail
-// ═══════════════════════════════════════════════════════════════════════
+// ──
+// Overlay UI — same shapes as original overlayUI(), with the
+// rolling-block bars replaced by a real audio spectrum strip and the
+// numeric readout showing live audio level.
+// ──
 
-float threatScan(vec2 uv, float t, float speed) {
-    float scanY = fract(t * speed * 0.2);
-    float dist = abs(uv.y - scanY);
+// Number-with-circle: 4-digit "XX.YY" live audio readout with a
+// rotating fragmented-arc border (DF polar-fold from the original).
+float numberWithCircleUI(vec2 p, float audioVal) {
+    vec2 prevP = p;
+    p *= SkewX(radians(-15.0));
+    float v = clamp(audioVal, 0.0, 0.999);
+    int hi = int(v * 99.0);
+    int lo = int(fract(v * 99.0) * 100.0);
+    int d0 = hi / 10, d1 = hi - d0 * 10;
+    int d2 = lo / 10, d3 = lo - d2 * 10;
 
-    // Sharp leading edge
-    float beam = smoothstep(0.003, 0.0005, dist);
+    float d = drawFont(p - vec2(-0.16, 0.0), d0);
+    d = min(d, drawFont(p - vec2(-0.08, 0.0), d1));
+    d = min(d, drawFont(p - vec2(-0.02, 0.0), 39)); // DP
 
-    // Data readout trail: hash-based segments behind the scan line
-    float trailMask = step(uv.y, scanY) * smoothstep(scanY - 0.15, scanY, uv.y);
-    float trailData = step(0.5, hash21(floor(uv * vec2(80.0, 200.0) + t * 0.5)));
-    float trail = trailMask * trailData * 0.15;
+    vec2 q = p * 1.5;
+    d = min(d, drawFont(q - vec2(0.04, -0.03), d2));
+    d = min(d, drawFont(q - vec2(0.12, -0.03), d3));
+    d = abs(d) - 0.002;
 
-    // Horizontal data fragments near scan line
-    float nearScan = smoothstep(0.03, 0.0, dist);
-    float dataFrag = step(0.7, hash21(floor(vec2(uv.x * 40.0, t * 3.0))));
-    float fragments = nearScan * dataFrag * 0.3;
-
-    return beam + trail + fragments;
+    p = prevP;
+    p.x -= 0.07;
+    p *= Rot(radians(-iTime * 50.0));
+    p = DF(p, 4.0);
+    p -= vec2(0.085);
+    float d2b = sdBox(p * Rot(radians(45.0)), vec2(0.015, 0.018));
+    p = prevP;
+    d2b = max(-sdBox(p, vec2(0.13, 0.07)), d2b);
+    return min(d, abs(d2b) - 0.0005);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Ghost data: suppressed organic memories bleeding through
-// Domain-warped noise that breaks through the sterile surface
-// ═══════════════════════════════════════════════════════════════════════
-
-float ghostData(vec2 uv, float t, float intensity) {
-    if (intensity <= 0.0) return 0.0;
-
-    // Organic noise — everything VIPER suppresses
-    vec2 warp = vec2(
-        fbm(uv * 3.0 + t * 0.08, 4),
-        fbm(uv * 3.0 + vec2(5.2, 1.3) - t * 0.06, 4)
-    );
-    float organic = fbm(uv * 2.0 + warp * 1.5, 5);
-
-    // Ridged: vein-like fragments (memories of something alive)
-    float ridge = 1.0 - abs(organic * 2.0 - 1.0);
-    ridge = pow(ridge, 4.0);
-
-    // Appear in glitchy bursts — not constant
-    float burstTime = floor(t * 0.7);
-    float burst = step(0.75, hash11(burstTime));
-    float burstFade = exp(-fract(t * 0.7) * 3.0);
-
-    // Spatial mask: ghosts only appear in certain regions (not everywhere)
-    float spatialMask = step(0.6, noise2D(uv * 4.0 + burstTime));
-
-    return ridge * burst * burstFade * spatialMask * intensity;
+// Classic rolling-block bars (preserved from original blockUI).
+float blockUI(vec2 p) {
+    vec2 prevP = p;
+    p.x += iTime * 0.05;
+    p.y = abs(p.y) - 0.02;
+    p.x = mod(p.x, 0.04) - 0.02;
+    float d = sdBox(p, vec2(0.0085));
+    p = prevP;
+    p.x += iTime * 0.05 + 0.02;
+    p.x = mod(p.x, 0.04) - 0.02;
+    d = min(d, sdBox(p, vec2(0.0085)));
+    p = prevP;
+    d = max(abs(p.x) - 0.2, d);
+    return abs(d) - 0.0002;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Hexagonal depth pattern
-// ═══════════════════════════════════════════════════════════════════════
+// Audio spectrum bars — same footprint as blockUI but reads live audio.
+// Returns a proper SDF: negative inside lit bars, positive outside.
+float spectrumBarsUI(vec2 p, float audioReact) {
+    if (iAudioSpectrumSize <= 0) return 10.0;
+    float halfW = 0.2, halfH = 0.022;
+    // Outside strip → far positive (no contribution)
+    float stripDist = max(abs(p.x) - halfW, abs(p.y) - halfH);
+    if (stripDist > 0.005) return 10.0;
 
-float hexGrid(vec2 uv, float scale) {
-    vec2 p = uv * scale;
-    vec2 h = vec2(p.x + p.y * 0.577350269, p.y * 1.154700538);
-    vec2 a = mod(h, 2.0) - 1.0;
-    vec2 b = mod(h + 1.0, 2.0) - 1.0;
-    float d = min(dot(a, a), dot(b, b));
-    return smoothstep(0.92, 0.85, d);
+    int n = min(iAudioSpectrumSize, 48);
+    float cellW = 2.0 * halfW / float(n);
+    float idxF = (p.x + halfW) / cellW;
+    float idx = clamp(floor(idxF), 0.0, float(n - 1));
+    float u = clamp(idx / float(max(n - 1, 1)), 0.0, 1.0);
+    float v = clamp(audioBarSmooth(u) * audioReact, 0.02, 1.0);
+
+    // Bar centered within its cell, grows symmetrically from y=0
+    float cellLocalX = (idxF - idx - 0.5) * cellW;
+    float barD = max(abs(cellLocalX) - cellW * 0.35, abs(p.y) - v * halfH);
+    return barD;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Glitch displacement
-// ═══════════════════════════════════════════════════════════════════════
+// Two nested small tick circles (preserved from original smallCircleUI).
+float smallCircleUI(vec2 p) {
+    p *= 1.1;
+    vec2 prevP = p;
+    p *= Rot(radians(sin(iTime * 3.0) * 50.0));
+    float d = abs(length(p) - 0.1) - 0.003;
+    p = DF(p, 0.75);
+    p -= vec2(0.02);
+    float deg = 20.0;
+    d = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d);
+    d = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d);
+    p = prevP;
+    p *= Rot(radians(-sin(iTime * 2.0) * 80.0));
+    float d2 = abs(length(p) - 0.08) - 0.001;
+    d2 = max(-p.x, d2);
+    d = min(d, d2);
+    p = prevP;
+    p *= Rot(radians(-iTime * 50.0));
+    d2 = abs(length(p) - 0.05) - 0.015;
+    deg = 170.0;
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    return min(d, abs(d2) - 0.0005);
+}
 
-vec2 glitchOffset(vec2 uv, float time, float amount) {
-    float glitchTime = floor(time * 20.0);
-    float trigger = hash11(glitchTime);
-    vec2 offset = vec2(0.0);
-    if (trigger > 0.85 && amount > 0.01) {
-        float band = hash11(glitchTime + 100.0);
-        float bandHeight = 0.02 + hash11(glitchTime + 200.0) * 0.06;
-        if (abs(uv.y - band) < bandHeight) {
-            offset.x = (hash11(glitchTime + 300.0) - 0.5) * amount * 0.15;
-            if (hash11(glitchTime + 400.0) > 0.7) offset.x *= 2.0;
+// Concentric tick donut (smallCircleUI2).
+float smallCircleUI2(vec2 p) {
+    float d = abs(length(p) - 0.04) - 0.0001;
+    float d2 = length(p) - 0.03;
+    p *= Rot(radians(iTime * 30.0));
+    float deg = 140.0;
+    d2 = max(-dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    d2 = max(-dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    d = min(d, d2);
+    d2 = length(p) - 0.03;
+    d2 = max(dot(p, vec2(cos(radians( deg)), sin(radians( deg)))), d2);
+    d2 = max(dot(p, vec2(cos(radians(-deg)), sin(radians(-deg)))), d2);
+    d = min(d, d2);
+    return max(-(length(p) - 0.02), d);
+}
+
+// Rotating double-square with triangle accents (rectUI).
+float rectUI(vec2 p) {
+    p *= Rot(radians(45.0));
+    vec2 prevP = p;
+    float d = abs(sdBox(p, vec2(0.12))) - 0.003;
+    p *= Rot(radians(iTime * 60.0));
+    d = max(-(abs(p.x) - 0.05), d);
+    d = max(-(abs(p.y) - 0.05), d);
+    p = prevP;
+    d = min(d, abs(sdBox(p, vec2(0.12))) - 0.0005);
+
+    float d2 = abs(sdBox(p, vec2(0.09))) - 0.003;
+    p *= Rot(radians(-iTime * 50.0));
+    d2 = max(-(abs(p.x) - 0.03), d2);
+    d2 = max(-(abs(p.y) - 0.03), d2);
+    d = min(d, d2);
+    p = prevP;
+    d = min(d, abs(sdBox(p, vec2(0.09))) - 0.0005);
+
+    p *= Rot(radians(-45.0));
+    p.y = abs(p.y) - 0.07 - sin(iTime * 3.0) * 0.01;
+    d = min(d, sdTri(p, vec2(0.02), radians(45.0)));
+    p = prevP;
+    p *= Rot(radians(45.0));
+    p.y = abs(p.y) - 0.07 - sin(iTime * 3.0) * 0.01;
+    d = min(d, sdTri(p, vec2(0.02), radians(45.0)));
+    p = prevP;
+    p *= Rot(radians(45.0));
+    d2 = abs(sdBox(p, vec2(0.025))) - 0.0005;
+    d2 = max(-(abs(p.x) - 0.01), d2);
+    d2 = max(-(abs(p.y) - 0.01), d2);
+    return min(d, d2);
+}
+
+// Horizontal bar rows — graphUI. Phase evolves at constant speed so the
+// bars don't jitter when audio changes; audio contributes only to bar
+// width (amplitude), not to the sin() argument.
+float graphUI(vec2 p, float audioReact) {
+    vec2 prevP = p;
+    p.x += 0.5;
+    p.y -= iTime * 0.25;
+    p *= vec2(1.0, 100.0);
+    vec2 gv = fract(p) - 0.5;
+    vec2 id = floor(p);
+
+    float u = fract(id.y * 0.13);
+    float audio = audioBarSmooth(clamp(u, 0.0, 0.98)) * audioReact;
+    float n = hash21(vec2(id.y)) * 2.0;
+    // Phase driven by constant time only — audio scales amplitude additively
+    float base = abs(sin(iTime * n) + 0.25) * 0.03 * n * 0.5;
+    float w = base * (1.0 + audio * 1.5) + audio * 0.035;
+    float d = sdBox(gv, vec2(w, 0.1));
+
+    p = prevP;
+    d = max(abs(p.x) - 0.2, d);
+    return max(abs(p.y) - 0.2, d);
+}
+
+// Side tick marker (staticUI).
+float staticUI(vec2 p) {
+    vec2 prevP = p;
+    float d = sdBox(p, vec2(0.005, 0.13));
+    vec2 q = (p - vec2(0.02, -0.147)) * Rot(radians(-45.0));
+    d = min(d, sdBox(q, vec2(0.005, 0.028)));
+    d = min(d, sdBox(p - vec2(0.04, -0.2135), vec2(0.005, 0.049)));
+    q = (p - vec2(0.02, -0.28)) * Rot(radians(45.0));
+    d = min(d, sdBox(q, vec2(0.005, 0.03)));
+    d = min(d, length(p - vec2(0.0,  0.13)) - 0.012);
+    return min(d, length(p - vec2(0.0, -0.30)) - 0.012);
+}
+
+// Scrolling arrow strip. Constant-speed phase — audio must not
+// modulate speed directly or frame-to-frame jumps cause jerky motion.
+float arrowUI(vec2 p) {
+    vec2 prevP = p;
+    p.x *= -1.0;
+    p.x -= iTime * 0.12;
+    p.x = mod(p.x, 0.07) - 0.035 - 0.0325;
+    p *= vec2(0.9, 1.5);
+    p *= Rot(radians(90.0));
+    float d = sdTri(p, vec2(0.05), radians(45.0));
+    d = max(-sdTri(p - vec2(0.0, -0.03), vec2(0.05), radians(45.0)), d);
+    d = abs(d) - 0.0005;
+    return max(abs(prevP.x) - 0.15, d);
+}
+
+// Two stacked arrow bracket pair (sideUI / sideLine).
+float sideLine(vec2 p) {
+    p.x *= -1.0;
+    vec2 prevP = p;
+    p.y = abs(p.y) - 0.17;
+    p *= Rot(radians(45.0));
+    float d = sdBox(p, vec2(0.035, 0.01));
+    p = prevP;
+    d = min(d, sdBox(p - vec2(0.0217, 0.0), vec2(0.01, 0.152)));
+    return abs(d) - 0.0005;
+}
+float sideUI(vec2 p) {
+    vec2 prevP = p;
+    p.x *= -1.0;
+    p.x += 0.025;
+    float d = sideLine(p);
+    p = prevP;
+    p.y = abs(p.y) - 0.275;
+    return min(d, sideLine(p));
+}
+
+// Combined overlay layout (mirrors original overlayUI positions).
+float overlayUI(vec2 p, float audioVal, float audioReact, bool useSpectrum) {
+    vec2 prevP = p;
+    float d = numberWithCircleUI(p - vec2(0.56, -0.34), audioVal);
+
+    // Bottom / top block strips — spectrum bars if audio, else original blockUI
+    p.x = abs(p.x) - 0.56;
+    p.y -= 0.45;
+    float bars = useSpectrum ? spectrumBarsUI(p, audioReact) : blockUI(p);
+    d = min(d, bars);
+    p = prevP;
+
+    p.x = abs(p.x) - 0.72;
+    p.y -= 0.35;
+    d = min(d, smallCircleUI2(p));
+    p = prevP;
+    d = min(d, smallCircleUI2(p - vec2(-0.39, -0.42)));
+
+    p = prevP;
+    p.x -= 0.58;
+    p.y -= 0.07;
+    p.y = abs(p.y) - 0.12;
+    d = min(d, smallCircleUI(p));
+
+    p = prevP;
+    d = min(d, rectUI(p - vec2(-0.58, -0.3)));
+
+    vec2 gp = prevP - vec2(-0.58, 0.1);
+    gp.x = abs(gp.x) - 0.05;
+    d = min(d, graphUI(gp, audioReact));
+
+    p = prevP;
+    p.x = abs(p.x) - 0.72;
+    p.y -= 0.13;
+    d = min(d, staticUI(p));
+
+    p = prevP;
+    p.x = abs(p.x) - 0.51;
+    p.y -= 0.35;
+    d = min(d, arrowUI(p));
+
+    p = prevP;
+    p.x = abs(p.x) - 0.82;
+    d = min(d, sideUI(p));
+    return d;
+}
+
+// ──
+// Global scene renderer — the whole raymarched HUD is drawn ONCE in
+// screen-space and zones act as windows into the same continuous scene.
+// Only border/glow/vitality remain per-zone (those belong to the zone
+// chrome, not the underlying visualization).
+// ──
+
+struct GlobalParams {
+    vec3 chromeCol;
+    vec3 dataCol;
+    vec3 scanCol;
+    vec3 bgCol;
+    float ringScale;
+    float thickPulse;
+    float audioReact;
+    float bassBreath;
+    float trebleGlitch;
+    float surgeThresh;
+    float hudBright;
+    float spectrumOn;
+    float showOverlay;
+    float staticAmt;
+    float scanDensity;
+    float bgStrength;
+    float mouseInfStr;
+    int   stepCount;
+    float aBass;
+    float aMids;
+    float aTreble;
+    float aAll;
+    bool  hasAudio;
+};
+
+vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
+    // Screen-space uv — Shadertoy Y-up convention (y=+0.5 at top, y=-0.5
+    // at bottom). PlasmaZones' fragCoord is Y-down after fragCoordFromTexCoord
+    // (Y=0 at top), so flip Y once here — that fixes the camera up-vector,
+    // background drift direction, and all overlay panel positions at once.
+    vec2 uv = (fragCoord - 0.5 * iResolution) / max(iResolution.y, 1.0);
+    uv.y = -uv.y;
+    uv /= max(g.ringScale, 0.1);
+    vec2 screenUV = fragCoord / max(iResolution, vec2(1.0));
+
+    // Treble-driven horizontal glitch displacement (screen-space bands)
+    if (g.trebleGlitch > 0.01 && g.aTreble > 0.05) {
+        float slot = floor(iTime * 22.0);
+        if (hash11(slot) > 0.82) {
+            float bandY = hash11(slot + 100.0);
+            if (abs(screenUV.y - bandY) < 0.04 + hash11(slot + 200.0) * 0.05) {
+                uv.x += (hash11(slot + 300.0) - 0.5) * g.trebleGlitch * g.aTreble * 0.12;
+            }
         }
     }
-    return offset;
-}
 
-// ═══════════════════════════════════════════════════════════════════════
-// HUD decorations: corner brackets, status indicators
-// ═══════════════════════════════════════════════════════════════════════
+    // Base: dark background
+    vec3 col = g.bgCol;
 
-float bracketCorner(vec2 uv, vec2 c, vec2 dir, float len, float thick) {
-    float hArm = step(abs(uv.y - c.y), thick)
-                * step(0.0, (uv.x - c.x) * dir.x)
-                * step((uv.x - c.x) * dir.x, len);
-    float vArm = step(abs(uv.x - c.x), thick)
-                * step(0.0, (uv.y - c.y) * dir.y)
-                * step((uv.y - c.y) * dir.y, len);
-    return hArm + vArm;
-}
-
-float hudBrackets(vec2 uv, float borderInset) {
-    float len = 0.08;
-    float thick = 0.0015;
-    float bi = borderInset;
-    float bo = 1.0 - borderInset;
-
-    float result = bracketCorner(uv, vec2(bi, bi), vec2( 1.0,  1.0), len, thick)
-                 + bracketCorner(uv, vec2(bo, bi), vec2(-1.0,  1.0), len, thick)
-                 + bracketCorner(uv, vec2(bi, bo), vec2( 1.0, -1.0), len, thick)
-                 + bracketCorner(uv, vec2(bo, bo), vec2(-1.0, -1.0), len, thick);
-
-    return clamp(result, 0.0, 1.0);
-}
-
-// Status pips: small dots along top edge
-float statusPips(vec2 uv, float t, int count, float bass) {
-    float result = 0.0;
-    float spacing = 0.8 / float(max(count, 1));
-    float startX = 0.1;
-
-    for (int i = 0; i < count && i < 12; i++) {
-        float pipX = startX + float(i) * spacing;
-        float pipY = 0.03;
-        float d = length(uv - vec2(pipX, pipY));
-
-        // Active/inactive based on audio level
-        float threshold = float(i) / float(count);
-        float lit = step(threshold, bass * 1.5);
-        float brightness = lit * 0.8 + (1.0 - lit) * 0.15;
-
-        result += smoothstep(0.005, 0.002, d) * brightness;
+    // Hex grid (screen-space)
+    if (g.bgStrength > 0.001) {
+        float bd = bg(uv);
+        float bgMask = 1.0 - smoothstep(0.0, 2.0 / max(iResolution.y, 1.0), bd);
+        vec3 gridCol = mix(g.chromeCol, g.scanCol, g.aBass * 0.3) * (0.55 + g.aMids * 0.2);
+        col = mix(col, gridCol, bgMask * g.bgStrength);
     }
-    return result;
+
+    // Thickness cycle — 30s alternation between thick (0.03) and thin (0.007)
+    float frame = mod(iTime, 30.0);
+    float thickness = 0.03;
+    const float maxThick = 0.03;
+    const float minThick = 0.007;
+    if (frame >= 10.0 && frame < 20.0) {
+        float tt = getTime(frame - 10.0, 1.5);
+        thickness = (maxThick + minThick) - cubicInOut(tt) * maxThick;
+    } else if (frame >= 20.0) {
+        float tt = getTime(frame - 20.0, 1.5);
+        thickness = minThick + cubicInOut(tt) * maxThick;
+    }
+    thickness = mix(thickness, maxThick * 1.2, g.aBass * g.thickPulse * 0.6);
+
+    // Camera orbit — same cycle as original
+    float camCycleYZ = 45.0;
+    float camOgRXZ = 50.0;
+    float camAnimRXZ = 20.0;
+    if (frame >= 10.0 && frame < 20.0) {
+        float tt = getTime(frame - 10.0, 1.5);
+        camCycleYZ *= 1.0 - cubicInOut(tt);
+        camOgRXZ   *= 1.0 - cubicInOut(tt);
+        camAnimRXZ *= 1.0 - cubicInOut(tt);
+    } else if (frame >= 20.0) {
+        float tt = getTime(frame - 20.0, 1.5);
+        camCycleYZ *= cubicInOut(tt);
+        camOgRXZ   *= cubicInOut(tt);
+        camAnimRXZ *= cubicInOut(tt);
+    }
+    camCycleYZ += g.aBass * g.bassBreath * 60.0;
+    float orbit = sin(iTime * 0.3) * camAnimRXZ * (1.0 + g.aMids * 0.5) + camOgRXZ;
+
+    vec3 ro = vec3(0.0, 0.0, -2.1 - g.aBass * g.bassBreath * 0.15);
+    ro.yz *= Rot(radians(camCycleYZ));
+    ro.xz *= Rot(radians(orbit));
+
+    // Mouse: global tilt when cursor is on the layout (no per-zone gating)
+    if (g.mouseInfStr > 0.01) {
+        vec2 m = (screenUV - 0.5) * 2.0;
+        ro.yz *= Rot(-m.y * 3.14 * 0.1 * g.mouseInfStr);
+        ro.xz *= Rot(-m.x * 6.28 * 0.06 * g.mouseInfStr);
+    }
+
+    vec3 rd = CameraRay(uv, ro, vec3(0.0), 1.0);
+    vec3 d3d = RayMarchT(ro, rd, g.stepCount, 0.003, thickness);
+
+    float surge = step(g.surgeThresh, g.aBass) * (g.aBass - g.surgeThresh)
+                / max(1.0 - g.surgeThresh, 0.01);
+    surge = clamp(surge * surge, 0.0, 1.0);
+    float glowMul = 1.0 + g.aBass * 0.6 + surge * 1.5;
+
+    vec3 ringTint = mix(g.dataCol, g.chromeCol, clamp(length(uv) * 1.5, 0.0, 1.0));
+    ringTint = mix(ringTint, g.scanCol, surge * 0.75);
+    col = mix(col, d3d * ringTint * glowMul, 0.7);
+
+    // Chromatic aberration (screen-space, uses iResolution.y)
+    if (g.aBass > 0.05 || surge > 0.01) {
+        float chromaStr = (0.4 + g.aBass * 2.0 + surge * 2.5) / max(iResolution.y, 1.0);
+        vec2 chromaOff = vec2(chromaStr, 0.0);
+        vec3 rdR = CameraRay(uv + chromaOff, ro, vec3(0.0), 1.0);
+        vec3 rdB = CameraRay(uv - chromaOff, ro, vec3(0.0), 1.0);
+        float aR = RayMarchT(ro, rdR, max(g.stepCount - 16, 16), 0.003, thickness).r;
+        float aB = RayMarchT(ro, rdB, max(g.stepCount - 16, 16), 0.003, thickness).r;
+        col.r += aR * g.chromeCol.r * 0.25 * glowMul;
+        col.b += aB * g.dataCol.b   * 0.25 * glowMul;
+    }
+
+    // Overlay UI moved to per-zone pass (see renderZoneChrome) so it
+    // stays visible inside zone bounds. Rings + bg span the screen here.
+
+    // Static noise + scanlines (screen-space)
+    if (g.staticAmt > 0.0001) {
+        float sn = hash21(fragCoord + iTime * 100.0) * g.staticAmt;
+        col += g.chromeCol * sn * 0.25 * (0.5 + g.aTreble);
+    }
+    if (g.scanDensity > 0.001) {
+        col *= 0.94 + 0.06 * sin(fragCoord.y * 1.5 * g.scanDensity);
+    }
+
+    // Gamma (matches original col = pow(col, 0.9545))
+    return pow(max(col, 0.0), vec3(0.9545));
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Zone rendering
-// ═══════════════════════════════════════════════════════════════════════
+// Per-zone chrome: fill (from global scene with vitality), border, glow.
+vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
+                      vec4 zParams, vec3 sceneCol, GlobalParams g, bool isHighlighted) {
+    float borderRadius = max(zParams.x, 6.0);
+    float borderWidth  = max(zParams.y, 2.5);
+    float fillOpacity  = customParams[4].y;
+    float edgeGlow     = customParams[3].z;
 
-vec4 renderChromeZone(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColor,
-                      vec4 params, bool isHighlighted,
-                      float bass, float mids, float treble, float overall, bool hasAudio) {
-    float borderRadius = max(params.x, 6.0);
-    float borderWidth = max(params.y, 2.5);
-
-    // Parameters
-    float ringScale      = customParams[0].x;
-    float animSpeed      = customParams[0].y;
-    float hudBright      = customParams[0].z;
-    // customParams[0].w (ringThickness) — reserved for future use
-    float scanSpeed      = customParams[1].x;
-    // customParams[1].y (scanWidth) — reserved for future use
-    float scanIntensity  = customParams[1].z;
-    float fillOpacity    = customParams[1].w;
-    float glowStr        = customParams[2].x;
-    int   particleCount  = int(customParams[2].y); // repurposed: status pip count
-    float audioReact     = customParams[2].z;
-    float glitchIntensity= customParams[2].w;
-    float edgeGlow       = customParams[3].w;
-    float ghostIntensity = customParams[4].x; // was hexOverlay
-    float particleSpeed  = customParams[4].z; // repurposed: ghost data speed
-    float surgeThreshold = customParams[4].w;
-    float mouseInfluenceStr = customParams[5].x;
-    float noiseFloor     = customParams[5].y;
-
-    vec3 chromeCol = colorWithFallback(customColors[0].rgb, vec3(0.753, 0.816, 0.878));
-    vec3 dataCol   = colorWithFallback(customColors[1].rgb, vec3(0.0, 0.706, 1.0));
-    vec3 scanCol   = colorWithFallback(customColors[2].rgb, vec3(0.91, 0.957, 1.0));
-    vec3 bgCol     = colorWithFallback(customColors[3].rgb, vec3(0.039, 0.055, 0.078));
-    // Ghost data uses a warm organic color — the suppressed humanity
-    vec3 ghostCol  = vec3(0.8, 0.3, 0.15); // amber/warm — contrast to cold chrome
-
-    vec2 rectPos = zoneRectPos(rect);
+    vec2 rectPos  = zoneRectPos(rect);
     vec2 rectSize = zoneRectSize(rect);
-    vec2 center = rectPos + rectSize * 0.5;
-    vec2 p = fragCoord - center;
-    float d = sdRoundedBox(p, rectSize * 0.5, borderRadius);
-    float px = pxScale();
+    vec2 center   = rectPos + rectSize * 0.5;
+    vec2 p        = fragCoord - center;
+    float d       = sdRoundedBox(p, rectSize * 0.5, borderRadius);
+    float px      = pxScale();
 
     float vitality = zoneVitality(isHighlighted);
-    float time = iTime * animSpeed;
-
-    // Vitality modulation
-    chromeCol = vitalityDesaturate(chromeCol, vitality);
-    dataCol = vitalityDesaturate(dataCol, vitality);
-    glowStr *= vitalityScale(0.5, 2.0, vitality);
-    fillOpacity = mix(fillOpacity, min(fillOpacity + 0.12, 0.95), vitality);
+    vec3 zChromeCol = vitalityDesaturate(g.chromeCol, vitality);
+    vec3 zDataCol   = vitalityDesaturate(g.dataCol, vitality);
     float highlightBoost = vitalityScale(0.75, 1.35, vitality);
-
-    // Audio system
-    float audioPulse = hasAudio ? bass * audioReact : 0.0;
-    float audioMid = hasAudio ? mids * audioReact : 0.0;
-    float audioHigh = hasAudio ? treble * audioReact : 0.0;
+    fillOpacity = mix(fillOpacity, min(fillOpacity + 0.1, 0.95), vitality);
 
     vec4 result = vec4(0.0);
-    vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
-    vec2 globalUV = fragCoord / max(iResolution, vec2(1.0));
-
-    // ── Mouse: targeting lock ────────────────────────────────────────
-    vec2 mousePixel = iMouse.xy;
-    vec2 mouseLocal = zoneLocalUV(mousePixel, rectPos, rectSize);
-    float mouseInZone = step(0.0, mouseLocal.x) * step(mouseLocal.x, 1.0)
-                      * step(0.0, mouseLocal.y) * step(mouseLocal.y, 1.0);
-    float mouseDist = length(localUV - mouseLocal);
-    float mouseInfluence = 0.0;
-    if (mouseInZone > 0.5) {
-        mouseInfluence = smoothstep(0.4, 0.0, mouseDist);
-        mouseInfluence *= mouseInfluence * mouseInfluenceStr;
-    }
-
-    // Glitch displacement
-    vec2 glitchOff = glitchOffset(localUV, iTime, glitchIntensity * (1.0 + audioHigh * 0.5));
-    vec2 glitchedUV = localUV + glitchOff;
-
     if (d < 0.0) {
-        // ── Base: dark clinical void ─────────────────────────────────
-        vec3 baseColor = bgCol * 0.8 + fillColor.rgb * 0.15;
-        // Subtle radial gradient (darker at edges — depth)
-        float vignette = 1.0 - length(localUV - 0.5) * 0.4;
-        baseColor *= vignette;
+        // Zone shows the global scene, desaturated when dormant, with a
+        // slight fillColor tint layered underneath for zone identity.
+        vec3 col = vitalityDesaturate(sceneCol, vitality);
+        col = mix(col, col * 0.85 + fillColor.rgb * 0.15, 0.35);
 
-        // ── Hex depth pattern (fills the void between elements) ────────
-        float hex = hexGrid(glitchedUV, ringScale * 8.0) * 0.15 * vitality;
-        float hexPulse = 0.5 + 0.5 * sin(time * 0.8 + length(localUV - 0.5) * 8.0);
-        baseColor += chromeCol * hex * 0.2 * hexPulse;
-
-        // ── Acquisition rings (zone center) ──────────────────────────
-        vec2 zoneCenter = vec2(0.5, 0.5);
-        float rings = targetingSystem(glitchedUV, zoneCenter, ringScale,
-                                      time, audioPulse, audioMid, audioReact);
-        // Rings color: chrome → data-blue gradient based on distance from center
-        float centerDist = length(glitchedUV - zoneCenter);
-        vec3 ringColor = mix(dataCol, chromeCol, smoothstep(0.0, 0.4, centerDist));
-        ringColor = mix(ringColor, scanCol, audioPulse * 0.4);
-        baseColor += ringColor * rings * hudBright * glowStr * vitality;
-
-        // ── Mouse targeting overlay ──────────────────────────────────
-        if (mouseInfluence > 0.01) {
-            float mouseRings = targetingSystem(glitchedUV, mouseLocal, ringScale * 0.6,
-                                               time * 1.5, audioPulse, audioMid, audioReact);
-            baseColor += scanCol * mouseRings * mouseInfluence * 0.8;
-            float prox = smoothstep(0.15, 0.0, mouseDist);
-            baseColor += dataCol * prox * mouseInfluence * 0.3;
+        // Overlay HUD — per-zone in zone-local aspect-corrected UV so the
+        // 7-seg readout, spectrum bars, and edge panels land inside the
+        // zone that's showing the effect. Rings/bg still span globally.
+        if (g.showOverlay > 0.5) {
+            vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
+            float zAspect = rectSize.x / max(rectSize.y, 1.0);
+            vec2 ouv = (localUV - 0.5) * vec2(zAspect, 1.0);
+            ouv.y = -ouv.y; // localUV is Y-down; overlay panels expect Y-up
+            bool useSpec = g.spectrumOn > 0.5 && g.hasAudio;
+            float od = overlayUI(ouv, g.aAll / max(g.audioReact, 0.01),
+                                 g.audioReact, useSpec);
+            float om = 1.0 - smoothstep(0.0, 2.5 / max(rectSize.y, 1.0), od);
+            vec3 overlayTint = mix(zChromeCol, g.scanCol, 0.3 + g.aBass * 0.3);
+            col = mix(col, overlayTint * 1.3 * g.hudBright * highlightBoost, om);
         }
 
-        // ── Frequency analyzer bars ──────────────────────────────────
-        float freqBars = frequencyBars(glitchedUV, time, audioReact * 1.5);
-        baseColor += dataCol * freqBars * 0.6 * vitality;
-
-        // ── Threat scanline ──────────────────────────────────────────
-        float scan = threatScan(glitchedUV, iTime, scanSpeed) * scanIntensity * vitality;
-        // Scan beam reveals hex pattern underneath as it passes
-        float scanReveal = scan * hex * 0.4;
-        baseColor += scanCol * scan * 0.5;
-        baseColor += dataCol * scanReveal;
-
-        // ── HUD brackets and status pips ─────────────────────────────
-        float brackets = hudBrackets(localUV, 0.03);
-        baseColor += chromeCol * brackets * 0.4 * vitality;
-
-        float pips = statusPips(localUV, time, particleCount, hasAudio ? bass : 0.3);
-        baseColor += dataCol * pips * 0.6 * vitality;
-
-        // ── Ghost data (suppressed memories) ─────────────────────────
-        // Bass hits trigger ghost data (not random — correlated with audio impact)
-        float ghostTrigger = hasAudio ? smoothstep(0.4, 0.8, bass) : 0.0;
-        float ghostBase = ghostData(glitchedUV, iTime * particleSpeed, ghostIntensity * vitality);
-        float ghost = ghostBase * (0.3 + ghostTrigger * 0.7); // Always slightly visible, bass amplifies
-        baseColor += ghostCol * ghost * 1.0;
-        baseColor = mix(baseColor, ghostCol * 0.3, ghost * 0.2);
-
-        // ── Static noise floor ───────────────────────────────────────
-        float staticN = hash21(globalUV * 500.0 + iTime * 100.0) * noiseFloor * vitality;
-        baseColor += chromeCol * staticN * 0.2;
-
-        // ── Scanline overlay (CRT/HUD) ───────────────────────────────
-        float scanlines = 0.95 + 0.05 * sin(fragCoord.y * 1.5);
-        baseColor *= scanlines;
-
-        // ── Chromatic aberration (cold precision splitting under stress) ─
-        float chromaStr = (1.0 + audioPulse * 2.0) * vitalityScale(0.5, 1.5, vitality);
-        vec2 chromaOff = vec2(chromaStr / max(iResolution.x, 1.0), 0.0);
-        float ringsR = targetingSystem(glitchedUV + chromaOff, zoneCenter, ringScale,
-                                        time, audioPulse, audioMid, audioReact);
-        float ringsB = targetingSystem(glitchedUV - chromaOff, zoneCenter, ringScale,
-                                        time, audioPulse, audioMid, audioReact);
-        baseColor.r += ringsR * chromeCol.r * 0.06 * glowStr;
-        baseColor.b += ringsB * dataCol.b * 0.06 * glowStr;
-
-        // ── Bass surge: radial overload wipe from center ─────────────
-        if (hasAudio && audioPulse > surgeThreshold) {
-            float surge = (audioPulse - surgeThreshold) / max(1.0 - surgeThreshold, 0.01);
-            surge *= surge;
-            // Radial wipe: overexposure expands outward from center
-            float wipeRadius = surge * 0.6;
-            float wipe = smoothstep(wipeRadius, wipeRadius - 0.1, centerDist);
-            baseColor += scanCol * wipe * surge * 1.5;
-            // Ring segments flash in sequence
-            baseColor += rings * mix(dataCol, scanCol, surge) * surge * 1.2;
-        }
-
-        // ── Treble: glitch bands ─────────────────────────────────────
-        if (hasAudio && treble > 0.15) {
-            float bandY = floor(localUV.y * 30.0 + iTime * 15.0);
-            float band = step(0.88, hash11(bandY + iTime * 7.0));
-            float shift = (hash11(bandY + 100.0) - 0.5) * 0.03 * audioHigh;
-            vec2 shiftedUV = localUV + vec2(shift, 0.0);
-            float shiftedRings = targetingSystem(shiftedUV, zoneCenter, ringScale,
-                                                  time, audioPulse, audioMid, audioReact);
-            baseColor = mix(baseColor, dataCol * shiftedRings * 2.0, band * audioHigh * 0.5);
-        }
-
-        // ── Flicker ──────────────────────────────────────────────────
-        float flicker = 0.95 + 0.05 * sin(iTime * 19.0) * sin(iTime * 27.0);
-        if (hasAudio) {
-            float standby = smoothstep(0.3, 0.0, overall * audioReact);
-            flicker -= standby * 0.15 * max(sin(iTime * 47.0) * sin(iTime * 61.0), 0.0);
-        }
-        baseColor *= max(flicker, 0.0) * highlightBoost;
-
-        result = vec4(baseColor, fillOpacity * fillColor.a);
+        col *= highlightBoost;
+        result = vec4(col, fillOpacity * fillColor.a);
     }
 
-    // ── Border ───────────────────────────────────────────────────────
+    // Border
     float borderFactor = softBorder(d, borderWidth);
     if (borderFactor > 0.001) {
-        vec3 borderTint = mix(chromeCol, dataCol, 0.3 + audioPulse * 0.2);
+        vec3 borderTint = mix(zChromeCol, zDataCol, 0.3 + g.aBass * 0.25);
         vec3 borderFinal = mix(borderTint, borderColor.rgb, 0.3);
-        borderFinal *= (1.0 + audioPulse * 0.4) * glowStr * highlightBoost;
+        borderFinal *= (1.0 + g.aBass * 0.4) * g.hudBright * highlightBoost;
         result = blendOver(result, vec4(borderFinal * borderFactor, borderFactor * borderColor.a));
     }
 
-    // ── Outer glow ───────────────────────────────────────────────────
+    // Outer glow
     if (d > 0.0 && d < 50.0 * px) {
-        float rimFalloff = (8.0 + audioPulse * 10.0) * px;
-        float rim = exp(-d / rimFalloff) * edgeGlow * vitality;
-        vec3 rimCol = mix(chromeCol, dataCol, audioPulse * 0.3);
+        float rim = exp(-d / ((8.0 + g.aBass * 10.0) * px)) * edgeGlow * vitality;
+        vec3 rimCol = mix(zChromeCol, zDataCol, g.aBass * 0.35);
         result = blendOver(result, vec4(rimCol * rim * highlightBoost, rim * 0.5));
     }
-
     return result;
 }
+
+// ──
+// Main — render the scene once in screen-space, then loop zones for chrome
+// ──
 
 void main() {
     bool hasAudio = iAudioSpectrumSize > 0;
@@ -561,139 +819,107 @@ void main() {
     float treble  = getTrebleSoft();
     float overall = getOverallSoft();
 
-    vec4 result = vec4(0.0);
+    GlobalParams g;
+    g.chromeCol    = colorWithFallback(customColors[0].rgb, vec3(0.776, 0.831, 0.890));
+    g.dataCol      = colorWithFallback(customColors[1].rgb, vec3(0.129, 0.784, 1.000));
+    g.scanCol      = colorWithFallback(customColors[2].rgb, vec3(0.918, 0.965, 1.000));
+    g.bgCol        = colorWithFallback(customColors[3].rgb, vec3(0.027, 0.043, 0.071));
+    g.ringScale    = customParams[0].x;
+    g.thickPulse   = customParams[0].w;
+    g.audioReact   = customParams[1].x;
+    g.bassBreath   = customParams[1].y;
+    g.trebleGlitch = customParams[1].z;
+    g.surgeThresh  = customParams[1].w;
+    g.hudBright    = customParams[2].x;
+    g.spectrumOn   = customParams[2].y;
+    g.showOverlay  = customParams[2].z;
+    g.staticAmt    = customParams[3].x;
+    g.scanDensity  = customParams[3].y;
+    g.bgStrength   = customParams[3].w;
+    g.mouseInfStr  = customParams[4].x;
+    g.stepCount    = int(max(customParams[4].z, 16.0));
+    g.hasAudio     = hasAudio;
+    g.aBass   = hasAudio ? bass    * g.audioReact : 0.0;
+    g.aMids   = hasAudio ? mids    * g.audioReact : 0.0;
+    g.aTreble = hasAudio ? treble  * g.audioReact : 0.0;
+    g.aAll    = hasAudio ? overall * g.audioReact : 0.0;
 
+    // Render the HUD scene once in screen-space — shared across all zones
+    vec3 sceneCol = renderGlobalScene(vFragCoord, g);
+
+    // Per-zone: gate visibility, apply vitality, draw border + glow
+    vec4 result = vec4(0.0);
     for (int i = 0; i < zoneCount && i < 64; i++) {
-        vec4 zone = renderChromeZone(
+        result = blendOver(result, renderZoneChrome(
             vFragCoord, zoneRects[i], zoneFillColors[i], zoneBorderColors[i],
-            zoneParams[i], zoneParams[i].z > 0.5,
-            bass, mids, treble, overall, hasAudio
-        );
-        result = blendOver(result, zone);
+            zoneParams[i], sceneCol, g, zoneParams[i].z > 0.5));
     }
 
-    // ─── Labels: Targeting Designation HUD ─────────────────────────────
-    bool showLabels = customParams[4].y > 0.5;
+    // Labels: HUD designation plate. The body stays in [0,1] color space
+    // so chrome/data tinting actually survives — labelBright scales glow
+    // intensity, not body saturation (a labelBright of 2.4 applied to the
+    // body pushed everything past the tonemap ceiling and bleached it white).
+    bool showLabels = customParams[5].w > 0.5;
     if (showLabels) {
-        float labelSpread = customParams[3].x;
-        float labelBright = customParams[3].y;
-        float labelReact  = customParams[3].z;
+        float labelSpread = customParams[5].x;
+        float labelBright = customParams[5].y;
+        float labelReact  = customParams[5].z;
 
-        vec3 lChromeCol = colorWithFallback(customColors[0].rgb, vec3(0.753, 0.816, 0.878));
-        vec3 lDataCol   = colorWithFallback(customColors[1].rgb, vec3(0.0, 0.706, 1.0));
-        vec3 lScanCol   = colorWithFallback(customColors[2].rgb, vec3(0.91, 0.957, 1.0));
+        vec3 lChromeCol = colorWithFallback(customColors[0].rgb, vec3(0.776, 0.831, 0.890));
+        vec3 lDataCol   = colorWithFallback(customColors[1].rgb, vec3(0.129, 0.784, 1.000));
+        vec3 lScanCol   = colorWithFallback(customColors[2].rgb, vec3(0.918, 0.965, 1.000));
 
         vec2 luv = labelsUv(vFragCoord);
         vec2 texPx = 1.0 / max(iResolution, vec2(1.0));
         vec4 labels = texture(uZoneLabels, luv);
         float spread = labelSpread * pxScale();
-        float t = iTime * customParams[0].y;
         float bassMod = hasAudio ? bass * labelReact : 0.0;
 
-        // Multi-layer halo with chromatic split
-        float haloTight = 0.0, haloWide = 0.0, haloVWide = 0.0;
-        float haloR = 0.0, haloG = 0.0, haloB = 0.0;
-        vec2 chromOff = vec2(texPx.x * 2.5, 0.0);
+        // Tight Gaussian halo — 5x5 kernel, narrow falloff so glow sits
+        // close to glyphs instead of smearing across ring detail
+        float halo = 0.0;
         for (int dy = -2; dy <= 2; dy++) {
             for (int dx = -2; dx <= 2; dx++) {
-                vec2 off = vec2(float(dx), float(dy)) * texPx;
                 float r2 = float(dx * dx + dy * dy);
-                float s = texture(uZoneLabels, luv + off * spread).a;
-                haloTight += s * exp(-r2 * 0.5);
-                haloWide += s * exp(-r2 * 0.2);
-                haloVWide += s * exp(-r2 * 0.1);
-                haloR += texture(uZoneLabels, luv + off * spread + chromOff).a * exp(-r2 * 0.2);
-                haloG += s * exp(-r2 * 0.2);
-                haloB += texture(uZoneLabels, luv + off * spread - chromOff).a * exp(-r2 * 0.2);
+                halo += texture(uZoneLabels, luv + vec2(float(dx), float(dy)) * texPx * spread).a
+                      * exp(-r2 * 0.45);
             }
         }
-        haloTight /= 10.0; haloWide /= 16.5; haloVWide /= 22.0;
+        halo /= 10.5;
 
-        // Clinical precision flicker
-        float clinFlicker = 0.93 + 0.07 * step(0.5, fract(t * 9.0 + luv.x * 4.0));
-        clinFlicker *= (1.0 + bassMod * 0.3);
+        float flicker = 0.96 + 0.04 * sin(iTime * 7.3 + luv.x * 3.0);
+        flicker *= (1.0 + bassMod * 0.25);
 
-        if (haloWide > 0.003) {
-            float haloEdge = haloWide * (1.0 - labels.a);
-            float haloEdgeTight = haloTight * (1.0 - labels.a);
-            float haloEdgeVWide = haloVWide * (1.0 - labels.a);
-
-            // Tight core: near-white targeting lock glow
-            result.rgb += lScanCol * 1.1 * haloEdgeTight * 0.6 * clinFlicker;
-
-            // Chromatic holographic split (RGB offset channels)
-            vec3 chromHalo = vec3(haloR, haloG, haloB) * (1.0 - labels.a);
-            vec3 chromCol = chromHalo * lDataCol * 0.45 * clinFlicker;
-            chromCol.r *= lChromeCol.r * 1.2;
-            chromCol.b *= lDataCol.b * 1.3;
-            result.rgb += chromCol;
-
-            // Wide targeting acquisition haze
-            result.rgb += lChromeCol * 0.25 * haloEdgeVWide * 0.3 * clinFlicker;
-
-            // Lock-on bracket lines around label (horizontal bars above/below)
-            float bracketH = smoothstep(spread * texPx.y * 6.0, spread * texPx.y * 5.5, abs(luv.y - 0.5));
-            float bracketMask = haloEdge * (1.0 - labels.a);
-            float bracketAnim = smoothstep(0.0, 0.8, fract(t * 0.5)); // animates closed
-            float bracketLine = step(abs(haloEdge - 0.3), 0.05) * bracketMask;
-            result.rgb += lDataCol * bracketLine * 0.3 * clinFlicker;
-
-            // Scanline interference bands
-            float scanLine = step(0.8, fract(vFragCoord.y * 0.5));
-            result.rgb += lDataCol * haloEdge * scanLine * 0.12;
-
-            // Treble: data-burst sparks along halo
-            if (hasAudio && treble > 0.1) {
-                float burstN = noise2D(luv * 55.0 + t * 5.0);
-                float burst = smoothstep(0.6, 0.9, burstN) * treble * labelReact * 2.0;
-                result.rgb += lScanCol * haloEdge * burst * clinFlicker;
-            }
-
-            result.a = max(result.a, haloEdge * 0.5);
+        // Halo: data-blue bias with chrome mid and scan-white core.
+        // labelBright scales halo intensity (that's what the knob should do).
+        if (halo > 0.002) {
+            float haloEdge = halo * (1.0 - labels.a);
+            float coreAmt = smoothstep(0.1, 0.45, haloEdge);
+            vec3 haloCol = mix(lDataCol * 0.9, lChromeCol, 0.35);
+            haloCol = mix(haloCol, lScanCol, coreAmt);
+            result.rgb += haloCol * haloEdge * 0.55 * flicker * labelBright;
+            result.a = max(result.a, haloEdge * 0.55);
         }
 
-        // ── Label text: cold compiled designation readout ─────────────
         if (labels.a > 0.01) {
-            // Base: dark data-blue body (not chrome-white — that's boring)
-            vec3 textCol = lDataCol * 0.5;
-
-            // Scrolling data columns within characters (vertical binary rain)
-            float colId = floor(vFragCoord.x * 0.3);
-            float scrollY = fract(vFragCoord.y * 0.08 + t * 1.5 + colId * 0.7);
-            float dataCell = step(0.4, hash21(vec2(colId, floor(scrollY * 12.0 + t * 3.0))));
-            // Lit cells pop bright, dark cells stay subdued
-            textCol = mix(textCol, lDataCol * 1.4, dataCell * 0.5);
-
-            // Horizontal scan line sweeping through text (compile pass)
-            float compileScan = fract(t * 0.8);
-            float scanDist = abs(fract(vFragCoord.y / max(iResolution.y, 1.0)) - compileScan);
-            float compileLine = smoothstep(0.01, 0.002, scanDist);
-            textCol = mix(textCol, lScanCol * 1.5, compileLine * 0.5);
-
-            // Edge-detected rim: bright scan-white stencil edge
+            // Rim stencil — computed first so body can reference it
             float aL = texture(uZoneLabels, luv + vec2(-texPx.x, 0.0)).a;
             float aR = texture(uZoneLabels, luv + vec2( texPx.x, 0.0)).a;
             float aU = texture(uZoneLabels, luv + vec2(0.0, -texPx.y)).a;
             float aD = texture(uZoneLabels, luv + vec2(0.0,  texPx.y)).a;
-            float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.5, 0.0, 1.0);
-            // Rim pops bright — chrome edge on data-blue body
-            textCol = mix(textCol, lScanCol, rim * 0.7);
+            float rim = clamp((4.0 * labels.a - aL - aR - aU - aD) * 2.2, 0.0, 1.0);
 
-            textCol *= labelBright * clinFlicker * (1.0 + bassMod * 0.4);
+            // Body: data-blue-heavy teal base (stays visibly colored, not white).
+            // The chrome ups the lightness; mix factor keeps saturation alive.
+            vec3 body = mix(lDataCol * 0.85, lChromeCol * 0.8, 0.35);
+            // Rim sharpens to bright scan-white for legibility
+            vec3 textCol = mix(body, lScanCol * 0.95, rim * 0.7);
+            // Bass pulse as a subtle multiplier (not an amplifier beyond 1)
+            textCol *= flicker * (1.0 + bassMod * 0.2);
 
-            // Ghost data: bass hits cause warm amber interference
-            float ghostTrigger = hasAudio ? smoothstep(0.5, 0.9, bass) : 0.0;
-            float ghostFade = exp(-fract(t * 0.7) * 3.0);
-            textCol = mix(textCol, vec3(0.8, 0.3, 0.15) * labelBright, ghostTrigger * ghostFade * 0.3);
+            // Match the ring gamma path so text lives in the same exposure
+            textCol = pow(max(textCol, 0.0), vec3(0.9545));
 
-            // Treble: horizontal corruption bands (data errors)
-            if (hasAudio && treble > 0.1) {
-                float corrBand = step(0.85, fract(vFragCoord.y * 0.12 + iTime * 8.0));
-                float tMod = treble * labelReact;
-                textCol = mix(textCol, lDataCol * labelBright * 1.8, corrBand * tMod * 0.4);
-            }
-
-            textCol = textCol / (0.5 + textCol);
             result.rgb = mix(result.rgb, textCol, labels.a);
             result.a = max(result.a, labels.a);
         }

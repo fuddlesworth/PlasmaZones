@@ -9,12 +9,12 @@
  * 1. Window close -> pending zone persistence (P0 crash/data-loss)
  * 2. Pre-snap geometry stable ID migration on close
  * 3. Pre-float zone conversion on close
- * 4. Layout change -> stale assignment removal and resnap buffer
+ * 4. PhosphorZones::Layout change -> stale assignment removal and resnap buffer
  * 5. State change signal emission
  *
  * WIRE FORMAT NOTE: These tests construct WTS without a WindowRegistry, so
  * they drive legacy-compat "appId|uuid" composite fixtures to exercise the
- * Utils::extractAppId fallback path inside currentAppIdFor(). Production
+ * PhosphorIdentity::WindowId::extractAppId fallback path inside currentAppIdFor(). Production
  * daemons set a registry and receive bare instance ids — see
  * test_wts_registry_integration.cpp and test_wta_reactive_metadata.cpp for
  * coverage of the live path.
@@ -34,8 +34,8 @@
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "core/utils.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -71,7 +71,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
@@ -92,13 +92,13 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Window Close -> Pending Zone Persistence
+    // P0: Window Close -> Pending PhosphorZones::Zone Persistence
     // =====================================================================
 
     void testWindowClosed_persistsZoneToPending()
     {
         QString windowId = QStringLiteral("firefox|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         QVERIFY(m_service->isWindowSnapped(windowId));
@@ -113,7 +113,7 @@ private Q_SLOTS:
     void testWindowClosed_floatingWindowNotPersisted()
     {
         QString windowId = QStringLiteral("firefox|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         m_service->setWindowFloating(windowId, true);
@@ -126,7 +126,7 @@ private Q_SLOTS:
     void testWindowClosed_preTileGeometryConvertedToStableId()
     {
         QString windowId = QStringLiteral("org.kde.dolphin|99999");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->storePreTileGeometry(windowId, QRect(100, 200, 800, 600));
         QVERIFY(m_service->hasPreTileGeometry(windowId));
@@ -143,7 +143,7 @@ private Q_SLOTS:
     void testWindowClosed_floatStateClearedOnClose()
     {
         QString windowId = QStringLiteral("org.kde.kate|55555");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[1], QStringLiteral("DP-1"), 1);
         m_service->unsnapForFloat(windowId);
@@ -178,7 +178,7 @@ private Q_SLOTS:
         // rather than falling back to the physical screen ID.
         const QString windowId = QStringLiteral("konsole|abcdef12-0000-0000-0000-000000000001");
         const QString vsId = QStringLiteral("DP-1/vs:0");
-        const QString appId = Utils::extractAppId(windowId);
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vsId, 1);
         QVERIFY(m_service->isWindowSnapped(windowId));
@@ -198,7 +198,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // P0: Layout Change
+    // P0: PhosphorZones::Layout Change
     // =====================================================================
 
     void testOnLayoutChanged_staleAssignmentsRemoved()
@@ -208,7 +208,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], screen, 0);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
-        Layout* newLayout = createTestLayout(2, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(2, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->assignLayout(screen, m_layoutManager->currentVirtualDesktop(), QString(), newLayout);
         m_layoutManager->setActiveLayout(newLayout);
@@ -226,7 +226,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(window1, m_zoneIds[0], QString(), 0);
         m_service->assignWindowToZone(window2, m_zoneIds[1], QString(), 0);
 
-        Layout* newLayout = createTestLayout(3, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
@@ -246,7 +246,7 @@ private Q_SLOTS:
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QString(), 0);
         m_service->setWindowFloating(windowId, true);
 
-        Layout* newLayout = createTestLayout(3, m_layoutManager);
+        PhosphorZones::Layout* newLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(newLayout);
         m_layoutManager->setActiveLayout(newLayout);
         m_service->onLayoutChanged();
@@ -263,7 +263,7 @@ private:
     StubSettingsLifecycle* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

@@ -12,8 +12,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 #include "XdgEnvGuard.h"
 
@@ -24,7 +24,7 @@ namespace TestHelpers {
  * @brief RAII helper that loads JS-based builtin algorithms from data/algorithms/
  *
  * Creates a temporary XDG data directory with a symlink to the project's
- * data/algorithms/ directory, sets XDG env vars, and runs the ScriptedAlgorithmLoader.
+ * data/algorithms/ directory, sets XDG env vars, and runs the PhosphorTiles::ScriptedAlgorithmLoader.
  * Restores the original environment on destruction via XdgEnvGuard.
  *
  * Usage in test class:
@@ -74,11 +74,11 @@ public:
         qputenv("XDG_DATA_DIRS", m_xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_xdgRoot.path().toUtf8());
 
-        m_loader = std::make_unique<ScriptedAlgorithmLoader>();
+        m_loader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"));
         m_loader->scanAndRegister();
 
         // Verify a minimum number of algorithms loaded to catch silent JS/builtin failures
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         if (registry->availableAlgorithms().size() < 24) {
             qWarning() << "ScriptedAlgoTestSetup: Only" << registry->availableAlgorithms().size()
                        << "algorithms loaded, expected at least 24 (15 C++ builtins + 9 JS-native)";
@@ -88,7 +88,7 @@ public:
     }
 
 private:
-    std::unique_ptr<ScriptedAlgorithmLoader> m_loader;
+    std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_loader;
     std::unique_ptr<XdgEnvGuard> m_envGuard;
     QTemporaryDir m_xdgRoot;
 };

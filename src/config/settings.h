@@ -108,7 +108,7 @@ public:
     Q_PROPERTY(
         bool labelFontStrikeout READ labelFontStrikeout WRITE setLabelFontStrikeout NOTIFY labelFontStrikeoutChanged)
 
-    // Zone settings
+    // PhosphorZones::Zone settings
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(
@@ -145,7 +145,7 @@ public:
     // Default layout (used when no explicit assignment exists)
     Q_PROPERTY(QString defaultLayoutId READ defaultLayoutId WRITE setDefaultLayoutId NOTIFY defaultLayoutIdChanged)
 
-    // Layout filtering
+    // PhosphorZones::Layout filtering
     Q_PROPERTY(bool filterLayoutsByAspectRatio READ filterLayoutsByAspectRatio WRITE setFilterLayoutsByAspectRatio
                    NOTIFY filterLayoutsByAspectRatioChanged)
 
@@ -167,7 +167,7 @@ public:
     Q_PROPERTY(
         int minimumWindowHeight READ minimumWindowHeight WRITE setMinimumWindowHeight NOTIFY minimumWindowHeightChanged)
 
-    // Zone Selector
+    // PhosphorZones::Zone Selector
     Q_PROPERTY(bool zoneSelectorEnabled READ zoneSelectorEnabled WRITE setZoneSelectorEnabled NOTIFY
                    zoneSelectorEnabledChanged)
     Q_PROPERTY(int zoneSelectorTriggerDistance READ zoneSelectorTriggerDistance WRITE setZoneSelectorTriggerDistance
@@ -354,7 +354,7 @@ public:
     Q_PROPERTY(QString swapWindowDownShortcut READ swapWindowDownShortcut WRITE setSwapWindowDownShortcut NOTIFY
                    swapWindowDownShortcutChanged)
 
-    // Snap to Zone by Number Shortcuts (Meta+Ctrl+1-9)
+    // Snap to PhosphorZones::Zone by Number Shortcuts (Meta+Ctrl+1-9)
     Q_PROPERTY(QString snapToZone1Shortcut READ snapToZone1Shortcut WRITE setSnapToZone1Shortcut NOTIFY
                    snapToZone1ShortcutChanged)
     Q_PROPERTY(QString snapToZone2Shortcut READ snapToZone2Shortcut WRITE setSnapToZone2Shortcut NOTIFY
@@ -381,14 +381,14 @@ public:
     Q_PROPERTY(QString rotateWindowsCounterclockwiseShortcut READ rotateWindowsCounterclockwiseShortcut WRITE
                    setRotateWindowsCounterclockwiseShortcut NOTIFY rotateWindowsCounterclockwiseShortcutChanged)
 
-    // Cycle Windows in Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
+    // Cycle Windows in PhosphorZones::Zone Shortcuts (Meta+Alt+. / Meta+Alt+,)
     // Cycles focus between windows stacked in the same zone
     Q_PROPERTY(QString cycleWindowForwardShortcut READ cycleWindowForwardShortcut WRITE setCycleWindowForwardShortcut
                    NOTIFY cycleWindowForwardShortcutChanged)
     Q_PROPERTY(QString cycleWindowBackwardShortcut READ cycleWindowBackwardShortcut WRITE setCycleWindowBackwardShortcut
                    NOTIFY cycleWindowBackwardShortcutChanged)
 
-    // Resnap to New Layout (Meta+Ctrl+Z, easy pinky key)
+    // Resnap to New PhosphorZones::Layout (Meta+Ctrl+Z, easy pinky key)
     Q_PROPERTY(QString resnapToNewLayoutShortcut READ resnapToNewLayoutShortcut WRITE setResnapToNewLayoutShortcut
                    NOTIFY resnapToNewLayoutShortcutChanged)
 
@@ -396,11 +396,11 @@ public:
     Q_PROPERTY(QString snapAllWindowsShortcut READ snapAllWindowsShortcut WRITE setSnapAllWindowsShortcut NOTIFY
                    snapAllWindowsShortcutChanged)
 
-    // Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
+    // PhosphorZones::Layout Picker (Meta+Alt+Space — browse and switch layouts interactively)
     Q_PROPERTY(QString layoutPickerShortcut READ layoutPickerShortcut WRITE setLayoutPickerShortcut NOTIFY
                    layoutPickerShortcutChanged)
 
-    // Toggle Layout Lock (Meta+Ctrl+L)
+    // Toggle PhosphorZones::Layout Lock (Meta+Ctrl+L)
     Q_PROPERTY(QString toggleLayoutLockShortcut READ toggleLayoutLockShortcut WRITE setToggleLayoutLockShortcut NOTIFY
                    toggleLayoutLockShortcutChanged)
 
@@ -506,7 +506,7 @@ public:
     bool labelFontStrikeout() const override;
     void setLabelFontStrikeout(bool strikeout) override;
 
-    // Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
+    // PhosphorZones::Zone geometry (Snapping.Gaps) — PhosphorConfig::Store-backed.
     int zonePadding() const override;
     void setZonePadding(int padding) override;
     int outerGap() const override;
@@ -581,7 +581,7 @@ public:
     int minimumWindowHeight() const override;
     void setMinimumWindowHeight(int height) override;
 
-    // Zone Selector — PhosphorConfig::Store-backed.
+    // PhosphorZones::Zone Selector — PhosphorConfig::Store-backed.
     bool zoneSelectorEnabled() const override;
     void setZoneSelectorEnabled(bool enabled) override;
     int zoneSelectorTriggerDistance() const override;
@@ -1006,8 +1006,8 @@ private:
     // Appearance + Labels + Opacity + Border + Effects.Blur are stored in
     // m_store; no cached members here.
 
-    // Zone settings
-    // Zone geometry is stored in m_store; no cached members here.
+    // PhosphorZones::Zone settings
+    // PhosphorZones::Zone geometry is stored in m_store; no cached members here.
 
     // Performance and behavior
     // Performance is stored in m_store; no cached members here.
@@ -1018,7 +1018,7 @@ private:
     // Default layout (used when no explicit assignment exists)
     // defaultLayoutId stored in m_store.
 
-    // Layout filtering
+    // PhosphorZones::Layout filtering
     // filterLayoutsByAspectRatio is stored in m_store.
 
     // Ordering
@@ -1027,8 +1027,8 @@ private:
     // Exclusions
     // Exclusions are stored in m_store; no cached members here.
 
-    // Zone Selector
-    // Zone selector is stored in m_store.
+    // PhosphorZones::Zone Selector
+    // PhosphorZones::Zone selector is stored in m_store.
     // (remaining zone selector members stored in m_store)
 
     // Virtual screen configurations (physicalScreenId -> config)

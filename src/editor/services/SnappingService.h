@@ -138,7 +138,7 @@ private:
     /**
      * @brief Collect all zone edge coordinates (plus canvas boundaries)
      * @param allZones All zones to collect edges from
-     * @param excludeZoneId Zone to exclude from edge collection
+     * @param excludeZoneId PhosphorZones::Zone to exclude from edge collection
      * @return EdgeLists with vertical (X) and horizontal (Y) edge coordinates
      */
     EdgeLists collectZoneEdges(const QVariantList& allZones, const QString& excludeZoneId) const;

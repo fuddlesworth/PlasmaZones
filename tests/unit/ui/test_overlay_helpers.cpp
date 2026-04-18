@@ -181,7 +181,7 @@ private Q_SLOTS:
         window.setProperty("highlightedZoneIds", QVariantList());
 
         QVariantList zones;
-        // Zone with empty id should never match empty highlightedZoneId
+        // PhosphorZones::Zone with empty id should never match empty highlightedZoneId
         QVariantMap z = makeZone(QString(), 0, 0, 960, 1080);
         zones.append(z);
 

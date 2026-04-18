@@ -62,14 +62,16 @@ package() {
         "$pkgdir/usr/share/libalpm/scripts/plasmazones-refresh-sycoca"
 
     # License files — GPL-3.0-or-later (main) + LGPL-2.1-or-later
-    # (the four Phosphor* libraries). The `license=()` array above declares
-    # both; both files must be shipped under /usr/share/licenses.
+    # (the eight Phosphor* libraries enumerated below). The `license=()`
+    # array above declares both; both files must be shipped under
+    # /usr/share/licenses.
     install -Dm644 "PlasmaZones-$pkgver/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 "PlasmaZones-$pkgver/COPYING.LESSER" \
         "$pkgdir/usr/share/licenses/$pkgname/COPYING.LESSER"
 
-    # Package ships libPhosphorConfig.so*, libPhosphorShell.so*,
+    # Package ships libPhosphorLayoutApi.so*, libPhosphorZones.so*, libPhosphorIdentity.so*,
+    # libPhosphorTiles.so*, libPhosphorConfig.so*, libPhosphorShell.so*,
     # libPhosphorRendering.so*, and libPhosphorLayer.so* plus their CMake
     # config and headers for downstream consumers. No separate -devel
     # package is produced; these are installed by `cmake --install` above

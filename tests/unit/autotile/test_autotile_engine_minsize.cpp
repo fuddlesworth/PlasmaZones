@@ -7,8 +7,8 @@
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 using namespace PlasmaZones;
@@ -24,7 +24,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PhosphorTiles::AlgorithmRegistry::instance();
     }
 
     void testWindowMinSizeUpdated_validWindow()

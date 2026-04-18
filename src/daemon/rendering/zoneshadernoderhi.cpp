@@ -44,7 +44,7 @@ ZoneShaderNodeRhi::~ZoneShaderNodeRhi()
 }
 
 // ============================================================================
-// Zone Counts
+// PhosphorZones::Zone Counts
 // ============================================================================
 
 void ZoneShaderNodeRhi::setZoneCounts(int total, int highlighted)

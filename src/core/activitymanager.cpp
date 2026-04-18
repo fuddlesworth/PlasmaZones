@@ -85,7 +85,7 @@ bool ActivityManager::init()
                         Q_EMIT currentActivityChanged(m_currentActivity);
                     }
 
-                    // Layout resolution is handled by the daemon's
+                    // PhosphorZones::Layout resolution is handled by the daemon's
                     // syncModeFromAssignments() via currentActivityChanged signal.
                 } else if (!m_activitiesAvailable && wasAvailable) {
                     qCWarning(lcCore) << "KActivities service stopped";
@@ -131,7 +131,7 @@ void ActivityManager::start()
 #ifdef KACTIVITIES_AVAILABLE
     m_running = true;
     connectSignals();
-    // Layout resolution is handled by the daemon via currentActivityChanged signal.
+    // PhosphorZones::Layout resolution is handled by the daemon via currentActivityChanged signal.
 #endif
 }
 

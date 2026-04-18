@@ -16,6 +16,24 @@
                 <annotation name="org.gtk.GDBus.DocString" value="List of layout IDs or JSON array of layout objects."/>
             </arg>
         </method>
+        <method name="getLayoutPreviewList">
+            <annotation name="org.gtk.GDBus.DocString" value="Source-agnostic list of renderer-ready previews across manual zone layouts and autotile algorithms. Each entry is a PhosphorLayout::LayoutPreview serialised to JSON (id, displayName, zones[]{x,y,width,height}, isAutotile, optional algorithm{...} metadata for autotile entries). Renderers consume uniformly without branching on the underlying source. Returns '[]' when no source is wired (early startup)."/>
+            <arg name="previewListJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="JSON array of LayoutPreview objects."/>
+            </arg>
+        </method>
+        <method name="getLayoutPreview">
+            <annotation name="org.gtk.GDBus.DocString" value="Source-agnostic preview for a single entry. id must match one returned by getLayoutPreviewList. windowCount is honoured by autotile sources (algorithm runs at that count); manual sources ignore it. Returns '{}' when id is unknown or no source is wired."/>
+            <arg name="id" type="s" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Preview id (manual layout UUID with braces, or 'autotile:&lt;algorithmId&gt;')."/>
+            </arg>
+            <arg name="windowCount" type="i" direction="in">
+                <annotation name="org.gtk.GDBus.DocString" value="Window count to render autotile algorithms with. Ignored by manual sources."/>
+            </arg>
+            <arg name="previewJson" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="LayoutPreview serialised to JSON, or '{}' if not found."/>
+            </arg>
+        </method>
         <method name="getLayout">
             <annotation name="org.gtk.GDBus.DocString" value="Returns a specific layout by ID as JSON. Empty string if not found."/>
             <arg name="id" type="s" direction="in">
@@ -429,6 +447,12 @@
                 <annotation name="org.gtk.GDBus.DocString" value="Full layout as JSON."/>
             </arg>
         </signal>
+        <signal name="activeLayoutChanged">
+            <annotation name="org.gtk.GDBus.DocString" value="Cheap context-switch notification: emitted alongside layoutChanged(json) on every active-layout switch, but carries only the layout UUID instead of the full JSON payload. Subscribers that re-load from disk (e.g. the editor) can bind to this signal and ignore the heavier layoutChanged emit."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the newly active layout."/>
+            </arg>
+        </signal>
         <signal name="layoutPropertyChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Compact per-property change notification. Replaces layoutChanged(json) for setLayoutHidden, setLayoutAutoAssign, and setLayoutAspectRatioClass. Subscribers that want the full shape should pull it via getLayout(layoutId) — the adaptor's cache is invalidated before the signal fires."/>
             <arg name="layoutId" type="s">
@@ -443,6 +467,18 @@
         </signal>
         <signal name="layoutListChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when the list of layouts changes."/>
+        </signal>
+        <signal name="layoutCreated">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a new layout is created (createLayout, createLayoutFromJson, duplicateLayout, importLayout). Carries the new layout's UUID."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the newly created layout."/>
+            </arg>
+        </signal>
+        <signal name="layoutDeleted">
+            <annotation name="org.gtk.GDBus.DocString" value="Emitted when a layout is deleted. Carries the UUID of the deleted layout."/>
+            <arg name="layoutId" type="s">
+                <annotation name="org.gtk.GDBus.DocString" value="UUID of the deleted layout."/>
+            </arg>
         </signal>
         <signal name="screenLayoutChanged">
             <annotation name="org.gtk.GDBus.DocString" value="Emitted when a screen's layout assignment changes."/>

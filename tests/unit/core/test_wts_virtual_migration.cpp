@@ -24,8 +24,8 @@
 #include "core/windowtrackingservice.h"
 #include "core/layoutmanager.h"
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/virtualdesktopmanager.h"
 #include "core/virtualscreen.h"
 #include "core/utils.h"
@@ -60,7 +60,7 @@ private Q_SLOTS:
         m_layoutManager->setActiveLayout(m_testLayout);
 
         m_zoneIds.clear();
-        for (Zone* z : m_testLayout->zones()) {
+        for (PhosphorZones::Zone* z : m_testLayout->zones()) {
             m_zoneIds.append(z->id().toString());
         }
     }
@@ -163,7 +163,7 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenAssignments().value(windowId), physId);
         QVERIFY(m_service->isWindowSnapped(windowId));
 
-        // Zone assignment is preserved throughout migration
+        // PhosphorZones::Zone assignment is preserved throughout migration
         QCOMPARE(m_service->zonesForWindow(windowId).first(), m_zoneIds[0]);
     }
 
@@ -244,7 +244,7 @@ private Q_SLOTS:
         //
         // A full integration test would call ScreenManager::setVirtualScreenConfig
         // with a new boundary, but WTS's test fixture uses nullptr for
-        // ScreenManager (it only needs LayoutManager + ZoneDetector). The
+        // ScreenManager (it only needs LayoutManager + PhosphorZones::ZoneDetector). The
         // boundary shift is a ScreenManager concern, not a WTS concern — WTS
         // only cares about the string screen ID.
         //
@@ -307,7 +307,7 @@ private Q_SLOTS:
         QCOMPARE(m_service->screenAssignments().value(win2), physId);
         QCOMPARE(m_service->screenAssignments().value(win3), physId);
 
-        // Zone assignments should be preserved
+        // PhosphorZones::Zone assignments should be preserved
         QVERIFY(m_service->isWindowSnapped(win1));
         QVERIFY(m_service->isWindowSnapped(win2));
         QVERIFY(m_service->isWindowSnapped(win3));
@@ -389,7 +389,7 @@ private:
     StubSettingsMigration* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;
-    Layout* m_testLayout = nullptr;
+    PhosphorZones::Layout* m_testLayout = nullptr;
     QStringList m_zoneIds;
 };
 

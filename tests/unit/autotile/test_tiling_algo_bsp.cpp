@@ -5,9 +5,9 @@
 #include <QRect>
 #include <QVector>
 
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingAlgorithm.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
 #include "core/constants.h"
 
 #include "../helpers/TilingTestHelpers.h"
@@ -27,9 +27,9 @@ private:
     QRect m_portraitScreen{0, 0, 1080, 1920};
     ScriptedAlgoTestSetup m_scriptSetup;
 
-    TilingAlgorithm* bsp()
+    PhosphorTiles::TilingAlgorithm* bsp()
     {
-        return AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
     }
 
     /**
@@ -40,9 +40,10 @@ private:
         auto* algo = bsp();
         if (!algo)
             return {};
-        TilingState state(QStringLiteral("test"));
+        PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(splitRatio);
-        return algo->calculateZones(makeParams(windowCount, screen, &state, gap, EdgeGaps::uniform(0)));
+        return algo->calculateZones(
+            makeParams(windowCount, screen, &state, gap, ::PhosphorLayout::EdgeGaps::uniform(0)));
     }
 
 private Q_SLOTS:
@@ -136,8 +137,10 @@ private Q_SLOTS:
 
         // All zones must have positive dimensions
         for (const QRect& zone : zones) {
-            QVERIFY2(zone.width() > 0, qPrintable(QStringLiteral("Zone width was %1").arg(zone.width())));
-            QVERIFY2(zone.height() > 0, qPrintable(QStringLiteral("Zone height was %1").arg(zone.height())));
+            QVERIFY2(zone.width() > 0,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone width was %1").arg(zone.width())));
+            QVERIFY2(zone.height() > 0,
+                     qPrintable(QStringLiteral("PhosphorZones::Zone height was %1").arg(zone.height())));
         }
 
         QVERIFY(allWithinBounds(zones, tinyScreen));
@@ -221,7 +224,7 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // 6. Zone dimensions positive — comprehensive check
+    // 6. PhosphorZones::Zone dimensions positive — comprehensive check
     // =========================================================================
 
     void testAllZonesPositiveDimensions_variousCounts()

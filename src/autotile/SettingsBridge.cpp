@@ -3,9 +3,9 @@
 
 #include "SettingsBridge.h"
 #include "AutotileEngine.h"
-#include "AlgorithmRegistry.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "AutotileConfig.h"
-#include "TilingState.h"
+#include <PhosphorTiles/TilingState.h>
 #include "config/settings.h"
 #include "core/constants.h"
 #include "core/logging.h"
@@ -19,16 +19,16 @@ namespace PlasmaZones {
 
 namespace {
 /// DRY helper: populate PreviewParams::savedAlgorithmSettings from AutotileConfig
-void populatePreviewSavedSettings(AlgorithmRegistry::PreviewParams& params,
+void populatePreviewSavedSettings(PhosphorTiles::AlgorithmRegistry::PreviewParams& params,
                                   const QHash<QString, AlgorithmSettings>& savedSettings)
 {
     for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
         QVariantMap entry{
-            {PerAlgoKeys::MasterCount, it.value().masterCount},
-            {PerAlgoKeys::SplitRatio, it.value().splitRatio},
+            {PhosphorTiles::AutotileJsonKeys::MasterCount, it.value().masterCount},
+            {PhosphorTiles::AutotileJsonKeys::SplitRatio, it.value().splitRatio},
         };
         if (!it.value().customParams.isEmpty()) {
-            entry[PerAlgoKeys::CustomParams] = it.value().customParams;
+            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
         }
         params.savedAlgorithmSettings[it.key()] = entry;
     }
@@ -212,16 +212,16 @@ void SettingsBridge::syncFromSettings(Settings* settings)
         m_engine->backfillWindows();
     }
 
-    // Update AlgorithmRegistry so preview generation uses the configured values.
+    // Update PhosphorTiles::AlgorithmRegistry so preview generation uses the configured values.
     // Per-algorithm settings are stored in the savedAlgorithmSettings map so
-    // generatePreviewZones() can look up any algorithm's saved params generically.
-    AlgorithmRegistry::PreviewParams previewParams;
+    // previewFromAlgorithm can look up any algorithm's saved params generically.
+    PhosphorTiles::AlgorithmRegistry::PreviewParams previewParams;
     previewParams.algorithmId = m_engine->m_algorithmId;
     previewParams.maxWindows = cfg->maxWindows;
     previewParams.masterCount = cfg->masterCount;
     previewParams.splitRatio = cfg->splitRatio;
     populatePreviewSavedSettings(previewParams, cfg->savedAlgorithmSettings);
-    AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
+    PhosphorTiles::AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
 
     if (configChanged && m_engine->isEnabled()) {
         // Cancel any pending debounced retile — we are doing a full resync
@@ -334,14 +334,14 @@ void SettingsBridge::connectToSettings(Settings* settings)
             m_engine->propagateGlobalMasterCount();
             scheduleSettingsRetile();
         }
-        // Update AlgorithmRegistry preview params so previews reflect the new values
-        AlgorithmRegistry::PreviewParams previewParams;
+        // Update PhosphorTiles::AlgorithmRegistry preview params so previews reflect the new values
+        PhosphorTiles::AlgorithmRegistry::PreviewParams previewParams;
         previewParams.algorithmId = m_engine->m_algorithmId;
         previewParams.maxWindows = m_engine->config()->maxWindows;
         previewParams.masterCount = m_engine->config()->masterCount;
         previewParams.splitRatio = m_engine->config()->splitRatio;
         populatePreviewSavedSettings(previewParams, newSaved);
-        AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
+        PhosphorTiles::AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);
@@ -455,7 +455,7 @@ QJsonArray SettingsBridge::serializeWindowOrders() const
 {
     QJsonArray entries;
     for (auto it = m_engine->m_screenStates.constBegin(); it != m_engine->m_screenStates.constEnd(); ++it) {
-        const TilingState* state = it.value();
+        const PhosphorTiles::TilingState* state = it.value();
         if (!state || state->windowCount() == 0) {
             continue;
         }

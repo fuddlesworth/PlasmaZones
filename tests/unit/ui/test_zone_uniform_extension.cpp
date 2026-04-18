@@ -57,7 +57,7 @@ struct Vec4
 
 Vec4 readVec4(const std::vector<char>& buf, int arrayIndex, int zoneIdx)
 {
-    // Layout: zoneRects[MaxZones][4] | zoneFillColors[MaxZones][4] | zoneBorderColors[MaxZones][4] |
+    // PhosphorZones::Layout: zoneRects[MaxZones][4] | zoneFillColors[MaxZones][4] | zoneBorderColors[MaxZones][4] |
     // zoneParams[MaxZones][4]
     const int arrayOffset = arrayIndex * MaxZones * kBytesPerVec4;
     const int zoneOffset = zoneIdx * kBytesPerVec4;

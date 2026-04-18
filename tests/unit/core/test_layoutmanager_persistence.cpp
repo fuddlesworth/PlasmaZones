@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "core/layoutmanager.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -31,10 +31,10 @@ class TestLayoutManagerPersistence : public QObject
     Q_OBJECT
 
 private:
-    Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
+    PhosphorZones::Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, parent);
-        auto* zone = new Zone();
+        auto* layout = new PhosphorZones::Layout(name, parent);
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);
         return layout;
@@ -45,7 +45,7 @@ private:
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
         auto* mgr = new LayoutManager(parent);
         // Override layout dir to a path under the guard's temp dir to avoid
-        // static-cache issues in Layout::isSystemLayout().
+        // static-cache issues in PhosphorZones::Layout::isSystemLayout().
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
@@ -163,7 +163,7 @@ private Q_SLOTS:
         auto* original = createTestLayout(QStringLiteral("Original"));
         mgr->addLayout(original);
 
-        Layout* duplicate = mgr->duplicateLayout(original);
+        PhosphorZones::Layout* duplicate = mgr->duplicateLayout(original);
         QVERIFY(duplicate != nullptr);
         QVERIFY(duplicate->id() != original->id());
         QCOMPARE(duplicate->name(), QStringLiteral("Original (Copy)"));
@@ -181,7 +181,7 @@ private Q_SLOTS:
         original->setAllowedActivities({QStringLiteral("activity1")});
         mgr->addLayout(original);
 
-        Layout* duplicate = mgr->duplicateLayout(original);
+        PhosphorZones::Layout* duplicate = mgr->duplicateLayout(original);
         QVERIFY(duplicate != nullptr);
 
         QVERIFY(!duplicate->hiddenFromSelector());

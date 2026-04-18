@@ -4,9 +4,9 @@
 #include "internal.h"
 #include "../overlayservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
 #include "../../core/virtualscreen.h"
@@ -228,7 +228,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     Q_EMIT visibilityChanged(true);
 }
 
-void OverlayService::updateLayout(Layout* layout)
+void OverlayService::updateLayout(PhosphorZones::Layout* layout)
 {
     setLayout(layout);
     if (m_visible) {
@@ -426,7 +426,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     // Set shader-specific properties (use QQmlProperty so QML bindings see updates)
     // Use per-screen layout (same resolution as updateOverlayWindow) so each monitor
     // gets the correct shader when per-screen assignments differ.
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (usingShader && screenLayout) {
         auto* registry = ShaderRegistry::instance();
@@ -761,7 +761,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
 
     // Get the layout for this screen to use layout-specific settings
     // Prefer per-screen assignment, fall back to global active layout
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
     // Update settings-based properties on the window itself (QML root)
     if (m_settings) {
@@ -813,7 +813,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     // Pass previewZones (all zones with relative geometries) only when LayoutPreview mode is active
     bool anyZoneUsesPreview = false;
     for (const QVariant& z : std::as_const(patched)) {
-        if (z.toMap().value(JsonKeys::OverlayDisplayMode).toInt() == 1) {
+        if (z.toMap().value(::PhosphorZones::ZoneJsonKeys::OverlayDisplayMode).toInt() == 1) {
             anyZoneUsesPreview = true;
             break;
         }

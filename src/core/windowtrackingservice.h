@@ -15,15 +15,18 @@
 #include <functional>
 #include <optional>
 
+namespace PhosphorZones {
+class IZoneDetector;
+class Layout;
+class Zone;
+}
+
 namespace PlasmaZones {
 
 class LayoutManager;
-class IZoneDetector;
 class ISettings;
 class ScreenManager;
 class VirtualDesktopManager;
-class Layout;
-class Zone;
 class WindowRegistry;
 
 /**
@@ -33,7 +36,7 @@ class WindowRegistry;
  * previously in WindowTrackingAdaptor. Following separation of concerns,
  * Principle, it handles:
  *
- * - Zone assignment management (which window is in which zone)
+ * - PhosphorZones::Zone assignment management (which window is in which zone)
  * - Pre-snap geometry storage (for restoring original size)
  * - Floating window state tracking
  * - Session persistence (save/load state across restarts)
@@ -54,8 +57,8 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
     Q_OBJECT
 
 public:
-    explicit WindowTrackingService(LayoutManager* layoutManager, IZoneDetector* zoneDetector, ISettings* settings,
-                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
+    explicit WindowTrackingService(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
+                                   ISettings* settings, VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
 
     /**
@@ -81,13 +84,13 @@ public:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Zone Assignment Management
+    // PhosphorZones::Zone Assignment Management
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
      * @brief Assign a window to a zone
      * @param windowId Full window ID
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @param screenId Screen where the zone is located
      * @param virtualDesktop Virtual desktop number (1-based, 0 = all)
      */
@@ -113,7 +116,7 @@ public:
     /**
      * @brief Get the primary zone ID for a window
      * @param windowId Full window ID
-     * @return Zone ID or empty string if not assigned
+     * @return PhosphorZones::Zone ID or empty string if not assigned
      */
     QString zoneForWindow(const QString& windowId) const;
 
@@ -126,7 +129,7 @@ public:
 
     /**
      * @brief Get all windows in a specific zone
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @return List of window IDs
      */
     QStringList windowsInZone(const QString& zoneId) const;
@@ -289,7 +292,7 @@ public:
     /**
      * @brief Get primary zone to restore to when unfloating
      * @param windowId Full window ID
-     * @return Zone ID or empty string if none
+     * @return PhosphorZones::Zone ID or empty string if none
      */
     QString preFloatZone(const QString& windowId) const;
 
@@ -654,7 +657,7 @@ public:
     /**
      * @brief Find the first empty zone in the layout for a screen
      * @param screenId Screen to find layout for (empty = active layout)
-     * @return Zone ID or empty string if all occupied
+     * @return PhosphorZones::Zone ID or empty string if all occupied
      */
     QString findEmptyZone(const QString& screenId = QString()) const;
 
@@ -667,9 +670,9 @@ public:
 
     /**
      * @brief Get geometry for a zone on a specific screen
-     * @param zoneId Zone UUID string
+     * @param zoneId PhosphorZones::Zone UUID string
      * @param screenId Screen identifier (empty = primary)
-     * @return Zone geometry in pixels, or invalid QRect if not found
+     * @return PhosphorZones::Zone geometry in pixels, or invalid QRect if not found
      */
     QRect zoneGeometry(const QString& zoneId, const QString& screenId = QString()) const;
 
@@ -1126,13 +1129,13 @@ private:
     void scheduleSaveState(DirtyMask fields = DirtyAll);
     bool isGeometryOnScreen(const QRect& geometry) const;
     QRect adjustGeometryToScreen(const QRect& geometry) const;
-    Zone* findZoneById(const QString& zoneId) const;
+    PhosphorZones::Zone* findZoneById(const QString& zoneId) const;
 
     /// Shared implementation for validatedPreTileGeometry and validatedPreTileGeometryExact.
     /// When exactOnly is true, does not fall back to the appId-keyed entry.
     std::optional<QRect> validatePreTileEntry(const QString& windowId, const QString& currentScreenName,
                                               bool exactOnly) const;
-    QString findEmptyZoneInLayout(Layout* layout, const QString& screenId, int desktopFilter = 0) const;
+    QString findEmptyZoneInLayout(PhosphorZones::Layout* layout, const QString& screenId, int desktopFilter = 0) const;
 
     /// Resolve a screen ID to an effective screen ID, falling back to the physical
     /// screen ID if a virtual screen no longer exists in the current configuration.
@@ -1143,7 +1146,7 @@ private:
 
     /// Sort zones by zone number ascending, with UUID tie-breaker for determinism
     /// when multiple zones share the same number.
-    static void sortZonesByNumber(QVector<Zone*>& zones);
+    static void sortZonesByNumber(QVector<PhosphorZones::Zone*>& zones);
 
     /// Find the nearest virtual screen by index proximity.
     /// Used when a stored virtual screen ID no longer exists in the current configuration.
@@ -1153,13 +1156,13 @@ private:
     /// Returns the zone and its parent layout, or {nullptr, nullptr} if not found.
     struct ZoneLookupResult
     {
-        Zone* zone = nullptr;
-        Layout* layout = nullptr;
+        PhosphorZones::Zone* zone = nullptr;
+        PhosphorZones::Layout* layout = nullptr;
     };
     ZoneLookupResult findZoneInAllLayouts(const QUuid& zoneUuid) const;
 
     /// Build a map from zone ID (toString) to 1-based position in sorted-by-zoneNumber order.
-    static QHash<QString, int> buildZonePositionMap(Layout* layout);
+    static QHash<QString, int> buildZonePositionMap(PhosphorZones::Layout* layout);
 
     /// Resolve zone geometry: combined geometry for multi-zone, single for single zone.
     /// Avoids repeating the (size>1) ? multiZoneGeometry : zoneGeometry ternary.
@@ -1182,7 +1185,7 @@ public:
     /**
      * @brief Current app class for a windowId, preferring the live registry.
      *
-     * Equivalent to Utils::extractAppId() when no registry is attached. With
+     * Equivalent to PhosphorIdentity::WindowId::extractAppId() when no registry is attached. With
      * a registry, returns the latest appId for the instance id — so snap rule
      * matching against a freshly-renamed window (Electron/CEF) sees the
      * current class.
@@ -1200,14 +1203,14 @@ public:
 private:
     // Dependencies
     LayoutManager* m_layoutManager;
-    IZoneDetector* m_zoneDetector;
+    PhosphorZones::IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
 
-    // Zone assignments: windowId -> zoneIds (supports multi-zone snap)
+    // PhosphorZones::Zone assignments: windowId -> zoneIds (supports multi-zone snap)
     QHash<QString, QStringList> m_windowZoneAssignments;
     // Screen tracking: windowId -> screenId
     QHash<QString, QString> m_windowScreenAssignments;

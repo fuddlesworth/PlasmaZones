@@ -2,18 +2,48 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "settingscontroller.h"
+
+#include "../common/layoutpreviewserialize.h"
+
+#include <PhosphorLayoutApi/LayoutPreview.h>
+
+namespace PlasmaZones {
+
+// File-scope helper used by both the ctor (file-watcher rebind path) and
+// loadLayoutsAsync (D-Bus refresh path). Manual layouts sort first;
+// within each category alphabetical by name.
+static void sortMergedLayoutList(QVariantList& list)
+{
+    std::sort(list.begin(), list.end(), [](const QVariant& a, const QVariant& b) {
+        const QVariantMap mapA = a.toMap();
+        const QVariantMap mapB = b.toMap();
+        const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
+        const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
+        if (aIsAutotile != bIsAutotile)
+            return !aIsAutotile;
+        return mapA.value(QStringLiteral("displayName")).toString().toLower()
+            < mapB.value(QStringLiteral("displayName")).toString().toLower();
+    });
+}
+
+} // namespace PlasmaZones
 #include "../core/constants.h"
 #include "version.h"
+#include "../core/geometryutils.h"
+#include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include "../core/virtualscreen.h"
 #include "dbusutils.h"
 
-#include "../autotile/AlgorithmRegistry.h"
-#include "../autotile/TilingAlgorithm.h"
-#include "../autotile/TilingState.h"
-#include "../autotile/algorithms/ScriptedAlgorithm.h"
-#include "../autotile/algorithms/ScriptedAlgorithmLoader.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/ZonesLayoutSource.h>
+
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
 #include "../config/configdefaults.h"
 #include "../config/configmigration.h"
@@ -51,8 +81,8 @@ namespace {
 
 QString userAlgorithmsDir()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms/");
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir + QLatin1Char('/');
 }
 
 QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
@@ -84,7 +114,7 @@ VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QStr
 
 SettingsController::~SettingsController()
 {
-    // Disconnect all pending algorithm registration watchers — AlgorithmRegistry
+    // Disconnect all pending algorithm registration watchers — PhosphorTiles::AlgorithmRegistry
     // is a singleton that outlives this object, so dangling connections would fire
     // into a destroyed SettingsController.
     for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
@@ -95,10 +125,76 @@ SettingsController::~SettingsController()
     m_algorithmWatchers.clear();
 }
 
-SettingsController::SettingsController(QObject* parent)
-    : QObject(parent)
-    , m_screenHelper(&m_settings, this)
+namespace {
+// Install the library-level screen-id resolver once per process so
+// Layout::fromJson() normalises legacy connector names ("DP-2") to
+// EDID-based IDs ("LG:Model:Serial") during load. Uses Utils::screenIdForName
+// which walks QGuiApplication::screens().
+void ensureScreenIdResolver()
 {
+    static const bool installed = [] {
+        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
+            if (name.isEmpty() || !Utils::isConnectorName(name))
+                return name;
+            return Utils::screenIdForName(name);
+        });
+        return true;
+    }();
+    (void)installed;
+}
+} // namespace
+
+SettingsController::SettingsController(QObject* parent)
+    : QObject((ensureScreenIdResolver(), parent))
+    , m_screenHelper(&m_settings, this)
+    , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get()))
+{
+    // Load the user's layouts immediately so localLayoutPreviews() returns
+    // a populated list on first call (before any QML query has had a
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
+    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
+    // and installs a QFileSystemWatcher so any subsequent disk changes
+    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    m_localLayoutManager->loadLayouts();
+    // Force a synchronous recalc over the primary screen so manual layouts
+    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
+    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
+    // referenceAspectRatio. Without this, settings-process previews render
+    // with zero-size rects for authored-pixel layouts. Daemon runs the
+    // same recalc in Daemon::init(); settings does it here because it owns
+    // an in-process LayoutManager independent of the daemon.
+    recalcLocalLayouts();
+    // Forward manager layouts-changed into the source so composite
+    // consumers (if any) see contentsChanged. Also re-run the recalc so
+    // future reads through the local source pick up current geometry.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
+            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    // When the file watcher detects a layout change on disk, refresh
+    // m_layouts from the local composite (manual + autotile) so QML
+    // rebinds even if the daemon isn't broadcasting D-Bus signals (or is
+    // down). The async refresh through scheduleLayoutLoad() /
+    // loadLayoutsAsync() also fires from daemon-side D-Bus signals and
+    // replaces m_layouts with the D-Bus-enriched view when the daemon is
+    // up — these two paths converge at m_layouts.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
+        recalcLocalLayouts();
+        QVariantList localLayouts = localLayoutPreviews();
+        if (!localLayouts.isEmpty()) {
+            sortMergedLayoutList(localLayouts);
+            m_layouts = std::move(localLayouts);
+            // Suppress the local-path emit while a D-Bus getLayoutList
+            // call is in flight — the async reply lambda will emit once
+            // it replaces m_layouts with the daemon-enriched view. If the
+            // daemon is unreachable or the call errors, the gate is
+            // cleared in the reply lambda's head and subsequent local
+            // emits run normally (fallback behaviour).
+            if (!m_awaitingDaemonLayouts) {
+                Q_EMIT layoutsChanged();
+            }
+        }
+    });
+
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
@@ -107,19 +203,20 @@ SettingsController::SettingsController(QObject* parent)
     m_startupRenderingBackend = m_settings.renderingBackend();
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
-    // The daemon also creates its own ScriptedAlgorithmLoader — the KCM runs
+    // The daemon also creates its own PhosphorTiles::ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate
-    // the shared AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new ScriptedAlgorithmLoader(this);
+    // the shared PhosphorTiles::AlgorithmRegistry singleton within their respective processes.
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir), this);
     scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Emit both signals: availableAlgorithmsChanged for algorithm-specific
     // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
     // (the layouts list includes autotile entries from the registry).
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::availableAlgorithmsChanged);
-    connect(scriptLoader, &ScriptedAlgorithmLoader::algorithmsChanged, this, &SettingsController::layoutsChanged);
+    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+            &SettingsController::layoutsChanged);
 
     // Listen for external settings changes from the daemon
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
@@ -197,33 +294,38 @@ SettingsController::SettingsController(QObject* parent)
         setNeedsSave(true);
     });
 
-    // Layout load timer (debounce)
+    // PhosphorZones::Layout load timer (debounce)
     m_layoutLoadTimer.setSingleShot(true);
     m_layoutLoadTimer.setInterval(50);
     connect(&m_layoutLoadTimer, &QTimer::timeout, this, &SettingsController::loadLayoutsAsync);
 
-    // Connect layout D-Bus signals for live updates
+    // Connect layout D-Bus signals for live updates — route through the 50 ms
+    // scheduleLayoutLoad() debounce slot so a burst of signals (e.g. editor
+    // save → layoutChanged + layoutListChanged together, or KCM property
+    // tweak → layoutPropertyChanged + layoutListChanged) coalesces into
+    // one loadLayoutsAsync() call instead of recomputing the full preview
+    // list + D-Bus round-trip for every hit.
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutCreated"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutDeleted"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // layoutChanged fires when a layout is modified (editor saves, zone changes, rename)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // layoutPropertyChanged fires on compact property mutations (hidden, autoAssign,
     // aspectRatioClass) — Phase 4 of refactor/dbus-performance. The settings UI still
     // triggers a full reload so the layout list view refreshes, but the daemon side
     // saved a full JSON serialization per mutation by not emitting layoutChanged.
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager),
-                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(loadLayoutsAsync()));
+                                          QStringLiteral("layoutPropertyChanged"), this, SLOT(scheduleLayoutLoad()));
     // layoutListChanged fires when the layout list changes (editor, import, system layout reload)
     QDBusConnection::sessionBus().connect(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                           QString(DBus::Interface::LayoutManager), QStringLiteral("layoutListChanged"),
-                                          this, SLOT(loadLayoutsAsync()));
+                                          this, SLOT(scheduleLayoutLoad()));
     // screenLayoutChanged(QString,QString,int) fires when assignments change (hotkeys, scripts, toggle)
     QDBusConnection::sessionBus().connect(
         QString(DBus::ServiceName), QString(DBus::ObjectPath), QString(DBus::Interface::LayoutManager),
@@ -613,7 +715,7 @@ void SettingsController::endExternalEdit()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
+// PhosphorZones::Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SettingsController::scheduleLayoutLoad()
@@ -623,42 +725,67 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
+    // Force-reload the in-process LayoutManager from disk before reading.
+    // The LayoutManager's QFileSystemWatcher catches most disk changes,
+    // but Qt's QFSW has known misses on cross-process atomic-rename
+    // writes (the daemon writes layouts via QSaveFile, which creates a
+    // new inode the watcher may not bind to in time). Belt-and-suspenders:
+    // every D-Bus layout signal that triggers loadLayoutsAsync (layoutCreated
+    // / layoutDeleted / layoutChanged / layoutPropertyChanged /
+    // layoutListChanged — see the connect block in the ctor) ALSO forces
+    // an explicit reload here, so the local-source preview path stays
+    // strictly in sync with the daemon's view regardless of which file-
+    // event path fires first.
+    if (m_localLayoutManager) {
+        m_localLayoutManager->loadLayouts();
+    }
+
+    // Step 1: instant paint from the in-process composite source is handled
+    // by the ctor-wired LayoutManager::layoutsChanged lambda (see ~line 180
+    // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
+    // and emits layoutsChanged). loadLayouts() above triggers that signal
+    // synchronously when the disk contents actually changed, so the instant-paint
+    // path runs without a duplicate recalc/emit here.
+
+    // Step 2: async D-Bus call to pick up daemon-side enrichment
+    // (hasSystemOrigin / hiddenFromSelector / defaultOrder / allow-lists)
+    // that the local composite can't know about. On reply the enriched
+    // list replaces m_layouts; if the call errors we keep the local
+    // previews from Step 1 visible rather than blanking the page.
     QDBusMessage msg =
         QDBusMessage::createMethodCall(QString(DBus::ServiceName), QString(DBus::ObjectPath),
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
+    // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
+    // on LayoutManager::layoutsChanged). The reply lambda clears this
+    // unconditionally so any subsequent local-only refresh (daemon down)
+    // emits as usual.
+    m_awaitingDaemonLayouts = true;
     auto* watcher = new QDBusPendingCallWatcher(QDBusConnection::sessionBus().asyncCall(msg), this);
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this, [this](QDBusPendingCallWatcher* w) {
         w->deleteLater();
+        // Clear the gate first so any local-path emit that arrives after
+        // an error reply (or after a successful one) runs normally.
+        m_awaitingDaemonLayouts = false;
 
-        QVariantList newLayouts;
         QDBusPendingReply<QStringList> reply = *w;
-
-        if (!reply.isError()) {
-            const QStringList layoutJsonList = reply.value();
-            for (const QString& layoutJson : layoutJsonList) {
-                QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
-                if (!doc.isNull() && doc.isObject()) {
-                    newLayouts.append(doc.object().toVariantMap());
-                }
-            }
-        } else {
-            qCWarning(lcCore) << "Failed to load layouts:" << reply.error().message();
+        if (reply.isError()) {
+            qCWarning(lcCore) << "Failed to load layouts (D-Bus):" << reply.error().message()
+                              << "— keeping local manual-layout previews from Step 1.";
+            return;
         }
 
-        // Sort: manual layouts first, then autotile, each alphabetical
-        std::sort(newLayouts.begin(), newLayouts.end(), [](const QVariant& a, const QVariant& b) {
-            const QVariantMap mapA = a.toMap();
-            const QVariantMap mapB = b.toMap();
-            const bool aIsAutotile = mapA.value(QStringLiteral("isAutotile")).toBool();
-            const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
-            if (aIsAutotile != bIsAutotile)
-                return !aIsAutotile;
-            return mapA.value(QStringLiteral("name")).toString().toLower()
-                < mapB.value(QStringLiteral("name")).toString().toLower();
-        });
+        QVariantList newLayouts;
+        const QStringList layoutJsonList = reply.value();
+        for (const QString& layoutJson : layoutJsonList) {
+            QJsonDocument doc = QJsonDocument::fromJson(layoutJson.toUtf8());
+            if (!doc.isNull() && doc.isObject()) {
+                newLayouts.append(doc.object().toVariantMap());
+            }
+        }
 
+        sortMergedLayoutList(newLayouts);
         m_layouts = newLayouts;
         Q_EMIT layoutsChanged();
 
@@ -671,9 +798,58 @@ void SettingsController::loadLayoutsAsync()
     });
 }
 
+// ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
+// See header doc for why these exist. Both helpers route through the shared
+// toVariantMap so settings + editor + future consumers emit the
+// same QML-compatible shape (drop-in replacement for the legacy m_layouts
+// produced by LayoutAdaptor::getLayoutList).
+
+QVariantList SettingsController::localLayoutPreviews() const
+{
+    QVariantList list;
+    if (!m_localSources.composite) {
+        return list;
+    }
+    const auto previews = m_localSources.composite->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(toVariantMap(preview));
+    }
+    return list;
+}
+
+void SettingsController::recalcLocalLayouts()
+{
+    if (!m_localLayoutManager) {
+        return;
+    }
+    QScreen* primary = Utils::primaryScreen();
+    if (!primary) {
+        return;
+    }
+    for (PhosphorZones::Layout* layout : m_localLayoutManager->layouts()) {
+        if (!layout) {
+            continue;
+        }
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+    }
+}
+
+QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
+{
+    if (id.isEmpty() || !m_localSources.composite) {
+        return {};
+    }
+    const auto preview = m_localSources.composite->previewAt(id, windowCount);
+    if (preview.id.isEmpty()) {
+        return {};
+    }
+    return toVariantMap(preview);
+}
+
 void SettingsController::createNewLayout()
 {
-    createNewLayout(QStringLiteral("New Layout"), QStringLiteral("custom"), -1, true);
+    createNewLayout(QStringLiteral("New PhosphorZones::Layout"), QStringLiteral("custom"), -1, true);
 }
 
 bool SettingsController::createNewLayout(const QString& name, const QString& type, int aspectRatioClass,
@@ -681,7 +857,7 @@ bool SettingsController::createNewLayout(const QString& name, const QString& typ
 {
     QString sanitizedName = name.trimmed();
     if (sanitizedName.isEmpty())
-        sanitizedName = QStringLiteral("New Layout");
+        sanitizedName = QStringLiteral("New PhosphorZones::Layout");
 
     const QString layoutType = type.isEmpty() ? QStringLiteral("custom") : type;
 
@@ -933,8 +1109,9 @@ void SettingsController::flushStagedAssignments()
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
             const QString tiling = s.tilingAlgorithmId.has_value()
-                ? (LayoutId::isAutotile(*s.tilingAlgorithmId) ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                                                              : *s.tilingAlgorithmId)
+                ? (PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
+                       ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                       : *s.tilingAlgorithmId)
                 : QString();
             DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
@@ -962,8 +1139,8 @@ void SettingsController::flushStagedAssignments()
 
         // Tiling algorithm assignment
         if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
-            const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
-                ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+            const QString algoId = PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
+                ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
                 : *s.tilingAlgorithmId;
             DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
@@ -1011,7 +1188,7 @@ bool SettingsController::stagedTilingLayout(const QString& screen, int desktop, 
         if (val.isEmpty()) {
             out = QString();
         } else {
-            out = LayoutId::isAutotile(val) ? val : LayoutId::makeAutotileId(val);
+            out = PhosphorLayout::LayoutId::isAutotile(val) ? val : PhosphorLayout::LayoutId::makeAutotileId(val);
         }
         return true;
     }
@@ -1236,7 +1413,7 @@ QString SettingsController::getTilingLayoutForScreenDesktop(const QString& scree
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString algo = reply.arguments().first().toString();
         if (!algo.isEmpty())
-            return LayoutId::makeAutotileId(algo);
+            return PhosphorLayout::LayoutId::makeAutotileId(algo);
     }
     return {};
 }
@@ -1277,7 +1454,7 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId))
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -1312,7 +1489,7 @@ QString SettingsController::getTilingLayoutForScreenActivity(const QString& scre
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (LayoutId::isAutotile(layoutId))
+        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -2192,11 +2369,8 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {
         const QString& val = *s->tilingAlgorithmId;
-        // Strip "autotile:" prefix if present
-        if (val.startsWith(QLatin1String("autotile:")))
-            map[QStringLiteral("algorithmId")] = val.mid(9);
-        else
-            map[QStringLiteral("algorithmId")] = val;
+        map[QStringLiteral("algorithmId")] =
+            PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
     }
     // Explicit mode takes priority (stageAssignmentEntry path)
     if (s->stagedMode.has_value()) {
@@ -2218,9 +2392,9 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 QVariantList SettingsController::availableAlgorithms() const
 {
     QVariantList algorithms;
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     for (const QString& id : registry->availableAlgorithms()) {
-        TilingAlgorithm* algo = registry->algorithm(id);
+        PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
             QVariantMap algoMap;
             algoMap[QStringLiteral("id")] = id;
@@ -2246,8 +2420,8 @@ QVariantList SettingsController::availableAlgorithms() const
 
 QVariantList SettingsController::customParamsForAlgorithm(const QString& algorithmId) const
 {
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return {};
     }
@@ -2277,8 +2451,8 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
     }
 
     // Validate paramName exists in the algorithm's declared custom params
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return;
     }
@@ -2323,16 +2497,16 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
 
     QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
-    QVariantMap customParams = algoEntry.value(PerAlgoKeys::CustomParams).toMap();
+    QVariantMap customParams = algoEntry.value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
     customParams[paramName] = coerced;
-    algoEntry[PerAlgoKeys::CustomParams] = customParams;
+    algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
 
     // Preserve existing splitRatio/masterCount if not already in the entry
-    if (!algoEntry.contains(PerAlgoKeys::SplitRatio)) {
-        algoEntry[PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
+    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::SplitRatio)) {
+        algoEntry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = algo->defaultSplitRatio();
     }
-    if (!algoEntry.contains(PerAlgoKeys::MasterCount)) {
-        algoEntry[PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
+    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::MasterCount)) {
+        algoEntry[PhosphorTiles::AutotileJsonKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
     }
 
     perAlgo[algorithmId] = algoEntry;
@@ -2345,7 +2519,7 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
     const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     const QVariant algoEntry = perAlgo.value(algorithmId);
     if (algoEntry.isValid()) {
-        const QVariant customVar = algoEntry.toMap().value(PerAlgoKeys::CustomParams);
+        const QVariant customVar = algoEntry.toMap().value(PhosphorTiles::AutotileJsonKeys::CustomParams);
         if (customVar.isValid()) {
             return customVar.toMap();
         }
@@ -2356,34 +2530,53 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
                                                           double splitRatio, int masterCount) const
 {
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         return {};
     }
 
-    const int previewSize = 1000;
+    // Custom-param-aware preview: the settings KCM's preview slider passes
+    // live master/split values without persisting them, and bundles saved
+    // custom params for the algorithm. That path diverges from
+    // previewFromAlgorithm (which reads the registry's configured params),
+    // so we build the TilingParams explicitly here. The relative-space
+    // projection mirrors LayoutPreview's contract (0..1 against the shared
+    // preview canvas size).
+    const int previewSize = PhosphorTiles::AlgorithmRegistry::PreviewCanvasSize;
     const QRect previewRect(0, 0, previewSize, previewSize);
 
-    TilingState state(QStringLiteral("preview"));
+    PhosphorTiles::TilingState state(QStringLiteral("preview"));
     state.setMasterCount(masterCount);
     state.setSplitRatio(splitRatio);
 
     const int count = qMax(1, windowCount);
-    TilingParams params = TilingParams::forPreview(count, previewRect, &state);
-
-    // Include saved custom params so preview reflects user configuration
+    PhosphorTiles::TilingParams params = PhosphorTiles::TilingParams::forPreview(count, previewRect, &state);
     params.customParams = savedCustomParams(algorithmId);
 
-    QVector<QRect> zones = algo->calculateZones(params);
+    const QVector<QRect> zones = algo->calculateZones(params);
 
-    return AlgorithmRegistry::zonesToRelativeGeometry(zones, previewRect);
+    QVariantList result;
+    result.reserve(zones.size());
+    for (int i = 0; i < zones.size(); ++i) {
+        QVariantMap relGeo;
+        relGeo[QLatin1String("x")] = static_cast<qreal>(zones[i].x()) / previewSize;
+        relGeo[QLatin1String("y")] = static_cast<qreal>(zones[i].y()) / previewSize;
+        relGeo[QLatin1String("width")] = static_cast<qreal>(zones[i].width()) / previewSize;
+        relGeo[QLatin1String("height")] = static_cast<qreal>(zones[i].height()) / previewSize;
+
+        QVariantMap zoneMap;
+        zoneMap[QLatin1String("zoneNumber")] = i + 1;
+        zoneMap[QLatin1String("relativeGeometry")] = relGeo;
+        result.append(zoneMap);
+    }
+    return result;
 }
 
 void SettingsController::openAlgorithmsFolder()
 {
-    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir;
     QDir dir(path);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -2400,8 +2593,8 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     if (!source.exists() || !source.isFile())
         return false;
 
-    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
-        + QStringLiteral("/plasmazones/algorithms");
+    const QString destDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/')
+        + ScriptedAlgorithmSubdir;
     QDir dir(destDir);
     if (!dir.exists()) {
         dir.mkpath(QStringLiteral("."));
@@ -2415,27 +2608,25 @@ bool SettingsController::importAlgorithm(const QString& filePath)
     }
 
     const bool ok = QFile::copy(filePath, destPath);
-    // ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
+    // PhosphorTiles::ScriptedAlgorithmLoader's QFileSystemWatcher will pick up the new file automatically
     return ok;
 }
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
 {
-    const QLatin1String prefix("autotile:");
-    if (layoutId.startsWith(prefix))
-        return layoutId.mid(prefix.size());
-    return layoutId;
+    return PhosphorLayout::LayoutId::isAutotile(layoutId) ? PhosphorLayout::LayoutId::extractAlgorithmId(layoutId)
+                                                          : layoutId;
 }
 
 QString SettingsController::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
         return QString();
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo)
         return QString();
-    auto* scripted = qobject_cast<ScriptedAlgorithm*>(algo);
+    auto* scripted = qobject_cast<PhosphorTiles::ScriptedAlgorithm*>(algo);
     if (!scripted)
         return QString();
     const QString path = scripted->filePath();
@@ -2460,10 +2651,10 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
     // Cancel any existing watcher for this ID to prevent stacking
     cancelAlgorithmWatcher(expectedId);
 
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
     auto conn = std::make_shared<QMetaObject::Connection>();
     m_algorithmWatchers[expectedId] = conn;
-    *conn = connect(registry, &AlgorithmRegistry::algorithmRegistered, this,
+    *conn = connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
                     [this, expectedId](const QString& registeredId) {
                         if (registeredId == expectedId) {
                             auto it = m_algorithmWatchers.find(expectedId);
@@ -2518,7 +2709,7 @@ void SettingsController::openLayoutFile(const QString& layoutId)
 {
     if (layoutId.isEmpty())
         return;
-    // Layout files use UUID without braces as the filename
+    // PhosphorZones::Layout files use UUID without braces as the filename
     const QUuid uuid(layoutId);
     if (uuid.isNull()) {
         qCDebug(lcCore) << "openLayoutFile: not a valid UUID layout ID:" << layoutId;
@@ -2530,7 +2721,7 @@ void SettingsController::openLayoutFile(const QString& layoutId)
     const QString located =
         QStandardPaths::locate(QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts/") + filename);
     if (located.isEmpty()) {
-        qCWarning(lcCore) << "Layout file not found:" << filename;
+        qCWarning(lcCore) << "PhosphorZones::Layout file not found:" << filename;
         return;
     }
     QDesktopServices::openUrl(QUrl::fromLocalFile(located));
@@ -2543,8 +2734,8 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Only user-created algorithms can be deleted."));
@@ -2596,8 +2787,8 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = AlgorithmRegistry::instance();
-    TilingAlgorithm* algo = registry->algorithm(algorithmId);
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));
         return false;
@@ -2789,7 +2980,7 @@ QString SettingsController::createNewAlgorithm(const QString& name, const QStrin
     if (baseTemplate != QLatin1String("blank") && !baseTemplate.isEmpty()) {
         const QString templateFile =
             QStandardPaths::locate(QStandardPaths::GenericDataLocation,
-                                   QStringLiteral("plasmazones/algorithms/") + baseTemplate + QStringLiteral(".js"));
+                                   ScriptedAlgorithmSubdir + QLatin1Char('/') + baseTemplate + QStringLiteral(".js"));
 
         if (!templateFile.isEmpty()) {
             QFile file(templateFile);
@@ -3169,16 +3360,16 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
 
         // Build PlasmaZones layout JSON
         QJsonObject pzLayout;
-        pzLayout[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-        pzLayout[QLatin1String(JsonKeys::Name)] =
-            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported Layout"));
-        pzLayout[QLatin1String(JsonKeys::Description)] = QStringLiteral("Imported from KZones");
-        pzLayout[QLatin1String(JsonKeys::IsBuiltIn)] = false;
-        pzLayout[QLatin1String(JsonKeys::ShowZoneNumbers)] = true;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+            kzLayout[QStringLiteral("name")].toString(QStringLiteral("Imported PhosphorZones::Layout"));
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Description)] = QStringLiteral("Imported from KZones");
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::IsBuiltIn)] = false;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ShowZoneNumbers)] = true;
 
         int padding = kzLayout[QStringLiteral("padding")].toInt(0);
         if (padding > 0) {
-            pzLayout[QLatin1String(JsonKeys::ZonePadding)] = padding;
+            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZonePadding)] = padding;
         }
 
         // Convert zones — skip layouts with no zones
@@ -3206,16 +3397,17 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
             int zoneNum = pzZones.size() + 1;
 
             QJsonObject pzZone;
-            pzZone[QLatin1String(JsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
-            pzZone[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
-            pzZone[QLatin1String(JsonKeys::Name)] = QStringLiteral("Zone %1").arg(zoneNum);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Id)] = QUuid::createUuid().toString(QUuid::WithBraces);
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::Name)] =
+                QStringLiteral("PhosphorZones::Zone %1").arg(zoneNum);
 
             QJsonObject relGeo;
-            relGeo[QLatin1String(JsonKeys::X)] = x;
-            relGeo[QLatin1String(JsonKeys::Y)] = y;
-            relGeo[QLatin1String(JsonKeys::Width)] = w;
-            relGeo[QLatin1String(JsonKeys::Height)] = h;
-            pzZone[QLatin1String(JsonKeys::RelativeGeometry)] = relGeo;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::X)] = x;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Y)] = y;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Width)] = w;
+            relGeo[QLatin1String(::PhosphorZones::ZoneJsonKeys::Height)] = h;
+            pzZone[QLatin1String(::PhosphorZones::ZoneJsonKeys::RelativeGeometry)] = relGeo;
 
             pzZones.append(pzZone);
 
@@ -3226,15 +3418,15 @@ int SettingsController::importKZonesLayouts(const QJsonArray& kzonesArray)
                 if (appClass.isEmpty())
                     continue;
                 QJsonObject rule;
-                rule[QLatin1String(JsonKeys::Pattern)] = appClass;
-                rule[QLatin1String(JsonKeys::ZoneNumber)] = zoneNum;
+                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::Pattern)] = appClass;
+                rule[QLatin1String(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = zoneNum;
                 appRules.append(rule);
             }
         }
 
-        pzLayout[QLatin1String(JsonKeys::Zones)] = pzZones;
+        pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::Zones)] = pzZones;
         if (!appRules.isEmpty()) {
-            pzLayout[QLatin1String(JsonKeys::AppRules)] = appRules;
+            pzLayout[QLatin1String(::PhosphorZones::ZoneJsonKeys::AppRules)] = appRules;
         }
 
         // Send to daemon via createLayoutFromJson D-Bus method
@@ -3283,10 +3475,10 @@ QVariantList SettingsController::getVirtualScreenConfig(const QString& physicalS
                 QJsonObject regionObj = screenObj.value(QLatin1String("region")).toObject();
                 QVariantMap screen;
                 screen[QStringLiteral("displayName")] = screenObj.value(QLatin1String("displayName")).toString();
-                screen[QStringLiteral("x")] = regionObj.value(JsonKeys::X).toDouble();
-                screen[QStringLiteral("y")] = regionObj.value(JsonKeys::Y).toDouble();
-                screen[QStringLiteral("width")] = regionObj.value(JsonKeys::Width).toDouble();
-                screen[QStringLiteral("height")] = regionObj.value(JsonKeys::Height).toDouble();
+                screen[QStringLiteral("x")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::X).toDouble();
+                screen[QStringLiteral("y")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Y).toDouble();
+                screen[QStringLiteral("width")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Width).toDouble();
+                screen[QStringLiteral("height")] = regionObj.value(::PhosphorZones::ZoneJsonKeys::Height).toDouble();
                 screen[QStringLiteral("index")] = screenObj.value(QLatin1String("index")).toInt();
                 result.append(screen);
             }
@@ -3312,10 +3504,10 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
         QJsonObject screenObj;
         screenObj[QLatin1String("index")] = def.index;
         screenObj[QLatin1String("displayName")] = def.displayName;
-        screenObj[QLatin1String("region")] = QJsonObject{{JsonKeys::X, def.region.x()},
-                                                         {JsonKeys::Y, def.region.y()},
-                                                         {JsonKeys::Width, def.region.width()},
-                                                         {JsonKeys::Height, def.region.height()}};
+        screenObj[QLatin1String("region")] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, def.region.x()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Y, def.region.y()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Width, def.region.width()},
+                                                         {::PhosphorZones::ZoneJsonKeys::Height, def.region.height()}};
         screensArr.append(screenObj);
     }
     root[QLatin1String("screens")] = screensArr;

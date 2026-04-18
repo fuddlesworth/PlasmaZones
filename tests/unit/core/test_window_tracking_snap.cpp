@@ -291,7 +291,7 @@ private Q_SLOTS:
     }
 
     // =====================================================================
-    // Last Used Zone Tests
+    // Last Used PhosphorZones::Zone Tests
     // =====================================================================
 
     void testLastUsedZone_tracked()
@@ -356,7 +356,7 @@ private Q_SLOTS:
         m_tracker->windowSnapped(windowId, normalZone);
         QCOMPARE(m_tracker->getLastUsedZoneId(), normalZone);
 
-        // Zone selector snaps should NOT update last used zone
+        // PhosphorZones::Zone selector snaps should NOT update last used zone
         m_tracker->windowSnapped(windowId, selectorZone);
         QCOMPARE(m_tracker->getLastUsedZoneId(), normalZone);
     }

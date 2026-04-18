@@ -21,9 +21,9 @@
 #include <QSignalSpy>
 
 #include "dbus/layoutadaptor.h"
-#include "core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
-#include "core/zone.h"
+#include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 
 using namespace PlasmaZones;
@@ -39,9 +39,9 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
         m_layoutManager = new LayoutManager(m_parent);
-        auto* layout = new Layout(QStringLiteral("SignalTestLayout"));
+        auto* layout = new PhosphorZones::Layout(QStringLiteral("SignalTestLayout"));
         for (int i = 0; i < 2; ++i) {
-            auto* zone = new Zone(QRectF(0.5 * i, 0.0, 0.5, 1.0));
+            auto* zone = new PhosphorZones::Zone(QRectF(0.5 * i, 0.0, 0.5, 1.0));
             zone->setZoneNumber(i + 1);
             layout->addZone(zone);
         }
@@ -146,7 +146,7 @@ private Q_SLOTS:
         // Prime the cache.
         const QString beforeJson = m_adaptor->getLayout(m_layoutId);
         QVERIFY(!beforeJson.isEmpty());
-        // Layout::toJson() only serializes the hiddenFromSelector key when
+        // PhosphorZones::Layout::toJson() only serializes the hiddenFromSelector key when
         // the flag is true, so beforeJson (default false) must not contain it.
         QVERIFY(!beforeJson.contains(QLatin1String("hiddenFromSelector")));
 

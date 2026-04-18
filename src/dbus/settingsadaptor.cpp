@@ -194,7 +194,7 @@ void SettingsAdaptor::initializeRegistry()
 
     REGISTER_BOOL_SETTING("zoneSpanEnabled", zoneSpanEnabled, setZoneSpanEnabled)
 
-    // Zone span modifier (legacy single value)
+    // PhosphorZones::Zone span modifier (legacy single value)
     m_getters[QStringLiteral("zoneSpanModifier")] = [this]() {
         return static_cast<int>(m_settings->zoneSpanModifier());
     };
@@ -208,7 +208,7 @@ void SettingsAdaptor::initializeRegistry()
     };
     m_schemas[QStringLiteral("zoneSpanModifier")] = QStringLiteral("int");
 
-    // Zone span triggers list (multi-bind)
+    // PhosphorZones::Zone span triggers list (multi-bind)
     m_getters[QStringLiteral("zoneSpanTriggers")] = [this]() {
         return QVariant::fromValue(m_settings->zoneSpanTriggers());
     };
@@ -306,7 +306,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_BOOL_SETTING("enableAudioVisualizer", enableAudioVisualizer, setEnableAudioVisualizer)
     REGISTER_INT_SETTING("audioSpectrumBarCount", audioSpectrumBarCount, setAudioSpectrumBarCount)
 
-    // Zone settings
+    // PhosphorZones::Zone settings
     REGISTER_INT_SETTING("zonePadding", zonePadding, setZonePadding)
     REGISTER_INT_SETTING("outerGap", outerGap, setOuterGap)
     REGISTER_BOOL_SETTING("usePerSideOuterGap", usePerSideOuterGap, setUsePerSideOuterGap)
@@ -361,7 +361,7 @@ void SettingsAdaptor::initializeRegistry()
     REGISTER_INT_SETTING("minimumWindowWidth", minimumWindowWidth, setMinimumWindowWidth)
     REGISTER_INT_SETTING("minimumWindowHeight", minimumWindowHeight, setMinimumWindowHeight)
 
-    // Zone selector settings
+    // PhosphorZones::Zone selector settings
     REGISTER_BOOL_SETTING("zoneSelectorEnabled", zoneSelectorEnabled, setZoneSelectorEnabled)
     REGISTER_INT_SETTING("zoneSelectorTriggerDistance", zoneSelectorTriggerDistance, setZoneSelectorTriggerDistance)
     // zoneSelectorPosition: enum (0=TopLeft .. 8=BottomRight)

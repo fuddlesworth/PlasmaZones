@@ -221,13 +221,13 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
         }
 
         QJsonObject info;
-        info[JsonKeys::Name] = screen->name();
+        info[::PhosphorZones::ZoneJsonKeys::Name] = screen->name();
         info[JsonKeys::Manufacturer] = screen->manufacturer();
         info[JsonKeys::Model] = screen->model();
-        info[JsonKeys::Geometry] = QJsonObject{{JsonKeys::X, geom.x()},
-                                               {JsonKeys::Y, geom.y()},
-                                               {JsonKeys::Width, geom.width()},
-                                               {JsonKeys::Height, geom.height()}};
+        info[JsonKeys::Geometry] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, geom.x()},
+                                               {::PhosphorZones::ZoneJsonKeys::Y, geom.y()},
+                                               {::PhosphorZones::ZoneJsonKeys::Width, geom.width()},
+                                               {::PhosphorZones::ZoneJsonKeys::Height, geom.height()}};
         // Scale physical size proportionally for virtual screens.
         // A VS covering width=0.5 of the physical monitor gets half the mm width.
         QSizeF physSize = screen->physicalSize();
@@ -240,8 +240,8 @@ QString ScreenAdaptor::getScreenInfo(const QString& screenId)
             const QRectF& region = vsConfig.screens[vsIndex].region;
             physSize = QSizeF(physSize.width() * region.width(), physSize.height() * region.height());
         }
-        info[JsonKeys::PhysicalSize] =
-            QJsonObject{{JsonKeys::Width, physSize.width()}, {JsonKeys::Height, physSize.height()}};
+        info[JsonKeys::PhysicalSize] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::Width, physSize.width()},
+                                                   {::PhosphorZones::ZoneJsonKeys::Height, physSize.height()}};
         info[JsonKeys::DevicePixelRatio] = screen->devicePixelRatio();
         info[JsonKeys::RefreshRate] = screen->refreshRate();
         info[JsonKeys::Depth] = screen->depth();
@@ -370,13 +370,13 @@ QString ScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenId)
     QJsonArray screensArr;
     for (const auto& vs : config.screens) {
         QJsonObject screenObj;
-        screenObj[JsonKeys::Id] = vs.id;
+        screenObj[::PhosphorZones::ZoneJsonKeys::Id] = vs.id;
         screenObj[JsonKeys::Index] = vs.index;
         screenObj[JsonKeys::DisplayName] = vs.displayName;
-        screenObj[JsonKeys::Region] = QJsonObject{{JsonKeys::X, vs.region.x()},
-                                                  {JsonKeys::Y, vs.region.y()},
-                                                  {JsonKeys::Width, vs.region.width()},
-                                                  {JsonKeys::Height, vs.region.height()}};
+        screenObj[JsonKeys::Region] = QJsonObject{{::PhosphorZones::ZoneJsonKeys::X, vs.region.x()},
+                                                  {::PhosphorZones::ZoneJsonKeys::Y, vs.region.y()},
+                                                  {::PhosphorZones::ZoneJsonKeys::Width, vs.region.width()},
+                                                  {::PhosphorZones::ZoneJsonKeys::Height, vs.region.height()}};
         screensArr.append(screenObj);
     }
     root[JsonKeys::Screens] = screensArr;
@@ -443,8 +443,10 @@ void ScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, cons
         def.id = VirtualScreenId::make(physicalScreenId, def.index);
         def.physicalScreenId = physicalScreenId;
         def.displayName = screenObj[JsonKeys::DisplayName].toString();
-        def.region = QRectF(regionObj[JsonKeys::X].toDouble(), regionObj[JsonKeys::Y].toDouble(),
-                            regionObj[JsonKeys::Width].toDouble(), regionObj[JsonKeys::Height].toDouble());
+        def.region = QRectF(regionObj[::PhosphorZones::ZoneJsonKeys::X].toDouble(),
+                            regionObj[::PhosphorZones::ZoneJsonKeys::Y].toDouble(),
+                            regionObj[::PhosphorZones::ZoneJsonKeys::Width].toDouble(),
+                            regionObj[::PhosphorZones::ZoneJsonKeys::Height].toDouble());
         config.screens.append(def);
     }
 

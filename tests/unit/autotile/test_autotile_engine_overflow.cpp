@@ -7,8 +7,8 @@
 
 #include "autotile/AutotileEngine.h"
 #include "autotile/AutotileConfig.h"
-#include "autotile/TilingState.h"
-#include "autotile/AlgorithmRegistry.h"
+#include <PhosphorTiles/TilingState.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "core/constants.h"
 
 using namespace PlasmaZones;
@@ -24,7 +24,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        AlgorithmRegistry::instance();
+        PhosphorTiles::AlgorithmRegistry::instance();
     }
 
     void testOverflow_excessWindowsAutoFloated()
@@ -41,7 +41,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QVERIFY(state != nullptr);
         QCOMPARE(state->tiledWindowCount(), 3);
 
@@ -66,7 +66,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-b"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -101,7 +101,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QCOMPARE(state->tiledWindowCount(), 3);
 
         engine.config()->maxWindows = 2;
@@ -129,7 +129,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -158,7 +158,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -184,7 +184,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screen1);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(screen1);
 
         engine.config()->maxWindows = 1;
         state1->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -211,7 +211,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QCOMPARE(state->tiledWindowCount(), 3);
 
         engine.config()->maxWindows = 2;
@@ -241,7 +241,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-4"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 2;
         state->setCalculatedZones({QRect(0, 0, 500, 500), QRect(500, 0, 500, 500)});
@@ -277,7 +277,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -306,7 +306,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
 
         engine.config()->maxWindows = 1;
         state->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -333,8 +333,8 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-4"), screen2);
         QCoreApplication::processEvents();
 
-        TilingState* state1 = engine.stateForScreen(screen1);
-        TilingState* state2 = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state1 = engine.stateForScreen(screen1);
+        PhosphorTiles::TilingState* state2 = engine.stateForScreen(screen2);
 
         engine.config()->maxWindows = 1;
         state1->setCalculatedZones({QRect(0, 0, 1000, 1000)});
@@ -346,7 +346,7 @@ private Q_SLOTS:
         engine.setAutotileScreens({screen2});
         QVERIFY(engine.isEnabled());
 
-        TilingState* state2After = engine.stateForScreen(screen2);
+        PhosphorTiles::TilingState* state2After = engine.stateForScreen(screen2);
         QVERIFY(state2After->isFloating(QStringLiteral("win-4")));
     }
 
@@ -364,7 +364,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-3"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         QCOMPARE(state->tiledWindowCount(), 3);
 
         QVariantMap overrides;
@@ -391,7 +391,7 @@ private Q_SLOTS:
         engine.windowOpened(QStringLiteral("win-2"), screenName);
         QCoreApplication::processEvents();
 
-        TilingState* state = engine.stateForScreen(screenName);
+        PhosphorTiles::TilingState* state = engine.stateForScreen(screenName);
         state->setFocusedWindow(QStringLiteral("win-2"));
 
         engine.config()->maxWindows = 1;

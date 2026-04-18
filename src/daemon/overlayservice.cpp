@@ -6,10 +6,12 @@
 #include "cavaservice.h"
 #include "windowthumbnailservice.h"
 
-#include "../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../core/layoutmanager.h"
-#include "../core/zone.h"
-#include "../core/layoututils.h"
+#include <PhosphorZones/Zone.h>
+#include <PhosphorZones/LayoutUtils.h>
+#include "../common/layoutpreviewserialize.h"
+#include "../core/unifiedlayoutlist.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
@@ -744,7 +746,7 @@ void OverlayService::updateSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayout(Layout* layout)
+void OverlayService::setLayout(PhosphorZones::Layout* layout)
 {
     if (m_layout != layout) {
         m_layout = layout;
@@ -753,7 +755,7 @@ void OverlayService::setLayout(Layout* layout)
     }
 }
 
-Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
+PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
 {
     // Physical QScreen* overload: derives screenId and delegates.
     // Callers with a known virtual screenId should use the QString overload directly.
@@ -763,9 +765,9 @@ Layout* OverlayService::resolveScreenLayout(QScreen* screen) const
     return resolveScreenLayout(Utils::screenIdentifier(screen));
 }
 
-Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
+PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
 {
-    Layout* screenLayout = nullptr;
+    PhosphorZones::Layout* screenLayout = nullptr;
     if (m_layoutManager && !screenId.isEmpty()) {
         screenLayout = m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
         if (!screenLayout) {
@@ -970,13 +972,12 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
     // whether to show manual layouts, autotile algorithms, or both.
     bool includeManual = m_includeManualLayouts;
     bool includeAutotile = m_includeAutotileLayouts;
-    auto* layoutManager = dynamic_cast<LayoutManager*>(m_layoutManager);
-    if (layoutManager) {
+    if (m_layoutManager) {
         const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
         if (!resolvedId.isEmpty()) {
             const QString assignmentId =
-                layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
-            if (LayoutId::isAutotile(assignmentId)) {
+                m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 includeManual = false;
                 includeAutotile = true;
             } else {
@@ -985,11 +986,11 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
             }
         }
     }
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
         Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
-        LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
-    return LayoutUtils::toVariantList(entries);
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
+    return PlasmaZones::toVariantList(entries);
 }
 
 void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)
@@ -1011,7 +1012,7 @@ void OverlayService::setExcludedScreens(const QSet<QString>& screenIds)
 int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
     // Ordering doesn't affect count — skip custom order for performance
-    const auto entries = LayoutUtils::buildUnifiedLayoutList(
+    const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
         m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio());

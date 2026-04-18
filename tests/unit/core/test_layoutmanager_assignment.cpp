@@ -20,8 +20,8 @@
 #include <vector>
 
 #include "core/layoutmanager.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "core/constants.h"
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -34,10 +34,10 @@ class TestLayoutManagerAssignment : public QObject
     Q_OBJECT
 
 private:
-    Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
+    PhosphorZones::Layout* createTestLayout(const QString& name, QObject* parent = nullptr)
     {
-        auto* layout = new Layout(name, parent);
-        auto* zone = new Zone();
+        auto* layout = new PhosphorZones::Layout(name, parent);
+        auto* zone = new PhosphorZones::Zone();
         zone->setRelativeGeometry(QRectF(0, 0, 1, 1));
         layout->addZone(zone);
         return layout;
@@ -86,7 +86,7 @@ private Q_SLOTS:
         // Desktop 1 has no explicit entry — cascades to display default
         QCOMPARE(mgr->layoutForScreen(QStringLiteral("DP-1"), 1)->name(), QStringLiteral("ScreenSpecific"));
 
-        Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
+        PhosphorZones::Layout* fallback = mgr->layoutForScreen(QStringLiteral("HDMI-1"));
         QVERIFY(fallback != nullptr);
         QCOMPARE(fallback->name(), QStringLiteral("Default"));
     }
@@ -453,7 +453,7 @@ private Q_SLOTS:
             {
                 auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
                 grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
-                grp->writeString(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
+                grp->writeString(QStringLiteral("PhosphorTiles::TilingAlgorithm"), QStringLiteral("dwindle"));
                 // SnappingLayout intentionally empty
             }
             // Write old ModeTracking group with the manual layout ID
@@ -606,13 +606,13 @@ private Q_SLOTS:
                 auto g = configBackend->group(QStringLiteral("Assignment:eDP-1"));
                 g->writeInt(QLatin1String("Mode"), 0);
                 g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{aaaa-bbbb}"));
-                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("dwindle"));
+                g->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), QStringLiteral("dwindle"));
             }
             {
                 auto g = configBackend->group(QStringLiteral("Assignment:HDMI-A-1:Desktop:2"));
                 g->writeInt(QLatin1String("Mode"), 1);
                 g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{cccc-dddd}"));
-                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("bsp"));
+                g->writeString(QLatin1String("PhosphorTiles::TilingAlgorithm"), QStringLiteral("bsp"));
             }
             {
                 auto g = configBackend->group(ConfigDefaults::quickLayoutsGroup());

@@ -63,7 +63,7 @@ public:
         // Save window-zone assignments using STABLE IDs
         QJsonObject assignmentsObj;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-            QString stableId = PlasmaZones::Utils::extractAppId(it.key());
+            QString stableId = PhosphorIdentity::WindowId::extractAppId(it.key());
             assignmentsObj[stableId] = it.value().isEmpty() ? QString() : it.value().first();
         }
         root[QStringLiteral("windowZoneAssignments")] = assignmentsObj;
@@ -102,7 +102,7 @@ public:
             return false;
         }
 
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         if (!m_pendingZoneAssignments.contains(stableId)) {
             zoneId.clear();
             return false;
@@ -116,7 +116,7 @@ public:
     /// Consume a pending zone assignment (after successful restore)
     void consumePendingAssignment(const QString& windowId)
     {
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         m_pendingZoneAssignments.remove(stableId);
     }
 
@@ -414,7 +414,7 @@ private Q_SLOTS:
 
     void testScenario_neverSnappedWindowGetsAutoSnapped()
     {
-        // BUG: Firefox snapped to Zone A, Konsole never snapped.
+        // BUG: Firefox snapped to PhosphorZones::Zone A, Konsole never snapped.
         // After relog, new Konsole incorrectly matches Firefox's pending zone
         // because different app class -> no collision here (passes correctly).
         QString firefox = QStringLiteral("org.mozilla.firefox|11111");
@@ -442,7 +442,7 @@ private Q_SLOTS:
 
     void testScenario_wrongWindowGetsRestoredAmongMultipleSameClass()
     {
-        // BUG: Konsole #1 snapped to Zone A, Konsole #2 not snapped.
+        // BUG: Konsole #1 snapped to PhosphorZones::Zone A, Konsole #2 not snapped.
         // After relog, new instance incorrectly matches because of
         // identity collision - can't distinguish which Konsole was snapped.
         QString konsole1 = QStringLiteral("org.kde.konsole|11111"); // Snapped

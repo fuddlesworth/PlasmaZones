@@ -9,64 +9,64 @@
 #include <QVector>
 
 #include "core/interfaces.h"
-#include "core/layout.h"
-#include "core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 
 namespace PlasmaZones {
 
 /**
- * @brief Stub IZoneDetector for unit tests that need a WindowTrackingService
+ * @brief Stub PhosphorZones::IZoneDetector for unit tests that need a WindowTrackingService
  *
  * All detection methods return empty/null results. Used by multiple test files
  * (snap assist, WTS lifecycle, virtual migration) to satisfy the constructor
  * dependency without requiring real zone detection logic.
  */
-class StubZoneDetector : public IZoneDetector
+class StubZoneDetector : public PhosphorZones::IZoneDetector
 {
-    // Q_OBJECT is intentionally omitted here. IZoneDetector already has Q_OBJECT
+    // Q_OBJECT is intentionally omitted here. PhosphorZones::IZoneDetector already has Q_OBJECT
     // and provides the meta-object infrastructure (vtable, signal dispatch, MOC
     // data). A concrete subclass only needs Q_OBJECT if it declares new signals
     // or slots of its own. StubZoneDetector adds neither, so omitting Q_OBJECT
     // is correct and avoids vtable/ODR violations when this header is included
     // from multiple translation units (e.g. Unity builds). The existing signals
-    // declared in IZoneDetector remain fully functional via the base meta-object.
+    // declared in PhosphorZones::IZoneDetector remain fully functional via the base meta-object.
 public:
     explicit StubZoneDetector(QObject* parent = nullptr)
-        : IZoneDetector(parent)
+        : PhosphorZones::IZoneDetector(parent)
     {
     }
-    Layout* layout() const override
+    PhosphorZones::Layout* layout() const override
     {
         return m_layout;
     }
-    void setLayout(Layout* layout) override
+    void setLayout(PhosphorZones::Layout* layout) override
     {
         m_layout = layout;
     }
-    ZoneDetectionResult detectZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectZone(const QPointF&) const override
     {
         return {};
     }
-    ZoneDetectionResult detectMultiZone(const QPointF&) const override
+    PhosphorZones::ZoneDetectionResult detectMultiZone(const QPointF&) const override
     {
         return {};
     }
-    Zone* zoneAtPoint(const QPointF&) const override
+    PhosphorZones::Zone* zoneAtPoint(const QPointF&) const override
     {
         return nullptr;
     }
-    Zone* nearestZone(const QPointF&) const override
+    PhosphorZones::Zone* nearestZone(const QPointF&) const override
     {
         return nullptr;
     }
-    QVector<Zone*> expandPaintedZonesToRect(const QVector<Zone*>&) const override
+    QVector<PhosphorZones::Zone*> expandPaintedZonesToRect(const QVector<PhosphorZones::Zone*>&) const override
     {
         return {};
     }
-    void highlightZone(Zone*) override
+    void highlightZone(PhosphorZones::Zone*) override
     {
     }
-    void highlightZones(const QVector<Zone*>&) override
+    void highlightZones(const QVector<PhosphorZones::Zone*>&) override
     {
     }
     void clearHighlights() override
@@ -74,20 +74,20 @@ public:
     }
 
 private:
-    Layout* m_layout = nullptr;
+    PhosphorZones::Layout* m_layout = nullptr;
 };
 
 /**
  * @brief Create a test layout with equally-spaced horizontal zones
  * @param zoneCount Number of zones to create
  * @param parent QObject parent (typically the LayoutManager)
- * @return Newly created Layout with zoneCount zones
+ * @return Newly created PhosphorZones::Layout with zoneCount zones
  */
-inline Layout* createTestLayout(int zoneCount, QObject* parent)
+inline PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)
 {
-    auto* layout = new Layout(QStringLiteral("TestLayout"), parent);
+    auto* layout = new PhosphorZones::Layout(QStringLiteral("TestLayout"), parent);
     for (int i = 0; i < zoneCount; ++i) {
-        auto* zone = new Zone(layout);
+        auto* zone = new PhosphorZones::Zone(layout);
         qreal x = static_cast<qreal>(i) / zoneCount;
         qreal w = 1.0 / zoneCount;
         zone->setRelativeGeometry(QRectF(x, 0.0, w, 1.0));

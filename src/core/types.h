@@ -59,7 +59,7 @@ struct PLASMAZONES_EXPORT SnapResult
 struct PLASMAZONES_EXPORT UnfloatResult
 {
     bool found = false; ///< Whether a valid restore target was found
-    QStringList zoneIds; ///< Zone UUIDs to restore to
+    QStringList zoneIds; ///< PhosphorZones::Zone UUIDs to restore to
     QRect geometry; ///< Target geometry for the window
     QString screenId; ///< Screen where the zones are located
 };
@@ -147,14 +147,14 @@ struct PLASMAZONES_EXPORT NavigationCommand
 };
 
 /**
- * @brief Zone assignment entry for window movement operations
+ * @brief PhosphorZones::Zone assignment entry for window movement operations
  *
  * Describes a single window movement in a rotation, resnap, or snap-all operation.
  */
 struct PLASMAZONES_EXPORT ZoneAssignmentEntry
 {
     QString windowId{}; ///< Window to move
-    QString sourceZoneId{}; ///< Zone window is moving from (for OSD highlighting)
+    QString sourceZoneId{}; ///< PhosphorZones::Zone window is moving from (for OSD highlighting)
     QString targetZoneId{}; ///< Primary zone to move to
     QStringList targetZoneIds{}; ///< All zones (for multi-zone spans; empty = single zone)
     QRect targetGeometry{}; ///< Target geometry in pixels

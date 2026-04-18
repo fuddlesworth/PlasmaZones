@@ -35,7 +35,7 @@ public:
     /**
      * @brief Creates a new layout from JSON
      * @param jsonLayout JSON string representation of the layout
-     * @return Layout ID of the created layout, or empty string on failure
+     * @return PhosphorZones::Layout ID of the created layout, or empty string on failure
      */
     virtual QString createLayout(const QString& jsonLayout) = 0;
 
@@ -49,7 +49,7 @@ public:
     /**
      * @brief Gets the layout ID assigned to a screen
      * @param screenName The screen/monitor name
-     * @return Layout ID for the screen, or empty string if no assignment
+     * @return PhosphorZones::Layout ID for the screen, or empty string if no assignment
      */
     virtual QString getLayoutIdForScreen(const QString& screenName) = 0;
 

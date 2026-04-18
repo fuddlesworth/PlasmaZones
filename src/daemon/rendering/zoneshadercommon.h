@@ -40,7 +40,7 @@ struct alignas(16) ZoneShaderUniforms
     // ── Base region (PhosphorShell::BaseUniforms, 672 bytes) ─────────
     PhosphorShell::BaseUniforms base;
 
-    // ── Zone extension region (PlasmaZones-specific) ─────────────────
+    // ── PhosphorZones::Zone extension region (PlasmaZones-specific) ─────────────────
     float zoneRects[MaxZones][4];
     float zoneFillColors[MaxZones][4];
     float zoneBorderColors[MaxZones][4];
@@ -74,14 +74,14 @@ constexpr size_t K_SCENE_HEADER_SIZE = sizeof(PhosphorShell::BaseUniforms) - K_S
 constexpr size_t K_SCENE_DATA_OFFSET = offsetof(ZoneShaderUniforms, base.iResolution);
 constexpr size_t K_SCENE_DATA_SIZE = sizeof(ZoneShaderUniforms) - K_SCENE_DATA_OFFSET;
 
-// Zone extension region
+// PhosphorZones::Zone extension region
 constexpr size_t K_ZONE_EXTENSION_OFFSET = sizeof(PhosphorShell::BaseUniforms);
 constexpr size_t K_ZONE_EXTENSION_SIZE = sizeof(ZoneShaderUniforms) - sizeof(PhosphorShell::BaseUniforms);
 
 } // namespace ZoneShaderUboRegions
 
 /**
- * @brief Zone data for passing to the shader node
+ * @brief PhosphorZones::Zone data for passing to the shader node
  */
 struct ZoneData
 {

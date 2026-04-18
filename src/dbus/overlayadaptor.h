@@ -9,20 +9,23 @@
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace PhosphorZones {
+class ILayoutRegistry;
+class IZoneDetector;
+}
+
 namespace PlasmaZones {
 
 class IOverlayService;
-class IZoneDetector;
-class ILayoutManager;
 class ISettings;
 
 /**
  * @brief D-Bus adaptor for overlay control operations
  *
  * Provides D-Bus interface: org.plasmazones.Overlay
- *  Zone overlay visibility and highlighting only
+ *  PhosphorZones::Zone overlay visibility and highlighting only
  *
- * Note: Zone detection and window tracking are handled by separate adaptors
+ * Note: PhosphorZones::Zone detection and window tracking are handled by separate adaptors
  * (ZoneDetectionAdaptor and WindowTrackingAdaptor).
  *
  * Uses interface types for loose coupling
@@ -33,8 +36,9 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Overlay")
 
 public:
-    explicit OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector, ILayoutManager* layoutManager,
-                            ISettings* settings, QObject* parent = nullptr);
+    explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                            PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings,
+                            QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
 
 public Q_SLOTS:
@@ -43,7 +47,7 @@ public Q_SLOTS:
     void hideOverlay();
     bool isOverlayVisible();
 
-    // Zone highlighting (requires layout manager for backward compatibility)
+    // PhosphorZones::Zone highlighting (requires layout manager for backward compatibility)
     void highlightZone(const QString& zoneId);
     void highlightZones(const QStringList& zoneIds);
     void clearHighlight();
@@ -75,8 +79,10 @@ Q_SIGNALS:
 
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)
-    IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
-    ILayoutManager* m_layoutManager; // Interface type (DIP) - needed for highlightZone by ID
+    PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
+    // Narrow to ILayoutRegistry — overlay adaptor only reads the active
+    // layout, never per-context assignments / quick slots / persistence.
+    PhosphorZones::ILayoutRegistry* m_layoutRegistry;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 };
 

@@ -8,8 +8,8 @@
 #include <QStringList>
 
 #include "autotile/AutotileEngine.h"
-#include "autotile/AlgorithmRegistry.h"
-#include "autotile/TilingState.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingState.h>
 
 namespace PlasmaZones::TestHelpers {
 
@@ -18,7 +18,7 @@ namespace PlasmaZones::TestHelpers {
  *
  * Uses engine->windowOpened() + processEvents() to register windows through
  * the proper lifecycle (populating m_windowToScreen), rather than adding
- * directly to TilingState which leaves internal maps empty.
+ * directly to PhosphorTiles::TilingState which leaves internal maps empty.
  *
  * @param screen      Screen name for the autotile screen.
  * @param count       Number of windows to open (named "win1" .. "winN").
@@ -37,7 +37,7 @@ inline AutotileEngine* createEngineWithWindows(const QString& screen, int count,
     QCoreApplication::processEvents();
 
     if (!focusedWindow.isEmpty()) {
-        TilingState* state = engine->stateForScreen(screen);
+        PhosphorTiles::TilingState* state = engine->stateForScreen(screen);
         state->setFocusedWindow(focusedWindow);
         engine->windowFocused(focusedWindow, screen);
     }

@@ -4,8 +4,9 @@
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/ILayoutRegistry.h>
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/screenmanager.h"
@@ -15,27 +16,27 @@
 
 namespace PlasmaZones {
 
-OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, IZoneDetector* detector, ILayoutManager* layoutManager,
-                               ISettings* settings, QObject* parent)
+OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                               PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
-    , m_layoutManager(layoutManager)
+    , m_layoutRegistry(layoutRegistry)
     , m_settings(settings)
 {
     Q_ASSERT(overlay);
     Q_ASSERT(detector);
-    Q_ASSERT(layoutManager);
+    Q_ASSERT(layoutRegistry);
     Q_ASSERT(settings);
 
     connect(m_overlayService, &IOverlayService::visibilityChanged, this, &OverlayAdaptor::overlayVisibilityChanged);
 
     // Connect to interface signals (DIP)
-    connect(m_zoneDetector, &IZoneDetector::zoneHighlighted, this, [this](Zone* zone) {
+    connect(m_zoneDetector, &PhosphorZones::IZoneDetector::zoneHighlighted, this, [this](PhosphorZones::Zone* zone) {
         Q_EMIT zoneHighlightChanged(zone ? zone->id().toString() : QString());
     });
 
-    connect(m_zoneDetector, &IZoneDetector::highlightsCleared, this, [this]() {
+    connect(m_zoneDetector, &PhosphorZones::IZoneDetector::highlightsCleared, this, [this]() {
         Q_EMIT zoneHighlightChanged(QString());
     });
 
@@ -63,7 +64,7 @@ bool OverlayAdaptor::isOverlayVisible()
 
 void OverlayAdaptor::highlightZone(const QString& zoneId)
 {
-    auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutManager, zoneId, QStringLiteral("highlight zone"));
+    auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutRegistry, zoneId, QStringLiteral("highlight zone"));
     if (!zone) {
         return;
     }
@@ -79,16 +80,16 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
         return;
     }
 
-    if (!m_layoutManager || !m_layoutManager->activeLayout()) {
+    if (!m_layoutRegistry || !m_layoutRegistry->activeLayout()) {
         qCWarning(lcDbus) << "highlightZones: no active layout";
         return;
     }
 
-    QVector<Zone*> zones;
+    QVector<PhosphorZones::Zone*> zones;
     for (const auto& id : zoneIds) {
         auto uuidOpt = Utils::parseUuid(id);
         if (uuidOpt) {
-            auto* zone = m_layoutManager->activeLayout()->zoneById(*uuidOpt);
+            auto* zone = m_layoutRegistry->activeLayout()->zoneById(*uuidOpt);
             if (zone) {
                 zones.append(zone);
             }

@@ -5,8 +5,8 @@
 #include "../overlayservice.h"
 #include "../cavaservice.h"
 #include "../../core/logging.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/utils.h"
 #include "../../core/shaderregistry.h"
 #include "../rendering/zonelabeltexturebuilder.h"
@@ -136,7 +136,7 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
     if (m_settings && !m_settings->enableShaderEffects()) {
         return false;
     }
-    Layout* screenLayout = resolveScreenLayout(screenId);
+    PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
     if (!screenLayout) {
         return false;
     }

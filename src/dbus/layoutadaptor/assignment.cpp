@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../layoutadaptor.h"
-#include "../../core/layout.h"
+#include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -11,8 +11,8 @@
 #include "../../core/constants.h"
 #include "../../core/screenmanager.h"
 #include "../../core/virtualscreen.h"
-#include "../../autotile/AlgorithmRegistry.h"
-#include "../../autotile/TilingAlgorithm.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/TilingAlgorithm.h>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -49,7 +49,7 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 
     // Check for autotile assignment first (layoutForScreen returns nullptr for autotile)
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, desktop, activity);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
 
@@ -64,8 +64,8 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
     }
 
     // For manual layouts, validate UUID and verify layout exists
-    Layout* layout = nullptr;
-    if (!LayoutId::isAutotile(layoutId)) {
+    PhosphorZones::Layout* layout = nullptr;
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
             return;
@@ -104,7 +104,7 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenIdOrName = it.key();
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
             if (!uuidOpt) {
                 continue;
@@ -118,7 +118,8 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     // immediately (same as assignLayoutToScreen). KCM Save uses this path.
     QScreen* primary = Utils::primaryScreen();
     if (primary) {
-        Layout* primaryLayout = m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(primary));
+        PhosphorZones::Layout* primaryLayout =
+            m_layoutManager->resolveLayoutForScreen(Utils::screenIdentifier(primary));
         if (primaryLayout) {
             m_layoutManager->setActiveLayout(primaryLayout);
         }
@@ -193,7 +194,7 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int vi
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, QString());
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, QString());
@@ -207,7 +208,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
         if (!layout) {
             return;
@@ -219,7 +220,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -274,7 +275,7 @@ QString LayoutAdaptor::getScreenStates()
         obj[QLatin1String("mode")] = static_cast<int>(entry.mode);
 
         // Snapping layout — use resolved layout (includes default fallback)
-        Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
+        PhosphorZones::Layout* resolvedLayout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (resolvedLayout) {
             obj[QLatin1String("layoutId")] = resolvedLayout->id().toString();
             obj[QLatin1String("layoutName")] = resolvedLayout->name();
@@ -287,8 +288,8 @@ QString LayoutAdaptor::getScreenStates()
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
         obj[QLatin1String("algorithmId")] = algoId;
         if (!algoId.isEmpty()) {
-            auto* registry = AlgorithmRegistry::instance();
-            TilingAlgorithm* algo = registry->algorithm(algoId);
+            auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+            PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algoId);
             obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
         } else {
             obj[QLatin1String("algorithmName")] = QString();
@@ -341,7 +342,7 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
             if (!uuidOpt) {
                 continue;
@@ -443,7 +444,7 @@ QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenId, const
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, 0, activityId);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, 0, activityId);
@@ -461,7 +462,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
         if (!layout) {
             return;
@@ -472,7 +473,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -516,7 +517,7 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
             if (!uuidOpt) {
                 continue;
@@ -535,7 +536,7 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, activityId);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, activityId);
@@ -550,7 +551,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
         if (!layout) {
             return;
@@ -562,7 +563,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
 
-    // Layout resolution is triggered by LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by LayoutManager::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -596,7 +597,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     // Validate tiling algorithm if non-empty
     if (!tilingAlgorithm.isEmpty()) {
-        if (!AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
+        if (!PhosphorTiles::AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
             return;
         }

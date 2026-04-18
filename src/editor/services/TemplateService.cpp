@@ -17,7 +17,7 @@ namespace {
 QVariantMap createZoneForTemplate(const QString& name, int number, qreal x, qreal y, qreal width, qreal height)
 {
     QVariantMap zone;
-    using namespace PlasmaZones::JsonKeys;
+    using namespace ::PhosphorZones::ZoneJsonKeys;
     zone[Id] = QUuid::createUuid().toString();
     zone[Name] = name;
     zone[ZoneNumber] = number;
@@ -49,8 +49,8 @@ QVariantList GridTemplateStrategy::createZones(int columns, int rows)
     for (int r = 0; r < rows; ++r) {
         for (int c = 0; c < columns; ++c) {
             int currentNum = zoneNumber++;
-            zones.append(createZoneForTemplate(QStringLiteral("Zone %1").arg(currentNum), currentNum, c * cellWidth,
-                                               r * cellHeight, cellWidth, cellHeight));
+            zones.append(createZoneForTemplate(QStringLiteral("PhosphorZones::Zone %1").arg(currentNum), currentNum,
+                                               c * cellWidth, r * cellHeight, cellWidth, cellHeight));
         }
     }
     return zones;
@@ -95,11 +95,14 @@ QVariantList PriorityTemplateStrategy::createZones(int columns, int rows)
     QVariantList zones;
     using namespace PlasmaZones::Defaults;
 
-    zones.append(createZoneForTemplate(QStringLiteral("Main"), 1, 0.0, 0.0, PriorityGridMainRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Secondary Top"), 2, PriorityGridMainRatio, 0.0,
-                                       PriorityGridSecondaryRatio, 0.5));
-    zones.append(createZoneForTemplate(QStringLiteral("Secondary Bottom"), 3, PriorityGridMainRatio, 0.5,
-                                       PriorityGridSecondaryRatio, 0.5));
+    zones.append(createZoneForTemplate(QStringLiteral("Main"), 1, 0.0, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 1.0));
+    zones.append(createZoneForTemplate(QStringLiteral("Secondary Top"), 2,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
+    zones.append(createZoneForTemplate(QStringLiteral("Secondary Bottom"), 3,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridMainRatio, 0.5,
+                                       ::PhosphorZones::ZoneDefaults::PriorityGridSecondaryRatio, 0.5));
 
     return zones;
 }
@@ -111,10 +114,14 @@ QVariantList FocusTemplateStrategy::createZones(int columns, int rows)
     QVariantList zones;
     using namespace PlasmaZones::Defaults;
 
-    zones.append(createZoneForTemplate(QStringLiteral("Left Panel"), 1, 0.0, 0.0, FocusSideRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Center"), 2, FocusSideRatio, 0.0, FocusMainRatio, 1.0));
-    zones.append(createZoneForTemplate(QStringLiteral("Right Panel"), 3, FocusSideRatio + FocusMainRatio, 0.0,
-                                       FocusSideRatio, 1.0));
+    zones.append(createZoneForTemplate(QStringLiteral("Left Panel"), 1, 0.0, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
+    zones.append(createZoneForTemplate(QStringLiteral("Center"), 2, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 0.0,
+                                       ::PhosphorZones::ZoneDefaults::FocusMainRatio, 1.0));
+    zones.append(createZoneForTemplate(QStringLiteral("Right Panel"), 3,
+                                       ::PhosphorZones::ZoneDefaults::FocusSideRatio
+                                           + ::PhosphorZones::ZoneDefaults::FocusMainRatio,
+                                       0.0, ::PhosphorZones::ZoneDefaults::FocusSideRatio, 1.0));
 
     return zones;
 }

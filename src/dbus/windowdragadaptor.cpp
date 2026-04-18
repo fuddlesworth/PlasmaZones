@@ -12,8 +12,8 @@
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/zoneselectorlayout.h"
@@ -33,8 +33,9 @@ namespace PlasmaZones {
 // conversion at the IAdhocRegistrar boundary (QString accepts it implicitly).
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
-WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* detector, LayoutManager* layoutManager,
-                                     ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent)
+WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
+                                     LayoutManager* layoutManager, ISettings* settings,
+                                     WindowTrackingAdaptor* windowTracking, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
@@ -59,9 +60,9 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, IZoneDetector* de
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
-    // Uses LayoutManager (concrete) because ILayoutManager is a pure interface without signals
+    // Uses LayoutManager (concrete) because PhosphorZones::ILayoutManager is a pure interface without signals
     connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowDragAdaptor::onLayoutChanged);
-    connect(m_layoutManager, &LayoutManager::layoutAssigned, this, [this](const QString&, int, Layout*) {
+    connect(m_layoutManager, &LayoutManager::layoutAssigned, this, [this](const QString&, int, PhosphorZones::Layout*) {
         onLayoutChanged();
     });
 
@@ -184,8 +185,8 @@ bool WindowDragAdaptor::anyTriggerHeld(const QVector<ParsedTrigger>& triggers, Q
     return false;
 }
 
-QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<Zone*>& zones, QScreen* screen, Layout* layout,
-                                                      const QString& screenId) const
+QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<PhosphorZones::Zone*>& zones, QScreen* screen,
+                                                      PhosphorZones::Layout* layout, const QString& screenId) const
 {
     if (zones.isEmpty()) {
         return QRectF();
@@ -469,7 +470,7 @@ void WindowDragAdaptor::hideOverlayAndSelector()
         didIdle = true;
     }
 
-    // Zone selector (different QQuickWindow, also Vulkan-backed) is
+    // PhosphorZones::Zone selector (different QQuickWindow, also Vulkan-backed) is
     // still destroyed on hide. It only shows when the user hovers a
     // configured selector trigger, so it's not in the drop-then-activate
     // hot path that triggers the NVIDIA deadlock. Revisit if selector
@@ -571,7 +572,7 @@ void WindowDragAdaptor::onLayoutChanged()
     // This handles the case where user changes layout via hotkey/GUI while dragging
     // On next dragMoved(), fresh geometry will be calculated from the new layout
     if (!m_draggedWindowId.isEmpty()) {
-        qCInfo(lcDbusWindow) << "Layout changed mid-drag, clearing cached zone state";
+        qCInfo(lcDbusWindow) << "PhosphorZones::Layout changed mid-drag, clearing cached zone state";
         m_currentZoneId.clear();
         m_currentZoneGeometry = QRect();
         m_currentMultiZoneGeometry = QRect();

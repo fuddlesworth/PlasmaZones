@@ -8,6 +8,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 
 namespace PlasmaZones {
 
@@ -23,7 +24,7 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
             m_cacheValid = false;
         });
 
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](Layout* layout) {
+        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
             if (layout) {
                 QString newId = layout->id().toString();
                 if (m_currentLayoutId != newId) {
@@ -39,21 +40,35 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
         });
     }
 
+    // Autotile entries enter the unified list via PhosphorTiles::AlgorithmRegistry,
+    // not LayoutManager — without this subscription a hot-loaded user script (or
+    // any built-in registration churn) leaves m_cachedLayouts stale, and Meta+1‥9
+    // continues to cycle the pre-load list until something else fires
+    // layoutsChanged. Mirror SettingsController's existing pattern.
+    if (auto* registry = PhosphorTiles::AlgorithmRegistry::instance()) {
+        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
+            m_cacheValid = false;
+        });
+        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool) {
+            m_cacheValid = false;
+        });
+    }
+
     syncFromExternalState();
 }
 
 UnifiedLayoutController::~UnifiedLayoutController() = default;
 
-QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
+QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
-        m_cachedLayouts = LayoutUtils::buildUnifiedLayoutList(
+        m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
             m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
-            LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
+            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 
         m_cacheValid = true;
     }
@@ -69,12 +84,12 @@ bool UnifiedLayoutController::applyLayoutByNumber(int number)
 bool UnifiedLayoutController::applyLayoutById(const QString& layoutId)
 {
     const auto list = layouts();
-    const UnifiedLayoutEntry* entry = LayoutUtils::findLayout(list, layoutId);
-    if (!entry) {
+    const PhosphorLayout::LayoutPreview* preview = PhosphorZones::LayoutUtils::findLayout(list, layoutId);
+    if (!preview) {
         qCWarning(lcDaemon) << "applyLayoutById: layout not found:" << layoutId;
         return false;
     }
-    return applyEntry(*entry);
+    return applyEntry(*preview);
 }
 
 bool UnifiedLayoutController::applyLayoutByIndex(int index)
@@ -125,8 +140,8 @@ void UnifiedLayoutController::cycle(bool forward)
     }
 
     qCInfo(lcDaemon) << "cycle: listSize=" << list.size() << "currentIdx=" << currentIndex << "nextIdx=" << nextIndex
-                     << "from=" << (currentIndex < list.size() ? list[currentIndex].name : QStringLiteral("?"))
-                     << "to=" << (nextIndex < list.size() ? list[nextIndex].name : QStringLiteral("?"));
+                     << "from=" << (currentIndex < list.size() ? list[currentIndex].displayName : QStringLiteral("?"))
+                     << "to=" << (nextIndex < list.size() ? list[nextIndex].displayName : QStringLiteral("?"));
 
     applyLayoutByIndex(nextIndex);
 }
@@ -151,7 +166,7 @@ void UnifiedLayoutController::setCurrentScreenName(const QString& screenId)
         // Sync current layout ID to what's actually assigned to this screen
         // (not the global active layout, which may belong to a different screen)
         if (m_layoutManager && !screenId.isEmpty()) {
-            Layout* screenLayout =
+            PhosphorZones::Layout* screenLayout =
                 m_layoutManager->layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
             if (screenLayout) {
                 m_currentLayoutId = screenLayout->id().toString();
@@ -186,14 +201,14 @@ void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAu
     m_cacheValid = false;
 }
 
-bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
+bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& preview)
 {
     // Handle autotile entries: assign autotile ID to the current screen.
     // The daemon's layoutAssigned handler calls updateAutotileScreens() which
     // derives per-screen autotile state from assignments automatically.
-    if (entry.isAutotile) {
+    if (preview.isAutotile()) {
         if (m_autotileEngine && m_layoutManager) {
-            QString algoId = LayoutId::extractAlgorithmId(entry.id);
+            QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
             // Assign layout FIRST so that layoutAssigned → updateAutotileScreens()
             // updates per-screen overrides before setAlgorithm's deferred retile.
             // Without this ordering, setAlgorithm's retile uses stale per-screen
@@ -204,24 +219,24 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
                 // priority over a desktop-only entry in the cascade, and a
                 // different activity falls through to the broader entry.
                 m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
-                                                  entry.id);
+                                                  preview.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
-            setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied autotile algorithm=" << entry.name;
-            Q_EMIT autotileApplied(entry.name, 0);
+            setCurrentLayoutId(preview.id);
+            qCInfo(lcDaemon) << "Applied autotile algorithm=" << preview.displayName;
+            Q_EMIT autotileApplied(preview.displayName, 0);
             return true;
         }
-        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << entry.id;
+        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << preview.id;
         return false;
     }
 
     // Manual layout: assign the UUID to the current screen.
     // If the previous assignment was autotile, it gets replaced and
     // updateAutotileScreens() will remove the screen from autotile set.
-    auto uuidOpt = Utils::parseUuid(entry.id);
+    auto uuidOpt = Utils::parseUuid(preview.id);
     if (uuidOpt && m_layoutManager) {
-        Layout* layout = m_layoutManager->layoutById(*uuidOpt);
+        PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
             if (!m_currentScreenName.isEmpty()) {
                 // Write to the current context (screen, desktop, activity).
@@ -230,8 +245,8 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
                 // and contexts keep their existing fallback layout.
                 m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
             }
-            setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied unified layout=" << entry.name << "screen=" << m_currentScreenName;
+            setCurrentLayoutId(preview.id);
+            qCInfo(lcDaemon) << "Applied unified layout=" << preview.displayName << "screen=" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);
             return true;
         }
@@ -251,7 +266,7 @@ void UnifiedLayoutController::setCurrentLayoutId(const QString& layoutId)
 int UnifiedLayoutController::findCurrentIndex() const
 {
     const auto list = layouts();
-    return LayoutUtils::findLayoutIndex(list, m_currentLayoutId);
+    return PhosphorZones::LayoutUtils::findLayoutIndex(list, m_currentLayoutId);
 }
 
 } // namespace PlasmaZones

@@ -20,7 +20,7 @@ bool BaseZoneCommand::validateZoneExists(const QString& zoneId) const
     }
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found:" << zoneId;
+        qCWarning(lcEditorUndo) << "PhosphorZones::Zone not found:" << zoneId;
         return false;
     }
     return true;
@@ -33,7 +33,7 @@ QVariantMap BaseZoneCommand::getValidatedZone(const QString& zoneId) const
     }
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditorUndo) << "Zone not found:" << zoneId;
+        qCWarning(lcEditorUndo) << "PhosphorZones::Zone not found:" << zoneId;
     }
     return zone;
 }

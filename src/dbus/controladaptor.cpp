@@ -5,8 +5,8 @@
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
 #include "../core/layoutmanager.h"
-#include "../core/layout.h"
-#include "../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
@@ -42,13 +42,13 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
     }
 
     // Resolve zone from screen's current layout
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: no layout for screen" << screenId;
         return;
     }
 
-    Zone* zone = layout->zoneByNumber(zoneNumber);
+    PhosphorZones::Zone* zone = layout->zoneByNumber(zoneNumber);
     if (!zone) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: zone" << zoneNumber << "not found in layout" << layout->name();
         return;
@@ -92,7 +92,7 @@ QString ControlAdaptor::getFullState()
     // Layouts
     if (m_layoutManager) {
         QJsonArray layoutArray;
-        for (Layout* layout : m_layoutManager->layouts()) {
+        for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
             QJsonObject lo;
             lo[QLatin1String("id")] = layout->id().toString();
             lo[QLatin1String("name")] = layout->name();
@@ -101,7 +101,7 @@ QString ControlAdaptor::getFullState()
         }
         state[QLatin1String("layouts")] = layoutArray;
 
-        Layout* active = m_layoutManager->activeLayout();
+        PhosphorZones::Layout* active = m_layoutManager->activeLayout();
         if (active) {
             state[QLatin1String("activeLayoutId")] = active->id().toString();
             state[QLatin1String("activeLayoutName")] = active->name();

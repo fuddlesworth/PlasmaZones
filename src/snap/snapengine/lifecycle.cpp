@@ -120,13 +120,13 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (m_settings && m_windowTracker) {
         const QString appId = m_windowTracker->currentAppIdFor(windowId);
         for (const QString& excluded : m_settings->excludedApplications()) {
-            if (Utils::appIdMatches(appId, excluded)) {
+            if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
                 qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by application rule:" << excluded;
                 return SnapResult::noSnap();
             }
         }
         for (const QString& excluded : m_settings->excludedWindowClasses()) {
-            if (Utils::appIdMatches(appId, excluded)) {
+            if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
                 qCInfo(lcCore) << "resolveWindowRestore:" << windowId << "excluded by window class rule:" << excluded;
                 return SnapResult::noSnap();
             }

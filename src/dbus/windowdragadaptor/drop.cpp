@@ -6,8 +6,8 @@
 #include "../../core/interfaces.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/assignmententry.h"
-#include "../../core/layout.h"
-#include "../../core/zone.h"
+#include <PhosphorZones/Layout.h>
+#include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -151,13 +151,13 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                     // Get the actual zone UUID from layout and zone index so navigation works
                     auto layoutUuidOpt = Utils::parseUuid(selectedLayoutId);
                     QString zoneUuid;
-                    Layout* selectedLayout = nullptr;
+                    PhosphorZones::Layout* selectedLayout = nullptr;
                     if (layoutUuidOpt) {
                         QUuid layoutUuid = *layoutUuidOpt;
                         selectedLayout = m_layoutManager->layoutById(layoutUuid);
                         if (selectedLayout && selectedZoneIndex >= 0
                             && selectedZoneIndex < selectedLayout->zones().size()) {
-                            Zone* zone = selectedLayout->zones().at(selectedZoneIndex);
+                            PhosphorZones::Zone* zone = selectedLayout->zones().at(selectedZoneIndex);
                             if (zone) {
                                 zoneUuid = zone->id().toString();
                             }
@@ -197,7 +197,8 @@ void WindowDragAdaptor::dragStopped(const QString& windowId, int cursorX, int cu
                             && m_settings->isContextLocked(QString::number(lcMode) + QStringLiteral(":")
                                                                + selectorScreenId,
                                                            layoutChangeDesktop, layoutChangeActivity);
-                        Layout* currentLayout = m_layoutManager->resolveLayoutForScreen(selectorScreenId);
+                        PhosphorZones::Layout* currentLayout =
+                            m_layoutManager->resolveLayoutForScreen(selectorScreenId);
                         if (currentLayout != selectedLayout && !screenLocked) {
                             // Hide overlay/selector BEFORE the layout change so signal
                             // handlers (updateZoneSelectorWindow, updateOverlayWindow) find
@@ -357,7 +358,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
         }
     }
 
-    Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
+    PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
     if (!layout) {
         return;
     }
@@ -370,10 +371,10 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // by WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
     const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
-    EmptyZoneList emptyZones =
-        GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings, [&occupied](const Zone* z) {
-            return !occupied.contains(z->id());
-        });
+    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings,
+                                                                 [&occupied](const PhosphorZones::Zone* z) {
+                                                                     return !occupied.contains(z->id());
+                                                                 });
 
     if (emptyZones.isEmpty()) {
         return;

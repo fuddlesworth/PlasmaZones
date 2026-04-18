@@ -36,10 +36,10 @@ QString EditorController::addZone(qreal x, qreal y, qreal width, qreal height)
     // Apply snapping using SnappingService
     QVariantList allZones = m_zoneManager->zones();
     QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones);
-    x = snapped[JsonKeys::X].toDouble();
-    y = snapped[JsonKeys::Y].toDouble();
-    width = snapped[JsonKeys::Width].toDouble();
-    height = snapped[JsonKeys::Height].toDouble();
+    x = snapped[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+    y = snapped[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+    width = snapped[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+    height = snapped[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
     // Minimum size check
     width = qMax(EditorConstants::MinZoneSize, width);
@@ -102,13 +102,13 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
     // Get current zone data to check geometry mode
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for geometry update:" << zoneId;
-        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for geometry update:" << zoneId;
+        Q_EMIT layoutSaveFailed(PzI18n::tr("PhosphorZones::Zone not found", "@info"));
         return;
     }
 
-    int geoMode = zone.value(JsonKeys::GeometryMode, 0).toInt();
-    bool isFixed = (geoMode == static_cast<int>(ZoneGeometryMode::Fixed));
+    int geoMode = zone.value(::PhosphorZones::ZoneJsonKeys::GeometryMode, 0).toInt();
+    bool isFixed = (geoMode == static_cast<int>(PhosphorZones::ZoneGeometryMode::Fixed));
 
     if (isFixed) {
         // Fixed mode: values are pixel coordinates — validate differently
@@ -130,12 +130,14 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
 
     QRectF oldGeometry;
     if (isFixed) {
-        oldGeometry =
-            QRectF(zone.value(JsonKeys::FixedX, 0.0).toReal(), zone.value(JsonKeys::FixedY, 0.0).toReal(),
-                   zone.value(JsonKeys::FixedWidth, 0.0).toReal(), zone.value(JsonKeys::FixedHeight, 0.0).toReal());
+        oldGeometry = QRectF(zone.value(::PhosphorZones::ZoneJsonKeys::FixedX, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedY, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedWidth, 0.0).toReal(),
+                             zone.value(::PhosphorZones::ZoneJsonKeys::FixedHeight, 0.0).toReal());
     } else {
-        oldGeometry = QRectF(zone[JsonKeys::X].toReal(), zone[JsonKeys::Y].toReal(), zone[JsonKeys::Width].toReal(),
-                             zone[JsonKeys::Height].toReal());
+        oldGeometry = QRectF(
+            zone[::PhosphorZones::ZoneJsonKeys::X].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Y].toReal(),
+            zone[::PhosphorZones::ZoneJsonKeys::Width].toReal(), zone[::PhosphorZones::ZoneJsonKeys::Height].toReal());
     }
 
     if (isFixed) {
@@ -149,10 +151,10 @@ void EditorController::updateZoneGeometry(const QString& zoneId, qreal x, qreal 
         if (!skipSnapping) {
             QVariantList allZones = m_zoneManager->zones();
             QVariantMap snapped = m_snappingService->snapGeometry(x, y, width, height, allZones, zoneId);
-            x = snapped[JsonKeys::X].toDouble();
-            y = snapped[JsonKeys::Y].toDouble();
-            width = snapped[JsonKeys::Width].toDouble();
-            height = snapped[JsonKeys::Height].toDouble();
+            x = snapped[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+            y = snapped[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+            width = snapped[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+            height = snapped[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
         }
 
         // Minimum size
@@ -206,12 +208,12 @@ void EditorController::updateZoneName(const QString& zoneId, const QString& name
     // Get current name for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for name update:" << zoneId;
-        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for name update:" << zoneId;
+        Q_EMIT zoneNameValidationError(zoneId, PzI18n::tr("PhosphorZones::Zone not found", "@info"));
         return;
     }
 
-    QString oldName = zone[JsonKeys::Name].toString();
+    QString oldName = zone[::PhosphorZones::ZoneJsonKeys::Name].toString();
 
     // Create and push command
     auto* command = new UpdateZoneNameCommand(QPointer<ZoneManager>(m_zoneManager), zoneId, oldName, name, QString());
@@ -242,12 +244,12 @@ void EditorController::updateZoneNumber(const QString& zoneId, int number)
     // Get current zone number for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for number update:" << zoneId;
-        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("Zone not found", "@info"));
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for number update:" << zoneId;
+        Q_EMIT zoneNumberValidationError(zoneId, PzI18n::tr("PhosphorZones::Zone not found", "@info"));
         return;
     }
 
-    int oldNumber = zone[JsonKeys::ZoneNumber].toInt();
+    int oldNumber = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
 
     // Create and push command
     auto* command =
@@ -272,7 +274,7 @@ void EditorController::updateZoneColor(const QString& zoneId, const QString& col
     // Get current value for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for color update:" << zoneId;
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for color update:" << zoneId;
         return;
     }
 
@@ -295,7 +297,7 @@ void EditorController::updateZoneAppearance(const QString& zoneId, const QString
     // Get current value for undo state
     QVariantMap zone = m_zoneManager->getZoneById(zoneId);
     if (zone.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for appearance update:" << zoneId;
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for appearance update:" << zoneId;
         return;
     }
 
@@ -321,8 +323,8 @@ void EditorController::deleteZone(const QString& zoneId)
     // Get zone data for undo
     QVariantMap zoneData = m_zoneManager->getZoneById(zoneId);
     if (zoneData.isEmpty()) {
-        qCWarning(lcEditor) << "Zone not found for deletion:" << zoneId;
-        Q_EMIT layoutSaveFailed(PzI18n::tr("Zone not found", "@info"));
+        qCWarning(lcEditor) << "PhosphorZones::Zone not found for deletion:" << zoneId;
+        Q_EMIT layoutSaveFailed(PzI18n::tr("PhosphorZones::Zone not found", "@info"));
         return;
     }
 

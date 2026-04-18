@@ -14,13 +14,13 @@ namespace PlasmaZones {
 struct ZoneSnapshot
 {
     QUuid id;
-    ZoneGeometryMode geometryMode = ZoneGeometryMode::Relative;
+    PhosphorZones::ZoneGeometryMode geometryMode = PhosphorZones::ZoneGeometryMode::Relative;
     QRectF relativeGeometry;
     QRectF fixedGeometry;
 };
 
 /// Immutable snapshot of a layout + screen, sufficient for geometry computation.
-/// Built on the main thread from live Layout/Zone objects (all const reads).
+/// Built on the main thread from live PhosphorZones::Layout/PhosphorZones::Zone objects (all const reads).
 struct LayoutSnapshot
 {
     QUuid layoutId;

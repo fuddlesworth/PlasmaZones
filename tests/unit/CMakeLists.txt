@@ -385,7 +385,7 @@ set_tests_properties(bench_dbus_adaptors PROPERTIES LABELS "bench")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # compositor-common/ — Shared Library Types Tests (D-Bus types, FloatingCache,
-#                      TriggerParser, WindowIdUtils)
+#                      TriggerParser, WindowId)
 # ═══════════════════════════════════════════════════════════════════════════════
 add_executable(test_compositor_common compositor-common/test_compositor_common.cpp)
 target_link_libraries(test_compositor_common PRIVATE Qt6::Test plasmazones_compositor_common)

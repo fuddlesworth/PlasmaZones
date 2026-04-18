@@ -11,9 +11,12 @@
 
 class QThread;
 
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
-class Layout;
 class LayoutManager;
 class LayoutWorker;
 
@@ -21,7 +24,7 @@ class LayoutWorker;
  * @brief Main-thread coordinator for async layout geometry computation.
  *
  * Owns a dedicated QThread + LayoutWorker. Callers on the main thread
- * call requestRecalculate() which snapshots the Layout and sends the
+ * call requestRecalculate() which snapshots the PhosphorZones::Layout and sends the
  * work to the worker thread. Results arrive back on the main thread
  * via geometriesComputed().
  *
@@ -58,30 +61,30 @@ public:
      *         rejected (null layout or invalid geometry). A rejected
      *         request never fires geometriesComputed.
      */
-    bool requestRecalculate(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    bool requestRecalculate(PhosphorZones::Layout* layout, const QString& screenId, const QRectF& screenGeometry);
 
     /**
      * Synchronous fallback — runs computation inline on the main thread.
      * Use for init-time code and D-Bus queries that must return immediately.
      */
-    static void recalculateSync(Layout* layout, const QRectF& screenGeometry);
+    static void recalculateSync(PhosphorZones::Layout* layout, const QRectF& screenGeometry);
 
 Q_SIGNALS:
     /**
      * Emitted on the main thread after the worker completes geometry
-     * computation for a layout-screen pair. The live Layout/Zone objects
+     * computation for a layout-screen pair. The live PhosphorZones::Layout/PhosphorZones::Zone objects
      * have already been updated when this signal fires. Also emitted
      * from requestRecalculate() when the request hit the geometry cache
-     * (no work needed), and from applyResult() when the tracked Layout
+     * (no work needed), and from applyResult() when the tracked PhosphorZones::Layout
      * was destroyed mid-compute — so completion barriers always drain
      * exactly once per accepted requestRecalculate() call.
      *
-     * @param layout may be nullptr if the Layout was destroyed while
+     * @param layout may be nullptr if the PhosphorZones::Layout was destroyed while
      *               the worker was running; @p layoutId is always the
-     *               id of the originally-requested Layout and is the
+     *               id of the originally-requested PhosphorZones::Layout and is the
      *               key completion barriers should match on.
      */
-    void geometriesComputed(const QString& screenId, const QUuid& layoutId, Layout* layout);
+    void geometriesComputed(const QString& screenId, const QUuid& layoutId, PhosphorZones::Layout* layout);
 
     // Internal: forward snapshot to worker thread via QueuedConnection.
     // Publicly visible because Qt signals cannot be private, but must
@@ -89,13 +92,14 @@ Q_SIGNALS:
     void requestCompute(const PlasmaZones::LayoutSnapshot& snapshot, uint64_t generation);
 
 private:
-    static LayoutSnapshot buildSnapshot(Layout* layout, const QString& screenId, const QRectF& screenGeometry);
+    static LayoutSnapshot buildSnapshot(PhosphorZones::Layout* layout, const QString& screenId,
+                                        const QRectF& screenGeometry);
     void applyResult(const LayoutComputeResult& result);
     void onLayoutRemoved(const QUuid& layoutId);
 
-    /// Map layout ID → live Layout* (QPointer guards against destruction
+    /// Map layout ID → live PhosphorZones::Layout* (QPointer guards against destruction
     /// while a compute result is in flight on the worker thread).
-    QHash<QUuid, QPointer<Layout>> m_trackedLayouts;
+    QHash<QUuid, QPointer<PhosphorZones::Layout>> m_trackedLayouts;
 
     /// Per-screen generation counters for coalescing
     QHash<QString, uint64_t> m_screenGeneration;

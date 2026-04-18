@@ -8,6 +8,7 @@
 #include <QFont>
 #include <QImage>
 #include <QRectF>
+#include <QTimer>
 #include <QUuid>
 #include <QScreen>
 #include <QQuickWindow>
@@ -15,12 +16,19 @@
 #include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
+#include "../core/layoutmanager.h"
+#include "../core/layoutsourcefactory.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
 
+#include <memory>
+
+namespace PhosphorZones {
+class Layout;
+}
+
 namespace PlasmaZones {
 
-class Layout;
 class ILayoutService;
 class ZoneManager;
 class SnappingService;
@@ -37,7 +45,7 @@ class EditorController : public QObject
 {
     Q_OBJECT
 
-    // Layout properties
+    // PhosphorZones::Layout properties
     Q_PROPERTY(QString layoutId READ layoutId NOTIFY layoutIdChanged)
     Q_PROPERTY(QString layoutName READ layoutName WRITE setLayoutName NOTIFY layoutNameChanged)
     Q_PROPERTY(QVariantList zones READ zones NOTIFY zonesChanged)
@@ -82,7 +90,7 @@ class EditorController : public QObject
     // Screen
     Q_PROPERTY(QString targetScreen READ targetScreen WRITE setTargetScreen NOTIFY targetScreenChanged)
 
-    // Zone settings (per-layout override or global settings)
+    // PhosphorZones::Zone settings (per-layout override or global settings)
     Q_PROPERTY(int zonePadding READ zonePadding WRITE setZonePadding NOTIFY zonePaddingChanged)
     Q_PROPERTY(int outerGap READ outerGap WRITE setOuterGap NOTIFY outerGapChanged)
     Q_PROPERTY(bool hasZonePaddingOverride READ hasZonePaddingOverride NOTIFY zonePaddingChanged)
@@ -290,6 +298,27 @@ public:
         return m_availableScreenIds;
     }
     QVariantList screenModel() const;
+
+    // ─── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───
+    //
+    // The editor runs as its own process. Today its layout-list / template /
+    // import-preview QML still mostly fetches via D-Bus (DBusLayoutService),
+    // requiring a running daemon. The methods below load the SAME on-disk
+    // layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource so QML
+    // preview-rendering paths work even when the daemon isn't running.
+    //
+    // QVariantMap shape is the QML-facing projection produced by
+    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
+    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
+    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
+    // flags. This is intentionally different from LayoutAdaptor::getLayoutPreview's
+    // D-Bus JSON, which is a separate projection optimised for wire transfer.
+    Q_INVOKABLE QVariantList localLayoutPreviews() const;
+    // Non-const: ILayoutSource::previewAt is non-const so implementations
+    // can populate a query cache (scripted autotile algorithms would be
+    // prohibitively expensive to re-run on every picker redraw). Changing
+    // this invoker to const would silently dodge that cache.
+    Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4);
     int virtualDesktopCount() const
     {
         return m_virtualDesktopCount;
@@ -411,7 +440,7 @@ public:
      * @brief Convert current zones to format expected by ZoneShaderItem for preview
      * @param width Preview width in pixels
      * @param height Preview height in pixels
-     * @return Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
+     * @return PhosphorZones::Zone data with pixel coords, fillR/G/B/A, borderR/G/B/A, etc.
      */
     Q_INVOKABLE QVariantList zonesForShaderPreview(int width, int height) const;
 
@@ -432,7 +461,7 @@ public:
 
     /**
      * @brief Build a labels texture (zone numbers) for shader preview
-     * @param zones Zone data from zonesForShaderPreview()
+     * @param zones PhosphorZones::Zone data from zonesForShaderPreview()
      * @param width Texture width in pixels
      * @param height Texture height in pixels
      * @return QImage with zone numbers rendered, or null image if no zones
@@ -456,13 +485,20 @@ public:
     Q_INVOKABLE void stopAudioCapture();
 
 public Q_SLOTS:
-    // Layout operations
+    // PhosphorZones::Layout operations
     void createNewLayout();
     void loadLayout(const QString& layoutId);
     void saveLayout();
     void discardChanges();
 
-    // Zone CRUD operations (using zone IDs)
+    // D-Bus subscriber slot — wired in the ctor to all of the daemon's
+    // layout-mutation signals (layoutCreated/Deleted/Changed/ListChanged/
+    // PropertyChanged). Forces an in-process LayoutManager reload so
+    // localLayoutPreviews() reflects the daemon's view regardless of
+    // whether the QFileSystemWatcher saw the underlying file event.
+    void reloadLocalLayouts();
+
+    // PhosphorZones::Zone CRUD operations (using zone IDs)
     QString addZone(qreal x, qreal y, qreal width, qreal height);
     void updateZoneGeometry(const QString& zoneId, qreal x, qreal y, qreal width, qreal height,
                             bool skipSnapping = false);
@@ -473,7 +509,7 @@ public Q_SLOTS:
     void deleteZone(const QString& zoneId);
     QString duplicateZone(const QString& zoneId);
 
-    // Zone splitting - split a zone horizontally or vertically
+    // PhosphorZones::Zone splitting - split a zone horizontally or vertically
     Q_INVOKABLE QString splitZone(const QString& zoneId, bool horizontal);
 
     // Helper: get zone index by ID
@@ -482,7 +518,7 @@ public Q_SLOTS:
 
     /**
      * @brief Get complete zone data by ID
-     * @param zoneId Zone ID to retrieve
+     * @param zoneId PhosphorZones::Zone ID to retrieve
      * @return Complete zone data as QVariantMap, or empty map if not found
      *
      * Performance optimization: O(1) lookup instead of O(n) JavaScript loop in QML.
@@ -607,7 +643,7 @@ public Q_SLOTS:
     // Per-zone geometry mode operations
     /**
      * @brief Toggle a zone between Relative and Fixed geometry mode
-     * @param zoneId Zone to toggle
+     * @param zoneId PhosphorZones::Zone to toggle
      *
      * Converts between modes using the target screen resolution.
      * Creates an undo command for the toggle.
@@ -616,14 +652,14 @@ public Q_SLOTS:
 
     /**
      * @brief Update fixed geometry for a zone (for spinbox edits)
-     * @param zoneId Zone to update
+     * @param zoneId PhosphorZones::Zone to update
      * @param x, y, w, h Fixed pixel coordinates
      */
     Q_INVOKABLE void updateZoneFixedGeometry(const QString& zoneId, qreal x, qreal y, qreal w, qreal h);
 
     /**
      * @brief Apply geometry mode and coordinates directly (for undo/redo)
-     * @param zoneId Zone to update
+     * @param zoneId PhosphorZones::Zone to update
      * @param mode Geometry mode (0=Relative, 1=Fixed)
      * @param relativeGeo Relative geometry
      * @param fixedGeo Fixed geometry
@@ -777,7 +813,7 @@ private:
 
     /**
      * @brief Internal implementation for all z-order operations
-     * @param zoneId Zone to modify
+     * @param zoneId PhosphorZones::Zone to modify
      * @param op Z-order operation to perform
      * @param actionName Undo action display name (already translated)
      */
@@ -840,7 +876,7 @@ private:
      */
     void onClipboardChanged();
 
-    // Layout data
+    // PhosphorZones::Layout data
     QString m_layoutId;
     QString m_layoutName;
     int m_zonesVersion = 0; // Increments on any zone change (lightweight binding dependency)
@@ -856,6 +892,31 @@ private:
     SnappingService* m_snappingService = nullptr;
     TemplateService* m_templateService = nullptr;
     UndoController* m_undoController = nullptr;
+
+    // Daemon-independent layout source — exposed via localLayoutPreviews()
+    // for QML preview rendering paths that don't need the daemon (template
+    // gallery, layout-import preview thumbnails, etc.).
+    //
+    // The bundle aggregates manual layouts (over m_localLayoutManager) and
+    // autotile previews (over the AlgorithmRegistry singleton) behind a
+    // single ILayoutSource. Declaration order matters — the LayoutManager
+    // must outlive the bundle's zones source that borrows its catalog.
+    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    LayoutSourceBundle m_localSources;
+
+    /// Debounces D-Bus layout-mutation bursts (layoutCreated / layoutDeleted /
+    /// layoutChanged / layoutListChanged / layoutPropertyChanged) into a
+    /// single reloadLocalLayouts() call. Mirrors the SettingsController
+    /// m_layoutLoadTimer pattern so a typical editor save — which fires
+    /// layoutChanged + layoutListChanged back-to-back — only hits the
+    /// LayoutManager once.
+    QTimer m_layoutReloadTimer;
+
+    /// Recompute zone geometry for every manual layout against the
+    /// primary screen so ZonesLayoutSource previews render fixed-geometry
+    /// zones at their authored dimensions — see SettingsController for
+    /// the matching implementation.
+    void recalcLocalLayouts();
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 
@@ -886,7 +947,7 @@ private:
     QString m_defaultInactiveColor;
     QString m_defaultBorderColor;
 
-    // Zone settings (per-layout override, -1 = use global)
+    // PhosphorZones::Zone settings (per-layout override, -1 = use global)
     int m_zonePadding = -1;
     int m_outerGap = -1;
     bool m_usePerSideOuterGap = false;

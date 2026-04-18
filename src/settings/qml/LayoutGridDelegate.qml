@@ -282,7 +282,7 @@ Item {
 
                 // Memory indicator for algorithms that persist split state
                 Kirigami.Icon {
-                    visible: root.modelData.memory === true
+                    visible: root.modelData.supportsMemory === true
                     source: "document-save-symbolic"
                     implicitWidth: Kirigami.Units.iconSizes.small
                     implicitHeight: Kirigami.Units.iconSizes.small

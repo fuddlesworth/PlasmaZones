@@ -460,7 +460,7 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
     return false;
 }
 
-// ── Per-Screen Zone Selector Config ──────────────────────────────────────────
+// ── Per-Screen PhosphorZones::Zone Selector Config ──────────────────────────────────────────
 
 ZoneSelectorConfig Settings::resolvedZoneSelectorConfig(const QString& screenIdOrName) const
 {

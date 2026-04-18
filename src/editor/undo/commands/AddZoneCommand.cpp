@@ -13,7 +13,7 @@ namespace PlasmaZones {
 
 AddZoneCommand::AddZoneCommand(QPointer<ZoneManager> zoneManager, const QString& zoneId, const QVariantMap& zoneData,
                                const QString& text, QUndoCommand* parent)
-    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Add Zone", "@action") : text, parent)
+    : BaseZoneCommand(zoneManager, text.isEmpty() ? PzI18n::tr("Add PhosphorZones::Zone", "@action") : text, parent)
     , m_zoneId(zoneId)
     , m_zoneData(zoneData)
 {
@@ -37,14 +37,14 @@ void AddZoneCommand::redo()
     // QUndoStack automatically calls redo() when pushing, so we need to be idempotent
     QVariantMap existingZone = m_zoneManager->getZoneById(m_zoneId);
     if (!existingZone.isEmpty()) {
-        // Zone already exists - this means the operation was already performed
+        // PhosphorZones::Zone already exists - this means the operation was already performed
         // QUndoStack calls redo() when pushing, but we've already done the operation
         // So we should do nothing (idempotent) - don't overwrite the zone's current state
         // The zone might have been modified by subsequent operations
         return;
     }
 
-    // Zone doesn't exist - restore it (this happens when redoing after an undo)
+    // PhosphorZones::Zone doesn't exist - restore it (this happens when redoing after an undo)
     m_zoneManager->addZoneFromMap(m_zoneData, true);
 }
 
