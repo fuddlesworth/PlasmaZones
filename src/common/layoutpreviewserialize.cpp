@@ -9,6 +9,7 @@
 
 #include <QJsonArray>
 #include <QVariantList>
+#include <QtMath>
 
 namespace PlasmaZones {
 
@@ -120,7 +121,11 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
     json[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);
-    if (preview.referenceAspectRatio > 0.0) {
+    // Guard against NaN/Inf landing in the wire payload — the QML preview
+    // renderer divides by referenceAspectRatio, which would yield Infinity or
+    // NaN-positioned thumbnails. Drop the field on non-finite values so the
+    // renderer falls back to its no-hint geometry.
+    if (qIsFinite(preview.referenceAspectRatio) && preview.referenceAspectRatio > 0.0) {
         json[K::ReferenceAspectRatio] = preview.referenceAspectRatio;
     }
 
@@ -170,7 +175,11 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;
     map[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);
-    if (preview.referenceAspectRatio > 0.0) {
+    // Guard against NaN/Inf landing in the wire payload — the QML preview
+    // renderer divides by referenceAspectRatio, which would yield Infinity or
+    // NaN-positioned thumbnails. Drop the field on non-finite values so the
+    // renderer falls back to its no-hint geometry.
+    if (qIsFinite(preview.referenceAspectRatio) && preview.referenceAspectRatio > 0.0) {
         map[K::ReferenceAspectRatio] = preview.referenceAspectRatio;
     }
 

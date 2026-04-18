@@ -74,8 +74,10 @@ struct AlgorithmSettings
  * This is a value type (not QObject) for easy copying and comparison.
  * It can be stored per-layout or as global defaults.
  *
- * @note Default values here must match PhosphorTiles::AutotileDefaults in constants.h.
- *       Validation and clamping use those shared constants.
+ * @note Default values are sourced from `ConfigDefaults::autotile*()` accessors,
+ *       which delegate to `PhosphorTiles::AutotileDefaults` for the algorithm
+ *       constants. Do not hand-mirror values here — keep the delegation chain
+ *       intact so library and config defaults stay in lock-step.
  */
 struct PLASMAZONES_EXPORT AutotileConfig
 {

@@ -38,6 +38,14 @@ namespace PlasmaZones {
 /// pointers to `zones` and `autotile`, and C++'s reverse-declaration
 /// destruction order guarantees composite is destroyed first, dropping its
 /// borrowed pointers before the child sources go out of scope.
+///
+/// **Lifetime contract for consumers:** the bundle must outlive every
+/// observer that holds `composite.get()`, `zones.get()`, or `autotile.get()`
+/// — including QML model bindings, async D-Bus callbacks, queued signal
+/// connections, and any cached `ILayoutSource*` stored elsewhere. Resetting
+/// or moving-from a bundle while observers still hold raw pointers is a
+/// use-after-free. Tear down observers (disconnect signals, drop QML
+/// bindings, cancel pending D-Bus calls) before destroying the bundle.
 struct PLASMAZONES_EXPORT LayoutSourceBundle
 {
     LayoutSourceBundle();

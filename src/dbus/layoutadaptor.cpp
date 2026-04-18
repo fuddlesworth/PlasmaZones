@@ -42,6 +42,14 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
     , m_layoutManager(manager)
 {
     Q_ASSERT(manager);
+    if (!m_layoutManager) {
+        // Release builds drop the assert above; a null manager is a fatal
+        // misconfiguration but skipping the connect() calls degrades the
+        // crash to a non-functional D-Bus surface that returns empty data.
+        qCCritical(lcDbusLayout) << "LayoutAdaptor constructed with null LayoutManager — D-Bus surface will be inert";
+        initCoalesceTimer();
+        return;
+    }
     connectLayoutManagerSignals();
     initCoalesceTimer();
 }
@@ -52,6 +60,11 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
     , m_virtualDesktopManager(vdm)
 {
     Q_ASSERT(manager);
+    if (!m_layoutManager) {
+        qCCritical(lcDbusLayout) << "LayoutAdaptor constructed with null LayoutManager — D-Bus surface will be inert";
+        initCoalesceTimer();
+        return;
+    }
     connectLayoutManagerSignals();
     connectVirtualDesktopSignals();
     initCoalesceTimer();
@@ -635,6 +648,13 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
         // D-Bus emission — see m_layoutSourceCoalesce member comment.
         connect(m_layoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, &m_layoutSourceCoalesce,
                 QOverload<>::of(&QTimer::start));
+        // Kick the coalesce timer once on bind so a fully-populated source
+        // (typical for AutotileLayoutSource over a registry that's been
+        // populated synchronously by the built-in registration sweep) still
+        // produces a layoutListChanged D-Bus emission for any client that
+        // attached before this bind. One extra signal at startup is cheap;
+        // a never-invalidated client cache is not.
+        m_layoutSourceCoalesce.start();
     }
 }
 

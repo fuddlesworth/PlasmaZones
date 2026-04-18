@@ -8,6 +8,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 
 namespace PlasmaZones {
 
@@ -35,6 +36,20 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
 
     if (m_settings) {
         connect(m_settings, &Settings::settingsChanged, this, [this]() {
+            m_cacheValid = false;
+        });
+    }
+
+    // Autotile entries enter the unified list via PhosphorTiles::AlgorithmRegistry,
+    // not LayoutManager — without this subscription a hot-loaded user script (or
+    // any built-in registration churn) leaves m_cachedLayouts stale, and Meta+1‥9
+    // continues to cycle the pre-load list until something else fires
+    // layoutsChanged. Mirror SettingsController's existing pattern.
+    if (auto* registry = PhosphorTiles::AlgorithmRegistry::instance()) {
+        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
+            m_cacheValid = false;
+        });
+        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool) {
             m_cacheValid = false;
         });
     }

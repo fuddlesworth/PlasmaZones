@@ -76,9 +76,14 @@ EditorController::EditorController(QObject* parent)
     // emits non-empty zones + a real referenceAspectRatio — see the matching
     // comment in SettingsController.
     recalcLocalLayouts();
+    // Order matters: recompute geometry BEFORE notifying the layout source
+    // that contents changed, otherwise consumers wired to ZonesLayoutSource
+    // see new entries with stale (pre-recalc) zone geometry until the next
+    // recompute fires. Slot connection order is the only guarantee Qt gives
+    // us here, so connect recalcLocalLayouts first.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
     connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
             &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
 
     // Subscribe to the daemon's layout-change D-Bus signals and force
     // a local-source reload when any fire. Belt-and-suspenders alongside
