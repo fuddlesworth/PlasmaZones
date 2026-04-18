@@ -112,6 +112,23 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         return;
     }
 
+    // IDs flow into LayoutPreview::id ("autotile:<id>"), JSON keys, D-Bus
+    // method arguments, and QML model roles. Reject characters that would
+    // break any downstream parser before they reach those boundaries.
+    // Allowed: ASCII letters, digits, '-', '_', '.', ':' (':' enables
+    // namespacing like "script:foo" used by ScriptedAlgorithmLoader).
+    for (QChar c : id) {
+        const ushort u = c.unicode();
+        const bool ok = (u >= 'a' && u <= 'z') || (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || u == '-'
+            || u == '_' || u == '.' || u == ':';
+        if (!ok) {
+            qCWarning(PhosphorTiles::lcTilesLib) << "AlgorithmRegistry: refusing algorithm id with invalid character"
+                                                 << id << "(allowed: [A-Za-z0-9._:-])";
+            delete algorithm;
+            return;
+        }
+    }
+
     // Check if this algorithm pointer is already registered under a different ID
     // to prevent double-free issues. Don't delete - it's still owned under the original ID.
     const QString existingId = algorithm->registryId();

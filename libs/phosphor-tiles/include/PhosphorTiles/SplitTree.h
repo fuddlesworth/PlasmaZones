@@ -282,7 +282,7 @@ private:
 
     static QJsonObject nodeToJson(const SplitNode* node, int depth = 0);
     static std::unique_ptr<SplitNode> nodeFromJson(const QJsonObject& json, SplitNode* parent, int depth,
-                                                   int& nodeCount, QSet<QString>& seenIds);
+                                                   int& nodeCount, int& clampedRatios, QSet<QString>& seenIds);
 };
 
 } // namespace PhosphorTiles
