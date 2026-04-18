@@ -40,6 +40,9 @@ void ZoneHighlighter::highlightZones(const QVector<Zone*>& zones)
 
 void ZoneHighlighter::clearHighlights()
 {
+    if (m_highlightedZones.isEmpty()) {
+        return;
+    }
     for (auto* zone : m_highlightedZones) {
         if (zone) {
             zone->setHighlighted(false);

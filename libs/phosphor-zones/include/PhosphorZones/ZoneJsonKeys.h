@@ -19,8 +19,8 @@ namespace PhosphorZones {
  * Keys that aren't part of the zone/layout file format proper (window-
  * assignment runtime state, screen-info enumeration, virtual-screen
  * configuration, pywal colour ingestion, autotile JSON) live in their
- * respective owners — see PlasmaZones::JsonKeys (src/core/constants.h)
- * and PhosphorTiles::AutotileJsonKeys (libs/phosphor-tiles).
+ * respective owners — see the application's config layer for host-specific
+ * keys, and PhosphorTiles::AutotileJsonKeys for autotile overrides.
  */
 namespace ZoneJsonKeys {
 
@@ -58,9 +58,14 @@ inline constexpr QLatin1String ZonePadding{"zonePadding"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
 inline constexpr QLatin1String ShowZoneNumbers{"showZoneNumbers"};
 inline constexpr QLatin1String OverlayDisplayMode{"overlayDisplayMode"};
-inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; ///< Legacy, for backward-compat when loading
-inline constexpr QLatin1String IsSystem{"isSystem"}; ///< New: determined by source path
-inline constexpr QLatin1String HasSystemOrigin{"hasSystemOrigin"}; ///< User override of a system layout
+inline constexpr QLatin1String IsBuiltIn{"isBuiltIn"}; ///< Live wire-format key — still emitted by sibling libraries
+                                                       ///< and src/common/layoutpreviewserialize.cpp when serialising
+                                                       ///< layout previews.
+inline constexpr QLatin1String IsSystem{"isSystem"}; ///< Live wire-format key — system classification derived from
+                                                     ///< the layout's source path.
+inline constexpr QLatin1String HasSystemOrigin{"hasSystemOrigin"}; ///< Live wire-format key — set when a user layout
+                                                                   ///< overrides a system original (see
+                                                                   ///< SystemSourcePath).
 inline constexpr QLatin1String SystemSourcePath{"systemSourcePath"}; ///< Original system layout path
 inline constexpr QLatin1String ZoneCount{"zoneCount"};
 inline constexpr QLatin1String Category{"category"}; ///< 0=Manual, 1=Autotile

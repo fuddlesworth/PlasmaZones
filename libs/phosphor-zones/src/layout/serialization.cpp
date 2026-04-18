@@ -18,10 +18,10 @@ QVariantList Layout::appRulesVariant() const
     QVariantList result;
     for (const auto& rule : m_appRules) {
         QVariantMap map;
-        map[QStringLiteral("pattern")] = rule.pattern;
-        map[QStringLiteral("zoneNumber")] = rule.zoneNumber;
+        map[QString(::PhosphorZones::ZoneJsonKeys::Pattern)] = rule.pattern;
+        map[QString(::PhosphorZones::ZoneJsonKeys::ZoneNumber)] = rule.zoneNumber;
         if (!rule.targetScreen.isEmpty()) {
-            map[QStringLiteral("targetScreen")] = rule.targetScreen;
+            map[QString(::PhosphorZones::ZoneJsonKeys::TargetScreen)] = rule.targetScreen;
         }
         result.append(map);
     }
@@ -34,9 +34,9 @@ void Layout::setAppRulesVariant(const QVariantList& rules)
     for (const auto& item : rules) {
         QVariantMap map = item.toMap();
         AppRule rule;
-        rule.pattern = map.value(QStringLiteral("pattern")).toString();
-        rule.zoneNumber = map.value(QStringLiteral("zoneNumber")).toInt();
-        rule.targetScreen = map.value(QStringLiteral("targetScreen")).toString();
+        rule.pattern = map.value(QString(::PhosphorZones::ZoneJsonKeys::Pattern)).toString();
+        rule.zoneNumber = map.value(QString(::PhosphorZones::ZoneJsonKeys::ZoneNumber)).toInt();
+        rule.targetScreen = map.value(QString(::PhosphorZones::ZoneJsonKeys::TargetScreen)).toString();
         if (!rule.pattern.isEmpty() && rule.zoneNumber > 0) {
             newRules.append(rule);
         }
@@ -131,7 +131,9 @@ QJsonObject Layout::toJson() const
     if (!m_shaderId.isEmpty()) {
         json[::PhosphorZones::ZoneJsonKeys::ShaderId] = m_shaderId;
     }
-    if (!m_shaderParams.isEmpty()) {
+    // Don't persist params when no shader is bound — stale params without a
+    // shaderId are meaningless to consumers and just bloat the file.
+    if (!m_shaderId.isEmpty() && !m_shaderParams.isEmpty()) {
         json[::PhosphorZones::ZoneJsonKeys::ShaderParams] = QJsonObject::fromVariantMap(m_shaderParams);
     }
 

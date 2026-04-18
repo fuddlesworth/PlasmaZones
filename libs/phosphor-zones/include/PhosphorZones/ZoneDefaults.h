@@ -12,11 +12,10 @@ namespace PhosphorZones {
  *
  * These are the canonical defaults the zone primitives fall back to when
  * a value isn't explicitly persisted (e.g. an old layout file missing a
- * border-width key, a freshly constructed Zone with no overrides).  The
- * application config layer's user-facing accessors
- * (PlasmaZones::ConfigDefaults::*) delegate downward to these so there is
- * a single source of truth — same pattern as
- * `PhosphorTiles::AutotileDefaults`.
+ * border-width key, a freshly constructed Zone with no overrides). The
+ * application's config layer delegates its user-facing zone-default
+ * accessors downward to these, so there is a single source of truth —
+ * same pattern as `PhosphorTiles::AutotileDefaults`.
  */
 namespace ZoneDefaults {
 

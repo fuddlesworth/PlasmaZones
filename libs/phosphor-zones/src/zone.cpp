@@ -87,11 +87,6 @@ void Zone::copyPropertiesFrom(const Zone& other)
     m_fixedGeometry = other.m_fixedGeometry;
 }
 
-bool Zone::operator==(const Zone& other) const
-{
-    return m_id == other.m_id && m_geometryMode == other.m_geometryMode && m_fixedGeometry == other.m_fixedGeometry;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Zone Property Setters
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -277,27 +272,34 @@ Zone* Zone::fromJson(const QJsonObject& json, QObject* parent)
     zone->m_name = json[Name].toString();
     zone->m_zoneNumber = json[ZoneNumber].toInt();
 
-    // Relative geometry
+    // Relative geometry — clamp 0..1 to defend against malformed input.
     const auto relGeo = json[RelativeGeometry].toObject();
     zone->m_relativeGeometry =
-        QRectF(relGeo[X].toDouble(), relGeo[Y].toDouble(), relGeo[Width].toDouble(), relGeo[Height].toDouble());
+        QRectF(qBound(0.0, relGeo[X].toDouble(), 1.0), qBound(0.0, relGeo[Y].toDouble(), 1.0),
+               qBound(0.0, relGeo[Width].toDouble(), 1.0), qBound(0.0, relGeo[Height].toDouble(), 1.0));
 
     // Per-zone geometry mode (default Relative if missing)
     zone->m_geometryMode = static_cast<ZoneGeometryMode>(json[GeometryMode].toInt(0));
 
-    // Fixed geometry (only present when mode is Fixed)
+    // Fixed geometry (only present when mode is Fixed). X/Y are pixel offsets
+    // (negative allowed for off-screen positioning); width/height must be >= 0.
     if (json.contains(FixedGeometry)) {
         const auto fixedGeo = json[FixedGeometry].toObject();
-        zone->m_fixedGeometry = QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(), fixedGeo[Width].toDouble(),
-                                       fixedGeo[Height].toDouble());
+        zone->m_fixedGeometry = QRectF(fixedGeo[X].toDouble(), fixedGeo[Y].toDouble(),
+                                       qMax(0.0, fixedGeo[Width].toDouble()), qMax(0.0, fixedGeo[Height].toDouble()));
     }
 
-    // Appearance
+    // Appearance — colours fall back to ZoneDefaults when missing or invalid so
+    // a partial appearance block (one good colour, one malformed) still yields a
+    // fully-populated zone instead of a default-constructed QColor for the bad key.
     const auto appearance = json[Appearance].toObject();
     if (!appearance.isEmpty()) {
-        zone->m_highlightColor = QColor(appearance[HighlightColor].toString());
-        zone->m_inactiveColor = QColor(appearance[InactiveColor].toString());
-        zone->m_borderColor = QColor(appearance[BorderColor].toString());
+        const QColor highlight(appearance[HighlightColor].toString());
+        zone->m_highlightColor = highlight.isValid() ? highlight : ::PhosphorZones::ZoneDefaults::HighlightColor;
+        const QColor inactive(appearance[InactiveColor].toString());
+        zone->m_inactiveColor = inactive.isValid() ? inactive : ::PhosphorZones::ZoneDefaults::InactiveColor;
+        const QColor border(appearance[BorderColor].toString());
+        zone->m_borderColor = border.isValid() ? border : ::PhosphorZones::ZoneDefaults::BorderColor;
         zone->m_activeOpacity = appearance[ActiveOpacity].toDouble(::PhosphorZones::ZoneDefaults::Opacity);
         zone->m_inactiveOpacity = appearance[InactiveOpacity].toDouble(::PhosphorZones::ZoneDefaults::InactiveOpacity);
         zone->m_borderWidth = appearance[BorderWidth].toInt(::PhosphorZones::ZoneDefaults::BorderWidth);

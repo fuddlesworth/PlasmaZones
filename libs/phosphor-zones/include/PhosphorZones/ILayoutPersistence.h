@@ -23,6 +23,11 @@ class Layout;
  * Layouts persist to individual JSON files under @c layoutDirectory()
  * (typically ~/.local/share/plasmazones/layouts/). Assignments persist
  * via the settings backend — saved separately from the layout files.
+ *
+ * This interface is non-reactive — it has no change signals. Callers that
+ * need to observe layout-directory changes, reload completion, or save
+ * completion must subscribe on the concrete @c LayoutManager (which owns
+ * the Qt signals) rather than this narrower contract.
  */
 class PHOSPHORZONES_EXPORT ILayoutPersistence
 {

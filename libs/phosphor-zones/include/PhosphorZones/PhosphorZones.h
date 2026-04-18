@@ -4,7 +4,9 @@
 #pragma once
 
 /// Umbrella include for PhosphorZones. Consumers may include individual
-/// headers for tighter dependencies.
+/// headers for tighter dependencies. Consumers that only need a read-only
+/// view of the layout set should prefer @c ILayoutCatalog (declared in
+/// ILayoutManager.h) over the full @c ILayoutManager surface.
 
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/IZoneDetector.h>

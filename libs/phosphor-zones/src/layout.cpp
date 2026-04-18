@@ -103,6 +103,7 @@ Layout::Layout(const Layout& other)
     , m_showZoneNumbers(other.m_showZoneNumbers)
     , m_overlayDisplayMode(other.m_overlayDisplayMode)
     , m_sourcePath() // Copies have no source path (will be saved to user directory)
+    , m_systemSourcePath() // Copies carry no system-origin tracking (see class comment)
     , m_defaultOrder(other.m_defaultOrder)
     , m_appRules(other.m_appRules)
     , m_autoAssign(other.m_autoAssign)
@@ -139,6 +140,7 @@ Layout& Layout::operator=(const Layout& other)
         bool screensChanged = m_allowedScreens != other.m_allowedScreens;
         bool desktopsChanged = m_allowedDesktops != other.m_allowedDesktops;
         bool activitiesChanged = m_allowedActivities != other.m_allowedActivities;
+        const bool sourcePathDiff = !m_sourcePath.isEmpty() || !m_systemSourcePath.isEmpty();
 
         m_name = other.m_name;
         m_description = other.m_description;
@@ -154,6 +156,7 @@ Layout& Layout::operator=(const Layout& other)
         m_defaultOrder = other.m_defaultOrder;
         m_sourcePath.clear(); // Assignment creates a user copy (will be saved to user directory)
         m_systemSourcePath.clear(); // New copy has no system origin
+        m_isSystemLayout = false; // Cache stays consistent with the cleared source path
         m_shaderId = other.m_shaderId;
         m_shaderParams = other.m_shaderParams;
         bool rulesChanged = m_appRules != other.m_appRules;
@@ -200,6 +203,8 @@ Layout& Layout::operator=(const Layout& other)
             Q_EMIT useFullScreenGeometryChanged();
         if (arChanged)
             Q_EMIT aspectRatioClassChanged();
+        if (sourcePathDiff)
+            Q_EMIT sourcePathChanged();
 
         m_dirty = true;
         endBatchModify();
@@ -331,8 +336,23 @@ bool Layout::matchesAspectRatio(qreal screenAspectRatio) const
     return ::PhosphorLayout::ScreenClassification::matches(m_aspectRatioClass, screenClass);
 }
 
-// Source path setter (no layoutModified - internal tracking property)
-LAYOUT_SETTER_NO_MODIFIED(const QString&, SourcePath, m_sourcePath, sourcePathChanged)
+// Source path setter — no layoutModified (internal tracking property), but
+// recomputes the cached isSystemLayout classification before emitting so QML
+// bindings on the isSystemLayout property see a consistent value when they
+// react to sourcePathChanged.
+void Layout::setSourcePath(const QString& path)
+{
+    if (m_sourcePath != path) {
+        m_sourcePath = path;
+        if (m_sourcePath.isEmpty()) {
+            m_isSystemLayout = false;
+        } else {
+            const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+            m_isSystemLayout = !m_sourcePath.startsWith(userDataPath);
+        }
+        Q_EMIT sourcePathChanged();
+    }
+}
 
 // App-to-zone rules
 void Layout::setAppRules(const QVector<AppRule>& rules)
@@ -385,15 +405,7 @@ void Layout::clearOuterGapOverride()
 
 bool Layout::isSystemLayout() const
 {
-    if (m_sourcePath.isEmpty()) {
-        return false; // New layouts (no source) are not system layouts
-    }
-
-    // System layouts are loaded from /usr/share or other system data directories
-    // User layouts are in ~/.local/share
-    // Check if source path is NOT under user's writable location
-    const QString userDataPath = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
-    return !m_sourcePath.startsWith(userDataPath);
+    return m_isSystemLayout;
 }
 
 Zone* Layout::zone(int index) const

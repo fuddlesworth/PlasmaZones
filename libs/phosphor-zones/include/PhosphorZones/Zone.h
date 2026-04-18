@@ -83,8 +83,6 @@ public:
      */
     void copyPropertiesFrom(const Zone& other);
 
-    bool operator==(const Zone& other) const;
-
     // Identification
     QUuid id() const
     {

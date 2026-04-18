@@ -96,6 +96,11 @@ public:
     virtual void setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments) = 0;
 
 protected:
+    // Protected defaulted copy ops silence -Wdeprecated-copy, which is triggered
+    // by the user-declared virtual destructor above. Applies to every sibling
+    // interface in this family — declared here once as the lexically first
+    // interface; the rest follow the same pattern without restating the
+    // rationale.
     ILayoutAssignments(const ILayoutAssignments&) = default;
     ILayoutAssignments& operator=(const ILayoutAssignments&) = default;
 };

@@ -18,7 +18,7 @@ class ZoneHighlighter;
 
 namespace PhosphorZones {
 
-// ZoneDetectionResult is defined in interfaces.h
+// ZoneDetectionResult is defined in IZoneDetector.h
 
 /**
  * @brief Efficient zone detection for window snapping
@@ -115,4 +115,4 @@ private:
 
 } // namespace PhosphorZones
 
-// Q_DECLARE_METATYPE is in interfaces.h
+// Q_DECLARE_METATYPE is in IZoneDetector.h

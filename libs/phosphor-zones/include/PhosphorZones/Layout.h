@@ -513,6 +513,11 @@ private:
     // Cache last geometry used for recalculation to avoid redundant work
     mutable QRectF m_lastRecalcGeometry;
 
+    // Cached classification derived from m_sourcePath. Recomputed in
+    // setSourcePath so isSystemLayout() is O(1) — QStandardPaths lookups add
+    // up on hot paths like QML preview rebuilds.
+    bool m_isSystemLayout = false;
+
     // Dirty tracking for copy-on-write saving
     bool m_dirty = false;
     int m_batchModifyDepth = 0;
