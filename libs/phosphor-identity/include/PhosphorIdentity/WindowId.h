@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include <phosphoridentity_export.h>
+// PhosphorIdentity is an INTERFACE library — no generated export header.
+// Every helper below is `inline` and lives entirely in this header.
 
 #include <QString>
 #include <QStringView>

@@ -17,6 +17,12 @@
 # This library carries no Qt-Widgets / Wayland / KWin / Gui dependencies —
 # just Qt6::Core.  That makes it cheap to link from anywhere, including the
 # KWin effect plugin which is highly cost-sensitive about transitive deps.
+#
+# INTERFACE library: every helper in WindowId.h is `inline`, so there is no
+# compiled object code to ship — the previous SHARED target produced an
+# empty .so that existed only to anchor an export header.  An INTERFACE
+# target exposes the include dir + the Qt6::Core requirement to consumers
+# without producing a build artifact or a runtime dlopen cost.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -27,8 +33,6 @@ if(NOT PROJECT_VERSION)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
-
-include(GenerateExportHeader)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Dependencies
@@ -45,20 +49,15 @@ set(phosphoridentity_public_HDRS
     include/PhosphorIdentity/WindowId.h
 )
 
-set(phosphoridentity_SRCS
-    src/windowid.cpp
-)
-
-add_library(PhosphorIdentity SHARED
-    ${phosphoridentity_public_HDRS}
-    ${phosphoridentity_SRCS}
-)
-
+add_library(PhosphorIdentity INTERFACE)
 add_library(PhosphorIdentity::PhosphorIdentity ALIAS PhosphorIdentity)
 
-generate_export_header(PhosphorIdentity
-    EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/phosphoridentity_export.h
-    EXPORT_MACRO_NAME PHOSPHORIDENTITY_EXPORT
+# Attach the header set so IDEs see the public headers as project members
+# even though INTERFACE libraries have no compilation step.
+target_sources(PhosphorIdentity INTERFACE
+    FILE_SET HEADERS
+    BASE_DIRS include
+    FILES ${phosphoridentity_public_HDRS}
 )
 
 if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
@@ -67,25 +66,16 @@ if(NOT DEFINED KDE_INSTALL_INCLUDEDIR)
 endif()
 
 target_include_directories(PhosphorIdentity
-    PUBLIC
+    INTERFACE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
         $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}>
 )
 
-target_compile_features(PhosphorIdentity PUBLIC cxx_std_20)
+target_compile_features(PhosphorIdentity INTERFACE cxx_std_20)
 
 target_link_libraries(PhosphorIdentity
-    PUBLIC
+    INTERFACE
         Qt6::Core
-)
-
-set_target_properties(PhosphorIdentity PROPERTIES
-    VERSION ${PHOSPHORIDENTITY_VERSION}
-    SOVERSION 0
-    CXX_VISIBILITY_PRESET hidden
-    VISIBILITY_INLINES_HIDDEN ON
-    UNITY_BUILD OFF
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -98,15 +88,9 @@ if(NOT DEFINED KDE_INSTALL_LIBDIR)
     set(KDE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_INCLUDEDIR})
 endif()
 
-if(NOT DEFINED KDE_INSTALL_BINDIR)
-    set(KDE_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR})
-endif()
-
 install(TARGETS PhosphorIdentity
     EXPORT PhosphorIdentityTargets
-    LIBRARY DESTINATION ${KDE_INSTALL_LIBDIR}
-    ARCHIVE DESTINATION ${KDE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
+    FILE_SET HEADERS DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorIdentity
 )
 
 install(EXPORT PhosphorIdentityTargets
@@ -130,13 +114,4 @@ install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIdentityConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/PhosphorIdentityConfigVersion.cmake"
     DESTINATION ${KDE_INSTALL_LIBDIR}/cmake/PhosphorIdentity
-)
-
-install(DIRECTORY include/PhosphorIdentity/
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorIdentity
-    FILES_MATCHING PATTERN "*.h"
-)
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphoridentity_export.h
-    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorIdentity
 )
