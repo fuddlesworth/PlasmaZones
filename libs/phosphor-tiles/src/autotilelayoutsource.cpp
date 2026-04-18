@@ -53,7 +53,8 @@ QString cacheKey(const QString& algorithmId, int windowCount)
 } // namespace
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
-                                                   PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
+                                                   PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
+                                                   PhosphorTiles::AlgorithmRegistry* registry)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!algorithm || algorithmId.isEmpty()) {
@@ -62,16 +63,20 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
 
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 
-    // Seed preview params from the registry's configured values so previews
-    // reflect the user's saved master-count / split-ratio / max-windows
+    // Seed preview params from the supplied registry's configured values so
+    // previews reflect the user's saved master-count / split-ratio / max-windows
     // tuning. Active algorithm gets the global configured values; other
     // algorithms fall back to their per-algorithm saved entry, then to the
-    // algorithm's own defaults.
+    // algorithm's own defaults. Fall back to AlgorithmRegistry::instance()
+    // when no registry is provided.
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     qreal splitRatio = algorithm->defaultSplitRatio();
     int effectiveCount = windowCount;
-    if (auto* registry = PhosphorTiles::AlgorithmRegistry::instance()) {
-        const auto& params = PhosphorTiles::AlgorithmRegistry::configuredPreviewParams();
+    if (!registry) {
+        registry = PhosphorTiles::AlgorithmRegistry::instance();
+    }
+    if (registry) {
+        const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
         if (isActive) {
             if (params.masterCount > 0) {
@@ -136,7 +141,8 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     return preview;
 }
 
-PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
+PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
+                                                   PhosphorTiles::AlgorithmRegistry* registry)
 {
     if (!algorithm) {
         return {};
@@ -151,7 +157,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
             << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
         return {};
     }
-    return previewFromAlgorithm(id, algorithm, windowCount);
+    return previewFromAlgorithm(id, algorithm, windowCount, registry);
 }
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
@@ -161,22 +167,21 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* reg
     , m_registry(registry ? registry : PhosphorTiles::AlgorithmRegistry::instance())
 {
     if (m_registry) {
-        const auto onRegistered = [this](const QString&) {
+        // Every invalidation path must emit contentsChanged — wire all three
+        // registry signals to the same slot so the emit is owned by a single
+        // function (invalidateCache) instead of duplicated in each lambda.
+        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
             invalidateCache();
-            Q_EMIT contentsChanged();
-        };
-        const auto onUnregistered = [this](const QString&, bool /*replacing*/) {
-            invalidateCache();
-            Q_EMIT contentsChanged();
-        };
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, onRegistered);
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, onUnregistered);
+        });
+        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this,
+                [this](const QString&, bool /*replacing*/) {
+                    invalidateCache();
+                });
         // User-tuned master-count / split-ratio updates must invalidate the
         // preview cache — otherwise the next availableLayouts() returns
         // geometry rendered against the old state.
         connect(m_registry, &PhosphorTiles::AlgorithmRegistry::previewParamsChanged, this, [this]() {
             invalidateCache();
-            Q_EMIT contentsChanged();
         });
     }
 }
@@ -186,6 +191,25 @@ AutotileLayoutSource::~AutotileLayoutSource() = default;
 void AutotileLayoutSource::invalidateCache()
 {
     m_cache.clear();
+    m_cacheOrder.clear();
+    // All invalidation paths converge here, so emitting once guarantees no
+    // listener misses a rebuild regardless of which signal fired.
+    Q_EMIT contentsChanged();
+}
+
+void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLayout::LayoutPreview& preview) const
+{
+    // FIFO cap: registered-algorithm-count × 10 entries. Enough headroom for
+    // the layout-picker UI (one preview per algorithm × a handful of
+    // windowCount values) while preventing unbounded growth if a caller
+    // probes previewAt() with a wide range of window counts.
+    const int cap = qMax(10, m_registry ? m_registry->availableAlgorithms().size() * 10 : 10);
+    while (m_cacheOrder.size() >= cap && !m_cacheOrder.isEmpty()) {
+        const QString evict = m_cacheOrder.takeFirst();
+        m_cache.remove(evict);
+    }
+    m_cache.insert(key, preview);
+    m_cacheOrder.append(key);
 }
 
 QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() const
@@ -208,9 +232,13 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
         const QString key = cacheKey(id, PhosphorLayout::DefaultPreviewWindowCount);
         auto it = m_cache.constFind(key);
         if (it == m_cache.constEnd()) {
-            it = m_cache.insert(key, previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount));
+            PhosphorLayout::LayoutPreview preview =
+                previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount, m_registry);
+            insertCacheEntry(key, preview);
+            result.append(preview);
+        } else {
+            result.append(it.value());
         }
-        result.append(it.value());
     }
     return result;
 }
@@ -235,8 +263,8 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
     if (!algorithm) {
         return {};
     }
-    PhosphorLayout::LayoutPreview preview = previewFromAlgorithm(algorithmId, algorithm, windowCount);
-    m_cache.insert(key, preview);
+    PhosphorLayout::LayoutPreview preview = previewFromAlgorithm(algorithmId, algorithm, windowCount, m_registry);
+    insertCacheEntry(key, preview);
     return preview;
 }
 

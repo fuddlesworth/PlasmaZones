@@ -63,6 +63,13 @@ bool TilingState::addWindow(const QString& windowId, int position)
         return false; // Already tracked or invalid
     }
 
+    // Reject ahead of the split-tree truncation path. insertAtEndRaw builds a
+    // right-leaning chain where N leaves = height N; going beyond
+    // MaxRuntimeTreeDepth silently loses windows when the tree is rebuilt.
+    if (tiledWindowCount() >= MaxRuntimeTreeDepth) {
+        return false;
+    }
+
     const bool appendToEnd = (position < 0 || position >= m_windowOrder.size());
 
     if (appendToEnd) {

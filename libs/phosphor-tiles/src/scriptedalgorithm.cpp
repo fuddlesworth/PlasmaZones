@@ -73,23 +73,8 @@ struct WatchdogContext
     std::thread watchdogThread; ///< Persistent watchdog thread (joined on destruction)
 };
 
-template<typename T>
-T ScriptedAlgorithm::resolveJsOverride(const QJSValue& jsFn, T cachedValue, T metadataFallback) const
-{
-    if (m_cachedValuesLoaded && jsFn.isCallable()) {
-        return cachedValue;
-    }
-    // After loadScript() sets m_cachedValuesLoaded, all calls use the cached path above.
-    // Before that, fall back to metadata — never call JS without the watchdog.
-    return metadataFallback;
-}
-
-template<typename T>
-T ScriptedAlgorithm::resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValue, T metadataFallback, T minVal,
-                                              T maxVal) const
-{
-    return std::clamp(resolveJsOverride<T>(jsFn, cachedValue, metadataFallback), minVal, maxVal);
-}
+// resolveJsOverride<T> / resolveJsOverrideClamped<T> are defined inline in
+// the header so the _hooks.cpp and _tree.cpp TUs can instantiate them.
 
 ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
     : TilingAlgorithm(parent)
@@ -280,14 +265,24 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // Inject frozen constants so JS helpers and user scripts can reference them.
     // Check return values — if the engine is broken these would silently be
     // undefined and every helper using them would produce NaN.
-    const QJSValue constResult1 = m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = %1;").arg(MinZoneSizePx),
+    //
+    // Floating-point constants must use QString::number(v, 'g', 17) instead of
+    // QString::arg(qreal), which is locale-dependent and would emit "0,5" under
+    // de_DE (comma decimal separator), producing a JS syntax error.
+    const QJSValue constResult1 = m_engine->evaluate(QStringLiteral("var PZ_MIN_ZONE_SIZE = ")
+                                                         + QString::number(MinZoneSizePx) + QStringLiteral(";"),
                                                      QStringLiteral("builtin:constants"));
-    const QJSValue constResult2 = m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = %1;").arg(MinSplitRatio),
+    const QJSValue constResult2 =
+        m_engine->evaluate(QStringLiteral("var PZ_MIN_SPLIT = ")
+                               + QString::number(static_cast<double>(MinSplitRatio), 'g', 17) + QStringLiteral(";"),
+                           QStringLiteral("builtin:constants"));
+    const QJSValue constResult3 =
+        m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = ")
+                               + QString::number(static_cast<double>(MaxSplitRatio), 'g', 17) + QStringLiteral(";"),
+                           QStringLiteral("builtin:constants"));
+    const QJSValue constResult4 = m_engine->evaluate(QStringLiteral("var MAX_TREE_DEPTH = ")
+                                                         + QString::number(MaxRuntimeTreeDepth) + QStringLiteral(";"),
                                                      QStringLiteral("builtin:constants"));
-    const QJSValue constResult3 = m_engine->evaluate(QStringLiteral("var PZ_MAX_SPLIT = %1;").arg(MaxSplitRatio),
-                                                     QStringLiteral("builtin:constants"));
-    const QJSValue constResult4 = m_engine->evaluate(
-        QStringLiteral("var MAX_TREE_DEPTH = %1;").arg(MaxRuntimeTreeDepth), QStringLiteral("builtin:constants"));
     if (constResult1.isError() || constResult2.isError() || constResult3.isError() || constResult4.isError()) {
         qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm: constant injection failed, file=" << filePath;
         return false;
@@ -390,38 +385,45 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
     // NOT frozen. When adding a new builtin helper, add its exported
     // global name(s) here.
     static const QLatin1String frozenGlobals[] = {
-        // Injected constants (from C++ AutotileDefaults)
+        // ── Group 1: Injected C++ constants (4 entries, running total: 4) ──
         QLatin1String("PZ_MIN_ZONE_SIZE"),
         QLatin1String("PZ_MIN_SPLIT"),
         QLatin1String("PZ_MAX_SPLIT"),
         QLatin1String("MAX_TREE_DEPTH"),
-        // Helpers from ScriptedAlgorithmJsBuiltins
+        // ── Group 2: Standalone layout helpers (3 entries, running total: 7) ──
         QLatin1String("applyTreeGeometry"),
         QLatin1String("lShapeLayout"),
         QLatin1String("deckLayout"),
+        // ── Group 3: distribute* helpers (4 entries, running total: 11) ──
         QLatin1String("distributeEvenly"),
         QLatin1String("distributeWithGaps"),
         QLatin1String("distributeWithMinSizes"),
         QLatin1String("distributeWithOptionalMins"),
+        // ── Group 4: Solver / min-dim helpers (4 entries, running total: 15) ──
         QLatin1String("solveTwoPart"),
         QLatin1String("solveThreeColumn"),
         QLatin1String("computeCumulativeMinDims"),
         QLatin1String("appendGracefulDegradation"),
+        // ── Group 5: dwindle + extractMinDims exports (4 entries, running total: 19) ──
         QLatin1String("dwindleLayout"),
         QLatin1String("extractMinWidths"), // from extractMinDims
         QLatin1String("extractMinHeights"), // from extractMinDims
+        QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
+        // ── Group 6: interleaveStacks exports (4 entries, running total: 23) ──
         QLatin1String("buildStackIsLeft"), // from interleaveStacks
         QLatin1String("interleaveMinWidths"), // from interleaveStacks
         QLatin1String("interleaveMinHeights"), // from interleaveStacks
         QLatin1String("assignInterleavedStacks"), // from interleaveStacks
+        // ── Group 7: Per-window / region helpers (4 entries, running total: 27) ──
         QLatin1String("applyPerWindowMinSize"),
         QLatin1String("extractRegionMaxMin"),
+        QLatin1String("fillRegion"),
         QLatin1String("fillArea"),
+        // ── Group 8: High-level layouts (3 entries, running total: 30) ──
         QLatin1String("masterStackLayout"),
         QLatin1String("equalColumnsLayout"),
-        QLatin1String("fillRegion"),
         QLatin1String("threeColumnLayout"),
-        QLatin1String("_extractMinDims"), // internal helper from extractMinDims (used by extractMinWidths/Heights)
+        // ── Group 9: Shared utilities (1 entry, running total: 31) ──
         QLatin1String("clampSplitRatio"),
     };
     static_assert(std::size(frozenGlobals) == 31, "frozenGlobals count mismatch — did you add a new builtin?");
@@ -519,6 +521,27 @@ bool ScriptedAlgorithm::loadScript(const QString& filePath)
             return detail::jsValueTo<T>(r);
         return fallback;
     };
+    // Seed caches from parsed metadata so scripts that only declare values via
+    // `// @defaultSplitRatio 0.6`-style comments (no JS override function) are
+    // honoured. Without this, guardedCacheJsValue() falls back to the raw C++
+    // default and metadata silently has no effect at cache time.
+    if (m_metadata.defaultSplitRatio > 0.0) {
+        m_cachedDefaultSplitRatio = m_metadata.defaultSplitRatio;
+    }
+    if (m_metadata.minimumWindows > 0) {
+        m_cachedMinimumWindows = m_metadata.minimumWindows;
+    }
+    if (m_metadata.defaultMaxWindows > 0) {
+        m_cachedDefaultMaxWindows = m_metadata.defaultMaxWindows;
+    }
+    if (m_metadata.masterZoneIndex >= 0) {
+        m_cachedMasterZoneIndex = m_metadata.masterZoneIndex;
+    }
+    m_cachedSupportsMasterCount = m_metadata.supportsMasterCount;
+    m_cachedSupportsSplitRatio = m_metadata.supportsSplitRatio;
+    m_cachedProducesOverlappingZones = m_metadata.producesOverlappingZones;
+    m_cachedCenterLayout = m_metadata.centerLayout;
+
     m_cachedMasterZoneIndex = guardedCacheJsValue(m_jsMasterZoneIndex, m_cachedMasterZoneIndex);
     m_cachedSupportsMasterCount = guardedCacheJsValue(m_jsSupportsMasterCount, m_cachedSupportsMasterCount);
     m_cachedSupportsSplitRatio = guardedCacheJsValue(m_jsSupportsSplitRatio, m_cachedSupportsSplitRatio);
@@ -699,308 +722,8 @@ QVector<QRect> ScriptedAlgorithm::calculateZones(const TilingParams& params) con
     return clamped;
 }
 
-QJSValue ScriptedAlgorithm::splitNodeToJSValue(const SplitNode* node, int depth) const
-{
-    if (!node || !m_engine || depth > MaxTreeConversionDepth) {
-        return QJSValue();
-    }
-
-    // Cache Object.freeze once at the top of the recursion instead of looking it up per node
-    const QJSValue freezeFn =
-        m_engine->globalObject().property(QStringLiteral("Object")).property(QStringLiteral("freeze"));
-    if (!freezeFn.isCallable()) {
-        qCWarning(PhosphorTiles::lcTilesLib) << "Object.freeze not callable — tree will be mutable to JS scripts";
-    }
-    int nodeCount = 0;
-    return splitNodeToJSValueImpl(node, freezeFn, depth, nodeCount);
-}
-
-QJSValue ScriptedAlgorithm::splitNodeToJSValueImpl(const SplitNode* node, const QJSValue& freezeFn, int depth,
-                                                   int& nodeCount) const
-{
-    if (!node || !m_engine || depth > MaxTreeConversionDepth) {
-        return QJSValue();
-    }
-
-    static constexpr int MaxNodeConversionCount = 512;
-    if (++nodeCount > MaxNodeConversionCount) {
-        return QJSValue();
-    }
-
-    QJSValue jsNode = m_engine->newObject();
-
-    if (node->isLeaf()) {
-        jsNode.setProperty(QStringLiteral("windowId"), node->windowId);
-    } else {
-        const qreal ratio = std::isnan(node->splitRatio) ? 0.5 : std::clamp(node->splitRatio, 0.1, 0.9);
-        jsNode.setProperty(QStringLiteral("ratio"), ratio);
-        jsNode.setProperty(QStringLiteral("horizontal"), node->splitHorizontal);
-        jsNode.setProperty(QStringLiteral("first"),
-                           splitNodeToJSValueImpl(node->first.get(), freezeFn, depth + 1, nodeCount));
-        jsNode.setProperty(QStringLiteral("second"),
-                           splitNodeToJSValueImpl(node->second.get(), freezeFn, depth + 1, nodeCount));
-    }
-
-    // Freeze the node so scripts cannot mutate the tree representation
-    if (freezeFn.isCallable()) {
-        freezeFn.call({jsNode});
-    }
-
-    return jsNode;
-}
-
-// --- Virtual method overrides ---
-// Each checks for a JS function override first, then falls back to parsed metadata,
-// then to the base class default.
-
-QString ScriptedAlgorithm::name() const
-{
-    if (!m_metadata.name.isEmpty()) {
-        return m_metadata.name;
-    }
-    // Fall back to basename (strip "script:" prefix) with first letter capitalized
-    if (!m_scriptId.isEmpty()) {
-        QString fallback = m_scriptId;
-        if (fallback.startsWith(QLatin1String("script:"))) {
-            fallback = fallback.mid(7);
-        }
-        if (!fallback.isEmpty()) {
-            fallback[0] = fallback[0].toUpper();
-        }
-        return fallback;
-    }
-    // Library-side defaults — translation responsibility lives with the
-    // application that consumes the library (it can substitute its own
-    // localised label via Q_PROPERTY / display-name override).
-    return QStringLiteral("Scripted");
-}
-
-QString ScriptedAlgorithm::description() const
-{
-    if (!m_metadata.description.isEmpty()) {
-        return m_metadata.description;
-    }
-    return QStringLiteral("User-provided scripted tiling algorithm");
-}
-
-int ScriptedAlgorithm::masterZoneIndex() const
-{
-    // Unified three-tier resolution via template helper
-    return resolveJsOverride<int>(m_jsMasterZoneIndex, m_cachedMasterZoneIndex, m_metadata.masterZoneIndex);
-}
-
-bool ScriptedAlgorithm::supportsMasterCount() const
-{
-    return resolveJsOverride<bool>(m_jsSupportsMasterCount, m_cachedSupportsMasterCount,
-                                   m_metadata.supportsMasterCount);
-}
-
-bool ScriptedAlgorithm::supportsSplitRatio() const
-{
-    return resolveJsOverride<bool>(m_jsSupportsSplitRatio, m_cachedSupportsSplitRatio, m_metadata.supportsSplitRatio);
-}
-
-qreal ScriptedAlgorithm::defaultSplitRatio() const
-{
-    // Use resolveJsOverrideClamped to unify clamped resolution
-    const qreal fallback =
-        (m_metadata.defaultSplitRatio > 0.0) ? m_metadata.defaultSplitRatio : TilingAlgorithm::defaultSplitRatio();
-    return resolveJsOverrideClamped<qreal>(m_jsDefaultSplitRatio, m_cachedDefaultSplitRatio, fallback, MinSplitRatio,
-                                           MaxSplitRatio);
-}
-
-int ScriptedAlgorithm::minimumWindows() const
-{
-    // Use resolveJsOverrideClamped to unify clamped resolution
-    const int fallback =
-        (m_metadata.minimumWindows > 0) ? m_metadata.minimumWindows : TilingAlgorithm::minimumWindows();
-    return resolveJsOverrideClamped<int>(m_jsMinimumWindows, m_cachedMinimumWindows, fallback, MinMetadataWindows,
-                                         MaxMetadataWindows);
-}
-
-int ScriptedAlgorithm::defaultMaxWindows() const
-{
-    // Use resolveJsOverrideClamped to unify clamped resolution
-    const int fallback =
-        (m_metadata.defaultMaxWindows > 0) ? m_metadata.defaultMaxWindows : TilingAlgorithm::defaultMaxWindows();
-    return resolveJsOverrideClamped<int>(m_jsDefaultMaxWindows, m_cachedDefaultMaxWindows, fallback, MinMetadataWindows,
-                                         MaxMetadataWindows);
-}
-
-bool ScriptedAlgorithm::producesOverlappingZones() const
-{
-    return resolveJsOverride<bool>(m_jsProducesOverlappingZones, m_cachedProducesOverlappingZones,
-                                   m_metadata.producesOverlappingZones);
-}
-
-bool ScriptedAlgorithm::supportsMinSizes() const noexcept
-{
-    return m_metadata.supportsMinSizes;
-}
-
-bool ScriptedAlgorithm::supportsMemory() const noexcept
-{
-    return m_metadata.supportsMemory;
-}
-
-QString ScriptedAlgorithm::zoneNumberDisplay() const noexcept
-{
-    if (!m_metadata.zoneNumberDisplay.isEmpty()) {
-        return m_metadata.zoneNumberDisplay;
-    }
-    return TilingAlgorithm::zoneNumberDisplay();
-}
-
-bool ScriptedAlgorithm::centerLayout() const
-{
-    return resolveJsOverride<bool>(m_jsCenterLayout, m_cachedCenterLayout, m_metadata.centerLayout);
-}
-
-bool ScriptedAlgorithm::isScripted() const noexcept
-{
-    return true;
-}
-
-bool ScriptedAlgorithm::isUserScript() const noexcept
-{
-    return m_isUserScript;
-}
-
-QString ScriptedAlgorithm::builtinId() const
-{
-    return m_metadata.builtinId;
-}
-
-void ScriptedAlgorithm::prepareTilingState(TilingState* state) const
-{
-    if (!m_metadata.supportsMemory) {
-        return; // Only memory-aware scripts need tree preparation
-    }
-
-    if (!state || state->splitTree()) {
-        return; // Already has a tree (or no state)
-    }
-
-    // Only reset the split ratio to our default (0.5) if it still holds a
-    // value from a different algorithm (e.g., MasterStack's 0.6).
-    const qreal currentRatio = state->splitRatio();
-    const qreal defRatio = defaultSplitRatio();
-    // Reset split ratio to our default when it still holds a value from a
-    // different algorithm (e.g. MasterStack's 0.6). Small differences within
-    // the hysteresis band are kept so user fine-tuning is not discarded.
-    if (currentRatio > defRatio + AutotileDefaults::SplitRatioHysteresis
-        || currentRatio < defRatio - AutotileDefaults::SplitRatioHysteresis) {
-        state->setSplitRatio(defRatio);
-    }
-
-    const QStringList tiledWindows = state->tiledWindows();
-    if (tiledWindows.size() <= 1) {
-        return; // No tree needed for 0-1 windows
-    }
-
-    // Cap window count to prevent unbounded tree growth (MaxZones = 256)
-    const int maxWindows = qMin(static_cast<int>(tiledWindows.size()), AutotileDefaults::MaxZones);
-
-    const qreal ratio = state->splitRatio();
-    auto newTree = std::make_unique<SplitTree>();
-    for (int i = 0; i < maxWindows; ++i) {
-        newTree->insertAtEnd(tiledWindows[i], ratio);
-    }
-    state->setSplitTree(std::move(newTree));
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Lifecycle Hooks (v2)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-bool ScriptedAlgorithm::supportsLifecycleHooks() const noexcept
-{
-    return m_hasLifecycleHooks;
-}
-
-QJSValue ScriptedAlgorithm::buildJsWindowArray(const QVector<WindowInfo>& infos, int cap) const
-{
-    QJSValue jsWindows = m_engine->newArray(static_cast<uint>(cap));
-    for (int i = 0; i < cap; ++i) {
-        QJSValue entry = m_engine->newObject();
-        entry.setProperty(QStringLiteral("appId"), infos[i].appId);
-        entry.setProperty(QStringLiteral("focused"), infos[i].focused);
-        jsWindows.setProperty(static_cast<quint32>(i), entry);
-    }
-    return jsWindows;
-}
-
-QJSValue ScriptedAlgorithm::buildJsState(const TilingState* state) const
-{
-    QJSValue jsState = m_engine->newObject();
-    jsState.setProperty(QStringLiteral("windowCount"), state->tiledWindowCount());
-    jsState.setProperty(QStringLiteral("masterCount"), state->masterCount());
-    jsState.setProperty(QStringLiteral("splitRatio"), std::clamp(state->splitRatio(), MinSplitRatio, MaxSplitRatio));
-
-    const int winCount = state->tiledWindowCount();
-    int focusedIdx = -1;
-    // Resolver injected by AutotileEngine::setWindowRegistry → every scripted
-    // algorithm sees the CURRENT app class for each tiled window, not a
-    // first-seen parse. User JS that switches on window.appId (e.g. "pin
-    // firefox as master") now sees "media.emby.client.beta" after Emby's
-    // mid-session rename instead of the stale "emby-beta".
-    const QVector<WindowInfo> infos = buildWindowInfos(state, winCount, appIdResolver(), focusedIdx);
-
-    jsState.setProperty(QStringLiteral("windows"), buildJsWindowArray(infos, infos.size()));
-    jsState.setProperty(QStringLiteral("focusedIndex"), focusedIdx);
-
-    return jsState;
-}
-
-void ScriptedAlgorithm::onWindowAdded(TilingState* state, int windowIndex)
-{
-    if (!m_jsOnWindowAdded.isCallable() || !state) {
-        return;
-    }
-    QJSValue jsState = buildJsState(state);
-    guardedCall([this, &jsState, windowIndex]() {
-        return m_jsOnWindowAdded.call({jsState, QJSValue(windowIndex)});
-    });
-}
-
-void ScriptedAlgorithm::onWindowRemoved(TilingState* state, int windowIndex)
-{
-    if (!m_jsOnWindowRemoved.isCallable() || !state) {
-        return;
-    }
-    QJSValue jsState = buildJsState(state);
-    // Expose countAfterRemoval so hook authors don't need to subtract 1 from windowCount
-    jsState.setProperty(QStringLiteral("countAfterRemoval"), qMax(0, state->tiledWindowCount() - 1));
-    guardedCall([this, &jsState, windowIndex]() {
-        return m_jsOnWindowRemoved.call({jsState, QJSValue(windowIndex)});
-    });
-}
-
-bool ScriptedAlgorithm::supportsCustomParams() const noexcept
-{
-    return !m_metadata.customParams.isEmpty();
-}
-
-QVariantList ScriptedAlgorithm::customParamDefList() const
-{
-    QVariantList result;
-    for (const auto& def : m_metadata.customParams) {
-        result.append(def.toVariantMap());
-    }
-    return result;
-}
-
-bool ScriptedAlgorithm::hasCustomParam(const QString& name) const
-{
-    return std::any_of(m_metadata.customParams.cbegin(), m_metadata.customParams.cend(),
-                       [&name](const ScriptedHelpers::CustomParamDef& def) {
-                           return def.name == name;
-                       });
-}
-
-const QVector<ScriptedHelpers::CustomParamDef>& ScriptedAlgorithm::customParamDefs() const
-{
-    return m_metadata.customParams;
-}
+// splitNodeToJSValue + splitNodeToJSValueImpl live in scriptedalgorithm_tree.cpp.
+// Virtual accessors + prepareTilingState + lifecycle-hook (v2) + custom-parameter
+// surface live in scriptedalgorithm_hooks.cpp. Keeps this TU under the 800-line cap.
 
 } // namespace PhosphorTiles

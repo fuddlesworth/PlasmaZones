@@ -8,6 +8,7 @@
 
 #include <QCoreApplication>
 #include <QDebug>
+#include <QEvent>
 #include <QThread>
 #include <algorithm>
 
@@ -63,6 +64,15 @@ void AlgorithmRegistry::cleanup()
         return; // Already cleaned up (e.g., aboutToQuit already ran)
     }
 
+    // Drain any pending deleteLater() events posted by safeDeleteAlgorithm() so
+    // those algorithms are destroyed now, while Qt is still fully alive.
+    // Without this drain, a ScriptedAlgorithm queued via deleteLater() could be
+    // destructed during static teardown after QCoreApplication has already
+    // gone away, crashing in ~QJSEngine.
+    if (QCoreApplication* app = QCoreApplication::instance()) {
+        app->sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    }
+
     // Explicitly delete all algorithm children while Qt is still alive.
     // This prevents crashes when the static singleton is destroyed after
     // QCoreApplication during static destruction (ScriptedAlgorithm
@@ -80,6 +90,8 @@ void AlgorithmRegistry::cleanup()
 
 AlgorithmRegistry* AlgorithmRegistry::instance()
 {
+    Q_ASSERT_X(QCoreApplication::instance(), "AlgorithmRegistry::instance",
+               "must not be called before QCoreApplication is created");
     // Meyer's singleton: C++11 guarantees thread-safe initialization
     // of static local variables (§6.7 [stmt.dcl] p4).
     // The constructor connects cleanup() — no separate connection needed.
@@ -254,19 +266,28 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
-void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
+void AlgorithmRegistry::setPreviewParams(const PreviewParams& params)
 {
-    auto* inst = instance();
-    if (inst->m_previewParams == params) {
+    if (m_previewParams == params) {
         return;
     }
-    inst->m_previewParams = params;
-    Q_EMIT inst->previewParamsChanged();
+    m_previewParams = params;
+    Q_EMIT previewParamsChanged();
+}
+
+const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::previewParams() const noexcept
+{
+    return m_previewParams;
+}
+
+void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
+{
+    instance()->setPreviewParams(params);
 }
 
 const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
 {
-    return instance()->m_previewParams;
+    return instance()->previewParams();
 }
 
 } // namespace PhosphorTiles

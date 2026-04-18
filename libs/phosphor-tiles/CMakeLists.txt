@@ -11,9 +11,9 @@
 # code can render autotile previews without depending on the daemon engine.
 #
 # This library does NOT include the runtime engine that actually places windows
-# (that's PlasmaZones::AutotileEngine in src/autotile, future phosphor-tile-engine
+# (that lives in the host application, pending a future phosphor-tile-engine
 # extraction). It also does NOT include daemon-side overflow handling, settings
-# bridge, or per-screen config resolution — those are PlasmaZones-internal.
+# bridge, or per-screen config resolution — those are host-application internals.
 #
 # Self-contained: depends only on Qt6 + PhosphorLayoutApi.  Logging is
 # library-local (`PhosphorTiles::lcTilesLib`).  Strings in
@@ -77,6 +77,8 @@ set(phosphortiles_SRCS
     src/splittreerebuild.cpp
     src/splittreeserializer.cpp
     src/scriptedalgorithm.cpp
+    src/scriptedalgorithm_hooks.cpp
+    src/scriptedalgorithm_tree.cpp
     src/scriptedalgorithmhelpers.cpp
     src/scriptedalgorithmjsbuiltins.cpp
     src/scriptedalgorithmloader.cpp

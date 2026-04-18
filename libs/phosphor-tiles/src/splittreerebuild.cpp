@@ -35,11 +35,11 @@ using namespace AutotileDefaults;
  * @param tiledWindows Ordered list of tiled window IDs (duplicates and empties are filtered)
  * @param defaultSplitRatio Default split ratio for new internal nodes
  */
-void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultSplitRatio)
+bool SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultSplitRatio)
 {
     if (tiledWindows.isEmpty()) {
         m_root.reset();
-        return;
+        return true;
     }
     // Deduplicate input while preserving order, skipping empty IDs
     QStringList uniqueWindows;
@@ -53,23 +53,25 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
 
     if (uniqueWindows.isEmpty()) {
         m_root.reset();
-        return;
+        return true;
     }
 
     // Cap to prevent degenerate trees exceeding MaxRuntimeTreeDepth.
     // insertAtEndRaw builds a right-leaning chain where N leaves = height N,
     // so N must not exceed MaxRuntimeTreeDepth (recursive traversals bail at depth > MaxRuntimeTreeDepth).
+    bool truncated = false;
     if (uniqueWindows.size() > MaxRuntimeTreeDepth) {
         qCWarning(PhosphorTiles::lcTilesLib)
             << "rebuildFromOrder: truncating" << uniqueWindows.size() << "windows to" << MaxRuntimeTreeDepth;
         uniqueWindows.resize(MaxRuntimeTreeDepth);
+        truncated = true;
     }
 
     if (uniqueWindows.size() == 1) {
         auto singleTree = std::make_unique<SplitNode>();
         singleTree->windowId = uniqueWindows.first();
         m_root = std::move(singleTree);
-        return;
+        return !truncated;
     }
 
     // Capture existing split ratios from old tree
@@ -94,6 +96,8 @@ void SplitTree::rebuildFromOrder(const QStringList& tiledWindows, qreal defaultS
         qCDebug(PhosphorTiles::lcTilesLib)
             << "rebuildFromOrder: restored" << oldRatios.size() << "ratios:" << oldRatios;
     }
+
+    return !truncated;
 }
 
 void SplitTree::collectInternalNodeParams(const SplitNode* node, QVector<qreal>& ratios, QVector<bool>& directions,

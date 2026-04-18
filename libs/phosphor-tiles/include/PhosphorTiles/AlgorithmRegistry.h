@@ -194,12 +194,22 @@ public:
      * / split-ratio / max-windows values for the active algorithm and consult
      * the per-algorithm saved entries for others. Emits @c previewParamsChanged
      * if the value differs from the currently configured one.
+     *
+     * Instance-owned state — each AlgorithmRegistry tracks its own preview
+     * params. The static overloads below delegate to @c instance() for
+     * backwards compatibility.
      */
-    static void setConfiguredPreviewParams(const PreviewParams& params);
+    void setPreviewParams(const PreviewParams& params);
 
     /**
-     * @brief Get the configured preview parameters
+     * @brief Get the configured preview parameters for this registry
      */
+    const PreviewParams& previewParams() const noexcept;
+
+    /// Static backwards-compat shim — forwards to `instance()->setPreviewParams(...)`.
+    static void setConfiguredPreviewParams(const PreviewParams& params);
+
+    /// Static backwards-compat shim — forwards to `instance()->previewParams()`.
     static const PreviewParams& configuredPreviewParams();
 
 Q_SIGNALS:

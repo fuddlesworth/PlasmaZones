@@ -347,8 +347,12 @@ QStringList ScriptedAlgorithmLoader::validatedJsFiles(const QString& dirPath, in
     if (canonicalDir.isEmpty())
         return result;
 
-    const QStringList files =
-        dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::NoSymLinks | QDir::Readable);
+    // No QDir::NoSymLinks — symlink escapes are already prevented by the
+    // canonical-path containment check below (each candidate file must resolve
+    // inside canonicalDir after symlink expansion). Leaving NoSymLinks in the
+    // filter would additionally block benign user-local symlinks pointing at
+    // read-only system script directories.
+    const QStringList files = dirObj.entryList({QStringLiteral("*.js")}, QDir::Files | QDir::Readable);
     for (const QString& file : files) {
         if (result.size() >= maxFiles) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Reached max file limit (" << maxFiles

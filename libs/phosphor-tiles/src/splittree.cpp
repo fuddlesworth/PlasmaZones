@@ -383,9 +383,18 @@ void SplitTree::applyGeometryRecursive(const SplitNode* node, const QRect& rect,
     auto splitDimension = [&](int totalSize, auto makeFirstRect, auto makeSecondRect) {
         const int contentSize = totalSize - innerGap;
         if (contentSize <= 0) {
-            // Gap exceeds space — give all leaves the parent rect (preserves zone count)
+            // Gap exceeds available space — collapsing both children onto the
+            // full parent rect produces overlapping zones, which defeats the
+            // entire point of tiling. Instead give the `first` subtree the
+            // full parent rect and collapse the `second` subtree into an
+            // empty/zero-area rect so its leaves are effectively dropped.
+            // Callers downstream already tolerate zero-area zones.
+            qCWarning(PhosphorTiles::lcTilesLib)
+                << "splitDimension: innerGap=" << innerGap << "exceeds available size=" << totalSize
+                << "— collapsing second subtree to avoid overlap";
             applyGeometryRecursive(node->first.get(), rect, 0, zones, depth + 1);
-            applyGeometryRecursive(node->second.get(), rect, 0, zones, depth + 1);
+            const QRect emptyRect(rect.x(), rect.y(), 0, 0);
+            applyGeometryRecursive(node->second.get(), emptyRect, 0, zones, depth + 1);
             return;
         }
 

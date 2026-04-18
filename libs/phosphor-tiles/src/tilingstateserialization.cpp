@@ -206,7 +206,27 @@ void TilingState::rebuildSplitTree()
         return; // No tree to rebuild
     }
 
-    m_splitTree->rebuildFromOrder(tiledWindows(), m_splitRatio);
+    const bool fullyRebuilt = m_splitTree->rebuildFromOrder(tiledWindows(), m_splitRatio);
+    if (!fullyRebuilt) {
+        // rebuildFromOrder truncated to MaxRuntimeTreeDepth. Clamp m_windowOrder
+        // to match so the TilingState invariant (tiledWindows() ⊆ tree leaves)
+        // is preserved — otherwise the next syncTreeInsert would insert against
+        // a mismatched position index.
+        const QStringList keptLeaves = m_splitTree->leafOrder();
+        const QSet<QString> keepSet(keptLeaves.begin(), keptLeaves.end());
+        QStringList clamped;
+        clamped.reserve(m_windowOrder.size());
+        for (const QString& id : m_windowOrder) {
+            if (m_floatingWindows.contains(id) || keepSet.contains(id)) {
+                clamped.append(id);
+            }
+        }
+        if (clamped.size() != m_windowOrder.size()) {
+            m_windowOrder = clamped;
+            Q_EMIT windowCountChanged();
+            Q_EMIT windowOrderChanged();
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -256,19 +276,19 @@ void TilingState::syncTreeSwap(const QString& idA, const QString& idB)
 
 // Lazy-create the split tree when a memory algorithm needs one but none exists
 // (e.g., first retile after switching to DwindleMemory).
-// Uses the dwindle default (0.5) unless m_splitRatio is already close to it
-// (meaning the user or prepareTilingState already set it), in which case we
+// Uses the library default split ratio unless m_splitRatio is already close to
+// it (meaning the user or prepareTilingState already set it), in which case we
 // use m_splitRatio to honor any fine-tuning the user applied.
 void TilingState::syncTreeLazyCreate()
 {
     if (m_splitTree || tiledWindowCount() < 2) {
         return;
     }
-    // Use m_splitRatio if it's close to the dwindle default (0.5), meaning
-    // prepareTilingState has likely already run. Otherwise fall back to 0.5
-    // to avoid building a tree with a stale MasterStack ratio (0.6).
-    constexpr qreal DwindleDefault = 0.5;
-    const qreal ratio = (std::abs(m_splitRatio - DwindleDefault) <= 0.05) ? m_splitRatio : DwindleDefault;
+    // Use m_splitRatio if it's within the hysteresis band of the default,
+    // meaning prepareTilingState has likely already run. Otherwise fall back
+    // to the default to avoid building a tree with a stale MasterStack ratio.
+    const qreal ratio =
+        (std::abs(m_splitRatio - DefaultSplitRatio) <= SplitRatioHysteresis) ? m_splitRatio : DefaultSplitRatio;
     m_splitTree = std::make_unique<SplitTree>();
     const auto tiled = tiledWindows();
     for (const auto& id : tiled) {

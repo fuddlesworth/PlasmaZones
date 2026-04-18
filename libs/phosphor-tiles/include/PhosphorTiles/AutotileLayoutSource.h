@@ -9,6 +9,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QHash>
+#include <QStringList>
 
 namespace PhosphorTiles {
 class AlgorithmRegistry;
@@ -26,19 +27,27 @@ namespace PhosphorTiles {
 /// @p algorithmId is the registry id for @p algorithm — embedded into the
 /// returned preview as `"autotile:<id>"`.
 ///
+/// @p registry    — registry consulted for `previewParams()` (the
+///                  user-configured master-count / split-ratio / per-algorithm
+///                  saved settings). Pass @c nullptr to fall back to
+///                  @c AlgorithmRegistry::instance() for backwards compatibility.
+///
 /// Provided as a free function so consumers that already hold a
 /// TilingAlgorithm* can build a preview without going through
 /// AutotileLayoutSource (mirrors PhosphorZones::previewFromLayout).
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
 previewFromAlgorithm(const QString& algorithmId, PhosphorTiles::TilingAlgorithm* algorithm,
-                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount);
+                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
+                     PhosphorTiles::AlgorithmRegistry* registry = nullptr);
 
 /// Convenience overload that reverse-looks-up the algorithm id via the
-/// default AlgorithmRegistry singleton. Prefer the id-taking form on hot
-/// paths — the reverse lookup is O(N) per call and emits a qCWarning.
+/// supplied registry (or @c AlgorithmRegistry::instance() when @p registry
+/// is null). Prefer the id-taking form on hot paths — the reverse lookup
+/// is O(N) per call and emits a qCWarning.
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
 previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm,
-                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount);
+                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
+                     PhosphorTiles::AlgorithmRegistry* registry = nullptr);
 
 /// ILayoutSource adapter wrapping the AlgorithmRegistry singleton.
 ///
@@ -85,10 +94,16 @@ public:
     void invalidateCache();
 
 private:
+    /// Insert a preview into the bounded cache, evicting the oldest entry
+    /// (FIFO) when the cap `availableAlgorithms().size() * 10` is reached.
+    void insertCacheEntry(const QString& key, const PhosphorLayout::LayoutPreview& preview) const;
+
     PhosphorTiles::AlgorithmRegistry* m_registry;
     /// Cache key is `"<algorithmId>|<windowCount>"`. Hash preserves
     /// insertion-order-independent lookup semantics.
     mutable QHash<QString, PhosphorLayout::LayoutPreview> m_cache;
+    /// FIFO eviction order — keys appended on insert, head evicted on overflow.
+    mutable QStringList m_cacheOrder;
 };
 
 } // namespace PhosphorTiles

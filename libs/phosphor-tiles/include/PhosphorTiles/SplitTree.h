@@ -184,9 +184,11 @@ public:
      * @param innerGap Gap between adjacent zones in pixels
      * @return Vector of zone geometries in depth-first left-to-right order
      *
-     * @note When gap exceeds available space in a split, both children receive the full
-     * parent rect (zones will overlap). Callers should be aware of possible overlap in
-     * degenerate gap configurations.
+     * @note When gap exceeds available space in a split, the `first` subtree receives
+     * the full parent rect and the `second` subtree collapses to a zero-area rect (its
+     * leaves are effectively dropped). A warning is logged via lcTilesLib. This avoids
+     * the earlier behaviour of returning the parent rect to both children, which
+     * produced overlapping zones.
      */
     QVector<QRect> applyGeometry(const QRect& area, int innerGap) const;
 
@@ -194,8 +196,12 @@ public:
      * @brief Rebuild tree from a new window order, preserving split ratios where possible
      * @param tiledWindows Ordered list of tiled window IDs
      * @param defaultSplitRatio Default split ratio for new internal nodes
+     * @return @c true if all windows were preserved, @c false if the input had to
+     *         be truncated (size exceeded @c MaxRuntimeTreeDepth). Callers that
+     *         care about lossless round-tripping should observe the return value
+     *         and clamp their own state to match.
      */
-    void rebuildFromOrder(const QStringList& tiledWindows,
+    bool rebuildFromOrder(const QStringList& tiledWindows,
                           qreal defaultSplitRatio = AutotileDefaults::DefaultSplitRatio);
 
     // ═══════════════════════════════════════════════════════════════════════

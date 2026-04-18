@@ -57,6 +57,10 @@ constexpr int MaxMaxWindows = 12;
 constexpr int UnlimitedMaxWindowsSentinel = std::numeric_limits<int>::max() / 2;
 constexpr int MaxZones = 256;
 constexpr int MaxRuntimeTreeDepth = 50; ///< Maximum recursion depth for split tree operations
+/// Cap on total node count when converting a SplitTree to a QJSValue object. Each
+/// tiled window occupies one leaf plus at most one internal node, so MaxZones*2
+/// is a safe ceiling that lets the widest valid tree through without truncation.
+constexpr int MaxTreeNodesForJs = MaxZones * 2;
 constexpr qreal SplitRatioHysteresis = 0.05; ///< Band within which algorithm-switch ratio reset is suppressed
 constexpr int MinMetadataWindows = 1;
 constexpr int MaxMetadataWindows = 100;
@@ -100,11 +104,11 @@ inline constexpr QLatin1String OuterGap{"outerGap"};
 // GapKeys.h (shared with phosphor-zones ZoneJsonKeys). Re-exported here so
 // AutotileJsonKeys callers can keep their fully-qualified references
 // unchanged while both libraries consume a single source of truth.
-using PhosphorLayout::GapKeys::OuterGapBottom;
-using PhosphorLayout::GapKeys::OuterGapLeft;
-using PhosphorLayout::GapKeys::OuterGapRight;
-using PhosphorLayout::GapKeys::OuterGapTop;
-using PhosphorLayout::GapKeys::UsePerSideOuterGap;
+using PhosphorLayout::GapKeys::OuterGapBottom; ///< canonical: PhosphorLayoutApi/GapKeys.h
+using PhosphorLayout::GapKeys::OuterGapLeft; ///< canonical: PhosphorLayoutApi/GapKeys.h
+using PhosphorLayout::GapKeys::OuterGapRight; ///< canonical: PhosphorLayoutApi/GapKeys.h
+using PhosphorLayout::GapKeys::OuterGapTop; ///< canonical: PhosphorLayoutApi/GapKeys.h
+using PhosphorLayout::GapKeys::UsePerSideOuterGap; ///< canonical: PhosphorLayoutApi/GapKeys.h
 
 inline constexpr QLatin1String SmartGaps{"smartGaps"};
 inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};
@@ -113,16 +117,39 @@ inline constexpr QLatin1String InsertPosition{"insertPosition"};
 inline constexpr QLatin1String RespectMinimumSize{"respectMinimumSize"};
 inline constexpr QLatin1String MaxWindows{"maxWindows"};
 inline constexpr QLatin1String OverflowBehavior{"overflowBehavior"};
+inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
+inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
+inline constexpr QLatin1String SplitTreeKey{"splitTree"};
+} // namespace AutotileJsonKeys
+
+/**
+ * @brief JSON value strings (enum-ish discriminants) paired with the keys above.
+ *
+ * Split out from @ref AutotileJsonKeys so consumers can disambiguate between
+ * "the config key string" and "a value that gets stored under that key". Keeps
+ * the `using namespace` ergonomics used by callers like AutotileConfig.cpp.
+ */
+namespace AutotileJsonValues {
 // OverflowBehavior values
 inline constexpr QLatin1String OverflowFloat{"float"};
 inline constexpr QLatin1String OverflowUnlimited{"unlimited"};
-inline constexpr QLatin1String CenteredMasterSplitRatio{"centeredMasterSplitRatio"};
-inline constexpr QLatin1String CenteredMasterMasterCount{"centeredMasterMasterCount"};
 // InsertPosition values
 inline constexpr QLatin1String InsertEnd{"end"};
 inline constexpr QLatin1String InsertAfterFocused{"afterFocused"};
 inline constexpr QLatin1String InsertAsMaster{"asMaster"};
-inline constexpr QLatin1String SplitTreeKey{"splitTree"};
+} // namespace AutotileJsonValues
+
+/**
+ * @brief Backwards-compat re-exports so existing `using namespace AutotileJsonKeys`
+ *        sites (e.g. `src/autotile/AutotileConfig.cpp`) resolve the value names
+ *        without a rename cascade. New code should qualify with AutotileJsonValues::.
+ */
+namespace AutotileJsonKeys {
+using AutotileJsonValues::InsertAfterFocused;
+using AutotileJsonValues::InsertAsMaster;
+using AutotileJsonValues::InsertEnd;
+using AutotileJsonValues::OverflowFloat;
+using AutotileJsonValues::OverflowUnlimited;
 } // namespace AutotileJsonKeys
 
 } // namespace PhosphorTiles

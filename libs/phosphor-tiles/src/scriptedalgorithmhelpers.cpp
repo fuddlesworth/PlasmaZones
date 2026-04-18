@@ -126,10 +126,11 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
         const QString value = match.captured(2).trimmed();
 
         if (key == QLatin1String("name")) {
-            // Sanitize metadata — length cap + HTML escape
-            meta.name = value.left(100).toHtmlEscaped();
+            // Store plain text; any caller that renders the string into rich
+            // text must escape at render time (single source of escape policy).
+            meta.name = value.left(100);
         } else if (key == QLatin1String("description")) {
-            meta.description = value.left(500).toHtmlEscaped();
+            meta.description = value.left(500);
         } else if (key == QLatin1String("supportsMasterCount")) {
             meta.supportsMasterCount = parseMetadataBool(key, value, filePath, meta.supportsMasterCount);
         } else if (key == QLatin1String("supportsSplitRatio")) {
@@ -199,7 +200,7 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 param.defaultValue = pm.captured(2).toDouble();
                 param.minValue = pm.captured(3).toDouble();
                 param.maxValue = pm.captured(4).toDouble();
-                param.description = pm.captured(5).left(200).toHtmlEscaped();
+                param.description = pm.captured(5).left(200);
                 if (param.minValue > param.maxValue) {
                     qCWarning(PhosphorTiles::lcTilesLib)
                         << "ScriptedAlgorithm::parseMetadata: @param number min" << param.minValue << "> max"
@@ -211,7 +212,7 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                 param.name = pm.captured(1).left(64);
                 param.type = QStringLiteral("bool");
                 param.defaultValue = (pm.captured(2) == QLatin1String("true"));
-                param.description = pm.captured(3).left(200).toHtmlEscaped();
+                param.description = pm.captured(3).left(200);
                 meta.customParams.append(param);
             } else if ((pm = paramEnumRe.match(value)).hasMatch()) {
                 param.name = pm.captured(1).left(64);
@@ -229,7 +230,7 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
                         param.enumOptions.append(trimmed.left(64));
                     }
                 }
-                param.description = pm.captured(4).left(200).toHtmlEscaped();
+                param.description = pm.captured(4).left(200);
                 if (param.enumOptions.isEmpty()) {
                     qCWarning(PhosphorTiles::lcTilesLib)
                         << "ScriptedAlgorithm::parseMetadata: @param enum has no valid options for" << param.name

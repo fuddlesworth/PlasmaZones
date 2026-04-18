@@ -8,6 +8,7 @@
 #include "TilingAlgorithm.h"
 #include <QJSValue>
 
+#include <algorithm>
 #include <atomic>
 #include <functional>
 #include <memory>
@@ -177,15 +178,30 @@ private:
 
     /**
      * @brief Resolve a JS override value: return cached if loaded, else call JS, else metadata fallback
+     *
+     * Defined in the header so multiple TUs (scriptedalgorithm_hooks.cpp,
+     * scriptedalgorithm_tree.cpp, scriptedalgorithm.cpp) can instantiate
+     * the template without an explicit instantiation list.
      */
     template<typename T>
-    T resolveJsOverride(const QJSValue& jsFn, T cachedValue, T metadataFallback) const;
+    T resolveJsOverride(const QJSValue& jsFn, T cachedValue, T metadataFallback) const
+    {
+        if (m_cachedValuesLoaded && jsFn.isCallable()) {
+            return cachedValue;
+        }
+        // After loadScript() sets m_cachedValuesLoaded, all calls use the cached path above.
+        // Before that, fall back to metadata — never call JS without the watchdog.
+        return metadataFallback;
+    }
 
     /**
      * @brief Like resolveJsOverride, but clamps the result to [minVal, maxVal]
      */
     template<typename T>
-    T resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValue, T metadataFallback, T minVal, T maxVal) const;
+    T resolveJsOverrideClamped(const QJSValue& jsFn, T cachedValue, T metadataFallback, T minVal, T maxVal) const
+    {
+        return std::clamp(resolveJsOverride<T>(jsFn, cachedValue, metadataFallback), minVal, maxVal);
+    }
 
     /// Build a JS state object from TilingState for lifecycle hook calls
     QJSValue buildJsState(const TilingState* state) const;
