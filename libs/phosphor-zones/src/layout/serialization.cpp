@@ -12,6 +12,8 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 
+#include <cmath>
+
 namespace PhosphorZones {
 
 QVariantList Layout::appRulesVariant() const
@@ -197,11 +199,25 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
 
 void Layout::initFromJson(const QJsonObject& json)
 {
+    // Boundary validation — flag missing/blank required fields with a single
+    // breadcrumb per layout so a hand-edited or corrupted file is visible in
+    // the log instead of silently producing a default-constructed shell.
+    // Behaviour is preserved (synthesise an Id, accept an empty name) so we
+    // don't break round-trips of older layouts that were tolerated previously,
+    // but every defaulted boundary now leaves a trail.
+    if (!json.contains(::PhosphorZones::ZoneJsonKeys::Id)
+        || json[::PhosphorZones::ZoneJsonKeys::Id].toString().isEmpty()) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing or empty Id, generating fresh UUID";
+    }
     m_id = QUuid::fromString(json[::PhosphorZones::ZoneJsonKeys::Id].toString());
     if (m_id.isNull()) {
         m_id = QUuid::createUuid();
     }
 
+    if (!json.contains(::PhosphorZones::ZoneJsonKeys::Name)
+        || json[::PhosphorZones::ZoneJsonKeys::Name].toString().trimmed().isEmpty()) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: missing or empty Name for layout" << m_id.toString();
+    }
     m_name = json[::PhosphorZones::ZoneJsonKeys::Name].toString();
     // Note: "type" key is silently ignored for backward compatibility
     m_description = json[::PhosphorZones::ZoneJsonKeys::Description].toString();
@@ -287,6 +303,19 @@ void Layout::initFromJson(const QJsonObject& json)
         json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey].toString());
     m_minAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MinAspectRatio].toDouble(0.0);
     m_maxAspectRatio = json[::PhosphorZones::ZoneJsonKeys::MaxAspectRatio].toDouble(0.0);
+    // NaN comparisons always return false, so a non-finite bound silently
+    // disables aspect-ratio matching. Drop to the "unbounded" sentinel so the
+    // layout still has a deterministic match policy.
+    if (!std::isfinite(m_minAspectRatio)) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: non-finite minAspectRatio for layout" << m_id.toString()
+                               << "— treating as unbounded";
+        m_minAspectRatio = 0.0;
+    }
+    if (!std::isfinite(m_maxAspectRatio)) {
+        qCWarning(lcLayoutLib) << "Layout::initFromJson: non-finite maxAspectRatio for layout" << m_id.toString()
+                               << "— treating as unbounded";
+        m_maxAspectRatio = 0.0;
+    }
 
     // Visibility filtering
     m_hiddenFromSelector = json[::PhosphorZones::ZoneJsonKeys::HiddenFromSelector].toBool(false);

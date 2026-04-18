@@ -88,8 +88,15 @@ Layout::Layout(const QString& name, QObject* parent)
 // m_systemSourcePath — a duplicate of a system layout becomes a plain user
 // layout with no system-origin tracking, so the "restore system original"
 // path doesn't think the duplicate is a user-override of the same entry.
+//
+// Why: parenting to other.parent() would silently re-parent the copy under the
+// source's QObject owner (typically a LayoutManager), which tracks layouts in
+// its own internal container — the copy would show up as a child without ever
+// being inserted into the manager's list, leading to either a leak or a
+// double-track. Callers reparent or insert the copy into the appropriate
+// manager themselves.
 Layout::Layout(const Layout& other)
-    : QObject(other.parent())
+    : QObject(nullptr)
     , m_id(QUuid::createUuid()) // New layout gets new ID
     , m_name(other.m_name)
     , m_description(other.m_description)
