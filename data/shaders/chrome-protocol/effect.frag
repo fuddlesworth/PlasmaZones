@@ -628,12 +628,13 @@ struct GlobalParams {
 };
 
 vec3 renderGlobalScene(vec2 fragCoord, GlobalParams g) {
-    // Screen-space uv — matches the original Shadertoy exactly:
-    //   uv = (fragCoord - 0.5 * iResolution) / iResolution.y
-    // Rings centre on the screen, not on individual zones, so multi-zone
-    // layouts show a continuous HUD spanning across them.
-    vec2 uv = (fragCoord - 0.5 * iResolution) / max(iResolution.y, 1.0)
-            / max(g.ringScale, 0.1);
+    // Screen-space uv — Shadertoy Y-up convention (y=+0.5 at top, y=-0.5
+    // at bottom). PlasmaZones' fragCoord is Y-down after fragCoordFromTexCoord
+    // (Y=0 at top), so flip Y once here — that fixes the camera up-vector,
+    // background drift direction, and all overlay panel positions at once.
+    vec2 uv = (fragCoord - 0.5 * iResolution) / max(iResolution.y, 1.0);
+    uv.y = -uv.y;
+    uv /= max(g.ringScale, 0.1);
     vec2 screenUV = fragCoord / max(iResolution, vec2(1.0));
 
     // Treble-driven horizontal glitch displacement (screen-space bands)
@@ -776,6 +777,7 @@ vec4 renderZoneChrome(vec2 fragCoord, vec4 rect, vec4 fillColor, vec4 borderColo
             vec2 localUV = zoneLocalUV(fragCoord, rectPos, rectSize);
             float zAspect = rectSize.x / max(rectSize.y, 1.0);
             vec2 ouv = (localUV - 0.5) * vec2(zAspect, 1.0);
+            ouv.y = -ouv.y; // localUV is Y-down; overlay panels expect Y-up
             bool useSpec = g.spectrumOn > 0.5 && g.hasAudio;
             float od = overlayUI(ouv, g.aAll / max(g.audioReact, 0.01),
                                  g.audioReact, useSpec);
