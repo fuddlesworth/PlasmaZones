@@ -169,11 +169,11 @@ Easing Easing::fromString(const QString& str)
     if (str.isEmpty())
         return curve;
 
-    // Detect named curves (e.g. "elastic-in") vs numeric cubic-bezier spec
-    // ("0.33,1.0,0.68,1.0" or scientific "1.5e-3,…"). The 'e'/'E' exemption
-    // is for floating-point exponents — numeric strings must not be
-    // misclassified as named. Named curves like "elastic-*" hit 'l' first
-    // and still register as letter-bearing.
+    // Detect named curves (e.g. "elastic-in") vs numeric cubic-bezier
+    // wire format ("0.33,1.0,0.68,1.0" or scientific "1.5e-3,…"). The
+    // 'e'/'E' exemption is for floating-point exponents — numeric
+    // strings must not be misclassified as named. Named curves like
+    // "elastic-*" hit 'l' first and still register as letter-bearing.
     bool hasLetter = false;
     for (const QChar& ch : str) {
         if (ch.isLetter() && ch != QLatin1Char('e') && ch != QLatin1Char('E')) {
@@ -183,14 +183,15 @@ Easing Easing::fromString(const QString& str)
     }
 
     if (hasLetter) {
+        // Named curves (elastic-*, bounce-*) take the form "name:params".
+        // Cubic-bezier uses the bare 4-comma wire format and is handled
+        // below — `"bezier:..."` is intentionally NOT accepted; there is
+        // exactly one wire format per curve type.
         const int colonIdx = str.indexOf(QLatin1Char(':'));
         const QString name = (colonIdx >= 0) ? str.left(colonIdx).trimmed() : str.trimmed();
         const QString params = (colonIdx >= 0) ? str.mid(colonIdx + 1).trimmed() : QString();
 
-        if (name == QLatin1String("bezier")) {
-            curve.type = Type::CubicBezier;
-            // Params parsed inline below in the CubicBezier-specific branch.
-        } else if (name == QLatin1String("elastic-in")) {
+        if (name == QLatin1String("elastic-in")) {
             curve.type = Type::ElasticIn;
         } else if (name == QLatin1String("elastic-out")) {
             curve.type = Type::ElasticOut;
@@ -210,53 +211,31 @@ Easing Easing::fromString(const QString& str)
         if (!params.isEmpty()) {
             const QLocale cLocale = QLocale::c();
             const QStringList parts = params.split(QLatin1Char(','));
-
-            if (curve.type == Type::CubicBezier) {
-                if (parts.size() == 4) {
-                    bool ok1, ok2, ok3, ok4;
-                    qreal x1v = cLocale.toDouble(parts[0].trimmed(), &ok1);
-                    qreal y1v = cLocale.toDouble(parts[1].trimmed(), &ok2);
-                    qreal x2v = cLocale.toDouble(parts[2].trimmed(), &ok3);
-                    qreal y2v = cLocale.toDouble(parts[3].trimmed(), &ok4);
-                    if (ok1 && ok2 && ok3 && ok4) {
-                        curve.x1 = qBound(0.0, x1v, 1.0);
-                        curve.y1 = qBound(-1.0, y1v, 2.0);
-                        curve.x2 = qBound(0.0, x2v, 1.0);
-                        curve.y2 = qBound(-1.0, y2v, 2.0);
-                    } else {
-                        qCWarning(lcEasing) << "bezier params parse failure in" << str << "- using default curve";
-                    }
-                } else {
-                    qCWarning(lcEasing) << "bezier expects 4 comma-separated params, got" << parts.size() << "in" << str
-                                        << "- using default curve";
-                }
-            } else {
-                if (parts.size() >= 1) {
+            if (parts.size() >= 1) {
+                bool ok;
+                qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
+                if (ok)
+                    curve.amplitude = qBound(0.5, a, 3.0);
+            }
+            if (parts.size() >= 2) {
+                if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
+                    || curve.type == Type::ElasticInOut) {
                     bool ok;
-                    qreal a = cLocale.toDouble(parts[0].trimmed(), &ok);
+                    qreal p = cLocale.toDouble(parts[1].trimmed(), &ok);
                     if (ok)
-                        curve.amplitude = qBound(0.5, a, 3.0);
-                }
-                if (parts.size() >= 2) {
-                    if (curve.type == Type::ElasticIn || curve.type == Type::ElasticOut
-                        || curve.type == Type::ElasticInOut) {
-                        bool ok;
-                        qreal p = cLocale.toDouble(parts[1].trimmed(), &ok);
-                        if (ok)
-                            curve.period = qBound(0.1, p, 1.0);
-                    } else {
-                        bool ok;
-                        int b = cLocale.toInt(parts[1].trimmed(), &ok);
-                        if (ok)
-                            curve.bounces = qBound(1, b, 8);
-                    }
+                        curve.period = qBound(0.1, p, 1.0);
+                } else {
+                    bool ok;
+                    int b = cLocale.toInt(parts[1].trimmed(), &ok);
+                    if (ok)
+                        curve.bounces = qBound(1, b, 8);
                 }
             }
         }
         return curve;
     }
 
-    // Legacy bare-bezier form: "x1,y1,x2,y2"
+    // Cubic-bezier wire format: "x1,y1,x2,y2"
     const QStringList parts = str.split(QLatin1Char(','));
     if (parts.size() == 4) {
         const QLocale cLocale = QLocale::c();

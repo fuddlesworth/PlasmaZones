@@ -17,9 +17,9 @@
 #include "compositor-common/trigger_parser.h"
 #include "compositor-common/window_id.h"
 
-// Easing curves, AnimationMath, WindowMotion, and AnimationConfig have
-// their own tests under libs/phosphor-animation/tests. Keep this TU
-// focused on the compositor-common D-Bus marshalling + helper code.
+// Easing curves, AnimationMath, and WindowMotion have their own tests
+// under libs/phosphor-animation/tests. Keep this TU focused on the
+// compositor-common D-Bus marshalling + helper code.
 
 namespace {
 

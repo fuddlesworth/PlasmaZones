@@ -4,7 +4,6 @@
 #pragma once
 
 #include <PhosphorAnimation/Easing.h>
-#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QPointF>
@@ -45,12 +44,13 @@ namespace PhosphorAnimation {
  * alive. `AnimationMath::repaintBounds()` accounts for this when
  * sizing repaint regions.
  *
- * ## Scaffold-branch scope
+ * ## Curve type
  *
- * This branch holds `Easing` by value for drop-in compatibility with
- * the compositor-common shim. Phase 2 replaces `easing` with a
- * `std::shared_ptr<const Curve>` to enable Spring + user-defined
- * curves; the migration is mechanical and localized.
+ * `easing` is a concrete `Easing` value — Spring + user-registered
+ * curves are not yet wired through to WindowMotion. Phase 2 replaces
+ * the field with `std::shared_ptr<const Curve>` once `WindowAnimator`
+ * is migrated; that lives in a follow-up PR so the migration touches
+ * one consumer at a time.
  */
 struct PHOSPHORANIMATION_EXPORT WindowMotion
 {
@@ -144,34 +144,6 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
         return qAbs(startSize.width() - targetGeometry.width()) > 1.0
             || qAbs(startSize.height() - targetGeometry.height()) > 1.0;
     }
-};
-
-/**
- * @brief Compositor-agnostic snap-animation configuration.
- *
- * Legacy configuration shape used by the KWin `WindowAnimator` (and
- * anyone else driving fixed-duration snap animations). Mirrors the
- * pre-library layout from `src/compositor-common/easingcurve.h` to
- * keep the forwarding shim trivial.
- *
- * @note This is distinct from @ref Profile. Profile is the new,
- * per-event, polymorphic-curve-bearing config. AnimationConfig stays
- * value-typed with `Easing` inline so existing consumers don't need
- * to change. Phase 2 will migrate WindowAnimator to Profile; this
- * struct will then be retired via deprecation.
- */
-struct PHOSPHORANIMATION_EXPORT AnimationConfig
-{
-    bool enabled = true;
-    qreal duration = 150.0;
-    Easing easing;
-    int minDistance = 0;
-    /// Cascade vs simultaneous. Stored as strongly typed enum — callers
-    /// loading raw integers from config/D-Bus should `static_cast` with
-    /// explicit range checking at the boundary rather than through a
-    /// magic int.
-    SequenceMode sequenceMode = SequenceMode::AllAtOnce;
-    int staggerInterval = 30; ///< ms between cascade starts when sequenceMode == Cascade
 };
 
 } // namespace PhosphorAnimation

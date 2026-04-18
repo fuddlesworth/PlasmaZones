@@ -35,21 +35,27 @@ public:
 
 void CurveRegistry::Impl::registerBuiltins()
 {
-    // Easing: all 7 variants share one Easing::fromString helper — it
-    // already handles the full "name:params" or bare numeric dispatch.
-    Factory easingFactory = [](const QString& typeId, const QString& params) -> std::shared_ptr<const Curve> {
+    // Cubic-bezier wire format is bare 4-comma: pass params directly to
+    // Easing::fromString (which dispatches on "no letters" → bezier).
+    Factory bezierFactory = [](const QString&, const QString& params) -> std::shared_ptr<const Curve> {
+        return std::make_shared<Easing>(Easing::fromString(params));
+    };
+    insertionOrder.push_back(QStringLiteral("bezier"));
+    factories.insert(QStringLiteral("bezier"), bezierFactory);
+
+    // Elastic + bounce variants use "name:params" — Easing::fromString
+    // needs the typeId in the spec to choose the right Type enumerator.
+    Factory namedEasingFactory = [](const QString& typeId, const QString& params) -> std::shared_ptr<const Curve> {
         const QString spec = params.isEmpty() ? typeId : (typeId + QLatin1Char(':') + params);
         return std::make_shared<Easing>(Easing::fromString(spec));
     };
-
-    const QStringList easingIds{
-        QStringLiteral("bezier"),         QStringLiteral("elastic-in"), QStringLiteral("elastic-out"),
-        QStringLiteral("elastic-in-out"), QStringLiteral("bounce-in"),  QStringLiteral("bounce-out"),
-        QStringLiteral("bounce-in-out"),
+    const QStringList namedIds{
+        QStringLiteral("elastic-in"), QStringLiteral("elastic-out"), QStringLiteral("elastic-in-out"),
+        QStringLiteral("bounce-in"),  QStringLiteral("bounce-out"),  QStringLiteral("bounce-in-out"),
     };
-    for (const QString& id : easingIds) {
+    for (const QString& id : namedIds) {
         insertionOrder.push_back(id);
-        factories.insert(id, easingFactory);
+        factories.insert(id, namedEasingFactory);
     }
 
     // Spring: single typeId, dedicated factory.
@@ -132,8 +138,9 @@ ParsedSpec parseSpec(const QString& spec)
     ParsedSpec out;
     const int colonIdx = spec.indexOf(QLatin1Char(':'));
     if (colonIdx < 0) {
-        // Might be legacy bare-bezier ("x1,y1,x2,y2"), or a bare typeId
-        // with no params. Exactly three commas means four numbers → bezier.
+        // Either the bare cubic-bezier wire format ("x1,y1,x2,y2"), or
+        // a bare typeId with no params. Exactly three commas means four
+        // numbers → bezier.
         if (spec.count(QLatin1Char(',')) == 3) {
             out.typeId = QStringLiteral("bezier");
             out.params = spec;
@@ -141,7 +148,14 @@ ParsedSpec parseSpec(const QString& spec)
             out.typeId = spec.trimmed();
         }
     } else {
-        out.typeId = spec.left(colonIdx).trimmed();
+        const QString prefix = spec.left(colonIdx).trimmed();
+        // Cubic-bezier has exactly one wire format — the bare 4-comma
+        // form. The "bezier:..." prefixed form is intentionally rejected
+        // here so the registry and Easing::fromString agree.
+        if (prefix == QLatin1String("bezier")) {
+            return out; // empty typeId → unknown
+        }
+        out.typeId = prefix;
         out.params = spec.mid(colonIdx + 1).trimmed();
     }
     return out;

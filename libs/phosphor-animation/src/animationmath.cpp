@@ -7,12 +7,9 @@ namespace PhosphorAnimation {
 namespace AnimationMath {
 
 std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
-                                             const QRect& targetGeometry, const AnimationConfig& config)
+                                             const QRect& targetGeometry, qreal duration, const Easing& easing,
+                                             int minDistance)
 {
-    if (!config.enabled) {
-        return std::nullopt;
-    }
-
     if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
         return std::nullopt;
     }
@@ -21,7 +18,7 @@ std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const Q
     const qreal dist = QLineF(oldPosition, newPos).length();
     const bool sizeChanging =
         qAbs(oldSize.width() - targetGeometry.width()) > 1.0 || qAbs(oldSize.height() - targetGeometry.height()) > 1.0;
-    if (dist < qMax(1.0, qreal(config.minDistance)) && !sizeChanging) {
+    if (dist < qMax(1.0, qreal(minDistance)) && !sizeChanging) {
         return std::nullopt;
     }
 
@@ -29,8 +26,8 @@ std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const Q
     motion.startPosition = oldPosition;
     motion.startSize = oldSize;
     motion.targetGeometry = targetGeometry;
-    motion.duration = config.duration;
-    motion.easing = config.easing;
+    motion.duration = duration;
+    motion.easing = easing;
     return motion;
 }
 
@@ -62,6 +59,12 @@ QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRe
         const qreal dw = startSize.width() - targetGeometry.width();
         const qreal dh = startSize.height() - targetGeometry.height();
 
+        // 50 samples ≈ one sample every 20 ms at the typical 1000 ms
+        // upper bound on snap durations — fine for the parameter ranges
+        // these curves clamp to (elastic amplitude ≤ 3, bounce count ≤ 8,
+        // bezier y ∈ [-1, 2]). Bounce-out with N=8 still gets ~6 samples
+        // per sub-bounce, enough to capture each peak. Longer / wilder
+        // curves should drive their own per-frame repaint instead.
         constexpr int nSamples = 50;
         for (int i = 1; i < nSamples; ++i) {
             qreal p = easing.evaluate(qreal(i) / nSamples);

@@ -70,9 +70,11 @@ Profile Profile::fromJson(const QJsonObject& obj)
     }
     if (obj.contains(QLatin1String("sequenceMode"))) {
         const int raw = obj.value(QLatin1String("sequenceMode")).toInt(static_cast<int>(DefaultSequenceMode));
-        // Clamp to a valid enumerator; unknown values fall back to the default
-        // to keep forward-compat with any future additions written by a newer
-        // client. Current enum has only {0, 1}.
+        // Map valid enumerators; anything else falls back to the library
+        // default. This is NOT forward-compat with future enumerators
+        // written by a newer client — those would silently land on
+        // AllAtOnce, not on a behaviorally-similar mode. If new modes
+        // are added, bump the schema and route through migration code.
         p.sequenceMode =
             (raw == static_cast<int>(SequenceMode::Cascade)) ? SequenceMode::Cascade : SequenceMode::AllAtOnce;
     }

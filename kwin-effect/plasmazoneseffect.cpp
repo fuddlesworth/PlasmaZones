@@ -1096,8 +1096,15 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
                                                   const std::function<void()>& onComplete)
 {
-    PhosphorAnimation::applyStaggeredOrImmediate(this, count, m_cachedAnimationSequenceMode,
-                                                 m_cachedAnimationStaggerInterval, applyFn, onComplete);
+    // Convert the D-Bus-sourced int to the typed enum at this boundary;
+    // the library API only accepts SequenceMode. Unknown ints fall back
+    // to AllAtOnce — same behaviour as Profile::fromJson.
+    const PhosphorAnimation::SequenceMode mode =
+        (m_cachedAnimationSequenceMode == static_cast<int>(PhosphorAnimation::SequenceMode::Cascade))
+        ? PhosphorAnimation::SequenceMode::Cascade
+        : PhosphorAnimation::SequenceMode::AllAtOnce;
+    PhosphorAnimation::applyStaggeredOrImmediate(this, count, mode, m_cachedAnimationStaggerInterval, applyFn,
+                                                 onComplete);
 }
 
 void PlasmaZonesEffect::slotDaemonReady()

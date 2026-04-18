@@ -62,8 +62,8 @@ struct PHOSPHORANIMATION_EXPORT CurveState
  *
  * The shared call path is `std::shared_ptr<const Curve>` — holding one
  * forbids mutation through the base pointer. Concrete subclasses like
- * `Easing` and `Spring` also support value-type semantics so legacy
- * callers can keep them inline in structs (e.g., `AnimationConfig`); a
+ * `Easing` and `Spring` also support value-type semantics so callers
+ * can keep them inline in structs (e.g., `WindowMotion::easing`); a
  * value-held instance is mutable by its owner, but it must not be
  * mutated after being wrapped in a `shared_ptr`. In practice the only
  * safe mutation pattern is "build then freeze": construct, configure,
@@ -131,6 +131,10 @@ public:
      * mid-flight is natural — callers just change `target` between calls
      * and velocity is preserved.
      *
+     * `dt <= 0` is a no-op for both stateless and stateful curves — the
+     * state passes through untouched, matching `Spring::step`'s contract
+     * so callers can drive any curve polymorphically with the same guard.
+     *
      * The default implementation is for stateless curves: it increments
      * `state.time` by `dt`, computes `t = state.time / state.duration`
      * clamped to [0, 1], then sets
@@ -187,7 +191,7 @@ public:
      *
      * Format: `"typeId:params"` for named curves (e.g.,
      * `"elastic-out:1.0,0.3"`, `"spring:12.0,0.8"`), or the bare
-     * `"x1,y1,x2,y2"` legacy format for cubic-bezier back-compat.
+     * `"x1,y1,x2,y2"` form for cubic-bezier (its canonical wire format).
      *
      * The string form uses 2-decimal float precision for human
      * readability — that makes the round-trip **lossy**. `Easing` and

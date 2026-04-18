@@ -5,7 +5,6 @@
 
 #include <QTest>
 
-using PhosphorAnimation::AnimationConfig;
 using PhosphorAnimation::Easing;
 
 class TestAnimationMath : public QObject
@@ -14,44 +13,47 @@ class TestAnimationMath : public QObject
 
 private Q_SLOTS:
 
-    // ─── createSnapMotion / createSnapAnimation alias ───
-
-    void testCreateSnapMotionDisabled()
-    {
-        AnimationConfig config;
-        config.enabled = false;
-        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(QPointF(0, 0), QSizeF(100, 100),
-                                                                         QRect(200, 200, 400, 300), config);
-        QVERIFY(!result.has_value());
-    }
+    // ─── createSnapMotion ───
 
     void testCreateSnapMotionDegenerateTarget()
     {
-        AnimationConfig config;
-        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(QPointF(0, 0), QSizeF(100, 100),
-                                                                         QRect(200, 200, 0, 300), config);
+        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(
+            QPointF(0, 0), QSizeF(100, 100), QRect(200, 200, 0, 300), 150.0, Easing(), /*minDistance*/ 0);
         QVERIFY(!result.has_value());
     }
 
     void testCreateSnapMotionBelowThreshold()
     {
-        AnimationConfig config;
-        config.minDistance = 50;
-        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(QPointF(100, 100), QSizeF(400, 300),
-                                                                         QRect(101, 101, 400, 300), config);
+        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(
+            QPointF(100, 100), QSizeF(400, 300), QRect(101, 101, 400, 300), 150.0, Easing(), /*minDistance*/ 50);
         QVERIFY(!result.has_value());
     }
 
     void testCreateSnapMotionValid()
     {
-        AnimationConfig config;
-        config.duration = 200.0;
-        config.minDistance = 5;
-        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(QPointF(0, 0), QSizeF(100, 100),
-                                                                         QRect(300, 300, 500, 400), config);
+        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(
+            QPointF(0, 0), QSizeF(100, 100), QRect(300, 300, 500, 400), /*duration*/ 200.0, Easing(),
+            /*minDistance*/ 5);
         QVERIFY(result.has_value());
         QCOMPARE(result->targetGeometry, QRect(300, 300, 500, 400));
         QCOMPARE(result->duration, 200.0);
+    }
+
+    void testCreateSnapMotionZeroMinDistanceTreatedAsOnePixel()
+    {
+        // Documented behaviour: minDistance=0 means "skip 0-pixel moves
+        // anyway" (sub-1px deltas with no scale change are no-ops).
+        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(
+            QPointF(100, 100), QSizeF(400, 300), QRect(100, 100, 400, 300), 150.0, Easing(), /*minDistance*/ 0);
+        QVERIFY(!result.has_value());
+    }
+
+    void testCreateSnapMotionScaleChangeBypassesDistanceThreshold()
+    {
+        // Even a 0-pixel move animates if the size is changing.
+        auto result = PhosphorAnimation::AnimationMath::createSnapMotion(
+            QPointF(100, 100), QSizeF(400, 300), QRect(100, 100, 800, 300), 150.0, Easing(), /*minDistance*/ 1000);
+        QVERIFY(result.has_value());
     }
 
     // ─── repaintBounds ───

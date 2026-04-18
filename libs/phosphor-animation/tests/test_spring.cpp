@@ -131,6 +131,27 @@ private Q_SLOTS:
         }
     }
 
+    void testEvaluateOverdampedNumericallyStable()
+    {
+        // Just outside the critical band, c1/c2 grow like 1/disc — guard
+        // against infinity / NaN at zeta values where disc = √(ζ²-1) is
+        // small but nonzero, and confirm the overdamped formula stays
+        // monotonic and bounded across the documented zeta range.
+        for (qreal zeta : {1.01, 1.05, 1.5, 5.0, 10.0}) {
+            Spring s(12.0, zeta);
+            qreal prev = 0.0;
+            for (int i = 0; i <= 100; ++i) {
+                const qreal t = qreal(i) / 100.0;
+                const qreal v = s.evaluate(t);
+                QVERIFY2(qIsFinite(v), qPrintable(QStringLiteral("non-finite at zeta=%1, t=%2").arg(zeta).arg(t)));
+                // Overdamped: monotonic non-decreasing toward target, no overshoot.
+                QVERIFY(v >= prev - 1e-6);
+                QVERIFY(v <= 1.0 + 1e-3);
+                prev = v;
+            }
+        }
+    }
+
     // ─── step (physics) ───
 
     void testStepConvergesToTarget()

@@ -16,8 +16,10 @@ private Q_SLOTS:
 
     // ─── fromString ───
 
-    void testFromStringBezierLegacyBare()
+    void testFromStringBezierBareWireFormat()
     {
+        // Bare 4-comma form is the canonical cubic-bezier wire format
+        // — what Easing::toString emits and what configs/QML write.
         Easing curve = Easing::fromString(QStringLiteral("0.33,1.00,0.68,1.00"));
         QCOMPARE(curve.type, Easing::Type::CubicBezier);
         QVERIFY(qAbs(curve.x1 - 0.33) < 0.01);
@@ -26,12 +28,14 @@ private Q_SLOTS:
         QVERIFY(qAbs(curve.y2 - 1.00) < 0.01);
     }
 
-    void testFromStringBezierPrefixed()
+    void testFromStringBezierPrefixedRejected()
     {
+        // The "bezier:..." prefixed form is intentionally NOT accepted
+        // — there is exactly one wire format per curve type. Unknown
+        // named-curve falls back to the default OutCubic bezier.
         Easing curve = Easing::fromString(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
-        QCOMPARE(curve.type, Easing::Type::CubicBezier);
-        QVERIFY(qAbs(curve.x1 - 0.25) < 0.01);
-        QVERIFY(qAbs(curve.y1 - 0.10) < 0.01);
+        Easing def;
+        QCOMPARE(curve, def);
     }
 
     void testFromStringElasticOut()

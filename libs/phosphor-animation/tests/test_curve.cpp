@@ -132,6 +132,31 @@ private Q_SLOTS:
         QCOMPARE(state.velocity, 0.0);
     }
 
+    void testDefaultStepZeroDtIsNoOp()
+    {
+        // dt <= 0 must not advance state — important when an upstream
+        // layer holds an intermediate state.value that the lerp formula
+        // would otherwise clobber. Same contract as Spring::step.
+        Easing e;
+        CurveState state;
+        state.value = 0.42;
+        state.velocity = 1.5;
+        state.time = 0.3;
+        state.startValue = 0.0;
+        state.duration = 1.0;
+
+        const CurveState before = state;
+        e.step(0.0, state, 1.0);
+        QCOMPARE(state.value, before.value);
+        QCOMPARE(state.velocity, before.velocity);
+        QCOMPARE(state.time, before.time);
+
+        e.step(-0.01, state, 1.0);
+        QCOMPARE(state.value, before.value);
+        QCOMPARE(state.velocity, before.velocity);
+        QCOMPARE(state.time, before.time);
+    }
+
     void testDefaultStepDtInSecondsMatchesSpringContract()
     {
         // Regression guard: Curve::step()'s `dt` is real seconds, the

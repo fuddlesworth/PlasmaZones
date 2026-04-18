@@ -7,8 +7,17 @@ namespace PhosphorAnimation {
 
 void Curve::step(qreal dt, CurveState& state, qreal target) const
 {
-    // Default: dt is real seconds, consistent with Spring::step. Map
-    // elapsed seconds into the parametric domain via state.duration.
+    // Default: dt is real seconds, consistent with Spring::step.
+    //
+    // dt <= 0 is a no-op so callers can safely tick polymorphically
+    // without per-curve guards. Importantly, this means a zero-dt call
+    // does NOT recompute state.value from (startValue, target) — useful
+    // when an upstream layer (e.g., AnimatedValue<T>) is holding an
+    // intermediate value that the lerp formula would clobber.
+    if (dt <= 0.0) {
+        return;
+    }
+
     // Zero/negative duration completes the animation immediately so the
     // default matches WindowMotion's "zero-duration = snap-to-target"
     // behavior and avoids a divide-by-zero.
@@ -24,7 +33,7 @@ void Curve::step(qreal dt, CurveState& state, qreal target) const
     const qreal t = qBound(0.0, state.time / state.duration, 1.0);
     const qreal progress = evaluate(t);
     state.value = state.startValue + progress * (target - state.startValue);
-    state.velocity = (dt > 0.0) ? (state.value - prevValue) / dt : 0.0;
+    state.velocity = (state.value - prevValue) / dt;
 }
 
 bool Curve::equals(const Curve& other) const

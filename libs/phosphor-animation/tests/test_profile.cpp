@@ -181,6 +181,28 @@ private Q_SLOTS:
         QVERIFY(restored.presetName->isEmpty());
     }
 
+    void testPresetNameAbsentVsEngagedEmptyDistinguishedInJson()
+    {
+        // Belt-and-braces around the QJsonObject "" vs missing-key
+        // contract: a Profile with no presetName must round-trip with
+        // the field absent; a Profile with engaged-empty presetName
+        // must round-trip with the field present-and-empty. Equality
+        // distinguishes the two cases, which is the whole point of
+        // optional-bearing fields.
+        Profile absent;
+        Profile engagedEmpty;
+        engagedEmpty.presetName = QString();
+
+        QVERIFY(absent != engagedEmpty);
+
+        const Profile absentRestored = Profile::fromJson(absent.toJson());
+        const Profile engagedEmptyRestored = Profile::fromJson(engagedEmpty.toJson());
+
+        QVERIFY(!absentRestored.presetName.has_value());
+        QVERIFY(engagedEmptyRestored.presetName.has_value());
+        QVERIFY(absentRestored != engagedEmptyRestored);
+    }
+
     void testRoundTripSpring()
     {
         Profile original;

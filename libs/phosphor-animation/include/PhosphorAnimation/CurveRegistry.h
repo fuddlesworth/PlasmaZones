@@ -20,8 +20,9 @@ namespace PhosphorAnimation {
  * Enables two things:
  *
  * 1. **Config round-trip.** Settings, config files, and D-Bus strings
- *    serialize curves as `"typeId:params"` (or legacy bare bezier
- *    `"x1,y1,x2,y2"`). The registry parses these back into concrete
+ *    serialize curves as `"typeId:params"` (e.g., `"spring:12,0.8"`)
+ *    or — for cubic-bezier specifically — the bare `"x1,y1,x2,y2"`
+ *    form. The registry parses these back into concrete
  *    `shared_ptr<const Curve>` instances without callers needing to
  *    know which subclass the string refers to.
  *
@@ -37,11 +38,11 @@ namespace PhosphorAnimation {
  *   - `bounce-in/out/in-out`      → Easing (bounce)
  *   - `spring`                    → Spring (angular-frequency + damping)
  *
- * ## Legacy form
+ * ## Cubic-bezier wire format
  *
  * The bare `"x1,y1,x2,y2"` string (four comma-separated numbers, no
- * colon) is treated as cubic-bezier for back-compat with configs
- * predating the registry.
+ * colon) is the cubic-bezier wire format and dispatches to the
+ * `bezier` factory. There is no parallel `"bezier:..."` form.
  *
  * ## Thread safety
  *
@@ -53,9 +54,10 @@ class PHOSPHORANIMATION_EXPORT CurveRegistry
 {
 public:
     /// Factory function: receives the typeId + the trailing parameter
-    /// substring (after the colon, or the whole string for legacy form)
-    /// and returns an immutable Curve instance. May return nullptr to
-    /// signal parse failure — callers fall back to a default curve.
+    /// substring (after the colon, or the whole string when the bare
+    /// cubic-bezier form was matched) and returns an immutable Curve
+    /// instance. May return nullptr to signal parse failure — callers
+    /// fall back to a default curve.
     using Factory = std::function<std::shared_ptr<const Curve>(const QString& typeId, const QString& params)>;
 
     /// Access the process-wide registry singleton.
@@ -79,7 +81,7 @@ public:
      *
      * Accepts:
      *   - `"typeId:params"`  — dispatched to the registered factory
-     *   - `"x1,y1,x2,y2"`    — legacy cubic-bezier
+     *   - `"x1,y1,x2,y2"`    — cubic-bezier wire format
      *
      * Returns `nullptr` only if @p spec is empty. Unknown typeIds fall
      * through to a best-effort default (cubic-bezier outCubic) with a

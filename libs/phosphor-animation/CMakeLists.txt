@@ -18,9 +18,10 @@
 #     orchestration — the primitives previously co-located in
 #     src/compositor-common/ are now in their own domain-named library.
 #
-# Depends on Qt6 Core + Gui only. The compositor-common backward-compat
-# shims forward to this library, so consumers that already include
-# easingcurve.h / animation_math.h / stagger_timer.h keep compiling.
+# Depends on Qt6 Core + Gui only. There is no compositor-common
+# forwarding shim — the old easingcurve.h / animation_math.h /
+# stagger_timer.h headers are gone and PlasmaZones consumers include
+# <PhosphorAnimation/...> directly.
 #
 # Future phases (separate branches, each gated):
 #   Phase 2  AnimationController base + WindowAnimator split

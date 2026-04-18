@@ -33,19 +33,15 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* window) const
 bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QSizeF& oldSize,
                                     const QRect& targetGeometry)
 {
-    if (!window) {
+    if (!window || !m_enabled) {
         return false;
     }
 
-    // All the skip-or-accept logic lives in AnimationMath::createSnapMotion
-    // — DRY with every other PhosphorAnimation consumer and guarantees
-    // that "worth animating?" decisions stay in one place.
-    PhosphorAnimation::AnimationConfig config;
-    config.enabled = m_enabled;
-    config.duration = m_duration;
-    config.easing = m_easing;
-    config.minDistance = m_minDistance;
-    auto motion = PhosphorAnimation::AnimationMath::createSnapMotion(oldPosition, oldSize, targetGeometry, config);
+    // The geometry-based skip logic (degenerate target, sub-threshold
+    // delta with no scale change) lives in createSnapMotion so every
+    // PhosphorAnimation consumer sees identical "worth animating?" rules.
+    auto motion = PhosphorAnimation::AnimationMath::createSnapMotion(oldPosition, oldSize, targetGeometry, m_duration,
+                                                                     m_easing, m_minDistance);
     if (!motion) {
         return false;
     }
@@ -162,8 +158,13 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
         const QSizeF desiredSize = it->currentVisualSize();
         const QSizeF actualSize = window->frameGeometry().size();
         constexpr qreal MinDim = 1.0;
-        const qreal sx = qBound(0.1, desiredSize.width() / qMax(actualSize.width(), MinDim), 10.0);
-        const qreal sy = qBound(0.1, desiredSize.height() / qMax(actualSize.height(), MinDim), 10.0);
+        // [0.01, 100] is wide enough that a 4K window snapping to a
+        // 100 px thumbnail (40× scale) renders without distortion. The
+        // qMax(actualSize, MinDim) above already prevents division
+        // explosion, so this clamp only catches genuinely degenerate
+        // input — keep it generous.
+        const qreal sx = qBound(0.01, desiredSize.width() / qMax(actualSize.width(), MinDim), 100.0);
+        const qreal sy = qBound(0.01, desiredSize.height() / qMax(actualSize.height(), MinDim), 100.0);
         data.setXScale(data.xScale() * sx);
         data.setYScale(data.yScale() * sy);
     }

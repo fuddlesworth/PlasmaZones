@@ -41,19 +41,20 @@ private Q_SLOTS:
 
     // ─── create() parsing ───
 
-    void testCreateLegacyBezier()
+    void testCreateBezierBareWireFormat()
     {
-        // Bare "x1,y1,x2,y2" form routes to bezier factory.
+        // Bare "x1,y1,x2,y2" is the canonical cubic-bezier wire format.
         auto curve = CurveRegistry::instance().create(QStringLiteral("0.33,1.00,0.68,1.00"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
-    void testCreatePrefixedBezier()
+    void testCreatePrefixedBezierFallsBackToDefault()
     {
-        auto curve = CurveRegistry::instance().create(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
-        QVERIFY(curve != nullptr);
-        QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
+        // The "bezier:..." prefixed form is intentionally NOT supported
+        // — there is exactly one wire format per curve type. Falls back
+        // to default bezier via create()'s unknown-typeId path.
+        QVERIFY(CurveRegistry::instance().tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00")) == nullptr);
     }
 
     void testCreateElastic()

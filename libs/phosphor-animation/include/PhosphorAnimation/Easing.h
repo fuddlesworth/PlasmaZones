@@ -15,10 +15,9 @@ namespace PhosphorAnimation {
  * @brief Parametric easing curve: cubic bezier, elastic, or bounce.
  *
  * Seven variants, all stateless (progression depends only on normalized
- * time t). Serialized strings:
+ * time t). Wire formats:
  *
- *   - CubicBezier:     `"x1,y1,x2,y2"`                (legacy bare form)
- *                      `"bezier:x1,y1,x2,y2"`         (registry form)
+ *   - CubicBezier:     `"x1,y1,x2,y2"`                (4 comma-separated floats)
  *   - ElasticIn:       `"elastic-in:amplitude,period"`
  *   - ElasticOut:      `"elastic-out:amplitude,period"`
  *   - ElasticInOut:    `"elastic-in-out:amplitude,period"`
@@ -26,15 +25,21 @@ namespace PhosphorAnimation {
  *   - BounceOut:       `"bounce-out:amplitude,bounces"`
  *   - BounceInOut:     `"bounce-in-out:amplitude,bounces"`
  *
+ * Each curve has exactly one wire format — there is no parallel
+ * `"bezier:x,y,x,y"` form, intentionally. The bare 4-comma form is
+ * unambiguous (no letters except float exponents) and that's what
+ * `Easing::toString` emits.
+ *
  * Default construction yields OutCubic bezier (0.33, 1.00, 0.68, 1.00).
  *
  * ## Value semantics
  *
- * Easing preserves value-type semantics for legacy back-compat (callers
- * that hold `Easing` by value, copy it, or use it as a struct field
- * continue to work after the compositor-common shim). The underlying
- * polymorphic Curve dispatch only engages when accessed through
- * `shared_ptr<const Curve>` in the new API.
+ * `Easing` is a value type with public fields. Copy/move are explicit
+ * to keep `Curve`'s protected base from blocking them, but otherwise
+ * Easing behaves like any POD-ish struct: it can be stack-allocated,
+ * stored inline in `WindowMotion`, copied freely, etc. The polymorphic
+ * `Curve` dispatch path is only engaged when an `Easing` is wrapped in
+ * a `shared_ptr<const Curve>`.
  */
 class PHOSPHORANIMATION_EXPORT Easing final : public Curve
 {
@@ -51,9 +56,10 @@ public:
 
     Easing() = default;
 
-    // Value-type copy/move: required for legacy callers that hold Easing
-    // by value (e.g. AnimationConfig::easing). Protected base copy in
-    // Curve.h makes this safe from slicing outside the hierarchy.
+    // Value-type copy/move: Easing is held by value in WindowMotion and
+    // anywhere else that wants a stack-allocated stateless curve. The
+    // protected base copy in Curve.h makes this safe from slicing
+    // outside the hierarchy.
     Easing(const Easing&) = default;
     Easing& operator=(const Easing&) = default;
     Easing(Easing&&) = default;
@@ -75,18 +81,21 @@ public:
     // ─────── Easing-specific API ───────
 
     /**
-     * @brief Parse from a config string.
+     * @brief Parse from a config string into a value-type @c Easing.
      *
-     * Accepts both the legacy bare bezier form ("0.33,1.00,0.68,1.00")
-     * and prefixed forms ("elastic-out:1.0,0.3", "bezier:0.33,1,0.68,1").
+     * Accepts the bare cubic-bezier wire form ("0.33,1.00,0.68,1.00")
+     * and the named-curve form ("elastic-out:1.0,0.3", "bounce-in:1.5,4").
      * Returns default OutCubic bezier on any parse failure.
      *
-     * @note This is a static factory. Prefer CurveRegistry::create() in
-     * new code since it also handles Spring and future curve types.
+     * Use this when the caller wants a value-type @c Easing (e.g., to
+     * stack-allocate or store inline). Use @ref CurveRegistry::create
+     * when the caller wants a polymorphic `shared_ptr<const Curve>` and
+     * may need Spring or third-party curve types from the same string
+     * format. The two share the same parsing rules.
      */
     static Easing fromString(const QString& str);
 
-    // ─────── Parameters (public for legacy back-compat) ───────
+    // ─────── Parameters (public — Easing is a value-type aggregate) ───────
 
     Type type = Type::CubicBezier;
 
@@ -109,7 +118,7 @@ public:
     /// Bounce count. Clamped to [1, 8] on parse.
     int bounces = 3;
 
-    // ─────── Legacy equality (value-type compat) ───────
+    // ─────── Value-type equality ───────
 
     bool operator==(const Easing& other) const;
     bool operator!=(const Easing& other) const

@@ -92,11 +92,11 @@ required for `QPointF` / `QSizeF` / `QRect` / `QRectF` used throughout
    pass the string form through.
 
 8. **No QObject, no signals at the data layer.** `Curve` / `Profile` /
-   `ProfileTree` / `WindowMotion` / `AnimationConfig` are plain data
-   types. `StaggerTimer` uses `QObject` only as a lifetime-context
-   parent for `QTimer::singleShot` — the functions themselves are free.
-   Observers wrap these types externally when Qt property binding /
-   signal dispatch is needed.
+   `ProfileTree` / `WindowMotion` are plain data types. `StaggerTimer`
+   uses `QObject` only as a lifetime-context parent for
+   `QTimer::singleShot` — the functions themselves are free. Observers
+   wrap these types externally when Qt property binding / signal
+   dispatch is needed.
 
 ---
 
@@ -152,18 +152,18 @@ Design notes:
 Seven variants via an internal `enum class Type`: `CubicBezier`,
 `ElasticIn/Out/InOut`, `BounceIn/Out/InOut`. Public parameter fields
 (`x1/y1/x2/y2` for bezier; `amplitude`, `period`, `bounces` for elastic /
-bounce) are kept public for legacy value-init; ranges are clamped on
-parse (`x ∈ [0,1]`, `y ∈ [-1,2]`, `amplitude ∈ [0.5, 3.0]`, `period ∈
-[0.1, 1.0]`, `bounces ∈ [1, 8]`).
+bounce) are public — `Easing` is a value-type aggregate. Ranges are
+clamped on parse (`x ∈ [0,1]`, `y ∈ [-1,2]`, `amplitude ∈ [0.5, 3.0]`,
+`period ∈ [0.1, 1.0]`, `bounces ∈ [1, 8]`).
 
-Serialized forms:
-- Bezier legacy: `"0.33,1.00,0.68,1.00"` (four comma-separated floats)
-- Bezier prefixed: `"bezier:0.33,1.00,0.68,1.00"`
+Wire formats — exactly one per curve type, no parallel encodings:
+- Bezier:  `"0.33,1.00,0.68,1.00"` (four comma-separated floats, no prefix)
 - Elastic: `"elastic-out:1.0,0.3"` (amplitude, period)
-- Bounce: `"bounce-out:1.5,4"` (amplitude, bounces)
+- Bounce:  `"bounce-out:1.5,4"` (amplitude, bounces)
 
-`fromString` tolerates both legacy and prefixed forms; `toString`
-always emits the canonical form for the current `Type`.
+`fromString` and `toString` are inverses on these formats. The
+`"bezier:..."` prefixed form is intentionally NOT accepted — there is
+one wire format per curve type.
 
 ### `Spring.h` — damped harmonic oscillator
 
@@ -373,15 +373,6 @@ struct WindowMotion {
     QSizeF  currentVisualSize() const;
     bool hasScaleChange() const;
 };
-
-struct AnimationConfig {
-    bool enabled = true;
-    qreal duration = 150.0;
-    Easing easing;
-    int minDistance = 0;
-    SequenceMode sequenceMode = SequenceMode::AllAtOnce;
-    int staggerInterval = 30;
-};
 ```
 
 Progress semantics:
@@ -405,7 +396,8 @@ change is mechanical — every field except `easing` is unchanged.
 namespace AnimationMath {
     std::optional<WindowMotion>
     createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
-                     const QRect& targetGeometry, const AnimationConfig&);
+                     const QRect& targetGeometry, qreal duration,
+                     const Easing& easing, int minDistance);
 
     QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize,
                          const QRect& targetGeometry, const Easing& easing,
@@ -413,8 +405,10 @@ namespace AnimationMath {
 }
 ```
 
-`createSnapMotion` returns `nullopt` for disabled config, degenerate
-target, or sub-threshold position delta without scale change.
+`createSnapMotion` returns `nullopt` for degenerate target geometry or
+sub-threshold position delta without scale change. The caller owns the
+"should I animate at all?" gate (e.g., a global enabled flag) — this
+function only refuses on geometry grounds.
 `repaintBounds` unions start + target rects with padding, and samples
 the curve when overshoot is possible (elastic, bounce with amplitude
 > 1, or bezier with out-of-range `y` controls) so repaint regions
@@ -424,16 +418,24 @@ don't under-invalidate during the middle of the animation.
 
 ```cpp
 void applyStaggeredOrImmediate(
-    QObject* parent, int count, int sequenceMode, int staggerInterval,
+    QObject* parent, int count, SequenceMode sequenceMode,
+    int staggerInterval,
     const std::function<void(int)>& applyFn,
     const std::function<void()>& onComplete = nullptr);
 ```
 
-Single free function. `sequenceMode == 1` with `staggerInterval > 0`
-and `count > 1` cascades via `QTimer::singleShot`; everything else
-runs synchronously. The parent guard cancels pending fires if
-`parent` is destroyed mid-cascade — critical for the effect-teardown
-path where windows may close while their snap cascade is in flight.
+Single free function, enum-typed for `sequenceMode`. `Cascade` with
+`staggerInterval > 0` and `count > 1` cascades via
+`QTimer::singleShot`; everything else runs synchronously. The parent
+guard cancels pending fires if `parent` is destroyed mid-cascade —
+critical for the effect-teardown path where windows may close while
+their snap cascade is in flight. `onComplete` is **not** invoked on
+cancellation; callers needing cleanup hooks must observe parent
+destruction independently.
+
+D-Bus / config call sites loading raw integers convert at the
+boundary (the kwin-effect's `applyStaggeredOrImmediate` wrapper does
+this once for the whole compositor effect).
 
 Parent-guard caveat: Qt cancels the lambda when `parent` dies, but
 objects captured *inside* `applyFn` / `onComplete` have their own
@@ -802,13 +804,12 @@ Full PlasmaZones suite (116 tests) runs green after every phase.
 
 ## Open Questions
 
-1. **Should `AnimationConfig` be retired in favor of `Profile` in
-   Phase 2?** Today they coexist because the kwin-effect WindowAnimator
-   uses `AnimationConfig` by value and Profile would force a
-   `shared_ptr` indirection. Once Phase 2 lands an `AnimationController`
-   base and WindowMotion uses `shared_ptr<const Curve>`,
-   `AnimationConfig` becomes a thin legacy shim. Deprecate in Phase 2
-   and remove in Phase 3?
+1. **~~Should `AnimationConfig` be retired in favor of `Profile`?~~**
+   Resolved in the scaffold PR — `AnimationConfig` was a parallel-shape
+   shim with no production benefit, so it was removed before merge.
+   `createSnapMotion` now takes individual params; Phase 2 will migrate
+   `WindowAnimator` to take a `Profile` and hold `shared_ptr<const Curve>`
+   inside `WindowMotion`.
 
 2. **Thread-safety posture beyond GUI thread.** Current contract is
    "all methods are GUI-thread-only." `CurveRegistry` has a mutex

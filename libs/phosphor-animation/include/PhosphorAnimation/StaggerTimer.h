@@ -15,23 +15,27 @@ namespace PhosphorAnimation {
 /**
  * @brief Apply a sequence of operations, optionally cascaded with stagger.
  *
- * When @p sequenceMode is `1` (one-by-one) and @p staggerInterval > 0,
- * each `applyFn(i)` call is delayed by `i * staggerInterval` ms via
+ * When @p sequenceMode is `Cascade` and @p staggerInterval > 0, each
+ * `applyFn(i)` call is delayed by `i * staggerInterval` ms via
  * `QTimer::singleShot`, producing the visual cascade familiar from
  * tiling shells. Otherwise all calls are immediate and @p onComplete
  * fires synchronously at the end.
  *
- * The integer @p sequenceMode matches `PhosphorAnimation::SequenceMode`
- * (0 = AllAtOnce, 1 = Cascade). The int signature is preserved here so
- * D-Bus/config integers can flow straight through without translation;
- * higher-level API surfaces (Profile, AnimationConfig) use the enum.
+ * Callers loading a raw integer from D-Bus / config should convert to
+ * `SequenceMode` at that boundary (with explicit range checking) — this
+ * function does not accept magic ints.
  *
  * @param parent          QObject that owns the QTimer context.
  * @param count           Number of items to process.
- * @param sequenceMode    `0` = all at once; `1` = cascade.
+ * @param sequenceMode    AllAtOnce or Cascade.
  * @param staggerInterval Milliseconds between cascade starts.
  * @param applyFn         Called once per index `i ∈ [0, count)`.
  * @param onComplete      Optional callback after all items are applied.
+ *                        **Not invoked** if @p parent is destroyed
+ *                        mid-cascade — Qt cancels the pending timers
+ *                        and we have no completion to report. Callers
+ *                        relying on @p onComplete for cleanup must
+ *                        handle parent destruction independently.
  *
  * ## Parent-guard contract
  *
@@ -53,18 +57,6 @@ namespace PhosphorAnimation {
  *
  * In PlasmaZones today all callers satisfy (b) — they capture
  * subsystems owned by the compositor effect which is itself @p parent.
- */
-PHOSPHORANIMATION_EXPORT void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode,
-                                                        int staggerInterval, const std::function<void(int)>& applyFn,
-                                                        const std::function<void()>& onComplete = nullptr);
-
-/**
- * @brief Type-safe overload taking @ref SequenceMode.
- *
- * Forwards to the int-taking form via `static_cast`. Callers that hold a
- * `SequenceMode` enum (Profile / AnimationConfig / anything above the
- * D-Bus marshalling boundary) should prefer this overload rather than
- * casting to int at every call site.
  */
 PHOSPHORANIMATION_EXPORT void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequenceMode,
                                                         int staggerInterval, const std::function<void(int)>& applyFn,
