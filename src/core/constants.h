@@ -30,15 +30,15 @@
 // include.  That transitive chain forced every PlasmaZones consumer (including
 // libraries like PhosphorZones that have no use for autotile symbols) to
 // resolve the PhosphorTiles include path.  Consumers that genuinely need the
-// autotile namespaces now include `<PhosphorTiles/AutotileConstants.h>` (or
-// the legacy shim `autotile/AutotileConstants.h`) directly.
+// autotile namespaces now include `<PhosphorTiles/AutotileConstants.h>`
+// directly.
 
 namespace PlasmaZones {
 
-// PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones — `PhosphorZones::Zone.h`
-// declares it inside `namespace PlasmaZones` so it's visible to existing
-// callers via the same name.  No alias needed here — the header transitively
-// reaches PhosphorZones::Zone.h via core/zone.h shim.
+// PhosphorZones::ZoneGeometryMode lives in libs/phosphor-zones —
+// `PhosphorZones::Zone.h` declares it inside `namespace PlasmaZones` so it's
+// visible to existing callers via the same name.  No alias needed here;
+// consumers that need the enum include `<PhosphorZones/Zone.h>` directly.
 
 /**
  * @brief Default values for zone appearance and core module constants
@@ -77,7 +77,16 @@ constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (c
 // `PhosphorLayout::ScreenClassification`. All PlasmaZones-side callers
 // reference them qualified directly — no aliases here.
 
-// PhosphorTiles::AutotileDefaults lives in autotile/AutotileConstants.h (re-included above).
+/**
+ * @brief XDG-relative subdirectory for scripted tiling algorithm JS files.
+ *
+ * Used by every in-tree @c PhosphorTiles::ScriptedAlgorithmLoader constructor
+ * (daemon, editor, settings) and by the settings-side helpers that resolve
+ * the user-writable directory under @c QStandardPaths::GenericDataLocation.
+ * Keeping this in one place prevents the three callers from drifting when
+ * the subdirectory ever needs to change.
+ */
+inline constexpr QLatin1String ScriptedAlgorithmSubdir{"plasmazones/algorithms"};
 
 /**
  * @brief Editor-specific constants
@@ -164,8 +173,6 @@ inline constexpr QLatin1String DisplayName{"displayName"};
 inline constexpr QLatin1String Region{"region"};
 inline constexpr QLatin1String Screens{"screens"};
 }
-
-// PhosphorTiles::AutotileJsonKeys lives in autotile/AutotileConstants.h (re-included above).
 
 /**
  * @brief Per-screen override key names (PascalCase — distinct from camelCase JSON keys)

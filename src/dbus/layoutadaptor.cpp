@@ -43,11 +43,7 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
 {
     Q_ASSERT(manager);
     connectLayoutManagerSignals();
-    m_layoutSourceCoalesce.setSingleShot(true);
-    m_layoutSourceCoalesce.setInterval(200);
-    connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
-        Q_EMIT layoutListChanged();
-    });
+    initCoalesceTimer();
 }
 
 LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm, QObject* parent)
@@ -58,6 +54,11 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
     Q_ASSERT(manager);
     connectLayoutManagerSignals();
     connectVirtualDesktopSignals();
+    initCoalesceTimer();
+}
+
+void LayoutAdaptor::initCoalesceTimer()
+{
     m_layoutSourceCoalesce.setSingleShot(true);
     m_layoutSourceCoalesce.setInterval(200);
     connect(&m_layoutSourceCoalesce, &QTimer::timeout, this, [this]() {
@@ -608,6 +609,11 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
     // The daemon/editor/settings each call setLayoutSource exactly once
     // during init(); allow idempotent re-assignment with the same pointer
     // but trip on a silent swap that would leave stale connections wired.
+    // Debug builds assert; release builds silently swap to the new source
+    // by disconnecting the coalesce timer from the old source first (see
+    // the disconnect-by-receiver block below), so a stray re-wire in a
+    // shipped binary is degraded from "duplicate coalesced emissions" to
+    // "single coalesced emission from the new source".
     Q_ASSERT(!m_layoutSource || m_layoutSource == source);
 
     if (m_layoutSource == source)

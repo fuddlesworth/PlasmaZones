@@ -433,7 +433,7 @@ bool Daemon::init()
     // user-defined algorithms are registered in PhosphorTiles::AlgorithmRegistry before the
     // engine resolves the configured algorithm ID.
     m_scriptedAlgorithmLoader =
-        std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"));
+        std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir));
     // When scripted algorithms change (hot-reload), notify layout list consumers
     connect(m_scriptedAlgorithmLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             [this]() {

@@ -26,7 +26,8 @@ add_library(plasmazones_compositor_common STATIC
     # window_id moved to libs/phosphor-identity — backward-compat shim
     # `window_id.h` in this directory forwards to <PhosphorIdentity/WindowId.h>
     # so the KWin effect's existing `#include "window_id.h"` keeps working.
-    window_id.h
+    # The shim is header-only; it's reachable via the public include-dir
+    # wired below and does not need to be listed as a source.
     autotile_state.h
     compositor_bridge.h
     dbus_types.cpp

@@ -368,6 +368,16 @@ private:
     void connectVirtualDesktopSignals();
     void connectActivitySignals();
 
+    /**
+     * @brief One-time setup for the ILayoutSource coalesce timer.
+     *
+     * Configures @c m_layoutSourceCoalesce (single-shot, 200 ms interval)
+     * and wires its @c timeout into a single @c layoutListChanged emission.
+     * Called from every public constructor so the init lives in exactly
+     * one place — see constructor bodies in layoutadaptor.cpp.
+     */
+    void initCoalesceTimer();
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Helper Methods
     // ═══════════════════════════════════════════════════════════════════════════════

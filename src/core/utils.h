@@ -188,10 +188,23 @@ inline constexpr QLatin1StringView Down{"down"};
 // Window-id parsing utilities (extractAppId / extractInstanceId / appIdMatches)
 // live in libs/phosphor-identity as `PhosphorIdentity::WindowId::*`. All
 // PlasmaZones-side callers reference them qualified directly — no forwarding
-// wrappers here.  composeWindowId() and extractWindowClass() were removed
-// together with the old `"appId|uuid"` composite format: runtime windowIds
-// are now the compositor's opaque instance id, and class metadata lives in
-// WindowRegistry instead of being joined back into a single string.
+// wrappers here.
+//
+// Wire format: `"appId|instanceId"`.
+//   appId       — compositor-reported app identity:
+//                   • preferred: `KWin::Window::desktopFileName()` (stable
+//                     cross-session),
+//                   • fallback:  normalized `KWin::EffectWindow::windowClass()`
+//                     (X11: resourceClass after the space; Wayland: app_id
+//                     as-is), lowercased.
+//                 Composed in the KWin effect's getWindowAppId()
+//                 (kwin-effect/plasmazoneseffect.cpp) — the daemon only
+//                 observes the joined string.
+//   instanceId  — `KWin::Window::internalId().toString(QUuid::WithoutBraces)`,
+//                 stable for the window's lifetime within a KWin session and
+//                 immune to WM_CLASS mutations (Electron/CEF apps).
+// The effect caches the composite at first observation so the daemon's
+// maps keyed by windowId remain stable across late class changes.
 
 /**
  * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)
