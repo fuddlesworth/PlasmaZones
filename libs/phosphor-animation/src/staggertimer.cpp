@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "stagger_timer.h"
+#include <PhosphorAnimation/StaggerTimer.h>
 
 #include <QTimer>
 
 #include <limits>
 
-namespace PlasmaZones {
+namespace PhosphorAnimation {
 
 void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int staggerInterval,
                                const std::function<void(int)>& applyFn, const std::function<void()>& onComplete)
@@ -19,15 +19,18 @@ void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int
         return;
     }
 
-    // If parent is null, QTimer::singleShot would be UB/crash — fall through to immediate path.
+    // parent == nullptr disables the Qt context guard — QTimer::singleShot
+    // would crash or leak. Fall through to the synchronous path in that
+    // case; callers should pass a valid parent but we stay defensive.
     const bool stagger = parent && (sequenceMode == 1) && (count > 1) && (staggerInterval > 0);
 
     if (stagger) {
         applyFn(0);
-        // Use qint64 intermediate + clamp: QTimer::singleShot takes int ms, so
-        // (i * staggerInterval) can silently overflow to negative for large
-        // counts. Clamp at INT_MAX — beyond that the delays are pathological
-        // anyway and clamping yields "fire as soon as possible after the cap".
+        // qint64 intermediate + clamp prevents silent negative-overflow
+        // for large counts: QTimer::singleShot takes int ms, so plain
+        // (i * staggerInterval) can wrap. Clamp at INT_MAX — the delay
+        // is already pathological at that point and the clamp yields
+        // "fire as soon as possible after the cap".
         for (int i = 1; i < count; ++i) {
             const qint64 rawDelay = static_cast<qint64>(i) * static_cast<qint64>(staggerInterval);
             const int delay = rawDelay > std::numeric_limits<int>::max() ? std::numeric_limits<int>::max()
@@ -50,4 +53,10 @@ void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int
     }
 }
 
-} // namespace PlasmaZones
+void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequenceMode, int staggerInterval,
+                               const std::function<void(int)>& applyFn, const std::function<void()>& onComplete)
+{
+    applyStaggeredOrImmediate(parent, count, static_cast<int>(sequenceMode), staggerInterval, applyFn, onComplete);
+}
+
+} // namespace PhosphorAnimation

@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "animation_math.h"
+#include <PhosphorAnimation/AnimationMath.h>
 
-namespace PlasmaZones {
+namespace PhosphorAnimation {
 namespace AnimationMath {
 
-std::optional<WindowAnimation> createSnapAnimation(const QPointF& oldPosition, const QSizeF& oldSize,
-                                                   const QRect& targetGeometry, const AnimationConfig& config)
+std::optional<WindowMotion> createSnapMotion(const QPointF& oldPosition, const QSizeF& oldSize,
+                                             const QRect& targetGeometry, const AnimationConfig& config)
 {
     if (!config.enabled) {
         return std::nullopt;
@@ -25,17 +25,17 @@ std::optional<WindowAnimation> createSnapAnimation(const QPointF& oldPosition, c
         return std::nullopt;
     }
 
-    WindowAnimation anim;
-    anim.startPosition = oldPosition;
-    anim.startSize = oldSize;
-    anim.targetGeometry = targetGeometry;
-    anim.duration = config.duration;
-    anim.easing = config.easing;
-    return anim;
+    WindowMotion motion;
+    motion.startPosition = oldPosition;
+    motion.startSize = oldSize;
+    motion.targetGeometry = targetGeometry;
+    motion.duration = config.duration;
+    motion.easing = config.easing;
+    return motion;
 }
 
-QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, const QRect& targetGeometry,
-                              const EasingCurve& easing, const QMarginsF& padding)
+QRectF repaintBounds(const QPointF& startPos, const QSizeF& startSize, const QRect& targetGeometry,
+                     const Easing& easing, const QMarginsF& padding)
 {
     QRectF atTarget(targetGeometry.x() - padding.left(), targetGeometry.y() - padding.top(),
                     targetGeometry.width() + padding.left() + padding.right(),
@@ -46,13 +46,14 @@ QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, 
 
     QRectF bounds = atTarget.united(atStart);
 
-    const bool isBounce = (easing.type == EasingCurve::Type::BounceIn || easing.type == EasingCurve::Type::BounceOut
-                           || easing.type == EasingCurve::Type::BounceInOut);
-    const bool needsSampling =
-        (easing.type == EasingCurve::Type::ElasticIn || easing.type == EasingCurve::Type::ElasticOut
-         || easing.type == EasingCurve::Type::ElasticInOut)
+    // Curves that overshoot the unit interval need sampling: otherwise
+    // we'd under-invalidate mid-animation and leave painting artifacts.
+    const bool isBounce = (easing.type == Easing::Type::BounceIn || easing.type == Easing::Type::BounceOut
+                           || easing.type == Easing::Type::BounceInOut);
+    const bool needsSampling = (easing.type == Easing::Type::ElasticIn || easing.type == Easing::Type::ElasticOut
+                                || easing.type == Easing::Type::ElasticInOut)
         || (isBounce && easing.amplitude > 1.0)
-        || (easing.type == EasingCurve::Type::CubicBezier
+        || (easing.type == Easing::Type::CubicBezier
             && (easing.y1 < 0.0 || easing.y1 > 1.0 || easing.y2 < 0.0 || easing.y2 > 1.0));
 
     if (needsSampling) {
@@ -73,9 +74,10 @@ QRectF computeOvershootBounds(const QPointF& startPos, const QSizeF& startSize, 
         }
     }
 
+    // 2 px slack for subpixel damage that QRectF union alone misses.
     bounds.adjust(-2.0, -2.0, 2.0, 2.0);
     return bounds;
 }
 
 } // namespace AnimationMath
-} // namespace PlasmaZones
+} // namespace PhosphorAnimation

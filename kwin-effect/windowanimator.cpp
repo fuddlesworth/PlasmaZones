@@ -3,13 +3,12 @@
 
 #include "windowanimator.h"
 
-#include <animation_math.h>
+#include <PhosphorAnimation/AnimationMath.h>
 
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
-#include <QLineF>
 #include <QMarginsF>
 #include <QVarLengthArray>
 
@@ -34,39 +33,28 @@ bool WindowAnimator::hasAnimation(KWin::EffectWindow* window) const
 bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& oldPosition, const QSizeF& oldSize,
                                     const QRect& targetGeometry)
 {
-    if (!window || !m_enabled) {
+    if (!window) {
         return false;
     }
 
-    // Skip degenerate targets
-    if (targetGeometry.width() <= 0 || targetGeometry.height() <= 0) {
+    // All the skip-or-accept logic lives in AnimationMath::createSnapMotion
+    // — DRY with every other PhosphorAnimation consumer and guarantees
+    // that "worth animating?" decisions stay in one place.
+    PhosphorAnimation::AnimationConfig config;
+    config.enabled = m_enabled;
+    config.duration = m_duration;
+    config.easing = m_easing;
+    config.minDistance = m_minDistance;
+    auto motion = PhosphorAnimation::AnimationMath::createSnapMotion(oldPosition, oldSize, targetGeometry, config);
+    if (!motion) {
         return false;
     }
 
-    // Skip if position change is below the minimum distance threshold
-    // and size isn't changing either
-    const QPointF newPos = targetGeometry.topLeft();
-    const qreal dist = QLineF(oldPosition, newPos).length();
-    const bool sizeChanging =
-        qAbs(oldSize.width() - targetGeometry.width()) > 1.0 || qAbs(oldSize.height() - targetGeometry.height()) > 1.0;
-    if (dist < qMax(1.0, qreal(m_minDistance)) && !sizeChanging) {
-        return false;
-    }
-
-    WindowAnimation anim;
-    anim.startPosition = oldPosition;
-    anim.startSize = oldSize;
-    anim.targetGeometry = targetGeometry;
-    anim.duration = m_duration;
-    anim.easing = m_easing;
-    // startTime is -1 (pending); latched to presentTime on first advanceAnimations()
-    m_animations[window] = anim;
-
+    m_animations[window] = *motion;
     window->addRepaintFull();
 
-    qCDebug(lcEffect) << "Started animation from" << oldPosition << oldSize << "to" << newPos << targetGeometry.size()
-                      << "distance:" << dist << "scale:" << sizeChanging << "duration:" << m_duration
-                      << "easing:" << m_easing.toString();
+    qCDebug(lcEffect) << "Started animation from" << oldPosition << oldSize << "to" << targetGeometry.topLeft()
+                      << targetGeometry.size() << "duration:" << m_duration << "easing:" << m_easing.toString();
     return true;
 }
 
@@ -197,12 +185,18 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     //   expanded extends LEFT of frame  => expanded.x() < frame.x(), so margin.left = frame.x - expanded.x
     //   expanded extends RIGHT of frame => expanded.right() > frame.right(), so margin.right = expanded.right -
     //   frame.right
+    //
+    // Clamp each component to >= 0. If expanded is somehow smaller than the
+    // frame (shouldn't happen, but decoration data can race), a negative
+    // margin would silently shrink the repaint rect via adjust() and cause
+    // visible paint truncation.
     const QRectF frameGeo(it->targetGeometry);
-    const QMarginsF padding(frameGeo.x() - expanded.x(), frameGeo.y() - expanded.y(),
-                            expanded.right() - frameGeo.right(), expanded.bottom() - frameGeo.bottom());
+    const QMarginsF padding(qMax(0.0, frameGeo.x() - expanded.x()), qMax(0.0, frameGeo.y() - expanded.y()),
+                            qMax(0.0, expanded.right() - frameGeo.right()),
+                            qMax(0.0, expanded.bottom() - frameGeo.bottom()));
 
-    return PlasmaZones::AnimationMath::computeOvershootBounds(it->startPosition, it->startSize, it->targetGeometry,
-                                                              it->easing, padding);
+    return PhosphorAnimation::AnimationMath::repaintBounds(it->startPosition, it->startSize, it->targetGeometry,
+                                                           it->easing, padding);
 }
 
 } // namespace PlasmaZones
