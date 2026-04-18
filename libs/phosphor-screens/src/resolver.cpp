@@ -9,9 +9,14 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QPoint>
 #include <QScreen>
+#include <QTimer>
 
 namespace Phosphor::Screens {
 
@@ -31,11 +36,34 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpo
             QDBusMessage::createMethodCall(endpoint.service, endpoint.path, endpoint.interfaceName, endpoint.method);
         msg.setAutoStartService(false);
         msg << pos.x() << pos.y();
-        QDBusMessage reply = bus.call(msg, QDBus::Block, timeoutMs);
-        if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
-            const QString daemonId = reply.arguments().at(0).toString();
-            if (!daemonId.isEmpty()) {
-                return daemonId;
+
+        // Spin a local event loop while the D-Bus reply is outstanding
+        // instead of QDBus::Block — which freezes the thread (including
+        // its QPA event queue) until the reply or D-Bus's own timeout.
+        // The sync-returning API is preserved; the difference is that
+        // queued signals, posted events, and pending UI paints keep
+        // running during the wait. A belt-and-braces QTimer caps the
+        // wall-clock even if D-Bus's internal deadline drifts.
+        QDBusPendingCall pending = bus.asyncCall(msg, timeoutMs);
+        QDBusPendingCallWatcher watcher(pending);
+        QEventLoop loop;
+        QObject::connect(&watcher, &QDBusPendingCallWatcher::finished, &loop, &QEventLoop::quit);
+        QTimer hardCap;
+        hardCap.setSingleShot(true);
+        QObject::connect(&hardCap, &QTimer::timeout, &loop, &QEventLoop::quit);
+        // +250 ms cushion so the hard cap only fires if D-Bus's own
+        // timeout has genuinely failed to resolve the call; a
+        // simultaneous timeout on both paths would be an unhelpful race.
+        hardCap.start(timeoutMs + 250);
+        loop.exec();
+
+        if (watcher.isFinished() && !watcher.isError()) {
+            QDBusPendingReply<QString> reply = pending;
+            if (reply.isValid()) {
+                const QString daemonId = reply.value();
+                if (!daemonId.isEmpty()) {
+                    return daemonId;
+                }
             }
         }
     }

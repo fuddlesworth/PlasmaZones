@@ -72,7 +72,11 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::V
     }
     for (auto it = filtered.constBegin(); it != filtered.constEnd(); ++it) {
         auto existing = m_virtualScreenConfigs.constFind(it.key());
-        if (existing == m_virtualScreenConfigs.constEnd() || !(existing.value() == it.value())) {
+        // approxEqual tolerates JSON round-trip float drift so a config
+        // loaded from disk compares equal to the freshly-saved in-memory
+        // version. Exact operator== would re-emit virtualScreenConfigsChanged
+        // on every boot for every screen.
+        if (existing == m_virtualScreenConfigs.constEnd() || !existing.value().approxEqual(it.value())) {
             m_virtualScreenConfigs = filtered;
             Q_EMIT virtualScreenConfigsChanged();
             Q_EMIT settingsChanged();
@@ -105,7 +109,9 @@ bool Settings::setVirtualScreenConfig(const QString& physicalScreenId,
                                 << error;
             return false;
         }
-        if (m_virtualScreenConfigs.value(physicalScreenId) == config)
+        // approxEqual: tolerance-aware skip-gate for JSON-roundtripped
+        // configs. Same reasoning as the setVirtualScreenConfigs bulk path.
+        if (m_virtualScreenConfigs.value(physicalScreenId).approxEqual(config))
             return true; // unchanged is a successful no-op
         m_virtualScreenConfigs.insert(physicalScreenId, config);
     }

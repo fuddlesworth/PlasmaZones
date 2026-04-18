@@ -51,7 +51,10 @@ public:
             return false;
         }
         const auto it = m_configs.constFind(physicalScreenId);
-        if (it != m_configs.constEnd() && it.value() == config) {
+        // approxEqual for the same reason SettingsConfigStore and
+        // ScreenManager use it: callers driven by JSON round-trips
+        // otherwise burn a changed() edge for every no-op reload.
+        if (it != m_configs.constEnd() && it.value().approxEqual(config)) {
             return true; // No-op write — don't fire changed().
         }
         m_configs.insert(physicalScreenId, config);

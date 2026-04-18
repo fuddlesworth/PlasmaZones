@@ -75,7 +75,12 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 
     const VirtualScreenConfig oldConfig = m_virtualConfigs.value(physicalScreenId);
-    if (oldConfig == config) {
+    // approxEqual (not operator==) so a JSON-roundtripped config that
+    // picked up tiny float deltas on load compares equal to the in-memory
+    // source we wrote. Exact operator== here would re-emit the change
+    // chain every reload. This is a change-detection skip-gate; the
+    // tolerance is never observed by downstream state.
+    if (oldConfig.approxEqual(config)) {
         return true;
     }
 

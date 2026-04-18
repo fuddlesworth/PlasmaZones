@@ -172,6 +172,76 @@ private Q_SLOTS:
         QVERIFY(err.contains(QLatin1String("does not match")));
     }
 
+    // ─── Equality (exact operator== vs. tolerance-aware approxEqual) ───
+
+    void testOperatorEqIsExactOnRegion()
+    {
+        VirtualScreenDef a = makeDef(0, QRectF(0.5, 0.0, 0.5, 1.0));
+        VirtualScreenDef b = a;
+        b.region.moveTo(0.5 + 5e-5, 0.0); // below Tolerance (1e-3) but nonzero
+
+        // Exact operator== must reject any bit-level difference — this is
+        // the contract that lets VirtualScreenDef safely be a QHash key.
+        QVERIFY(!(a == b));
+        QVERIFY(a != b);
+    }
+
+    void testApproxEqualAcceptsSubToleranceDrift()
+    {
+        VirtualScreenDef a = makeDef(0, QRectF(0.5, 0.0, 0.5, 1.0));
+        VirtualScreenDef b = a;
+        b.region.moveTo(0.5 + 5e-5, 5e-5);
+        QVERIFY(a.approxEqual(b));
+    }
+
+    void testApproxEqualRejectsOverTolerance()
+    {
+        VirtualScreenDef a = makeDef(0, QRectF(0.5, 0.0, 0.5, 1.0));
+        VirtualScreenDef b = a;
+        b.region.moveTo(0.5 + 1e-2, 0.0); // 10× Tolerance
+        QVERIFY(!a.approxEqual(b));
+    }
+
+    void testApproxEqualRejectsIdMismatch()
+    {
+        VirtualScreenDef a = makeDef(0, QRectF(0.5, 0.0, 0.5, 1.0));
+        VirtualScreenDef b = makeDef(1, QRectF(0.5, 0.0, 0.5, 1.0));
+        QVERIFY(!a.approxEqual(b));
+    }
+
+    void testConfigOperatorEqIsExact()
+    {
+        VirtualScreenConfig a = makeHalvesConfig();
+        VirtualScreenConfig b = a;
+        b.screens[0].region.moveTo(0.0 + 5e-5, 0.0); // sub-tolerance drift
+        QVERIFY(!(a == b));
+    }
+
+    void testConfigApproxEqualAcceptsRoundTripDrift()
+    {
+        VirtualScreenConfig a = makeHalvesConfig();
+        VirtualScreenConfig b = a;
+        b.screens[0].region.moveTo(5e-5, 5e-5);
+        b.screens[1].region.moveTo(0.5 + 5e-5, 5e-5);
+        QVERIFY(a.approxEqual(b));
+    }
+
+    void testConfigApproxEqualRejectsPhysIdDifference()
+    {
+        VirtualScreenConfig a = makeHalvesConfig();
+        VirtualScreenConfig b = a;
+        b.physicalScreenId = QStringLiteral("Other:Monitor");
+        QVERIFY(!a.approxEqual(b));
+    }
+
+    void testConfigApproxEqualRejectsSizeDifference()
+    {
+        VirtualScreenConfig a = makeHalvesConfig();
+        VirtualScreenConfig b = a;
+        b.screens.removeLast();
+        QVERIFY(!a.approxEqual(b));
+    }
+
     void testIsValidRejectsDuplicateIndex()
     {
         VirtualScreenConfig cfg;
