@@ -73,15 +73,22 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
 
 void appendAutotilePreviews(QVector<LayoutPreview>& list)
 {
-    // Delegate to phosphor-tiles' AutotileLayoutSource so autotile
-    // composition is owned in one place. The temporary source binds to
-    // AlgorithmRegistry::instance() in its constructor; its internal
-    // preview cache is per-instance and discarded at the end of this
-    // call (cheap — just the QHash). Long-lived consumers that hold a
-    // persistent source (daemon, editor, settings) benefit from the
-    // cross-call cache directly.
-    PhosphorTiles::AutotileLayoutSource source;
-    const auto previews = source.availableLayouts();
+    // Delegate to a process-wide persistent AutotileLayoutSource so the
+    // per-algorithm preview cache survives across calls. Every consumer
+    // funnels through here (LayoutAdaptor, OverlayService, ZoneSelector-
+    // Controller, UnifiedLayoutController), so a local transient source
+    // meant re-running every scripted algorithm on every picker refresh
+    // — the registry owns JS engines, not the source, so sharing one
+    // source is safe across all callers.
+    //
+    // The source binds to AlgorithmRegistry::instance() in its default
+    // constructor and wires itself to the registry's change signals, so
+    // the cache self-invalidates without any explicit wiring here. We
+    // never disconnect listeners — no one subscribes to this instance —
+    // so the default-lifetime QObject is fine; it outlives every caller
+    // by construction.
+    static PhosphorTiles::AutotileLayoutSource* sharedSource = new PhosphorTiles::AutotileLayoutSource();
+    const auto previews = sharedSource->availableLayouts();
     list.reserve(list.size() + previews.size());
     for (const auto& preview : previews) {
         list.append(preview);

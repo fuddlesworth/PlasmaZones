@@ -11,7 +11,27 @@ namespace PlasmaZones {
 LayoutSourceBundle::LayoutSourceBundle() = default;
 LayoutSourceBundle::~LayoutSourceBundle() = default;
 LayoutSourceBundle::LayoutSourceBundle(LayoutSourceBundle&&) noexcept = default;
-LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&&) noexcept = default;
+
+// Hand-written move-assign — a defaulted implementation would move
+// `zones`, then `autotile`, then `composite` member-wise, which means the
+// *old* LHS composite keeps its raw pointers into the *old* LHS zones /
+// autotile alive for one member-move step each. It's latent today because
+// no signals fire in the interim on single-threaded paths, but any future
+// signal emission from a child during destruction would race.
+// Drop the old composite's child pointers first, then let the member
+// moves proceed in declaration order.
+LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) noexcept
+{
+    if (this != &other) {
+        if (composite) {
+            composite->clearSources();
+        }
+        zones = std::move(other.zones);
+        autotile = std::move(other.autotile);
+        composite = std::move(other.composite);
+    }
+    return *this;
+}
 
 LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutRegistry* registry)
 {
