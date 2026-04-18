@@ -1,0 +1,212 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfilePaths.h>
+#include <PhosphorAnimation/ProfileTree.h>
+#include <PhosphorAnimation/Spring.h>
+
+#include <QTest>
+
+using PhosphorAnimation::Easing;
+using PhosphorAnimation::Profile;
+using PhosphorAnimation::ProfileTree;
+using PhosphorAnimation::Spring;
+
+namespace PP = PhosphorAnimation::ProfilePaths;
+
+class TestProfileTree : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // ─── Path walking ───
+
+    void testParentPath()
+    {
+        QCOMPARE(PP::parentPath(PP::WindowOpen), PP::Window);
+        QCOMPARE(PP::parentPath(PP::Window), PP::Global);
+        QCOMPARE(PP::parentPath(PP::Global), QString());
+        QCOMPARE(PP::parentPath(QString()), QString());
+    }
+
+    void testAllBuiltInPathsNonEmpty()
+    {
+        const QStringList paths = PP::allBuiltInPaths();
+        QVERIFY(!paths.isEmpty());
+        QVERIFY(paths.contains(PP::Global));
+        QVERIFY(paths.contains(PP::WindowOpen));
+        QVERIFY(paths.contains(PP::ZoneSnapIn));
+    }
+
+    // ─── Resolve walk-up ───
+
+    void testResolveEmptyTreeReturnsBaseline()
+    {
+        ProfileTree tree;
+        Profile baseline;
+        baseline.duration = 400.0;
+        baseline.curve = std::make_shared<Easing>();
+        tree.setBaseline(baseline);
+
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QCOMPARE(resolved.duration, 400.0);
+        QVERIFY(resolved.curve != nullptr);
+    }
+
+    void testResolveLeafOverride()
+    {
+        ProfileTree tree;
+        Profile baseline;
+        baseline.duration = 150.0;
+        tree.setBaseline(baseline);
+
+        Profile leaf;
+        leaf.duration = 80.0;
+        leaf.curve = std::make_shared<Spring>(Spring::snappy());
+        tree.setOverride(PP::WindowOpen, leaf);
+
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QCOMPARE(resolved.duration, 80.0);
+        QCOMPARE(resolved.curve->typeId(), QStringLiteral("spring"));
+    }
+
+    void testResolveCategoryOverrideInherited()
+    {
+        ProfileTree tree;
+
+        Profile category;
+        category.duration = 200.0;
+        tree.setOverride(PP::Window, category);
+
+        // Any window.* leaf without its own override inherits from "window".
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QCOMPARE(resolved.duration, 200.0);
+    }
+
+    void testResolveLeafFillsFromCategoryThenBaseline()
+    {
+        ProfileTree tree;
+
+        Profile baseline;
+        baseline.curve = std::make_shared<Easing>();
+        tree.setBaseline(baseline);
+
+        Profile category;
+        category.staggerInterval = 60;
+        tree.setOverride(PP::Window, category);
+
+        Profile leaf;
+        leaf.duration = 99.0;
+        tree.setOverride(PP::WindowClose, leaf);
+
+        const Profile resolved = tree.resolve(PP::WindowClose);
+        QCOMPARE(resolved.duration, 99.0); // from leaf
+        QCOMPARE(resolved.staggerInterval, 60); // from category
+        QVERIFY(resolved.curve != nullptr); // from baseline
+    }
+
+    // ─── Mutation ───
+
+    void testSetOverrideInsertsOnce()
+    {
+        ProfileTree tree;
+        Profile p;
+        p.duration = 200.0;
+        tree.setOverride(PP::WindowOpen, p);
+
+        QCOMPARE(tree.overriddenPaths().size(), 1);
+
+        // Updating an existing override must not duplicate the path.
+        p.duration = 300.0;
+        tree.setOverride(PP::WindowOpen, p);
+        QCOMPARE(tree.overriddenPaths().size(), 1);
+        QCOMPARE(tree.override_(PP::WindowOpen).duration, 300.0);
+    }
+
+    void testClearOverride()
+    {
+        ProfileTree tree;
+        Profile p;
+        p.duration = 999.0;
+        tree.setOverride(PP::ZoneSnapIn, p);
+        QVERIFY(tree.hasOverride(PP::ZoneSnapIn));
+
+        QVERIFY(tree.clearOverride(PP::ZoneSnapIn));
+        QVERIFY(!tree.hasOverride(PP::ZoneSnapIn));
+        QVERIFY(tree.overriddenPaths().isEmpty());
+
+        // Second clear is a no-op.
+        QVERIFY(!tree.clearOverride(PP::ZoneSnapIn));
+    }
+
+    void testClearAllOverrides()
+    {
+        ProfileTree tree;
+        Profile p;
+        tree.setOverride(PP::Window, p);
+        tree.setOverride(PP::Zone, p);
+        tree.setOverride(PP::Osd, p);
+
+        Profile baseline;
+        baseline.duration = 123.0;
+        tree.setBaseline(baseline);
+
+        tree.clearAllOverrides();
+        QVERIFY(tree.overriddenPaths().isEmpty());
+        // Baseline survives.
+        QCOMPARE(tree.baseline().duration, 123.0);
+    }
+
+    void testSetOverrideRejectsEmptyPath()
+    {
+        ProfileTree tree;
+        Profile p;
+        tree.setOverride(QString(), p);
+        QVERIFY(tree.overriddenPaths().isEmpty());
+    }
+
+    // ─── Serialization ───
+
+    void testJsonRoundTrip()
+    {
+        ProfileTree original;
+
+        Profile baseline;
+        baseline.curve = std::make_shared<Spring>(Spring::smooth());
+        baseline.duration = 180.0;
+        original.setBaseline(baseline);
+
+        Profile overrideA;
+        overrideA.duration = 500.0;
+        overrideA.staggerInterval = 75;
+        original.setOverride(PP::Window, overrideA);
+
+        Profile overrideB;
+        overrideB.curve = std::make_shared<Easing>();
+        overrideB.sequenceMode = 1;
+        original.setOverride(PP::ZoneSnapIn, overrideB);
+
+        const QJsonObject encoded = original.toJson();
+        const ProfileTree restored = ProfileTree::fromJson(encoded);
+
+        QCOMPARE(restored, original);
+    }
+
+    void testJsonPreservesOverrideOrder()
+    {
+        ProfileTree original;
+        original.setOverride(PP::Window, Profile());
+        original.setOverride(PP::Zone, Profile());
+        original.setOverride(PP::Osd, Profile());
+
+        const QStringList before = original.overriddenPaths();
+        const ProfileTree restored = ProfileTree::fromJson(original.toJson());
+        QCOMPARE(restored.overriddenPaths(), before);
+    }
+};
+
+QTEST_MAIN(TestProfileTree)
+#include "test_profiletree.moc"

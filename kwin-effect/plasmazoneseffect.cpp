@@ -3,10 +3,12 @@
 
 #include "plasmazoneseffect.h"
 
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/StaggerTimer.h>
+
 #include <dbus_helpers.h>
 #include <dbus_types.h>
 #include <screen_id.h>
-#include <stagger_timer.h>
 #include <window_id.h>
 
 #include <algorithm>
@@ -1094,8 +1096,8 @@ void PlasmaZonesEffect::slotMouseChanged(const QPointF& pos, const QPointF& oldp
 void PlasmaZonesEffect::applyStaggeredOrImmediate(int count, const std::function<void(int)>& applyFn,
                                                   const std::function<void()>& onComplete)
 {
-    PlasmaZones::applyStaggeredOrImmediate(this, count, m_cachedAnimationSequenceMode, m_cachedAnimationStaggerInterval,
-                                           applyFn, onComplete);
+    PhosphorAnimation::applyStaggeredOrImmediate(this, count, m_cachedAnimationSequenceMode,
+                                                 m_cachedAnimationStaggerInterval, applyFn, onComplete);
 }
 
 void PlasmaZonesEffect::slotDaemonReady()
@@ -1745,7 +1747,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationDuration = d;
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
-        m_windowAnimator->setEasingCurve(EasingCurve::fromString(v.toString()));
+        m_windowAnimator->setEasingCurve(PhosphorAnimation::Easing::fromString(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));

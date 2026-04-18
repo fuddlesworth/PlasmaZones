@@ -3,7 +3,7 @@
 
 #include "windowanimator.h"
 
-#include <animation_math.h>
+#include <PhosphorAnimation/AnimationMath.h>
 
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
@@ -53,7 +53,7 @@ bool WindowAnimator::startAnimation(KWin::EffectWindow* window, const QPointF& o
         return false;
     }
 
-    WindowAnimation anim;
+    PhosphorAnimation::WindowMotion anim;
     anim.startPosition = oldPosition;
     anim.startSize = oldSize;
     anim.targetGeometry = targetGeometry;
@@ -201,8 +201,8 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     const QMarginsF padding(frameGeo.x() - expanded.x(), frameGeo.y() - expanded.y(),
                             expanded.right() - frameGeo.right(), expanded.bottom() - frameGeo.bottom());
 
-    return PlasmaZones::AnimationMath::computeOvershootBounds(it->startPosition, it->startSize, it->targetGeometry,
-                                                              it->easing, padding);
+    return PhosphorAnimation::AnimationMath::repaintBounds(it->startPosition, it->startSize, it->targetGeometry,
+                                                           it->easing, padding);
 }
 
 } // namespace PlasmaZones
