@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <PhosphorLayoutApi/AlgorithmMetadata.h>
+
 #include <QJSValue>
 #include <QRect>
 #include <QString>
@@ -56,7 +58,7 @@ struct ScriptMetadata
 {
     QString name;
     QString description;
-    QString zoneNumberDisplay;
+    PhosphorLayout::ZoneNumberDisplay zoneNumberDisplay = PhosphorLayout::ZoneNumberDisplay::RendererDecides;
     qreal defaultSplitRatio = 0.0; ///< 0.0 = unset, falls back to algorithm default
     int defaultMaxWindows = 0; ///< 0 = unset, falls back to algorithm default
     int minimumWindows = 0; ///< 0 = unset, falls back to algorithm default

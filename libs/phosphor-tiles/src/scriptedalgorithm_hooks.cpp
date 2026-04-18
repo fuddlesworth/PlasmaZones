@@ -117,8 +117,8 @@ bool ScriptedAlgorithm::supportsMemory() const noexcept
 
 QString ScriptedAlgorithm::zoneNumberDisplay() const noexcept
 {
-    if (!m_metadata.zoneNumberDisplay.isEmpty()) {
-        return m_metadata.zoneNumberDisplay;
+    if (m_metadata.zoneNumberDisplay != PhosphorLayout::ZoneNumberDisplay::RendererDecides) {
+        return PhosphorLayout::zoneNumberDisplayToString(m_metadata.zoneNumberDisplay);
     }
     return TilingAlgorithm::zoneNumberDisplay();
 }

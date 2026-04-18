@@ -36,7 +36,7 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     meta.supportsMemory = algorithm->supportsMemory();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
-    meta.zoneNumberDisplay = algorithm->zoneNumberDisplay();
+    meta.zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayFromString(algorithm->zoneNumberDisplay());
     return meta;
 }
 

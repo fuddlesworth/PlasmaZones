@@ -164,9 +164,11 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
             if (ok)
                 meta.masterZoneIndex = std::clamp(v, -1, MaxZones - 1);
         } else if (key == QLatin1String("zoneNumberDisplay")) {
-            if (value == QLatin1String("all") || value == QLatin1String("last") || value == QLatin1String("first")
-                || value == QLatin1String("firstAndLast") || value == QLatin1String("none")) {
-                meta.zoneNumberDisplay = value;
+            // Forgiving decode: unknown / "first" / empty all fall back to
+            // RendererDecides (the TilingAlgorithm default kicks in).
+            const auto decoded = PhosphorLayout::zoneNumberDisplayFromString(value);
+            if (decoded != PhosphorLayout::ZoneNumberDisplay::RendererDecides) {
+                meta.zoneNumberDisplay = decoded;
             }
         } else if (key == QLatin1String("builtinId")) {
             static const QRegularExpression builtinIdRe(QStringLiteral("^[a-z][a-z0-9-]*$"));

@@ -25,6 +25,10 @@ constexpr QLatin1String ZoneCount{"zoneCount"};
 constexpr QLatin1String Zones{"zones"};
 constexpr QLatin1String IsAutotile{"isAutotile"};
 constexpr QLatin1String IsSystem{"isSystem"};
+// Back-compat alias for isSystem. Older consumers historically read
+// isSystemEntry; emitting both for one release cycle; drop isSystemEntry
+// in a subsequent release.
+constexpr QLatin1String IsSystemEntry{"isSystemEntry"};
 constexpr QLatin1String Recommended{"recommended"};
 constexpr QLatin1String AutoAssign{"autoAssign"};
 constexpr QLatin1String AspectRatioClass{"aspectRatioClass"};
@@ -42,10 +46,9 @@ constexpr QLatin1String Height{"height"};
 constexpr QLatin1String ZoneNumber{"zoneNumber"};
 
 // Per-algorithm (flat under the same top-level object — see header comment).
-// Note: the historical `isSystemEntry` key is intentionally not emitted —
-// consumers read `isSystem` at the top level, which the producer has already
-// resolved for both manual and autotile previews. Keeping both would mean
-// two wire-format flags for the same semantic with one source of truth.
+// Note: the historical `isSystemEntry` key is emitted alongside `isSystem`
+// for one release cycle (back-compat alias) — drop `isSystemEntry` in a
+// subsequent release. Both keys carry the same resolved boolean.
 constexpr QLatin1String SupportsMasterCount{"supportsMasterCount"};
 constexpr QLatin1String SupportsSplitRatio{"supportsSplitRatio"};
 constexpr QLatin1String ProducesOverlappingZones{"producesOverlappingZones"};
@@ -88,8 +91,9 @@ void writeAlgorithmFlat(Container& dst, const PhosphorLayout::AlgorithmMetadata&
     dst[K::SupportsMemory] = meta.supportsMemory;
     dst[K::IsScripted] = meta.isScripted;
     dst[K::IsUserScript] = meta.isUserScript;
-    if (!meta.zoneNumberDisplay.isEmpty()) {
-        dst[K::ZoneNumberDisplay] = meta.zoneNumberDisplay;
+    const QString zoneNumberDisplay = PhosphorLayout::zoneNumberDisplayToString(meta.zoneNumberDisplay);
+    if (!zoneNumberDisplay.isEmpty()) {
+        dst[K::ZoneNumberDisplay] = zoneNumberDisplay;
     }
 }
 
@@ -111,6 +115,8 @@ QJsonObject toJson(const PhosphorLayout::LayoutPreview& preview)
     json[K::ZoneCount] = preview.zoneCount;
     json[K::IsAutotile] = preview.isAutotile();
     json[K::IsSystem] = preview.isSystem;
+    // Back-compat alias: emit alongside `isSystem` for one release cycle.
+    json[K::IsSystemEntry] = preview.isSystem;
     json[K::Recommended] = preview.recommended;
     json[K::AutoAssign] = preview.autoAssign;
     json[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);
@@ -159,6 +165,8 @@ QVariantMap toVariantMap(const PhosphorLayout::LayoutPreview& preview)
     map[K::ZoneCount] = preview.zoneCount;
     map[K::IsAutotile] = preview.isAutotile();
     map[K::IsSystem] = preview.isSystem;
+    // Back-compat alias: emit alongside `isSystem` for one release cycle.
+    map[K::IsSystemEntry] = preview.isSystem;
     map[K::Recommended] = preview.recommended;
     map[K::AutoAssign] = preview.autoAssign;
     map[K::AspectRatioClass] = aspectRatioClassTag(preview.aspectRatioClass);

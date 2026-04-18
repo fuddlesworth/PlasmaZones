@@ -3,9 +3,67 @@
 
 #pragma once
 
+#include <QLatin1String>
 #include <QString>
+#include <QStringLiteral>
+#include <QStringView>
 
 namespace PhosphorLayout {
+
+/// How zone numbers are displayed in algorithm previews.
+///
+/// Internal typed enumeration used throughout the C++ codebase. String
+/// encodings are still used at the wire/parse boundaries (JS script
+/// front-matter, D-Bus @c AlgorithmInfoEntry, JSON serialisation, QML
+/// property strings) — convert via @c zoneNumberDisplayToString and
+/// @c zoneNumberDisplayFromString at those boundaries.
+enum class ZoneNumberDisplay {
+    RendererDecides, ///< Empty on the wire — algorithm defers to renderer default.
+    All, ///< Every zone shows its number.
+    Last, ///< Only the trailing zone is numbered.
+    FirstAndLast, ///< First and last zones are numbered.
+    None, ///< No zones are numbered.
+};
+
+/// Encode a ZoneNumberDisplay as its canonical wire string. @c
+/// RendererDecides maps to an empty string so callers can check
+/// @c QString::isEmpty() before emitting the field.
+inline QString zoneNumberDisplayToString(ZoneNumberDisplay value)
+{
+    switch (value) {
+    case ZoneNumberDisplay::All:
+        return QStringLiteral("all");
+    case ZoneNumberDisplay::Last:
+        return QStringLiteral("last");
+    case ZoneNumberDisplay::FirstAndLast:
+        return QStringLiteral("firstAndLast");
+    case ZoneNumberDisplay::None:
+        return QStringLiteral("none");
+    case ZoneNumberDisplay::RendererDecides:
+        break;
+    }
+    return QString();
+}
+
+/// Decode a wire string back into a ZoneNumberDisplay. Forgiving:
+/// unknown or empty strings map to @c RendererDecides so callers need
+/// not pre-validate JSON / D-Bus input.
+inline ZoneNumberDisplay zoneNumberDisplayFromString(QStringView text)
+{
+    if (text == QLatin1String("all")) {
+        return ZoneNumberDisplay::All;
+    }
+    if (text == QLatin1String("last")) {
+        return ZoneNumberDisplay::Last;
+    }
+    if (text == QLatin1String("firstAndLast")) {
+        return ZoneNumberDisplay::FirstAndLast;
+    }
+    if (text == QLatin1String("none")) {
+        return ZoneNumberDisplay::None;
+    }
+    return ZoneNumberDisplay::RendererDecides;
+}
 
 /// Capability + display metadata for a single autotile algorithm.
 ///
@@ -52,14 +110,11 @@ struct AlgorithmMetadata
     /// Drives the lock-icon vs user-icon badge in the picker.
     bool isUserScript = false;
 
-    /// How zone numbers are displayed in previews — algorithm-specific
-    /// hint passed through to the renderer. Values in current use:
-    /// "all" (every zone numbered), "last" (only the trailing slot
-    /// numbered), "firstAndLast", "none", "" (renderer decides).
-    /// Stringly-typed: the value is wire-format across D-Bus and threaded
-    /// through QML properties + JS script front-matter, so it stays a
-    /// QString rather than being promoted to an enum here.
-    QString zoneNumberDisplay;
+    /// How zone numbers are displayed in previews. Typed internally;
+    /// converted to / from the wire-format string at JSON, D-Bus, and QML
+    /// boundaries via @c zoneNumberDisplayToString /
+    /// @c zoneNumberDisplayFromString.
+    ZoneNumberDisplay zoneNumberDisplay = ZoneNumberDisplay::RendererDecides;
 };
 
 } // namespace PhosphorLayout
