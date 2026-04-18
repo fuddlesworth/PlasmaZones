@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -14,9 +14,6 @@
 #include <algorithm>
 
 namespace {
-/// Use 1000x1000 for high-precision relative coordinate conversion
-constexpr int PreviewSize = 1000;
-
 /// Library-owned recommended default algorithm.
 /// Kept as a literal so the registry is self-contained — no PlasmaZones
 /// config-layer dependency.  Application config layers may surface their own
@@ -354,8 +351,8 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
         const auto it = params.savedAlgorithmSettings.constFind(algoId);
         if (it != params.savedAlgorithmSettings.constEnd()) {
             const QVariantMap& saved = it.value();
-            const int savedMasterCount = saved.value(PerAlgoKeys::MasterCount, -1).toInt();
-            const qreal savedSplitRatio = saved.value(PerAlgoKeys::SplitRatio, -1.0).toDouble();
+            const int savedMasterCount = saved.value(AutotileJsonKeys::MasterCount, -1).toInt();
+            const qreal savedSplitRatio = saved.value(AutotileJsonKeys::SplitRatio, -1.0).toDouble();
             if (savedMasterCount > 0)
                 masterCount = savedMasterCount;
             if (savedSplitRatio > 0)
@@ -364,7 +361,7 @@ QVariantList AlgorithmRegistry::generatePreviewZones(TilingAlgorithm* algorithm,
     }
 
     // Generate preview zones for a representative window count
-    const QRect previewRect(0, 0, PreviewSize, PreviewSize);
+    const QRect previewRect(0, 0, AlgorithmRegistry::PreviewCanvasSize, AlgorithmRegistry::PreviewCanvasSize);
 
     TilingState previewState(QStringLiteral("preview"));
     previewState.setMasterCount(masterCount);

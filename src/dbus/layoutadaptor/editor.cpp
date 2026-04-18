@@ -107,8 +107,8 @@ bool LayoutAdaptor::updateLayout(const QString& layoutJson)
     QString idStr = obj[::PhosphorZones::ZoneJsonKeys::Id].toString();
 
     // Handle autotile layout settings updates (gaps, visibility, shader only)
-    if (LayoutId::isAutotile(idStr)) {
-        QString algoId = LayoutId::extractAlgorithmId(idStr);
+    if (PhosphorLayout::LayoutId::isAutotile(idStr)) {
+        QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(idStr);
         QJsonObject overrides;
         if (obj.contains(::PhosphorZones::ZoneJsonKeys::ZonePadding))
             overrides[::PhosphorZones::ZoneJsonKeys::ZonePadding] = obj[::PhosphorZones::ZoneJsonKeys::ZonePadding];

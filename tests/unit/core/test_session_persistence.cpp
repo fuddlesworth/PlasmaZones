@@ -63,7 +63,7 @@ public:
         // Save window-zone assignments using STABLE IDs
         QJsonObject assignmentsObj;
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
-            QString stableId = PlasmaZones::Utils::extractAppId(it.key());
+            QString stableId = PhosphorIdentity::WindowId::extractAppId(it.key());
             assignmentsObj[stableId] = it.value().isEmpty() ? QString() : it.value().first();
         }
         root[QStringLiteral("windowZoneAssignments")] = assignmentsObj;
@@ -102,7 +102,7 @@ public:
             return false;
         }
 
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         if (!m_pendingZoneAssignments.contains(stableId)) {
             zoneId.clear();
             return false;
@@ -116,7 +116,7 @@ public:
     /// Consume a pending zone assignment (after successful restore)
     void consumePendingAssignment(const QString& windowId)
     {
-        QString stableId = PlasmaZones::Utils::extractAppId(windowId);
+        QString stableId = PhosphorIdentity::WindowId::extractAppId(windowId);
         m_pendingZoneAssignments.remove(stableId);
     }
 

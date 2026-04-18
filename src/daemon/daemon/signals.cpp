@@ -193,7 +193,7 @@ void Daemon::initializeAutotile()
             QString currentAssignment = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
 
             bool applied = false;
-            const bool wasAutotile = LayoutId::isAutotile(currentAssignment);
+            const bool wasAutotile = PhosphorLayout::LayoutId::isAutotile(currentAssignment);
             qCInfo(lcDaemon) << "Mode toggle: currentAssignment=" << currentAssignment << "wasAutotile=" << wasAutotile;
 
             // Feature gate: only allow toggling INTO a mode whose feature flag is enabled.
@@ -270,7 +270,8 @@ void Daemon::initializeAutotile()
                     algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
                 }
                 if (!algoId.isEmpty()) {
-                    applied = m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algoId));
+                    applied =
+                        m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algoId));
                 }
             }
 
@@ -536,7 +537,7 @@ void Daemon::connectOverlaySignals()
                     if (!screenId.isEmpty()) {
                         m_unifiedLayoutController->setCurrentScreenName(screenId);
                     }
-                    m_unifiedLayoutController->applyLayoutById(LayoutId::makeAutotileId(algorithmId));
+                    m_unifiedLayoutController->applyLayoutById(PhosphorLayout::LayoutId::makeAutotileId(algorithmId));
                 }
             });
 

@@ -10,5 +10,7 @@
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/CompositeLayoutSource.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorLayoutApi/GapKeys.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>

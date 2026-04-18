@@ -75,7 +75,8 @@ static PhosphorZones::Layout* findLayout(const QVector<PhosphorZones::Layout*>& 
 // Helper: emit layoutAssigned for a single screenId/layoutId pair
 void LayoutManager::emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId)
 {
-    PhosphorZones::Layout* layout = LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
+    PhosphorZones::Layout* layout =
+        PhosphorLayout::LayoutId::isAutotile(layoutId) ? nullptr : layoutById(QUuid::fromString(layoutId));
     Q_EMIT layoutAssigned(screenId, virtualDesktop, layout);
 }
 
@@ -86,7 +87,7 @@ bool LayoutManager::shouldSkipLayoutAssignment(const QString& layoutId, const QS
     if (layoutId.isEmpty()) {
         return true;
     }
-    if (LayoutId::isAutotile(layoutId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         return false; // Autotile IDs are valid without PhosphorZones::Layout* lookup
     }
     if (!layoutById(QUuid::fromString(layoutId))) {
@@ -346,7 +347,7 @@ PhosphorZones::Layout* LayoutManager::layoutForShortcut(int number) const
 {
     if (m_quickLayoutShortcuts.contains(number)) {
         const QString& id = m_quickLayoutShortcuts[number];
-        if (LayoutId::isAutotile(id))
+        if (PhosphorLayout::LayoutId::isAutotile(id))
             return nullptr;
         return layoutById(QUuid::fromString(id));
     }
@@ -409,7 +410,7 @@ void LayoutManager::setQuickLayoutSlot(int number, const QString& layoutId)
         qCInfo(lcLayout) << "Cleared quick layout slot" << number;
     } else {
         // Verify layout exists (skip for autotile IDs — they don't have PhosphorZones::Layout*)
-        if (!LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
+        if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
             qCWarning(lcLayout) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
@@ -442,7 +443,7 @@ void LayoutManager::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
         }
 
         // Verify layout exists (skip for autotile IDs)
-        if (!LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
+        if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
             qCWarning(lcLayout) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
             continue;
         }

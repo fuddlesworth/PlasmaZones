@@ -18,6 +18,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/modifierutils.h"
 
+#include <PhosphorLayoutApi/CompositeLayoutSource.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
@@ -241,9 +242,12 @@ public:
     // so QML preview-rendering paths can render layouts even when the
     // daemon isn't up (early settings launch, daemon crashed, etc.).
     //
-    // Returns the same QVariantMap shape as the D-Bus
-    // getLayoutPreviewList method on the layout adaptor — id /
-    // displayName / zones[]{x,y,width,height,zoneNumber} / isAutotile.
+    // Returns the QML-facing projection produced by
+    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
+    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
+    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
+    // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
+    // shape, which is optimised for wire transfer.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
     Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
 
@@ -868,15 +872,13 @@ private:
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
     // LayoutManager opens its own assignments backend + scans the standard
-    // layouts directory; PhosphorZones::ZonesLayoutSource wraps it in the
-    // PhosphorLayout::ILayoutSource contract.
+    // layouts directory; the composite aggregates manual (ZonesLayoutSource)
+    // + autotile (AutotileLayoutSource) so consumers query a single
+    // ILayoutSource and never branch on id-prefix.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
-    // Autotile previews come from the in-process PhosphorTiles::AlgorithmRegistry singleton
-    // (populated by PhosphorTiles::ScriptedAlgorithmLoader) — same wrapping pattern as
-    // m_localLayoutSource so settings renders manual + autotile previews
-    // through one uniform path with no D-Bus round-trip.
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localZonesSource;
     std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
+    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_localSource;
 
     // Virtual desktop / activity state
     int m_virtualDesktopCount = 1;

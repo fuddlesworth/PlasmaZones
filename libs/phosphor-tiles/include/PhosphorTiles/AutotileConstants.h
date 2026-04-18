@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
+#include <PhosphorLayoutApi/GapKeys.h>
 #include <QLatin1String>
 #include <QMetaType>
 #include <limits>
@@ -95,16 +96,15 @@ inline constexpr QLatin1String AlgorithmId{"algorithmId"};
 inline constexpr QLatin1String InnerGap{"innerGap"};
 inline constexpr QLatin1String OuterGap{"outerGap"};
 
-// Per-side outer gap keys.  The wire format is intentionally shared with
-// manual-layout JSON (LayoutJsonKeys uses the same string literals) so a
-// future overlay/animation layer can read either kind of layout without
-// branching.  Duplicated here so the algorithm layer is self-contained;
-// see core/constants.h::JsonKeys for the parallel manual-layout copy.
-inline constexpr QLatin1String UsePerSideOuterGap{"usePerSideOuterGap"};
-inline constexpr QLatin1String OuterGapTop{"outerGapTop"};
-inline constexpr QLatin1String OuterGapBottom{"outerGapBottom"};
-inline constexpr QLatin1String OuterGapLeft{"outerGapLeft"};
-inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
+// Per-side outer-gap keys — canonical definition in phosphor-layout-api's
+// GapKeys.h (shared with phosphor-zones ZoneJsonKeys). Re-exported here so
+// AutotileJsonKeys callers can keep their fully-qualified references
+// unchanged while both libraries consume a single source of truth.
+using PhosphorLayout::GapKeys::OuterGapBottom;
+using PhosphorLayout::GapKeys::OuterGapLeft;
+using PhosphorLayout::GapKeys::OuterGapRight;
+using PhosphorLayout::GapKeys::OuterGapTop;
+using PhosphorLayout::GapKeys::UsePerSideOuterGap;
 
 inline constexpr QLatin1String SmartGaps{"smartGaps"};
 inline constexpr QLatin1String FocusNewWindows{"focusNewWindows"};

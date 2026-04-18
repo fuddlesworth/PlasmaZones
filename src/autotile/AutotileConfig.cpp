@@ -77,15 +77,15 @@ QHash<QString, AlgorithmSettings> AutotileConfig::perAlgoFromVariantMap(const QV
         if (!validAlgoId.match(it.key()).hasMatch())
             continue;
         const QVariantMap entry = it.value().toMap();
-        const QVariant ratioVar = entry.value(PhosphorTiles::PerAlgoKeys::SplitRatio);
+        const QVariant ratioVar = entry.value(PhosphorTiles::AutotileJsonKeys::SplitRatio);
         const qreal ratio = std::clamp(ratioVar.isValid() ? ratioVar.toDouble() : ConfigDefaults::autotileSplitRatio(),
                                        MinSplitRatio, MaxSplitRatio);
-        const QVariant mcVar = entry.value(PhosphorTiles::PerAlgoKeys::MasterCount);
+        const QVariant mcVar = entry.value(PhosphorTiles::AutotileJsonKeys::MasterCount);
         const int masterCount = std::clamp(mcVar.isValid() ? mcVar.toInt() : ConfigDefaults::autotileMasterCount(),
                                            MinMasterCount, MaxMasterCount);
         AlgorithmSettings settings{ratio, masterCount, {}};
         // Load custom params if present
-        const QVariant customVar = entry.value(PhosphorTiles::PerAlgoKeys::CustomParams);
+        const QVariant customVar = entry.value(PhosphorTiles::AutotileJsonKeys::CustomParams);
         if (customVar.isValid() && customVar.typeId() == QMetaType::QVariantMap) {
             settings.customParams = customVar.toMap();
         }
@@ -99,10 +99,10 @@ QVariantMap AutotileConfig::perAlgoToVariantMap(const QHash<QString, AlgorithmSe
     QVariantMap result;
     for (auto it = hash.constBegin(); it != hash.constEnd(); ++it) {
         QVariantMap entry;
-        entry[PhosphorTiles::PerAlgoKeys::SplitRatio] = it.value().splitRatio;
-        entry[PhosphorTiles::PerAlgoKeys::MasterCount] = it.value().masterCount;
+        entry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = it.value().splitRatio;
+        entry[PhosphorTiles::AutotileJsonKeys::MasterCount] = it.value().masterCount;
         if (!it.value().customParams.isEmpty()) {
-            entry[PhosphorTiles::PerAlgoKeys::CustomParams] = it.value().customParams;
+            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
         }
         result[it.key()] = entry;
     }

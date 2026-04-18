@@ -56,13 +56,13 @@ QString WindowTrackingService::currentAppIdFor(const QString& anyWindowId) const
         return QString();
     }
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
         const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
         if (!fromRegistry.isEmpty()) {
             return fromRegistry;
         }
     }
-    return Utils::extractAppId(anyWindowId);
+    return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
 }
 
 QString WindowTrackingService::canonicalizeForLookup(const QString& rawWindowId) const

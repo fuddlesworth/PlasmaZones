@@ -218,7 +218,7 @@ private Q_SLOTS:
     void testClearStalePendingAssignment()
     {
         QString windowId = QStringLiteral("app|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};
@@ -360,7 +360,7 @@ private Q_SLOTS:
     void testConsumePendingAssignment()
     {
         QString windowId = QStringLiteral("app|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         WindowTrackingService::PendingRestore entry;
         entry.zoneIds = {m_zoneIds[0]};

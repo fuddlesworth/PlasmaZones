@@ -14,10 +14,9 @@
 #   • PhosphorZones uses them in app-rule matching (Layout::matchAppRule).
 #   • Future PhosphorTiles runtime engine will hold them per-tiled-window.
 #
-# This library carries no Qt-Widgets / Wayland / KWin dependencies — just
-# Qt6::Core + Qt6::Gui (QIcon for the icon-data-url helper).  That makes
-# it cheap to link from anywhere, including the KWin effect plugin which
-# is highly cost-sensitive about transitive deps.
+# This library carries no Qt-Widgets / Wayland / KWin / Gui dependencies —
+# just Qt6::Core.  That makes it cheap to link from anywhere, including the
+# KWin effect plugin which is highly cost-sensitive about transitive deps.
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -35,7 +34,7 @@ include(GenerateExportHeader)
 # Dependencies
 # ═══════════════════════════════════════════════════════════════════════════════
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
@@ -79,7 +78,6 @@ target_compile_features(PhosphorIdentity PUBLIC cxx_std_20)
 target_link_libraries(PhosphorIdentity
     PUBLIC
         Qt6::Core
-        Qt6::Gui
 )
 
 set_target_properties(PhosphorIdentity PROPERTIES

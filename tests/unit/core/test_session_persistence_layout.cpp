@@ -73,7 +73,7 @@ public:
     {
         if (windowId.isEmpty())
             return;
-        QString sid = PlasmaZones::Utils::extractAppId(windowId);
+        QString sid = PhosphorIdentity::WindowId::extractAppId(windowId);
         QStringList zoneIds = m_windowZones.value(windowId);
         QString zoneId = zoneIds.isEmpty() ? QString() : zoneIds.first();
         if (!zoneId.isEmpty()) {
@@ -142,7 +142,7 @@ public:
             zoneId.clear();
             return false;
         }
-        QString sid = PlasmaZones::Utils::extractAppId(windowId);
+        QString sid = PhosphorIdentity::WindowId::extractAppId(windowId);
         if (!m_pendingZones.contains(sid)) {
             zoneId.clear();
             return false;
@@ -177,7 +177,7 @@ public:
 
     void consumePending(const QString& windowId)
     {
-        QString sid = PlasmaZones::Utils::extractAppId(windowId);
+        QString sid = PhosphorIdentity::WindowId::extractAppId(windowId);
         m_pendingZones.remove(sid);
         m_pendingScreens.remove(sid);
         m_pendingDesktops.remove(sid);
@@ -190,11 +190,11 @@ public:
     }
     QString pendingLayout(const QString& wid) const
     {
-        return m_pendingLayouts.value(PlasmaZones::Utils::extractAppId(wid));
+        return m_pendingLayouts.value(PhosphorIdentity::WindowId::extractAppId(wid));
     }
     int pendingDesktop(const QString& wid) const
     {
-        return m_pendingDesktops.value(PlasmaZones::Utils::extractAppId(wid), 0);
+        return m_pendingDesktops.value(PhosphorIdentity::WindowId::extractAppId(wid), 0);
     }
 
 private:

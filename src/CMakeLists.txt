@@ -74,8 +74,10 @@ set(plasmazones_core_SRCS
     core/layoutworker/layoutcomputeservice.cpp
     core/layoutworker/layoutcomputeservice.h
     core/layoutworker/types.h
-    core/unifiedlayoutentry.cpp
-    core/unifiedlayoutentry.h
+    core/unifiedlayoutlist.cpp
+    core/unifiedlayoutlist.h
+    common/layoutpreviewserialize.cpp
+    common/layoutpreviewserialize.h
     core/supportreport.cpp
     core/supportreport.h
     # layersurface + shaderregistry/params moved to PhosphorShell
@@ -158,8 +160,8 @@ set(plasmazones_core_SRCS
     dbus/snapadaptor.cpp
     dbus/snapadaptor.h
     # TilingAlgorithm, TilingState, SplitTree, AlgorithmRegistry, scripted-algo
-    # machinery moved to libs/phosphor-tiles/ — shim headers in autotile/ keep
-    # `#include "autotile/AlgorithmRegistry.h"` etc. working for in-tree consumers.
+    # machinery live in libs/phosphor-tiles/. Consumers include canonical
+    # <PhosphorTiles/...> headers directly; no forwarding shims remain.
     autotile/AutotileConfig.cpp
     autotile/AutotileConfig.h
     autotile/AutotileEngine.cpp
@@ -221,6 +223,7 @@ target_link_libraries(plasmazones_core
         Qt6::DBus
         plasmazones_compositor_common
         PhosphorConfig::PhosphorConfig
+        PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
         PhosphorShell::PhosphorShell
         PhosphorTiles::PhosphorTiles
@@ -470,8 +473,6 @@ configure_file(
 set(plasmazones_editor_SRCS
     editor/main.cpp
     daemon/vulkan_support.cpp
-    common/layoutpreviewtoqml.cpp
-    common/layoutpreviewtoqml.h
     editor/EditorController.cpp
     editor/EditorLaunchController.cpp
     editor/EditorLaunchController.h

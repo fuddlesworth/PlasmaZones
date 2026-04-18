@@ -15,8 +15,10 @@ namespace PhosphorZones {
 // ISettings + IOverlayService destructors live in src/core/interfaces.cpp
 // — those interfaces stay in PZ.
 
+ILayoutCatalog::~ILayoutCatalog() = default;
 ILayoutManager::~ILayoutManager() = default;
 
+IZoneDetection::~IZoneDetection() = default;
 IZoneDetector::~IZoneDetector() = default;
 
 } // namespace PhosphorZones

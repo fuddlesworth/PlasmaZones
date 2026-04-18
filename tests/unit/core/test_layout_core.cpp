@@ -13,10 +13,13 @@
 #include <QJsonDocument>
 
 #include "core/constants.h"
+#include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 
 using namespace PlasmaZones;
+using PhosphorLayout::AspectRatioClass;
+namespace ScreenClassification = PhosphorLayout::ScreenClassification;
 
 class TestLayoutCore : public QObject
 {

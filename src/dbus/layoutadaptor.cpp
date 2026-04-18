@@ -9,8 +9,10 @@
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
-#include "../core/unifiedlayoutentry.h"
+#include "../common/layoutpreviewserialize.h"
+#include "../core/unifiedlayoutlist.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
@@ -210,23 +212,20 @@ QStringList LayoutAdaptor::getLayoutList()
         m_layoutManager, /*includeAutotile=*/true,
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true));
     for (const auto& entry : entries) {
-        QJsonObject json = PhosphorZones::LayoutUtils::toJson(entry);
+        QJsonObject json = PlasmaZones::toJson(entry);
 
+        // Enrich manual-layout entries with Layout-specific fields that
+        // LayoutPreview doesn't carry (hasSystemOrigin, hiddenFromSelector,
+        // defaultOrder, allow-lists). Autotile entries have no Layout to
+        // look up so they skip this block.
         auto uuidOpt = Utils::parseUuid(entry.id);
         if (uuidOpt) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
-                json[::PhosphorZones::ZoneJsonKeys::IsSystem] = layout->isSystemLayout();
-                json[::PhosphorZones::ZoneJsonKeys::HasSystemOrigin] = layout->hasSystemOrigin();
-                json[::PhosphorZones::ZoneJsonKeys::HiddenFromSelector] = layout->hiddenFromSelector();
+                json[QStringLiteral("hasSystemOrigin")] = layout->hasSystemOrigin();
+                json[QStringLiteral("hiddenFromSelector")] = layout->hiddenFromSelector();
                 if (layout->defaultOrder() != 999) {
-                    json[::PhosphorZones::ZoneJsonKeys::DefaultOrder] = layout->defaultOrder();
-                }
-
-                // Include aspect ratio class so KCM can show the AR badge
-                if (layout->aspectRatioClass() != AspectRatioClass::Any) {
-                    json[::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey] =
-                        ScreenClassification::toString(layout->aspectRatioClass());
+                    json[QStringLiteral("defaultOrder")] = layout->defaultOrder();
                 }
 
                 // Include allow-lists so KCM can show the filter badge
@@ -244,23 +243,17 @@ QStringList LayoutAdaptor::getLayoutList()
 QString LayoutAdaptor::getLayout(const QString& id)
 {
     // Handle autotile algorithm preview layouts
-    if (LayoutId::isAutotile(id)) {
-        QString algoId = LayoutId::extractAlgorithmId(id);
+    if (PhosphorLayout::LayoutId::isAutotile(id)) {
+        QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
         auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
         auto* algo = registry ? registry->algorithm(algoId) : nullptr;
         if (!algo) {
             qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
             return QString();
         }
-        UnifiedLayoutEntry entry;
-        entry.id = id;
-        entry.name = algo->name();
-        entry.description = algo->description();
-        entry.isAutotile = true;
-        entry.previewZones = PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo);
-        entry.zones = entry.previewZones;
-        entry.zoneCount = PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo);
-        QJsonObject json = PhosphorZones::LayoutUtils::toJson(entry);
+        PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(
+            algoId, algo, PhosphorTiles::AlgorithmRegistry::effectiveMaxWindows(algo));
+        QJsonObject json = PlasmaZones::toJson(preview);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
         for (auto it = overrides.constBegin(); it != overrides.constEnd(); ++it) {
@@ -425,7 +418,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
         auto* mgr = ScreenManager::instance();
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
-        layout->setAspectRatioClass(ScreenClassification::classify(geo.width(), geo.height()));
+        layout->setAspectRatioClass(PhosphorLayout::ScreenClassification::classify(geo.width(), geo.height()));
     }
 
     m_layoutManager->addLayout(layout);
@@ -498,7 +491,7 @@ void LayoutAdaptor::setQuickLayoutSlot(int slotNumber, const QString& layoutId)
     }
 
     // Validate UUID format for manual layouts (skip for autotile IDs)
-    if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+    if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("set quick layout slot"));
         if (!uuidOpt) {
             return;
@@ -523,7 +516,7 @@ void LayoutAdaptor::setAllQuickLayoutSlots(const QVariantMap& slots)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch quick layout slot"));
             if (!uuidOpt) {
                 continue;
@@ -579,74 +572,6 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 // Source-agnostic PhosphorZones::Layout Preview (PhosphorLayout::ILayoutSource bridge)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-namespace {
-
-QJsonObject algorithmMetadataToJson(const PhosphorLayout::AlgorithmMetadata& meta)
-{
-    QJsonObject json;
-    json[QStringLiteral("supportsMasterCount")] = meta.supportsMasterCount;
-    json[QStringLiteral("supportsSplitRatio")] = meta.supportsSplitRatio;
-    json[QStringLiteral("producesOverlappingZones")] = meta.producesOverlappingZones;
-    json[QStringLiteral("supportsCustomParams")] = meta.supportsCustomParams;
-    json[QStringLiteral("memory")] = meta.memory;
-    json[QStringLiteral("isScripted")] = meta.isScripted;
-    json[QStringLiteral("isUserScript")] = meta.isUserScript;
-    json[QStringLiteral("isSystemEntry")] = meta.isSystemEntry();
-    if (!meta.zoneNumberDisplay.isEmpty()) {
-        json[QStringLiteral("zoneNumberDisplay")] = meta.zoneNumberDisplay;
-    }
-    return json;
-}
-
-QJsonObject layoutPreviewToJson(const PhosphorLayout::LayoutPreview& preview)
-{
-    QJsonObject json;
-    json[QStringLiteral("id")] = preview.id;
-    json[QStringLiteral("displayName")] = preview.displayName;
-    if (!preview.description.isEmpty()) {
-        json[QStringLiteral("description")] = preview.description;
-    }
-    json[QStringLiteral("zoneCount")] = preview.zoneCount;
-    json[QStringLiteral("isAutotile")] = preview.isAutotile;
-    json[QStringLiteral("recommended")] = preview.recommended;
-    json[QStringLiteral("autoAssign")] = preview.autoAssign;
-    json[QStringLiteral("aspectRatioClass")] = preview.aspectRatioClass;
-    if (preview.referenceAspectRatio > 0.0) {
-        json[QStringLiteral("referenceAspectRatio")] = preview.referenceAspectRatio;
-    }
-
-    // Zones as nested {x, y, width, height} objects matching the existing
-    // zone-preview JSON shape used by overlay / picker QML.
-    QJsonArray zonesArray;
-    for (int i = 0; i < preview.zones.size(); ++i) {
-        const QRectF& r = preview.zones.at(i);
-        QJsonObject zoneJson;
-        zoneJson[QStringLiteral("x")] = r.x();
-        zoneJson[QStringLiteral("y")] = r.y();
-        zoneJson[QStringLiteral("width")] = r.width();
-        zoneJson[QStringLiteral("height")] = r.height();
-        if (i < preview.zoneNumbers.size()) {
-            zoneJson[QStringLiteral("zoneNumber")] = preview.zoneNumbers.at(i);
-        }
-        zonesArray.append(zoneJson);
-    }
-    json[QStringLiteral("zones")] = zonesArray;
-
-    if (!preview.sectionKey.isEmpty()) {
-        json[QStringLiteral("sectionKey")] = preview.sectionKey;
-        json[QStringLiteral("sectionLabel")] = preview.sectionLabel;
-        json[QStringLiteral("sectionOrder")] = preview.sectionOrder;
-    }
-
-    if (preview.algorithm.has_value()) {
-        json[QStringLiteral("algorithm")] = algorithmMetadataToJson(preview.algorithm.value());
-    }
-
-    return json;
-}
-
-} // namespace
-
 QString LayoutAdaptor::getLayoutPreviewList()
 {
     if (!m_layoutSource) {
@@ -655,7 +580,7 @@ QString LayoutAdaptor::getLayoutPreviewList()
     QJsonArray array;
     const auto previews = m_layoutSource->availableLayouts();
     for (const auto& preview : previews) {
-        array.append(layoutPreviewToJson(preview));
+        array.append(PlasmaZones::toJson(preview));
     }
     return QString::fromUtf8(QJsonDocument(array).toJson(QJsonDocument::Compact));
 }
@@ -670,7 +595,7 @@ QString LayoutAdaptor::getLayoutPreview(const QString& id, int windowCount)
         // ILayoutSource contract: empty id signals "unknown to this source".
         return QStringLiteral("{}");
     }
-    return QString::fromUtf8(QJsonDocument(layoutPreviewToJson(preview)).toJson(QJsonDocument::Compact));
+    return QString::fromUtf8(QJsonDocument(PlasmaZones::toJson(preview)).toJson(QJsonDocument::Compact));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

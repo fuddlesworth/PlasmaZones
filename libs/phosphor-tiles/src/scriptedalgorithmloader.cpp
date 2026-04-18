@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -18,8 +18,9 @@ namespace PhosphorTiles {
 // Single file-scope constant shared by loadFromDirectory() and reWatchFiles()
 static constexpr int MaxWatchedFilesPerDir = 100;
 
-ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(QObject* parent)
+ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, QObject* parent)
     : QObject(parent)
+    , m_subdirectory(subdirectory)
 {
     // Lazy user directory creation — moved ensureUserDirectoryExists()
     // to scanAndRegister() so it is only called when actually needed.
@@ -44,16 +45,21 @@ ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
 
 QString ScriptedAlgorithmLoader::userAlgorithmDir() const
 {
+    if (m_subdirectory.isEmpty())
+        return QString();
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
     if (dataDir.isEmpty())
         return QString();
-    return dataDir + QStringLiteral("/plasmazones/algorithms");
+    return dataDir + QLatin1Char('/') + m_subdirectory;
 }
 
 QStringList ScriptedAlgorithmLoader::algorithmDirectories() const
 {
-    QStringList dirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/algorithms"), QStandardPaths::LocateDirectory);
+    if (m_subdirectory.isEmpty())
+        return {};
+
+    QStringList dirs =
+        QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, m_subdirectory, QStandardPaths::LocateDirectory);
 
     const QString userDir = userAlgorithmDir();
     if (!userDir.isEmpty() && !dirs.contains(userDir)) {

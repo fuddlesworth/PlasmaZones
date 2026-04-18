@@ -3121,7 +3121,7 @@ QString AutotileEngine::canonicalizeWindowId(const QString& rawWindowId)
     if (m_windowRegistry) {
         return m_windowRegistry->canonicalizeWindowId(rawWindowId);
     }
-    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
     if (it != m_canonicalByInstance.constEnd()) {
         return it.value();
@@ -3143,7 +3143,7 @@ void AutotileEngine::cleanupCanonical(const QString& anyWindowId)
     if (m_windowRegistry) {
         return;
     }
-    const QString instanceId = Utils::extractInstanceId(anyWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
     m_canonicalByInstance.remove(instanceId);
 }
 
@@ -3155,7 +3155,7 @@ QString AutotileEngine::canonicalizeForLookup(const QString& rawWindowId) const
     if (m_windowRegistry) {
         return m_windowRegistry->canonicalizeForLookup(rawWindowId);
     }
-    const QString instanceId = Utils::extractInstanceId(rawWindowId);
+    const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(rawWindowId);
     auto it = m_canonicalByInstance.constFind(instanceId);
     return (it != m_canonicalByInstance.constEnd()) ? it.value() : rawWindowId;
 }
@@ -3166,7 +3166,7 @@ QString AutotileEngine::currentAppIdFor(const QString& anyWindowId) const
         return QString();
     }
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(anyWindowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(anyWindowId);
         const QString fromRegistry = m_windowRegistry->appIdFor(instanceId);
         if (!fromRegistry.isEmpty()) {
             return fromRegistry;
@@ -3174,7 +3174,7 @@ QString AutotileEngine::currentAppIdFor(const QString& anyWindowId) const
     }
     // Fallback: parse the string. Note this returns the FIRST-seen class for
     // canonical ids; accurate only when the window has never renamed.
-    return Utils::extractAppId(anyWindowId);
+    return PhosphorIdentity::WindowId::extractAppId(anyWindowId);
 }
 
 bool AutotileEngine::cleanupPendingOrderIfResolved(const QString& screenId)

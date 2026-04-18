@@ -14,6 +14,19 @@ void CompositeLayoutSource::addSource(ILayoutSource* source)
     }
 }
 
+void CompositeLayoutSource::removeSource(ILayoutSource* source)
+{
+    if (!source) {
+        return;
+    }
+    m_sources.removeAll(source);
+}
+
+void CompositeLayoutSource::clearSources()
+{
+    m_sources.clear();
+}
+
 QVector<LayoutPreview> CompositeLayoutSource::availableLayouts() const
 {
     QVector<LayoutPreview> result;

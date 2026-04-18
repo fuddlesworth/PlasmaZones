@@ -55,9 +55,9 @@ void Daemon::updateAutotileScreens()
             continue;
         }
         QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             autotileScreens.insert(screenId);
-            QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+            QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
             if (!algoId.isEmpty()) {
                 screenAlgorithms[screenId] = algoId;
             }
@@ -278,7 +278,7 @@ void Daemon::handleSnappingToAutotile()
     if (algoId.isEmpty()) {
         algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
     }
-    const QString autotileLayoutId = LayoutId::makeAutotileId(algoId);
+    const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 
     if (m_autotileEngine) {
         m_autotileEngine->setAlgorithm(algoId);
@@ -297,7 +297,7 @@ void Daemon::handleSnappingToAutotile()
     const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
     for (const QString& screenId : effectiveIds) {
         const QString existing = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (!LayoutId::isAutotile(existing)) {
+        if (!PhosphorLayout::LayoutId::isAutotile(existing)) {
             screensToConvert.append(screenId);
         }
     }

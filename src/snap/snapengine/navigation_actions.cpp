@@ -121,14 +121,14 @@ bool SnapEngine::isWindowExcludedForAction(const QString& windowId, const QStrin
     }
     const QString appId = m_windowTracker->currentAppIdFor(windowId);
     for (const QString& excluded : m_settings->excludedApplications()) {
-        if (Utils::appIdMatches(appId, excluded)) {
+        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
             qCInfo(lcCore) << action << ":" << windowId << "excluded by app rule:" << excluded;
             Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
             return true;
         }
     }
     for (const QString& excluded : m_settings->excludedWindowClasses()) {
-        if (Utils::appIdMatches(appId, excluded)) {
+        if (PhosphorIdentity::WindowId::appIdMatches(appId, excluded)) {
             qCInfo(lcCore) << action << ":" << windowId << "excluded by class rule:" << excluded;
             Q_EMIT navigationFeedback(false, action, QStringLiteral("excluded"), appId, QString(), screenId);
             return true;

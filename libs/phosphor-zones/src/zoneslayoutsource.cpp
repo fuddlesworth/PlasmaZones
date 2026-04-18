@@ -23,7 +23,9 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
     preview.zoneCount = layout->zoneCount();
     preview.autoAssign = layout->autoAssign();
     preview.aspectRatioClass = static_cast<int>(layout->aspectRatioClass());
-    preview.isAutotile = false;
+    preview.isSystem = layout->isSystemLayout();
+    // Manual preview — leave preview.algorithm as std::nullopt so
+    // isAutotile() returns false.
 
     if (layout->hasFixedGeometryZones()) {
         const QRectF refGeo = layout->lastRecalcGeometry();
@@ -51,8 +53,8 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout)
 
 // ─── ZonesLayoutSource ──────────────────────────────────────────────────────
 
-ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutManager* manager)
-    : m_manager(manager)
+ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutCatalog* catalog)
+    : m_catalog(catalog)
 {
 }
 
@@ -61,11 +63,11 @@ ZonesLayoutSource::~ZonesLayoutSource() = default;
 QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() const
 {
     QVector<PhosphorLayout::LayoutPreview> result;
-    if (!m_manager) {
+    if (!m_catalog) {
         return result;
     }
 
-    const auto layouts = m_manager->layouts();
+    const auto layouts = m_catalog->layouts();
     result.reserve(layouts.size());
     for (PhosphorZones::Layout* layout : layouts) {
         if (!layout) {
@@ -79,14 +81,14 @@ QVector<PhosphorLayout::LayoutPreview> ZonesLayoutSource::availableLayouts() con
 PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, int /*windowCount*/,
                                                            const QSize& /*canvas*/) const
 {
-    if (!m_manager || id.isEmpty()) {
+    if (!m_catalog || id.isEmpty()) {
         return {};
     }
     const QUuid uuid = QUuid::fromString(id);
     if (uuid.isNull()) {
         return {};
     }
-    PhosphorZones::Layout* layout = m_manager->layoutById(uuid);
+    PhosphorZones::Layout* layout = m_catalog->layoutById(uuid);
     return layout ? previewFromLayout(layout) : PhosphorLayout::LayoutPreview{};
 }
 

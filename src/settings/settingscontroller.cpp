@@ -3,7 +3,7 @@
 
 #include "settingscontroller.h"
 
-#include "../common/layoutpreviewtoqml.h"
+#include "../common/layoutpreviewserialize.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
@@ -21,8 +21,8 @@ static void sortMergedLayoutList(QVariantList& list)
         const bool bIsAutotile = mapB.value(QStringLiteral("isAutotile")).toBool();
         if (aIsAutotile != bIsAutotile)
             return !aIsAutotile;
-        return mapA.value(QStringLiteral("name")).toString().toLower()
-            < mapB.value(QStringLiteral("name")).toString().toLower();
+        return mapA.value(QStringLiteral("displayName")).toString().toLower()
+            < mapB.value(QStringLiteral("displayName")).toString().toLower();
     });
 }
 
@@ -120,14 +120,37 @@ SettingsController::~SettingsController()
     m_algorithmWatchers.clear();
 }
 
+namespace {
+// Install the library-level screen-id resolver once per process so
+// Layout::fromJson() normalises legacy connector names ("DP-2") to
+// EDID-based IDs ("LG:Model:Serial") during load. Uses Utils::screenIdForName
+// which walks QGuiApplication::screens().
+void ensureScreenIdResolver()
+{
+    static const bool installed = [] {
+        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
+            if (name.isEmpty() || !Utils::isConnectorName(name))
+                return name;
+            return Utils::screenIdForName(name);
+        });
+        return true;
+    }();
+    (void)installed;
+}
+} // namespace
+
 SettingsController::SettingsController(QObject* parent)
-    : QObject(parent)
+    : QObject((ensureScreenIdResolver(), parent))
     , m_screenHelper(&m_settings, this)
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
+    , m_localZonesSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
     , m_localAutotileSource(
           std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
+    , m_localSource(std::make_unique<PhosphorLayout::CompositeLayoutSource>())
 {
+    m_localSource->addSource(m_localZonesSource.get());
+    m_localSource->addSource(m_localAutotileSource.get());
+
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
     // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
@@ -171,7 +194,7 @@ SettingsController::SettingsController(QObject* parent)
     // The daemon also creates its own PhosphorTiles::ScriptedAlgorithmLoader — the KCM runs
     // in a separate process, so both need an independent loader to populate
     // the shared PhosphorTiles::AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(this);
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QStringLiteral("plasmazones/algorithms"), this);
     scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
@@ -757,55 +780,34 @@ void SettingsController::loadLayoutsAsync()
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
 // See header doc for why these exist. Both helpers route through the shared
-// layoutPreviewToQmlMap so settings + editor + future consumers emit the
+// toVariantMap so settings + editor + future consumers emit the
 // same QML-compatible shape (drop-in replacement for the legacy m_layouts
 // produced by LayoutAdaptor::getLayoutList).
 
 QVariantList SettingsController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (m_localLayoutSource) {
-        const auto manualPreviews = m_localLayoutSource->availableLayouts();
-        list.reserve(list.size() + manualPreviews.size());
-        for (const auto& preview : manualPreviews) {
-            list.append(layoutPreviewToQmlMap(preview));
-        }
+    if (!m_localSource) {
+        return list;
     }
-    if (m_localAutotileSource) {
-        const auto autotilePreviews = m_localAutotileSource->availableLayouts();
-        list.reserve(list.size() + autotilePreviews.size());
-        for (const auto& preview : autotilePreviews) {
-            list.append(layoutPreviewToQmlMap(preview));
-        }
+    const auto previews = m_localSource->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(toVariantMap(preview));
     }
     return list;
 }
 
 QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount) const
 {
-    if (id.isEmpty()) {
+    if (id.isEmpty() || !m_localSource) {
         return {};
     }
-    // Autotile previews carry an `autotile:<algorithmId>` id — route those
-    // to the algorithm source; everything else is a manual layout UUID.
-    if (id.startsWith(QLatin1String("autotile:"))) {
-        if (!m_localAutotileSource) {
-            return {};
-        }
-        const auto preview = m_localAutotileSource->previewAt(id, windowCount);
-        if (preview.id.isEmpty()) {
-            return {};
-        }
-        return layoutPreviewToQmlMap(preview);
-    }
-    if (!m_localLayoutSource) {
-        return {};
-    }
-    const auto preview = m_localLayoutSource->previewAt(id, windowCount);
+    const auto preview = m_localSource->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }
-    return layoutPreviewToQmlMap(preview);
+    return toVariantMap(preview);
 }
 
 void SettingsController::createNewLayout()
@@ -1070,8 +1072,9 @@ void SettingsController::flushStagedAssignments()
             const int mode = *s.stagedMode;
             const QString snapping = s.snappingLayoutId.value_or(QString());
             const QString tiling = s.tilingAlgorithmId.has_value()
-                ? (LayoutId::isAutotile(*s.tilingAlgorithmId) ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
-                                                              : *s.tilingAlgorithmId)
+                ? (PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
+                       ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+                       : *s.tilingAlgorithmId)
                 : QString();
             DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, mode, snapping, tiling});
@@ -1099,8 +1102,8 @@ void SettingsController::flushStagedAssignments()
 
         // Tiling algorithm assignment
         if (s.tilingAlgorithmId.has_value() && !s.tilingAlgorithmId->isEmpty()) {
-            const QString algoId = LayoutId::isAutotile(*s.tilingAlgorithmId)
-                ? LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
+            const QString algoId = PhosphorLayout::LayoutId::isAutotile(*s.tilingAlgorithmId)
+                ? PhosphorLayout::LayoutId::extractAlgorithmId(*s.tilingAlgorithmId)
                 : *s.tilingAlgorithmId;
             DaemonDBus::callDaemon(QString(DBus::Interface::LayoutManager), QStringLiteral("setAssignmentEntry"),
                                    {s.screenId, s.virtualDesktop, s.activityId, 1, QString(), algoId});
@@ -1148,7 +1151,7 @@ bool SettingsController::stagedTilingLayout(const QString& screen, int desktop, 
         if (val.isEmpty()) {
             out = QString();
         } else {
-            out = LayoutId::isAutotile(val) ? val : LayoutId::makeAutotileId(val);
+            out = PhosphorLayout::LayoutId::isAutotile(val) ? val : PhosphorLayout::LayoutId::makeAutotileId(val);
         }
         return true;
     }
@@ -1373,7 +1376,7 @@ QString SettingsController::getTilingLayoutForScreenDesktop(const QString& scree
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString algo = reply.arguments().first().toString();
         if (!algo.isEmpty())
-            return LayoutId::makeAutotileId(algo);
+            return PhosphorLayout::LayoutId::makeAutotileId(algo);
     }
     return {};
 }
@@ -1414,7 +1417,7 @@ QString SettingsController::getSnappingLayoutForScreenActivity(const QString& sc
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId))
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -1449,7 +1452,7 @@ QString SettingsController::getTilingLayoutForScreenActivity(const QString& scre
                                                 QStringLiteral("getLayoutForScreenActivity"), {screenName, activityId});
     if (reply.type() == QDBusMessage::ReplyMessage && !reply.arguments().isEmpty()) {
         QString layoutId = reply.arguments().first().toString();
-        if (LayoutId::isAutotile(layoutId))
+        if (PhosphorLayout::LayoutId::isAutotile(layoutId))
             return layoutId;
     }
     return {};
@@ -2329,11 +2332,8 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
         map[QStringLiteral("layoutId")] = *s->snappingLayoutId;
     if (s->tilingAlgorithmId.has_value()) {
         const QString& val = *s->tilingAlgorithmId;
-        // Strip "autotile:" prefix if present
-        if (val.startsWith(QLatin1String("autotile:")))
-            map[QStringLiteral("algorithmId")] = val.mid(9);
-        else
-            map[QStringLiteral("algorithmId")] = val;
+        map[QStringLiteral("algorithmId")] =
+            PhosphorLayout::LayoutId::isAutotile(val) ? PhosphorLayout::LayoutId::extractAlgorithmId(val) : val;
     }
     // Explicit mode takes priority (stageAssignmentEntry path)
     if (s->stagedMode.has_value()) {
@@ -2460,16 +2460,16 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
 
     QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     QVariantMap algoEntry = perAlgo.value(algorithmId).toMap();
-    QVariantMap customParams = algoEntry.value(PhosphorTiles::PerAlgoKeys::CustomParams).toMap();
+    QVariantMap customParams = algoEntry.value(PhosphorTiles::AutotileJsonKeys::CustomParams).toMap();
     customParams[paramName] = coerced;
-    algoEntry[PhosphorTiles::PerAlgoKeys::CustomParams] = customParams;
+    algoEntry[PhosphorTiles::AutotileJsonKeys::CustomParams] = customParams;
 
     // Preserve existing splitRatio/masterCount if not already in the entry
-    if (!algoEntry.contains(PhosphorTiles::PerAlgoKeys::SplitRatio)) {
-        algoEntry[PhosphorTiles::PerAlgoKeys::SplitRatio] = algo->defaultSplitRatio();
+    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::SplitRatio)) {
+        algoEntry[PhosphorTiles::AutotileJsonKeys::SplitRatio] = algo->defaultSplitRatio();
     }
-    if (!algoEntry.contains(PhosphorTiles::PerAlgoKeys::MasterCount)) {
-        algoEntry[PhosphorTiles::PerAlgoKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
+    if (!algoEntry.contains(PhosphorTiles::AutotileJsonKeys::MasterCount)) {
+        algoEntry[PhosphorTiles::AutotileJsonKeys::MasterCount] = ConfigDefaults::autotileMasterCount();
     }
 
     perAlgo[algorithmId] = algoEntry;
@@ -2482,7 +2482,7 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
     const QVariantMap perAlgo = m_settings.autotilePerAlgorithmSettings();
     const QVariant algoEntry = perAlgo.value(algorithmId);
     if (algoEntry.isValid()) {
-        const QVariant customVar = algoEntry.toMap().value(PhosphorTiles::PerAlgoKeys::CustomParams);
+        const QVariant customVar = algoEntry.toMap().value(PhosphorTiles::AutotileJsonKeys::CustomParams);
         if (customVar.isValid()) {
             return customVar.toMap();
         }
@@ -2558,10 +2558,8 @@ bool SettingsController::importAlgorithm(const QString& filePath)
 
 QString SettingsController::algorithmIdFromLayoutId(const QString& layoutId)
 {
-    const QLatin1String prefix("autotile:");
-    if (layoutId.startsWith(prefix))
-        return layoutId.mid(prefix.size());
-    return layoutId;
+    return PhosphorLayout::LayoutId::isAutotile(layoutId) ? PhosphorLayout::LayoutId::extractAlgorithmId(layoutId)
+                                                          : layoutId;
 }
 
 QString SettingsController::scriptedFilePath(const QString& algorithmId) const

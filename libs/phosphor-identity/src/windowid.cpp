@@ -3,31 +3,6 @@
 
 #include <PhosphorIdentity/WindowId.h>
 
-#include <QBuffer>
-#include <QByteArray>
-#include <QImage>
-#include <QPixmap>
-
-namespace PhosphorIdentity {
-namespace WindowId {
-
-QString iconToDataUrl(const QIcon& icon, int size)
-{
-    if (icon.isNull()) {
-        return QString();
-    }
-    QPixmap pix = icon.pixmap(size, size);
-    if (pix.isNull()) {
-        return QString();
-    }
-    QByteArray ba;
-    QBuffer buffer(&ba);
-    buffer.open(QIODevice::WriteOnly);
-    if (!pix.toImage().save(&buffer, "PNG")) {
-        return QString();
-    }
-    return QStringLiteral("data:image/png;base64,") + QString::fromUtf8(ba.toBase64());
-}
-
-} // namespace WindowId
-} // namespace PhosphorIdentity
+// Translation unit present so the library has at least one compiled object
+// file even though every WindowId helper is inline in the header. Anchors
+// the export header include for consumers that explicitly request the .so.

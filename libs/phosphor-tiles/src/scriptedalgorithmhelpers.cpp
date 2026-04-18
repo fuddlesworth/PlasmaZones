@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/ScriptedAlgorithmHelpers.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -75,6 +75,26 @@ QVector<QRect> clampZonesToArea(const QVector<QRect>& zones, const QRect& area, 
     return clamped;
 }
 
+namespace {
+
+// Parse a permissive boolean: {true,1,yes,on} → true, {false,0,no,off} → false
+// (case-insensitive). Unknown values log a warning and fall back to @p fallback.
+bool parseMetadataBool(QStringView key, QStringView value, const QString& filePath, bool fallback)
+{
+    const QString lowered = value.toString().toLower();
+    if (lowered == QLatin1String("true") || lowered == QLatin1String("1") || lowered == QLatin1String("yes")
+        || lowered == QLatin1String("on"))
+        return true;
+    if (lowered == QLatin1String("false") || lowered == QLatin1String("0") || lowered == QLatin1String("no")
+        || lowered == QLatin1String("off"))
+        return false;
+    qCWarning(PhosphorTiles::lcTilesLib) << "ScriptedAlgorithm::parseMetadata: unrecognised boolean for @" << key << "="
+                                         << value << "(accepted: true/1/yes/on or false/0/no/off) in" << filePath;
+    return fallback;
+}
+
+} // namespace
+
 ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
 {
     using namespace AutotileDefaults;
@@ -111,17 +131,17 @@ ScriptMetadata parseMetadata(const QString& source, const QString& filePath)
         } else if (key == QLatin1String("description")) {
             meta.description = value.left(500).toHtmlEscaped();
         } else if (key == QLatin1String("supportsMasterCount")) {
-            meta.supportsMasterCount = (value == QLatin1String("true"));
+            meta.supportsMasterCount = parseMetadataBool(key, value, filePath, meta.supportsMasterCount);
         } else if (key == QLatin1String("supportsSplitRatio")) {
-            meta.supportsSplitRatio = (value == QLatin1String("true"));
+            meta.supportsSplitRatio = parseMetadataBool(key, value, filePath, meta.supportsSplitRatio);
         } else if (key == QLatin1String("producesOverlappingZones")) {
-            meta.producesOverlappingZones = (value == QLatin1String("true"));
+            meta.producesOverlappingZones = parseMetadataBool(key, value, filePath, meta.producesOverlappingZones);
         } else if (key == QLatin1String("supportsMemory")) {
-            meta.supportsMemory = (value == QLatin1String("true"));
+            meta.supportsMemory = parseMetadataBool(key, value, filePath, meta.supportsMemory);
         } else if (key == QLatin1String("centerLayout")) {
-            meta.centerLayout = (value == QLatin1String("true"));
+            meta.centerLayout = parseMetadataBool(key, value, filePath, meta.centerLayout);
         } else if (key == QLatin1String("supportsMinSizes")) {
-            meta.supportsMinSizes = (value == QLatin1String("true"));
+            meta.supportsMinSizes = parseMetadataBool(key, value, filePath, meta.supportsMinSizes);
         } else if (key == QLatin1String("defaultSplitRatio")) {
             bool ok = false;
             const qreal v = value.toDouble(&ok);

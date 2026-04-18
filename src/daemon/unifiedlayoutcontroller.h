@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "../core/unifiedlayoutentry.h"
+#include "../core/unifiedlayoutlist.h"
+#include <PhosphorLayoutApi/LayoutPreview.h>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -61,7 +62,7 @@ public:
     /**
      * @brief Get the full unified layout list
      */
-    QVector<UnifiedLayoutEntry> layouts() const;
+    QVector<PhosphorLayout::LayoutPreview> layouts() const;
 
     // ═══════════════════════════════════════════════════════════════════════════
     // PhosphorZones::Layout application
@@ -174,9 +175,9 @@ Q_SIGNALS:
 
 private:
     /**
-     * @brief Apply a unified layout entry
+     * @brief Apply a unified layout preview
      */
-    bool applyEntry(const UnifiedLayoutEntry& entry);
+    bool applyEntry(const PhosphorLayout::LayoutPreview& preview);
 
     /**
      * @brief Update current layout ID and emit signal
@@ -198,7 +199,7 @@ private:
     QString m_currentActivity;
     bool m_includeManualLayouts = true;
     bool m_includeAutotileLayouts = false;
-    mutable QVector<UnifiedLayoutEntry> m_cachedLayouts;
+    mutable QVector<PhosphorLayout::LayoutPreview> m_cachedLayouts;
     mutable bool m_cacheValid = false;
 };
 

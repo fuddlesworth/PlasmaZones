@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -41,7 +41,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(ZoneFields)
  * This header carries only code that operates on Layout and Zone types and
  * has no dependency on autotile, settings services, or higher-layer
  * composition (the picker-UI aggregation that stitches manual layouts
- * together with autotile algorithms lives in unifiedlayoutentry.h).
+ * together with autotile algorithms lives in unifiedlayoutlist.h).
  * Keeping that split lets these primitives eventually live in a standalone
  * phosphor-zones library without dragging autotile or settings services
  * into the dependency graph.
@@ -83,7 +83,7 @@ PHOSPHORZONES_EXPORT QVariantList zonesToVariantList(Layout* layout, ZoneFields 
  * @brief Convert a layout to a QVariantMap (metadata + zones)
  *
  * Used by LayoutAdaptor for D-Bus and other consumers that want the
- * whole layout as a single map without building a UnifiedLayoutEntry.
+ * whole layout as a single map without going through LayoutPreview.
  */
 PHOSPHORZONES_EXPORT QVariantMap layoutToVariantMap(Layout* layout, ZoneFields zoneFields = ZoneField::Minimal);
 

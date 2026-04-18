@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 /**
  * Clamp a ratio to the global [PZ_MIN_SPLIT, PZ_MAX_SPLIT] range.

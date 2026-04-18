@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -17,19 +17,6 @@
 #include <functional>
 
 namespace PhosphorTiles {
-
-/**
- * @brief Named constants for per-algorithm settings keys
- *
- * Used by AlgorithmRegistry, AutotileConfig, and Settings serialization
- * to avoid key drift between serialization and deserialization sites.
- * References AutotileJsonKeys from core/constants.h as the single source of truth.
- */
-namespace PerAlgoKeys {
-inline constexpr auto SplitRatio = AutotileJsonKeys::SplitRatio;
-inline constexpr auto MasterCount = AutotileJsonKeys::MasterCount;
-inline constexpr auto CustomParams = AutotileJsonKeys::CustomParams;
-} // namespace PerAlgoKeys
 
 class TilingAlgorithm;
 
@@ -159,6 +146,13 @@ public:
     // Preview utilities for unified layout model (shared by zone selector,
     // overlay service, daemon OSD, and KCM algorithm preview)
     // ═══════════════════════════════════════════════════════════════════════════
+
+    /// Canvas edge length used by @c generatePreviewZones and by every other
+    /// preview path that converts algorithm output into relative (0.0–1.0)
+    /// geometry. Exposed publicly so external sources (e.g.
+    /// @c AutotileLayoutSource) can scale against the same canvas without
+    /// drift.
+    static constexpr int PreviewCanvasSize = 1000;
 
     /**
      * @brief Convert pixel zones to relative geometry

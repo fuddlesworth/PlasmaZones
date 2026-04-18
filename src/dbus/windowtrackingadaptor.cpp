@@ -432,7 +432,7 @@ void WindowTrackingAdaptor::windowClosed(const QString& windowId)
     // disappear signal fires synchronously from remove() and subscribers may
     // still call canonicalizeForLookup on their way out.
     if (m_windowRegistry) {
-        const QString instanceId = Utils::extractInstanceId(windowId);
+        const QString instanceId = PhosphorIdentity::WindowId::extractInstanceId(windowId);
         m_windowRegistry->remove(instanceId);
         m_windowRegistry->releaseCanonical(instanceId);
     }

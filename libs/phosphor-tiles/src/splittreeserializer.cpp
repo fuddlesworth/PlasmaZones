@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/AutotileConstants.h>
@@ -92,7 +92,12 @@ std::unique_ptr<SplitNode> SplitTree::nodeFromJson(const QJsonObject& json, Spli
 
     if (json.contains(QLatin1String("first")) && json.contains(QLatin1String("second"))) {
         // Only set split properties on internal nodes (meaningless on leaves)
-        node->splitRatio = std::clamp(json[QLatin1String("ratio")].toDouble(0.5), MinSplitRatio, MaxSplitRatio);
+        const double rawRatio = json[QLatin1String("ratio")].toDouble(0.5);
+        node->splitRatio = std::clamp(rawRatio, MinSplitRatio, MaxSplitRatio);
+        if (rawRatio != node->splitRatio) {
+            qCDebug(PhosphorTiles::lcTilesLib)
+                << "SplitTree::fromJson: clamped out-of-range split ratio" << rawRatio << "->" << node->splitRatio;
+        }
         node->splitHorizontal = json[QLatin1String("horizontal")].toBool(false);
         // Internal node
         node->first = nodeFromJson(json[QLatin1String("first")].toObject(), node.get(), depth + 1, nodeCount, seenIds);

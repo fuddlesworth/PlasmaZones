@@ -14,7 +14,7 @@
  *
  * WIRE FORMAT NOTE: These tests construct WTS without a WindowRegistry, so
  * they drive legacy-compat "appId|uuid" composite fixtures to exercise the
- * Utils::extractAppId fallback path inside currentAppIdFor(). Production
+ * PhosphorIdentity::WindowId::extractAppId fallback path inside currentAppIdFor(). Production
  * daemons set a registry and receive bare instance ids — see
  * test_wts_registry_integration.cpp and test_wta_reactive_metadata.cpp for
  * coverage of the live path.
@@ -98,7 +98,7 @@ private Q_SLOTS:
     void testWindowClosed_persistsZoneToPending()
     {
         QString windowId = QStringLiteral("firefox|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         QVERIFY(m_service->isWindowSnapped(windowId));
@@ -113,7 +113,7 @@ private Q_SLOTS:
     void testWindowClosed_floatingWindowNotPersisted()
     {
         QString windowId = QStringLiteral("firefox|12345");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[0], QStringLiteral("DP-1"), 1);
         m_service->setWindowFloating(windowId, true);
@@ -126,7 +126,7 @@ private Q_SLOTS:
     void testWindowClosed_preTileGeometryConvertedToStableId()
     {
         QString windowId = QStringLiteral("org.kde.dolphin|99999");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->storePreTileGeometry(windowId, QRect(100, 200, 800, 600));
         QVERIFY(m_service->hasPreTileGeometry(windowId));
@@ -143,7 +143,7 @@ private Q_SLOTS:
     void testWindowClosed_floatStateClearedOnClose()
     {
         QString windowId = QStringLiteral("org.kde.kate|55555");
-        QString appId = Utils::extractAppId(windowId);
+        QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[1], QStringLiteral("DP-1"), 1);
         m_service->unsnapForFloat(windowId);
@@ -178,7 +178,7 @@ private Q_SLOTS:
         // rather than falling back to the physical screen ID.
         const QString windowId = QStringLiteral("konsole|abcdef12-0000-0000-0000-000000000001");
         const QString vsId = QStringLiteral("DP-1/vs:0");
-        const QString appId = Utils::extractAppId(windowId);
+        const QString appId = PhosphorIdentity::WindowId::extractAppId(windowId);
 
         m_service->assignWindowToZone(windowId, m_zoneIds[1], vsId, 1);
         QVERIFY(m_service->isWindowSnapped(windowId));

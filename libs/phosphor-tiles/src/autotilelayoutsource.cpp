@@ -3,6 +3,7 @@
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
@@ -21,7 +22,7 @@ namespace {
 // Match the canvas size used by AlgorithmRegistry::generatePreviewZones so
 // that previews coming through this adapter are pixel-identical to those
 // rendered by the existing daemon-side D-Bus path.
-constexpr int PreviewCanvasSize = 1000;
+constexpr int PreviewCanvasSize = PhosphorTiles::AlgorithmRegistry::PreviewCanvasSize;
 
 PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* algorithm)
 {
@@ -33,7 +34,7 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
     meta.supportsSplitRatio = algorithm->supportsSplitRatio();
     meta.producesOverlappingZones = algorithm->producesOverlappingZones();
     meta.supportsCustomParams = algorithm->supportsCustomParams();
-    meta.memory = algorithm->supportsMemory();
+    meta.supportsMemory = algorithm->supportsMemory();
     meta.isScripted = algorithm->isScripted();
     meta.isUserScript = algorithm->isUserScript();
     meta.zoneNumberDisplay = algorithm->zoneNumberDisplay();
@@ -42,38 +43,16 @@ PhosphorLayout::AlgorithmMetadata buildMetadata(PhosphorTiles::TilingAlgorithm* 
 
 QString makePreviewId(const QString& algorithmId)
 {
-    // Prefix matches PlasmaZones::LayoutId::AutotilePrefix in core/constants.h
-    // (kept in sync as a literal so this library doesn't depend on the
-    // PlasmaZones header).
-    return QStringLiteral("autotile:") + algorithmId;
+    return PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
 }
 
 } // namespace
 
-PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
+PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
+                                                   PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
 {
     PhosphorLayout::LayoutPreview preview;
-    if (!algorithm) {
-        return preview;
-    }
-
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-    const QString algorithmId = registry ? registry->availableAlgorithms().value(0) : QString();
-    // Recover this algorithm's id by reverse lookup — the algorithm itself
-    // doesn't expose it, the registry owns the mapping.
-    QString id;
-    if (registry) {
-        const auto ids = registry->availableAlgorithms();
-        for (const QString& candidate : ids) {
-            if (registry->algorithm(candidate) == algorithm) {
-                id = candidate;
-                break;
-            }
-        }
-    }
-    if (id.isEmpty()) {
-        qCWarning(PhosphorTiles::lcTilesLib)
-            << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
+    if (!algorithm || algorithmId.isEmpty()) {
         return preview;
     }
 
@@ -85,12 +64,13 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
 
     const QVector<QRect> rects = algorithm->calculateZones(params);
 
-    preview.id = makePreviewId(id);
+    preview.id = makePreviewId(algorithmId);
     preview.displayName = algorithm->name();
     preview.description = algorithm->description();
-    preview.zoneCount = effectiveCount;
-    preview.isAutotile = true;
+    preview.zoneCount = rects.size();
+    // Setting preview.algorithm = ... makes isAutotile() return true.
     preview.algorithm = buildMetadata(algorithm);
+    preview.isSystem = preview.algorithm->isSystemEntry();
 
     preview.zones.reserve(rects.size());
     preview.zoneNumbers.reserve(rects.size());
@@ -106,6 +86,31 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
     }
 
     return preview;
+}
+
+PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount)
+{
+    if (!algorithm) {
+        return {};
+    }
+    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    if (!registry) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "previewFromAlgorithm: no AlgorithmRegistry available — preview will be empty";
+        return {};
+    }
+    // Recover this algorithm's id by reverse lookup — the algorithm itself
+    // doesn't expose it, the registry owns the mapping. O(N); prefer the id
+    // overload on hot paths where the caller already has the id.
+    const auto ids = registry->availableAlgorithms();
+    for (const QString& candidate : ids) {
+        if (registry->algorithm(candidate) == algorithm) {
+            return previewFromAlgorithm(candidate, algorithm, windowCount);
+        }
+    }
+    qCWarning(PhosphorTiles::lcTilesLib)
+        << "previewFromAlgorithm: algorithm not in registry — preview will have empty id";
+    return {};
 }
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
@@ -124,13 +129,17 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
         return result;
     }
 
-    const auto algorithms = m_registry->allAlgorithms();
-    result.reserve(algorithms.size());
-    for (PhosphorTiles::TilingAlgorithm* algorithm : algorithms) {
+    // Iterate by id so we pass the id directly to previewFromAlgorithm and
+    // avoid the reverse-lookup on each entry (would otherwise make this
+    // O(N²) in the number of registered algorithms).
+    const auto ids = m_registry->availableAlgorithms();
+    result.reserve(ids.size());
+    for (const QString& id : ids) {
+        PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(id);
         if (!algorithm) {
             continue;
         }
-        result.append(previewFromAlgorithm(algorithm, DefaultPreviewWindowCount));
+        result.append(previewFromAlgorithm(id, algorithm, PhosphorLayout::DefaultPreviewWindowCount));
     }
     return result;
 }
@@ -142,13 +151,12 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
         return {};
     }
 
-    static const QLatin1String prefix("autotile:");
-    if (!id.startsWith(prefix)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(id)) {
         return {};
     }
-    const QString algorithmId = id.mid(prefix.size());
+    const QString algorithmId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
     PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(algorithmId);
-    return algorithm ? previewFromAlgorithm(algorithm, windowCount) : PhosphorLayout::LayoutPreview{};
+    return algorithm ? previewFromAlgorithm(algorithmId, algorithm, windowCount) : PhosphorLayout::LayoutPreview{};
 }
 
 } // namespace PhosphorTiles

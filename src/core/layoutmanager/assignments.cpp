@@ -122,12 +122,12 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
 void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
                                      const QString& layoutId)
 {
-    if (LayoutId::isAutotile(layoutId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         // Store autotile assignment — set mode to Autotile, preserve snappingLayout
         LayoutAssignmentKey key{screenId, virtualDesktop, activity};
         AssignmentEntry& entry = m_assignments[key];
         entry.mode = AssignmentEntry::Autotile;
-        entry.tilingAlgorithm = LayoutId::extractAlgorithmId(layoutId);
+        entry.tilingAlgorithm = PhosphorLayout::LayoutId::extractAlgorithmId(layoutId);
         // Preserve existing snappingLayout — only mode + tilingAlgorithm change
         Q_EMIT layoutAssigned(screenId, virtualDesktop, nullptr);
         saveAssignments();
@@ -260,7 +260,7 @@ void LayoutManager::clearAutotileAssignments()
 
     // Also clear autotile quick layout slots
     for (auto it = m_quickLayoutShortcuts.begin(); it != m_quickLayoutShortcuts.end();) {
-        if (LayoutId::isAutotile(it.value())) {
+        if (PhosphorLayout::LayoutId::isAutotile(it.value())) {
             it = m_quickLayoutShortcuts.erase(it);
             changed = true;
         } else {

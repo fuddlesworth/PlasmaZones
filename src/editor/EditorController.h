@@ -19,6 +19,7 @@
 #include "../core/logging.h"
 #include "undo/UndoController.h"
 
+#include <PhosphorLayoutApi/CompositeLayoutSource.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 
@@ -308,9 +309,12 @@ public:
     // layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource so QML
     // preview-rendering paths work even when the daemon isn't running.
     //
-    // QVariantMap shape mirrors LayoutAdaptor::getLayoutPreview's JSON
-    // (id / displayName / zones[]{x,y,width,height,zoneNumber} / isAutotile).
-    // QML can swap consumers between the two without changing rendering code.
+    // QVariantMap shape is the QML-facing projection produced by
+    // PlasmaZones::toVariantMap (src/common/layoutpreviewserialize.h):
+    // id / name / zones[]{relativeGeometry{x,y,width,height},zoneNumber} /
+    // isAutotile / aspectRatioClass (string tag) / flat supports* capability
+    // flags. This is intentionally different from LayoutAdaptor::getLayoutPreview's
+    // D-Bus JSON, which is a separate projection optimised for wire transfer.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
     Q_INVOKABLE QVariantMap localLayoutPreview(const QString& id, int windowCount = 4) const;
     int virtualDesktopCount() const
@@ -890,13 +894,16 @@ private:
     // Daemon-independent layout source — exposed via localLayoutPreviews()
     // for QML preview rendering paths that don't need the daemon (template
     // gallery, layout-import preview thumbnails, etc.).
+    //
+    // CompositeLayoutSource aggregates manual layouts (m_localZonesSource
+    // over m_localLayoutManager) and autotile previews (m_localAutotileSource
+    // over the AlgorithmRegistry singleton). Consumers query exclusively
+    // through m_localSource and never branch on id-prefix — the composite
+    // dispatches internally.
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localLayoutSource;
-    // Autotile previews come from the in-process PhosphorTiles::AlgorithmRegistry singleton
-    // (populated by PhosphorTiles::ScriptedAlgorithmLoader) — same wrapping pattern as
-    // m_localLayoutSource so the editor renders manual + autotile previews
-    // through one uniform path.  Source borrows the registry pointer.
+    std::unique_ptr<PhosphorZones::ZonesLayoutSource> m_localZonesSource;
     std::unique_ptr<PhosphorTiles::AutotileLayoutSource> m_localAutotileSource;
+    std::unique_ptr<PhosphorLayout::CompositeLayoutSource> m_localSource;
 
     bool m_gridOverlayVisible = true; // Grid overlay visibility (independent of snapping)
 

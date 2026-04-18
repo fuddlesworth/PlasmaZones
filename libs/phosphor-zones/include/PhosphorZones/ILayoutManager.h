@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -24,6 +24,38 @@ namespace PhosphorZones {
 class Layout;
 
 /**
+ * @brief Read-only catalog of manual zone layouts.
+ *
+ * Minimal ISP-compliant subset used by consumers that only need to
+ * enumerate and look up layouts — e.g. @c ZonesLayoutSource or any UI
+ * that paints previews without mutating state. Fixture tests can stub
+ * this two-method interface instead of carrying the 30-method
+ * @c ILayoutManager surface.
+ *
+ * @c ILayoutManager inherits from @c ILayoutCatalog so any callsite
+ * accepting an @c ILayoutCatalog also accepts a full manager.
+ */
+class PHOSPHORZONES_EXPORT ILayoutCatalog
+{
+public:
+    ILayoutCatalog() = default;
+    virtual ~ILayoutCatalog();
+
+    /// Enumerate every known layout. Borrowed pointers — owned by the
+    /// concrete catalog (typically @c LayoutManager). Order is the
+    /// catalog's natural iteration order.
+    virtual QVector<Layout*> layouts() const = 0;
+
+    /// Resolve a layout by its stable UUID. Returns nullptr when no
+    /// layout with that id is known to the catalog.
+    virtual Layout* layoutById(const QUuid& id) const = 0;
+
+protected:
+    ILayoutCatalog(const ILayoutCatalog&) = default;
+    ILayoutCatalog& operator=(const ILayoutCatalog&) = default;
+};
+
+/**
  * @brief Abstract interface for layout management
  *
  * Note: This is a non-QObject interface (pure virtual abstract class).
@@ -35,7 +67,7 @@ class Layout;
  *
  * Components needing signals should use LayoutManager* directly.
  */
-class PHOSPHORZONES_EXPORT ILayoutManager
+class PHOSPHORZONES_EXPORT ILayoutManager : public ILayoutCatalog
 {
 public:
     ILayoutManager() = default;
@@ -47,9 +79,7 @@ public:
 
     // Layout management
     virtual int layoutCount() const = 0;
-    virtual QVector<Layout*> layouts() const = 0;
     virtual Layout* layout(int index) const = 0;
-    virtual Layout* layoutById(const QUuid& id) const = 0;
     virtual Layout* layoutByName(const QString& name) const = 0;
 
     virtual void addLayout(Layout* layout) = 0;

@@ -5,7 +5,6 @@
 
 #include <phosphoridentity_export.h>
 
-#include <QIcon>
 #include <QString>
 #include <QStringView>
 
@@ -120,18 +119,6 @@ inline bool appIdMatches(const QString& appId, const QString& pattern)
     }
     return false;
 }
-
-/**
- * @brief Encode a QIcon as a data:image/png;base64 URL string.
- *
- * Requires a running QGuiApplication with display access (uses QPixmap).
- * Will return empty string in headless environments without a display.
- *
- * @param icon The icon to encode
- * @param size The pixel size to render
- * @return Data URL string, or empty string on failure
- */
-PHOSPHORIDENTITY_EXPORT QString iconToDataUrl(const QIcon& icon, int size);
 
 } // namespace WindowId
 } // namespace PhosphorIdentity

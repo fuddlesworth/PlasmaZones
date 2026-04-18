@@ -327,7 +327,7 @@ void LayoutManager::loadAssignments()
                             // Old single layoutId format
                             const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
                             QString normalizedId = layoutIdStr;
-                            if (!LayoutId::isAutotile(layoutIdStr)) {
+                            if (!PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
                                 const QUuid uuid = QUuid::fromString(layoutIdStr);
                                 if (uuid.isNull())
                                     continue;
@@ -339,11 +339,12 @@ void LayoutManager::loadAssignments()
                             auto shadowIt = oldShadows.constFind(key);
                             if (shadowIt != oldShadows.constEnd()) {
                                 if (entry.mode == AssignmentEntry::Autotile
-                                    && !LayoutId::isAutotile(shadowIt.value())) {
+                                    && !PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
                                     entry.snappingLayout = shadowIt.value();
                                 } else if (entry.mode == AssignmentEntry::Snapping
-                                           && LayoutId::isAutotile(shadowIt.value())) {
-                                    entry.tilingAlgorithm = LayoutId::extractAlgorithmId(shadowIt.value());
+                                           && PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
+                                    entry.tilingAlgorithm =
+                                        PhosphorLayout::LayoutId::extractAlgorithmId(shadowIt.value());
                                 }
                             }
                         }
@@ -361,7 +362,7 @@ void LayoutManager::loadAssignments()
                             if (!ok)
                                 continue;
                             const QString layoutIdStr = it.value().toString();
-                            if (LayoutId::isAutotile(layoutIdStr)) {
+                            if (PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
                                 m_quickLayoutShortcuts[number] = layoutIdStr;
                             } else {
                                 const QUuid uuid = QUuid::fromString(layoutIdStr);

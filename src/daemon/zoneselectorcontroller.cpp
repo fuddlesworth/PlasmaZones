@@ -3,9 +3,10 @@
 
 #include "zoneselectorcontroller.h"
 #include <PhosphorZones/Zone.h>
+#include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
-#include "../core/unifiedlayoutentry.h"
+#include "../core/unifiedlayoutlist.h"
 #include "../core/utils.h"
 #include "../core/assignmententry.h"
 #include "../core/screenmanager.h"
@@ -99,7 +100,7 @@ QVariantList ZoneSelectorController::layouts() const
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
         m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
-    return PhosphorZones::LayoutUtils::toVariantList(entries);
+    return PlasmaZones::toVariantList(entries);
 }
 
 void ZoneSelectorController::setActiveLayoutId(const QString& layoutId)

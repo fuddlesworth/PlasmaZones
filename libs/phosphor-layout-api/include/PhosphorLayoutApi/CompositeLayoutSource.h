@@ -38,9 +38,20 @@ public:
     /// terse when a child source is conditionally available.
     void addSource(ILayoutSource* source);
 
+    /// Remove @p source from the aggregation.  No-op if @p source was never
+    /// added. Does not take ownership (the composite only borrows), so the
+    /// caller is responsible for deleting the source as usual.
+    void removeSource(ILayoutSource* source);
+
+    /// Drop every child source (without deleting — sources are borrowed).
+    /// Handy for teardown paths that want to invalidate the composite
+    /// before its children go out of scope.
+    void clearSources();
+
     QVector<LayoutPreview> availableLayouts() const override;
 
-    LayoutPreview previewAt(const QString& id, int windowCount = 4, const QSize& canvas = {}) const override;
+    LayoutPreview previewAt(const QString& id, int windowCount = DefaultPreviewWindowCount,
+                            const QSize& canvas = {}) const override;
 
 private:
     QVector<ILayoutSource*> m_sources;

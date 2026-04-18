@@ -49,7 +49,7 @@ QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 
     // Check for autotile assignment first (layoutForScreen returns nullptr for autotile)
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, desktop, activity);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
 
@@ -65,7 +65,7 @@ void LayoutAdaptor::assignLayoutToScreen(const QString& screenId, const QString&
 
     // For manual layouts, validate UUID and verify layout exists
     PhosphorZones::Layout* layout = nullptr;
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen"));
         if (!layout) {
             return;
@@ -104,7 +104,7 @@ void LayoutAdaptor::setAllScreenAssignments(const QVariantMap& assignments)
     for (auto it = assignments.begin(); it != assignments.end(); ++it) {
         const QString& screenIdOrName = it.key();
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch screen assignment"));
             if (!uuidOpt) {
                 continue;
@@ -194,7 +194,7 @@ QString LayoutAdaptor::getLayoutForScreenDesktop(const QString& screenId, int vi
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, QString());
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, QString());
@@ -208,7 +208,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop"));
         if (!layout) {
             return;
@@ -342,7 +342,7 @@ void LayoutAdaptor::setAllDesktopAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch desktop assignment"));
             if (!uuidOpt) {
                 continue;
@@ -444,7 +444,7 @@ QString LayoutAdaptor::getLayoutForScreenActivity(const QString& screenId, const
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, 0, activityId);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, 0, activityId);
@@ -462,7 +462,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen activity"));
         if (!layout) {
             return;
@@ -517,7 +517,7 @@ void LayoutAdaptor::setAllActivityAssignments(const QVariantMap& assignments)
         }
 
         QString layoutId = it.value().toString();
-        if (!layoutId.isEmpty() && !LayoutId::isAutotile(layoutId)) {
+        if (!layoutId.isEmpty() && !PhosphorLayout::LayoutId::isAutotile(layoutId)) {
             auto uuidOpt = parseAndValidateUuid(layoutId, QStringLiteral("batch activity assignment"));
             if (!uuidOpt) {
                 continue;
@@ -536,7 +536,7 @@ QString LayoutAdaptor::getLayoutForScreenDesktopActivity(const QString& screenId
 {
     QString resolvedId = Utils::screenIdForName(screenId);
     QString assignmentId = m_layoutManager->assignmentIdForScreen(resolvedId, virtualDesktop, activityId);
-    if (LayoutId::isAutotile(assignmentId)) {
+    if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
         return assignmentId;
     }
     auto* layout = m_layoutManager->layoutForScreen(resolvedId, virtualDesktop, activityId);
@@ -551,7 +551,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     }
 
     // Validate UUID for manual layouts, skip for autotile IDs
-    if (!LayoutId::isAutotile(layoutId)) {
+    if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         auto* layout = getValidatedLayout(layoutId, QStringLiteral("assign layout to screen desktop activity"));
         if (!layout) {
             return;

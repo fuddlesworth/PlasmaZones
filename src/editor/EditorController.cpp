@@ -12,9 +12,11 @@
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include "../common/layoutpreviewtoqml.h"
+#include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
 #include "../core/logging.h"
+#include "../core/utils.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
@@ -24,18 +26,50 @@
 
 namespace PlasmaZones {
 
+namespace {
+// Install the library-level screen-id resolver once per process so
+// Layout::fromJson() can normalise legacy connector names ("DP-2") to
+// EDID-based IDs ("LG:Model:Serial") during load. Uses QGuiApplication's
+// screen list via Utils::screenIdForName.
+void ensureScreenIdResolver()
+{
+    static const bool installed = [] {
+        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
+            if (name.isEmpty() || !Utils::isConnectorName(name))
+                return name;
+            return Utils::screenIdForName(name);
+        });
+        return true;
+    }();
+    (void)installed;
+}
+} // namespace
+
 EditorController::EditorController(QObject* parent)
-    : QObject(parent)
+    : QObject((ensureScreenIdResolver(), parent))
     , m_layoutService(new DBusLayoutService(this))
     , m_zoneManager(new ZoneManager(this))
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localLayoutSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
+    , m_localZonesSource(std::make_unique<PhosphorZones::ZonesLayoutSource>(m_localLayoutManager.get()))
     , m_localAutotileSource(
           std::make_unique<PhosphorTiles::AutotileLayoutSource>(PhosphorTiles::AlgorithmRegistry::instance()))
+    , m_localSource(std::make_unique<PhosphorLayout::CompositeLayoutSource>())
 {
+    m_localSource->addSource(m_localZonesSource.get());
+    m_localSource->addSource(m_localAutotileSource.get());
+
+    // Discover + register user-authored scripted algorithms in the shared
+    // AlgorithmRegistry singleton so standalone editor launches (daemon down)
+    // still surface them in layout pickers. The loader also sets up a
+    // QFileSystemWatcher so hot-edits roll through automatically.
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QStringLiteral("plasmazones/algorithms"), this);
+    scriptLoader->scanAndRegister();
+    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+            &EditorController::reloadLocalLayouts);
+
     // Populate the daemon-independent layout source from disk on startup
     // so localLayoutPreviews() returns a populated list immediately. The
     // LayoutManager installs a QFileSystemWatcher so subsequent disk
@@ -172,54 +206,33 @@ QVariantList EditorController::zones() const
 
 // ── Daemon-independent layout previews (PhosphorZones::ILayoutSource) ───────
 // Same shape as SettingsController's localLayoutPreviews — both processes
-// route through the shared layoutPreviewToQmlMap so QML preview-rendering
+// route through the shared toVariantMap so QML preview-rendering
 // code stays identical across the two consumers.
 
 QVariantList EditorController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (m_localLayoutSource) {
-        const auto manualPreviews = m_localLayoutSource->availableLayouts();
-        list.reserve(list.size() + manualPreviews.size());
-        for (const auto& preview : manualPreviews) {
-            list.append(layoutPreviewToQmlMap(preview));
-        }
+    if (!m_localSource) {
+        return list;
     }
-    if (m_localAutotileSource) {
-        const auto autotilePreviews = m_localAutotileSource->availableLayouts();
-        list.reserve(list.size() + autotilePreviews.size());
-        for (const auto& preview : autotilePreviews) {
-            list.append(layoutPreviewToQmlMap(preview));
-        }
+    const auto previews = m_localSource->availableLayouts();
+    list.reserve(previews.size());
+    for (const auto& preview : previews) {
+        list.append(toVariantMap(preview));
     }
     return list;
 }
 
 QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount) const
 {
-    if (id.isEmpty()) {
+    if (id.isEmpty() || !m_localSource) {
         return {};
     }
-    // Autotile previews carry an `autotile:<algorithmId>` id — route those
-    // to the algorithm source; everything else is a manual layout UUID.
-    if (id.startsWith(QLatin1String("autotile:"))) {
-        if (!m_localAutotileSource) {
-            return {};
-        }
-        const auto preview = m_localAutotileSource->previewAt(id, windowCount);
-        if (preview.id.isEmpty()) {
-            return {};
-        }
-        return layoutPreviewToQmlMap(preview);
-    }
-    if (!m_localLayoutSource) {
-        return {};
-    }
-    const auto preview = m_localLayoutSource->previewAt(id, windowCount);
+    const auto preview = m_localSource->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }
-    return layoutPreviewToQmlMap(preview);
+    return toVariantMap(preview);
 }
 
 void EditorController::reloadLocalLayouts()

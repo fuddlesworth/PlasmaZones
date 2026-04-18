@@ -21,6 +21,7 @@
 // namespace PlasmaZones below.
 #include <PhosphorLayoutApi/AspectRatioClass.h>
 #include <PhosphorLayoutApi/EdgeGaps.h>
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorZones/ZoneDefaults.h>
 #include <PhosphorZones/ZoneJsonKeys.h>
 
@@ -72,11 +73,9 @@ constexpr int MinimumZoneDisplaySizePx = 10; // Minimum zone size for display (c
 }
 
 // AspectRatioClass + ScreenClassification helpers live in
-// libs/phosphor-layout-api so every layout/tile provider can speak the same
-// classification vocabulary.  Aliased here so existing PlasmaZones::
-// AspectRatioClass / ScreenClassification:: callers compile unchanged.
-using AspectRatioClass = ::PhosphorLayout::AspectRatioClass;
-namespace ScreenClassification = ::PhosphorLayout::ScreenClassification;
+// libs/phosphor-layout-api as `PhosphorLayout::AspectRatioClass` /
+// `PhosphorLayout::ScreenClassification`. All PlasmaZones-side callers
+// reference them qualified directly — no aliases here.
 
 // PhosphorTiles::AutotileDefaults lives in autotile/AutotileConstants.h (re-included above).
 
@@ -247,32 +246,9 @@ inline constexpr QLatin1String Interface{"org.plasmazones.EditorController"};
 
 }
 
-/**
- * @brief PhosphorZones::Layout ID utilities for autotile algorithm layouts
- *
- * Autotile layouts use prefixed IDs: "autotile:algorithm-id"
- * Manual layouts use UUID strings.
- */
-namespace LayoutId {
-inline constexpr QLatin1String AutotilePrefix{"autotile:"};
-
-inline bool isAutotile(const QString& id)
-{
-    return id.startsWith(AutotilePrefix);
-}
-
-inline QString extractAlgorithmId(const QString& id)
-{
-    if (!isAutotile(id))
-        return QString();
-    return id.mid(AutotilePrefix.size());
-}
-
-inline QString makeAutotileId(const QString& algorithmId)
-{
-    return AutotilePrefix + algorithmId;
-}
-}
+// LayoutId lives in libs/phosphor-layout-api as `PhosphorLayout::LayoutId`.
+// All PlasmaZones-side callers reference it qualified directly — no alias
+// here.
 
 // EdgeGaps lives in libs/phosphor-layout-api as `PhosphorLayout::EdgeGaps`.
 // All PlasmaZones-side callers now reference it qualified directly — no

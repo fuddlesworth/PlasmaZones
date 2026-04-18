@@ -63,8 +63,31 @@ namespace {
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 } // anonymous namespace
 
+namespace {
+// Install the library-level screen-id resolver before any layouts load so
+// fromJson() can normalise legacy connector names ("DP-2") to the daemon's
+// EDID-based IDs ("LG:Model:Serial") during load. Installed on first Daemon
+// construction (a static local ensures it runs exactly once).
+struct InstallScreenIdResolver
+{
+    InstallScreenIdResolver()
+    {
+        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
+            if (name.isEmpty() || !Utils::isConnectorName(name))
+                return name;
+            return Utils::screenIdForName(name);
+        });
+    }
+};
+void ensureScreenIdResolver()
+{
+    static InstallScreenIdResolver s_installer;
+    (void)s_installer;
+}
+} // namespace
+
 Daemon::Daemon(QObject* parent)
-    : QObject(parent)
+    : QObject((ensureScreenIdResolver(), parent))
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
@@ -409,7 +432,8 @@ bool Daemon::init()
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
     // user-defined algorithms are registered in PhosphorTiles::AlgorithmRegistry before the
     // engine resolves the configured algorithm ID.
-    m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>();
+    m_scriptedAlgorithmLoader =
+        std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"));
     // When scripted algorithms change (hot-reload), notify layout list consumers
     connect(m_scriptedAlgorithmLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             [this]() {
@@ -572,13 +596,13 @@ bool Daemon::init()
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (LayoutId::isAutotile(assignmentId)) {
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileScreens.insert(screenId);
                 }
                 // Only show OSD for screens that actually changed
                 if (changedScreenIds.isEmpty() || changedScreenIds.contains(screenId)) {
                     if (autotileScreens.contains(screenId)) {
-                        osdEntries.append({screenId, true, LayoutId::extractAlgorithmId(assignmentId)});
+                        osdEntries.append({screenId, true, PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId)});
                     } else {
                         osdEntries.append({screenId, false, {}});
                     }

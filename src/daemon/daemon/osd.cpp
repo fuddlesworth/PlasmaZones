@@ -243,7 +243,7 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             }
             QVariantList zones =
                 PhosphorTiles::AlgorithmRegistry::generatePreviewZones(algo, windowCount > 0 ? windowCount : -1);
-            QString layoutId = LayoutId::makeAutotileId(algorithmId);
+            QString layoutId = PhosphorLayout::LayoutId::makeAutotileId(algorithmId);
             m_overlayService->showLayoutOsd(layoutId, displayName, zones,
                                             static_cast<int>(PhosphorZones::LayoutCategory::Autotile), false, screenId,
                                             algo->supportsMasterCount(), algo->producesOverlappingZones(),
@@ -296,7 +296,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
         if (!focusedScreenId.isEmpty()) {
             // Per-screen filter: only check the focused screen's mode
             const QString assignmentId = m_layoutManager->assignmentIdForScreen(focusedScreenId, desktop, activity);
-            if (LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 autotileActive = true;
             } else {
                 manualActive = true;
@@ -306,7 +306,7 @@ void Daemon::updateLayoutFilterForScreen(const QString& focusedScreenId)
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             for (const QString& screenId : effectiveIds) {
                 const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-                if (LayoutId::isAutotile(assignmentId)) {
+                if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                     autotileActive = true;
                 } else {
                     manualActive = true;
@@ -371,7 +371,7 @@ void Daemon::syncModeFromAssignments()
             // should trigger resnap via the global active layout signal. KCM saves
             // use populateResnapBufferForAllScreens() + resnapToNewLayout()
             // (per-screen, independent of global active layout) instead.
-            if (!LayoutId::isAutotile(focusedAssignmentId)) {
+            if (!PhosphorLayout::LayoutId::isAutotile(focusedAssignmentId)) {
                 PhosphorZones::Layout* desktopLayout =
                     m_layoutManager->layoutForScreen(focusedScreenId, desktop, activity);
                 if (desktopLayout && desktopLayout != m_layoutManager->activeLayout()) {
@@ -422,8 +422,8 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
             continue;
         }
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
-        if (LayoutId::isAutotile(assignmentId)) {
-            const QString algoId = LayoutId::extractAlgorithmId(assignmentId);
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
+            const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
             auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algoId);
             const QString displayName = algo ? algo->name() : algoId;
             showAlgorithmOsdDeferred(algoId, displayName, screenId);

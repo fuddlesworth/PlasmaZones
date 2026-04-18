@@ -74,7 +74,7 @@ public:
         qputenv("XDG_DATA_DIRS", m_xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_xdgRoot.path().toUtf8());
 
-        m_loader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>();
+        m_loader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"));
         m_loader->scanAndRegister();
 
         // Verify a minimum number of algorithms loaded to catch silent JS/builtin failures

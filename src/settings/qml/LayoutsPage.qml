@@ -143,7 +143,7 @@ ColumnLayout {
                     "label": i18n("Persistent (Memory)"),
                     "order": 3,
                     "test": (a) => {
-                        return a.memory === true;
+                        return a.supportsMemory === true;
                     }
                 }, {
                     "key": "customParams",
@@ -200,7 +200,7 @@ ColumnLayout {
                         }, "builtin", i18n("Built-in"), "user", i18n("User Scripts"));
                         else if (groupIdx === filterBar.groupPersistent)
                             return Logic.groupByBoolKey(filtered, (item) => {
-                            return item.memory === true;
+                            return item.supportsMemory === true;
                         }, "persistent", i18n("Persistent"), "stateless", i18n("Stateless"));
                         return Logic.ungrouped(filtered);
                     }
@@ -509,7 +509,7 @@ ColumnLayout {
         readonly property bool isAlgorithm: layoutToDelete && layoutToDelete.isAutotile === true
 
         title: isAlgorithm ? i18n("Delete Algorithm") : i18n("Delete Layout")
-        subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.name || "") : ""
+        subtitle: layoutToDelete ? i18n("Are you sure you want to delete \"%1\"?", layoutToDelete.displayName || "") : ""
         standardButtons: Kirigami.Dialog.NoButton
         onRejected: layoutToDelete = null
         onClosed: layoutToDelete = null

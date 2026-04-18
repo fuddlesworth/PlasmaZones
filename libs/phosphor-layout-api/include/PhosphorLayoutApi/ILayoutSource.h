@@ -63,7 +63,8 @@ public:
     ///
     /// Returns a default-constructed preview (empty @c id) when @p id is
     /// not known to this source. Caller checks `result.id.isEmpty()`.
-    virtual LayoutPreview previewAt(const QString& id, int windowCount = 4, const QSize& canvas = {}) const = 0;
+    virtual LayoutPreview previewAt(const QString& id, int windowCount = DefaultPreviewWindowCount,
+                                    const QSize& canvas = {}) const = 0;
 
 protected:
     ILayoutSource() = default;

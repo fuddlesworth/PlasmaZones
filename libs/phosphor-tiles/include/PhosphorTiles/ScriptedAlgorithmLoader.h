@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -18,18 +18,29 @@ namespace PhosphorTiles {
  * Scans system and user algorithm directories for .js files, creates
  * ScriptedAlgorithm instances, and registers them with AlgorithmRegistry.
  * Watches directories and files via QFileSystemWatcher with debounced
- * refresh (same pattern as ShaderRegistry) so that new/modified/deleted
- * scripts are picked up automatically.
+ * refresh so that new/modified/deleted scripts are picked up automatically.
  *
- * User scripts in ~/.local/share/plasmazones/algorithms/ override system
- * scripts with the same filename.
+ * The application injects the subdirectory name (relative to
+ * `QStandardPaths::GenericDataLocation`) at construction — the library is
+ * brand-agnostic. For PlasmaZones this is `"plasmazones/algorithms"`.
+ *
+ * User scripts under `writableLocation/<subdirectory>/` override system
+ * scripts with the same filename (system dirs come from every XDG
+ * GenericDataLocation entry, in order).
  */
 class PHOSPHORTILES_EXPORT ScriptedAlgorithmLoader : public QObject
 {
     Q_OBJECT
 
 public:
-    explicit ScriptedAlgorithmLoader(QObject* parent = nullptr);
+    /**
+     * @brief Construct a loader for @p subdirectory under XDG data dirs.
+     *
+     * @p subdirectory is a relative path (no leading slash) appended to
+     * every `QStandardPaths::GenericDataLocation` entry. Pass the empty
+     * string to disable all discovery (the loader becomes a no-op).
+     */
+    explicit ScriptedAlgorithmLoader(const QString& subdirectory, QObject* parent = nullptr);
     ~ScriptedAlgorithmLoader() override;
 
     /**
@@ -48,7 +59,9 @@ public:
 
     /**
      * @brief Writable user directory path for custom algorithms
-     * @return Absolute path to ~/.local/share/plasmazones/algorithms/
+     * @return Absolute path to the configured subdirectory under
+     *         `QStandardPaths::writableLocation(GenericDataLocation)`,
+     *         or empty string if the subdirectory was empty.
      */
     QString userAlgorithmDir() const;
 
@@ -72,6 +85,7 @@ private:
     void watchDirectory(const QString& dirPath);
     QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 
+    QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path

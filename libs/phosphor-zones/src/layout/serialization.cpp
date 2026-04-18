@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Layout JSON serialization / deserialization.
 // Part of Layout class — split from layout.cpp for SRP.
@@ -251,13 +251,20 @@ Layout* Layout::fromJson(const QJsonObject& json, QObject* parent)
     LayoutUtils::deserializeAllowLists(json, layout->m_allowedScreens, layout->m_allowedDesktops,
                                        layout->m_allowedActivities);
 
-    // Note: allowedScreens may contain either connector names ("DP-2") or
-    // EDID-based screen IDs ("LG:Model:115107"). Resolution between the
-    // two forms happens at visibility-check time via screensMatch — this
-    // load path stores the strings verbatim. (Previously this loop did an
-    // eager connector-name → screen-ID translation via QGuiApplication,
-    // which forced a daemon-side dependency that prevented zones from
-    // running headless in the editor / settings preview path.)
+    // Translate any legacy connector names ("DP-2") in allowedScreens to the
+    // application's stable screen identifier ("LG:Model:Serial") if a
+    // resolver is installed. Daemon / editor / settings install a resolver
+    // that walks QGuiApplication::screens(); headless contexts leave the
+    // resolver unset and the strings pass through verbatim. Equality-path
+    // matches (same connector on both sides) still work without a resolver.
+    if (const auto& resolver = Layout::screenIdResolver(); resolver) {
+        for (int i = 0; i < layout->m_allowedScreens.size(); ++i) {
+            const QString resolved = resolver(layout->m_allowedScreens[i]);
+            if (!resolved.isEmpty()) {
+                layout->m_allowedScreens[i] = resolved;
+            }
+        }
+    }
 
     const auto zonesArray = json[::PhosphorZones::ZoneJsonKeys::Zones].toArray();
     for (const auto& zoneValue : zonesArray) {

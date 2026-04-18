@@ -168,7 +168,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
     writeQmlProperty(window, QStringLiteral("layoutName"), layout->name());
     writeQmlProperty(window, QStringLiteral("screenAspectRatio"), aspectRatio);
     writeQmlProperty(window, QStringLiteral("aspectRatioClass"),
-                     ScreenClassification::toString(layout->aspectRatioClass()));
+                     PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass()));
     writeQmlProperty(window, QStringLiteral("category"), static_cast<int>(PhosphorZones::LayoutCategory::Manual));
     writeQmlProperty(window, QStringLiteral("autoAssign"), layout->autoAssign());
     writeAutotileMetadata(window, false, false);
@@ -178,7 +178,7 @@ void OverlayService::showLayoutOsdImpl(PhosphorZones::Layout* layout, const QStr
                          : PhosphorZones::LayoutUtils::zonesToVariantList(layout, PhosphorZones::ZoneField::Full));
     writeFontProperties(window, m_settings);
 
-    qreal layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
+    qreal layoutAR = PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
     sizeAndCenterOsd(window, surface, physScreen, screenGeom, layoutAR);
     QMetaObject::invokeMethod(window, "show");
     qCInfo(lcOverlay) << (locked ? "Locked" : "PhosphorZones::Layout") << "OSD: layout=" << layout->name()
@@ -217,8 +217,9 @@ void OverlayService::showLayoutOsd(const QString& id, const QString& name, const
         if (uuidOpt && m_layoutManager) {
             PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
             if (layout) {
-                arClass = ScreenClassification::toString(layout->aspectRatioClass());
-                layoutAR = ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
+                arClass = PhosphorLayout::ScreenClassification::toString(layout->aspectRatioClass());
+                layoutAR =
+                    PhosphorLayout::ScreenClassification::aspectRatioForClass(layout->aspectRatioClass(), aspectRatio);
             }
         }
         writeQmlProperty(window, QStringLiteral("aspectRatioClass"), arClass);

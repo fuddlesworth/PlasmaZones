@@ -1185,7 +1185,7 @@ public:
     /**
      * @brief Current app class for a windowId, preferring the live registry.
      *
-     * Equivalent to Utils::extractAppId() when no registry is attached. With
+     * Equivalent to PhosphorIdentity::WindowId::extractAppId() when no registry is attached. With
      * a registry, returns the latest appId for the instance id — so snap rule
      * matching against a freshly-renamed window (Electron/CEF) sees the
      * current class.

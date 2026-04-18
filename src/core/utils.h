@@ -185,74 +185,13 @@ inline constexpr QLatin1StringView Down{"down"};
 // Window ID Utilities
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/**
- * @brief Extract app identity from a full window ID
- *
- * Delegates to ::PhosphorIdentity::WindowId::extractAppId (canonical implementation in compositor-common).
- */
-inline QString extractAppId(const QString& windowId)
-{
-    return ::PhosphorIdentity::WindowId::extractAppId(windowId);
-}
-
-// extractWindowClass() was removed — it was an alias for extractAppId() that
-// only made call sites read "windowClass" instead of "appId". Runtime class
-// lookups go through WindowTrackingService::currentAppIdFor or
-// AutotileEngine::currentAppIdFor on the daemon side, which hit the live
-// WindowRegistry instead of parsing the frozen composite key. On the effect
-// side, the live class is read directly via getWindowAppId() — there is no
-// effect-local app-id cache.
-
-/**
- * @brief Extract the stable KWin instance identifier (UUID) from a full window ID.
- *
- * Window ID format: "appId|internalId" where internalId is KWin's QUuid string.
- * The instance id is stable for the window's lifetime; the appId is mutable
- * (KWin emits windowClassChanged / desktopFileNameChanged for apps like
- * Electron/CEF that swap their identity after the surface is mapped).
- *
- * Use this as the primary runtime key for any per-window storage so lookups
- * remain valid across class mutations.
- *
- * @param windowId Full window ID
- * @return Instance id portion, or the original string if no separator found
- */
-inline QString extractInstanceId(const QString& windowId)
-{
-    return ::PhosphorIdentity::WindowId::extractInstanceId(windowId);
-}
-
-// composeWindowId() was removed — the "appId|uuid" composite format is no
-// longer used. Runtime windowIds are the compositor's opaque instance id;
-// class metadata lives separately in WindowRegistry and is never joined
-// back into a single string.
-
-/**
- * @brief Segment-aware app ID matching.
- *
- * Returns true if @p pattern matches @p appId using dot-segment-boundary rules.
- * Handles both directions and partial last-segment prefixes.
- *
- * Match rules (all case-insensitive):
- *   - Exact: "firefox" == "firefox"
- *   - Trailing dot-segment: "firefox" matches "org.mozilla.firefox"
- *   - Reverse trailing: "org.mozilla.firefox" matches appId "firefox"
- *   - Last-segment prefix: "systemsettings" matches "org.kde.systemsettings5"
- *     (pattern matches start of appId's last dot-segment)
- *
- * Does NOT match arbitrary substrings: "fire" does NOT match "firefox"
- * because "fire" is not a complete segment and the last segment "firefox"
- * does not start with "fire" (length 4 < 5 threshold to prevent short matches).
- */
-/**
- * @brief Segment-aware app ID matching for exclusion lists.
- *
- * Delegates to ::PhosphorIdentity::WindowId::appIdMatches (canonical implementation in compositor-common).
- */
-inline bool appIdMatches(const QString& appId, const QString& pattern)
-{
-    return ::PhosphorIdentity::WindowId::appIdMatches(appId, pattern);
-}
+// Window-id parsing utilities (extractAppId / extractInstanceId / appIdMatches)
+// live in libs/phosphor-identity as `PhosphorIdentity::WindowId::*`. All
+// PlasmaZones-side callers reference them qualified directly — no forwarding
+// wrappers here.  composeWindowId() and extractWindowClass() were removed
+// together with the old `"appId|uuid"` composite format: runtime windowIds
+// are now the compositor's opaque instance id, and class metadata lives in
+// WindowRegistry instead of being joined back into a single string.
 
 /**
  * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)

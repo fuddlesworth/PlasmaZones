@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Layout static factory methods for predefined layout templates.
 // Part of Layout class — split from layout.cpp for SRP.

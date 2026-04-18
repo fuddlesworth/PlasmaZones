@@ -24,11 +24,11 @@ void populatePreviewSavedSettings(PhosphorTiles::AlgorithmRegistry::PreviewParam
 {
     for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
         QVariantMap entry{
-            {PhosphorTiles::PerAlgoKeys::MasterCount, it.value().masterCount},
-            {PhosphorTiles::PerAlgoKeys::SplitRatio, it.value().splitRatio},
+            {PhosphorTiles::AutotileJsonKeys::MasterCount, it.value().masterCount},
+            {PhosphorTiles::AutotileJsonKeys::SplitRatio, it.value().splitRatio},
         };
         if (!it.value().customParams.isEmpty()) {
-            entry[PhosphorTiles::PerAlgoKeys::CustomParams] = it.value().customParams;
+            entry[PhosphorTiles::AutotileJsonKeys::CustomParams] = it.value().customParams;
         }
         params.savedAlgorithmSettings[it.key()] = entry;
     }

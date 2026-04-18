@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorLayoutApi/GapKeys.h>
 #include <QLatin1String>
 
 namespace PhosphorZones {
@@ -96,12 +97,14 @@ inline constexpr QLatin1String FixedY{"fixedY"};
 inline constexpr QLatin1String FixedWidth{"fixedWidth"};
 inline constexpr QLatin1String FixedHeight{"fixedHeight"};
 
-// Per-side outer-gap keys.
-inline constexpr QLatin1String UsePerSideOuterGap{"usePerSideOuterGap"};
-inline constexpr QLatin1String OuterGapTop{"outerGapTop"};
-inline constexpr QLatin1String OuterGapBottom{"outerGapBottom"};
-inline constexpr QLatin1String OuterGapLeft{"outerGapLeft"};
-inline constexpr QLatin1String OuterGapRight{"outerGapRight"};
+// Per-side outer-gap keys — canonical definition in phosphor-layout-api's
+// GapKeys.h (shared with phosphor-tiles AutotileConstants). Re-exported so
+// in-tree ZoneJsonKeys callers can keep their references unchanged.
+using PhosphorLayout::GapKeys::OuterGapBottom;
+using PhosphorLayout::GapKeys::OuterGapLeft;
+using PhosphorLayout::GapKeys::OuterGapRight;
+using PhosphorLayout::GapKeys::OuterGapTop;
+using PhosphorLayout::GapKeys::UsePerSideOuterGap;
 
 } // namespace ZoneJsonKeys
 

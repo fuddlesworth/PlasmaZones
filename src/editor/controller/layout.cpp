@@ -574,7 +574,7 @@ void EditorController::loadLayout(const QString& layoutId)
         QJsonValue arVal = layoutObj[QLatin1String(::PhosphorZones::ZoneJsonKeys::AspectRatioClassKey)];
         if (arVal.isString()) {
             // Canonical format from PhosphorZones::Layout::toJson() — string like "ultrawide"
-            m_aspectRatioClass = static_cast<int>(ScreenClassification::fromString(arVal.toString()));
+            m_aspectRatioClass = static_cast<int>(PhosphorLayout::ScreenClassification::fromString(arVal.toString()));
         } else {
             // Int format (from editor save round-trip before daemon persists)
             m_aspectRatioClass = arVal.toInt(0);

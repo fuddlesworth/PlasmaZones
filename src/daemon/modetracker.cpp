@@ -54,7 +54,7 @@ bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) cons
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);
-        if (LayoutId::isAutotile(assignmentId)) {
+        if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             return true;
         }
     }

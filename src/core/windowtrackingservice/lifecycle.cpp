@@ -730,7 +730,7 @@ void WindowTrackingService::onLayoutChanged()
         if (cached == screenIsAutotile.constEnd()) {
             QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(windowScreen, currentDesktop, currentActivity);
-            cached = screenIsAutotile.insert(windowScreen, LayoutId::isAutotile(assignmentId));
+            cached = screenIsAutotile.insert(windowScreen, PhosphorLayout::LayoutId::isAutotile(assignmentId));
         }
         if (*cached) {
             continue;

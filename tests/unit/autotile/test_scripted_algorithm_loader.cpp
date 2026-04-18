@@ -93,7 +93,7 @@ private Q_SLOTS:
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
 
         QSignalSpy spy(&*loader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged);
         loader->scanAndRegister();
@@ -107,7 +107,7 @@ private Q_SLOTS:
         // below verifies isUserScript() with separate system/user directories.
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
     }
 
     // =========================================================================
@@ -138,7 +138,7 @@ private Q_SLOTS:
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
         loader->scanAndRegister();
 
         auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
@@ -148,7 +148,7 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:special!char")));
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
     }
 
     // =========================================================================
@@ -176,7 +176,7 @@ private Q_SLOTS:
         qputenv("XDG_DATA_HOME", (xdgRoot.path() + QStringLiteral("/user")).toUtf8());
 
         std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
         loader->scanAndRegister();
 
         auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
@@ -189,7 +189,7 @@ private Q_SLOTS:
         QVERIFY(algo->isUserScript()); // user version should be marked as user script
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
     }
 
     // =========================================================================
@@ -213,7 +213,7 @@ private Q_SLOTS:
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
         std::optional<PhosphorTiles::ScriptedAlgorithmLoader> loader;
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
         loader->scanAndRegister();
 
         auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
@@ -227,7 +227,7 @@ private Q_SLOTS:
         QVERIFY(!registry->hasAlgorithm(QStringLiteral("script:ephemeral")));
 
         loader.reset();
-        loader.emplace();
+        loader.emplace(QStringLiteral("plasmazones/algorithms"));
     }
 
     // =========================================================================
@@ -248,7 +248,7 @@ private Q_SLOTS:
 
         qputenv("XDG_DATA_HOME", xdgRoot.path().toUtf8());
 
-        PhosphorTiles::ScriptedAlgorithmLoader loader;
+        PhosphorTiles::ScriptedAlgorithmLoader loader(QStringLiteral("plasmazones/algorithms"));
         loader.ensureUserDirectoryExists();
 
         // The directory should now exist

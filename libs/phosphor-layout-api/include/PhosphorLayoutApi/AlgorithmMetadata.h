@@ -42,7 +42,7 @@ struct PHOSPHORLAYOUTAPI_EXPORT AlgorithmMetadata
     /// True when the algorithm carries persistent per-screen state across
     /// sessions (BSP-style trees that remember user splits). Picker may
     /// surface a "remembers your splits" indicator.
-    bool memory = false;
+    bool supportsMemory = false;
 
     /// True when the algorithm is loaded from a JS script file rather than
     /// a built-in C++ implementation. Affects how the picker renders the

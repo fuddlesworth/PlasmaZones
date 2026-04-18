@@ -3,11 +3,11 @@
 
 /**
  * @file test_window_identity.cpp
- * @brief Unit tests for Utils::extractAppId() — the composite-key parser.
+ * @brief Unit tests for PhosphorIdentity::WindowId::extractAppId() — the composite-key parser.
  *
  * The effect produces window ids in the form "appId|instanceId" (frozen at
  * first observation). Every daemon map keys off that composite. Services
- * that need the first-seen app class parse it with Utils::extractAppId();
+ * that need the first-seen app class parse it with PhosphorIdentity::WindowId::extractAppId();
  * services that need the LIVE app class (Electron/CEF apps that mutate
  * their WM_CLASS mid-session) query WindowTrackingService::currentAppIdFor
  * or AutotileEngine::currentAppIdFor, both of which hit WindowRegistry.
@@ -30,7 +30,7 @@
 
 #include "../../../src/core/utils.h"
 
-using PlasmaZones::Utils::extractAppId;
+using PhosphorIdentity::WindowId::extractAppId;
 
 class TestWindowIdentity : public QObject
 {

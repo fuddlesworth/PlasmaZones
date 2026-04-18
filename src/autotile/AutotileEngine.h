@@ -124,7 +124,7 @@ public:
      * @brief Wire up the shared WindowRegistry.
      *
      * Optional — tests construct the engine without a registry and fall back
-     * to string parsing (Utils::extractAppId). Production daemons set this to
+     * to string parsing (PhosphorIdentity::WindowId::extractAppId). Production daemons set this to
      * the daemon-root registry so class lookups return the latest value after
      * an Electron/CEF app renames itself mid-session.
      *
@@ -1251,7 +1251,7 @@ private:
      * hit the most recent value. Falls back to parsing the composite form
      * when no registry is attached (unit tests, legacy callers).
      *
-     * Use this anywhere you'd otherwise call Utils::extractAppId(windowId)
+     * Use this anywhere you'd otherwise call PhosphorIdentity::WindowId::extractAppId(windowId)
      * on the canonical form — the canonical string is frozen at first
      * observation, so parsing it returns a stale class after mutation.
      */

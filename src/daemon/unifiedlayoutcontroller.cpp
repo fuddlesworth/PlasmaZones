@@ -44,7 +44,7 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
 
 UnifiedLayoutController::~UnifiedLayoutController() = default;
 
-QVector<UnifiedLayoutEntry> UnifiedLayoutController::layouts() const
+QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
@@ -69,12 +69,12 @@ bool UnifiedLayoutController::applyLayoutByNumber(int number)
 bool UnifiedLayoutController::applyLayoutById(const QString& layoutId)
 {
     const auto list = layouts();
-    const UnifiedLayoutEntry* entry = PhosphorZones::LayoutUtils::findLayout(list, layoutId);
-    if (!entry) {
+    const PhosphorLayout::LayoutPreview* preview = PhosphorZones::LayoutUtils::findLayout(list, layoutId);
+    if (!preview) {
         qCWarning(lcDaemon) << "applyLayoutById: layout not found:" << layoutId;
         return false;
     }
-    return applyEntry(*entry);
+    return applyEntry(*preview);
 }
 
 bool UnifiedLayoutController::applyLayoutByIndex(int index)
@@ -125,8 +125,8 @@ void UnifiedLayoutController::cycle(bool forward)
     }
 
     qCInfo(lcDaemon) << "cycle: listSize=" << list.size() << "currentIdx=" << currentIndex << "nextIdx=" << nextIndex
-                     << "from=" << (currentIndex < list.size() ? list[currentIndex].name : QStringLiteral("?"))
-                     << "to=" << (nextIndex < list.size() ? list[nextIndex].name : QStringLiteral("?"));
+                     << "from=" << (currentIndex < list.size() ? list[currentIndex].displayName : QStringLiteral("?"))
+                     << "to=" << (nextIndex < list.size() ? list[nextIndex].displayName : QStringLiteral("?"));
 
     applyLayoutByIndex(nextIndex);
 }
@@ -186,14 +186,14 @@ void UnifiedLayoutController::setLayoutFilter(bool includeManual, bool includeAu
     m_cacheValid = false;
 }
 
-bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
+bool UnifiedLayoutController::applyEntry(const PhosphorLayout::LayoutPreview& preview)
 {
     // Handle autotile entries: assign autotile ID to the current screen.
     // The daemon's layoutAssigned handler calls updateAutotileScreens() which
     // derives per-screen autotile state from assignments automatically.
-    if (entry.isAutotile) {
+    if (preview.isAutotile()) {
         if (m_autotileEngine && m_layoutManager) {
-            QString algoId = LayoutId::extractAlgorithmId(entry.id);
+            QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(preview.id);
             // Assign layout FIRST so that layoutAssigned → updateAutotileScreens()
             // updates per-screen overrides before setAlgorithm's deferred retile.
             // Without this ordering, setAlgorithm's retile uses stale per-screen
@@ -204,22 +204,22 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
                 // priority over a desktop-only entry in the cascade, and a
                 // different activity falls through to the broader entry.
                 m_layoutManager->assignLayoutById(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
-                                                  entry.id);
+                                                  preview.id);
             }
             m_autotileEngine->setAlgorithm(algoId);
-            setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied autotile algorithm=" << entry.name;
-            Q_EMIT autotileApplied(entry.name, 0);
+            setCurrentLayoutId(preview.id);
+            qCInfo(lcDaemon) << "Applied autotile algorithm=" << preview.displayName;
+            Q_EMIT autotileApplied(preview.displayName, 0);
             return true;
         }
-        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << entry.id;
+        qCWarning(lcDaemon) << "applyEntry: autotile engine not available for" << preview.id;
         return false;
     }
 
     // Manual layout: assign the UUID to the current screen.
     // If the previous assignment was autotile, it gets replaced and
     // updateAutotileScreens() will remove the screen from autotile set.
-    auto uuidOpt = Utils::parseUuid(entry.id);
+    auto uuidOpt = Utils::parseUuid(preview.id);
     if (uuidOpt && m_layoutManager) {
         PhosphorZones::Layout* layout = m_layoutManager->layoutById(*uuidOpt);
         if (layout) {
@@ -230,8 +230,8 @@ bool UnifiedLayoutController::applyEntry(const UnifiedLayoutEntry& entry)
                 // and contexts keep their existing fallback layout.
                 m_layoutManager->assignLayout(m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, layout);
             }
-            setCurrentLayoutId(entry.id);
-            qCInfo(lcDaemon) << "Applied unified layout=" << entry.name << "screen=" << m_currentScreenName;
+            setCurrentLayoutId(preview.id);
+            qCInfo(lcDaemon) << "Applied unified layout=" << preview.displayName << "screen=" << m_currentScreenName;
             Q_EMIT layoutApplied(layout);
             return true;
         }

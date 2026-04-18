@@ -10,7 +10,8 @@
 #include "../core/layoutmanager.h"
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../core/unifiedlayoutentry.h"
+#include "../common/layoutpreviewserialize.h"
+#include "../core/unifiedlayoutlist.h"
 #include "../core/geometryutils.h"
 #include "../core/screenmanager.h"
 #include "../core/utils.h"
@@ -977,7 +978,7 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
         if (!resolvedId.isEmpty()) {
             const QString assignmentId =
                 layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);
-            if (LayoutId::isAutotile(assignmentId)) {
+            if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
                 includeManual = false;
                 includeAutotile = true;
             } else {
@@ -990,7 +991,7 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
         Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
-    return PhosphorZones::LayoutUtils::toVariantList(entries);
+    return PlasmaZones::toVariantList(entries);
 }
 
 void OverlayService::setLayoutFilter(bool includeManual, bool includeAutotile)

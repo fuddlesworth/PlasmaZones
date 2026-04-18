@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
@@ -14,6 +14,7 @@
 #include <QString>
 #include <QJsonArray>
 #include <QJsonObject>
+#include <functional>
 #include <memory>
 
 namespace PhosphorZones {
@@ -397,6 +398,22 @@ public:
     // Serialization
     QJsonObject toJson() const;
     static Layout* fromJson(const QJsonObject& json, QObject* parent = nullptr);
+
+    /// Screen-id resolver. Install a callback that maps a legacy connector
+    /// name (e.g. "DP-2") to the application's stable screen identifier
+    /// (EDID-based, "LG:Model:Serial"). The library calls it for every
+    /// entry in `allowedScreens` during @c fromJson so in-memory layouts
+    /// hold normalized IDs regardless of what the file stores.
+    ///
+    /// The callback typically requires a live QGuiApplication (to enumerate
+    /// connected QScreens). Install from the daemon / editor / settings
+    /// processes only; leave unset for headless / test code, in which case
+    /// strings are stored verbatim.
+    ///
+    /// Passing a default-constructed function clears the resolver.
+    using ScreenIdResolver = std::function<QString(const QString&)>;
+    static void setScreenIdResolver(ScreenIdResolver resolver);
+    static const ScreenIdResolver& screenIdResolver();
 
     // Predefined layouts (templates)
     static Layout* createColumnsLayout(int columns, QObject* parent = nullptr);

@@ -29,10 +29,10 @@ QString serializeZonesToClipboard(const QVariantList& zones)
         zoneObj[QLatin1String("id")] = QUuid::createUuid().toString();
         zoneObj[QLatin1String("name")] = zone[::PhosphorZones::ZoneJsonKeys::Name].toString();
         zoneObj[QLatin1String("zoneNumber")] = zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber].toInt();
-        zoneObj[QLatin1String("x")] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
-        zoneObj[QLatin1String("y")] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
-        zoneObj[QLatin1String("width")] = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
-        zoneObj[QLatin1String("height")] = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::X] = zone[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Y] = zone[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Width] = zone[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        zoneObj[::PhosphorZones::ZoneJsonKeys::Height] = zone[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Appearance properties
         zoneObj[QLatin1String("highlightColor")] = zone[::PhosphorZones::ZoneJsonKeys::HighlightColor].toString();
@@ -89,10 +89,10 @@ QVariantList deserializeZonesFromClipboard(const QString& clipboardText)
         zone[::PhosphorZones::ZoneJsonKeys::Id] = zoneObj[QLatin1String("id")].toString();
         zone[::PhosphorZones::ZoneJsonKeys::Name] = zoneObj[QLatin1String("name")].toString();
         zone[::PhosphorZones::ZoneJsonKeys::ZoneNumber] = zoneObj[QLatin1String("zoneNumber")].toInt();
-        zone[::PhosphorZones::ZoneJsonKeys::X] = zoneObj[QLatin1String("x")].toDouble();
-        zone[::PhosphorZones::ZoneJsonKeys::Y] = zoneObj[QLatin1String("y")].toDouble();
-        zone[::PhosphorZones::ZoneJsonKeys::Width] = zoneObj[QLatin1String("width")].toDouble();
-        zone[::PhosphorZones::ZoneJsonKeys::Height] = zoneObj[QLatin1String("height")].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::X] = zoneObj[::PhosphorZones::ZoneJsonKeys::X].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Y] = zoneObj[::PhosphorZones::ZoneJsonKeys::Y].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Width] = zoneObj[::PhosphorZones::ZoneJsonKeys::Width].toDouble();
+        zone[::PhosphorZones::ZoneJsonKeys::Height] = zoneObj[::PhosphorZones::ZoneJsonKeys::Height].toDouble();
 
         // Appearance properties
         zone[::PhosphorZones::ZoneJsonKeys::HighlightColor] = zoneObj[QLatin1String("highlightColor")].toString();

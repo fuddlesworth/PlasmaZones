@@ -15,6 +15,11 @@
 
 namespace PhosphorLayout {
 
+/// Reference window count used by `ILayoutSource::previewAt` when the caller
+/// doesn't specify one. Picked so most picker thumbnails render a visually
+/// representative layout without visiting the algorithm's empty state.
+inline constexpr int DefaultPreviewWindowCount = 4;
+
 /// Renderer-ready snapshot of one layout entry (manual zone layout OR autotile
 /// algorithm result). Plain data — no Qt object lifecycle, no signals.
 ///
@@ -62,11 +67,6 @@ struct PHOSPHORLAYOUTAPI_EXPORT LayoutPreview
     /// example geometry).
     int zoneCount = 0;
 
-    /// True when this preview backs an autotile algorithm rather than a
-    /// static manual layout. Toggles UI affordances (system-vs-user badge,
-    /// algorithm-specific parameter editors via @c algorithm metadata).
-    bool isAutotile = false;
-
     /// True when the layout matches the rendering canvas's aspect ratio
     /// well enough to be a "recommended" pick. False entries can still
     /// render (they just appear in a collapsed "Other" section in the
@@ -101,10 +101,32 @@ struct PHOSPHORLAYOUTAPI_EXPORT LayoutPreview
     /// auto-snap behaviour at the daemon side; renderer ignores.
     bool autoAssign = false;
 
-    /// Optional autotile algorithm metadata. Present when @c isAutotile is
-    /// true; nullopt otherwise. Picker reads this for capability flags
-    /// (supports master count / split ratio editors, lock badge, etc.).
+    /// True when the layout is "system-owned" and should render with a
+    /// lock badge in the picker. For manual layouts this reflects whether
+    /// the layout file came from the system install (vs. a user-created
+    /// copy). For autotile layouts it mirrors
+    /// @c AlgorithmMetadata::isSystemEntry (built-in C++ algorithms and
+    /// system-installed scripts = system; user scripts = not system).
+    /// Sources populate this at preview construction — consumers treat
+    /// it as authoritative.
+    bool isSystem = false;
+
+    /// Optional autotile algorithm metadata. Presence is the sole signal
+    /// that this preview backs an autotile algorithm rather than a static
+    /// manual layout — @c isAutotile() reads the optional's has_value().
+    /// Picker reads the metadata for capability flags (supports master
+    /// count / split ratio editors, lock badge, etc.).
     std::optional<AlgorithmMetadata> algorithm;
+
+    /// True when this preview backs an autotile algorithm (equivalent to
+    /// `algorithm.has_value()`). Consumers branch on this to toggle UI
+    /// affordances like the system-vs-user badge and algorithm-specific
+    /// parameter editors. The invariant `isAutotile() == algorithm.has_value()`
+    /// holds by construction — the flag is computed, not stored.
+    bool isAutotile() const noexcept
+    {
+        return algorithm.has_value();
+    }
 };
 
 } // namespace PhosphorLayout

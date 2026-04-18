@@ -6,7 +6,8 @@
 // Zones-local logging categories. Distinct names from the daemon-side
 // lcZone / lcLayout categories so we don't collide at link time —
 // daemon and library each own their own log filtering knob
-// (org.plasmazones.zones / org.phosphor.zones respectively).
+// (org.phosphor.zones.zone / org.phosphor.zones.layout — see
+// zoneslogging.cpp for the registered names).
 
 #include <QLoggingCategory>
 

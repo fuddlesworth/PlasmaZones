@@ -105,13 +105,16 @@ Item {
             required property var modelData
             required property int index
             // Parse relative geometry — clamp to [0, 1] to handle fixed-geometry
-            // layouts whose reference screen differs from current (zones can exceed 1.0)
-            property var relGeo: modelData.relativeGeometry || {
-            }
-            property real relX: Math.max(0, Math.min(relGeo.x || 0, 1))
-            property real relY: Math.max(0, Math.min(relGeo.y || 0, 1))
-            property real relWidth: Math.max(0, Math.min(relGeo.width || 0.25, 1 - relX))
-            property real relHeight: Math.max(0, Math.min(relGeo.height || 1, 1 - relY))
+            // layouts whose reference screen differs from current (zones can exceed 1.0).
+            // Zones may come from LayoutPreview (flat x/y/w/h) or the legacy
+            // zonesToVariantList shape (nested relativeGeometry); prefer flat,
+            // fall back to nested.
+            property var relGeo: modelData.relativeGeometry || ({
+            })
+            property real relX: Math.max(0, Math.min((modelData.x !== undefined ? modelData.x : (relGeo.x || 0)), 1))
+            property real relY: Math.max(0, Math.min((modelData.y !== undefined ? modelData.y : (relGeo.y || 0)), 1))
+            property real relWidth: Math.max(0, Math.min((modelData.width !== undefined ? modelData.width : (relGeo.width || 0.25)), 1 - relX))
+            property real relHeight: Math.max(0, Math.min((modelData.height !== undefined ? modelData.height : (relGeo.height || 1)), 1 - relY))
             // Check if this zone is selected (by index, highlightAllZones, or by zone ID)
             property bool isZoneSelected: {
                 // Highlight all zones when any is selected (highlightAllZones mode)
@@ -281,8 +284,8 @@ Item {
             required property int index
             readonly property var relGeo: modelData.relativeGeometry || ({
             })
-            readonly property real relX: relGeo.x || 0
-            readonly property real relY: relGeo.y || 0
+            readonly property real relX: modelData.x !== undefined ? modelData.x : (relGeo.x || 0)
+            readonly property real relY: modelData.y !== undefined ? modelData.y : (relGeo.y || 0)
             readonly property real leftOffset: relX < 0.01 ? root.edgeGap : root.zonePadding / 2
             readonly property real topOffset: relY < 0.01 ? root.edgeGap : root.zonePadding / 2
 
