@@ -12,6 +12,8 @@
 #include <PhosphorShortcuts/IBackend.h>
 #include <PhosphorShortcuts/Registry.h>
 
+#include <algorithm>
+
 namespace PlasmaZones {
 
 namespace {
@@ -409,6 +411,11 @@ void ShortcutManager::registerShortcuts()
                 m_settingsDirty = false;
                 updateShortcuts();
             }
+            // Replay any adhoc (un)registrations that arrived while the
+            // initial batch was in flight. Must run AFTER the in-progress
+            // flag is cleared so each drained op goes through the normal
+            // path instead of re-queuing itself.
+            drainPendingAdhocOps();
         },
         Qt::SingleShotConnection);
 
@@ -464,14 +471,19 @@ void ShortcutManager::registerAdhocShortcut(const QString& id, const QKeySequenc
     // Adhoc registration during the initial settings-driven batch would race
     // the batched BindShortcuts on the Portal backend (the per-batch Request
     // subscription gets torn down mid-flight when the adhoc flush fires,
-    // leaving m_confirmedBound out of sync with the compositor). Real-world
-    // callers (WindowDragAdaptor Escape grab) all fire in response to user
-    // actions post-init — reject the call loudly if something changes that
-    // assumption rather than racing silently. Q_ASSERT_X would only fire in
-    // debug; use a runtime warning so release builds are protected too.
+    // leaving m_confirmedBound out of sync with the compositor). Queue the
+    // request instead of dropping it — the Registry ready() callback drains
+    // pending ops after the initial batch settles, so a drag that fires in
+    // the first few hundred ms after daemon startup still gets its Escape
+    // cancel-overlay grab (just slightly later). De-dup: any earlier
+    // (un)register for the same id is superseded — last write wins.
     if (m_registrationInProgress) {
-        qCWarning(lcShortcuts) << "registerAdhocShortcut(" << id
-                               << "): called during initial registration — ignoring (would race BindShortcuts)";
+        m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
+                                               [&id](const PendingAdhocOp& op) {
+                                                   return op.id == id;
+                                               }),
+                                m_pendingAdhocOps.end());
+        m_pendingAdhocOps.push_back({PendingAdhocOp::Register, id, sequence, description, std::move(callback)});
         return;
     }
     m_registry->bind(id, sequence, description, std::move(callback), /*persistent=*/false);
@@ -492,8 +504,50 @@ void ShortcutManager::unregisterAdhocShortcut(const QString& id)
         // shutdown) — release is implicit since the entire session is gone.
         return;
     }
+    // Same race as registerAdhocShortcut: if the initial batch is still in
+    // flight, queue the unregister. Supersede any pending register for the
+    // same id — register-then-unregister before the batch drains is just a
+    // no-op.
+    if (m_registrationInProgress) {
+        const auto wasRegister =
+            std::find_if(m_pendingAdhocOps.cbegin(), m_pendingAdhocOps.cend(), [&id](const PendingAdhocOp& op) {
+                return op.id == id && op.kind == PendingAdhocOp::Register;
+            });
+        m_pendingAdhocOps.erase(std::remove_if(m_pendingAdhocOps.begin(), m_pendingAdhocOps.end(),
+                                               [&id](const PendingAdhocOp& op) {
+                                                   return op.id == id;
+                                               }),
+                                m_pendingAdhocOps.end());
+        // Only queue an Unregister if the id hasn't already been seen as a
+        // pending Register — cancelling a never-sent register is a no-op and
+        // queuing Unregister for it would send a spurious release to the
+        // backend for an id it never heard of.
+        if (wasRegister == m_pendingAdhocOps.cend()) {
+            m_pendingAdhocOps.push_back({PendingAdhocOp::Unregister, id, {}, {}, {}});
+        }
+        return;
+    }
     m_registry->unbind(id);
     m_registry->flush();
+}
+
+void ShortcutManager::drainPendingAdhocOps()
+{
+    if (m_pendingAdhocOps.isEmpty()) {
+        return;
+    }
+    // Swap-and-iterate so a callback that itself calls (un)registerAdhocShortcut
+    // lands in a fresh queue rather than mutating the one we're draining.
+    QVector<PendingAdhocOp> ops;
+    m_pendingAdhocOps.swap(ops);
+    qCInfo(lcShortcuts) << "Draining" << ops.size() << "deferred adhoc shortcut op(s) after initial registration";
+    for (auto& op : ops) {
+        if (op.kind == PendingAdhocOp::Register) {
+            registerAdhocShortcut(op.id, op.sequence, op.description, std::move(op.callback));
+        } else {
+            unregisterAdhocShortcut(op.id);
+        }
+    }
 }
 
 void ShortcutManager::rebindAll()

@@ -42,7 +42,7 @@ enum class NavigationDirection {
  * below. The actual key-grab mechanism (KGlobalAccel / XDG Portal /
  * D-Bus trigger) is selected inside the PhosphorShortcuts library.
  */
-class ShortcutManager : public QObject, public Phosphor::Shortcuts::IAdhocRegistrar
+class ShortcutManager : public QObject, public Phosphor::Shortcuts::Integration::IAdhocRegistrar
 {
     Q_OBJECT
 
@@ -116,8 +116,28 @@ private:
         std::function<void()> fire;
     };
 
+    // Adhoc registration deferred because the initial settings-driven
+    // registration batch was in flight when the caller arrived. Drained from
+    // the Registry ready() callback so subsystems that bind shortcuts in
+    // response to user actions (e.g. WindowDragAdaptor's Escape cancel on
+    // drag start) don't silently lose their grab when the drag fires in the
+    // first few hundred ms after daemon startup on a Portal compositor.
+    struct PendingAdhocOp
+    {
+        enum Kind {
+            Register,
+            Unregister
+        };
+        Kind kind;
+        QString id;
+        QKeySequence sequence;
+        QString description;
+        std::function<void()> callback;
+    };
+
     void buildEntries();
     void rebindAll();
+    void drainPendingAdhocOps();
 
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
@@ -126,6 +146,7 @@ private:
     std::unique_ptr<Phosphor::Shortcuts::Registry> m_registry;
 
     QVector<Entry> m_entries;
+    QVector<PendingAdhocOp> m_pendingAdhocOps;
 
     bool m_registrationInProgress = false;
     bool m_settingsDirty = false;

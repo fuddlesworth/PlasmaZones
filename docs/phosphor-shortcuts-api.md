@@ -160,7 +160,12 @@ Contract details worth knowing:
   `registerShortcut` so the backend can refresh its "reset to default" target
   (KGlobalAccel's `setDefaultShortcut`, Portal's `preferred_trigger`) —
   backend implementations handle repeated `registerShortcut` idempotently.
-  Subsequent `currentSeq`-only change → `updateShortcut`.
+  Subsequent `currentSeq`-only change → `updateShortcut`. Portal's
+  `updateShortcut` additionally short-circuits when the passed `defaultSeq`
+  matches the last successfully-acknowledged `preferred_trigger` for that
+  id: `newTrigger` is unused on Portal (spec limitation), so a rebind of
+  the user's custom sequence with defaults unchanged has nothing to tell
+  the compositor — avoiding a wasted `BindShortcuts` round-trip.
 - **Description changes are local-only.** The `updateShortcut` signature has
   no description argument; a `bind()` that updates only the description
   reaches the Registry (visible via `bindings()`) but does not roundtrip
@@ -198,14 +203,18 @@ entry with `unbind()` on exit.
 
 For subsystems that need a transient grab without taking a hard dependency
 on the concrete shortcut-manager type, the library exposes
-`Phosphor::Shortcuts::IAdhocRegistrar` — a pure-abstract two-method
-interface (`registerAdhocShortcut` / `unregisterAdhocShortcut`) that the
-consumer's manager implements. Subsystems hold an `IAdhocRegistrar*` and
-call through it; the underlying Registry stays private to the manager.
+`Phosphor::Shortcuts::Integration::IAdhocRegistrar` — a pure-abstract
+two-method interface (`registerAdhocShortcut` / `unregisterAdhocShortcut`)
+that the consumer's manager implements. Subsystems hold an
+`Integration::IAdhocRegistrar*` and call through it; the underlying
+Registry stays private to the manager. The `Integration` sub-namespace
+signals that this is a contract consumers *implement* to plug their own
+glue into the library, not library machinery itself — the library
+provides no implementation.
 
 ```cpp
 class WindowDragAdaptor {
-    Phosphor::Shortcuts::IAdhocRegistrar* m_registrar = nullptr;
+    Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_registrar = nullptr;
     void onDragStart() {
         m_registrar->registerAdhocShortcut("cancel_overlay", QKeySequence(Qt::Key_Escape),
                                            tr("Cancel"), [this]{ cancelDrag(); });
@@ -215,9 +224,16 @@ class WindowDragAdaptor {
 ```
 
 The PlasmaZones daemon's `ShortcutManager` implements `IAdhocRegistrar`
-and refuses adhoc registrations during the initial settings-driven batch
-(would race the Portal `BindShortcuts` Response). Other consumers may
-implement different bind-flow semantics.
+and **queues** adhoc (un)registrations that arrive during the initial
+settings-driven batch (they would otherwise race the Portal
+`BindShortcuts` Response and desynchronise `m_confirmedBound`). The
+queue is drained from the Registry `ready()` callback, so a user action
+that fires in the first few hundred ms after daemon startup on a Portal
+compositor (a drag that binds an Escape cancel grab, say) still gets
+its shortcut — just slightly later than usual. De-dup is last-write-wins
+per id; a pending register superseded by an unregister before drain
+never reaches the backend. Other consumers may implement different
+bind-flow semantics.
 
 One KGlobalAccel-specific caveat: each `unbind()` → `unregisterShortcut()`
 on that backend runs `KGlobalAccel::removeAllShortcuts(action)`, which wipes

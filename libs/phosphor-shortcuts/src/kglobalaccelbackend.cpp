@@ -76,9 +76,19 @@ KGlobalAccelBackend::~KGlobalAccelBackend()
     // destroy them anyway. We delete explicitly to clear the hash table's
     // pointers in the right order (action gone, entry cleared) and avoid
     // relying on implicit child-destruction ordering.
+    //
+    // disconnect() before delete: the per-action triggered lambda captures
+    // `this` (the backend). If a queued QAction::triggered event is
+    // dispatched during the delete loop (vanishingly unlikely on the same
+    // thread, but possible across D-Bus dispatch), the lambda would emit
+    // activated() on a mid-destruction QObject. Severing the connection
+    // first makes the race unreachable.
     for (auto& entry : m_impl->entries) {
-        delete entry.action;
-        entry.action = nullptr;
+        if (entry.action) {
+            entry.action->disconnect();
+            delete entry.action;
+            entry.action = nullptr;
+        }
     }
 }
 

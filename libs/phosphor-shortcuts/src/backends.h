@@ -114,6 +114,23 @@ private:
     // compositor-side" (the spec limitation where the key stays routed to us
     // until session close — see unregisterShortcut for the full rationale).
     QSet<QString> m_confirmedBound;
+
+    // Snapshot of m_pending captured right before the most recent
+    // sendBindShortcuts dispatch. Consumed by handleBindShortcutsResponse on
+    // a successful Response to promote ids into m_lastSentPreferred; cleared
+    // on RPC failure (no promotion). Superseded responses never reach this
+    // field because onAnyRequestResponse drops them by path compare.
+    QHash<QString, Pending> m_pendingBindResponse;
+
+    // Per-id preferred_trigger that the compositor has successfully
+    // acknowledged via a BindShortcuts Response. updateShortcut uses this
+    // to short-circuit "rebind with same defaultSeq": Portal's newTrigger
+    // argument is ignored (spec limitation), so when defaultSeq hasn't
+    // changed since the last confirmed send there is nothing to tell the
+    // portal. Without this gate, every user rebind of currentSeq on
+    // KGlobalAccel-side would round-trip a useless BindShortcuts RPC on
+    // Portal compositors.
+    QHash<QString, QKeySequence> m_lastSentPreferred;
 };
 
 #ifdef PHOSPHORSHORTCUTS_HAVE_KGLOBALACCEL

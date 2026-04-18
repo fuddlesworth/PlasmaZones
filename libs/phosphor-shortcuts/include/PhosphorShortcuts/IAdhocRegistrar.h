@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace Phosphor::Shortcuts {
+namespace Phosphor::Shortcuts::Integration {
 
 /**
  * Reduced-surface registrar interface for subsystems that need to bind a
@@ -16,15 +16,17 @@ namespace Phosphor::Shortcuts {
  * cancel grab held only during a window drag) without taking a hard
  * dependency on the concrete shortcut-manager type that owns the Registry.
  *
- * Lives in PhosphorShortcuts so a future standalone Phosphor WM (or any
- * other consumer of the library) can offer the same contract without
- * defining its own copy in app code. The library does not provide an
- * implementation — implementing this is the consumer-side glue between
- * the consumer's "shortcut manager" object and the underlying Registry,
- * and is responsible for whatever bind-flow + flush ordering its app
- * needs (the PlasmaZones implementation, for example, refuses adhoc
- * registration during the initial settings-driven batch to avoid racing
- * the Portal BindShortcuts batch).
+ * Lives in the `Integration` sub-namespace rather than directly under
+ * `Phosphor::Shortcuts` to make the split explicit: the library (Registry,
+ * IBackend, the concrete backends) is the shortcut machinery itself;
+ * `Integration` is the set of contracts consumers *implement* to plug
+ * their own glue into that machinery. The library provides no
+ * implementation of IAdhocRegistrar — each consumer wires its own
+ * "shortcut manager" object to the underlying Registry, with whatever
+ * bind-flow + flush ordering its app needs (the PlasmaZones
+ * implementation, for example, queues adhoc registrations that arrive
+ * during the initial settings-driven batch and drains them once the
+ * Portal BindShortcuts Response lands).
  *
  * Pure abstract C++; no QObject inheritance, no Qt signals — keeps the
  * interface usable from non-QObject consumers.
@@ -57,4 +59,4 @@ public:
     virtual void unregisterAdhocShortcut(const QString& id) = 0;
 };
 
-} // namespace Phosphor::Shortcuts
+} // namespace Phosphor::Shortcuts::Integration

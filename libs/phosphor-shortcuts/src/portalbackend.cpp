@@ -157,17 +157,31 @@ void PortalBackend::updateShortcut(const QString& id, const QKeySequence& defaul
     // any compositor that surfaces preferred_trigger as a default — but
     // that's a behaviour the consumer chose by binding both seqs.
     auto it = m_pending.find(id);
-    if (it == m_pending.end()) {
-        // Already flushed; re-queue so the next flush re-sends with the
-        // current default. Description is known because m_descriptions.contains
-        // check above passed.
-        Pending p;
-        p.preferred = defaultSeq;
-        p.description = m_descriptions.value(id);
-        m_pending.insert(id, p);
+    if (it != m_pending.end()) {
+        // Already queued for next flush — refresh the preferred in-place.
+        // No short-circuit here: the pending entry hasn't reached the portal
+        // yet, so even a same-value update still needs the flush to happen.
+        it->preferred = defaultSeq;
         return;
     }
-    it->preferred = defaultSeq;
+
+    // Not in pending. Short-circuit when defaultSeq matches what we last
+    // successfully delivered to the compositor: Portal ignores newTrigger,
+    // so with defaultSeq unchanged the RPC would carry no new information
+    // and only cost a BindShortcuts round-trip. Without this gate every
+    // user rebind of currentSeq (which Registry funnels through
+    // updateShortcut) would trigger a useless flush.
+    const auto lastIt = m_lastSentPreferred.constFind(id);
+    if (lastIt != m_lastSentPreferred.constEnd() && *lastIt == defaultSeq) {
+        return;
+    }
+
+    // defaultSeq has drifted from the last confirmed send (or was never
+    // confirmed). Re-queue so the next flush carries the new preferred.
+    Pending p;
+    p.preferred = defaultSeq;
+    p.description = m_descriptions.value(id);
+    m_pending.insert(id, p);
 }
 
 void PortalBackend::unregisterShortcut(const QString& id)
@@ -175,6 +189,11 @@ void PortalBackend::unregisterShortcut(const QString& id)
     const bool wasConfirmed = m_confirmedBound.remove(id);
     m_pending.remove(id);
     m_descriptions.remove(id);
+    m_lastSentPreferred.remove(id);
+    // If an in-flight BindShortcuts batch was carrying this id, drop it from
+    // the snapshot so a successful Response doesn't promote a since-released
+    // grab back into m_lastSentPreferred.
+    m_pendingBindResponse.remove(id);
     // IMPORTANT: the XDG GlobalShortcuts spec has no per-id UnbindShortcuts —
     // BindShortcuts is additive (it "binds new shortcuts", it does not
     // replace the full set), and the only release path is closing the
@@ -332,7 +351,14 @@ void PortalBackend::handleCreateSessionResponse(uint response, const QVariantMap
 
     qCInfo(lcPhosphorShortcuts) << "Portal GlobalShortcuts session ready:" << m_sessionHandle;
 
-    if (m_flushRequested || !m_pending.isEmpty()) {
+    // Honour the IBackend contract: registerShortcut queues, and only an
+    // explicit flush() (which sets m_flushRequested when the session isn't
+    // ready yet) may dispatch to the portal. A non-empty m_pending alone
+    // must NOT trigger a send here — consumers queuing ids without flushing
+    // should not leak out to the portal just because a session became ready.
+    // The only caller today is Registry, which always flushes, so this is a
+    // contract-cleanliness fix rather than a visible-behaviour one.
+    if (m_flushRequested) {
         m_flushRequested = false;
         if (m_pending.isEmpty()) {
             Q_EMIT ready();
@@ -392,11 +418,16 @@ void PortalBackend::sendBindShortcuts()
 
     QDBusPendingCall pending = QDBusConnection::sessionBus().asyncCall(msg);
 
-    // Snapshot the entries we just dispatched so a failure path can restore
-    // them into m_pending for the next flush() to retry. Without this, an RPC
-    // failure (auth refused, bus disconnect) silently drops the grabs and the
-    // consumer has no way to recover except re-binding everything from scratch.
-    QHash<QString, Pending> dispatched = m_pending;
+    // Snapshot the entries we just dispatched so (a) a failure path can
+    // restore them into m_pending for the next flush() to retry, and (b) a
+    // successful Response can promote their preferred_trigger into
+    // m_lastSentPreferred for the updateShortcut short-circuit. Store on
+    // the member rather than a lambda capture so handleBindShortcutsResponse
+    // (which runs via the unified Response dispatcher, not this watcher) can
+    // consume it. A second sendBindShortcuts supersedes any prior snapshot —
+    // the superseded Response is dropped at onAnyRequestResponse by path
+    // compare, so the snapshot is safe to overwrite.
+    m_pendingBindResponse = m_pending;
     m_pending.clear();
 
     // Capture the path this watcher belongs to. If a second sendBindShortcuts
@@ -406,37 +437,40 @@ void PortalBackend::sendBindShortcuts()
     // and only emit ready() if WE were the live request.
     const QString myRequestPath = m_bindRequestPath;
     auto* watcher = new QDBusPendingCallWatcher(pending, this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this, watcher, myRequestPath, dispatched = std::move(dispatched)]() mutable {
-                watcher->deleteLater();
-                QDBusPendingReply<> reply = *watcher;
-                if (!reply.isError()) {
-                    // Happy path: Response will arrive via onAnyRequestResponse
-                    // and emit ready() from handleBindShortcutsResponse.
-                    return;
-                }
+    connect(watcher, &QDBusPendingCallWatcher::finished, this, [this, watcher, myRequestPath]() {
+        watcher->deleteLater();
+        QDBusPendingReply<> reply = *watcher;
+        if (!reply.isError()) {
+            // Happy path: Response will arrive via onAnyRequestResponse and
+            // emit ready() from handleBindShortcutsResponse, which also
+            // consumes m_pendingBindResponse.
+            return;
+        }
 
-                qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
+        qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts failed:" << reply.error().message();
 
-                // Restore the grabs we tried to send so a subsequent flush()
-                // (or the consumer's own retry) can re-attempt. Only restore
-                // ids the consumer hasn't unregistered in the meantime —
-                // m_descriptions is the live "still wanted" set.
-                for (auto it = dispatched.constBegin(); it != dispatched.constEnd(); ++it) {
-                    if (m_descriptions.contains(it.key()) && !m_pending.contains(it.key())) {
-                        m_pending.insert(it.key(), it.value());
-                    }
-                }
+        // Superseded request: a newer sendBindShortcuts has replaced our
+        // snapshot and owns m_bindRequestPath. Don't touch shared state —
+        // the live request's own completion path will fire ready() and
+        // consume its own snapshot.
+        if (m_bindRequestPath != myRequestPath) {
+            return;
+        }
 
-                // Only the request that's still considered "live" gets to
-                // clear the dispatch tag and emit ready. A superseded request
-                // must not touch m_bindRequestPath (that path now belongs to a
-                // newer in-flight call) or fire ready (the newer call will).
-                if (m_bindRequestPath == myRequestPath) {
-                    m_bindRequestPath.clear();
-                    Q_EMIT ready();
-                }
-            });
+        // Restore the grabs we tried to send so a subsequent flush() (or
+        // the consumer's own retry) can re-attempt. Only restore ids the
+        // consumer hasn't unregistered in the meantime — m_descriptions is
+        // the live "still wanted" set. Do NOT promote into
+        // m_lastSentPreferred: these ids never reached the portal.
+        for (auto it = m_pendingBindResponse.constBegin(); it != m_pendingBindResponse.constEnd(); ++it) {
+            if (m_descriptions.contains(it.key()) && !m_pending.contains(it.key())) {
+                m_pending.insert(it.key(), it.value());
+            }
+        }
+        m_pendingBindResponse.clear();
+        m_bindRequestPath.clear();
+        Q_EMIT ready();
+    });
 }
 
 void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap& results)
@@ -449,6 +483,13 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
 
     if (response != 0) {
         qCWarning(lcPhosphorShortcuts) << "Portal BindShortcuts Response: failed with response code" << response;
+        // Portal rejected the batch. Drop the snapshot without promoting
+        // any id into m_lastSentPreferred — nothing reached the compositor.
+        // We don't restore m_pending here (unlike the RPC-failure path):
+        // the portal acknowledged receipt of the call but refused the
+        // contents, and blindly re-queuing would loop. Consumers can
+        // re-bind explicitly if they want to retry.
+        m_pendingBindResponse.clear();
         Q_EMIT ready();
         return;
     }
@@ -479,10 +520,21 @@ void PortalBackend::handleBindShortcutsResponse(uint response, const QVariantMap
             // but cheap to avoid).
             if (!id.isEmpty() && m_descriptions.contains(id)) {
                 m_confirmedBound.insert(id);
+                // Promote into m_lastSentPreferred using the preferred we
+                // actually sent (from the dispatch snapshot). If the id
+                // wasn't in the snapshot (Response carries ids from prior
+                // batches too — BindShortcuts is additive), leave
+                // m_lastSentPreferred unchanged: we never claimed to have
+                // refreshed it in this batch.
+                const auto snapIt = m_pendingBindResponse.constFind(id);
+                if (snapIt != m_pendingBindResponse.constEnd()) {
+                    m_lastSentPreferred.insert(id, snapIt->preferred);
+                }
             }
         }
         arg.endArray();
     }
+    m_pendingBindResponse.clear();
     qCDebug(lcPhosphorShortcuts) << "Portal BindShortcuts Response: success, results=" << results;
     Q_EMIT ready();
 }

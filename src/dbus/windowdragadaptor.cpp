@@ -30,7 +30,7 @@ namespace PlasmaZones {
 // a drag. Matches the pre-library object name so kglobalshortcutsrc entries
 // created by earlier installs continue to resolve. QLatin1String is constexpr-
 // constructible from a string literal in Qt 6, so we pay zero per-call
-// conversion at the IAdhocRegistrar boundary (QString accepts it implicitly).
+// conversion at the Integration::IAdhocRegistrar boundary (QString accepts it implicitly).
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,

@@ -406,7 +406,7 @@ bool Daemon::init()
 
     // Give the window drag adaptor access to the shortcut manager for
     // registering/unregistering the Escape cancel shortcut during drags.
-    // Routed through the Phosphor::Shortcuts::IAdhocRegistrar interface so the underlying
+    // Routed through the Phosphor::Shortcuts::Integration::IAdhocRegistrar interface so the underlying
     // Registry stays private to ShortcutManager.
     m_windowDragAdaptor->setShortcutRegistrar(m_shortcutManager.get());
 

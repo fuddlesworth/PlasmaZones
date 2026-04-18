@@ -16,7 +16,7 @@
 
 class QScreen;
 
-namespace Phosphor::Shortcuts {
+namespace Phosphor::Shortcuts::Integration {
 class IAdhocRegistrar;
 }
 
@@ -84,7 +84,7 @@ public:
      * shutdown (member destruction order: unique_ptr members destruct before
      * ~QObject runs, so ShortcutManager dies before this adaptor does).
      */
-    void setShortcutRegistrar(Phosphor::Shortcuts::IAdhocRegistrar* registrar)
+    void setShortcutRegistrar(Phosphor::Shortcuts::Integration::IAdhocRegistrar* registrar)
     {
         m_shortcutRegistrar = registrar;
     }
@@ -319,7 +319,7 @@ private:
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check
-    Phosphor::Shortcuts::IAdhocRegistrar* m_shortcutRegistrar =
+    Phosphor::Shortcuts::Integration::IAdhocRegistrar* m_shortcutRegistrar =
         nullptr; // Non-owning: owned by Daemon (ShortcutManager)
 
     // Snap-assist deferred compute state. Populated in dragStopped when snap

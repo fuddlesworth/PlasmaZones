@@ -234,7 +234,7 @@ target_link_libraries(plasmazones_core
         Qt6::WaylandClientPrivate
 )
 
-# PhosphorShortcuts: plasmazones_core uses ONLY the IAdhocRegistrar header
+# PhosphorShortcuts: plasmazones_core uses ONLY the Integration::IAdhocRegistrar header
 # (consumed by WindowDragAdaptor); the daemon links the shared library
 # binary (see target_link_libraries(plasmazonesd ...) below). Wire the
 # headers via INTERFACE-only include — pulls no .so dependency into
