@@ -3,6 +3,8 @@
 
 #include "easingcurve.h"
 
+#include "logging.h"
+
 #include <QLocale>
 #include <QStringList>
 #include <QLoggingCategory>
