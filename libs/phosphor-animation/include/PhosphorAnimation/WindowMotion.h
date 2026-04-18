@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QPointF>
@@ -12,6 +12,7 @@
 #include <QtGlobal>
 
 #include <chrono>
+#include <memory>
 
 namespace PhosphorAnimation {
 
@@ -46,11 +47,10 @@ namespace PhosphorAnimation {
  *
  * ## Curve type
  *
- * `easing` is a concrete `Easing` value — Spring + user-registered
- * curves are not yet wired through to WindowMotion. Phase 2 replaces
- * the field with `std::shared_ptr<const Curve>` once `WindowAnimator`
- * is migrated; that lives in a follow-up PR so the migration touches
- * one consumer at a time.
+ * `curve` is `shared_ptr<const Curve>` so any registered curve subclass
+ * (Easing, Spring, third-party) drives window motion via polymorphic
+ * `evaluate()`. A null curve is interpreted as linear progression — the
+ * cached progress simply equals normalized time `t`.
  */
 struct PHOSPHORANIMATION_EXPORT WindowMotion
 {
@@ -59,7 +59,7 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
     QRect targetGeometry; ///< Final geometry (duplicate detection)
     std::chrono::milliseconds startTime{-1}; ///< presentTime at start (-1 = pending)
     qreal duration = 150.0; ///< Animation length in milliseconds
-    Easing easing; ///< Curve evaluated per frame
+    std::shared_ptr<const Curve> curve; ///< Polymorphic curve evaluated per frame; null = linear
     qreal cachedProgress = 0.0; ///< Eased progress (per-frame snapshot)
 
     /// True once @ref startTime has been latched (first paint seen).
@@ -95,8 +95,19 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
             return;
         }
         const qreal elapsed = qreal((presentTime - startTime).count());
-        const qreal t = qMin(1.0, elapsed / duration);
-        cachedProgress = easing.evaluate(t);
+        if (elapsed >= duration) {
+            // Terminal frame — snap to exactly 1.0 regardless of curve
+            // shape. Spring-like curves whose `evaluate(1)` lands within
+            // their settle band (e.g. 0.98 for underdamped at 2% settle)
+            // would otherwise paint a visible 2% miss on the last frame
+            // before the controller prunes the motion. Stateless curves
+            // typically already return 1.0 at t=1; this path makes the
+            // endpoint uniform across every Curve subclass.
+            cachedProgress = 1.0;
+            return;
+        }
+        const qreal t = elapsed / duration;
+        cachedProgress = curve ? curve->evaluate(t) : t;
     }
 
     /// Eased progress cached by updateProgress(). See Overshoot above.

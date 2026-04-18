@@ -79,6 +79,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/ProfileTree.h
     include/PhosphorAnimation/WindowMotion.h
     include/PhosphorAnimation/AnimationMath.h
+    include/PhosphorAnimation/AnimationController.h
     include/PhosphorAnimation/StaggerTimer.h
 )
 

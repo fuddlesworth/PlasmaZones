@@ -1,13 +1,18 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/Spring.h>
 #include <PhosphorAnimation/WindowMotion.h>
 
 #include <QTest>
 
+#include <memory>
+
 using namespace std::chrono_literals;
 
 using PhosphorAnimation::Easing;
+using PhosphorAnimation::Spring;
 using PhosphorAnimation::WindowMotion;
 
 class TestWindowMotion : public QObject
@@ -51,7 +56,25 @@ private Q_SLOTS:
 
         QVERIFY(p0 <= pHalf);
         QVERIFY(pHalf <= pEnd);
-        QVERIFY(pEnd >= 0.99);
+        // Terminal frame snaps to exactly 1.0 regardless of curve shape
+        // — see WindowMotion::updateProgress.
+        QCOMPARE(pEnd, 1.0);
+    }
+
+    void testTerminalFrameSnapsToExactlyOne()
+    {
+        // Springs whose evaluate(1) sits in the 2% settle band (e.g.
+        // 0.98 for underdamped) must still paint exactly at the target
+        // on the last frame — the terminal clamp in updateProgress
+        // guarantees that regardless of curve shape.
+        WindowMotion m;
+        m.duration = 100.0;
+        m.curve = std::make_shared<Spring>(Spring::snappy());
+        m.updateProgress(std::chrono::milliseconds(0)); // latch
+        m.updateProgress(std::chrono::milliseconds(100));
+        QCOMPARE(m.progress(), 1.0);
+        m.updateProgress(std::chrono::milliseconds(250));
+        QCOMPARE(m.progress(), 1.0);
     }
 
     void testIsCompleteAfterDuration()
@@ -115,6 +138,48 @@ private Q_SLOTS:
 
         m.targetGeometry = QRect(0, 0, 200, 100);
         QVERIFY(m.hasScaleChange());
+    }
+
+    void testNullCurveProgressesLinearly()
+    {
+        // A null curve is a valid state — the progress field falls back
+        // to the raw normalized t. Useful for default-constructed
+        // motion records and as a sentinel.
+        WindowMotion m;
+        m.duration = 100.0;
+        m.curve = nullptr;
+        m.updateProgress(std::chrono::milliseconds(0));
+        m.updateProgress(std::chrono::milliseconds(50));
+        QVERIFY(qAbs(m.progress() - 0.5) < 1e-6);
+    }
+
+    void testPolymorphicCurveDispatchesViaSharedPtr()
+    {
+        // Spring + Easing both drive WindowMotion through the same
+        // shared_ptr<const Curve> field — that's the whole point of
+        // the Phase-2 polymorphic upgrade. Sampled at mid-progression
+        // (t=0.5) the two curves produce numerically distinct values,
+        // which proves the dispatch is actually calling Spring::evaluate
+        // and Easing::evaluate through the shared base pointer.
+        WindowMotion easingMotion;
+        easingMotion.duration = 100.0;
+        easingMotion.curve = std::make_shared<Easing>();
+
+        WindowMotion springMotion;
+        springMotion.duration = 100.0;
+        springMotion.curve = std::make_shared<Spring>(Spring::snappy());
+
+        easingMotion.updateProgress(std::chrono::milliseconds(0));
+        springMotion.updateProgress(std::chrono::milliseconds(0));
+        easingMotion.updateProgress(std::chrono::milliseconds(50));
+        springMotion.updateProgress(std::chrono::milliseconds(50));
+
+        QVERIFY(easingMotion.progress() >= 0.0 && easingMotion.progress() <= 1.5);
+        QVERIFY(springMotion.progress() >= 0.0 && springMotion.progress() <= 1.5);
+        // Proof of dispatch: the two curves evaluate to different values
+        // at t=0.5. If both were silently routed through the same path
+        // (e.g. always linear), this would fail.
+        QVERIFY(qAbs(easingMotion.progress() - springMotion.progress()) > 1.0e-3);
     }
 };
 

@@ -73,6 +73,9 @@ public:
     qreal settleTime() const override;
     QString toString() const override;
     std::unique_ptr<Curve> clone() const override;
+    /// True for underdamped springs (ζ < 1) which oscillate past target.
+    /// Critical / overdamped never overshoot.
+    bool overshoots() const override;
 
     /// Overrides `Curve::equals()` to delegate to the tight
     /// `operator==`. The base default compares `toString()` forms,

@@ -3,6 +3,7 @@
 
 #include "plasmazoneseffect.h"
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/StaggerTimer.h>
 
@@ -149,7 +150,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
-    , m_windowAnimator(std::make_unique<WindowAnimator>(this))
+    , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
 {
@@ -1754,7 +1755,10 @@ void PlasmaZonesEffect::loadCachedSettings()
         m_cachedAnimationDuration = d;
     });
     loadSettingAsync(QStringLiteral("animationEasingCurve"), [this](const QVariant& v) {
-        m_windowAnimator->setEasingCurve(PhosphorAnimation::Easing::fromString(v.toString()));
+        // Polymorphic curve parse — handles bare bezier, named easing,
+        // and "spring:..." in one path so Spring can drive snap motion
+        // end-to-end without a settings-side branch.
+        m_windowAnimator->setCurve(PhosphorAnimation::CurveRegistry::instance().create(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));
@@ -3302,9 +3306,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             if (m_windowAnimator->isAnimatingToTarget(window, geo)) {
                 return; // Already animating to this target
             }
-            // Capture current visual state before changing anything (mid-flight redirect)
-            animStartPos = m_windowAnimator->currentVisualPosition(window);
-            animStartSize = m_windowAnimator->currentVisualSize(window);
+            // Capture current visual state before changing anything (mid-flight redirect).
+            // The fallback (old frame) is unreachable under the hasAnimation() gate
+            // above, but pass it explicitly so a stray call outside the gate still
+            // yields a meaningful start state instead of the origin.
+            animStartPos = m_windowAnimator->currentVisualPosition(window, oldFrame.topLeft());
+            animStartSize = m_windowAnimator->currentVisualSize(window, oldFrame.size());
             m_windowAnimator->removeAnimation(window);
         } else {
             animStartPos = oldFrame.topLeft();
