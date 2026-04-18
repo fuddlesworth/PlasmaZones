@@ -104,9 +104,14 @@ public:
         return m_curve;
     }
 
+    /// Minimum translate distance (in px) before a transition is worth
+    /// animating. Clamped to [0, 10000] — the upper bound is a sanity
+    /// cap so a pathological config value doesn't silently disable every
+    /// animation. Callers that want a tighter clamp should apply it
+    /// themselves (the effect's settings loader clamps to [0, 200]).
     void setMinDistance(int pixels)
     {
-        m_minDistance = qMax(0, pixels);
+        m_minDistance = qBound(0, pixels, 10000);
     }
     int minDistance() const
     {
@@ -130,9 +135,17 @@ public:
      *
      * Returns false (and does nothing) when:
      *   - @ref isEnabled() is false,
+     *   - @ref isHandleValid returns false for @p handle (adapters
+     *     reject stale / null handles here so nothing downstream needs
+     *     to re-check),
      *   - the geometry-based skip rules in @ref AnimationMath::createSnapMotion
      *     reject the transition (degenerate target, sub-threshold delta
      *     with no scale change).
+     *
+     * Re-calling for a handle that already has an in-flight motion
+     * overwrites it; @ref onAnimationStarted fires again. Adapters that
+     * want smooth retarget should pass the current @ref currentVisualPosition
+     * / @ref currentVisualSize as the start state before overwriting.
      *
      * Otherwise the motion is stored, @ref onAnimationStarted is fired,
      * and the function returns true.
@@ -140,6 +153,9 @@ public:
     bool startAnimation(Handle handle, const QPointF& oldPosition, const QSizeF& oldSize, const QRect& targetGeometry)
     {
         if (!m_enabled) {
+            return false;
+        }
+        if (!isHandleValid(handle)) {
             return false;
         }
 
@@ -176,10 +192,14 @@ public:
     }
 
     /// Current visual top-left position (lerped between start and target).
-    /// Returns @p fallback (default-constructed QPointF) when no motion
-    /// exists for @p handle — adapters typically pass the window's
-    /// current frame geometry as a fallback.
-    QPointF currentVisualPosition(Handle handle, const QPointF& fallback = {}) const
+    /// Returns @p fallback when no motion exists for @p handle.
+    ///
+    /// The fallback is mandatory (no default) so callers make an explicit
+    /// choice — passing `{}` silently on a miss would place the window at
+    /// origin. Adapters should typically pass the window's current frame
+    /// geometry top-left so a stray call outside `hasAnimation()` still
+    /// yields a sensible value.
+    QPointF currentVisualPosition(Handle handle, const QPointF& fallback) const
     {
         auto it = m_motions.constFind(handle);
         if (it == m_motions.constEnd()) {
@@ -189,7 +209,9 @@ public:
     }
 
     /// Current visual size (lerped between start and target).
-    QSizeF currentVisualSize(Handle handle, const QSizeF& fallback = {}) const
+    /// Returns @p fallback when no motion exists for @p handle.
+    /// See @ref currentVisualPosition for the fallback rationale.
+    QSizeF currentVisualSize(Handle handle, const QSizeF& fallback) const
     {
         auto it = m_motions.constFind(handle);
         if (it == m_motions.constEnd()) {
@@ -228,20 +250,42 @@ public:
      *
      * Call exactly once per paint cycle with the compositor's
      * vsync-aligned @p presentTime. Order of operations per handle:
-     *   1. Skip + remove if @ref isHandleValid returns false.
-     *   2. Latch start time + cache eased progress.
-     *   3. If complete, compute final-frame bounds, remove the entry,
-     *      then fire @ref onAnimationComplete and @ref onRepaintNeeded.
+     *   1. Prune (without firing hooks) if @ref isHandleValid returns false.
+     *   2. Otherwise latch start time + cache eased progress.
+     *   3. If complete, compute final-frame bounds, remove the entry
+     *      from the active map, fire @ref onAnimationComplete, then
+     *      fire @ref onRepaintNeeded.
+     *
+     * ## Re-entrancy contract
+     *
+     * The completion hook may call back into the controller —
+     * @ref startAnimation, @ref removeAnimation, or @ref clear are all
+     * safe. The entry for the completing handle is erased *before* the
+     * hook fires, so a re-registration via @ref startAnimation inserts
+     * cleanly and survives the remainder of this call. Handles are
+     * snapshotted before iteration, so hook-driven mutation of
+     * @c m_motions cannot invalidate the outer loop's iterator.
      */
     void advanceAnimations(std::chrono::milliseconds presentTime)
     {
-        QVarLengthArray<Handle, 16> toRemove;
+        // Snapshot handles before iteration — the completion hook may
+        // mutate m_motions (retarget / chained animations / clear), and a
+        // live QHash iterator would be invalidated by an insert. Looking
+        // up each handle fresh inside the loop is O(1) and robust.
+        QVarLengthArray<Handle, 16> handles;
+        handles.reserve(m_motions.size());
+        for (auto it = m_motions.constBegin(); it != m_motions.constEnd(); ++it) {
+            handles.append(it.key());
+        }
 
-        for (auto it = m_motions.begin(); it != m_motions.end(); ++it) {
-            Handle handle = it.key();
+        for (Handle handle : handles) {
+            auto it = m_motions.find(handle);
+            if (it == m_motions.end()) {
+                continue; // Removed by a prior hook on this same tick.
+            }
 
             if (!isHandleValid(handle)) {
-                toRemove.append(handle);
+                m_motions.erase(it);
                 continue;
             }
 
@@ -252,22 +296,27 @@ public:
                 const QRectF bounds = AnimationMath::repaintBounds(it->startPosition, it->startSize, it->targetGeometry,
                                                                    it->curve, padding);
                 const WindowMotion finished = *it;
-                toRemove.append(handle);
+                // Erase BEFORE firing the completion hook so a re-entrant
+                // startAnimation(handle, …) from inside the hook
+                // registers cleanly (hasAnimation(handle) is false during
+                // the hook) and is not clobbered by any deferred cleanup.
+                m_motions.erase(it);
                 onAnimationComplete(handle, finished);
                 if (bounds.isValid()) {
                     onRepaintNeeded(handle, bounds);
                 }
             }
         }
-
-        for (Handle handle : toRemove) {
-            m_motions.remove(handle);
-        }
     }
 
     /**
      * @brief Schedule per-frame repaints covering every in-flight
      * animation's bounds. Call from postPaintScreen().
+     *
+     * Marked `const` because it does not mutate the controller. The
+     * `onRepaintNeeded` hook it dispatches through may still produce
+     * external side effects (e.g. `KWin::effects->addRepaint`) — that's
+     * the adapter's concern, not the controller's.
      */
     void scheduleRepaints() const
     {
@@ -289,8 +338,11 @@ protected:
     {
     }
 
-    /// Fired once when an animation completes (before the entry is
-    /// removed from the active map). Default no-op.
+    /// Fired once when an animation completes. The entry has already
+    /// been removed from the active map by the time this fires, so
+    /// `hasAnimation(handle)` returns false inside the hook — a
+    /// re-entrant `startAnimation(handle, …)` is therefore safe and
+    /// registers a fresh motion without conflict. Default no-op.
     virtual void onAnimationComplete(Handle /*handle*/, const WindowMotion& /*motion*/)
     {
     }

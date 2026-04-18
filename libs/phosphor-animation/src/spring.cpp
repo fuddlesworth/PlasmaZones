@@ -17,6 +17,13 @@ Q_LOGGING_CATEGORY(lcSpring, "phosphoranimation.spring")
 // bounded even for pathological parameters (omega near 0 or zeta huge).
 static constexpr qreal MaxSettleSeconds = 30.0;
 
+// 2% settling coefficient for a critically damped second-order system.
+// Solves (1 + ωt)·exp(-ωt) = 0.02 for ωt numerically → ωt ≈ 5.834. The
+// previous code used 5.0, which gave envelope(settleTime) ≈ 0.04 (twice
+// the target band) — at zeta=1 this made `evaluate(1)` sit ~4% below the
+// target instead of the advertised 2%.
+static constexpr qreal CriticalSettleFactor = 5.834;
+
 // Convergence threshold for step()-driven animation: when value is within
 // ConvergeValueEps of target AND |velocity| < ConvergeVelEps, the spring
 // is considered settled and further steps produce no change. These are
@@ -118,30 +125,58 @@ void Spring::step(qreal dt, CurveState& state, qreal target) const
 
 qreal Spring::settleTime() const
 {
-    // 2% settling for second-order system. For underdamped, dominated by
-    // the envelope exp(-zeta*omega*t): solve exp(-zeta*omega*t) = 0.02
-    // → t = -ln(0.02) / (zeta*omega) ≈ 3.912 / (zeta*omega).
+    // 2% settling for second-order system.
     //
-    // For critically damped, the envelope is (1 + omega*t)·exp(-omega·t);
-    // the closed-form for 2% is slightly higher than the underdamped
-    // approximation, but 5/omega is a good practical approximation and
-    // matches what most UI engines use.
+    // - Underdamped (ζ < 1): envelope exp(-ζω·t) = 0.02 dominates
+    //   → t = -ln(0.02)/(ζω) ≈ 3.912/(ζω). Ignores the 1/sqrt(1-ζ²)
+    //   amplitude factor (which diverges as ζ→1); acceptable because
+    //   the critical-band blend below covers the ζ≈1 regime.
+    // - Critically damped: (1 + ωt)·exp(-ωt) = 0.02 → ωt ≈ 5.834
+    //   (see CriticalSettleFactor).
+    // - Overdamped (ζ > 1): slow pole p₁ = ω(ζ - √(ζ²-1)) dominates:
+    //   t ≈ -ln(0.02)/p₁.
     //
-    // For overdamped, the slow pole p1 = omega·(zeta - sqrt(zeta²-1))
-    // dominates: t ≈ -ln(0.02) / p1.
+    // Continuity: the formulas step-change at ζ = 1 ± ε by up to ~30%.
+    // To avoid visible jumps as the user live-edits ζ near 1.0 (which
+    // would jitter repaint budgets), the ε-wide band around critical
+    // linearly blends between the two regime formulas at the band edges.
     constexpr qreal target = 0.02;
     const qreal lnTarget = -qLn(target); // ≈ 3.912
+    const qreal safeOmega = qMax(1.0e-3, omega);
+
+    auto underdampedSettle = [&](qreal zetaVal) {
+        return lnTarget / qMax(1.0e-3, zetaVal * safeOmega);
+    };
+    auto overdampedSettle = [&](qreal zetaVal) {
+        const qreal disc = qSqrt(qMax(0.0, zetaVal * zetaVal - 1.0));
+        const qreal p1 = safeOmega * (zetaVal - disc);
+        return lnTarget / qMax(1.0e-3, p1);
+    };
+    const qreal criticalSettle = CriticalSettleFactor / safeOmega;
 
     qreal seconds;
     if (zeta < 1.0 - CriticalDampingEpsilon) {
-        const qreal denom = qMax(1.0e-3, zeta * omega);
-        seconds = lnTarget / denom;
-    } else if (zeta <= 1.0 + CriticalDampingEpsilon) {
-        seconds = 5.0 / qMax(1.0e-3, omega);
+        seconds = underdampedSettle(zeta);
+    } else if (zeta > 1.0 + CriticalDampingEpsilon) {
+        seconds = overdampedSettle(zeta);
     } else {
-        const qreal disc = qSqrt(zeta * zeta - 1.0);
-        const qreal p1 = omega * (zeta - disc);
-        seconds = lnTarget / qMax(1.0e-3, p1);
+        // Critical band: quadratic Bézier-ish blend (underdamped → critical →
+        // overdamped) pinned to the regime formulas at the band edges and
+        // exactly to the critical 2% settle at ζ = 1. Keeps the function
+        // C0-continuous and close to the physically correct value.
+        const qreal zLow = 1.0 - CriticalDampingEpsilon;
+        const qreal zHigh = 1.0 + CriticalDampingEpsilon;
+        const qreal lower = underdampedSettle(zLow);
+        const qreal upper = overdampedSettle(zHigh);
+        if (zeta <= 1.0) {
+            // Blend from lower (at zLow) to criticalSettle (at 1.0).
+            const qreal alpha = (zeta - zLow) / CriticalDampingEpsilon;
+            seconds = lower + (criticalSettle - lower) * alpha;
+        } else {
+            // Blend from criticalSettle (at 1.0) to upper (at zHigh).
+            const qreal alpha = (zeta - 1.0) / CriticalDampingEpsilon;
+            seconds = criticalSettle + (upper - criticalSettle) * alpha;
+        }
     }
     return qMin(MaxSettleSeconds, qMax(0.001, seconds));
 }

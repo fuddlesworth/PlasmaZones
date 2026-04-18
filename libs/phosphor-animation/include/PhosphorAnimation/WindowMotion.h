@@ -95,7 +95,18 @@ struct PHOSPHORANIMATION_EXPORT WindowMotion
             return;
         }
         const qreal elapsed = qreal((presentTime - startTime).count());
-        const qreal t = qMin(1.0, elapsed / duration);
+        if (elapsed >= duration) {
+            // Terminal frame — snap to exactly 1.0 regardless of curve
+            // shape. Spring-like curves whose `evaluate(1)` lands within
+            // their settle band (e.g. 0.98 for underdamped at 2% settle)
+            // would otherwise paint a visible 2% miss on the last frame
+            // before the controller prunes the motion. Stateless curves
+            // typically already return 1.0 at t=1; this path makes the
+            // endpoint uniform across every Curve subclass.
+            cachedProgress = 1.0;
+            return;
+        }
+        const qreal t = elapsed / duration;
         cachedProgress = curve ? curve->evaluate(t) : t;
     }
 

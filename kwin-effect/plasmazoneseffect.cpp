@@ -3306,9 +3306,12 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
             if (m_windowAnimator->isAnimatingToTarget(window, geo)) {
                 return; // Already animating to this target
             }
-            // Capture current visual state before changing anything (mid-flight redirect)
-            animStartPos = m_windowAnimator->currentVisualPosition(window);
-            animStartSize = m_windowAnimator->currentVisualSize(window);
+            // Capture current visual state before changing anything (mid-flight redirect).
+            // The fallback (old frame) is unreachable under the hasAnimation() gate
+            // above, but pass it explicitly so a stray call outside the gate still
+            // yields a meaningful start state instead of the origin.
+            animStartPos = m_windowAnimator->currentVisualPosition(window, oldFrame.topLeft());
+            animStartSize = m_windowAnimator->currentVisualSize(window, oldFrame.size());
             m_windowAnimator->removeAnimation(window);
         } else {
             animStartPos = oldFrame.topLeft();
