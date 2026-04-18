@@ -28,7 +28,7 @@ private Q_SLOTS:
         QVERIFY(!p.minDistance.has_value());
         QVERIFY(!p.sequenceMode.has_value());
         QVERIFY(!p.staggerInterval.has_value());
-        QVERIFY(p.presetName.isEmpty());
+        QVERIFY(!p.presetName.has_value());
     }
 
     void testEffectiveGettersUseLibraryDefaults()
@@ -163,6 +163,22 @@ private Q_SLOTS:
 
         const Profile restored = Profile::fromJson(original.toJson());
         QCOMPARE(restored, original);
+    }
+
+    void testPresetNameEngagedEmptyOverridesParent()
+    {
+        // Regression: presetName is std::optional<QString>, so an engaged
+        // empty-string override is distinct from a nullopt "inherit".
+        // `toJson` must emit an engaged-but-empty name; `fromJson` must
+        // round-trip it back to engaged-empty, not drop it as "unset".
+        Profile p;
+        p.presetName = QString();
+        const QJsonObject obj = p.toJson();
+        QVERIFY(obj.contains(QLatin1String("presetName")));
+
+        const Profile restored = Profile::fromJson(obj);
+        QVERIFY(restored.presetName.has_value());
+        QVERIFY(restored.presetName->isEmpty());
     }
 
     void testRoundTripSpring()

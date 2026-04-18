@@ -7,17 +7,21 @@ namespace PhosphorAnimation {
 
 void Curve::step(qreal dt, CurveState& state, qreal target) const
 {
-    // Default: advance state.time by dt and lerp from state.startValue
-    // to target via the parametric evaluate(t). Callers of stateless
-    // curves are expected to pre-scale dt by 1/duration before calling
-    // so state.time reaches 1 at animation end.
-    //
-    // Numerical velocity is the derivative across this step, preserved
-    // so stateful-curve retargets can ingest parametric predecessors
-    // without a velocity discontinuity.
+    // Default: dt is real seconds, consistent with Spring::step. Map
+    // elapsed seconds into the parametric domain via state.duration.
+    // Zero/negative duration completes the animation immediately so the
+    // default matches WindowMotion's "zero-duration = snap-to-target"
+    // behavior and avoids a divide-by-zero.
     const qreal prevValue = state.value;
     state.time += dt;
-    const qreal t = qBound(0.0, state.time, 1.0);
+
+    if (state.duration <= 0.0) {
+        state.value = target;
+        state.velocity = 0.0;
+        return;
+    }
+
+    const qreal t = qBound(0.0, state.time / state.duration, 1.0);
     const qreal progress = evaluate(t);
     state.value = state.startValue + progress * (target - state.startValue);
     state.velocity = (dt > 0.0) ? (state.value - prevValue) / dt : 0.0;

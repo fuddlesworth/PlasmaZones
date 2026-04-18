@@ -50,7 +50,7 @@ Profile ProfileTree::resolve(const QString& path) const
     return effective.withDefaults();
 }
 
-Profile ProfileTree::override_(const QString& path) const
+Profile ProfileTree::directOverride(const QString& path) const
 {
     return m_overrides.value(path);
 }
@@ -123,7 +123,7 @@ void ProfileTree::overlay(Profile& dst, const Profile& src)
     if (src.staggerInterval) {
         dst.staggerInterval = src.staggerInterval;
     }
-    if (!src.presetName.isEmpty()) {
+    if (src.presetName) {
         dst.presetName = src.presetName;
     }
 }

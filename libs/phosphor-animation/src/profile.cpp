@@ -45,8 +45,8 @@ QJsonObject Profile::toJson() const
     if (staggerInterval) {
         obj.insert(QLatin1String("staggerInterval"), *staggerInterval);
     }
-    if (!presetName.isEmpty()) {
-        obj.insert(QLatin1String("presetName"), presetName);
+    if (presetName) {
+        obj.insert(QLatin1String("presetName"), *presetName);
     }
     return obj;
 }

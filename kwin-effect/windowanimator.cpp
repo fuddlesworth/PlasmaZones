@@ -185,9 +185,15 @@ QRectF WindowAnimator::animationBounds(KWin::EffectWindow* window) const
     //   expanded extends LEFT of frame  => expanded.x() < frame.x(), so margin.left = frame.x - expanded.x
     //   expanded extends RIGHT of frame => expanded.right() > frame.right(), so margin.right = expanded.right -
     //   frame.right
+    //
+    // Clamp each component to >= 0. If expanded is somehow smaller than the
+    // frame (shouldn't happen, but decoration data can race), a negative
+    // margin would silently shrink the repaint rect via adjust() and cause
+    // visible paint truncation.
     const QRectF frameGeo(it->targetGeometry);
-    const QMarginsF padding(frameGeo.x() - expanded.x(), frameGeo.y() - expanded.y(),
-                            expanded.right() - frameGeo.right(), expanded.bottom() - frameGeo.bottom());
+    const QMarginsF padding(qMax(0.0, frameGeo.x() - expanded.x()), qMax(0.0, frameGeo.y() - expanded.y()),
+                            qMax(0.0, expanded.right() - frameGeo.right()),
+                            qMax(0.0, expanded.bottom() - frameGeo.bottom()));
 
     return PhosphorAnimation::AnimationMath::repaintBounds(it->startPosition, it->startSize, it->targetGeometry,
                                                            it->easing, padding);

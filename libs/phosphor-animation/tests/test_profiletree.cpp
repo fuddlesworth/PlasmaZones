@@ -164,7 +164,7 @@ private Q_SLOTS:
         p.duration = 300.0;
         tree.setOverride(PP::WindowOpen, p);
         QCOMPARE(tree.overriddenPaths().size(), 1);
-        QCOMPARE(*tree.override_(PP::WindowOpen).duration, 300.0);
+        QCOMPARE(*tree.directOverride(PP::WindowOpen).duration, 300.0);
     }
 
     void testClearOverride()
@@ -256,9 +256,67 @@ private Q_SLOTS:
         original.setOverride(PP::WindowOpen, leaf);
 
         const ProfileTree restored = ProfileTree::fromJson(original.toJson());
-        const Profile restoredLeaf = restored.override_(PP::WindowOpen);
+        const Profile restoredLeaf = restored.directOverride(PP::WindowOpen);
         QVERIFY(restoredLeaf.duration.has_value());
         QCOMPARE(*restoredLeaf.duration, Profile::DefaultDuration);
+    }
+
+    // ─── Plugin-defined paths ───
+
+    void testResolveWalksUpThroughNonTaxonomyPath()
+    {
+        // The doc promises that plugin-defined dot-paths (outside the
+        // built-in taxonomy) resolve through `parentPath()` up to
+        // `global`. Verify with a `widget.toast.slideIn`-style chain.
+        ProfileTree tree;
+        Profile baseline;
+        baseline.duration = 500.0;
+        tree.setBaseline(baseline);
+
+        Profile categoryOverride;
+        categoryOverride.staggerInterval = 77;
+        tree.setOverride(QStringLiteral("widget.toast"), categoryOverride);
+
+        const Profile resolved = tree.resolve(QStringLiteral("widget.toast.slideIn"));
+        QCOMPARE(*resolved.duration, 500.0); // from baseline
+        QCOMPARE(*resolved.staggerInterval, 77); // from widget.toast
+    }
+
+    // ─── Preset name inheritance (optional semantics) ───
+
+    void testPresetNameEngagedEmptyOverridesParent()
+    {
+        // With presetName as std::optional<QString>, an engaged-but-empty
+        // leaf must win over a non-empty parent — same semantics as every
+        // other optional field.
+        ProfileTree tree;
+        Profile baseline;
+        baseline.presetName = QStringLiteral("Default Preset");
+        tree.setBaseline(baseline);
+
+        Profile leaf;
+        leaf.presetName = QString(); // engaged, empty — "explicitly clear"
+        tree.setOverride(PP::WindowOpen, leaf);
+
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QVERIFY(resolved.presetName.has_value());
+        QVERIFY(resolved.presetName->isEmpty());
+    }
+
+    void testPresetNameNulloptInheritsParent()
+    {
+        ProfileTree tree;
+        Profile baseline;
+        baseline.presetName = QStringLiteral("From Baseline");
+        tree.setBaseline(baseline);
+
+        Profile leaf;
+        leaf.duration = 200.0; // presetName stays nullopt
+        tree.setOverride(PP::WindowOpen, leaf);
+
+        const Profile resolved = tree.resolve(PP::WindowOpen);
+        QVERIFY(resolved.presetName.has_value());
+        QCOMPARE(*resolved.presetName, QStringLiteral("From Baseline"));
     }
 };
 

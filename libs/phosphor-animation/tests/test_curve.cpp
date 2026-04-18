@@ -64,11 +64,12 @@ private Q_SLOTS:
 
     void testDefaultStepForStatelessCurve()
     {
-        // Curve::step() default: state.value = lerp(startValue, target,
-        // evaluate(t)). Start at 0, target 1 — after a full run, value
-        // should have traversed from 0 to ~1.
+        // Curve::step() default: dt is real seconds; progression maps via
+        // state.duration. Start at 0, target 1, duration = 1 second —
+        // after a full run, value should have traversed from 0 to ~1.
         Easing e;
         CurveState state;
+        state.duration = 1.0;
         const qreal dt = 1.0 / 60.0;
         const qreal target = 1.0;
 
@@ -88,6 +89,7 @@ private Q_SLOTS:
         state.value = 0.5;
         state.startValue = 0.5;
         state.time = 0.0;
+        state.duration = 1.0;
 
         // Take one small step toward 2.0. The default step lerps from
         // startValue (0.5) to target (2.0) via evaluate(tiny) ≈ 0, so
@@ -98,12 +100,13 @@ private Q_SLOTS:
 
     void testDefaultStepLerpArrivesAtTarget()
     {
-        // After a full animation (state.time reaches 1.0), state.value
-        // reaches target regardless of startValue.
+        // After the animation completes (state.time ≥ state.duration),
+        // state.value reaches target regardless of startValue.
         Easing e;
         CurveState state;
         state.value = 0.3;
         state.startValue = 0.3;
+        state.duration = 1.0;
         const qreal target = 0.9;
         const qreal dt = 1.0 / 60.0;
 
@@ -113,6 +116,39 @@ private Q_SLOTS:
         QVERIFY(qAbs(state.value - target) < 0.01);
     }
 
+    void testDefaultStepZeroDurationSnapsToTarget()
+    {
+        // Matches WindowMotion's "zero-duration completes immediately"
+        // behavior — the default stateless step must not divide by zero
+        // or produce a half-state.
+        Easing e;
+        CurveState state;
+        state.value = 0.2;
+        state.startValue = 0.2;
+        state.duration = 0.0;
+
+        e.step(1.0 / 60.0, state, 0.9);
+        QCOMPARE(state.value, 0.9);
+        QCOMPARE(state.velocity, 0.0);
+    }
+
+    void testDefaultStepDtInSecondsMatchesSpringContract()
+    {
+        // Regression guard: Curve::step()'s `dt` is real seconds, the
+        // same contract as Spring::step. This lets Phase-3 AnimatedValue<T>
+        // drive either curve polymorphically without unit conversion.
+        // Drive a stateless curve for exactly 0.5 seconds (dt=1/60) and
+        // expect t ≈ 0.5 at the end of the run.
+        Easing e;
+        CurveState state;
+        state.duration = 1.0;
+        const qreal dt = 1.0 / 60.0;
+        for (int i = 0; i < 30; ++i) {
+            e.step(dt, state, 1.0);
+        }
+        QVERIFY(qAbs(state.time - 0.5) < 0.02);
+    }
+
     void testCurveStateDefaults()
     {
         CurveState s;
@@ -120,6 +156,7 @@ private Q_SLOTS:
         QCOMPARE(s.velocity, 0.0);
         QCOMPARE(s.time, 0.0);
         QCOMPARE(s.startValue, 0.0);
+        QCOMPARE(s.duration, 1.0);
     }
 
     void testMultipleRefsShareCurve()

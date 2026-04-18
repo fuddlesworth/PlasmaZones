@@ -84,7 +84,7 @@ public:
      * Profile (every field unset) when @p path has no direct override;
      * use `hasOverride()` to distinguish absent from all-unset.
      */
-    Profile override_(const QString& path) const;
+    Profile directOverride(const QString& path) const;
 
     /// True if @p path has a direct override (not inherited).
     bool hasOverride(const QString& path) const;

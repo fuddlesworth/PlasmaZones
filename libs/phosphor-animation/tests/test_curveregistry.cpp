@@ -86,6 +86,28 @@ private Q_SLOTS:
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
+    // ─── tryCreate() — explicit-failure path ───
+
+    void testTryCreateEmptyReturnsNull()
+    {
+        QVERIFY(CurveRegistry::instance().tryCreate(QString()) == nullptr);
+    }
+
+    void testTryCreateUnknownReturnsNull()
+    {
+        // tryCreate does NOT substitute a default — callers that want the
+        // fallback behavior can use create(); those that want to detect
+        // bad input use tryCreate.
+        QVERIFY(CurveRegistry::instance().tryCreate(QStringLiteral("not-a-real-curve:1,2,3")) == nullptr);
+    }
+
+    void testTryCreateValidReturnsCurve()
+    {
+        auto curve = CurveRegistry::instance().tryCreate(QStringLiteral("spring:12.0,0.8"));
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("spring"));
+    }
+
     // ─── Extension ───
 
     void testRegisterAndUnregisterCustom()

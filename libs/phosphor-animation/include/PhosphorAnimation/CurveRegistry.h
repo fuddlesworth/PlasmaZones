@@ -75,17 +75,29 @@ public:
     bool unregisterFactory(const QString& typeId);
 
     /**
-     * @brief Parse @p spec into an immutable curve.
+     * @brief Parse @p spec into an immutable curve, or a default curve.
      *
      * Accepts:
      *   - `"typeId:params"`  — dispatched to the registered factory
      *   - `"x1,y1,x2,y2"`    — legacy cubic-bezier
      *
-     * Returns `nullptr` only if @p spec is empty AND no default has been
-     * configured. Unknown typeIds fall through to a best-effort default
-     * (cubic-bezier outCubic) with a warning logged.
+     * Returns `nullptr` only if @p spec is empty. Unknown typeIds fall
+     * through to a best-effort default (cubic-bezier outCubic) with a
+     * warning logged — use `tryCreate()` if you need to distinguish
+     * "valid curve" from "default substituted for bad input".
      */
     std::shared_ptr<const Curve> create(const QString& spec) const;
+
+    /**
+     * @brief Parse @p spec into an immutable curve, returning null on
+     * any failure.
+     *
+     * Same acceptable forms as `create()`, but returns `nullptr` for
+     * empty input, unknown typeIds, and factory parse failures instead
+     * of substituting a default. Callers get an explicit signal that
+     * the input was invalid and can log / fall back as they prefer.
+     */
+    std::shared_ptr<const Curve> tryCreate(const QString& spec) const;
 
     /// Lists all registered typeIds in insertion order.
     QStringList knownTypes() const;

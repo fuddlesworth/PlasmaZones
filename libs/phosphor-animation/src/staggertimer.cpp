@@ -53,4 +53,10 @@ void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode, int
     }
 }
 
+void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequenceMode, int staggerInterval,
+                               const std::function<void(int)>& applyFn, const std::function<void()>& onComplete)
+{
+    applyStaggeredOrImmediate(parent, count, static_cast<int>(sequenceMode), staggerInterval, applyFn, onComplete);
+}
+
 } // namespace PhosphorAnimation

@@ -306,7 +306,7 @@ iteration and UI display.
 class ProfileTree {
 public:
     Profile resolve(const QString& path) const;  // walk-up inheritance
-    Profile override_(const QString& path) const; // direct, no walk
+    Profile directOverride(const QString& path) const; // direct, no walk
     bool hasOverride(const QString& path) const;
     QStringList overriddenPaths() const;
 

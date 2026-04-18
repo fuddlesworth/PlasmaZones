@@ -186,6 +186,27 @@ private Q_SLOTS:
         QVERIFY(foundOvershoot);
     }
 
+    void testElasticUndershoot()
+    {
+        // At high amplitude + short period, elastic-out dips well below
+        // zero during early oscillation. Consumers relying on the
+        // "may overshoot [0, 1]" contract must not clamp this.
+        Easing elastic;
+        elastic.type = Easing::Type::ElasticOut;
+        elastic.amplitude = 3.0;
+        elastic.period = 0.1;
+
+        bool foundUndershoot = false;
+        for (int i = 1; i < 100; ++i) {
+            const qreal t = qreal(i) / 100.0;
+            if (elastic.evaluate(t) < 0.0) {
+                foundUndershoot = true;
+                break;
+            }
+        }
+        QVERIFY(foundUndershoot);
+    }
+
     // ─── Curve virtuals ───
 
     void testTypeIdMatchesSerialization()

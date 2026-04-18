@@ -119,6 +119,57 @@ bool CurveRegistry::unregisterFactory(const QString& typeId)
 // Lookup + parse
 // ═══════════════════════════════════════════════════════════════════════════════
 
+namespace {
+
+struct ParsedSpec
+{
+    QString typeId;
+    QString params;
+};
+
+ParsedSpec parseSpec(const QString& spec)
+{
+    ParsedSpec out;
+    const int colonIdx = spec.indexOf(QLatin1Char(':'));
+    if (colonIdx < 0) {
+        // Might be legacy bare-bezier ("x1,y1,x2,y2"), or a bare typeId
+        // with no params. Exactly three commas means four numbers → bezier.
+        if (spec.count(QLatin1Char(',')) == 3) {
+            out.typeId = QStringLiteral("bezier");
+            out.params = spec;
+        } else {
+            out.typeId = spec.trimmed();
+        }
+    } else {
+        out.typeId = spec.left(colonIdx).trimmed();
+        out.params = spec.mid(colonIdx + 1).trimmed();
+    }
+    return out;
+}
+
+} // namespace
+
+std::shared_ptr<const Curve> CurveRegistry::tryCreate(const QString& spec) const
+{
+    if (spec.isEmpty()) {
+        return nullptr;
+    }
+
+    const ParsedSpec parsed = parseSpec(spec);
+
+    Factory factory;
+    {
+        QMutexLocker locker(&m_impl->mutex);
+        factory = m_impl->factories.value(parsed.typeId);
+    }
+
+    if (!factory) {
+        return nullptr;
+    }
+
+    return factory(parsed.typeId, parsed.params);
+}
+
 std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
 {
     if (spec.isEmpty()) {
@@ -126,39 +177,23 @@ std::shared_ptr<const Curve> CurveRegistry::create(const QString& spec) const
         return nullptr;
     }
 
-    // Legacy bare-bezier form: four comma-separated numbers, no colon.
-    // Dispatch to the "bezier" factory with the spec as-is.
-    const int colonIdx = spec.indexOf(QLatin1Char(':'));
-    QString typeId;
-    QString params;
-    if (colonIdx < 0) {
-        // Might be legacy bezier, or a bare typeId with no params.
-        if (spec.count(QLatin1Char(',')) == 3) {
-            typeId = QStringLiteral("bezier");
-            params = spec;
-        } else {
-            typeId = spec.trimmed();
-            params = QString();
-        }
-    } else {
-        typeId = spec.left(colonIdx).trimmed();
-        params = spec.mid(colonIdx + 1).trimmed();
-    }
+    const ParsedSpec parsed = parseSpec(spec);
 
     Factory factory;
     {
         QMutexLocker locker(&m_impl->mutex);
-        factory = m_impl->factories.value(typeId);
+        factory = m_impl->factories.value(parsed.typeId);
     }
 
     if (!factory) {
-        qCWarning(lcCurveRegistry) << "unknown curve typeId" << typeId << "in spec" << spec << "- returning default";
+        qCWarning(lcCurveRegistry) << "unknown curve typeId" << parsed.typeId << "in spec" << spec
+                                   << "- returning default";
         return std::make_shared<Easing>();
     }
 
-    auto curve = factory(typeId, params);
+    auto curve = factory(parsed.typeId, parsed.params);
     if (!curve) {
-        qCWarning(lcCurveRegistry) << "factory for" << typeId << "returned null for params" << params
+        qCWarning(lcCurveRegistry) << "factory for" << parsed.typeId << "returned null for params" << parsed.params
                                    << "- returning default";
         return std::make_shared<Easing>();
     }

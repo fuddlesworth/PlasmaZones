@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QObject>
@@ -54,6 +55,18 @@ namespace PhosphorAnimation {
  * subsystems owned by the compositor effect which is itself @p parent.
  */
 PHOSPHORANIMATION_EXPORT void applyStaggeredOrImmediate(QObject* parent, int count, int sequenceMode,
+                                                        int staggerInterval, const std::function<void(int)>& applyFn,
+                                                        const std::function<void()>& onComplete = nullptr);
+
+/**
+ * @brief Type-safe overload taking @ref SequenceMode.
+ *
+ * Forwards to the int-taking form via `static_cast`. Callers that hold a
+ * `SequenceMode` enum (Profile / AnimationConfig / anything above the
+ * D-Bus marshalling boundary) should prefer this overload rather than
+ * casting to int at every call site.
+ */
+PHOSPHORANIMATION_EXPORT void applyStaggeredOrImmediate(QObject* parent, int count, SequenceMode sequenceMode,
                                                         int staggerInterval, const std::function<void(int)>& applyFn,
                                                         const std::function<void()>& onComplete = nullptr);
 

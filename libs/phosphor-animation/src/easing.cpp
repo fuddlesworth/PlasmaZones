@@ -189,7 +189,7 @@ Easing Easing::fromString(const QString& str)
 
         if (name == QLatin1String("bezier")) {
             curve.type = Type::CubicBezier;
-            // Params handled in the numeric path below by falling through.
+            // Params parsed inline below in the CubicBezier-specific branch.
         } else if (name == QLatin1String("elastic-in")) {
             curve.type = Type::ElasticIn;
         } else if (name == QLatin1String("elastic-out")) {

@@ -111,8 +111,11 @@ public:
     std::optional<int> staggerInterval;
 
     /// Optional user-assigned preset name. Purely decorative for UI —
-    /// the runtime never branches on this. Empty string means no name.
-    QString presetName;
+    /// the runtime never branches on this. `std::nullopt` = inherit from
+    /// parent in a ProfileTree. An engaged-but-empty optional explicitly
+    /// overrides the parent's name with an empty string (same semantic as
+    /// every other field: an engaged optional means "I have an opinion").
+    std::optional<QString> presetName;
 
     // ─────── Effective getters (optional + library default) ───────
 
@@ -154,7 +157,7 @@ public:
      *     "minDistance":     0,                    // omitted if unset
      *     "sequenceMode":    0,                    // omitted if unset
      *     "staggerInterval": 30,                   // omitted if unset
-     *     "presetName":      "My Spring"           // omitted if empty
+     *     "presetName":      "My Spring"           // omitted if unset
      *   }
      * @endcode
      */

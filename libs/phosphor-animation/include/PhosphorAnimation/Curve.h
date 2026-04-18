@@ -19,18 +19,18 @@ namespace PhosphorAnimation {
  * across frames; stateless parametric curves (easing) don't use velocity
  * but share the same struct so callers can treat all curves uniformly.
  *
- * @note Values are dimensionless normalized units in [0, 1] unless a
- * specific caller interprets them otherwise. AnimatedValue<T> (Phase 3)
- * will map to/from concrete typed ranges.
+ * All time fields are in real seconds so `step()` has a single consistent
+ * `dt` contract across stateless and stateful curves. AnimatedValue<T>
+ * (Phase 3) will map to/from concrete typed ranges.
  */
 struct PHOSPHORANIMATION_EXPORT CurveState
 {
     /// Current value. Usually [0, 1]; elastic/bounce/spring may overshoot.
     qreal value = 0.0;
-    /// Rate of change per second. Springs read+write this; easing ignores.
+    /// Rate of change per second. Springs read+write this; stateless
+    /// curves numerically derive it from the parametric progression.
     qreal velocity = 0.0;
-    /// Elapsed time since start, in seconds. Parametric curves advance
-    /// this via step() and evaluate(time/duration) under the hood.
+    /// Elapsed time since the current segment began, in real seconds.
     qreal time = 0.0;
     /// Value at the start of the current animation segment. Used by the
     /// default `Curve::step()` to produce `lerp(startValue, target,
@@ -40,6 +40,12 @@ struct PHOSPHORANIMATION_EXPORT CurveState
     /// produces continuous motion. Stateful subclasses like Spring
     /// ignore this and derive continuity from `value`/`velocity` alone.
     qreal startValue = 0.0;
+    /// Segment duration in real seconds. Used by the default stateless
+    /// `step()` to map `state.time → t = time/duration`. Stateful curves
+    /// (Spring) ignore this; they derive settle time from their own
+    /// parameters. Zero or negative means "complete immediately" for
+    /// stateless curves.
+    qreal duration = 1.0;
 };
 
 /**
@@ -114,7 +120,11 @@ public:
     virtual qreal evaluate(qreal t) const = 0;
 
     /**
-     * @brief Advance @p state by @p dt seconds toward @p target.
+     * @brief Advance @p state by @p dt real seconds toward @p target.
+     *
+     * `dt` is always real seconds — the same contract across every curve
+     * subclass so callers holding `std::shared_ptr<const Curve>` can drive
+     * step() polymorphically without knowing the concrete type.
      *
      * Stateful curves (Spring) read `state.value` + `state.velocity` and
      * write the integrated next step using their own physics. Retarget
@@ -122,16 +132,19 @@ public:
      * and velocity is preserved.
      *
      * The default implementation is for stateless curves: it increments
-     * `state.time` by `dt`, then sets `state.value = lerp(state.startValue,
-     * target, evaluate(t))` where `t = state.time` clamped to [0, 1].
-     * Callers must pre-scale `dt` by `1 / duration` so `time` reaches 1
-     * at the end of the animation.
+     * `state.time` by `dt`, computes `t = state.time / state.duration`
+     * clamped to [0, 1], then sets
+     * `state.value = lerp(state.startValue, target, evaluate(t))`.
+     * `state.velocity` is overwritten with the numerical derivative of
+     * the parametric progression for this step — it is NOT a preserved
+     * physical velocity. Switching from a stateful curve to a stateless
+     * one therefore resets velocity to the parametric-derivative value.
      *
      * For **retarget** with a stateless curve: set `state.startValue =
      * state.value` and `state.time = 0` before changing `target`. That
      * mid-flight reset produces continuous motion because the new
      * segment starts at the current value. Stateful curves handle
-     * retarget implicitly and ignore `startValue`.
+     * retarget implicitly and ignore `startValue`/`duration`.
      */
     virtual void step(qreal dt, CurveState& state, qreal target) const;
 
