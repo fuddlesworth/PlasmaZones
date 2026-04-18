@@ -190,3 +190,15 @@ install(DIRECTORY include/PhosphorScreens/
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/phosphorscreens_export.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorScreens
 )
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Tests
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Enable unit tests when building as part of the parent project or when the
+# user explicitly toggles BUILD_TESTING. Mirrors phosphor-animation's policy so
+# ctest picks them up automatically on a normal `cmake --build` cycle.
+if(CMAKE_PROJECT_NAME STREQUAL "PhosphorScreens" OR BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

@@ -129,6 +129,11 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
         } else {
             // ScreenManager may not be fully initialised yet — defer a re-check
             // so virtual screen signals are emitted once the event loop settles.
+            // When the re-check finds VSs that weren't visible on the first
+            // pass, we already emitted `screenAdded(physId)` above; retract it
+            // with a matching `screenRemoved(physId)` before announcing the
+            // virtuals, so D-Bus consumers never see a phantom physical
+            // alongside its own VS children.
             QTimer::singleShot(0, this, [this, physId]() {
                 if (!m_screenManager) {
                     return;
@@ -140,9 +145,15 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
                 m_lastEmittedEffectiveIds = currentEffective;
 
                 if (m_screenManager->hasVirtualScreens(physId)) {
-                    for (const QString& vsId : m_screenManager->virtualScreenIdsFor(physId)) {
+                    Q_EMIT screenRemoved(physId);
+                    const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
+                    for (const QString& vsId : vsIds) {
                         Q_EMIT screenAdded(vsId);
                     }
+                    // Cache so the later screen-removal handler knows to
+                    // emit screenRemoved(vsId) for each VS instead of the
+                    // physical ID we just retracted.
+                    m_cachedEffectiveIdsPerScreen[physId] = vsIds;
                     Q_EMIT virtualScreensChanged(physId);
                 }
             });
@@ -217,7 +228,15 @@ void DBusScreenAdaptor::handleScreenRemoved(QScreen* removedScreen, QScreen* tar
         return;
     }
     invalidateScreenInfoCache();
-    const QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
+    QStringList effectiveIds = m_cachedEffectiveIdsPerScreen.take(cachedId);
+    // Cold-cache fallback: VSs may have been configured for this screen
+    // but `virtualScreensChanged` hadn't fired yet to populate
+    // m_cachedEffectiveIdsPerScreen. Ask the manager directly so we emit
+    // screenRemoved per-VS rather than a single screenRemoved(physId) that
+    // leaves VS-tracking consumers holding stale IDs.
+    if (effectiveIds.isEmpty() && m_screenManager && m_screenManager->hasVirtualScreens(cachedId)) {
+        effectiveIds = m_screenManager->virtualScreenIdsFor(cachedId);
+    }
     if (!effectiveIds.isEmpty()) {
         for (const QString& id : effectiveIds) {
             Q_EMIT screenRemoved(id);
@@ -237,7 +256,7 @@ bool DBusScreenAdaptor::emitForEffectiveScreens(const QString& physId,
 {
     if (m_screenManager) {
         bool hadVirtual = m_screenManager->hasVirtualScreens(physId);
-        const QStringList ids = m_screenManager->effectiveIdsForPhysical(physId);
+        const QStringList ids = m_screenManager->virtualScreenIdsFor(physId);
         for (const QString& id : ids) {
             emitFn(id);
         }

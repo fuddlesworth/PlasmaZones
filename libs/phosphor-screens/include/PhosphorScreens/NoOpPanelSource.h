@@ -4,6 +4,7 @@
 #pragma once
 
 #include "IPanelSource.h"
+#include "phosphorscreens_export.h"
 
 namespace Phosphor::Screens {
 
@@ -18,7 +19,7 @@ namespace Phosphor::Screens {
  *
  * Header-only and inline — no compiled object code.
  */
-class NoOpPanelSource final : public IPanelSource
+class PHOSPHORSCREENS_EXPORT NoOpPanelSource final : public IPanelSource
 {
     Q_OBJECT
 public:

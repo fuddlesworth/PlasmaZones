@@ -24,7 +24,7 @@ QString resolveScreenId(const QString& screenId)
         if (primary && mgr) {
             // If the primary screen has virtual subdivisions, returns the first
             // virtual screen ID. Otherwise returns the physical screen ID.
-            const QStringList ids = mgr->effectiveIdsForPhysical(Utils::screenIdentifier(primary));
+            const QStringList ids = mgr->virtualScreenIdsFor(Utils::screenIdentifier(primary));
             return ids.isEmpty() ? Utils::screenIdentifier(primary) : ids.first();
         }
         return primary ? Utils::screenIdentifier(primary) : QString();

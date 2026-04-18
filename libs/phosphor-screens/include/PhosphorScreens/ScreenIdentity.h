@@ -36,6 +36,18 @@ namespace Phosphor::Screens {
  *
  * Threading: process-local caches use unsynchronised statics; every
  * function MUST be called from the GUI thread.
+ *
+ * Process-global state: these helpers intentionally keep their
+ * identifier and reverse-lookup caches in function-local statics rather
+ * than on a per-ScreenManager object. EDID-to-identifier mapping is
+ * determined entirely by the set of connected QScreens (shared
+ * QGuiApplication state), so moving the caches onto individual managers
+ * would not decouple them — every instance would end up computing the
+ * same answers from the same inputs. The trade-off: hosts that run
+ * multiple ScreenManager instances (tests, future multi-session shells)
+ * share one cache, so `invalidateEdidCache()` on hotplug is a global
+ * side-effect. Document rather than isolate because isolation here buys
+ * nothing.
  */
 namespace ScreenIdentity {
 

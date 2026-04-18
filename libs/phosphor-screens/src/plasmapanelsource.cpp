@@ -208,22 +208,30 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 
     QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), panelScript());
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
+    // Parent plasmaShell to the watcher so the interface object goes away
+    // with it — covers the two shutdown paths the finished-lambda doesn't:
+    // destruction of `this` (QObject deletes the watcher-child, which
+    // deletes plasmaShell-grandchild) and a canceled stop() where the
+    // reply never lands (deleteLater on the watcher sweeps the interface
+    // too). Previously raw `new` here leaked on both.
+    plasmaShell->setParent(watcher);
     m_activeWatcher = watcher;
 
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this, plasmaShell, emitRequeryCompleted](QDBusPendingCallWatcher* w) {
                 // stop() cancelled us — don't mutate state or emit signals.
                 // The watcher has already been queued for deletion via stop(),
-                // so we just return without touching anything.
+                // so we just return without touching anything. plasmaShell
+                // dies with the watcher via the parent relationship above.
                 if (m_activeWatcher != w) {
-                    plasmaShell->deleteLater();
                     return;
                 }
                 QDBusPendingReply<QString> reply = *w;
 
                 QHash<QString, Offsets> newOffsets;
+                const bool replyValid = reply.isValid();
 
-                if (reply.isValid()) {
+                if (replyValid) {
                     const QString output = reply.value();
                     qCDebug(lcPhosphorScreens) << "queryKdePlasmaPanels D-Bus reply=" << output;
 
@@ -314,7 +322,13 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                     }
                 }
 
-                if (!m_ready) {
+                // Only flip to ready on a *successful* reply. A transient
+                // D-Bus failure must not leave us stuck in "ready with no
+                // panels" forever — the watcher would then never retry
+                // first-ready on the next `requestRequery` because we'd
+                // already be ready. Callers gate startup work on this flag;
+                // giving them a false positive paints stale geometry.
+                if (!m_ready && replyValid) {
                     m_ready = true;
                     qCInfo(lcPhosphorScreens) << "Panel geometry: ready";
                     // First-ready transition — synthetic per-screen fan-out so
@@ -332,7 +346,7 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                     Q_EMIT requeryCompleted();
                 }
 
-                plasmaShell->deleteLater();
+                // plasmaShell is parented to w; deleting w deletes it.
                 w->deleteLater();
                 m_activeWatcher = nullptr;
                 m_queryPending = false;

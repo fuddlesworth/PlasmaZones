@@ -4,6 +4,7 @@
 #pragma once
 
 #include "IConfigStore.h"
+#include "phosphorscreens_export.h"
 
 namespace Phosphor::Screens {
 
@@ -17,7 +18,7 @@ namespace Phosphor::Screens {
  *
  * Header-only and inline.
  */
-class InMemoryConfigStore final : public IConfigStore
+class PHOSPHORSCREENS_EXPORT InMemoryConfigStore final : public IConfigStore
 {
     Q_OBJECT
 public:

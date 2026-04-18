@@ -292,7 +292,7 @@ void OverlayService::ensureOsdScreenAddedConnected()
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
         auto* mgr2 = screenManager();
         const QString physId = Utils::screenIdentifier(screen);
-        const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
+        const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
         if (m_layoutOsdWarmed) {
             for (const QString& sid : ids) {
                 if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {

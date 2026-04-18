@@ -135,6 +135,7 @@ public:
     /// sites use both spellings interchangeably and converging to one name
     /// is a cross-cutting rename out of scope for this library's surface.
     /// New code should prefer @ref virtualScreenIdsFor. Thin inline forward.
+    [[deprecated("use virtualScreenIdsFor")]]
     QStringList effectiveIdsForPhysical(const QString& physicalScreenId) const
     {
         return virtualScreenIdsFor(physicalScreenId);
