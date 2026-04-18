@@ -88,10 +88,8 @@ set(plasmazones_core_SRCS
     # layersurface + shaderregistry/params moved to PhosphorShell
     core/single_instance_service.cpp
     core/single_instance_service.h
-    # screen_resolver.cpp lifted to libs/phosphor-screens/. The shim header
-    # `core/screen_resolver.h` re-exports `Phosphor::Screens::ScreenResolver`
-    # as `PlasmaZones::ScreenResolver` for existing in-tree callers.
-    core/screen_resolver.h
+    # screen_resolver.{h,cpp} lifted to libs/phosphor-screens/Resolver.h —
+    # callers include <PhosphorScreens/Resolver.h> directly.
     # screenmanager.cpp + screenmanager/panels.cpp + screenmanager/virtualscreens.cpp
     # lifted to libs/phosphor-screens. The shim header `core/screenmanager.h`
     # re-exports `Phosphor::Screens::ScreenManager` as

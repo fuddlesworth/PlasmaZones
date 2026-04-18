@@ -7,7 +7,7 @@
 #include "../core/logging.h"
 #include <PhosphorShell/LayerShellPluginLoader.h>
 #include <PhosphorShell/LayerSurface.h>
-#include "../core/screen_resolver.h"
+#include <PhosphorScreens/Resolver.h>
 #include "../core/single_instance_service.h"
 #include "../core/translationloader.h"
 #include "../config/configdefaults.h"
@@ -147,7 +147,7 @@ int main(int argc, char* argv[])
     // ScreenResolver wraps the daemon call + QGuiApplication::screenAt fallback
     // so we don't have to duplicate the virtual-screen-aware lookup here.
     QString targetScreen = parser.isSet(screenOption) ? parser.value(screenOption)
-                                                      : PlasmaZones::ScreenResolver::effectiveScreenAtCursor();
+                                                      : Phosphor::Screens::ScreenResolver::effectiveScreenAtCursor();
 
     // Warn about mutually exclusive flags
     if (parser.isSet(previewOption) && parser.isSet(newLayoutOption)) {
