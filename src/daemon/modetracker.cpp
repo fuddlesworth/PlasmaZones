@@ -75,13 +75,13 @@ QString ModeTracker::lastAutotileAlgorithm() const
 {
     if (!m_layoutManager || m_screenId.isEmpty()) {
         return m_settings ? m_settings->defaultAutotileAlgorithm()
-                          : PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+                          : PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
     QString algo = m_layoutManager->tilingAlgorithmForScreen(m_screenId, m_desktop, m_activity);
     if (algo.isEmpty() && m_settings) {
         algo = m_settings->defaultAutotileAlgorithm();
     }
-    return algo.isEmpty() ? PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId() : algo;
+    return algo.isEmpty() ? PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId() : algo;
 }
 
 } // namespace PlasmaZones

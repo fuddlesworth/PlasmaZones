@@ -18,6 +18,11 @@ void ensureAutotileLayoutSourceProviderLinked()
 {
 }
 
+QLatin1String autotileLayoutSourceName()
+{
+    return QLatin1String("autotile");
+}
+
 AutotileLayoutSourceFactory::AutotileLayoutSourceFactory(ITileAlgorithmRegistry* registry)
     : m_registry(registry)
 {
@@ -27,7 +32,7 @@ AutotileLayoutSourceFactory::~AutotileLayoutSourceFactory() = default;
 
 QString AutotileLayoutSourceFactory::name() const
 {
-    return QStringLiteral("autotile");
+    return autotileLayoutSourceName();
 }
 
 std::unique_ptr<PhosphorLayout::ILayoutSource> AutotileLayoutSourceFactory::create()
@@ -48,7 +53,7 @@ namespace {
 // Priority 100 — autotile entries follow manual zone entries in the
 // composite's iteration order (zones registers at priority 0).
 PhosphorLayout::LayoutSourceProviderRegistrar
-    registrar(QStringLiteral("autotile"), /*priority=*/100,
+    registrar(QString(autotileLayoutSourceName()), /*priority=*/100,
               &PhosphorLayout::makeProviderFactory<ITileAlgorithmRegistry, AutotileLayoutSourceFactory>);
 } // anonymous namespace
 

@@ -10,7 +10,10 @@
 #include <QHash>
 #include <QLatin1String>
 #include <QList>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -55,20 +58,22 @@ public:
     /**
      * @brief Early cleanup of all registered algorithms.
      *
-     * @warning **Shutdown-only.** This method is wired to
-     * @c QCoreApplication::aboutToQuit so algorithm objects (especially
-     * @c ScriptedAlgorithm instances with @c QJSEngine internals) are
-     * destroyed while Qt is still fully alive, avoiding crashes during
-     * teardown if an instance outlives @c QCoreApplication. It must NOT
-     * be called during normal runtime: its implementation drains the
-     * process-wide @c QEvent::DeferredDelete queue via
-     * @c QCoreApplication::sendPostedEvents(nullptr, ...), which forces
-     * deletion of every object app-wide that has a pending deleteLater()
-     * — not just those owned by this registry. That is safe on shutdown
-     * and actively dangerous at any other time.
+     * Wired to @c QCoreApplication::aboutToQuit so algorithm objects
+     * (especially @c ScriptedAlgorithm instances with @c QJSEngine
+     * internals) are destroyed while Qt is still fully alive, avoiding
+     * teardown crashes if an instance outlives @c QCoreApplication.
      *
-     * After this runs the registry holds no algorithms; further calls
-     * are idempotent no-ops.
+     * Drains exclusively this registry's own pending @c deleteLater()
+     * algorithms (tracked in @c m_pendingDeletes), never the process-
+     * wide DeferredDelete queue. This narrow scoping is load-bearing
+     * after the singleton kill in PR #343: multiple registries
+     * (daemon, editor, settings) each connect to @c aboutToQuit, and a
+     * process-wide drain from one registry would force-delete pending
+     * @c deleteLater() events for unrelated subsystems whose owners
+     * have not yet run their teardown.
+     *
+     * Safe to call from the destructor as well — idempotent after the
+     * first invocation.
      */
     void cleanup();
 
@@ -83,15 +88,26 @@ public:
     TilingAlgorithm* defaultAlgorithm() const override;
 
     /**
-     * @brief Get the library's recommended default algorithm ID
+     * @brief Get the library's recommended default algorithm ID.
      *
-     * Owned by the algorithm layer itself (not the application config layer)
-     * so the registry remains self-contained.  Application config layers may
-     * expose their own user-facing default; that is intentionally independent.
+     * Owned by the algorithm layer itself (not the application config
+     * layer) so the registry remains self-contained. Application config
+     * layers may expose their own user-facing default; that is
+     * intentionally independent.
      *
-     * Stays static — this is a type-level policy, not per-instance state.
+     * Returns the same id from any instance (type-level policy, not
+     * per-instance state) — the static helper @c defaultAlgorithmId()
+     * is still available for callers that don't hold a registry pointer.
      */
-    static QString defaultAlgorithmId();
+    QString defaultAlgorithmId() const override
+    {
+        return staticDefaultAlgorithmId();
+    }
+
+    /// Static accessor for the same id @c defaultAlgorithmId() returns.
+    /// Provided for callers that already had a hard dependency on the
+    /// concrete @c AlgorithmRegistry type.
+    static QString staticDefaultAlgorithmId();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Preview utilities for unified layout model (shared by zone selector,
@@ -147,6 +163,14 @@ private:
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 
+    /// Algorithms detached from the registry via @c safeDeleteAlgorithm
+    /// and queued for deferred deletion. Tracked so @c cleanup can drain
+    /// only these objects' pending @c QEvent::DeferredDelete events
+    /// rather than the entire process-wide queue. @c QPointer auto-clears
+    /// when Qt finally processes the deferred-delete event, so stale
+    /// entries are harmless.
+    QList<QPointer<TilingAlgorithm>> m_pendingDeletes;
+
     AlgorithmPreviewParams m_previewParams; ///< User-configured tiling parameters for previews
 };
 
@@ -161,12 +185,26 @@ struct PHOSPHORTILES_EXPORT PendingAlgorithmRegistration
 };
 
 /**
- * @brief Global list of pending algorithm registrations
+ * @brief Global list of pending algorithm registrations.
  *
- * This is separate from the template to ensure all registrations go to the
- * same list regardless of template instantiation.
+ * Separate from the template so every registrar instantiation appends
+ * to the same list regardless of template specialisation.
+ *
+ * @warning Callers MUST hold @c pendingAlgorithmRegistrationsMutex()
+ * across every access. The list is append-only at static-init time
+ * and snapshot-only at @c AlgorithmRegistry construction, so contention
+ * is rare — but with the singleton gone (PR #343) two registries can
+ * be constructed concurrently in the same process (daemon + KCM tests),
+ * and a Qt plugin loader spawning a worker thread that triggers
+ * @c dlopen of an algorithm library is a realistic future case.
  */
 PHOSPHORTILES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations();
+
+/**
+ * @brief Mutex protecting @c pendingAlgorithmRegistrations(). Same
+ * Meyer's-singleton lifetime as the list itself.
+ */
+PHOSPHORTILES_EXPORT class QMutex& pendingAlgorithmRegistrationsMutex();
 
 /**
  * @brief Helper for static self-registration of built-in algorithms
@@ -197,7 +235,11 @@ public:
      */
     explicit AlgorithmRegistrar(const QString& id, int priority = 100)
     {
-        // Store in the global (non-template) pending list
+        // Store in the global (non-template) pending list. Locked so
+        // multiple algorithm libraries' static-init can run concurrently
+        // (Qt plugin loader on a worker thread, parallel test binaries
+        // sharing a process) without corrupting the QList.
+        QMutexLocker locker(&pendingAlgorithmRegistrationsMutex());
         pendingAlgorithmRegistrations().append({id, priority, []() {
                                                     return new T();
                                                 }});

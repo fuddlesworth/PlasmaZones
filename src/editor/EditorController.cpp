@@ -75,8 +75,23 @@ EditorController::EditorController(QObject* parent)
     m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
                                                                               m_localAlgorithmRegistry.get());
     m_scriptLoader->scanAndRegister();
-    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
-            &EditorController::reloadLocalLayouts);
+    // Intentionally NOT connecting algorithmsChanged → reloadLocalLayouts:
+    // manual zone layouts are unaffected by an algorithm hot-reload, so a
+    // disk re-scan here would be wasted work. AutotileLayoutSource self-
+    // wires to the registry's contentsChanged and invalidates its preview
+    // cache directly — the editor's localLayoutPreviews() already reflects
+    // the new algorithm set on the next composite query.
+
+    // Wire the layoutsChanged → recalcLocalLayouts connection BEFORE the
+    // initial loadLayouts() so that QFileSystemWatcher events arriving in
+    // the window between load + connect (e.g. the daemon writing a layout
+    // file mid-ctor) are handled. ZonesLayoutSource self-wires to the
+    // registry's unified ILayoutSourceRegistry::contentsChanged — no manual
+    // bridge required. Editor has no downstream consumer of
+    // ILayoutSource::contentsChanged, so slot ordering against
+    // recalcLocalLayouts is not load-bearing here; consumers always query
+    // availableLayouts() directly after an interactive edit.
+    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
 
     // Populate the daemon-independent layout source from disk on startup
     // so localLayoutPreviews() returns a populated list immediately. The
@@ -85,16 +100,12 @@ EditorController::EditorController(QObject* parent)
     m_localLayoutManager->loadLayouts();
     // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
     // emits non-empty zones + a real referenceAspectRatio — see the matching
-    // comment in SettingsController.
+    // comment in SettingsController. The connect above also fires
+    // recalcLocalLayouts on the first loadLayouts() emission, but the
+    // explicit call here covers the single-shot path where loadLayouts()
+    // returns no-op (e.g. empty layouts dir, recalc still has work to do
+    // against any pre-existing in-memory state).
     recalcLocalLayouts();
-    // Recompute geometry on every layouts-changed. ZonesLayoutSource
-    // self-wires to the registry's unified ILayoutSourceRegistry::
-    // contentsChanged — no manual bridge required. Editor has no
-    // downstream consumer of ILayoutSource::contentsChanged, so slot
-    // ordering against recalcLocalLayouts is not load-bearing here;
-    // consumers always query availableLayouts() directly after an
-    // interactive edit, by which point recalcLocalLayouts has run.
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
 
     // Subscribe to the daemon's layout-change D-Bus signals and force
     // a local-source reload when any fire. Belt-and-suspenders alongside

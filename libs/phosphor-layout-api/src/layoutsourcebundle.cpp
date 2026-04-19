@@ -4,6 +4,7 @@
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <QDebug>
+#include <QMutexLocker>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -135,10 +136,15 @@ void LayoutSourceBundle::build()
         // static-init re-run) — the warning identifies the offending
         // provider by name for diagnostics.
         if (m_sourceIndex.contains(name)) {
+            // Include the duplicate's position in m_factories so plugin
+            // authors looking at the warning can correlate against the
+            // (priority, name) registrar list. The first-wins entry's
+            // position is implicit (lower index) — only the dropped one
+            // needs identifying.
             qWarning(
-                "LayoutSourceBundle::build: duplicate factory name '%s' — skipping later registration (first "
-                "wins)",
-                qUtf8Printable(name));
+                "LayoutSourceBundle::build: duplicate factory name '%s' at registration index %td — "
+                "skipping later registration (first wins)",
+                qUtf8Printable(name), static_cast<std::ptrdiff_t>(&factory - m_factories.data()));
             continue;
         }
         auto source = factory->create();
@@ -190,8 +196,16 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
     // static-init time (so its contents are stable once main() runs),
     // but std::sort mutates the container — two bundles building in
     // parallel would otherwise trip over each other's sort swaps.
+    //
+    // Hold @c pendingLayoutSourceProvidersMutex across the snapshot loop
+    // so a registrar ctor running on another thread (Qt plugin loader's
+    // worker, late dlopen) cannot append while we copy. Released before
+    // the per-provider builder calls so a builder that reaches back into
+    // the registry (e.g. a future plugin metadata helper) cannot
+    // deadlock on the same mutex.
     std::vector<PendingLayoutSourceProvider> providers;
     {
+        QMutexLocker locker(&pendingLayoutSourceProvidersMutex());
         const auto& pending = pendingLayoutSourceProviders();
         providers.reserve(static_cast<std::size_t>(pending.size()));
         for (const auto& p : pending) {

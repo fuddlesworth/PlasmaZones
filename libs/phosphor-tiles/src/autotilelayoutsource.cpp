@@ -13,6 +13,7 @@
 
 #include "tileslogging.h"
 
+#include <QMutexLocker>
 #include <QRect>
 #include <QRectF>
 
@@ -48,6 +49,14 @@ QString makePreviewId(const QString& algorithmId)
 
 QString cacheKey(const QString& algorithmId, int windowCount)
 {
+    // The '|' separator is unambiguous because AlgorithmRegistry's
+    // id-charset validator (see registerAlgorithm in algorithmregistry.cpp)
+    // rejects '|' in algorithm ids. Removing that validator without
+    // updating this cache key construction would let two different
+    // (id, count) pairs collide on the same cache slot — silently
+    // returning the wrong preview. If the validator changes, switch
+    // here to a multi-field key (e.g. QPair-keyed hash) at the same
+    // time.
     return algorithmId + QLatin1Char('|') + QString::number(windowCount);
 }
 
@@ -203,15 +212,23 @@ AutotileLayoutSource::~AutotileLayoutSource() = default;
 
 void AutotileLayoutSource::invalidateCache()
 {
-    m_cache.clear();
-    m_cacheOrder.clear();
+    {
+        QMutexLocker locker(&m_cacheMutex);
+        m_cache.clear();
+        m_cacheOrder.clear();
+    }
     // All invalidation paths converge here, so emitting once guarantees no
-    // listener misses a rebuild regardless of which signal fired.
+    // listener misses a rebuild regardless of which signal fired. Emit
+    // outside the lock — Qt direct connections deliver synchronously, and
+    // a slot that re-enters the source through availableLayouts() would
+    // otherwise deadlock on m_cacheMutex.
     Q_EMIT contentsChanged();
 }
 
 void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLayout::LayoutPreview& preview) const
 {
+    // Caller must already hold m_cacheMutex (availableLayouts / previewAt
+    // both lock around the cache lookup + insert pair).
     // FIFO cap: registered-algorithm-count × 10 entries. Enough headroom for
     // the layout-picker UI (one preview per algorithm × a handful of
     // windowCount values) while preventing unbounded growth if a caller
@@ -260,6 +277,7 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
     // O(N²) in the number of registered algorithms).
     const auto ids = m_registry->availableAlgorithms();
     result.reserve(ids.size());
+    QMutexLocker locker(&m_cacheMutex);
     for (const QString& id : ids) {
         PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(id);
         if (!algorithm) {
@@ -291,6 +309,7 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
     }
     const QString algorithmId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
     const QString key = cacheKey(algorithmId, windowCount);
+    QMutexLocker locker(&m_cacheMutex);
     auto it = m_cache.constFind(key);
     if (it != m_cache.constEnd()) {
         return it.value();

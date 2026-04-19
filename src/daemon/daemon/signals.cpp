@@ -267,7 +267,7 @@ void Daemon::initializeAutotile()
                     algoId = m_settings->defaultAutotileAlgorithm();
                 }
                 if (algoId.isEmpty()) {
-                    algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+                    algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
                 }
                 if (!algoId.isEmpty()) {
                     applied =

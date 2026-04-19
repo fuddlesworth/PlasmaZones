@@ -38,9 +38,13 @@ PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
 previewFromAlgorithm(const QString& algorithmId, PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
                      PhosphorTiles::ITileAlgorithmRegistry* registry);
 
-/// Convenience overload that reverse-looks-up the algorithm id via the
-/// supplied registry. Prefer the id-taking form on hot paths — the
-/// reverse lookup is O(N) per call and emits a qCWarning.
+/// Convenience overload that reads the algorithm's stable id from
+/// @c TilingAlgorithm::registryId() (populated by
+/// @c AlgorithmRegistry::registerAlgorithm). Bails with a warning if the
+/// algorithm is not currently registered (empty registryId() — a preview
+/// has no stable id to reference). The supplied @p registry is consulted
+/// only for preview-params resolution, not for an id reverse-lookup —
+/// every call is O(1) regardless of registry size.
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
 previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
                      PhosphorTiles::ITileAlgorithmRegistry* registry);

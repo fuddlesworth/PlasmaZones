@@ -48,7 +48,7 @@ private Q_SLOTS:
         AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         QVERIFY(!engine.isEnabled());
-        QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId());
+        QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId());
         QVERIFY(engine.config() != nullptr);
     }
 
@@ -132,7 +132,7 @@ private Q_SLOTS:
         QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
         engine.setAlgorithm(QStringLiteral("nonexistent-algorithm"));
 
-        QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId());
+        QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId());
         QCOMPARE(spy.count(), 1);
     }
 

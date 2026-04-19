@@ -7,9 +7,21 @@
 
 #include <PhosphorLayoutApi/ILayoutSourceFactory.h>
 
+#include <QLatin1String>
+
+#include <QString>
+
 namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
+
+/// Stable source-name string for the autotile layout source. Exposed
+/// publicly so callers that need to look up the bundle's autotile
+/// source via @c LayoutSourceBundle::source(...) (e.g. the daemon's
+/// fast-path cache pointer in @c daemon.cpp) reference one definition
+/// instead of repeating the literal at every call site. The factory's
+/// @c name() returns the same value.
+PHOSPHORTILES_EXPORT QLatin1String autotileLayoutSourceName();
 
 /// Anchor symbol that forces the translation unit owning the static
 /// @c LayoutSourceProviderRegistrar for this provider to be linked in.

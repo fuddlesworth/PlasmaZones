@@ -276,7 +276,12 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
+        QCOMPARE(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId(), QLatin1String("bsp"));
+        // Round-trip through the virtual interface — concrete registry's
+        // override resolves to the same id, so a future test fake that
+        // overrides the policy can substitute its own.
+        auto* registry = m_scriptSetup.registry();
+        QCOMPARE(registry->defaultAlgorithmId(), QLatin1String("bsp"));
     }
 
     void testDefault_algorithmInstance()

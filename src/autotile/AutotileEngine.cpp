@@ -59,7 +59,7 @@ AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingServi
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
     , m_settingsBridge(std::make_unique<SettingsBridge>(this))
-    , m_algorithmId(PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId())
+    , m_algorithmId(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId())
 {
     // In production (Daemon::start) all three dependencies are non-null.
     // Headless unit tests deliberately pass nullptr to construct an engine
@@ -630,13 +630,27 @@ QString AutotileEngine::algorithm() const noexcept
 
 void AutotileEngine::setAlgorithm(const QString& algorithmId)
 {
-    // Validate algorithm exists
+    // Validate algorithm exists. Headless unit tests deliberately pass
+    // nullptr for the registry (per the constructor contract), so guard
+    // here rather than crashing — the engine simply records the requested
+    // id without validation, mirroring the no-op return in
+    // currentAlgorithm()/setWindowRegistry below.
     auto* registry = m_algorithmRegistry;
     QString newId = algorithmId;
+    if (!registry) {
+        if (m_algorithmId == newId) {
+            return;
+        }
+        m_algorithmEverSet = true;
+        m_algorithmId = newId;
+        m_config->algorithmId = newId;
+        Q_EMIT algorithmChanged(m_algorithmId);
+        return;
+    }
 
     if (!registry->hasAlgorithm(newId)) {
         qCWarning(lcAutotile) << "AutotileEngine: unknown algorithm" << newId << "- using default";
-        newId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+        newId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
 
     if (m_algorithmId == newId) {
@@ -743,7 +757,10 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
 
 PhosphorTiles::TilingAlgorithm* AutotileEngine::currentAlgorithm() const
 {
-    return m_algorithmRegistry->algorithm(m_algorithmId);
+    // Null-tolerant per the ctor contract — headless unit tests construct
+    // an engine without a registry. Returning nullptr is the documented
+    // signal for "no algorithm available"; every caller already guards.
+    return m_algorithmRegistry ? m_algorithmRegistry->algorithm(m_algorithmId) : nullptr;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3098,7 +3115,13 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
     auto resolver = [this](const QString& windowId) {
         return currentAppIdFor(windowId);
     };
+    // Null-tolerant per the ctor contract — headless tests can wire a
+    // window registry without an algorithm registry. Skip the resolver
+    // installation pass entirely when no algorithm registry is available.
     auto* algoRegistry = m_algorithmRegistry;
+    if (!algoRegistry) {
+        return;
+    }
     for (PhosphorTiles::TilingAlgorithm* algo : algoRegistry->allAlgorithms()) {
         if (algo) {
             algo->setAppIdResolver(resolver);
@@ -3110,6 +3133,9 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
     connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
             [this, resolver](const QString& id) {
                 auto* reg = m_algorithmRegistry;
+                if (!reg) {
+                    return;
+                }
                 if (auto* algo = reg->algorithm(id)) {
                     algo->setAppIdResolver(resolver);
                 }

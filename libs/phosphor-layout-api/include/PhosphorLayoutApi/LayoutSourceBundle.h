@@ -59,8 +59,10 @@ public:
     /// provider library uses a distinct id prefix, so collisions are
     /// only theoretical).
     ///
-    /// May only be called before @c build(); registering after build
-    /// is a programmer error and triggers a Q_ASSERT in debug builds.
+    /// May only be called before @c build() or @c buildFromRegistered();
+    /// registering after either call is a programmer error and triggers
+    /// a Q_ASSERT in debug builds. The single-shot gate is per-bundle —
+    /// move-assign a fresh bundle to start a new registration cycle.
     void addFactory(std::unique_ptr<ILayoutSourceFactory> factory);
 
     /// Materialise sources from every registered factory and wire the

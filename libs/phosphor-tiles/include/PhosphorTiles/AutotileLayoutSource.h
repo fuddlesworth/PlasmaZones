@@ -15,6 +15,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QHash>
+#include <QMutex>
 #include <QStringList>
 
 namespace PhosphorTiles {
@@ -80,6 +81,12 @@ private:
     mutable QHash<QString, PhosphorLayout::LayoutPreview> m_cache;
     /// FIFO eviction order — keys appended on insert, head evicted on overflow.
     mutable QStringList m_cacheOrder;
+    /// Guards @c m_cache + @c m_cacheOrder. The registry's read API
+    /// advertises thread-safety (see @c AlgorithmRegistry.h note), and
+    /// @c availableLayouts() / @c previewAt() are advertised as @c const
+    /// reads — but both populate the mutable cache, which would race on
+    /// concurrent reads from different threads without this guard.
+    mutable QMutex m_cacheMutex;
 };
 
 } // namespace PhosphorTiles

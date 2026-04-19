@@ -9,6 +9,7 @@
 
 #include <QDebug>
 #include <QList>
+#include <QMutex>
 #include <QString>
 
 #include <functional>
@@ -92,6 +93,23 @@ public:
     template<typename T>
     bool set(std::type_identity_t<T*> service)
     {
+        // Compile-time guard for the void*-round-trip invariants
+        // documented above. T must be a class type (no plain pointers
+        // sneaking in via deduction), and its inheritance chain MUST be
+        // single (single-base) to keep static_cast<void*>(T*) ↔
+        // static_cast<T*>(void*) at a fixed offset. We can't statically
+        // detect virtual inheritance with pre-C++26 traits, but we can
+        // catch the most common silent-bug shape: a Concrete that
+        // multiply-inherits two non-related abstract bases would still
+        // round-trip safely under T == Concrete, but the documented
+        // pattern is to set<Interface>(...) — and that one does
+        // round-trip provided Interface itself sits at offset 0 in T.
+        // The runtime test in test_factory_context_typing covers the
+        // remaining cases.
+        static_assert(std::is_class_v<T>, "FactoryContext::set<T>: T must be a class type");
+        static_assert(!std::is_pointer_v<T>,
+                      "FactoryContext::set<T>: pass the interface type, not a pointer type "
+                      "(write set<IFoo>(p), not set<IFoo*>(p))");
         const auto key = std::type_index(typeid(T));
         const bool duplicate = m_services.find(key) != m_services.end();
         Q_ASSERT_X(!duplicate, "FactoryContext::set",
@@ -112,6 +130,10 @@ public:
     template<typename T>
     T* get() const
     {
+        static_assert(std::is_class_v<T>, "FactoryContext::get<T>: T must be a class type");
+        static_assert(!std::is_pointer_v<T>,
+                      "FactoryContext::get<T>: pass the interface type, not a pointer type "
+                      "(write get<IFoo>(), not get<IFoo*>())");
         const auto it = m_services.find(std::type_index(typeid(T)));
         return it == m_services.end() ? nullptr : static_cast<T*>(it->second);
     }
@@ -145,6 +167,17 @@ struct PHOSPHORLAYOUTAPI_EXPORT PendingLayoutSourceProvider
 /// in a templated class) so every translation unit appends to the
 /// same QList regardless of template instantiation.
 ///
+/// @warning **Callers MUST hold @c pendingLayoutSourceProvidersMutex()
+/// across every access (read or write).** The reference returned here
+/// is the bare list; thread-safety lives in the mutex, not the
+/// container. In tree this matters when (a) a Qt plugin loader
+/// triggers @c dlopen of a provider on a worker thread (a
+/// @c LayoutSourceProviderRegistrar ctor running concurrently with a
+/// @c buildFromRegistered snapshot), and (b) two composition roots
+/// (e.g. daemon + KCM in the same process) run their bundle builds in
+/// parallel. The Meyer's-singleton @c QList is otherwise safe to
+/// reference but not safe to mutate without external sync.
+///
 /// @note Plugin-loading constraint: this list is intended for
 /// static-init-time population. Bundles snapshot it at
 /// @c buildFromRegistered time, so providers introduced via a later
@@ -154,13 +187,17 @@ struct PHOSPHORLAYOUTAPI_EXPORT PendingLayoutSourceProvider
 /// @c buildFromRegistered afterwards.
 ///
 /// @todo(plugin-compositor) When runtime plugin loading lands, this
-/// contract must be revisited. Likely shape: mutex-protected list with
-/// explicit per-plugin handles, removal on @c dlclose, and a bundle
-/// rebuild API for composition roots that want to pick up a newly-
-/// loaded provider. The plugin-discovery pattern described above is the
-/// static-init-only variant; do not assume it will survive the switch
-/// to a dynamic plugin loader without a redesign.
+/// contract must be revisited. Likely shape: explicit per-plugin
+/// handles, removal on @c dlclose, and a bundle rebuild API for
+/// composition roots that want to pick up a newly-loaded provider. The
+/// plugin-discovery pattern described above is the static-init-only
+/// variant; do not assume it will survive the switch to a dynamic
+/// plugin loader without a redesign.
 PHOSPHORLAYOUTAPI_EXPORT QList<PendingLayoutSourceProvider>& pendingLayoutSourceProviders();
+
+/// Mutex protecting @c pendingLayoutSourceProviders(). Same Meyer's-
+/// singleton lifetime as the list itself.
+PHOSPHORLAYOUTAPI_EXPORT QMutex& pendingLayoutSourceProvidersMutex();
 
 /// Static-init self-registration helper for provider libraries.
 ///

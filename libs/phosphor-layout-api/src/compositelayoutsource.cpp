@@ -171,6 +171,13 @@ QVector<LayoutPreview> CompositeLayoutSource::availableLayouts() const
 
 LayoutPreview CompositeLayoutSource::previewAt(const QString& id, int windowCount, const QSize& canvas)
 {
+    // Empty input id can't match any child's id; short-circuit before
+    // walking the source list. Per ILayoutSource contract empty input
+    // is well-formed (each child would also bail), so this is a small
+    // O(1) win on miss-the-cache callers.
+    if (id.isEmpty()) {
+        return {};
+    }
     for (ILayoutSource* source : m_sources) {
         if (!source) {
             continue;

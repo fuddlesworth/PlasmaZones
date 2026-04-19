@@ -37,11 +37,16 @@ namespace PlasmaZones {
 ///
 /// @pre @c bundle has not been built yet (enforced by the bundle's
 ///      own single-shot assertion).
-/// @param zoneLayouts  Borrowed — caller owns. May be nullptr in
-///                     narrow cases where the composition root hosts
-///                     no zone-layout engine; the zones provider will
-///                     silently skip.
-/// @param tileAlgorithms Borrowed — caller owns. May be nullptr.
+/// @param zoneLayouts  Borrowed — caller owns. Required: every in-tree
+///                     composition root (daemon, editor, settings)
+///                     hosts a manual-layout registry; passing nullptr
+///                     would silently skip the zones provider, leaving
+///                     the bundle with only autotile entries (no
+///                     in-tree caller wants this). If a future caller
+///                     legitimately needs the no-zones case, drop the
+///                     assert and add a test that exercises the path.
+/// @param tileAlgorithms Borrowed — caller owns. Required: see note
+///                     above; same reasoning applies symmetrically.
 PLASMAZONES_EXPORT void buildStandardLayoutSourceBundle(PhosphorLayout::LayoutSourceBundle& bundle,
                                                         PhosphorZones::IZoneLayoutRegistry* zoneLayouts,
                                                         PhosphorTiles::ITileAlgorithmRegistry* tileAlgorithms);

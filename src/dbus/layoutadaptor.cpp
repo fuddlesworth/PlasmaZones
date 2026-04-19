@@ -637,12 +637,16 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
     // The daemon/editor/settings each call setLayoutSource exactly once
     // during init(); allow idempotent re-assignment with the same pointer
     // but trip on a silent swap that would leave stale connections wired.
-    // Debug builds assert; release builds silently swap to the new source
-    // by disconnecting the coalesce timer from the old source first (see
-    // the disconnect-by-receiver block below), so a stray re-wire in a
-    // shipped binary is degraded from "duplicate coalesced emissions" to
-    // "single coalesced emission from the new source".
-    Q_ASSERT(!m_layoutSource || m_layoutSource == source);
+    // Release-build behaviour is intentionally lenient: the disconnect-
+    // by-receiver block below already drops the prior connection, so a
+    // re-wire that escapes debug only loses the OLD source's coalesced
+    // emissions (the new source's are wired on the next branch). Asserts
+    // catch the dev-time programmer error; release degrades to single-
+    // source-wins rather than a hard crash so a misconfigured
+    // composition root stays observable instead of unkillable.
+    Q_ASSERT_X(!m_layoutSource || m_layoutSource == source, "LayoutAdaptor::setLayoutSource",
+               "rebinding to a different ILayoutSource is a programmer error — debug asserts; release silently "
+               "swaps to the new source (old source's coalesce-timer connection is dropped first)");
 
     if (m_layoutSource == source)
         return;
@@ -657,20 +661,28 @@ void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)
 
     m_layoutSource = source;
 
-    if (m_layoutSource) {
-        // Coalesce bursts of contentsChanged (AlgorithmRegistry churn on
-        // startup, scripted-algorithm hot-reload) into one layoutListChanged
-        // D-Bus emission — see m_layoutSourceCoalesce member comment.
-        connect(m_layoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, &m_layoutSourceCoalesce,
-                QOverload<>::of(&QTimer::start));
-        // Kick the coalesce timer once on bind so a fully-populated source
-        // (typical for AutotileLayoutSource over a registry that's been
-        // populated synchronously by the built-in registration sweep) still
-        // produces a layoutListChanged D-Bus emission for any client that
-        // attached before this bind. One extra signal at startup is cheap;
-        // a never-invalidated client cache is not.
-        m_layoutSourceCoalesce.start();
+    if (!m_layoutSource) {
+        // Explicit clear: stop any in-flight coalesce so the next
+        // setLayoutSource(non-null) doesn't trip its initial timeout()
+        // for stale state. Mirrors invalidateCache() above — the cache
+        // is already nuked because subsequent getLayoutPreviewList()
+        // bails on the null source check.
+        m_layoutSourceCoalesce.stop();
+        return;
     }
+
+    // Coalesce bursts of contentsChanged (AlgorithmRegistry churn on
+    // startup, scripted-algorithm hot-reload) into one layoutListChanged
+    // D-Bus emission — see m_layoutSourceCoalesce member comment.
+    connect(m_layoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, &m_layoutSourceCoalesce,
+            QOverload<>::of(&QTimer::start));
+    // Kick the coalesce timer once on bind so a fully-populated source
+    // (typical for AutotileLayoutSource over a registry that's been
+    // populated synchronously by the built-in registration sweep) still
+    // produces a layoutListChanged D-Bus emission for any client that
+    // attached before this bind. One extra signal at startup is cheap;
+    // a never-invalidated client cache is not.
+    m_layoutSourceCoalesce.start();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

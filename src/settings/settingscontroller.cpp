@@ -160,32 +160,19 @@ SettingsController::SettingsController(QObject* parent)
     // service the KCM doesn't already publish.
     buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
 
-    // Load the user's layouts immediately so localLayoutPreviews() returns
-    // a populated list on first call (before any QML query has had a
-    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
-    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
-    // and installs a QFileSystemWatcher so any subsequent disk changes
-    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
-    m_localLayoutManager->loadLayouts();
-    // Force a synchronous recalc over the primary screen so manual layouts
-    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
-    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
-    // referenceAspectRatio. Without this, settings-process previews render
-    // with zero-size rects for authored-pixel layouts. Daemon runs the
-    // same recalc in Daemon::init(); settings does it here because it owns
-    // an in-process LayoutManager independent of the daemon.
-    recalcLocalLayouts();
-    // ZonesLayoutSource self-wires to the registry's unified
-    // ILayoutSourceRegistry::contentsChanged; no manual bridge is
-    // required. Future reads through the local source reflect current
-    // geometry once the recalc above has run.
-    // When the file watcher detects a layout change on disk, refresh
-    // m_layouts from the local composite (manual + autotile) so QML
-    // rebinds even if the daemon isn't broadcasting D-Bus signals (or is
-    // down). The async refresh through scheduleLayoutLoad() /
-    // loadLayoutsAsync() also fires from daemon-side D-Bus signals and
-    // replaces m_layouts with the D-Bus-enriched view when the daemon is
-    // up — these two paths converge at m_layouts.
+    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
+    // any QFileSystemWatcher event landing in the window between load +
+    // connect (e.g. the daemon writing to ~/.local/share/plasmazones/layouts/
+    // mid-ctor) is handled. ZonesLayoutSource self-wires to the registry's
+    // unified ILayoutSourceRegistry::contentsChanged; future reads through
+    // the local source reflect current geometry once recalcLocalLayouts has
+    // run. When the file watcher detects a layout change on disk, refresh
+    // m_layouts from the local composite (manual + autotile) so QML rebinds
+    // even if the daemon isn't broadcasting D-Bus signals (or is down). The
+    // async refresh through scheduleLayoutLoad() / loadLayoutsAsync() also
+    // fires from daemon-side D-Bus signals and replaces m_layouts with the
+    // D-Bus-enriched view when the daemon is up — these two paths converge
+    // at m_layouts.
     connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
@@ -203,6 +190,22 @@ SettingsController::SettingsController(QObject* parent)
             }
         }
     });
+
+    // Load the user's layouts immediately so localLayoutPreviews() returns
+    // a populated list on first call (before any QML query has had a
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
+    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
+    // and installs a QFileSystemWatcher so any subsequent disk changes
+    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    m_localLayoutManager->loadLayouts();
+    // Force a synchronous recalc over the primary screen so manual layouts
+    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
+    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
+    // referenceAspectRatio. Without this, settings-process previews render
+    // with zero-size rects for authored-pixel layouts. Daemon runs the
+    // same recalc in Daemon::init(); settings does it here because it owns
+    // an in-process LayoutManager independent of the daemon.
+    recalcLocalLayouts();
 
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())

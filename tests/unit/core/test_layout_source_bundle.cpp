@@ -33,6 +33,11 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>
+#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
+
+#include "core/layoutmanager.h"
 
 // ─── Fixture sources / factories ────────────────────────────────────────────
 
@@ -135,6 +140,27 @@ FixtureService g_fixtureServiceB{22};
 /// root doesn't host this engine" signal path.
 struct AbsentFixtureService
 {
+};
+
+/// Two-tier interface fixture for the FactoryContext type-key safety
+/// tests. Mirrors the shape every real provider library follows:
+/// a non-virtually-inheriting concrete that derives from an interface
+/// type. set<Concrete>(d) registers under the concrete's typeid;
+/// get<Interface>() must miss because typeid(Interface) != typeid(Derived).
+class FixtureBaseInterface
+{
+public:
+    virtual ~FixtureBaseInterface() = default;
+    virtual int kind() const = 0;
+};
+
+class FixtureConcrete : public FixtureBaseInterface
+{
+public:
+    int kind() const override
+    {
+        return 7;
+    }
 };
 
 // ─── File-scope static-init registrars ──────────────────────────────────────
@@ -387,6 +413,127 @@ private Q_SLOTS:
         QSignalSpy spy(bundle.composite(), &PhosphorLayout::ILayoutSource::contentsChanged);
         source->bumpContents();
         QCOMPARE(spy.count(), 1);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FactoryContext type-key safety (M3 — set<Concrete> vs get<Base> must
+    // miss, and vice versa, so a typo in the type parameter doesn't
+    // silently route the wrong pointer).
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testFactoryContext_setConcreteGetBaseMisses()
+    {
+        // Real composition roots write `ctx.set<Interface>(concrete)` —
+        // the rejected shape is `ctx.set<Concrete>(concrete)` followed
+        // by a provider builder doing `ctx.get<Interface>()`. The keys
+        // are typeid(Concrete) and typeid(Interface) respectively; they
+        // do not match, so the get<>() must return nullptr (the bundle
+        // then bails as "engine not hosted") rather than slicing through
+        // a void* round-trip and handing the builder an offset pointer.
+        FixtureConcrete d;
+        PhosphorLayout::FactoryContext ctx;
+        QVERIFY(ctx.set<FixtureConcrete>(&d));
+        // Same key — round-trips fine.
+        QCOMPARE(ctx.get<FixtureConcrete>(), &d);
+        // Different key — missed. This is the safe failure mode.
+        QCOMPARE(ctx.get<FixtureBaseInterface>(), nullptr);
+    }
+
+    void testFactoryContext_setBaseGetConcreteMisses()
+    {
+        // Symmetric to the above: registering under the interface and
+        // pulling under the concrete must also miss. Documented contract
+        // for "pass the interface to set, the same interface to get".
+        FixtureConcrete d;
+        PhosphorLayout::FactoryContext ctx;
+        QVERIFY(ctx.set<FixtureBaseInterface>(&d));
+        QCOMPARE(ctx.get<FixtureBaseInterface>(), static_cast<FixtureBaseInterface*>(&d));
+        QCOMPARE(ctx.get<FixtureConcrete>(), nullptr);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Single-shot enforcement (build / buildFromRegistered are one-shot)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testBundle_secondBuildIsNoOp()
+    {
+#ifndef QT_DEBUG
+        // Q_ASSERT_X aborts in debug; only the release-fallback path is
+        // testable here.
+        PhosphorLayout::LayoutSourceBundle bundle;
+        bundle.addFactory(
+            std::make_unique<FixtureSourceFactory>(QStringLiteral("alpha"), QStringList{QStringLiteral("a1")}));
+        bundle.build();
+        const auto* compositeBefore = bundle.composite();
+        bundle.build(); // ignored
+        QCOMPARE(bundle.composite(), compositeBefore);
+#else
+        QSKIP("Q_ASSERT_X aborts in debug builds — second-build release behaviour covered on release runs");
+#endif
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CompositeLayoutSource::previewAt empty-id short-circuit (n3)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testComposite_previewAtEmptyIdShortCircuits()
+    {
+        PhosphorLayout::LayoutSourceBundle bundle;
+        bundle.addFactory(
+            std::make_unique<FixtureSourceFactory>(QStringLiteral("alpha"), QStringList{QStringLiteral("a1")}));
+        bundle.build();
+        // Empty input id can't match any source's id; must return an
+        // empty preview without walking the source list. We can't easily
+        // assert "the source's previewAt was not called" without adding a
+        // counter to the fixture, so just verify the empty result holds.
+        const auto preview = bundle.composite()->previewAt(QString());
+        QVERIFY(preview.id.isEmpty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Single-QObject-base invariant (M4 — every chain from a concrete
+    // registry to QObject must be a single inheritance path; otherwise
+    // FactoryContext's void* round-trip silently slices an offset
+    // pointer through to provider builders).
+    //
+    // Compile-time guards live in libs/phosphor-zones/src/interfaces.cpp
+    // and libs/phosphor-tiles/src/itilealgorithmregistry.cpp; the runtime
+    // checks below catch the harder case those static_asserts can't see:
+    // that the upcast from concrete → interface → QObject yields the
+    // same address as the direct concrete → QObject upcast.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    void testInvariant_layoutManagerSingleQObjectBase()
+    {
+        PlasmaZones::LayoutManager mgr;
+        // Direct concrete → QObject path.
+        QObject* directQObject = static_cast<QObject*>(&mgr);
+        // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.
+        // Every step is non-virtual, single inheritance; the address must
+        // not shift along the chain. A non-zero offset would mean
+        // LayoutManager picked up a second QObject base somewhere along
+        // the way (e.g. a sibling interface accidentally re-derived from
+        // QObject), which is exactly the multi-QObject hazard the static-
+        // assert pair guards against at compile time.
+        auto* registry = static_cast<PhosphorZones::IZoneLayoutRegistry*>(&mgr);
+        QObject* viaRegistry = static_cast<QObject*>(registry);
+        QCOMPARE(directQObject, viaRegistry);
+        // And the next link in the chain.
+        auto* notifier = static_cast<PhosphorLayout::ILayoutSourceRegistry*>(registry);
+        QObject* viaNotifier = static_cast<QObject*>(notifier);
+        QCOMPARE(directQObject, viaNotifier);
+    }
+
+    void testInvariant_algorithmRegistrySingleQObjectBase()
+    {
+        PhosphorTiles::AlgorithmRegistry registry;
+        QObject* directQObject = static_cast<QObject*>(&registry);
+        auto* tileIface = static_cast<PhosphorTiles::ITileAlgorithmRegistry*>(&registry);
+        QObject* viaTileIface = static_cast<QObject*>(tileIface);
+        QCOMPARE(directQObject, viaTileIface);
+        auto* unifiedIface = static_cast<PhosphorLayout::ILayoutSourceRegistry*>(tileIface);
+        QObject* viaUnifiedIface = static_cast<QObject*>(unifiedIface);
+        QCOMPARE(directQObject, viaUnifiedIface);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

@@ -9,18 +9,26 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QEvent>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QThread>
 #include <algorithm>
 #include <vector>
 
 namespace {
 /// Library-owned recommended default algorithm.
-/// Kept as a literal so the registry is self-contained — no PlasmaZones
-/// config-layer dependency.  Application config layers may surface their own
-/// user-facing default (which today happens to also be "bsp"); the two are
-/// intentionally independent.
-constexpr auto RecommendedDefaultAlgorithmId = "bsp";
+/// Stored as a static const QString rather than a raw C-string so the
+/// id-string is constructed once at first-use rather than rebuilt on
+/// every defaultAlgorithmId() call. Library is self-contained — no
+/// PlasmaZones config-layer dependency. Application config layers may
+/// surface their own user-facing default (which today happens to also
+/// be "bsp"); the two are intentionally independent.
+const QString& recommendedDefaultAlgorithmId()
+{
+    static const QString id = QStringLiteral("bsp");
+    return id;
 }
+} // namespace
 
 namespace PhosphorTiles {
 
@@ -31,11 +39,18 @@ bool AlgorithmPreviewParams::operator==(const AlgorithmPreviewParams& other) con
         && savedAlgorithmSettings == other.savedAlgorithmSettings;
 }
 
-// Global pending registrations list - shared by all AlgorithmRegistrar instantiations
+// Global pending registrations list - shared by all AlgorithmRegistrar instantiations.
+// See header note: callers MUST hold pendingAlgorithmRegistrationsMutex().
 QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 {
     static QList<PendingAlgorithmRegistration> s_pending;
     return s_pending;
+}
+
+QMutex& pendingAlgorithmRegistrationsMutex()
+{
+    static QMutex s_mutex;
+    return s_mutex;
 }
 
 AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
@@ -85,21 +100,32 @@ AlgorithmRegistry::~AlgorithmRegistry()
 
 void AlgorithmRegistry::cleanup()
 {
+    // Drain only THIS registry's own pending deferred-delete events.
+    // The previous implementation called sendPostedEvents(nullptr, ...)
+    // which drains the process-wide QEvent::DeferredDelete queue —
+    // safe under the old singleton, but dangerous after PR #343 where
+    // multiple registries (daemon, editor, settings) each connect to
+    // aboutToQuit and would each force-delete pending deleteLater()
+    // events for unrelated subsystems whose owners have not yet run
+    // their teardown. Iterating m_pendingDeletes and posting per-algo
+    // narrows the drain to objects this registry actually owned. The
+    // QPointer auto-clears when Qt processes the event, so a no-op
+    // path after a normal drain is the common case.
+    if (QCoreApplication::instance()) {
+        for (auto& weak : m_pendingDeletes) {
+            if (TilingAlgorithm* alive = weak.data()) {
+                QCoreApplication::sendPostedEvents(alive, QEvent::DeferredDelete);
+            }
+        }
+    }
+    m_pendingDeletes.clear();
+
     if (m_algorithms.isEmpty()) {
         return; // Already cleaned up (e.g., aboutToQuit already ran)
     }
 
-    // Drain any pending deleteLater() events posted by safeDeleteAlgorithm() so
-    // those algorithms are destroyed now, while Qt is still fully alive.
-    // Without this drain, a ScriptedAlgorithm queued via deleteLater() could be
-    // destructed during static teardown after QCoreApplication has already
-    // gone away, crashing in ~QJSEngine.
-    if (QCoreApplication* app = QCoreApplication::instance()) {
-        app->sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    }
-
     // Explicitly delete all algorithm children while Qt is still alive.
-    // This prevents crashes when the static singleton is destroyed after
+    // This prevents crashes when the registry is destroyed after
     // QCoreApplication during static destruction (ScriptedAlgorithm
     // instances hold QJSEngine internals that require a live Qt runtime).
     // Use direct delete instead of deleteLater() — this runs during shutdown
@@ -243,8 +269,13 @@ void AlgorithmRegistry::safeDeleteAlgorithm(TilingAlgorithm* algo)
     //   1. The algorithm was already removed from m_algorithms by
     //      removeAlgorithmInternal(), so cleanup() won't see it.
     //   2. deleteLater() ensures the QObject event loop handles final deletion.
+    //
+    // Tracked in m_pendingDeletes so cleanup() can drain only this
+    // registry's own deferred-delete events (instead of the global queue,
+    // which would step on other registries' subsystems — see cleanup()).
     algo->setRegistryId(QString());
     algo->setParent(nullptr);
+    m_pendingDeletes.append(QPointer<TilingAlgorithm>(algo));
     algo->deleteLater();
 }
 
@@ -280,14 +311,14 @@ bool AlgorithmRegistry::hasAlgorithm(const QString& id) const
     return m_algorithms.contains(id);
 }
 
-QString AlgorithmRegistry::defaultAlgorithmId()
+QString AlgorithmRegistry::staticDefaultAlgorithmId()
 {
-    return QString::fromLatin1(RecommendedDefaultAlgorithmId);
+    return recommendedDefaultAlgorithmId();
 }
 
 TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 {
-    auto* algo = algorithm(defaultAlgorithmId());
+    auto* algo = algorithm(staticDefaultAlgorithmId());
     if (!algo && !m_algorithms.isEmpty() && !m_registrationOrder.isEmpty()) {
         // Configured default not registered (e.g. BSP script failed to load).
         // Fall back to the first available algorithm so callers never get nullptr
@@ -314,8 +345,12 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     // append-only at static-init time (stable once main() runs), but
     // std::sort mutates container order — two constructors running on
     // different threads would otherwise trip over each other's swaps.
+    // Hold the registrations mutex across the snapshot so a concurrent
+    // AlgorithmRegistrar ctor on a worker thread (Qt plugin loader,
+    // parallel test binaries) cannot append while we copy.
     std::vector<PendingAlgorithmRegistration> snapshot;
     {
+        QMutexLocker locker(&pendingAlgorithmRegistrationsMutex());
         const auto& pending = pendingAlgorithmRegistrations();
         snapshot.reserve(static_cast<std::size_t>(pending.size()));
         for (const auto& p : pending) {

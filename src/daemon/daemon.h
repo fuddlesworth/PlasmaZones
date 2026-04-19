@@ -387,16 +387,22 @@ private:
     // Manual layouts + autotile algorithms composed behind layoutSource().
     // The bundle owns all three objects so destruction is deterministic
     // (composite first, then the child sources it borrows from). See
-    // layoutsourcefactory.h for the construction contract.
+    // libs/phosphor-layout-api/.../LayoutSourceBundle.h for the
+    // construction contract.
     PhosphorLayout::LayoutSourceBundle m_layoutSources;
     /// Cached pointer to the bundle's autotile source — populated once
     /// after buildFromRegistered in the ctor, then handed to every
     /// consumer that wants the long-lived preview-cache fast path
     /// (overlay service, layout adaptor, unified controller). Avoids
-    /// repeating m_layoutSources.source(QStringLiteral("autotile"))
+    /// repeating m_layoutSources.source(autotileLayoutSourceName())
     /// at every wiring site (DRY) and removes the temptation to typo
-    /// the literal. Borrowed; lifetime tied to m_layoutSources.
+    /// the literal. Borrowed; lifetime tied to m_layoutSources, so it
+    /// MUST stay declared immediately adjacent (and below) the bundle
+    /// so reverse-order member destruction nulls borrowed-pointer
+    /// consumers before the source itself is gone — see
+    /// "DECLARATION ORDER INVARIANT" comment above.
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
+    // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;

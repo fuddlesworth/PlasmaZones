@@ -161,6 +161,11 @@ inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRe
  *
  * Searches active layout first, then all layouts.
  * Useful for per-screen layout assignments where zone may be in non-active layout.
+ *
+ * @note O(N×M) in (layouts, zones-per-layout) on the cold path. Acceptable
+ * for the per-screen-assignment fallback use case where N is small (a few
+ * layouts) and only triggers when the active layout misses; not suitable
+ * for hot-path zone lookups (use the IZoneLayoutRegistry by-id surface).
  */
 template<typename LogCategory>
 PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,

@@ -277,7 +277,7 @@ void Daemon::handleSnappingToAutotile()
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
     QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
-        algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
     const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 

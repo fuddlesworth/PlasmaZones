@@ -61,9 +61,21 @@ public:
     virtual bool hasAlgorithm(const QString& id) const = 0;
 
     /// Convenience: the registry's recommended default algorithm.
-    /// Concrete registries determine the id via their own policy — see
-    /// @c AlgorithmRegistry::defaultAlgorithmId.
+    /// Resolves @c defaultAlgorithmId() via @c algorithm() and falls
+    /// back to the first-registered algorithm if the configured default
+    /// isn't present. Concrete registries override @c defaultAlgorithmId
+    /// to publish their policy id; tests can override either to inject
+    /// a fake.
     virtual TilingAlgorithm* defaultAlgorithm() const = 0;
+
+    /// Stable id of the registry's recommended default algorithm.
+    /// Virtual so test fakes that derive from this interface can publish
+    /// their own policy id without taking on @c AlgorithmRegistry's
+    /// concrete implementation. The concrete @c AlgorithmRegistry
+    /// override returns @c "bsp"; downstream callers (settings'
+    /// validate-default check, daemon's algorithm-fallback) should ask
+    /// the registry rather than hard-coding the id.
+    virtual QString defaultAlgorithmId() const = 0;
 
     // ─── Mutation ──────────────────────────────────────────────────────────
 

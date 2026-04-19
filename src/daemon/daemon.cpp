@@ -19,6 +19,7 @@
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
@@ -160,7 +161,7 @@ Daemon::Daemon(QObject* parent)
     // Cache the bundle's autotile source once so the four init() wiring
     // sites that need it don't each re-call source(QStringLiteral("autotile"))
     // (one literal typo away from silently breaking preview-cache reuse).
-    m_autotileLayoutSource = m_layoutSources.source(QStringLiteral("autotile"));
+    m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 }
 
 Daemon::~Daemon()
