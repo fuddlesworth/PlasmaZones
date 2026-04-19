@@ -15,6 +15,8 @@
 
 namespace PhosphorAnimation {
 
+class CurveRegistry;
+
 /**
  * @brief How a batch of animations starts.
  *
@@ -165,9 +167,12 @@ public:
 
     /// Parse from a JSON object. Missing keys produce unset fields
     /// (@c std::nullopt / null curve). The `curve` string is parsed via
-    /// `CurveRegistry::create()`, so any registered (including
-    /// third-party) curve type is supported.
-    static Profile fromJson(const QJsonObject& obj);
+    /// @p registry's `create()`, so any registered (including
+    /// third-party) curve type the caller's registry knows about is
+    /// supported. Per-process registries (replacing the prior
+    /// `CurveRegistry::instance()` singleton) mean composition roots
+    /// must thread their own registry to every fromJson call.
+    static Profile fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     // ─────── Equality ───────
 

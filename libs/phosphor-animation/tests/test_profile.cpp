@@ -9,6 +9,7 @@
 #include <QTest>
 
 using PhosphorAnimation::Curve;
+using PhosphorAnimation::CurveRegistry;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::Profile;
 using PhosphorAnimation::SequenceMode;
@@ -161,7 +162,7 @@ private Q_SLOTS:
         original.staggerInterval = 45;
         original.presetName = QStringLiteral("My Fast");
 
-        const Profile restored = Profile::fromJson(original.toJson());
+        const Profile restored = Profile::fromJson(original.toJson(), CurveRegistry{});
         QCOMPARE(restored, original);
     }
 
@@ -176,7 +177,7 @@ private Q_SLOTS:
         const QJsonObject obj = p.toJson();
         QVERIFY(obj.contains(QLatin1String("presetName")));
 
-        const Profile restored = Profile::fromJson(obj);
+        const Profile restored = Profile::fromJson(obj, CurveRegistry{});
         QVERIFY(restored.presetName.has_value());
         QVERIFY(restored.presetName->isEmpty());
     }
@@ -195,8 +196,8 @@ private Q_SLOTS:
 
         QVERIFY(absent != engagedEmpty);
 
-        const Profile absentRestored = Profile::fromJson(absent.toJson());
-        const Profile engagedEmptyRestored = Profile::fromJson(engagedEmpty.toJson());
+        const Profile absentRestored = Profile::fromJson(absent.toJson(), CurveRegistry{});
+        const Profile engagedEmptyRestored = Profile::fromJson(engagedEmpty.toJson(), CurveRegistry{});
 
         QVERIFY(!absentRestored.presetName.has_value());
         QVERIFY(engagedEmptyRestored.presetName.has_value());
@@ -209,7 +210,7 @@ private Q_SLOTS:
         original.curve = std::make_shared<Spring>(Spring::bouncy());
         original.duration = 400.0;
 
-        const Profile restored = Profile::fromJson(original.toJson());
+        const Profile restored = Profile::fromJson(original.toJson(), CurveRegistry{});
         QCOMPARE(restored.duration, original.duration);
         QVERIFY(restored.curve != nullptr);
         QCOMPARE(restored.curve->typeId(), QStringLiteral("spring"));
@@ -220,7 +221,7 @@ private Q_SLOTS:
     {
         QJsonObject obj;
         obj.insert(QLatin1String("duration"), 999.0);
-        const Profile p = Profile::fromJson(obj);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
         QCOMPARE(*p.duration, 999.0);
         QVERIFY(!p.minDistance.has_value());
         QVERIFY(!p.staggerInterval.has_value());
@@ -232,7 +233,7 @@ private Q_SLOTS:
         // Unknown integer values fall back to the library default enum.
         QJsonObject obj;
         obj.insert(QLatin1String("sequenceMode"), 99);
-        const Profile p = Profile::fromJson(obj);
+        const Profile p = Profile::fromJson(obj, CurveRegistry{});
         QCOMPARE(*p.sequenceMode, Profile::DefaultSequenceMode);
     }
 };

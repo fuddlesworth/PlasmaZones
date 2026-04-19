@@ -3,6 +3,7 @@
 
 #include <PhosphorAnimation/ProfileTree.h>
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 
 #include <QJsonArray>
@@ -155,12 +156,12 @@ QJsonObject ProfileTree::toJson() const
     return root;
 }
 
-ProfileTree ProfileTree::fromJson(const QJsonObject& obj)
+ProfileTree ProfileTree::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     ProfileTree tree;
 
     if (obj.contains(QLatin1String("baseline"))) {
-        tree.m_baseline = Profile::fromJson(obj.value(QLatin1String("baseline")).toObject());
+        tree.m_baseline = Profile::fromJson(obj.value(QLatin1String("baseline")).toObject(), registry);
     }
 
     const QJsonArray arr = obj.value(QLatin1String("overrides")).toArray();
@@ -170,7 +171,7 @@ ProfileTree ProfileTree::fromJson(const QJsonObject& obj)
         if (path.isEmpty()) {
             continue;
         }
-        tree.setOverride(path, Profile::fromJson(entry.value(QLatin1String("profile")).toObject()));
+        tree.setOverride(path, Profile::fromJson(entry.value(QLatin1String("profile")).toObject(), registry));
     }
 
     return tree;

@@ -1798,7 +1798,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Polymorphic curve parse — handles bare bezier, named easing,
         // and "spring:..." in one path so Spring can drive snap motion
         // end-to-end without a settings-side branch.
-        m_windowAnimator->setCurve(PhosphorAnimation::CurveRegistry::instance().create(v.toString()));
+        m_windowAnimator->setCurve(m_curveRegistry.create(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));

@@ -49,6 +49,15 @@ namespace PhosphorAnimation {
  * All methods are thread-safe. Internal `QMutex` guards the factory map.
  * Factory functions themselves must be reentrant (the common
  * `Easing::fromString` / `Spring::fromString` helpers are).
+ *
+ * ## Ownership
+ *
+ * Per-process instance, owned by the composition root. PlasmaZones
+ * daemon, KCM, editor, and the KWin effect each construct one
+ * `CurveRegistry` and pass it to every `Profile::fromJson` /
+ * `ProfileTree::fromJson` call. The previous process-wide singleton
+ * (`instance()`) was removed in the singleton-sweep #2 refactor —
+ * see project_plugin_based_compositor.md for the rationale.
  */
 class PHOSPHORANIMATION_EXPORT CurveRegistry
 {
@@ -60,8 +69,8 @@ public:
     /// fall back to a default curve.
     using Factory = std::function<std::shared_ptr<const Curve>(const QString& typeId, const QString& params)>;
 
-    /// Access the process-wide registry singleton.
-    static CurveRegistry& instance();
+    CurveRegistry();
+    ~CurveRegistry();
 
     /**
      * @brief Register a factory for @p typeId.
@@ -108,16 +117,14 @@ public:
     /// True if @p typeId has a registered factory.
     bool has(const QString& typeId) const;
 
-    // Not copyable / movable — singleton.
+    // Not copyable / movable — owned by composition root via member or
+    // unique_ptr. Move would invalidate the QMutex inside Impl.
     CurveRegistry(const CurveRegistry&) = delete;
     CurveRegistry& operator=(const CurveRegistry&) = delete;
     CurveRegistry(CurveRegistry&&) = delete;
     CurveRegistry& operator=(CurveRegistry&&) = delete;
 
 private:
-    CurveRegistry();
-    ~CurveRegistry();
-
     class Impl;
     std::unique_ptr<Impl> m_impl;
 };

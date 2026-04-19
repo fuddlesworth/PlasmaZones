@@ -79,15 +79,6 @@ CurveRegistry::CurveRegistry()
 
 CurveRegistry::~CurveRegistry() = default;
 
-CurveRegistry& CurveRegistry::instance()
-{
-    // Meyers singleton — C++11 guarantees thread-safe initialization.
-    // Avoids Q_GLOBAL_STATIC's static-destruction ordering pitfalls for
-    // a library that may be unloaded before Qt's plugin-teardown.
-    static CurveRegistry sInstance;
-    return sInstance;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Registration
 // ═══════════════════════════════════════════════════════════════════════════════

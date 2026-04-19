@@ -9,6 +9,7 @@
 #include <dbus_types.h>
 #include <trigger_parser.h>
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <effect/effect.h>
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
@@ -472,6 +473,13 @@ private:
     PhosphorAnimation::IMotionClock* clockForOutput(KWin::LogicalOutput* output) const;
     void onScreenAdded(KWin::LogicalOutput* output);
     void onScreenRemoved(KWin::LogicalOutput* output);
+    /// Per-effect curve registry. Replaces the prior per-process
+    /// CurveRegistry::instance() singleton — composition roots own
+    /// their own. Declared BEFORE m_windowAnimator so a future
+    /// curve-driving member that captures a CurveRegistry reference
+    /// (today: only animationEasingCurve loadSettingAsync at construction
+    /// time) outlives the animator on shutdown.
+    PhosphorAnimation::CurveRegistry m_curveRegistry;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

@@ -51,14 +51,14 @@ QJsonObject Profile::toJson() const
     return obj;
 }
 
-Profile Profile::fromJson(const QJsonObject& obj)
+Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
     if (obj.contains(QLatin1String("curve"))) {
         const QString spec = obj.value(QLatin1String("curve")).toString();
         if (!spec.isEmpty()) {
-            p.curve = CurveRegistry::instance().create(spec);
+            p.curve = registry.create(spec);
         }
     }
 
