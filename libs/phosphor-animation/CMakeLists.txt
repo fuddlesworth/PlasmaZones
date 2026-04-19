@@ -48,8 +48,17 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Pin to 6.6 to match sibling phosphor-* libraries. Qt Gui is required for
-# QPointF/QSizeF/QRect/QRectF used across WindowMotion + AnimationMath.
+# QPointF/QSizeF/QRect/QRectF + QColor/QTransform used across AnimatedValue<T>.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+
+# Optional Qt Quick support — builds QtQuickClock for QML-side
+# animation drivers (Phase 3 sub-commit 5). Off by default so
+# compositor / daemon consumers that don't drive QML animations
+# don't pull Qt Quick into their link graph transitively.
+option(PHOSPHOR_ANIMATION_QUICK "Build QtQuickClock (requires Qt6::Quick)" OFF)
+if(PHOSPHOR_ANIMATION_QUICK)
+    find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorAnimation Library
@@ -121,6 +130,19 @@ target_link_libraries(PhosphorAnimation
         Qt6::Core
         Qt6::Gui
 )
+
+# Gate QtQuickClock + its Qt Quick dependency behind the opt-in
+# flag. Header + source ship only when the feature is enabled so the
+# install set stays clean for non-QML consumers.
+if(PHOSPHOR_ANIMATION_QUICK)
+    target_sources(PhosphorAnimation PRIVATE
+        src/qtquickclock.cpp
+        include/PhosphorAnimation/QtQuickClock.h
+    )
+    target_link_libraries(PhosphorAnimation PUBLIC Qt6::Quick)
+    install(FILES include/PhosphorAnimation/QtQuickClock.h
+            DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation)
+endif()
 
 set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}
