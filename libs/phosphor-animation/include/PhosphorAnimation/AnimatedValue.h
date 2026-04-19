@@ -11,12 +11,15 @@
 #include <PhosphorAnimation/RetargetPolicy.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <QColor>
 #include <QLineF>
 #include <QLoggingCategory>
 #include <QPointF>
 #include <QRectF>
 #include <QSizeF>
+#include <QTransform>
 #include <QtGlobal>
+#include <QtMath>
 
 #include <algorithm>
 #include <chrono>
@@ -35,6 +38,27 @@ namespace PhosphorAnimation {
 // in phosphor-animation's animatedvalue.cpp. Must be exported so the
 // symbol resolves across the SO boundary.
 Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcAnimatedValue, PHOSPHORANIMATION_EXPORT)
+
+/**
+ * @brief Interpolation space selector for `AnimatedValue<QColor, …>`.
+ *
+ * - `Linear` (default): lerp in linear-space RGB. sRGB → linear on
+ *   each conversion, linear lerp, linear → sRGB on value(). Matches
+ *   the blending behaviour of every compositor shader pipeline;
+ *   midpoint of complementary colours is chromatic, not grey.
+ * - `OkLab`: lerp in OkLab perceptually uniform space. Costs a
+ *   second matrix transform per conversion but produces midpoints
+ *   that match perceptual chromatic gradients (useful for colour
+ *   pickers / gradient strips where hue-shift matters more than
+ *   radiometric correctness).
+ *
+ * The parameter is ignored by every non-`QColor` specialisation of
+ * `AnimatedValue<T, Space>`.
+ */
+enum class ColorSpace {
+    Linear,
+    OkLab,
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Interpolate<T> — per-type lerp + distance helpers
@@ -121,6 +145,273 @@ struct Interpolate<QRectF>
     }
 };
 
+// ─── QColor linear-space RGB interpolation ───
+//
+// The default `Interpolate<QColor>` path. `AnimatedValue<QColor>` with
+// the default `ColorSpace::Linear` dispatches through this. For OkLab
+// opt-in via `AnimatedValue<QColor, ColorSpace::OkLab>`, the template
+// bypasses this and calls `detail::lerpColorOkLab` directly — see the
+// `advance()` dispatch inside AnimatedValue.
+
+namespace detail {
+
+// sRGB ↔ linear — the IEC 61966-2-1 piecewise definition.
+// `qPow` is Qt's `std::pow` alias; the 2.4 exponent here is the
+// canonical sRGB gamma (not 2.2; 2.2 is a crude approximation).
+inline qreal srgbToLinear(qreal c)
+{
+    return c <= 0.04045 ? c / 12.92 : qPow((c + 0.055) / 1.055, 2.4);
+}
+inline qreal linearToSrgb(qreal c)
+{
+    return c <= 0.0031308 ? c * 12.92 : 1.055 * qPow(c, 1.0 / 2.4) - 0.055;
+}
+
+inline QColor lerpColorLinear(const QColor& from, const QColor& to, qreal t)
+{
+    const qreal fR = srgbToLinear(from.redF());
+    const qreal fG = srgbToLinear(from.greenF());
+    const qreal fB = srgbToLinear(from.blueF());
+    const qreal tR = srgbToLinear(to.redF());
+    const qreal tG = srgbToLinear(to.greenF());
+    const qreal tB = srgbToLinear(to.blueF());
+
+    const qreal rLin = fR + (tR - fR) * t;
+    const qreal gLin = fG + (tG - fG) * t;
+    const qreal bLin = fB + (tB - fB) * t;
+
+    // Alpha is gamma-independent.
+    const qreal a = from.alphaF() + (to.alphaF() - from.alphaF()) * t;
+
+    QColor result;
+    result.setRgbF(qBound(0.0, linearToSrgb(rLin), 1.0), qBound(0.0, linearToSrgb(gLin), 1.0),
+                   qBound(0.0, linearToSrgb(bLin), 1.0), qBound(0.0, a, 1.0));
+    return result;
+}
+
+// OkLab — Björn Ottosson's perceptually-uniform lab space.
+// Reference: https://bottosson.github.io/posts/oklab/
+//
+// Conversion: sRGB → linear RGB → LMS → cube root → OkLab.
+// The LMS→OkLab matrix below is the published OkLab M2 matrix.
+
+struct OkLab
+{
+    qreal L, a, b;
+};
+
+inline OkLab linearToOkLab(qreal r, qreal g, qreal bv)
+{
+    const qreal l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bv;
+    const qreal m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bv;
+    const qreal s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bv;
+
+    const qreal lCbrt = std::cbrt(l);
+    const qreal mCbrt = std::cbrt(m);
+    const qreal sCbrt = std::cbrt(s);
+
+    OkLab out;
+    out.L = 0.2104542553 * lCbrt + 0.7936177850 * mCbrt - 0.0040720468 * sCbrt;
+    out.a = 1.9779984951 * lCbrt - 2.4285922050 * mCbrt + 0.4505937099 * sCbrt;
+    out.b = 0.0259040371 * lCbrt + 0.7827717662 * mCbrt - 0.8086757660 * sCbrt;
+    return out;
+}
+
+inline void okLabToLinear(const OkLab& lab, qreal& r, qreal& g, qreal& bv)
+{
+    const qreal lCbrt = lab.L + 0.3963377774 * lab.a + 0.2158037573 * lab.b;
+    const qreal mCbrt = lab.L - 0.1055613458 * lab.a - 0.0638541728 * lab.b;
+    const qreal sCbrt = lab.L - 0.0894841775 * lab.a - 1.2914855480 * lab.b;
+
+    const qreal l = lCbrt * lCbrt * lCbrt;
+    const qreal m = mCbrt * mCbrt * mCbrt;
+    const qreal s = sCbrt * sCbrt * sCbrt;
+
+    r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+    g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+    bv = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+}
+
+inline QColor lerpColorOkLab(const QColor& from, const QColor& to, qreal t)
+{
+    const qreal fR = srgbToLinear(from.redF());
+    const qreal fG = srgbToLinear(from.greenF());
+    const qreal fB = srgbToLinear(from.blueF());
+    const qreal tR = srgbToLinear(to.redF());
+    const qreal tG = srgbToLinear(to.greenF());
+    const qreal tB = srgbToLinear(to.blueF());
+
+    const OkLab fLab = linearToOkLab(fR, fG, fB);
+    const OkLab tLab = linearToOkLab(tR, tG, tB);
+
+    OkLab mid;
+    mid.L = fLab.L + (tLab.L - fLab.L) * t;
+    mid.a = fLab.a + (tLab.a - fLab.a) * t;
+    mid.b = fLab.b + (tLab.b - fLab.b) * t;
+
+    qreal rLin, gLin, bLin;
+    okLabToLinear(mid, rLin, gLin, bLin);
+
+    const qreal a = from.alphaF() + (to.alphaF() - from.alphaF()) * t;
+
+    QColor result;
+    result.setRgbF(qBound(0.0, linearToSrgb(rLin), 1.0), qBound(0.0, linearToSrgb(gLin), 1.0),
+                   qBound(0.0, linearToSrgb(bLin), 1.0), qBound(0.0, a, 1.0));
+    return result;
+}
+
+inline qreal colorDistance(const QColor& from, const QColor& to)
+{
+    // L2 norm in sRGB space — used only by the retarget velocity-
+    // rescale path. Perceptual accuracy is not required here because
+    // the ratio is what matters; sRGB vs linear vs OkLab shift the
+    // absolute value but not the ratio (approximately).
+    const qreal dR = to.redF() - from.redF();
+    const qreal dG = to.greenF() - from.greenF();
+    const qreal dB = to.blueF() - from.blueF();
+    const qreal dA = to.alphaF() - from.alphaF();
+    return std::sqrt(dR * dR + dG * dG + dB * dB + dA * dA);
+}
+
+} // namespace detail
+
+template<>
+struct Interpolate<QColor>
+{
+    static QColor lerp(const QColor& from, const QColor& to, qreal t)
+    {
+        return detail::lerpColorLinear(from, to, t);
+    }
+    static qreal distance(const QColor& from, const QColor& to)
+    {
+        return detail::colorDistance(from, to);
+    }
+};
+
+// ─── QTransform polar-decomposed interpolation ───
+//
+// Component-wise lerp of 3×3 affine matrices shears visibly during
+// rotation (a rotate(0°)→rotate(90°) interpolated component-wise
+// passes through a squashed matrix at t=0.5, not rotate(45°)).
+// Correct answer: decompose into translate + rotate + scale + shear,
+// interpolate each component independently, recompose.
+
+namespace detail {
+
+struct DecomposedTransform
+{
+    qreal tx = 0.0, ty = 0.0;
+    qreal rotation = 0.0; // radians; shortest-arc slerp during lerp
+    qreal sx = 1.0, sy = 1.0;
+    qreal shear = 0.0;
+};
+
+inline DecomposedTransform decomposeTransform(const QTransform& t)
+{
+    DecomposedTransform d;
+    d.tx = t.dx();
+    d.ty = t.dy();
+
+    const qreal m11 = t.m11();
+    const qreal m12 = t.m12();
+    const qreal m21 = t.m21();
+    const qreal m22 = t.m22();
+
+    // QR-style decomposition on the 2x2 linear part under Qt's
+    // post-multiply row-vector convention:
+    //   points' = points * M
+    //   M = R × K × S where
+    //     R = [[cos, sin], [-sin, cos]]          (Qt rotate(θ))
+    //     K = [[1, shear], [0, 1]]               (x-shear)
+    //     S = [[sx, 0], [0, sy]]
+    //   → m11 = sx·cos
+    //     m12 = sy·(shear·cos + sin)
+    //     m21 = -sx·sin
+    //     m22 = sy·(cos - shear·sin)
+    //
+    // Extract sx and θ from the first column (m11, m21), then
+    // un-rotate the second column to split shear × sy from sy.
+    d.sx = std::sqrt(m11 * m11 + m21 * m21);
+    d.rotation = d.sx > 1.0e-9 ? std::atan2(-m21, m11) : 0.0;
+
+    const qreal cosR = std::cos(d.rotation);
+    const qreal sinR = std::sin(d.rotation);
+
+    // Invert the (R × K × S) second-column decomposition analytically:
+    //   sy          = m22·cos + m12·sin
+    //   shear × sy  = m12·cos - m22·sin
+    d.sy = m22 * cosR + m12 * sinR;
+    const qreal shearTimesSy = m12 * cosR - m22 * sinR;
+    d.shear = qAbs(d.sy) > 1.0e-9 ? shearTimesSy / d.sy : 0.0;
+    return d;
+}
+
+inline QTransform recomposeTransform(const DecomposedTransform& d)
+{
+    // Recompose M = R × K × S under Qt's post-multiply convention
+    // (see decomposeTransform above for the forward derivation).
+    const qreal cosR = std::cos(d.rotation);
+    const qreal sinR = std::sin(d.rotation);
+
+    const qreal m11 = d.sx * cosR;
+    const qreal m12 = d.sy * (d.shear * cosR + sinR);
+    const qreal m21 = -d.sx * sinR;
+    const qreal m22 = d.sy * (cosR - d.shear * sinR);
+
+    return QTransform(m11, m12, m21, m22, d.tx, d.ty);
+}
+
+inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qreal t)
+{
+    const DecomposedTransform df = decomposeTransform(from);
+    const DecomposedTransform dt = decomposeTransform(to);
+
+    DecomposedTransform r;
+    r.tx = df.tx + (dt.tx - df.tx) * t;
+    r.ty = df.ty + (dt.ty - df.ty) * t;
+    r.sx = df.sx + (dt.sx - df.sx) * t;
+    r.sy = df.sy + (dt.sy - df.sy) * t;
+    r.shear = df.shear + (dt.shear - df.shear) * t;
+
+    // Shortest-arc slerp on rotation. Unwrap the delta into (-π, π]
+    // so a 0→3π/2 rotation interpolates via the short way (0→-π/2)
+    // rather than the long way (0→3π/2).
+    qreal dRot = dt.rotation - df.rotation;
+    while (dRot > M_PI) {
+        dRot -= 2.0 * M_PI;
+    }
+    while (dRot < -M_PI) {
+        dRot += 2.0 * M_PI;
+    }
+    r.rotation = df.rotation + dRot * t;
+
+    return recomposeTransform(r);
+}
+
+} // namespace detail
+
+template<>
+struct Interpolate<QTransform>
+{
+    static QTransform lerp(const QTransform& from, const QTransform& to, qreal t)
+    {
+        return detail::lerpTransform(from, to, t);
+    }
+    static qreal distance(const QTransform& from, const QTransform& to)
+    {
+        // Frobenius norm of the matrix difference — includes translation,
+        // linear part, and the two perspective-row invariants (which are
+        // zero for affines but cheap to include).
+        const qreal d11 = to.m11() - from.m11();
+        const qreal d12 = to.m12() - from.m12();
+        const qreal d21 = to.m21() - from.m21();
+        const qreal d22 = to.m22() - from.m22();
+        const qreal dtx = to.dx() - from.dx();
+        const qreal dty = to.dy() - from.dy();
+        return std::sqrt(d11 * d11 + d12 * d12 + d21 * d21 + d22 * d22 + dtx * dtx + dty * dty);
+    }
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Concept guards for the bounds() / sweptRange() members
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -200,7 +491,7 @@ concept ScalarValue = std::is_arithmetic_v<T>;
  *
  * GUI-thread only — matches `IMotionClock`'s contract.
  */
-template<typename T>
+template<typename T, ColorSpace Space = ColorSpace::Linear>
 class AnimatedValue
 {
 public:
@@ -211,6 +502,11 @@ public:
     AnimatedValue& operator=(const AnimatedValue&) = delete;
     AnimatedValue(AnimatedValue&&) noexcept = default;
     AnimatedValue& operator=(AnimatedValue&&) noexcept = default;
+
+    // The Space template parameter is only consulted when T == QColor.
+    // For every other T the value is ignored and the default Linear is
+    // harmless noise in the type. Enforced via `if constexpr` in the
+    // lerp dispatch below — no separate partial specialisation is needed.
 
     // ─────── Lifecycle ───────
 
@@ -507,7 +803,7 @@ public:
             // further ticks are needed. The consumer's completion
             // callback can still schedule its own final paint.
         } else {
-            m_current = Interpolate<T>::lerp(m_from, m_to, m_state.value);
+            m_current = lerpStateValue();
             if (m_spec.onValueChanged) {
                 m_spec.onValueChanged(m_current);
             }
@@ -610,6 +906,21 @@ public:
 
 private:
     static constexpr std::chrono::seconds kSafetyCap{60};
+
+    // Colour-space aware lerp dispatch. For T == QColor with
+    // Space == OkLab, routes through the OkLab conversion path;
+    // for every other (T, Space) pair, falls through to the standard
+    // Interpolate<T>::lerp specialisation. `if constexpr` keeps the
+    // dispatch compile-time zero-cost — no runtime branch survives
+    // in the emitted code for any concrete instantiation.
+    T lerpStateValue() const
+    {
+        if constexpr (std::same_as<T, QColor> && Space == ColorSpace::OkLab) {
+            return detail::lerpColorOkLab(m_from, m_to, m_state.value);
+        } else {
+            return Interpolate<T>::lerp(m_from, m_to, m_state.value);
+        }
+    }
 
     std::shared_ptr<const Curve> effectiveCurve() const
     {
