@@ -1580,6 +1580,121 @@ private Q_SLOTS:
         }
     }
 
+    // ─── Cascade reap: reapAnimationsForClock(B) called from inside
+    //     onAnimationReaped fired by reapAnimationsForClock(A) ───
+
+    /// Multi-output teardown can cascade: output A's removal fires its
+    /// reap, a telemetry / layering layer hooked on `onAnimationReaped`
+    /// notices that output B is also being torn down in the same
+    /// hotplug event and calls `reapAnimationsForClock(clockB)` from
+    /// within the hook. The outer snapshot must tolerate the inner
+    /// pass erasing entries it holds handles to, and the inner pass
+    /// must not double-reap (or miss) anything.
+    void testReentrantReapInsideReapedHookIsSafe()
+    {
+        TestClock clockA;
+        TestClock clockB;
+        TestClock clockC; // bystander — survives the cascade untouched
+
+        ReapReentrantController c;
+        configureLinearEasing(c, clockC, 100.0);
+        c.clockForOne = &clockA; // handles 1 and 2 bind to clockA
+
+        // Handles on the two reaped clocks:
+        //   clockA → 1, 2 (via clockForOne routing)
+        //   clockB → 3, 4 (installed via the per-animation spec below
+        //                   — configureLinearEasing's default clock is
+        //                   clockC so we spec clockB by hand)
+        //   clockC → 99 (bystander)
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+
+        // For handles 3 + 4 we want clockB — temporarily swap the
+        // default via setClock so startAnimation captures clockB.
+        c.setClock(&clockB);
+        QVERIFY(c.startAnimation(3, QRectF(0, 0, 100, 100), QRectF(700, 0, 100, 100)));
+        QVERIFY(c.startAnimation(4, QRectF(0, 0, 100, 100), QRectF(900, 0, 100, 100)));
+        c.setClock(&clockC); // restore bystander default
+
+        QVERIFY(c.startAnimation(99, QRectF(0, 0, 100, 100), QRectF(200, 0, 100, 100)));
+
+        // Confirm spec captures — defensive: the test's premise is that
+        // the two inner sets are on clocks A and B respectively.
+        QCOMPARE(c.animationFor(1)->spec().clock, static_cast<IMotionClock*>(&clockA));
+        QCOMPARE(c.animationFor(3)->spec().clock, static_cast<IMotionClock*>(&clockB));
+
+        // First reap of A's clock triggers cascade into B's clock via
+        // the hook. One-shot guard avoids unbounded recursion on the
+        // inner pass's own fires.
+        bool cascadeFired = false;
+        c.onReapedCallback = [&](int /*handle*/, ReapReentrantController& self) {
+            if (!cascadeFired) {
+                cascadeFired = true;
+                const int innerReaped = self.reapAnimationsForClock(&clockB);
+                // Inner pass must find both B-bound handles and reap
+                // them — not more, not fewer.
+                QCOMPARE(innerReaped, 2);
+            }
+        };
+
+        const int outerReaped = c.reapAnimationsForClock(&clockA);
+
+        // Outer pass reaps its own 2 handles (1, 2). The inner pass
+        // reaped B's 2 handles (3, 4) via the cascade. Bystander
+        // handle 99 on clockC survives untouched.
+        QCOMPARE(outerReaped, 2);
+        QVERIFY(cascadeFired);
+        QVERIFY(!c.hasAnimation(1));
+        QVERIFY(!c.hasAnimation(2));
+        QVERIFY(!c.hasAnimation(3));
+        QVERIFY(!c.hasAnimation(4));
+        QVERIFY(c.hasAnimation(99));
+
+        // Reap ordering: outer pass entries fire first, then the inner
+        // pass entries (depth-first on the hook callback). Contents
+        // must cover all four reaped handles exactly once — no doubles,
+        // no misses.
+        QCOMPARE(c.reapedHandlesOrdered.size(), 4);
+        QVERIFY(c.reapedHandlesOrdered.contains(1));
+        QVERIFY(c.reapedHandlesOrdered.contains(2));
+        QVERIFY(c.reapedHandlesOrdered.contains(3));
+        QVERIFY(c.reapedHandlesOrdered.contains(4));
+    }
+
+    // ─── Reap fires trailing onRepaintNeeded for damage coverage ───
+
+    /// `reapAnimationsForClock` must fire `onRepaintNeeded` after each
+    /// `onAnimationReaped` so adapters that rely on the controller's
+    /// damage bookkeeping invalidate the stale paint region when an
+    /// output is torn down. Symmetric with the natural-completion and
+    /// degenerate-retarget paths.
+    void testReapFiresRepaintNeededForDamageCoverage()
+    {
+        TestClock clockA;
+        TestClock clockB;
+
+        PerHandleClockController c;
+        configureLinearEasing(c, clockB, 100.0);
+        c.clockForOne = &clockA; // handles 1 and 2 → clockA
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(400, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(600, 0, 100, 100)));
+        QVERIFY(c.startAnimation(99, QRectF(0, 0, 100, 100), QRectF(200, 0, 100, 100)));
+
+        // startAnimation itself triggers zero repaints (the hook fires
+        // on damage-producing events, not on start). Reset the counter
+        // so we measure only what reap emits.
+        const int baselineRepaints = c.repaintCalls;
+
+        const int reaped = c.reapAnimationsForClock(&clockA);
+        QCOMPARE(reaped, 2);
+
+        // Exactly one onRepaintNeeded per reaped entry. The bystander
+        // handle on clockB is untouched.
+        QCOMPARE(c.repaintCalls - baselineRepaints, 2);
+        QVERIFY(c.hasAnimation(99));
+    }
+
     // ─── Transform reflection (determinant sign change) falls back
     //      to component-wise lerp rather than producing singular
     //      matrices via polar decomposition ───

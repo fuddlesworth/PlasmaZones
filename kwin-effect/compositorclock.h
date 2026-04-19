@@ -41,9 +41,17 @@ namespace PlasmaZones {
  *
  * `updatePresentTime` is the only method that mutates clock state, and
  * it MUST be called from the compositor thread. All `IMotionClock`
- * methods (including `now()`) are const but read the state written by
- * `updatePresentTime` without synchronization — the single-threaded
- * contract makes that safe.
+ * methods (`now()`, `refreshRate()`, `requestFrame()`) must ALSO be
+ * called from the compositor thread — they read the state written by
+ * `updatePresentTime` without synchronization, and `requestFrame()`
+ * additionally dereferences the `QPointer<LogicalOutput>` which is not
+ * cross-thread safe. This diverges from the `QtQuickClock` sibling
+ * (which explicitly supports cross-thread `now()` / `requestFrame()`
+ * via atomics + Qt's thread-safe `update()`); consumers holding an
+ * `IMotionClock*` polymorphically must therefore either treat the
+ * pointer as main-thread-bound OR know which concrete class they got.
+ * The base-class `IMotionClock::now()` doc lists per-implementation
+ * thread-safety stories for exactly this reason.
  *
  * ## Monotonicity
  *

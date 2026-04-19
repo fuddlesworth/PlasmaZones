@@ -5,6 +5,7 @@
 #include <PhosphorAnimation/QtQuickClock.h>
 
 #include <QQuickWindow>
+#include <QScreen>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -47,10 +48,16 @@ private Q_SLOTS:
         QQuickWindow window;
         QtQuickClock clock(&window);
         QVERIFY(clock.window() == &window);
-        // refreshRate() returns 0 when no screen is attached yet — the
-        // usual state before the window is shown. The contract is
-        // "zero = unknown", not "zero = invalid".
-        QVERIFY(clock.refreshRate() >= 0.0);
+        // The contract is "read-through to the attached QScreen's
+        // refresh rate; zero when no screen". QT_QPA_PLATFORM=offscreen
+        // happens to attach a virtual 60 Hz screen, so we assert
+        // *equality* against the window's screen rather than a
+        // tautological `>= 0.0`. The prior assertion would pass even
+        // if QtQuickClock::refreshRate() started returning the wrong
+        // screen's rate or a hardcoded constant.
+        const QScreen* screen = window.screen();
+        const qreal expected = screen ? screen->refreshRate() : 0.0;
+        QCOMPARE(clock.refreshRate(), expected);
     }
 
     void testRequestFrameCallsUpdate()

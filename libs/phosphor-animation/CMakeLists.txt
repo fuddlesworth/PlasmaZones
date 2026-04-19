@@ -75,6 +75,7 @@ set(phosphoranimation_SRCS
     src/profile.cpp
     src/profilepaths.cpp
     src/profiletree.cpp
+    src/imotionclock.cpp
     src/animatedvalue.cpp
     src/snappolicy.cpp
     src/staggertimer.cpp

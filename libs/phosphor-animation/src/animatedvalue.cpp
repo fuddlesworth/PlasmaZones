@@ -10,7 +10,6 @@
 #include <PhosphorAnimation/AnimatedValue.h>
 
 #include <PhosphorAnimation/Easing.h>
-#include <PhosphorAnimation/IMotionClock.h>
 
 namespace PhosphorAnimation {
 
@@ -24,18 +23,6 @@ std::shared_ptr<const Curve> defaultFallbackCurve()
     // CurveRegistry::create("")'s fallback shape.
     static const std::shared_ptr<const Curve> sFallback = std::make_shared<const Easing>();
     return sFallback;
-}
-
-const void* IMotionClock::steadyClockEpoch()
-{
-    // Shared sentinel address for every std::chrono::steady_clock-backed
-    // IMotionClock. The pointee is never dereferenced; only the pointer
-    // identity matters for the rebind-compatibility test in
-    // AnimatedValue::rebindClock / AnimationController::advanceAnimations.
-    // Exporting this from a single TU guarantees one unique address
-    // across the process.
-    static const char kSentinel{};
-    return &kSentinel;
 }
 
 } // namespace PhosphorAnimation

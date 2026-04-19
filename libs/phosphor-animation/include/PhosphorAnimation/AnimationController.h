@@ -635,6 +635,17 @@ public:
      * opt-in to batch cancellation notifications without treating them
      * as natural completions.
      *
+     * Each `onAnimationReaped` is followed by `onRepaintNeeded(handle,
+     * bounds)` with the reaped animation's full path bounds (including
+     * overshoot + `expandedPadding`) — symmetric with the natural-
+     * completion and degenerate-retarget paths. Without this follow-up
+     * an adapter's last-painted frame may leave interpolated pixels
+     * on-screen after the animation is reaped: `applyTransform` stops
+     * running on the next paint (no animation left), but the
+     * compositor has no reason to invalidate the stale region unless
+     * told. The default hook is a no-op, so adapters that don't care
+     * about damage-on-reap (headless telemetry, tests) pay nothing.
+     *
      * The reference passed to `onAnimationReaped` points to a
      * locally-moved copy on the controller's stack — valid for the
      * duration of the hook only. See the subclass-hooks reference
@@ -673,9 +684,17 @@ public:
             if (it->second.spec().clock != clock) {
                 continue;
             }
+            // Capture bounds BEFORE moving the entry out — bounds()
+            // reads m_from / m_to / effectiveCurve() which are on the
+            // AnimatedValue we're about to vacate.
+            const QMarginsF padding = expandedPadding(handle, it->second);
+            const QRectF bounds = it->second.bounds().marginsAdded(padding);
             AnimatedValue<QRectF> reapedAnim = std::move(it->second);
             m_animations.erase(it);
             onAnimationReaped(handle, reapedAnim);
+            if (bounds.isValid()) {
+                onRepaintNeeded(handle, bounds);
+            }
             ++reaped;
         }
         return reaped;
@@ -942,6 +961,12 @@ protected:
      * events override this to balance started-vs-terminated accounting
      * under multi-output hotplug; adapters that only care about
      * user-visible completion can leave the default no-op.
+     *
+     * The controller follows every call with
+     * `onRepaintNeeded(handle, bounds)` so adapters do not need to
+     * issue their own invalidation from this hook; the damage
+     * bookkeeping is symmetric with the natural-completion path. See
+     * @ref reapAnimationsForClock for the full contract.
      *
      * The @p anim reference is scoped to the call — see the lifetime
      * contract above.

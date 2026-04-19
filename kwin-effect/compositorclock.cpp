@@ -68,6 +68,15 @@ qreal CompositorClock::refreshRate() const
 
 void CompositorClock::requestFrame()
 {
+    // Main-thread only — same contract as `now()` / `updatePresentTime`.
+    // `m_output` (QPointer) and `KWin::effects` are both main-thread-
+    // bound state; a cross-thread caller mirroring the QtQuickClock
+    // pattern of "requestFrame is thread-safe" would race against
+    // onScreenRemoved tearing the output down. The assertion lives in
+    // one spot so a future refactor that promotes `CompositorClock` to
+    // cross-thread use can drop it from a single call site after
+    // properly synchronising the underlying state.
+    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
     if (!KWin::effects) {
         // Test or teardown path — nothing to ask for another frame from.
         return;

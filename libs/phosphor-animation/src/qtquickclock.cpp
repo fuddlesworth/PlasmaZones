@@ -118,32 +118,32 @@ QtQuickClock::QtQuickClock(QQuickWindow* window)
     : m_window(window)
     , m_adapter(std::make_unique<SignalAdapter>(this, window))
 {
-    // Prime the cache with a real steady_clock reading so any `now()`
-    // consumer that runs before the first `beforeRendering` slot fires
-    // sees a monotonic timestamp in the same epoch the slot will later
-    // continue from. Without this, the first advance() on an
-    // AnimatedValue bound to a freshly-constructed clock latches
-    // m_startTime = 0ns; the NEXT advance (post-beforeRendering) would
-    // see elapsed = seconds-since-boot and skip directly to completion.
-    //
-    // Release store so a render-thread reader (the slot itself is on
-    // the render thread; consumers that share that thread don't need
-    // the fence, but cross-thread GUI-side consumers do) observes the
-    // prime without relying on implementation-defined publication of
-    // `std::atomic` relaxed stores from the constructing thread.
-    m_nowCache.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_release);
+    // No cache prime: `now()` reads `steady_clock` directly until the
+    // first `beforeRendering` slot flips `m_renderLoopActive`, at which
+    // point the slot overwrites `m_nowCache` before any reader sees it.
+    // A constructor-time prime would be strictly overwritten before use.
 }
 
 QtQuickClock::~QtQuickClock() = default;
 
 std::chrono::nanoseconds QtQuickClock::now() const
 {
+    // Null-window test mode: the adapter never connects, so
+    // `beforeRendering` never fires. The documented contract for this
+    // mode is "now() stays at zero" — a consumer driving an
+    // AnimatedValue against a null-window clock is in a test / teardown
+    // path with no paint loop; returning a steady_clock reading would
+    // let animations tick with nonsense `dt` on every call. Match the
+    // header.
+    if (!m_window) {
+        return std::chrono::nanoseconds{0};
+    }
     // Freshness fallback. A `QQuickWindow` that hasn't been shown yet
-    // never fires `beforeRendering`, so the cache holds the
-    // construction-time prime forever — an AnimatedValue advancing
-    // against this clock would see constant `now()` and `dt == 0` on
-    // every tick (latched startTime, no progression). Until the render
-    // loop fires for the first time, read `steady_clock` directly; once
+    // never fires `beforeRendering`, so the cache would otherwise stay
+    // at its default 0 forever — an AnimatedValue advancing against
+    // this clock would see constant `now()` and `dt == 0` on every
+    // tick (latched startTime, no progression). Until the render loop
+    // fires for the first time, read `steady_clock` directly; once
     // `m_renderLoopActive` is set, trust the cache so every
     // AnimatedValue advanced in the same frame sees an identical
     // vsync-aligned reading (the whole point of caching).

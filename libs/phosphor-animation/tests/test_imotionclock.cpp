@@ -3,6 +3,8 @@
 
 #include <PhosphorAnimation/IMotionClock.h>
 
+#include "TestClock.h"
+
 #include <QTest>
 
 #include <chrono>
@@ -11,6 +13,7 @@
 using namespace std::chrono_literals;
 
 using PhosphorAnimation::IMotionClock;
+using PhosphorAnimation::Testing::TestClock;
 
 namespace {
 
@@ -18,7 +21,9 @@ namespace {
 /// counts `requestFrame` calls, mutable refresh rate. Exists to
 /// exercise the IMotionClock contract without pulling in KWin.
 /// Deliberately does NOT override `epochIdentity()` — the base-class
-/// default (nullptr) is part of the contract being tested.
+/// default (nullptr) is part of the contract being tested, and
+/// `TestClock` (used elsewhere in this file) defaults to
+/// `steadyClockEpoch()` which would bypass the nullptr path entirely.
 class MockClock final : public IMotionClock
 {
 public:
@@ -55,53 +60,12 @@ private:
     int m_requestFrameCalls = 0;
 };
 
-/// Matches the in-tree family (CompositorClock, QtQuickClock): overrides
-/// `epochIdentity()` to return `steadyClockEpoch()`. Used by rebind-
-/// compatibility tests.
-class SteadyMockClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return {};
-    }
-    qreal refreshRate() const override
-    {
-        return 0.0;
-    }
-    void requestFrame() override
-    {
-    }
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-};
-
-/// Third-party pattern: non-steady monotonic source. Returns a private
-/// sentinel so rebase attempts against a steady-backed clock refuse
-/// rather than silently corrupt progress. Used by the mixed-sentinel
-/// negative test.
-class PrivateEpochMockClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return {};
-    }
-    qreal refreshRate() const override
-    {
-        return 0.0;
-    }
-    void requestFrame() override
-    {
-    }
-    const void* epochIdentity() const override
-    {
-        static const char tag{};
-        return &tag;
-    }
-};
+// A private sentinel for the "third-party non-steady monotonic source"
+// test pattern — distinct address from `steadyClockEpoch()`, stable
+// across the process. Shared between the epoch-mismatch tests below so
+// there's one unambiguous "other sentinel" anchor rather than a per-
+// test local with a drifting address.
+const char kPrivateEpochTag{};
 
 } // namespace
 
@@ -309,8 +273,9 @@ private Q_SLOTS:
     {
         // Two clocks both reporting steadyClockEpoch() are rebind-safe.
         // This is the in-tree CompositorClock ↔ QtQuickClock case.
-        SteadyMockClock a;
-        SteadyMockClock b;
+        // TestClock defaults to steadyClockEpoch().
+        TestClock a;
+        TestClock b;
         QVERIFY(IMotionClock::epochCompatible(&a, &b));
         QVERIFY(IMotionClock::epochCompatible(&b, &a));
     }
@@ -320,8 +285,9 @@ private Q_SLOTS:
         // A clock with a private (non-steady) sentinel must not rebase
         // against a steadyClockEpoch-backed clock even when both are
         // monotonic — the underlying tick sources are independent.
-        SteadyMockClock steady;
-        PrivateEpochMockClock priv;
+        TestClock steady; // default steadyClockEpoch
+        TestClock priv;
+        priv.setEpochIdentity(&kPrivateEpochTag);
         QVERIFY(!IMotionClock::epochCompatible(&steady, &priv));
         QVERIFY(!IMotionClock::epochCompatible(&priv, &steady));
     }
@@ -330,7 +296,7 @@ private Q_SLOTS:
     {
         // A non-null identity is compatible with itself — a degenerate
         // single-clock rebind is a no-op, not a refusal.
-        SteadyMockClock a;
+        TestClock a;
         QVERIFY(IMotionClock::epochCompatible(&a, &a));
     }
 
