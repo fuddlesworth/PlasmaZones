@@ -907,6 +907,18 @@ public:
     {
         return 200;
     }
+    /// Default Profile JSON blob — the new Phase-4 storage format for
+    /// animation settings (decision S). Assembled from the per-field
+    /// defaults above so the library-default feel is unchanged from
+    /// the pre-migration surface. Serialized via `Profile::toJson` in
+    /// `settings.cpp`; stored as a string under
+    /// `animationsGroup/animationProfileKey`.
+    ///
+    /// This lives as a method (not a const) because `Profile::toJson`
+    /// is not constexpr and the ConfigDefaults convention for
+    /// composite defaults (e.g., `autotileDragInsertTriggers`) is a
+    /// function returning the composite value.
+    static QString animationProfile();
     static bool autotileFocusFollowsMouse()
     {
         return false;

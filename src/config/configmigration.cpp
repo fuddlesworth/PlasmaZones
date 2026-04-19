@@ -686,14 +686,41 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     if (!shaders.isEmpty())
         root[QLatin1String("Shaders")] = shaders;
 
-    // ── Animations (key renames) ────────────────────────────────────────────
+    // ── Animations (key renames + Phase-4 Profile-blob packing) ────────────
+    // v1 stored five per-field animation keys + a standalone `AnimationsEnabled`
+    // bool. v2's Phase-4-restructure packs the five per-field values into a
+    // single `Profile` JSON blob (decision S) while keeping `Enabled` as an
+    // orthogonal bool. Preserve v1 users' customisation by composing the
+    // Profile blob inline here rather than dropping the fields.
     QJsonObject animations;
     moveKey(v1Animations, QLatin1String("AnimationsEnabled"), animations, QLatin1String("Enabled"));
-    moveKey(v1Animations, QLatin1String("AnimationDuration"), animations, QLatin1String("Duration"));
-    moveKey(v1Animations, QLatin1String("AnimationEasingCurve"), animations, QLatin1String("EasingCurve"));
-    moveKey(v1Animations, QLatin1String("AnimationMinDistance"), animations, QLatin1String("MinDistance"));
-    moveKey(v1Animations, QLatin1String("AnimationSequenceMode"), animations, QLatin1String("SequenceMode"));
-    moveKey(v1Animations, QLatin1String("AnimationStaggerInterval"), animations, QLatin1String("StaggerInterval"));
+
+    // Assemble Profile fields from the v1 keys (if present). We build the
+    // JSON shape directly — matches Profile::toJson output without linking
+    // phosphor-animation into the migration code (which would bloat the
+    // daemon-startup dependency graph for a transient code path).
+    QJsonObject profile;
+    if (v1Animations.contains(QLatin1String("AnimationDuration"))) {
+        profile[QLatin1String("duration")] = v1Animations.value(QLatin1String("AnimationDuration")).toDouble();
+    }
+    if (v1Animations.contains(QLatin1String("AnimationEasingCurve"))) {
+        profile[QLatin1String("curve")] = v1Animations.value(QLatin1String("AnimationEasingCurve")).toString();
+    }
+    if (v1Animations.contains(QLatin1String("AnimationMinDistance"))) {
+        profile[QLatin1String("minDistance")] = v1Animations.value(QLatin1String("AnimationMinDistance")).toInt();
+    }
+    if (v1Animations.contains(QLatin1String("AnimationSequenceMode"))) {
+        profile[QLatin1String("sequenceMode")] = v1Animations.value(QLatin1String("AnimationSequenceMode")).toInt();
+    }
+    if (v1Animations.contains(QLatin1String("AnimationStaggerInterval"))) {
+        profile[QLatin1String("staggerInterval")] =
+            v1Animations.value(QLatin1String("AnimationStaggerInterval")).toInt();
+    }
+    if (!profile.isEmpty()) {
+        // Stored as a JSON-encoded string under `Profile` — matches the
+        // schema's QMetaType::QString declaration for this key.
+        animations[QLatin1String("Profile")] = QString::fromUtf8(QJsonDocument(profile).toJson(QJsonDocument::Compact));
+    }
     if (!animations.isEmpty())
         root[QLatin1String("Animations")] = animations;
 

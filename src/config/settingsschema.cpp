@@ -238,36 +238,31 @@ void appendOrderingSchema(PhosphorConfig::Schema& schema)
 }
 
 // ─── Animations ─────────────────────────────────────────────────────────────
-// Covers both snapping and autotile geometry-change transitions. Easing curve
-// is a string (EasingCurve::fromString/toString handle the wire format
-// outside the schema); the rest are clamped ints + one bool.
+// Phase 4 sub-commit 6 — storage format is a single Profile JSON blob
+// (`Animations.Profile`) replacing the pre-migration five per-field
+// entries (Duration / EasingCurve / MinDistance / SequenceMode /
+// StaggerInterval). Per decision S, the old keys are dead on disk; no
+// migration code. Users with configs predating this schema lose their
+// animation customisation and read back the library-default Profile.
+//
+// The per-field accessor surface on Settings (animationDuration / etc.)
+// is preserved as projections over the Profile blob — see settings.cpp.
+//
+// Validation: the Profile JSON string is stored as-is. Clamping happens
+// at the library level (Profile::effective* + AnimationController's
+// clampProfile on the hot path) rather than in the schema, because the
+// schema's per-field QMetaType::Int validator can't see inside the
+// JSON. A malformed blob falls back to the library default via
+// Profile::fromJson's permissive parse — consistent with the "garbage
+// in disk → sensible defaults on read" invariant the rest of the
+// v3 config uses.
 
 void appendAnimationsSchema(PhosphorConfig::Schema& schema)
 {
     using CD = ConfigDefaults;
     schema.groups[CD::animationsGroup()] = {
         {CD::enabledKey(), CD::animationsEnabled(), QMetaType::Bool},
-        {CD::durationKey(),
-         CD::animationDuration(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationDurationMin(), CD::animationDurationMax())},
-        {CD::easingCurveKey(), CD::animationEasingCurve(), QMetaType::QString},
-        {CD::minDistanceKey(),
-         CD::animationMinDistance(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationMinDistanceMin(), CD::animationMinDistanceMax())},
-        {CD::sequenceModeKey(),
-         CD::animationSequenceMode(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationSequenceModeMin(), CD::animationSequenceModeMax())},
-        {CD::staggerIntervalKey(),
-         CD::animationStaggerInterval(),
-         QMetaType::Int,
-         {},
-         clampInt(CD::animationStaggerIntervalMin(), CD::animationStaggerIntervalMax())},
+        {CD::animationProfileKey(), CD::animationProfile(), QMetaType::QString},
     };
 }
 

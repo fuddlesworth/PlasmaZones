@@ -15,6 +15,8 @@
 
 #include <QTest>
 #include <QSignalSpy>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
@@ -194,9 +196,18 @@ private Q_SLOTS:
         }
 
         {
+            // Phase 4 sub-commit 6: animation settings persist as a
+            // single Profile JSON blob under `Animations/Profile`
+            // (decision S). The per-field setters compose into that
+            // blob — verify the on-disk shape carries both values.
             auto animations = backend->group(ConfigDefaults::animationsGroup());
-            QCOMPARE(animations->readInt(ConfigDefaults::durationKey(), 0), 300);
-            QCOMPARE(animations->readInt(ConfigDefaults::sequenceModeKey(), -1), 0);
+            const QString profileJson = animations->readString(ConfigDefaults::animationProfileKey(), QString());
+            QVERIFY2(!profileJson.isEmpty(), "Animations/Profile blob missing from persisted config");
+            const QJsonDocument doc = QJsonDocument::fromJson(profileJson.toUtf8());
+            QVERIFY(doc.isObject());
+            const QJsonObject obj = doc.object();
+            QCOMPARE(obj.value(QLatin1String("duration")).toInt(), 300);
+            QCOMPARE(obj.value(QLatin1String("sequenceMode")).toInt(), 0);
         }
     }
 

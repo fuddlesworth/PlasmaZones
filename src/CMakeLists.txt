@@ -222,6 +222,11 @@ target_link_libraries(plasmazones_core
         Qt6::Gui
         Qt6::DBus
         plasmazones_compositor_common
+        # PhosphorAnimation PUBLIC because Settings::animationProfile()
+        # exposes PhosphorAnimation::Profile in the header — consumers
+        # that #include <settings.h> need the core library for the
+        # return type (Phase 4 sub-commit 6).
+        PhosphorAnimation::PhosphorAnimation
         PhosphorConfig::PhosphorConfig
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi

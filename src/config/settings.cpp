@@ -12,6 +12,10 @@
 #include "../core/constants.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+
+#include <PhosphorAnimation/CurveRegistry.h>
+
+#include <QJsonDocument>
 #include <QGuiApplication>
 #include <QMetaMethod>
 #include <QMetaProperty>
@@ -606,21 +610,155 @@ void Settings::setTilingAlgorithmOrder(const QStringList& order)
 }
 
 // ── Animations (PhosphorConfig::Store-backed) ───────────────────────────────
-// Snapping + autotile geometry-change transitions. Clamp validators enforce
-// duration/min-distance/sequence-mode/stagger-interval ranges uniformly.
+// Snapping + autotile geometry-change transitions. Phase 4 sub-commit 6
+// migrated the on-disk format from five per-field keys to a single
+// Profile JSON blob (decision S — no backwards compat for the old
+// layout). Each per-field accessor now decomposes / composes the blob,
+// preserving the Q_PROPERTY + ISettings interface for QML and the
+// daemon's existing consumers.
+//
+// `animationsEnabled` stays as a standalone bool — it's an orthogonal
+// on/off toggle rather than part of the Profile concept.
 
 PZ_STORE_GET(bool, animationsEnabled, animationsGroup, enabledKey, bool)
 PZ_STORE_SET_BOOL(setAnimationsEnabled, animationsGroup, enabledKey, animationsEnabledChanged)
-PZ_STORE_GET(int, animationDuration, animationsGroup, durationKey, int)
-PZ_STORE_SET_INT(setAnimationDuration, animationsGroup, durationKey, animationDurationChanged)
-PZ_STORE_GET(QString, animationEasingCurve, animationsGroup, easingCurveKey, QString)
-PZ_STORE_SET_STRING(setAnimationEasingCurve, animationsGroup, easingCurveKey, animationEasingCurveChanged)
-PZ_STORE_GET(int, animationMinDistance, animationsGroup, minDistanceKey, int)
-PZ_STORE_SET_INT(setAnimationMinDistance, animationsGroup, minDistanceKey, animationMinDistanceChanged)
-PZ_STORE_GET(int, animationSequenceMode, animationsGroup, sequenceModeKey, int)
-PZ_STORE_SET_INT(setAnimationSequenceMode, animationsGroup, sequenceModeKey, animationSequenceModeChanged)
-PZ_STORE_GET(int, animationStaggerInterval, animationsGroup, staggerIntervalKey, int)
-PZ_STORE_SET_INT(setAnimationStaggerInterval, animationsGroup, staggerIntervalKey, animationStaggerIntervalChanged)
+
+PhosphorAnimation::Profile Settings::animationProfile() const
+{
+    // Parse the stored JSON string through Profile::fromJson. Malformed
+    // blobs fall back to a default-constructed Profile (unset-optional
+    // fields) — Profile::effective* methods then substitute library
+    // defaults, matching the "garbage in disk → sensible defaults"
+    // invariant.
+    const QString json =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QJsonDocument doc = QJsonDocument::fromJson(json.toUtf8());
+    if (!doc.isObject()) {
+        return PhosphorAnimation::Profile{};
+    }
+    return PhosphorAnimation::Profile::fromJson(doc.object());
+}
+
+void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
+{
+    // Serialise through Profile::toJson — keeps engaged-optional
+    // semantics so round-tripping doesn't fabricate explicit values
+    // for fields the user left inheriting defaults.
+    const QString before =
+        m_store->read<QString>(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey());
+    const QString after = QString::fromUtf8(QJsonDocument(profile.toJson()).toJson(QJsonDocument::Compact));
+    if (before == after) {
+        return;
+    }
+    m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
+    // Fire every per-field changed signal — the whole blob swapped,
+    // consumers bound to individual Q_PROPERTYs re-read their projection.
+    // Plus the aggregate animationProfileChanged for consumers who
+    // want to observe the Profile atomically.
+    Q_EMIT animationProfileChanged();
+    Q_EMIT animationDurationChanged();
+    Q_EMIT animationEasingCurveChanged();
+    Q_EMIT animationMinDistanceChanged();
+    Q_EMIT animationSequenceModeChanged();
+    Q_EMIT animationStaggerIntervalChanged();
+    Q_EMIT settingsChanged();
+}
+
+// ─── Per-field projections over the Profile blob ───────────────────────────
+// Each setter reads the current Profile, mutates one field, writes back.
+// That's one read + one write + one serialise per setter call (hot path:
+// settings-UI slider drag, ~30 Hz). Acceptable overhead for the design-
+// cleanness win over maintaining a parallel cache. Getters are one read
+// + parse; Profile::fromJson is cheap enough that memoisation would be
+// premature optimisation.
+
+int Settings::animationDuration() const
+{
+    return qRound(animationProfile().effectiveDuration());
+}
+
+void Settings::setAnimationDuration(int duration)
+{
+    auto p = animationProfile();
+    const int clamped =
+        qBound(ConfigDefaults::animationDurationMin(), duration, ConfigDefaults::animationDurationMax());
+    if (qRound(p.effectiveDuration()) == clamped) {
+        return;
+    }
+    p.duration = static_cast<qreal>(clamped);
+    setAnimationProfile(p);
+}
+
+QString Settings::animationEasingCurve() const
+{
+    const auto p = animationProfile();
+    if (!p.curve) {
+        return ConfigDefaults::animationEasingCurve();
+    }
+    return p.curve->toString();
+}
+
+void Settings::setAnimationEasingCurve(const QString& curve)
+{
+    auto p = animationProfile();
+    const QString currentWire = p.curve ? p.curve->toString() : ConfigDefaults::animationEasingCurve();
+    if (currentWire == curve) {
+        return;
+    }
+    p.curve = PhosphorAnimation::CurveRegistry::instance().create(curve);
+    setAnimationProfile(p);
+}
+
+int Settings::animationMinDistance() const
+{
+    return animationProfile().effectiveMinDistance();
+}
+
+void Settings::setAnimationMinDistance(int distance)
+{
+    auto p = animationProfile();
+    const int clamped =
+        qBound(ConfigDefaults::animationMinDistanceMin(), distance, ConfigDefaults::animationMinDistanceMax());
+    if (p.effectiveMinDistance() == clamped) {
+        return;
+    }
+    p.minDistance = clamped;
+    setAnimationProfile(p);
+}
+
+int Settings::animationSequenceMode() const
+{
+    return static_cast<int>(animationProfile().effectiveSequenceMode());
+}
+
+void Settings::setAnimationSequenceMode(int mode)
+{
+    auto p = animationProfile();
+    const int clamped =
+        qBound(ConfigDefaults::animationSequenceModeMin(), mode, ConfigDefaults::animationSequenceModeMax());
+    if (static_cast<int>(p.effectiveSequenceMode()) == clamped) {
+        return;
+    }
+    p.sequenceMode = static_cast<PhosphorAnimation::SequenceMode>(clamped);
+    setAnimationProfile(p);
+}
+
+int Settings::animationStaggerInterval() const
+{
+    return animationProfile().effectiveStaggerInterval();
+}
+
+void Settings::setAnimationStaggerInterval(int ms)
+{
+    auto p = animationProfile();
+    const int clamped =
+        qBound(ConfigDefaults::animationStaggerIntervalMin(), ms, ConfigDefaults::animationStaggerIntervalMax());
+    if (p.effectiveStaggerInterval() == clamped) {
+        return;
+    }
+    p.staggerInterval = clamped;
+    setAnimationProfile(p);
+}
 
 // ── Rendering (PhosphorConfig::Store-backed) ────────────────────────────────
 // Validator (normalizeRenderingBackend in the schema) coerces unknown values

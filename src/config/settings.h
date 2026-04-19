@@ -5,6 +5,7 @@
 
 #include "../core/interfaces.h"
 #include "../core/constants.h"
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "configdefaults.h"
 #include "configbackends.h"
@@ -705,8 +706,19 @@ public:
 
     // Animation Settings (applies to both snapping and autotiling geometry
     // changes) — backed by PhosphorConfig::Store (see settingsschema.cpp).
+    // Phase 4 sub-commit 6: storage format migrated to a single Profile
+    // JSON blob; per-field accessors below are projections. The `animationProfile`
+    // getter / setter is the new canonical surface for consumers that want
+    // the whole Profile atomically (daemon's WindowAnimator config-reload path,
+    // plugin-authored profile presets).
     bool animationsEnabled() const override;
     void setAnimationsEnabled(bool enabled) override;
+    /// The single Profile blob backing every per-field accessor below.
+    /// Not a Q_PROPERTY — QML consumers that need the typed Profile
+    /// should use the sub-commit-2 `PhosphorProfile` Q_GADGET; this
+    /// returns a C++-only PhosphorAnimation::Profile value.
+    PhosphorAnimation::Profile animationProfile() const;
+    void setAnimationProfile(const PhosphorAnimation::Profile& profile);
     int animationDuration() const override;
     void setAnimationDuration(int duration) override;
     QString animationEasingCurve() const override;
@@ -957,6 +969,15 @@ public:
     void applyAutotileBorderSystemColor();
 
 Q_SIGNALS:
+    /// Emitted when the whole animation Profile blob is replaced via
+    /// `setAnimationProfile`. Fires alongside every per-field *Changed
+    /// signal. Consumers that want to observe the Profile atomically
+    /// (e.g., daemon's WindowAnimator re-configuring its MotionSpec
+    /// defaults) prefer this signal; Q_PROPERTY consumers bound to the
+    /// per-field surface get re-triggered through the individual
+    /// signals per the existing NOTIFY wiring.
+    void animationProfileChanged();
+
     // Editor settings signals (not part of ISettings interface)
     void editorDuplicateShortcutChanged();
     void editorSplitHorizontalShortcutChanged();
