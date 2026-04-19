@@ -76,7 +76,7 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_layoutManager(makePzLayoutManager(nullptr))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))

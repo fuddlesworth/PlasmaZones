@@ -44,7 +44,7 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_localLayoutManager(makePzLayoutManager(nullptr))
 {
     // Install the library-level screen-id resolver before any layout load
     // runs. First call initialises the static; subsequent constructions

@@ -38,7 +38,7 @@ private:
     LayoutManager* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new LayoutManager(parent);
+        auto* mgr = makePzLayoutManager(parent).release();
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);

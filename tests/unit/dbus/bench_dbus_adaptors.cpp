@@ -59,7 +59,7 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_settingsAdaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
 
-        m_layoutManager = new LayoutManager(m_parent);
+        m_layoutManager = makePzLayoutManager(m_parent).release();
         auto* layout = new PhosphorZones::Layout(QStringLiteral("BenchLayout"));
         for (int i = 0; i < 4; ++i) {
             auto* zone = new PhosphorZones::Zone(QRectF(0.25 * i, 0.0, 0.25, 1.0));

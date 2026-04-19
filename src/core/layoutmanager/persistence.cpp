@@ -13,8 +13,6 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QStandardPaths>
-#include "../../config/configdefaults.h"
-#include "../../config/configbackends.h"
 #include <algorithm>
 
 namespace PlasmaZones {
@@ -227,13 +225,13 @@ void LayoutManager::saveLayouts()
 void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    const QString assignmentPrefix = ConfigDefaults::assignmentGroupPrefix();
+    const QString& assignmentPrefix = m_config.assignmentGroupPrefix;
 
     for (const QString& groupName : allGroups) {
         if (!groupName.startsWith(assignmentPrefix))
             continue;
 
-        const auto key = LayoutAssignmentKey::fromGroupName(groupName);
+        const auto key = LayoutAssignmentKey::fromGroupName(groupName, assignmentPrefix);
         if (key.screenId.isEmpty())
             continue;
 
@@ -250,7 +248,7 @@ void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
 
 void LayoutManager::readQuickLayouts(PhosphorConfig::IBackend* backend)
 {
-    auto quickGroup = backend->group(ConfigDefaults::quickLayoutsGroup());
+    auto quickGroup = backend->group(m_config.quickLayoutsGroup);
     for (int i = 1; i <= 9; ++i) {
         QString key = QString::number(i);
         if (quickGroup->hasKey(key)) {
@@ -427,19 +425,19 @@ void LayoutManager::loadAssignments()
             saveAssignments();
 
             // Delete migrated groups from config.json
-            const QString assignPrefix = ConfigDefaults::assignmentGroupPrefix();
+            const QString& assignPrefix = m_config.assignmentGroupPrefix;
             for (const QString& groupName : configBackend->groupList()) {
                 if (groupName.startsWith(assignPrefix)) {
                     configBackend->deleteGroup(groupName);
                 }
             }
-            configBackend->deleteGroup(ConfigDefaults::quickLayoutsGroup());
+            configBackend->deleteGroup(m_config.quickLayoutsGroup);
             qCInfo(lcLayout) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
         }
 
         // Also clean up legacy groups from config.json while we have it open
         {
-            auto modeGroup = configBackend->group(ConfigDefaults::modeTrackingGroup());
+            auto modeGroup = configBackend->group(m_config.modeTrackingGroup);
             if (modeGroup->hasKey(QLatin1String("LastManualLayoutId"))
                 || modeGroup->hasKey(QLatin1String("LastAutotileAlgorithm"))
                 || modeGroup->hasKey(QLatin1String("LastTilingMode"))) {
@@ -461,7 +459,7 @@ void LayoutManager::loadAssignments()
                     }
                 }
                 modeGroup.reset();
-                configBackend->deleteGroup(ConfigDefaults::modeTrackingGroup());
+                configBackend->deleteGroup(m_config.modeTrackingGroup);
                 if (migrated) {
                     saveAssignments();
                     qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
@@ -505,21 +503,22 @@ void LayoutManager::loadAssignments()
 
 void LayoutManager::saveAssignments()
 {
-    // Delete old Assignment:* groups
+    // Delete old <prefix>* groups
     const QStringList allGroups = m_configBackend->groupList();
+    const QString& prefix = m_config.assignmentGroupPrefix;
     for (const QString& groupName : allGroups) {
-        if (groupName.startsWith(QLatin1String("Assignment:"))) {
+        if (groupName.startsWith(prefix)) {
             m_configBackend->deleteGroup(groupName);
         }
     }
 
-    // Write [Assignment:*] groups
+    // Write [<prefix>*] groups
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         const LayoutAssignmentKey& key = it.key();
         const AssignmentEntry& entry = it.value();
 
-        // Build group name: Assignment:screenId[:Desktop:N][:Activity:id]
-        QString groupName = QStringLiteral("Assignment:") + key.screenId;
+        // Build group name: <prefix>screenId[:Desktop:N][:Activity:id]
+        QString groupName = prefix + key.screenId;
         if (key.virtualDesktop > 0) {
             groupName += QStringLiteral(":Desktop:") + QString::number(key.virtualDesktop);
         }
@@ -535,8 +534,8 @@ void LayoutManager::saveAssignments()
 
     // Write [QuickLayouts] group
     {
-        m_configBackend->deleteGroup(ConfigDefaults::quickLayoutsGroup());
-        auto quickGroup = m_configBackend->group(ConfigDefaults::quickLayoutsGroup());
+        m_configBackend->deleteGroup(m_config.quickLayoutsGroup);
+        auto quickGroup = m_configBackend->group(m_config.quickLayoutsGroup);
         for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
             quickGroup->writeString(QString::number(it.key()), it.value());
         }

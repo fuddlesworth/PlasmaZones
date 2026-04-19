@@ -504,9 +504,11 @@ private Q_SLOTS:
 
     void testInvariant_layoutManagerSingleQObjectBase()
     {
-        PlasmaZones::LayoutManager mgr;
+        // Use the PZ-flavoured factory so the test doesn't have to know
+        // about LayoutManagerConfig's required schema strings.
+        auto mgr = PlasmaZones::makePzLayoutManager();
         // Direct concrete → QObject path.
-        QObject* directQObject = static_cast<QObject*>(&mgr);
+        QObject* directQObject = static_cast<QObject*>(mgr.get());
         // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.
         // Every step is non-virtual, single inheritance; the address must
         // not shift along the chain. A non-zero offset would mean
@@ -514,7 +516,7 @@ private Q_SLOTS:
         // the way (e.g. a sibling interface accidentally re-derived from
         // QObject), which is exactly the multi-QObject hazard the static-
         // assert pair guards against at compile time.
-        auto* registry = static_cast<PhosphorZones::IZoneLayoutRegistry*>(&mgr);
+        auto* registry = static_cast<PhosphorZones::IZoneLayoutRegistry*>(mgr.get());
         QObject* viaRegistry = static_cast<QObject*>(registry);
         QCOMPARE(directQObject, viaRegistry);
         // And the next link in the chain.

@@ -45,7 +45,7 @@ private Q_SLOTS:
     {
         // LayoutManager with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
 
         // SnapEngine with all-nullptr dependencies is a valid construction:
         // the router only invokes it via the IEngineLifecycle interface

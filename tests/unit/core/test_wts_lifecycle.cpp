@@ -61,7 +61,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         // Pass nullptr as parent to avoid double-delete: cleanup() deletes manually
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
         m_settings = new StubSettingsLifecycle(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);

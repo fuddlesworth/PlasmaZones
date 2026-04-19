@@ -43,7 +43,7 @@ private:
     LayoutManager* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new LayoutManager(parent);
+        auto* mgr = makePzLayoutManager(parent).release();
         // Override layout dir to a path under the guard's temp dir to avoid
         // static-cache issues in PhosphorZones::Layout::isSystemLayout().
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");

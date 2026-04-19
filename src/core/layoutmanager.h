@@ -18,6 +18,40 @@
 namespace PlasmaZones {
 
 /**
+ * @brief Schema-key configuration for a LayoutManager instance.
+ *
+ * Decouples the manager from PlasmaZones-specific config-key strings
+ * so the class can move into the @c phosphor-zones library without
+ * dragging in @c ConfigDefaults / @c configbackends. Composition roots
+ * supply the project's actual values (PlasmaZones uses
+ * @c makePzLayoutManager() below; tests use @c testLayoutManagerConfig
+ * from @c TestHelpers).
+ *
+ * Every field is required — the manager has no built-in defaults
+ * because "default values" are inherently project-specific (the lib
+ * has no opinion on what to call its assignment groups).
+ */
+struct LayoutManagerConfig
+{
+    /// Group-name prefix for per-context layout assignments
+    /// (e.g. @c "Assignment:" so groups read @c "Assignment:eDP-1:Desktop:2").
+    QString assignmentGroupPrefix;
+
+    /// Group name for the quick-layout shortcut map.
+    QString quickLayoutsGroup;
+
+    /// Group name for the per-context mode-tracking map (snapping vs autotile).
+    QString modeTrackingGroup;
+
+    /// Default filesystem directory for layout JSON files. Composition
+    /// roots typically pass @c "$XDG_DATA_HOME/<app>/layouts". The
+    /// manager calls @c QDir::mkpath on this in its constructor; pass
+    /// an empty string to defer until @c setLayoutDirectory() is called
+    /// explicitly.
+    QString defaultLayoutDirectory;
+};
+
+/**
  * @brief Manages all layouts and their assignments to screens/desktops
  *
  * Central component for zone layouts: loading/saving, screen/desktop/activity
@@ -32,6 +66,13 @@ namespace PlasmaZones {
  * inherited @c contentsChanged signal (from @c ILayoutSourceRegistry)
  * is forwarded whenever @c layoutsChanged fires so @c ZonesLayoutSource
  * auto-refreshes.
+ *
+ * Construction takes a @ref LayoutManagerConfig (PZ-specific schema
+ * names — kept out of the class so the class can move into the
+ * @c phosphor-zones library) and an owned @c IBackend (the persistent
+ * config store the manager reads/writes assignments from). PlasmaZones
+ * composition roots and tests should prefer @ref makePzLayoutManager
+ * instead of constructing directly.
  */
 class PLASMAZONES_EXPORT LayoutManager : public PhosphorZones::ILayoutManager
 {
@@ -42,8 +83,17 @@ class PLASMAZONES_EXPORT LayoutManager : public PhosphorZones::ILayoutManager
     Q_PROPERTY(QString layoutDirectory READ layoutDirectory WRITE setLayoutDirectory NOTIFY layoutDirectoryChanged)
 
 public:
-    explicit LayoutManager(QObject* parent = nullptr);
-    LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent);
+    /**
+     * @param config Schema-key strings the manager reads/writes against.
+     *               No defaults — the lib is project-agnostic.
+     * @param backend Owned config-store backend. Must outlive every
+     *                method call; ownership transfers to the manager.
+     *                Pass @c nullptr only in narrow tests that don't
+     *                exercise persistence (load/save methods will skip).
+     * @param parent Qt parent.
+     */
+    LayoutManager(LayoutManagerConfig config, std::unique_ptr<PhosphorConfig::IBackend> backend,
+                  QObject* parent = nullptr);
     ~LayoutManager();
 
     // No singleton - use dependency injection instead
@@ -270,8 +320,9 @@ private:
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
     ISettings* m_settings = nullptr;
+    LayoutManagerConfig m_config;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
-    PhosphorConfig::IBackend* m_configBackend = nullptr; // always valid after construction
+    PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of @c m_ownedBackend.get()
     QString m_layoutDirectory;
     QVector<PhosphorZones::Layout*> m_layouts;
     PhosphorZones::Layout* m_activeLayout = nullptr;
@@ -282,5 +333,21 @@ private:
     int m_currentVirtualDesktop = 1;
     QString m_currentActivity;
 };
+
+/**
+ * @brief PlasmaZones-flavoured @ref LayoutManager factory.
+ *
+ * Pulls the schema-key strings from @c ConfigDefaults and the
+ * persistent backend from @c createAssignmentsBackend(), constructs a
+ * ready-to-use manager, and returns it as @c unique_ptr. Use this from
+ * every PlasmaZones composition root (daemon, editor, settings) and
+ * test fixture instead of calling the @ref LayoutManager constructor
+ * directly — keeps PZ-specific config-schema knowledge centralized
+ * here so the underlying class can move into the project-agnostic
+ * @c phosphor-zones library without dragging it along.
+ *
+ * @param parent Qt parent for the resulting manager.
+ */
+PLASMAZONES_EXPORT std::unique_ptr<LayoutManager> makePzLayoutManager(QObject* parent = nullptr);
 
 } // namespace PlasmaZones

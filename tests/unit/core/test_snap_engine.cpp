@@ -87,7 +87,7 @@ private Q_SLOTS:
 
     void init()
     {
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);

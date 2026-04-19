@@ -46,7 +46,7 @@ private:
     LayoutManager* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = new LayoutManager(parent);
+        auto* mgr = makePzLayoutManager(parent).release();
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
@@ -348,7 +348,7 @@ private Q_SLOTS:
         mgr->saveAssignments();
 
         // Create a new manager and load — same config file sees the data
-        QScopedPointer<LayoutManager> mgr2(new LayoutManager(nullptr));
+        QScopedPointer<LayoutManager> mgr2(makePzLayoutManager(nullptr).release());
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
         QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");
@@ -505,7 +505,8 @@ private Q_SLOTS:
 
     void testFromGroupName_fullKey_parsesAllFields()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:2:Activity:abc-123"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:2:Activity:abc-123"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 2);
         QCOMPARE(key.activity, QStringLiteral("abc-123"));
@@ -513,7 +514,8 @@ private Q_SLOTS:
 
     void testFromGroupName_screenOnly_parsesScreenId()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:HDMI-A-1"));
+        auto key =
+            LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:HDMI-A-1"), QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("HDMI-A-1"));
         QCOMPARE(key.virtualDesktop, 0);
         QVERIFY(key.activity.isEmpty());
@@ -521,47 +523,53 @@ private Q_SLOTS:
 
     void testFromGroupName_noPrefix_returnsEmpty()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Snapping.Behavior"));
+        auto key =
+            LayoutAssignmentKey::fromGroupName(QStringLiteral("Snapping.Behavior"), QStringLiteral("Assignment:"));
         QVERIFY(key.screenId.isEmpty());
     }
 
     void testFromGroupName_emptyAfterPrefix_returnsEmpty()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:"), QStringLiteral("Assignment:"));
         QVERIFY(key.screenId.isEmpty());
     }
 
     void testFromGroupName_emptyActivity_treatedAsAllActivities()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Activity:"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Activity:"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QVERIFY(key.activity.isEmpty());
     }
 
     void testFromGroupName_invalidDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:abc"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:abc"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_negativeDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:-1"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:-1"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_zeroDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:0"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:0"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_desktopOnly_parsesDesktop()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:DP-2:Desktop:3"));
+        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:DP-2:Desktop:3"),
+                                                      QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("DP-2"));
         QCOMPARE(key.virtualDesktop, 3);
         QVERIFY(key.activity.isEmpty());

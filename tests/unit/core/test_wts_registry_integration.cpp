@@ -111,7 +111,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
         m_settings = new StubSettings(nullptr);
         m_zoneDetector = new StubZoneDetectorRegIntegration(nullptr);
         m_registry = new WindowRegistry(nullptr);

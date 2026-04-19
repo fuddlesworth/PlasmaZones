@@ -142,7 +142,7 @@ SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
     , m_screenHelper(&m_settings, this)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_localLayoutManager(makePzLayoutManager(nullptr))
 {
     // Install the library-level screen-id resolver before any layout load
     // runs. First call initialises the static; subsequent constructions

@@ -3,6 +3,7 @@
 
 #include "layoutmanager.h"
 #include "../config/configbackends.h"
+#include "../config/configdefaults.h"
 #include "constants.h"
 #include "logging.h"
 #include "utils.h"
@@ -16,29 +17,33 @@
 
 namespace PlasmaZones {
 
-LayoutManager::LayoutManager(QObject* parent)
+LayoutManager::LayoutManager(LayoutManagerConfig config, std::unique_ptr<PhosphorConfig::IBackend> backend,
+                             QObject* parent)
     : PhosphorZones::ILayoutManager(parent)
-    , m_ownedBackend(createAssignmentsBackend())
+    , m_config(std::move(config))
+    , m_ownedBackend(std::move(backend))
     , m_configBackend(m_ownedBackend.get())
+    , m_layoutDirectory(m_config.defaultLayoutDirectory)
 {
-    // Default layout directory
-    m_layoutDirectory =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
-    ensureLayoutDirectory();
+    if (!m_layoutDirectory.isEmpty()) {
+        ensureLayoutDirectory();
+    }
     // Forward the detailed layoutsChanged signal into the unified
     // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
     // ILayoutSource (e.g. ZonesLayoutSource) refreshes automatically.
     connect(this, &LayoutManager::layoutsChanged, this, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged);
 }
 
-LayoutManager::LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent)
-    : PhosphorZones::ILayoutManager(parent)
-    , m_configBackend(backend)
+std::unique_ptr<LayoutManager> makePzLayoutManager(QObject* parent)
 {
-    m_layoutDirectory =
-        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
-    ensureLayoutDirectory();
-    connect(this, &LayoutManager::layoutsChanged, this, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged);
+    LayoutManagerConfig config{
+        /*assignmentGroupPrefix=*/ConfigDefaults::assignmentGroupPrefix(),
+        /*quickLayoutsGroup=*/ConfigDefaults::quickLayoutsGroup(),
+        /*modeTrackingGroup=*/ConfigDefaults::modeTrackingGroup(),
+        /*defaultLayoutDirectory=*/QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+            + QStringLiteral("/plasmazones/layouts"),
+    };
+    return std::make_unique<LayoutManager>(std::move(config), createAssignmentsBackend(), parent);
 }
 
 LayoutManager::~LayoutManager()

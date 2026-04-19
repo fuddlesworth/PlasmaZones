@@ -100,7 +100,7 @@ private Q_SLOTS:
     void testMultiZoneGeometry_someZonesInvalid()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
+        QScopedPointer<LayoutManager> layoutManager(makePzLayoutManager(nullptr).release());
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
@@ -132,7 +132,7 @@ private Q_SLOTS:
     void testCalculateRotation_uuidFormatMismatch()
     {
         IsolatedConfigGuard guard;
-        QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
+        QScopedPointer<LayoutManager> layoutManager(makePzLayoutManager(nullptr).release());
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
         QScopedPointer<WindowTrackingService> service(new WindowTrackingService(

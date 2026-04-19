@@ -105,7 +105,7 @@ private Q_SLOTS:
         m_bridgeAdaptor = new CompositorBridgeAdaptor(m_parent);
 
         // For ControlAdaptor tests we need a WTA + LayoutManager
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
         m_settings = new StubSettingsBridge(nullptr);
         m_zoneDetector = new StubZoneDetectorBridge(nullptr);
 

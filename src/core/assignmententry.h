@@ -3,8 +3,7 @@
 
 #pragma once
 
-#include "constants.h"
-#include "../config/configdefaults.h"
+#include <PhosphorLayoutApi/LayoutId.h>
 #include <QString>
 
 namespace PlasmaZones {
@@ -24,16 +23,21 @@ struct LayoutAssignmentKey
     }
 
     /**
-     * @brief Parse an "Assignment:screenId[:Desktop:N][:Activity:uuid]" group name
+     * @brief Parse a "<prefix><screenId>[:Desktop:N][:Activity:uuid]" group name.
      *
      * Expects suffixes in canonical order: :Desktop:N before :Activity:uuid.
      * Group names are always constructed internally in this order.
-     * @return Key with populated fields; screenId is empty on parse failure
+     *
+     * @param groupName Full group name from the config backend.
+     * @param prefix    Schema-defined prefix (PlasmaZones uses
+     *                  @c "Assignment:" — see @ref LayoutManagerConfig).
+     *                  Decoupling from a project-specific default keeps
+     *                  this header lib-agnostic.
+     * @return Key with populated fields; screenId is empty on parse failure.
      */
-    static LayoutAssignmentKey fromGroupName(const QString& groupName)
+    static LayoutAssignmentKey fromGroupName(const QString& groupName, const QString& prefix)
     {
         LayoutAssignmentKey result;
-        const QString prefix = ConfigDefaults::assignmentGroupPrefix();
         if (!groupName.startsWith(prefix))
             return result;
         QString remainder = groupName.mid(prefix.size());

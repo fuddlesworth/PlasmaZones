@@ -52,7 +52,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
-        m_layoutManager = new LayoutManager(m_parent);
+        m_layoutManager = makePzLayoutManager(m_parent).release();
         m_virtualDesktopManager = new VirtualDesktopManager(m_layoutManager, m_parent);
         m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
@@ -97,7 +97,7 @@ private Q_SLOTS:
         // tests in this class.
         auto guard = std::make_unique<IsolatedConfigGuard>();
         QObject freshParent;
-        auto* freshLayoutManager = new LayoutManager(&freshParent);
+        auto* freshLayoutManager = makePzLayoutManager(&freshParent).release();
         auto* freshVirtualDesktopManager = new VirtualDesktopManager(freshLayoutManager, &freshParent);
         auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);

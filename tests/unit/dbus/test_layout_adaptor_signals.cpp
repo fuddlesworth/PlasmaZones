@@ -38,7 +38,7 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
-        m_layoutManager = new LayoutManager(m_parent);
+        m_layoutManager = makePzLayoutManager(m_parent).release();
         auto* layout = new PhosphorZones::Layout(QStringLiteral("SignalTestLayout"));
         for (int i = 0; i < 2; ++i) {
             auto* zone = new PhosphorZones::Zone(QRectF(0.5 * i, 0.0, 0.5, 1.0));

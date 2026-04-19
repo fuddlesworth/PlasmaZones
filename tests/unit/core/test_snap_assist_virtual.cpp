@@ -56,7 +56,7 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = makePzLayoutManager(nullptr).release();
         m_settings = new StubSettingsSnapAssist(nullptr);
         m_settings->setSnapAssistFeatureEnabled(true);
         m_settings->setSnapAssistEnabled(true);
