@@ -996,7 +996,8 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
         m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual,
         includeAutotile, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio(),
-        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
+        PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile),
+        m_autotileLayoutSource);
     return PlasmaZones::toVariantList(entries);
 }
 
@@ -1022,7 +1023,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
         m_includeManualLayouts, m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, screenId),
-        m_settings && m_settings->filterLayoutsByAspectRatio());
+        m_settings && m_settings->filterLayoutsByAspectRatio(),
+        /*customOrder=*/{}, m_autotileLayoutSource);
     return entries.size();
 }
 

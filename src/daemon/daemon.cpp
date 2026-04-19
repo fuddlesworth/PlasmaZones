@@ -271,6 +271,7 @@ bool Daemon::init()
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
     m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
+    m_overlayService->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
@@ -410,6 +411,12 @@ bool Daemon::init()
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
+    // Thread the bundle-owned autotile source through the adaptor's
+    // buildUnifiedLayoutList path so its preview cache survives across
+    // D-Bus calls. The full composite above drives the
+    // getLayoutPreview* methods; this separate pointer targets only the
+    // autotile enumeration slot — see LayoutAdaptor::setAutotileLayoutSource.
+    m_layoutAdaptor->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);

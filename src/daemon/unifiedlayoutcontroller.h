@@ -13,6 +13,10 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
 namespace PhosphorZones {
 class Layout;
 }
@@ -165,6 +169,15 @@ public:
      */
     void setLayoutFilter(bool includeManual, bool includeAutotile);
 
+    /**
+     * @brief Inject the daemon's bundle-owned autotile layout source.
+     *
+     * Optional — when set, @ref layouts reuses its preview cache across
+     * calls instead of constructing a transient source per call. Borrowed —
+     * caller owns it and must keep it alive for the controller's lifetime.
+     */
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
 Q_SIGNALS:
     /**
      * @brief Emitted when a manual layout is applied (for OSD)
@@ -198,6 +211,7 @@ private:
     QPointer<Settings> m_settings;
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<AutotileEngine> m_autotileEngine;
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
 
     QString m_currentLayoutId;
     QString m_currentScreenName;

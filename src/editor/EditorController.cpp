@@ -52,7 +52,7 @@ void ensureScreenIdResolver()
 } // namespace
 
 EditorController::EditorController(QObject* parent)
-    : QObject((ensureScreenIdResolver(), parent))
+    : QObject(parent)
     , m_layoutService(new DBusLayoutService(this))
     , m_zoneManager(new ZoneManager(this))
     , m_snappingService(new SnappingService(this))
@@ -61,6 +61,13 @@ EditorController::EditorController(QObject* parent)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
 {
+    // Install the library-level screen-id resolver before any layout load
+    // runs. First call initialises the static; subsequent constructions
+    // in the same process reuse it. Moved out of the ctor-initializer
+    // comma-operator trick so the intent is obvious at a glance —
+    // matches the daemon's handling.
+    ensureScreenIdResolver();
+
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The editor just
     // publishes the registries it owns into the FactoryContext and

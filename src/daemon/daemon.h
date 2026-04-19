@@ -362,6 +362,28 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
+    // Daemon-owned tile-algorithm registry. Replaces the old
+    // AlgorithmRegistry::instance() singleton — per-process ownership is
+    // the only shape that works once PlasmaZones becomes a plugin-based
+    // compositor/WM/shell (plugins can't share process-global state
+    // safely).
+    //
+    // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
+    // Every FactoryContext service the bundle borrows (m_layoutManager
+    // → IZoneLayoutRegistry, m_algorithmRegistry → ITileAlgorithmRegistry)
+    // MUST be declared before m_layoutSources so reverse-order member
+    // destruction tears the bundle (and its ZonesLayoutSource /
+    // AutotileLayoutSource children) down BEFORE the registries those
+    // children borrow. The LayoutSourceBundle contract
+    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h) is explicit
+    // about this — violating the order produces dangling pointers in
+    // every source's destructor, hidden today only by Qt's signal
+    // auto-disconnect. Do not reorder these three lines without revisiting
+    // every source's destructor.
+    //
+    // Also declared before ScriptedAlgorithmLoader + AutotileEngine
+    // because both take a borrowed pointer to it in their constructor.
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
     // Manual layouts + autotile algorithms composed behind layoutSource().
     // The bundle owns all three objects so destruction is deterministic
     // (composite first, then the child sources it borrows from). See
@@ -408,15 +430,9 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
-    // Daemon-owned tile-algorithm registry. Replaces the old
-    // AlgorithmRegistry::instance() singleton — per-process ownership is
-    // the only shape that works once PlasmaZones becomes a plugin-based
-    // compositor/WM/shell (plugins can't share process-global state
-    // safely). Declared before ScriptedAlgorithmLoader + AutotileEngine
-    // because both take a borrowed pointer to it in their constructor.
-    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
-
-    // Scripted algorithm loader (file watcher for user-defined JS algorithms)
+    // Scripted algorithm loader (file watcher for user-defined JS algorithms).
+    // m_algorithmRegistry is declared up at the top of the member block with
+    // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines

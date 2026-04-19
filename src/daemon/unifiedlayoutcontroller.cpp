@@ -62,6 +62,12 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
 
 UnifiedLayoutController::~UnifiedLayoutController() = default;
 
+void UnifiedLayoutController::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    m_autotileLayoutSource = source;
+    m_cacheValid = false;
+}
+
 QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
@@ -72,7 +78,8 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
             m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts, m_includeAutotileLayouts,
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
-            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
+            PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),
+            m_autotileLayoutSource);
 
         m_cacheValid = true;
     }

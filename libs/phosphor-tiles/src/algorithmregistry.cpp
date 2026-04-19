@@ -56,11 +56,21 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
     // up registry changes through this single connection instead of
     // hooking each specific signal. Consumers that need discrimination
     // still connect to the specific signals directly.
+    //
+    // A replacement pair emits algorithmUnregistered(id, replacing=true)
+    // then algorithmRegistered(id) — a single logical mutation. Suppress
+    // the contentsChanged bridge on the unregister half of the pair so
+    // the replacement emits contentsChanged exactly once (the matching
+    // registered signal fires it). Halves preview-cache rebuilds on
+    // scripted-algorithm hot reload, where every replaced script used
+    // to trigger two full rebuilds in every subscriber.
     connect(this, &ITileAlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
         Q_EMIT contentsChanged();
     });
-    connect(this, &ITileAlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool) {
-        Q_EMIT contentsChanged();
+    connect(this, &ITileAlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool replacing) {
+        if (!replacing) {
+            Q_EMIT contentsChanged();
+        }
     });
     connect(this, &ITileAlgorithmRegistry::previewParamsChanged, this, &ITileAlgorithmRegistry::contentsChanged);
 }

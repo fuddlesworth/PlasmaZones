@@ -35,6 +35,10 @@ namespace PhosphorZones {
 class Zone;
 }
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
 namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
@@ -142,6 +146,13 @@ public:
     /// @ref layoutListForScreen output. Borrowed — caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, @ref buildUnifiedLayoutList reuses its internal preview
+    /// cache across calls instead of constructing a transient source per
+    /// call (which throws away the cache). Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
     Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -389,6 +400,7 @@ private:
     QPointer<ISettings> m_settings;
     PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 

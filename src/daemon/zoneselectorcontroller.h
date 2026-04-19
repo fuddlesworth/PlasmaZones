@@ -10,6 +10,10 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
 namespace PhosphorTiles {
 class ITileAlgorithmRegistry;
 }
@@ -147,6 +151,11 @@ public:
     /// autotile layout entries to appear in @ref layoutPreviews.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, layout enumeration reuses its preview cache across calls
+    /// instead of constructing a transient source per call.
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
+
     // Screen management
     void setScreen(QScreen* screen);
     void setScreenId(const QString& screenId)
@@ -265,6 +274,7 @@ private:
     QPointer<LayoutManager> m_layoutManager;
     QPointer<ISettings> m_settings;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<QScreen> m_screen;
     QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)

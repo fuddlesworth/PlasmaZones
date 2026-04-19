@@ -170,6 +170,11 @@ void OverlayService::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry*
     m_algorithmRegistry = registry;
 }
 
+void OverlayService::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
+{
+    m_autotileLayoutSource = source;
+}
+
 void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
 {
     if (!layout) {

@@ -9,6 +9,7 @@
 #include "utils.h"
 
 #include <PhosphorLayoutApi/AspectRatioClass.h>
+#include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/Layout.h>
@@ -72,16 +73,33 @@ LayoutPreview previewFromLayoutWithSection(PhosphorZones::Layout* layout)
     return preview;
 }
 
-void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry)
+void appendAutotilePreviews(QVector<LayoutPreview>& list, PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
+                            PhosphorLayout::ILayoutSource* autotileSource)
 {
-    // Per-call construction over the caller-supplied registry. The
-    // previous static-cached AutotileLayoutSource bound to a process-
-    // global AlgorithmRegistry::instance() is gone — composition roots
-    // each own their own registry now, so a process-wide singleton
-    // source has no well-defined registry to bind to. The transient
-    // source's internal preview cache is discarded between calls;
-    // callers that want preview-cache reuse should hold their own
-    // long-lived AutotileLayoutSource against their registry.
+    // Preferred path: a long-lived ILayoutSource (typically the
+    // autotile source owned by the caller's LayoutSourceBundle) whose
+    // internal preview cache is reused across calls. The bundle binds
+    // that source to the composition root's AlgorithmRegistry once in
+    // the ctor and it self-wires to contentsChanged — every call here
+    // is a plain cache hit unless a registry mutation happened since
+    // the last build.
+    //
+    // Fallback: construct a transient AutotileLayoutSource over the
+    // registry. The transient source's preview cache is discarded
+    // between calls — every algorithm preview is recomputed. This
+    // covers code paths that don't yet hold a bundle reference (tests,
+    // early-init call sites). The previous process-global
+    // AlgorithmRegistry::instance() singleton-backed static source is
+    // gone with the registry singleton — per-process ownership leaves
+    // no well-defined registry for a process-wide source to bind to.
+    if (autotileSource) {
+        const auto previews = autotileSource->availableLayouts();
+        list.reserve(list.size() + previews.size());
+        for (const auto& preview : previews) {
+            list.append(preview);
+        }
+        return;
+    }
     if (!algorithmRegistry) {
         return;
     }
@@ -144,7 +162,8 @@ QStringList buildCustomOrder(const IOrderingSettings* settings, bool includeManu
 
 QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
-                                              bool includeAutotile, const QStringList& customOrder)
+                                              bool includeAutotile, const QStringList& customOrder,
+                                              PhosphorLayout::ILayoutSource* autotileSource)
 {
     QVector<LayoutPreview> list;
 
@@ -159,7 +178,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* lay
     }
 
     if (includeAutotile) {
-        appendAutotilePreviews(list, algorithmRegistry);
+        appendAutotilePreviews(list, algorithmRegistry, autotileSource);
     }
 
     sortPreviews(list, customOrder);
@@ -171,7 +190,8 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* lay
                                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                               const QString& screenId, int virtualDesktop, const QString& activity,
                                               bool includeManual, bool includeAutotile, qreal screenAspectRatio,
-                                              bool filterByAspectRatio, const QStringList& customOrder)
+                                              bool filterByAspectRatio, const QStringList& customOrder,
+                                              PhosphorLayout::ILayoutSource* autotileSource)
 {
     QVector<LayoutPreview> list;
 
@@ -238,7 +258,7 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* lay
     }
 
     if (includeAutotile) {
-        appendAutotilePreviews(list, algorithmRegistry);
+        appendAutotilePreviews(list, algorithmRegistry, autotileSource);
     }
 
     sortPreviews(list, customOrder);

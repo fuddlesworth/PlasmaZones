@@ -7,6 +7,7 @@
 
 #include <PhosphorLayoutApi/ILayoutSourceFactory.h>
 
+#include <QDebug>
 #include <QList>
 #include <QString>
 
@@ -33,7 +34,7 @@ namespace PhosphorLayout {
 class PHOSPHORLAYOUTAPI_EXPORT FactoryContext
 {
 public:
-    /// Register a service of type @c T. Repeated calls overwrite.
+    /// Register a service of type @c T.
     ///
     /// @c T is intentionally non-deducible (wrapped in @c std::type_identity_t)
     /// so callers must spell the interface explicitly:
@@ -43,10 +44,24 @@ public:
     /// Without the non-deducing context, @c ctx.set(manager.get()) would deduce
     /// @c T from the concrete class and the registrar's
     /// @c ctx.get<IZoneLayoutRegistry>() would silently miss.
+    ///
+    /// Duplicate registrations are a programmer error: asserts in debug,
+    /// warns + overwrites in release. Silent last-write-wins would let
+    /// a typo in one composition root hand provider builders a different
+    /// registry than the rest of the root is wired against, with no
+    /// diagnostic — matches the single-shot discipline on
+    /// @c LayoutSourceBundle::buildFromRegistered.
     template<typename T>
     void set(std::type_identity_t<T*> service)
     {
-        m_services[std::type_index(typeid(T))] = static_cast<void*>(service);
+        const auto key = std::type_index(typeid(T));
+        const bool duplicate = m_services.find(key) != m_services.end();
+        Q_ASSERT_X(!duplicate, "FactoryContext::set",
+                   "service key already registered; duplicate set<T>() is a programmer error");
+        if (duplicate) {
+            qWarning("FactoryContext::set: overwriting existing service for type '%s'", key.name());
+        }
+        m_services[key] = static_cast<void*>(service);
     }
 
     /// Look up a previously-registered service. Returns nullptr when
@@ -95,10 +110,15 @@ struct PHOSPHORLAYOUTAPI_EXPORT PendingLayoutSourceProvider
 /// @c dlopen are not picked up by bundles already built. Symmetrically,
 /// @c dlclose on a provider library leaves a dangling @c std::function
 /// closure in the list — safe as long as no bundle calls
-/// @c buildFromRegistered afterwards. When this codebase grows runtime
-/// plugin loading, revisit this contract (likely: mutex-protected list
-/// with explicit per-plugin handle + removal on unload, and a bundle
-/// rebuild API).
+/// @c buildFromRegistered afterwards.
+///
+/// @todo(plugin-compositor) When runtime plugin loading lands, this
+/// contract must be revisited. Likely shape: mutex-protected list with
+/// explicit per-plugin handles, removal on @c dlclose, and a bundle
+/// rebuild API for composition roots that want to pick up a newly-
+/// loaded provider. The plugin-discovery pattern described above is the
+/// static-init-only variant; do not assume it will survive the switch
+/// to a dynamic plugin loader without a redesign.
 PHOSPHORLAYOUTAPI_EXPORT QList<PendingLayoutSourceProvider>& pendingLayoutSourceProviders();
 
 /// Static-init self-registration helper for provider libraries.

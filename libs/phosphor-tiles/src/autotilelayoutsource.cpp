@@ -166,10 +166,15 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
-    // Null registry is tolerated — mirrors ZonesLayoutSource. In production
-    // the factory's registrar returns nullptr when ctx doesn't surface the
-    // registry, so the source is never constructed with a null pointer.
-    // Public API callers that pass null just get an empty source.
+    // In production the factory registrar returns nullptr from its
+    // builder lambda when the ctx has no ITileAlgorithmRegistry, so the
+    // source is never constructed with null — asserting in debug catches
+    // tests that accidentally pass nullptr instead of silently returning
+    // an empty list. Release builds keep the null-tolerance branch below
+    // (for parity with ZonesLayoutSource and public API callers that
+    // legitimately want an empty source).
+    Q_ASSERT_X(m_registry, "AutotileLayoutSource",
+               "constructed with null ITileAlgorithmRegistry — factory registrar should have returned nullptr instead");
     if (m_registry) {
         // Seed the algorithm-count cache — insertCacheEntry() relies on it
         // for its FIFO cap, and the first invalidation signal may not fire

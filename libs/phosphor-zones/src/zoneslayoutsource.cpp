@@ -65,6 +65,14 @@ ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::IZoneLayoutRegistry* registr
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
+    // In production the factory registrar returns nullptr from its
+    // builder lambda when the ctx has no IZoneLayoutRegistry, so the
+    // source is never constructed with null — asserting in debug catches
+    // tests that accidentally pass nullptr instead of silently returning
+    // an empty list. Release builds keep the null-tolerance branch below
+    // for public API callers that legitimately want an empty source.
+    Q_ASSERT_X(m_registry, "ZonesLayoutSource",
+               "constructed with null IZoneLayoutRegistry — factory registrar should have returned nullptr instead");
     // Mirror AutotileLayoutSource's pattern: self-wire the registry's
     // unified contentsChanged signal (inherited from
     // PhosphorLayout::ILayoutSourceRegistry) into our own, so callers

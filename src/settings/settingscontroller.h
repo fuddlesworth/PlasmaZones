@@ -246,6 +246,18 @@ public:
     // isAutotile / aspectRatioClass (string tag) / flat supports* capability
     // flags. Intentionally different from the D-Bus getLayoutPreviewList JSON
     // shape, which is optimised for wire transfer.
+    //
+    // @note Autotile preview-parameter drift: the local AlgorithmRegistry
+    // here is independent of the daemon's (see m_localAlgorithmRegistry
+    // below) — preview params (master count, split ratio, saved per-
+    // algorithm settings) configured via the daemon's D-Bus do NOT
+    // propagate to this process's registry. The fallback previews always
+    // render with the algorithm's built-in defaults rather than the
+    // user's live tuning. This only affects the daemon-independent code
+    // path; when the daemon is up the D-Bus @c getLayoutPreviewList
+    // carries the fully-tuned previews. Acceptable because the fallback
+    // is primarily a "daemon is down" safety net for early launch /
+    // crash-recovery, not a replacement for the D-Bus surface.
     Q_INVOKABLE QVariantList localLayoutPreviews() const;
     // Non-const: ILayoutSource::previewAt is non-const so implementations
     // can populate a query cache (scripted autotile algorithms would be

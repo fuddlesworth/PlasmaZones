@@ -387,6 +387,11 @@ void Daemon::initializeUnifiedController()
     m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
         m_layoutManager.get(), m_settings.get(), m_screenManager.get(), m_autotileEngine.get(), this);
 
+    // Share the daemon's bundle-owned autotile source with the controller
+    // so its internal layout cache's autotile half is populated from the
+    // bundle's preview cache instead of rebuilt from scratch per call.
+    m_unifiedLayoutController->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
+
     // Set initial desktop/activity context for visibility-filtered cycling
     m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
     m_unifiedLayoutController->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
