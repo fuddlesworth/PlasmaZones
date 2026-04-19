@@ -81,6 +81,26 @@ PHOSPHORSCREENS_EXPORT void reset();
 PHOSPHORSCREENS_EXPORT void invalidateEdidCache(const QString& connectorName = QString());
 
 /**
+ * @brief Drop the computed-identifier and reverse-lookup caches without
+ *        touching the EDID-serial cache.
+ *
+ * Call on QScreen add/remove: identifier disambiguation depends on the
+ * full set of connected screens (a "/CONNECTOR" suffix appears only when
+ * another screen produces the same base ID), so any topology change can
+ * promote a previously-bare ID to a disambiguated form or vice versa.
+ * Pruning by connector name (as @ref invalidateEdidCache does) misses
+ * this: screen A's cache entry is keyed on its own connector, but the
+ * disambiguation of A's identifier depends on whether screen B exists —
+ * a delta to B alone leaves A's entry stale.
+ *
+ * Distinct from @ref invalidateEdidCache because the EDID serial is a
+ * hardware property of a specific connector (only changes on physical
+ * monitor swap), while disambiguation is a function of the screen set
+ * (changes on every add/remove regardless of hardware reuse).
+ */
+PHOSPHORSCREENS_EXPORT void invalidateComputedIdentifiers();
+
+/**
  * @brief Compute the EDID-based base ID for a `QScreen*`.
  *
  * Identical-monitor disambiguation is NOT applied here (use @ref

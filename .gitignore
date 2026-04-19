@@ -202,6 +202,9 @@ $RECYCLE.BIN/
 # -----------------------------------------------------------------------------
 # Testing and Coverage
 # -----------------------------------------------------------------------------
+# CTest working tree (created by ctest when run outside a build/ directory)
+Testing/
+
 # Test executables (but not test source files)
 test_*
 !test_*.cpp

@@ -423,6 +423,14 @@ void ScreenManager::onScreenAdded(QScreen* screen)
     if (!screen || m_trackedScreens.contains(screen)) {
         return;
     }
+    // Topology changed — invalidate computed identifiers BEFORE emitting
+    // screenAdded so listeners that call identifierFor() on the existing
+    // tracked screens see freshly-disambiguated IDs. Scenario: a second
+    // same-model monitor joining promotes the first monitor's cached ID
+    // from bare "Manuf:Model:Serial" to "Manuf:Model:Serial/CONNECTOR".
+    // Without this, the first monitor's listeners keep reading the stale
+    // bare ID and downstream state keyed by ID desynchronises.
+    ScreenIdentity::invalidateComputedIdentifiers();
     connectScreenSignals(screen);
     m_trackedScreens.append(screen);
     m_effectiveScreenIdsDirty = true;
@@ -452,6 +460,12 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     // Drop EDID-cache entries pinned to this connector so a different
     // monitor on the same port gets fresh identifier resolution next time.
     ScreenIdentity::invalidateEdidCache(screen->name());
+    // Clear the broader computed-identifier caches too — a removal can
+    // also collapse a disambiguated ID back to bare form on the screen
+    // that previously had a same-model sibling. invalidateEdidCache above
+    // only drops entries tied to THIS connector; the still-connected
+    // sibling's cached disambiguated ID must go through this path.
+    ScreenIdentity::invalidateComputedIdentifiers();
     m_effectiveScreenIdsDirty = true;
 
     Q_EMIT screenRemoved(screen);

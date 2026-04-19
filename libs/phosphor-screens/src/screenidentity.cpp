@@ -67,6 +67,19 @@ void reset()
     reverseCache().clear();
 }
 
+void invalidateComputedIdentifiers()
+{
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
+    // Hotplug invalidation for the computed-identifier caches only.
+    // Disambiguation (the "/CONNECTOR" suffix) is a function of the
+    // full screen set — any add/remove can flip a screen's identifier
+    // between bare and disambiguated forms even though that screen's
+    // own EDID is unchanged. Leave the EDID serial cache alone; it's
+    // keyed on connector and only invalidates on real monitor swap.
+    identifierCache().clear();
+    reverseCache().clear();
+}
+
 void invalidateEdidCache(const QString& connectorName)
 {
     PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
