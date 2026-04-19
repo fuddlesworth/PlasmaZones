@@ -89,6 +89,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/IMotionClock.h
     include/PhosphorAnimation/RetargetPolicy.h
     include/PhosphorAnimation/MotionSpec.h
+    include/PhosphorAnimation/Interpolate.h
     include/PhosphorAnimation/AnimatedValue.h
     include/PhosphorAnimation/Profile.h
     include/PhosphorAnimation/ProfilePaths.h

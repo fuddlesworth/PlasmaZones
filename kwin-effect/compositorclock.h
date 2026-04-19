@@ -80,6 +80,7 @@ public:
     std::chrono::nanoseconds now() const override;
     qreal refreshRate() const override;
     void requestFrame() override;
+    const void* epochIdentity() const override;
 
     /**
      * @brief Push the next presentTime sample from the compositor.
@@ -97,6 +98,15 @@ public:
 private:
     QPointer<KWin::LogicalOutput> m_output;
     std::chrono::nanoseconds m_latestPresentTime{0};
+    // `true` if the clock was constructed bound to a non-null output
+    // (per-output instance), `false` for the always-unbound fallback
+    // clock. Used by `requestFrame()` to distinguish "stale output
+    // destroyed before onScreenRemoved" (rare, worth a debug log) from
+    // "unbound by design" (normal, silent).
+    const bool m_wasBound;
+    // Rate-limit: set once a stale-output debug log fires so a misbehaving
+    // compositor sequence doesn't flood the log at paint rate.
+    mutable bool m_loggedStaleOutput = false;
 };
 
 } // namespace PlasmaZones

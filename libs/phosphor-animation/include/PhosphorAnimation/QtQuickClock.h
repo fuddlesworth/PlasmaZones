@@ -95,6 +95,7 @@ public:
     std::chrono::nanoseconds now() const override;
     qreal refreshRate() const override;
     void requestFrame() override;
+    const void* epochIdentity() const override;
 
     /// The QQuickWindow this clock is bound to. May be null.
     QQuickWindow* window() const;

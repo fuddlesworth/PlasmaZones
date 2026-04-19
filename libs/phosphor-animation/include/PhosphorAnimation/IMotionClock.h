@@ -134,6 +134,46 @@ public:
      */
     virtual void requestFrame() = 0;
 
+    /**
+     * @brief Opaque epoch identity used to gate `rebindClock`.
+     *
+     * `AnimatedValue<T>::rebindClock` rebases `m_startTime` by
+     * `newClock->now() - oldClock->now()`. That arithmetic is only
+     * meaningful when both clocks share a monotonic time base; across
+     * independent epochs (wall-clock, domain-specific counters), the
+     * rebase produces a meaningless offset and corrupts progress.
+     *
+     * Two clocks with the same non-null `epochIdentity()` are declared
+     * rebind-compatible. `nullptr` (the default) means "incompatible
+     * with rebind onto any other clock" — `AnimatedValue::rebindClock`
+     * refuses the migration and `AnimationController::advanceAnimations`
+     * skips the per-tick rebind, keeping the captured clock in place.
+     *
+     * Concrete steady_clock-backed implementations return
+     * `steadyClockEpoch()` — the shared sentinel defined by this
+     * interface. Third-party clocks backed by a different monotonic
+     * source must define their own sentinel (a `static const char` at
+     * namespace or class scope returning `&sentinel`); consumers
+     * routing between clocks of different epochs will then correctly
+     * observe the mismatch and refuse to migrate.
+     */
+    virtual const void* epochIdentity() const
+    {
+        return nullptr;
+    }
+
+    /**
+     * @brief Shared sentinel for `std::chrono::steady_clock`-backed clocks.
+     *
+     * Every in-tree `IMotionClock` implementation
+     * (`PlasmaZones::CompositorClock` wrapping KWin's presentTime,
+     * `PhosphorAnimation::QtQuickClock` wrapping `std::chrono::
+     * steady_clock::now()`) returns this pointer from `epochIdentity()`.
+     * The address identity is stable across the process lifetime; the
+     * pointee is an unused static byte.
+     */
+    static const void* steadyClockEpoch();
+
 protected:
     // Protected default-ctor keeps derived classes constructible while
     // preventing `IMotionClock` instances from being stack-allocated by

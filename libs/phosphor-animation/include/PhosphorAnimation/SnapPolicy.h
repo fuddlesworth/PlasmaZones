@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/RetargetPolicy.h>
@@ -62,7 +63,11 @@ struct SnapParams
 /// adapter-side "should I apply scale this paint?" checks
 /// (`AnimatedValue<QRectF>::hasSizeChange`). Both sides use 1.0 px so
 /// a sub-pixel size delta is treated identically by both layers.
-constexpr qreal kSnapSizeEpsilonPx = 1.0;
+///
+/// Aliases `PhosphorAnimation::kRectSizeEpsilonPx` (defined in
+/// AnimatedValue.h). Single source of truth on the generic layer; the
+/// snap-flavoured name is kept here for call-site clarity.
+inline constexpr qreal kSnapSizeEpsilonPx = kRectSizeEpsilonPx;
 
 /**
  * @brief Build a `MotionSpec<QRectF>` if the transition merits animation.

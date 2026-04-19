@@ -150,4 +150,12 @@ QQuickWindow* QtQuickClock::window() const
     return m_window.data();
 }
 
+const void* QtQuickClock::epochIdentity() const
+{
+    // std::chrono::steady_clock — same epoch family as CompositorClock,
+    // so an AnimatedValue started by a QML driver can rebind onto a
+    // compositor clock mid-flight without a timestamp corruption.
+    return IMotionClock::steadyClockEpoch();
+}
+
 } // namespace PhosphorAnimation

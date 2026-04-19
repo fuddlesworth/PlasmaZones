@@ -36,6 +36,10 @@ public:
     void requestFrame() override
     {
     }
+    const void* epochIdentity() const override
+    {
+        return IMotionClock::steadyClockEpoch();
+    }
     void advanceMs(qreal ms)
     {
         m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));

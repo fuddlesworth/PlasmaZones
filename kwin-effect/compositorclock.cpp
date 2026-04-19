@@ -7,24 +7,41 @@
 #include <effect/effecthandler.h>
 
 #include <QCoreApplication>
+#include <QLoggingCategory>
 #include <QThread>
 
 namespace PlasmaZones {
 
+Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
 CompositorClock::CompositorClock(KWin::LogicalOutput* output)
     : m_output(output)
+    , m_wasBound(output != nullptr)
 {
 }
 
 CompositorClock::~CompositorClock() = default;
 
+// Shared main-thread contract assertion. CompositorClock's state
+// (m_latestPresentTime, m_output's QPointer dispatch) is read and
+// written without synchronization; every access must come from the
+// compositor thread. The assertion is a debug-only check — cheap to
+// keep in production builds (no-op) and invaluable for catching
+// future drift during testing. See updatePresentTime's contract
+// comment for the full rationale.
+#define PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD()                                                               \
+    Q_ASSERT(QCoreApplication::instance() == nullptr                                                                   \
+             || QThread::currentThread() == QCoreApplication::instance()->thread())
+
 std::chrono::nanoseconds CompositorClock::now() const
 {
+    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
     return m_latestPresentTime;
 }
 
 qreal CompositorClock::refreshRate() const
 {
+    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
     if (!m_output) {
         return 0.0;
     }
@@ -48,11 +65,21 @@ void CompositorClock::requestFrame()
         // per-output signal we have, and the output's geometry scopes
         // it.
         KWin::effects->addRepaint(m_output->geometry());
-    } else {
-        // Unbound clock — full-screen tick. Degenerate single-output
-        // and test paths land here.
-        KWin::effects->addRepaintFull();
+        return;
     }
+    if (m_wasBound && !m_loggedStaleOutput) {
+        // Bound at construction but the QPointer has since gone null —
+        // the LogicalOutput was destroyed before onScreenRemoved fired
+        // its reap + clock cleanup. The full-screen repaint below is
+        // correct (the per-output damage scope we'd prefer is no longer
+        // available), just wasteful. One-shot debug so the sequence is
+        // visible in diagnostics without flooding at paint rate.
+        qCDebug(lcEffect) << "CompositorClock: bound output destroyed before reap — falling back to addRepaintFull";
+        m_loggedStaleOutput = true;
+    }
+    // Unbound-by-construction fallback clock (single-output / test path)
+    // or the stale-output path handled above.
+    KWin::effects->addRepaintFull();
 }
 
 void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
@@ -61,8 +88,9 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
     // is unsynchronised, so every mutator must come from the same
     // thread as the readers. Every in-tree caller (prePaintScreen)
     // satisfies this; the assertion catches future drift cheaply.
-    Q_ASSERT(QCoreApplication::instance() == nullptr
-             || QThread::currentThread() == QCoreApplication::instance()->thread());
+    // Same assertion is applied on now() / refreshRate() via the
+    // shared macro above.
+    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
 
     const auto asNs = std::chrono::duration_cast<std::chrono::nanoseconds>(presentTime);
     // Monotonicity latch — KWin's presentTime is normally monotonic
@@ -79,6 +107,15 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
 KWin::LogicalOutput* CompositorClock::output() const
 {
     return m_output.data();
+}
+
+const void* CompositorClock::epochIdentity() const
+{
+    // KWin's presentTime is sourced from std::chrono::steady_clock, so
+    // this clock is rebind-compatible with any other steady_clock-backed
+    // IMotionClock (notably QtQuickClock for shells that drive both
+    // compositor- and QML-side animations on the same AnimatedValue).
+    return IMotionClock::steadyClockEpoch();
 }
 
 } // namespace PlasmaZones

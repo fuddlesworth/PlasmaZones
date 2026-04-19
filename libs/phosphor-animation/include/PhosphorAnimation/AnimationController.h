@@ -191,12 +191,7 @@ public:
     void setProfile(const Profile& profile)
     {
         m_profile = profile;
-        if (m_profile.duration) {
-            m_profile.duration = qBound(qreal(0.0), *m_profile.duration, kMaxDurationMs);
-        }
-        if (m_profile.minDistance) {
-            m_profile.minDistance = qBound(0, *m_profile.minDistance, kMaxMinDistancePx);
-        }
+        clampProfile(m_profile);
     }
     const Profile& profile() const
     {
@@ -228,10 +223,12 @@ public:
     static constexpr int kMaxMinDistancePx = 10000;
 
     /// Convenience setter — equivalent to modifying `profile().duration`.
-    /// Clamps to `[0, kMaxDurationMs]` ms (same range as Phase 2).
+    /// Clamps to `[0, kMaxDurationMs]` ms (same range as Phase 2) via
+    /// the shared `clampProfile` helper.
     void setDuration(qreal ms)
     {
-        m_profile.duration = qBound(qreal(0.0), ms, kMaxDurationMs);
+        m_profile.duration = ms;
+        clampProfile(m_profile);
     }
     qreal duration() const
     {
@@ -248,7 +245,8 @@ public:
     /// point interchangeably.
     void setMinDistance(int pixels)
     {
-        m_profile.minDistance = qBound(0, pixels, kMaxMinDistancePx);
+        m_profile.minDistance = pixels;
+        clampProfile(m_profile);
     }
     int minDistance() const
     {
@@ -351,19 +349,39 @@ public:
 
         AnimatedValue<QRectF> anim;
         if (!anim.start(oldFrame, newFrame, *spec)) {
+            // NoMotion on a handle that already has an in-flight
+            // animation: the caller asked to replace, so event-count
+            // invariants demand a terminating event for the displaced
+            // one even though the new segment is degenerate. Move it
+            // out, erase, fire onAnimationReplaced — the caller still
+            // gets NoMotion back so they can distinguish "degenerate
+            // new start" from a normal replace.
+            if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
+                AnimatedValue<QRectF> displaced = std::move(existing->second);
+                m_animations.erase(existing);
+                onAnimationReplaced(handle, displaced);
+            }
             return StartResult::NoMotion;
         }
 
-        // Displace + notify: a naïve insert_or_assign would silently
-        // drop the prior animation, leaving consumers that count
-        // started-vs-complete events with a stranded "started". Fire
-        // onAnimationReplaced on the displaced instance so the event
-        // accounting stays balanced (one started ⇒ exactly one
-        // terminating event: complete OR replaced OR removed).
+        // Displace + notify. When an entry already exists for @p handle,
+        // swap state in-place via move-assignment rather than erase +
+        // emplace. Move-assignment preserves object identity, which is
+        // load-bearing for the re-entrancy contract: if this call was
+        // triggered from inside a spec-level `onValueChanged` running
+        // on the currently-advancing AnimatedValue, erasing the map
+        // entry would destroy `*this` under advance()'s call stack and
+        // subsequent code (m_isComplete / m_spec.onComplete access)
+        // would be use-after-free. Move-assignment rewrites the state
+        // while keeping the object alive — advance()'s re-entrancy
+        // guard re-checks m_isComplete after each callback and bails
+        // cleanly when the state flipped out from under it.
         if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
             AnimatedValue<QRectF> displaced = std::move(existing->second);
-            m_animations.erase(existing);
+            existing->second = std::move(anim);
             onAnimationReplaced(handle, displaced);
+            onAnimationStarted(handle, existing->second);
+            return StartResult::Accepted;
         }
 
         // unordered_map's operator[] requires default-constructible value
@@ -489,9 +507,25 @@ public:
      */
     RetargetResult retargetWithResult(Handle handle, const QRectF& newFrame)
     {
+        // Guards run here (not deferred to the forwarded call) so the
+        // unknown-handle branch does not need a synthetic "fallback
+        // policy" sentinel. Early-exit ordering matches the three-arg
+        // overload: Disabled → HandleInvalid → UnknownHandle → dispatch.
+        if (!m_enabled) {
+            return RetargetResult::Disabled;
+        }
+        if (!isHandleValid(handle)) {
+            return RetargetResult::HandleInvalid;
+        }
         auto it = m_animations.find(handle);
-        const RetargetPolicy policy = (it != m_animations.end()) ? it->second.spec().retargetPolicy : m_retargetPolicy;
-        return retargetWithResult(handle, newFrame, policy);
+        if (it == m_animations.end()) {
+            return RetargetResult::UnknownHandle;
+        }
+        // The per-animation policy — stamped by `startAnimation` from the
+        // controller's `m_retargetPolicy` at the time the animation
+        // started. Using the stamped value honours the config-reload
+        // immutability contract on `setRetargetPolicy`.
+        return retargetWithResult(handle, newFrame, it->second.spec().retargetPolicy);
     }
 
     void removeAnimation(Handle handle)
@@ -660,17 +694,22 @@ public:
             // Per-tick clock re-resolution. If `clockForHandle(handle)`
             // now resolves to a different pointer than the one captured
             // at start (window migrated between outputs, QML item re-
-            // parented to a different QQuickWindow), rebind. Relies on
-            // the epoch contract documented on
-            // AnimatedValue::rebindClock — both shipped clocks share
-            // std::chrono::steady_clock so the rebind is a pointer
-            // swap with no timestamp rebase. Null result leaves the
-            // animation on its existing clock (no regression: if the
-            // resolver can't produce a clock now, the captured one is
-            // still the best we have).
+            // parented to a different QQuickWindow), rebind IFF the
+            // two clocks share a rebind-compatible epoch. Both shipped
+            // clocks return `IMotionClock::steadyClockEpoch()` so the
+            // common case is permitted; third-party clocks that
+            // don't opt in are skipped (keeping the captured clock)
+            // rather than silently corrupting progress via a
+            // meaningless timestamp delta. Null resolver result also
+            // falls through to "keep captured" for the same reason.
             if (IMotionClock* resolved = clockForHandle(handle)) {
-                if (resolved != it->second.spec().clock) {
-                    it->second.rebindClock(resolved);
+                IMotionClock* current = it->second.spec().clock;
+                if (resolved != current && current) {
+                    const void* currentEpoch = current->epochIdentity();
+                    const void* resolvedEpoch = resolved->epochIdentity();
+                    if (currentEpoch && currentEpoch == resolvedEpoch) {
+                        it->second.rebindClock(resolved);
+                    }
                 }
             }
 
@@ -844,6 +883,20 @@ protected:
     }
 
 private:
+    /// Central clamp for every write path into @c m_profile. Keeps the
+    /// duration / minDistance bounds in one place so a settings UI
+    /// cannot sneak a pathological value in via any of the three
+    /// entry points (setProfile / setDuration / setMinDistance).
+    static void clampProfile(Profile& profile)
+    {
+        if (profile.duration) {
+            profile.duration = qBound(qreal(0.0), *profile.duration, kMaxDurationMs);
+        }
+        if (profile.minDistance) {
+            profile.minDistance = qBound(0, *profile.minDistance, kMaxMinDistancePx);
+        }
+    }
+
     // Per-tick snapshot of handles to step. Sized to fit a typical
     // full-workspace burst (layout-switch / workspace-switch) in the
     // inline buffer without heap fallback.

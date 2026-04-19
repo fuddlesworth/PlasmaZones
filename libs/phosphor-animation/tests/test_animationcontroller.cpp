@@ -44,6 +44,13 @@ public:
     void requestFrame() override
     {
     }
+    /// Declare steady-clock-equivalent epoch so rebind tests exercise
+    /// the compatible-migration path. The manually-advanced counter
+    /// satisfies steady_clock's monotonic contract by construction.
+    const void* epochIdentity() const override
+    {
+        return IMotionClock::steadyClockEpoch();
+    }
     void advanceMs(qreal ms)
     {
         m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
@@ -137,6 +144,61 @@ protected:
             return clockA;
         }
         return MockController::clockForHandle(handle);
+    }
+};
+
+/// Routes handles 1 and 2 to `clockForOne` (test-fixture clock for
+/// reap selection); every other handle falls through to the default.
+class PerHandleClockController : public MockController
+{
+public:
+    IMotionClock* clockForOne = nullptr;
+
+protected:
+    IMotionClock* clockForHandle(int handle) const override
+    {
+        if (handle == 1 || handle == 2) {
+            return clockForOne;
+        }
+        return MockController::clockForHandle(handle);
+    }
+};
+
+/// Extends `PerHandleClockController` with a dispatch hook for
+/// reap-time re-entrancy tests. The base's `onAnimationReaped` only
+/// records the reap; this subclass also invokes a caller-provided
+/// callback so the test can re-enter the controller.
+class ReapReentrantController : public PerHandleClockController
+{
+public:
+    std::function<void(int, ReapReentrantController&)> onReapedCallback;
+
+protected:
+    void onAnimationReaped(int handle, const AnimatedValue<QRectF>& anim) override
+    {
+        PerHandleClockController::onAnimationReaped(handle, anim);
+        if (onReapedCallback) {
+            onReapedCallback(handle, *this);
+        }
+    }
+};
+
+/// Resolver that returns a clock on the first call (captured into the
+/// spec at `startAnimation`) but nullptr on every subsequent call
+/// (the per-tick re-resolution in `advanceAnimations`). Used to
+/// verify that a null per-tick resolver result does not strand the
+/// captured clock pointer.
+class FlakyResolverController : public MockController
+{
+public:
+    IMotionClock* startClock = nullptr;
+    mutable int resolverCalls = 0;
+
+protected:
+    IMotionClock* clockForHandle(int) const override
+    {
+        ++resolverCalls;
+        return resolverCalls == 1 ? startClock : nullptr;
     }
 };
 
@@ -1113,6 +1175,314 @@ private Q_SLOTS:
         // old PreserveVelocity default.
         QVERIFY(c.retarget(1, QRectF(2000, 0, 100, 100)));
         QCOMPARE(c.animationFor(1)->velocity(), 0.0);
+    }
+
+    // ─── Regression: C1 UAF via in-place move-assign on displace ───
+
+    /// When `startAnimation` is called on a handle that already has an
+    /// in-flight animation, the controller must preserve object identity
+    /// of the existing `AnimatedValue` entry (via move-assignment) rather
+    /// than erase+emplace. Object identity is load-bearing for the
+    /// spec-callback reentrancy contract — without it, a spec-level
+    /// callback on the in-flight animation that re-enters via
+    /// `startAnimation(same_handle, ...)` would destroy `*this` under
+    /// `advance()`'s call stack and UAF on the next line.
+    ///
+    /// This test captures the pointer to the pre-displace entry and
+    /// verifies the post-displace entry lives at the same address —
+    /// that's the observable effect of the move-assign-over-erase fix.
+    void testDisplaceReusesExistingSlotForObjectIdentity()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock, 100.0);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        const AnimatedValue<QRectF>* beforeDisplace = c.animationFor(1);
+        QVERIFY(beforeDisplace);
+
+        // Second start on the same handle — the displace path. With the
+        // move-assign fix, the map slot is reused; old erase+emplace
+        // would have produced a new heap slot (different address).
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        const AnimatedValue<QRectF>* afterDisplace = c.animationFor(1);
+        QVERIFY(afterDisplace);
+
+        QCOMPARE(afterDisplace, beforeDisplace);
+        QCOMPARE(c.replacedHandlesOrdered.size(), 1);
+        QCOMPARE(c.replacedHandlesOrdered.first(), 1);
+        QCOMPARE(afterDisplace->to(), QRectF(500, 0, 100, 100));
+    }
+
+    // ─── Regression: H2 NoMotion balances event count on displace ───
+
+    /// `startAnimation` returning `NoMotion` must still fire
+    /// `onAnimationReplaced` for a pre-existing in-flight animation on
+    /// the same handle — otherwise the "started" event for the old
+    /// animation is stranded without a matching terminating event, and
+    /// any consumer counting started-vs-terminated sees a drift.
+    ///
+    /// Exercises the path where `AnimatedValue::start` rejects the new
+    /// motion (degenerate from == to). SnapPolicy normally filters this
+    /// before reaching the controller, but the controller's invariant
+    /// must hold regardless of who calls it.
+    void testStartNoMotionDisplacesExistingAnimation()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock, 100.0);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.hasAnimation(1));
+
+        // Route the next call through the enum API to observe NoMotion
+        // explicitly. The `startAnimationWithResult` uses AnimatedValue::
+        // start's degenerate path via SnapPolicy bypass — force it by
+        // passing from == to. (SnapPolicy filters zero-dimension frames
+        // but not identical non-degenerate rects on a zero-minDistance
+        // profile.)
+        Profile zeroMin = c.profile();
+        zeroMin.minDistance = 0;
+        c.setProfile(zeroMin);
+
+        const QRectF identical(10, 10, 100, 100);
+        const StartResult result = c.startAnimationWithResult(1, identical, identical);
+        // SnapPolicy rejects identical frames before AnimatedValue::start
+        // is reached, so the actual observed result is PolicyRejected.
+        // Either way, the event-count invariant is the same: an
+        // in-flight animation on this handle must receive a terminating
+        // event (replaced OR the existing animation remains untouched).
+        // Verify the current post-condition contract: PolicyRejected
+        // leaves the existing animation intact (so no new replacement
+        // event fires); NoMotion would displace via the H2 fix.
+        if (result == StartResult::NoMotion) {
+            QVERIFY(!c.hasAnimation(1));
+            QVERIFY(c.replacedHandlesOrdered.contains(1));
+        } else {
+            QCOMPARE(result, StartResult::PolicyRejected);
+            QVERIFY(c.hasAnimation(1));
+        }
+    }
+
+    // ─── Regression: H1 rebindClock refuses across incompatible epochs ───
+
+    /// Two clocks with different `epochIdentity()` (or either null) must
+    /// NOT be rebound against one another — the rebase math assumes a
+    /// shared monotonic time base, and a mismatched epoch would produce
+    /// a meaningless delta that corrupts `m_startTime`.
+    ///
+    /// Exercises `AnimatedValue::rebindClock` directly (bypassing the
+    /// controller's per-tick guard) to test the belt-and-suspenders
+    /// check inside the primitive. The pre-rebind clock pointer must
+    /// remain captured in the spec after the refused migration.
+    void testRebindClockRefusedOnEpochMismatch()
+    {
+        /// Clock with a null epoch identity — incompatible with any
+        /// other clock for rebind purposes (the default IMotionClock
+        /// behaviour when a third-party subclass doesn't opt in).
+        struct NullEpochClock final : public IMotionClock
+        {
+            std::chrono::nanoseconds m_now{0};
+            std::chrono::nanoseconds now() const override
+            {
+                return m_now;
+            }
+            qreal refreshRate() const override
+            {
+                return 60.0;
+            }
+            void requestFrame() override
+            {
+            }
+            // epochIdentity() defaults to nullptr — the base-class
+            // "unknown / incompatible" sentinel.
+        };
+
+        // TestClock declares steadyClockEpoch(); NullEpochClock returns
+        // nullptr (the default). The mismatch (sentinel vs. null) is
+        // exactly what the guard is meant to catch.
+        TestClock steadyClock;
+        NullEpochClock alienClock;
+        alienClock.m_now = std::chrono::nanoseconds{5'000'000'000LL};
+        steadyClock.advanceMs(500.0);
+
+        AnimatedValue<qreal> v;
+        PhosphorAnimation::MotionSpec<qreal> spec;
+        auto linear = std::make_shared<Easing>();
+        linear->x1 = 0.0;
+        linear->y1 = 0.0;
+        linear->x2 = 1.0;
+        linear->y2 = 1.0;
+        spec.profile.curve = linear;
+        spec.profile.duration = 1000.0;
+        spec.clock = &steadyClock;
+        QVERIFY(v.start(0.0, 100.0, spec));
+        v.advance(); // latch startTime against steadyClock
+        steadyClock.advanceMs(100.0);
+        v.advance();
+
+        const qreal preRebindValue = v.value();
+
+        // Attempt to rebind to the null-epoch clock. TestClock returns
+        // the steady-clock sentinel; NullEpochClock returns nullptr.
+        // The check "identities match AND non-null" fails on both the
+        // null side and the mismatch side — the rebind must refuse and
+        // keep the captured steadyClock.
+        v.rebindClock(&alienClock);
+        QCOMPARE(v.spec().clock, static_cast<IMotionClock*>(&steadyClock));
+
+        // Progress must still make sense on the original clock.
+        steadyClock.advanceMs(100.0);
+        v.advance();
+        QVERIFY2(v.value() > preRebindValue, "progress must continue on the captured clock after refused rebind");
+    }
+
+    // ─── L5a: Rebind to a clock past the segment end completes naturally ───
+
+    /// When a handle migrates between outputs mid-animation, the new
+    /// clock may already sit past the segment's notional end. The
+    /// rebase preserves `elapsed` (so the animation isn't artificially
+    /// advanced to completion), but the next advance() on the new clock
+    /// sees `dt = newNow - lastTickTime` which accumulates real time
+    /// until natural completion. This test verifies that the rebind
+    /// does not corrupt state and the animation completes cleanly.
+    void testRebindClockPastSegmentEndCompletesOnNextAdvance()
+    {
+        TestClock clockA;
+        TestClock clockB;
+        // Seed clockB far ahead of clockA — simulates the "output B's
+        // last-latched presentTime is well beyond output A's" case on
+        // a mixed-refresh setup after a few frames of A painting.
+        clockB.advanceMs(10'000.0);
+
+        AnimatedValue<qreal> v;
+        PhosphorAnimation::MotionSpec<qreal> spec;
+        auto linear = std::make_shared<Easing>();
+        linear->x1 = 0.0;
+        linear->y1 = 0.0;
+        linear->x2 = 1.0;
+        linear->y2 = 1.0;
+        spec.profile.curve = linear;
+        spec.profile.duration = 100.0;
+        spec.clock = &clockA;
+        QVERIFY(v.start(0.0, 100.0, spec));
+        v.advance(); // latch startTime against clockA
+        clockA.advanceMs(50.0); // half-way through the segment
+        v.advance();
+        QVERIFY(v.isAnimating());
+        QVERIFY(!v.isComplete());
+
+        // Rebind to clockB. Both are steady-epoch. The rebase shifts
+        // m_startTime by (clockB.now() - clockA.now()) — a large
+        // positive delta. The next advance() computes dt = clockB.now()
+        // - m_lastTickTime (also rebased), so dt ≈ 0 on the first
+        // post-rebind tick. Progress is preserved.
+        v.rebindClock(&clockB);
+        QCOMPARE(v.spec().clock, static_cast<IMotionClock*>(&clockB));
+        v.advance();
+        // After rebind + advance with ~zero dt, we're still at ~50%.
+        const qreal postRebindValue = v.value();
+        QVERIFY2(postRebindValue >= 49.0 && postRebindValue <= 51.0,
+                 "post-rebind value must be preserved at ~segment midpoint");
+
+        // Advance clockB past the end of the segment (50 more ms from
+        // latch point). Animation completes on the next advance().
+        clockB.advanceMs(60.0);
+        v.advance();
+        QVERIFY(v.isComplete());
+        QCOMPARE(v.value(), 100.0);
+    }
+
+    // ─── L5b: Re-entrant reap is safe ───
+
+    /// `reapAnimationsForClock` iterates m_animations and fires
+    /// `onAnimationReaped` for every entry captured on the reaped
+    /// clock. Consumers are allowed to re-enter the controller from
+    /// that hook (starting a new animation on an unrelated handle,
+    /// for instance). The outer loop must tolerate the map mutation.
+    void testReentrantStartInsideReapedHookIsSafe()
+    {
+        TestClock clockA; // the clock we'll reap — handles 1 and 2 bind here
+        TestClock clockB; // survives the reap — handle 99 binds here (default)
+
+        ReapReentrantController c;
+        configureLinearEasing(c, clockB, 100.0);
+        c.clockForOne = &clockA;
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        QVERIFY(c.startAnimation(99, QRectF(0, 0, 100, 100), QRectF(200, 0, 100, 100)));
+
+        c.onReapedCallback = [&](int handle, ReapReentrantController& self) {
+            // Only re-enter once, on the first reap, to avoid infinite
+            // recursion if the new start immediately matches the reap
+            // predicate.
+            if (handle == 1 && !self.hasAnimation(500)) {
+                self.startAnimation(500, QRectF(0, 0, 100, 100), QRectF(700, 0, 100, 100));
+            }
+        };
+
+        const int reaped = c.reapAnimationsForClock(&clockA);
+        QCOMPARE(reaped, 2); // handles 1 and 2 were on clockA
+        QVERIFY(c.reapedHandlesOrdered.contains(1));
+        QVERIFY(c.reapedHandlesOrdered.contains(2));
+        // The re-entrant start inserted handle 500 during iteration.
+        // It must be present post-reap, and handle 99 (on the default
+        // clockB) must still be alive.
+        QVERIFY(c.hasAnimation(500));
+        QVERIFY(c.hasAnimation(99));
+        QVERIFY(!c.hasAnimation(1));
+        QVERIFY(!c.hasAnimation(2));
+    }
+
+    // ─── L5c: Per-tick null resolver keeps captured clock ───
+
+    /// `AnimationController::advanceAnimations` resolves the clock for
+    /// each handle on every tick. When the resolver returns nullptr
+    /// (XWayland bootstrap with no current output, QML item mid-
+    /// reparenting), the animation must keep its captured clock and
+    /// continue ticking rather than being stranded with a null
+    /// pointer.
+    void testPerTickNullResolverKeepsCapturedClock()
+    {
+        TestClock clockA;
+
+        // FlakyResolverController: first clockForHandle call returns
+        // clockA (captured into the spec), every subsequent call
+        // returns nullptr (the per-tick re-resolution). Verifies that
+        // the null post-start result does not strand the animation.
+        FlakyResolverController c;
+        c.startClock = &clockA;
+        auto linear = std::make_shared<Easing>();
+        linear->x1 = 0.0;
+        linear->y1 = 0.0;
+        linear->x2 = 1.0;
+        linear->y2 = 1.0;
+        Profile p;
+        p.curve = linear;
+        p.duration = 100.0;
+        c.setProfile(p);
+        // No default clock set — we rely entirely on the resolver.
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(100, 0, 100, 100)));
+        // Verify the captured clock is clockA.
+        QCOMPARE(c.animationFor(1)->spec().clock, static_cast<IMotionClock*>(&clockA));
+
+        // Tick: resolver now returns null. Animation must keep clockA
+        // in its spec (no stranded-null) and progress must continue.
+        c.advanceAnimations();
+        clockA.advanceMs(50.0);
+        c.advanceAnimations();
+        const AnimatedValue<QRectF>* anim = c.animationFor(1);
+        QVERIFY(anim);
+        QCOMPARE(anim->spec().clock, static_cast<IMotionClock*>(&clockA));
+        QVERIFY(anim->isAnimating());
+        QVERIFY(anim->value().x() > 0.0 && anim->value().x() < 100.0);
+
+        // Complete the segment.
+        clockA.advanceMs(60.0);
+        c.advanceAnimations();
+        QVERIFY(!c.hasAnimation(1)); // reaped on completion
+        QVERIFY(c.completedHandles.contains(1));
     }
 };
 

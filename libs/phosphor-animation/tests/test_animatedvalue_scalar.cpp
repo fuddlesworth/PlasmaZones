@@ -41,6 +41,10 @@ public:
     {
         ++m_requestFrameCalls;
     }
+    const void* epochIdentity() const override
+    {
+        return IMotionClock::steadyClockEpoch();
+    }
 
     void advanceMs(qreal ms)
     {
