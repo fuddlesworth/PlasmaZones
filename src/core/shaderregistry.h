@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // PlasmaZones ShaderRegistry — wraps PhosphorShell::ShaderRegistry with
-// singleton pattern and hardcoded plasmazones shader paths.
+// hardcoded plasmazones shader paths and QML-side Q_INVOKABLE helpers.
+//
+// Per-process ownership: composition roots (daemon) own one via unique_ptr
+// and inject it into every consumer. The previous `instance() / s_instance`
+// singleton was removed in the singleton-sweep #2 refactor — same playbook
+// as AlgorithmRegistry, see project_plugin_based_compositor.md.
 
 #pragma once
 
@@ -18,7 +23,6 @@
 namespace PlasmaZones {
 
 /// PlasmaZones-specific ShaderRegistry that adds:
-/// - Singleton pattern (instance() / s_instance)
 /// - Hardcoded system/user shader paths (plasmazones/shaders)
 /// - userShadersEnabled(), userShaderDirectory(), openUserShaderDirectory()
 class PLASMAZONES_EXPORT ShaderRegistry : public PhosphorShell::ShaderRegistry
@@ -29,8 +33,6 @@ public:
     explicit ShaderRegistry(QObject* parent = nullptr)
         : PhosphorShell::ShaderRegistry(parent)
     {
-        s_instance = this;
-
         // Register PlasmaZones-specific search paths
         const QString userDir = userShaderDir();
         const QStringList systemDirs =
@@ -56,17 +58,7 @@ public:
         refresh();
     }
 
-    ~ShaderRegistry() override
-    {
-        if (s_instance == this) {
-            s_instance = nullptr;
-        }
-    }
-
-    static ShaderRegistry* instance()
-    {
-        return s_instance;
-    }
+    ~ShaderRegistry() override = default;
 
     Q_INVOKABLE bool userShadersEnabled() const
     {
@@ -93,8 +85,6 @@ private:
         return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
             + QStringLiteral("/plasmazones/shaders");
     }
-
-    static inline ShaderRegistry* s_instance = nullptr;
 };
 
 } // namespace PlasmaZones

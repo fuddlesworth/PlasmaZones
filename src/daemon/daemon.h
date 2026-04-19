@@ -60,6 +60,7 @@ class SnapNavigationAdapter;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
+class ShaderRegistry;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
@@ -419,6 +420,15 @@ private:
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
     std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    /// Per-daemon shader registry. Replaces the previous
+    /// ShaderRegistry::instance() singleton — per-process ownership is the
+    /// plugin-architecture-friendly shape (matches m_algorithmRegistry).
+    /// Declared BEFORE m_overlayService so the OverlayService can hold a
+    /// borrowed pointer to it; reverse-order destruction tears the service
+    /// down before the registry, guaranteeing no UAF on shadersChanged
+    /// disconnect during shutdown. Also declared before the D-Bus adaptors
+    /// (ShaderAdaptor, SettingsAdaptor) that borrow it.
+    std::unique_ptr<ShaderRegistry> m_shaderRegistry;
     /// OverlayService takes ScreenManager* via constructor injection — must
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.

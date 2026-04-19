@@ -70,8 +70,11 @@ void OverlayService::setSettings(ISettings* settings)
             // shadersChanged(). We tell each overlay window's ZoneShaderItem to
             // re-read its source from disk by invoking reloadShader() (inherited
             // Q_INVOKABLE from PhosphorRendering::ShaderEffect).
-            if (auto* registry = ShaderRegistry::instance()) {
-                m_shadersChangedConnection = connect(registry, &ShaderRegistry::shadersChanged, this, [this]() {
+            // Daemon must call setShaderRegistry() before the first updateSettings()
+            // — without it, this branch is silently skipped and on-disk shader edits
+            // won't propagate until the next daemon restart.
+            if (m_shaderRegistry) {
+                m_shadersChangedConnection = connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, [this]() {
                     if (!m_settings || !m_settings->enableShaderEffects()) {
                         return;
                     }
@@ -168,6 +171,11 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
 void OverlayService::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     m_algorithmRegistry = registry;
+}
+
+void OverlayService::setShaderRegistry(ShaderRegistry* registry)
+{
+    m_shaderRegistry = registry;
 }
 
 void OverlayService::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)

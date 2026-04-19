@@ -17,6 +17,7 @@ namespace PlasmaZones {
 
 class ISettings;
 class Settings; // Forward declaration for concrete type
+class ShaderRegistry;
 
 /**
  * @brief D-Bus adaptor for settings operations
@@ -32,7 +33,14 @@ class PLASMAZONES_EXPORT SettingsAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Settings")
 
 public:
-    explicit SettingsAdaptor(ISettings* settings, QObject* parent = nullptr);
+    /// @param settings Settings interface (required).
+    /// @param shaderRegistry Per-process shader registry. Borrowed; must
+    ///        outlive the adaptor. Optional in tests / unit fixtures —
+    ///        when null, every shader-related method returns an empty
+    ///        result and the on-disk hot-reload connection is skipped.
+    /// @param parent Qt parent (D-Bus adaptors are owned by their adapted
+    ///        QObject via Qt parent-child).
+    explicit SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry = nullptr, QObject* parent = nullptr);
     ~SettingsAdaptor() override;
 
 public Q_SLOTS:
@@ -244,6 +252,7 @@ private:
     void invalidateShaderCaches();
 
     ISettings* m_settings; // Interface type (DIP)
+    ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives adaptor
 
     // Registry pattern
     using Getter = std::function<QVariant()>;

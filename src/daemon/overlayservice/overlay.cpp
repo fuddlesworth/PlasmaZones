@@ -430,7 +430,7 @@ void OverlayService::createOverlayWindow(const QString& screenId, QScreen* physS
     PhosphorZones::Layout* screenLayout = resolveScreenLayout(screenId);
 
     if (usingShader && screenLayout) {
-        auto* registry = ShaderRegistry::instance();
+        auto* registry = m_shaderRegistry;
         if (registry) {
             const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
@@ -781,7 +781,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
     const bool windowIsShader = window->property("isShaderOverlay").toBool();
     const bool screenUsesShader = useShaderForScreen(screenId);
     if (windowIsShader && screenUsesShader && screenLayout) {
-        auto* registry = ShaderRegistry::instance();
+        auto* registry = m_shaderRegistry;
         if (registry) {
             const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);

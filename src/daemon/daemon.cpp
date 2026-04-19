@@ -178,12 +178,16 @@ bool Daemon::init()
     // sequential but still off the main thread.
     m_shaderBakePool.setMaxThreadCount(1);
 
-    // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
-    // The registry checks for Qt6::ShaderTools availability at compile time
-    // and for qsb tool availability at runtime
-    auto* shaderRegistry = new ShaderRegistry(this);
+    // Initialize shader registry (must be done early, before D-Bus adaptors).
+    // Per-daemon ownership replaces the previous ShaderRegistry::instance()
+    // singleton — every consumer takes a borrowed pointer via constructor or
+    // setter injection. The registry checks for Qt6::ShaderTools availability
+    // at compile time and for qsb tool availability at runtime. Pass nullptr
+    // as Qt parent: the unique_ptr owns lifetime (matches m_algorithmRegistry
+    // and the rest of this ctor's convention).
+    m_shaderRegistry = std::make_unique<ShaderRegistry>(nullptr);
     auto scheduleWarmForShader =
-        [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
+        [this, registryPtr = QPointer<ShaderRegistry>(m_shaderRegistry.get())](const ShaderRegistry::ShaderInfo& info) {
             if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
             }
@@ -222,14 +226,14 @@ bool Daemon::init()
                     return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
                 }));
         };
-    connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
-        const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();
+    connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, [this, scheduleWarmForShader]() {
+        const QList<ShaderRegistry::ShaderInfo> shaders = m_shaderRegistry->availableShaders();
         for (const ShaderRegistry::ShaderInfo& info : shaders) {
             scheduleWarmForShader(info);
         }
     });
     // Warm cache once for shaders already loaded by ShaderRegistry ctor
-    for (const ShaderRegistry::ShaderInfo& info : shaderRegistry->availableShaders()) {
+    for (const ShaderRegistry::ShaderInfo& info : m_shaderRegistry->availableShaders()) {
         scheduleWarmForShader(info);
     }
 
@@ -251,7 +255,12 @@ bool Daemon::init()
         }
     }
 
-    // Configure overlay service with settings, layout manager, and default layout
+    // Configure overlay service with settings, layout manager, and default layout.
+    // setShaderRegistry MUST run before setSettings so the on-disk shader
+    // hot-reload connection in OverlayService::updateSettings sees a
+    // non-null registry; without it, edits to shader files won't propagate
+    // until the next daemon restart.
+    m_overlayService->setShaderRegistry(m_shaderRegistry.get());
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
     m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
@@ -403,10 +412,10 @@ bool Daemon::init()
     m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
-    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
+    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), this);
 
     // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
-    new ShaderAdaptor(ShaderRegistry::instance(), this);
+    new ShaderAdaptor(m_shaderRegistry.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Captured as a local so we can wire its bridgeRegistered signal to

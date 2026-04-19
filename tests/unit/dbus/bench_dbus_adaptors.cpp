@@ -57,7 +57,7 @@ private Q_SLOTS:
         // teardown. See test_settings_adaptor_batch.cpp for the same pattern.
         m_settings = new StubSettings(nullptr);
         m_parent = new QObject(nullptr);
-        m_settingsAdaptor = new SettingsAdaptor(m_settings, m_parent);
+        m_settingsAdaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
 
         m_layoutManager = new LayoutManager(m_parent);
         auto* layout = new PhosphorZones::Layout(QStringLiteral("BenchLayout"));

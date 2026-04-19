@@ -46,6 +46,7 @@ class ITileAlgorithmRegistry;
 namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
+class ShaderRegistry;
 }
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -146,6 +147,14 @@ public:
     /// @ref layoutListForScreen output. Borrowed — caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon-owned shader registry. Required for any overlay
+    /// path that resolves a shader by id (per-screen shader lookup,
+    /// fade-in/out shader selection, wallpaper sampling). Borrowed —
+    /// caller owns it and must keep it alive for the service's lifetime.
+    /// Replaces the prior ShaderRegistry::instance() singleton — see
+    /// project_plugin_based_compositor.md.
+    void setShaderRegistry(ShaderRegistry* registry);
 
     /// Inject the daemon's bundle-owned autotile layout source. Optional —
     /// when set, @ref buildUnifiedLayoutList reuses its internal preview
@@ -406,6 +415,7 @@ private:
     QPointer<ISettings> m_settings;
     PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
+    ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
