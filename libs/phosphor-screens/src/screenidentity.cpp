@@ -54,6 +54,19 @@ QHash<QString, QPointer<QScreen>>& reverseCache()
 
 } // namespace
 
+void reset()
+{
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
+    // Full-cache wipe hook for tests and for hosts that tear down and
+    // recreate QGuiApplication within one process. Distinct from
+    // invalidateEdidCache(empty) only in intent: that one is the hotplug
+    // path, this one is explicitly "start from nothing". Cascades through
+    // PhosphorIdentity so the EDID-serial cache also resets.
+    PhosphorIdentity::ScreenId::invalidateEdidCache(QString());
+    identifierCache().clear();
+    reverseCache().clear();
+}
+
 void invalidateEdidCache(const QString& connectorName)
 {
     PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
@@ -230,6 +243,10 @@ QScreen* findByIdOrName(const QString& identifier)
 bool screensMatch(const QString& a, const QString& b)
 {
     PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
+    // Fast paths (string equal, one empty, either virtual) return BEFORE
+    // any QScreen lookup so the VS-vs-physical case doesn't pay two walks
+    // over QGuiApplication::screens() only to reject on the isVirtual
+    // check at the end.
     if (a == b) {
         return true;
     }
@@ -240,8 +257,11 @@ bool screensMatch(const QString& a, const QString& b)
         return false;
     }
     QScreen* sa = findByIdOrName(a);
+    if (!sa) {
+        return false;
+    }
     QScreen* sb = findByIdOrName(b);
-    return sa && sb && sa == sb;
+    return sb && sa == sb;
 }
 
 } // namespace Phosphor::Screens::ScreenIdentity

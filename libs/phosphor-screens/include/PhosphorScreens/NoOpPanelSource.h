@@ -6,6 +6,10 @@
 #include "IPanelSource.h"
 #include "phosphorscreens_export.h"
 
+#include <QGuiApplication>
+#include <QScreen>
+#include <QTimer>
+
 namespace Phosphor::Screens {
 
 /**
@@ -30,6 +34,16 @@ public:
 
     void start() override
     {
+        // Synthetic per-screen fan-out mirrors PlasmaPanelSource's first-ready
+        // behaviour so consumers wired only to panelOffsetsChanged (rather
+        // than ScreenManager::panelGeometryReady) still get a recompute kick
+        // on non-KDE hosts. Zero offsets are reported via currentOffsets().
+        if (qGuiApp) {
+            const auto screens = QGuiApplication::screens();
+            for (auto* s : screens) {
+                Q_EMIT panelOffsetsChanged(s);
+            }
+        }
         Q_EMIT requeryCompleted();
     }
     void stop() override
@@ -43,9 +57,21 @@ public:
     {
         return true;
     }
-    void requestRequery(int /*delayMs*/ = 0) override
+    void requestRequery(int delayMs = 0) override
     {
-        Q_EMIT requeryCompleted();
+        // Honour the caller's delay so "wait for panel editor to settle"
+        // timing is consistent across IPanelSource implementations —
+        // PlasmaPanelSource's timer-path delays its completion signal, and
+        // callers that pass a positive delayMs expect that behaviour
+        // regardless of host desktop. 0/negative stays synchronous
+        // (matches the IPanelSource::requestRequery contract).
+        if (delayMs <= 0) {
+            Q_EMIT requeryCompleted();
+            return;
+        }
+        QTimer::singleShot(delayMs, this, [this]() {
+            Q_EMIT requeryCompleted();
+        });
     }
 };
 

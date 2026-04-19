@@ -59,6 +59,18 @@ namespace ScreenIdentity {
 // want both surfaces).
 
 /**
+ * @brief Unconditionally drop every cache this namespace holds (local
+ *        identifier caches AND the cross-process EDID serial cache).
+ *
+ * Test-isolation hook. Production callers almost always want
+ * @ref invalidateEdidCache — this function exists so a test harness that
+ * recreates @c QGuiApplication within one process can wipe stale pointer-
+ * keyed entries before the next run populates them with addresses that
+ * happen to match a freed QScreen from a previous iteration.
+ */
+PHOSPHORSCREENS_EXPORT void reset();
+
+/**
  * @brief Drop the QScreen-keyed identifier caches AND the underlying
  *        EDID-serial cache (cascades to @ref PhosphorIdentity::ScreenId::invalidateEdidCache).
  *

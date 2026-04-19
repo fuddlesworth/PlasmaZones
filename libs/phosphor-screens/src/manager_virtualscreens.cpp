@@ -100,6 +100,11 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
                 break;
             }
             const VirtualScreenDef* oldDef = it.value();
+            // displayName deliberately participates in topology detection:
+            // OSD labels and any downstream consumer that caches by
+            // display name need the full virtualScreensChanged fan-out,
+            // not the cheap regions-only one (see
+            // testSignal_displayNameOnly_firesVirtualScreensChanged).
             if (oldDef->displayName != newDef.displayName || oldDef->index != newDef.index
                 || oldDef->physicalScreenId != newDef.physicalScreenId) {
                 regionsOnly = false;

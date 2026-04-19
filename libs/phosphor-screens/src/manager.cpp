@@ -74,12 +74,12 @@ void ScreenManager::start()
         });
     }
 
-    if (m_cfg.configStore) {
-        connect(m_cfg.configStore, &IConfigStore::changed, this, &ScreenManager::onConfigStoreChanged);
-        // Initial cache population.
-        refreshVirtualConfigs(m_cfg.configStore->loadAll());
-    }
-
+    // Populate m_trackedScreens BEFORE the initial refreshVirtualConfigs so
+    // any virtualScreensChanged signal the seed refresh emits observes a
+    // coherent effectiveScreenIds() from a listener's handler. If this loop
+    // ran after the refresh, a listener that called effectiveScreenIds() in
+    // response to the seed would see an empty list even though VS configs
+    // are already cached.
     for (auto* screen : QGuiApplication::screens()) {
         if (!m_trackedScreens.contains(screen)) {
             connectScreenSignals(screen);
@@ -88,6 +88,12 @@ void ScreenManager::start()
                 createGeometrySensor(screen);
             }
         }
+    }
+
+    if (m_cfg.configStore) {
+        connect(m_cfg.configStore, &IConfigStore::changed, this, &ScreenManager::onConfigStoreChanged);
+        // Initial cache population.
+        refreshVirtualConfigs(m_cfg.configStore->loadAll());
     }
 }
 
@@ -322,12 +328,17 @@ void ScreenManager::onSensorGeometryChanged(QScreen* screen)
     if (!sensorGeom.isValid() || sensorGeom.width() <= 0 || sensorGeom.height() <= 0) {
         return;
     }
-    // Sensor moved — re-query panels (handles panels added/removed/resized).
+    // Kick the panel source so it picks up add/remove/resize of a panel that
+    // might have caused the sensor reflow. But always recompute the
+    // available-geometry cache for this screen — sensor SIZE is an
+    // independent input to the final rect (qMin(sensor, dbus) in
+    // calculateAvailableGeometry), and a requery that returns identical
+    // offsets will NOT emit panelOffsetsChanged, leaving the cache stale
+    // for sensor-only changes (e.g. floating-panel ↔ reserved-panel flip).
     if (m_cfg.panelSource) {
         m_cfg.panelSource->requestRequery();
-    } else {
-        calculateAvailableGeometry(screen);
     }
+    calculateAvailableGeometry(screen);
 }
 
 void ScreenManager::onPanelOffsetsChanged(QScreen* screen)

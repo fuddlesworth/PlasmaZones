@@ -39,3 +39,8 @@ ps_add_test(ps_test_swapper test_swapper.cpp)
 ps_add_test(ps_test_manager_lifecycle test_manager_lifecycle.cpp)
 ps_add_test(ps_test_resolver test_resolver.cpp)
 ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
+ps_add_test(ps_test_dbusscreenadaptor test_dbusscreenadaptor.cpp)
+# DBus-component link — only this test needs it; the lib itself already
+# exposes QDBusAbstractAdaptor publicly, so this target inherits the
+# compile-time include surface but still needs the symbol.
+target_link_libraries(ps_test_dbusscreenadaptor PRIVATE Qt6::DBus)

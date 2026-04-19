@@ -95,8 +95,24 @@ void DBusScreenAdaptor::setScreenManager(ScreenManager* manager)
         disconnectScreenManagerSignals(m_screenManager);
     }
     m_screenManager = manager;
+    m_cachedEffectiveIdsPerScreen.clear();
     if (m_screenManager) {
         connectScreenManagerSignals(m_screenManager);
+        // Prime m_cachedEffectiveIdsPerScreen for screens that already exist.
+        // The per-screen signal wiring in the constructor ran before the
+        // manager was wired, so the cache population branch was skipped
+        // there. Do it here instead — handleScreenRemoved relies on the
+        // cache to emit per-VS screenRemoved tokens without a round-trip
+        // through the (about-to-be-stale) manager.
+        for (QScreen* screen : QGuiApplication::screens()) {
+            const QString physId = ScreenIdentity::identifierFor(screen);
+            if (m_screenManager->hasVirtualScreens(physId)) {
+                m_cachedEffectiveIdsPerScreen[physId] = m_screenManager->virtualScreenIdsFor(physId);
+            }
+        }
+        m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
+    } else {
+        m_lastEmittedEffectiveIds.clear();
     }
     invalidateScreenInfoCache();
 }
@@ -181,15 +197,16 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
         });
     });
 
-    // Connect existing screens
+    // Wire per-screen signals for currently-connected screens. Cache priming
+    // keyed on m_screenManager happens in setScreenManager() — the manager
+    // may not be wired yet when the constructor runs this loop. The
+    // screen-removed lambda is still installed here so consumer-visible
+    // retraction works from the moment the adaptor exists.
     for (QScreen* screen : QGuiApplication::screens()) {
         const QString cachedId = ScreenIdentity::identifierFor(screen);
         connect(screen, &QScreen::geometryChanged, screen, [this, screen, cachedId]() {
             handleScreenGeometryChanged(screen, cachedId);
         });
-        if (m_screenManager && m_screenManager->hasVirtualScreens(cachedId)) {
-            m_cachedEffectiveIdsPerScreen[cachedId] = m_screenManager->virtualScreenIdsFor(cachedId);
-        }
         connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
             handleScreenRemoved(removedScreen, screen, cachedId);
         });
@@ -219,7 +236,12 @@ void DBusScreenAdaptor::disconnectScreenManagerSignals(ScreenManager* mgr)
     if (!mgr) {
         return;
     }
-    disconnect(mgr, nullptr, this, nullptr);
+    // Explicit per-signal disconnects that mirror connectScreenManagerSignals —
+    // keeps future ScreenManager signals from being silently severed by a
+    // blanket disconnect(mgr, nullptr, this, nullptr). This policy matches
+    // ScreenManager::stop()'s own disconnect discipline.
+    disconnect(mgr, &ScreenManager::virtualScreensChanged, this, nullptr);
+    disconnect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, nullptr);
 }
 
 void DBusScreenAdaptor::handleScreenGeometryChanged(QScreen* /*screen*/, const QString& physId)

@@ -20,6 +20,14 @@
 
 namespace Phosphor::Screens {
 
+namespace {
+// Extra wall-clock budget on top of @p timeoutMs before the hard-cap timer
+// fires. D-Bus gets first-strike rights at the caller's timeout; this
+// cushion only catches the pathological case where D-Bus's own deadline
+// drifts. A simultaneous expiry on both paths would just be a race.
+constexpr int kResolverHardCapMarginMs = 250;
+} // namespace
+
 QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpoint& endpoint, int timeoutMs)
 {
     // Ask the daemon first — it's the only component that knows about
@@ -51,10 +59,7 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpo
         QTimer hardCap;
         hardCap.setSingleShot(true);
         QObject::connect(&hardCap, &QTimer::timeout, &loop, &QEventLoop::quit);
-        // +250 ms cushion so the hard cap only fires if D-Bus's own
-        // timeout has genuinely failed to resolve the call; a
-        // simultaneous timeout on both paths would be an unhelpful race.
-        hardCap.start(timeoutMs + 250);
+        hardCap.start(timeoutMs + kResolverHardCapMarginMs);
         loop.exec();
 
         if (watcher.isFinished() && !watcher.isError()) {

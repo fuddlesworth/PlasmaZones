@@ -62,10 +62,14 @@ public:
             return false;
         }
         const auto it = m_configs.constFind(physicalScreenId);
-        // approxEqual for the same reason SettingsConfigStore and
-        // ScreenManager use it: callers driven by JSON round-trips
-        // otherwise burn a changed() edge for every no-op reload.
-        if (it != m_configs.constEnd() && it.value().approxEqual(config)) {
+        // Exact operator== (not approxEqual). In-memory storage has no JSON
+        // round-trip to round off floats, so there's nothing for the
+        // tolerance window to absorb — but approxEqual is non-transitive,
+        // and using a non-transitive predicate as a dedup key can collapse
+        // a sequence of sub-tolerance drifts into a single equivalence class
+        // the caller didn't intend. Settings-backed stores keep approxEqual
+        // because they DO serialise through JSON; this store doesn't need it.
+        if (it != m_configs.constEnd() && it.value() == config) {
             return true; // No-op write — don't fire changed().
         }
         m_configs.insert(physicalScreenId, config);

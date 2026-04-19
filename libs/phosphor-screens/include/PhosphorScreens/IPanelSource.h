@@ -73,6 +73,13 @@ public:
     /// `panelGeometryReady` one-shot signal — consumers that compute
     /// initial zone geometry at daemon startup gate on this so they
     /// don't lay out windows against the unreserved screen rect.
+    ///
+    /// Latch semantics: implementations MAY keep `ready()` returning true
+    /// across @ref stop / @ref start cycles — the contract is "panels
+    /// have been queried successfully at least once", not "a fresh query
+    /// has completed since the last start". Consumers that need a liveness
+    /// indicator should listen for @ref requeryCompleted after their own
+    /// @ref requestRequery, rather than polling `ready()`.
     virtual bool ready() const = 0;
 
     /// Best-effort: ask the backend to re-query immediately, optionally
