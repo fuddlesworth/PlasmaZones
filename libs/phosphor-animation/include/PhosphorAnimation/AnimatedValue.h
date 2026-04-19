@@ -797,19 +797,33 @@ public:
      * velocity, elapsed) is preserved; the next `advance()` just reads
      * `dt` from the new clock instead of the old one.
      *
-     * ## Epoch contract
+     * ## Epoch contract and timestamp rebase
      *
-     * Both clocks MUST share a monotonic epoch for the swap to
-     * produce a meaningful `dt`. The shipped clocks (`CompositorClock`
+     * Per-output clocks latch `now()` independently from their own
+     * paint cycles — two clocks that share the same `std::chrono::
+     * steady_clock` epoch can still return *different* absolute values
+     * at the same wall instant because each returns the timestamp of
+     * *its* last `updatePresentTime` call. Naïvely swapping the clock
+     * pointer therefore leaves `m_startTime` (latched against the old
+     * clock's last-observed `now`) potentially ahead of the new
+     * clock's current `now` — the next `advance()` would compute a
+     * negative `elapsed`, and the stateless progression branch would
+     * sample `curve->evaluate(negative-t)` and visibly rewind.
+     *
+     * Rebind therefore rebases `m_startTime` and `m_lastTickTime` by
+     * the delta between the two clocks' current readings so that
+     * `newNow - m_startTime` equals the pre-rebind `oldNow -
+     * m_startTime`. Progress, not wall-time, is preserved across the
+     * boundary.
+     *
+     * Both clocks must still share a monotonic epoch for the rebase
+     * arithmetic to make sense — the shipped clocks (`CompositorClock`
      * backed by KWin's presentTime, `QtQuickClock` backed by
      * `std::chrono::steady_clock`) both derive from
-     * `std::chrono::steady_clock`, so a swap between any two shipped
-     * clocks is safe. A third-party `IMotionClock` using a different
-     * epoch (e.g., wall-clock, a domain-specific counter) must not be
-     * rebound with this method — the first post-rebind `now() -
-     * startTime` would produce a nonsense dt. The monotonicity guard
-     * in `advance()` catches backwards dt and logs, but forward-jumps
-     * would still over-step the curve.
+     * `std::chrono::steady_clock`, so any pair is safe. A third-party
+     * `IMotionClock` using a different epoch (e.g., wall-clock, a
+     * domain-specific counter) must not be rebound with this method —
+     * the rebase delta would mix incompatible time bases.
      *
      * Passing @p newClock == nullptr cancels the animation (same as
      * `cancel()`) — a null clock means no driver; progress cannot
@@ -834,6 +848,25 @@ public:
         if (!newClock) {
             cancel();
             return;
+        }
+        // Rebase latched timestamps by the delta between the two
+        // clocks' current readings so `elapsed` and `dt` survive the
+        // swap unchanged. See the epoch-contract section in the
+        // docstring — without this, a new clock whose last-latched
+        // `now()` sits behind `m_startTime` produces a negative
+        // elapsed on the next stateless advance and the curve samples
+        // at t < 0. Guarded on `m_startTime` having a value (first
+        // tick hasn't latched yet ⇒ no anchors to shift) and the
+        // current `m_spec.clock` being non-null (rebind before start
+        // has no anchors either).
+        if (m_startTime && m_spec.clock) {
+            const auto oldNow = m_spec.clock->now();
+            const auto newNow = newClock->now();
+            const auto delta = newNow - oldNow;
+            *m_startTime += delta;
+            if (m_lastTickTime) {
+                *m_lastTickTime += delta;
+            }
         }
         m_spec.clock = newClock;
         if (m_isAnimating) {

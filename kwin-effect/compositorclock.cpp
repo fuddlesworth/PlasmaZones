@@ -6,6 +6,9 @@
 #include <core/output.h>
 #include <effect/effecthandler.h>
 
+#include <QCoreApplication>
+#include <QThread>
+
 namespace PlasmaZones {
 
 CompositorClock::CompositorClock(KWin::LogicalOutput* output)
@@ -54,6 +57,13 @@ void CompositorClock::requestFrame()
 
 void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
 {
+    // Contract: compositor (main) thread only — the `now()` read path
+    // is unsynchronised, so every mutator must come from the same
+    // thread as the readers. Every in-tree caller (prePaintScreen)
+    // satisfies this; the assertion catches future drift cheaply.
+    Q_ASSERT(QCoreApplication::instance() == nullptr
+             || QThread::currentThread() == QCoreApplication::instance()->thread());
+
     const auto asNs = std::chrono::duration_cast<std::chrono::nanoseconds>(presentTime);
     // Monotonicity latch — KWin's presentTime is normally monotonic
     // (std::chrono::steady_clock-backed) but output hotplug / DPMS can

@@ -255,6 +255,30 @@ public:
         return m_profile.effectiveMinDistance();
     }
 
+    /// Default retarget policy stamped into every new animation's
+    /// `MotionSpec::retargetPolicy`. The two-argument `retarget(handle,
+    /// newFrame)` overloads read the stamped value back out per
+    /// animation, so a settings UI that wants drag-through-zones to
+    /// feel like a reset-on-retarget (rather than velocity-preserved
+    /// redirection) sets this once and every subsequent start +
+    /// policy-less retarget honour it.
+    ///
+    /// In-flight animations keep their own captured MotionSpec copy
+    /// and are unaffected by a subsequent policy swap — matches the
+    /// config-reload immutability contract on `setProfile`.
+    ///
+    /// `PreserveVelocity` (the default) carries the world-space rate
+    /// across the retarget boundary on stateful curves and degrades
+    /// to position-continuous on stateless curves.
+    void setRetargetPolicy(RetargetPolicy policy)
+    {
+        m_retargetPolicy = policy;
+    }
+    RetargetPolicy retargetPolicy() const
+    {
+        return m_retargetPolicy;
+    }
+
     // ─────── Lifecycle ───────
 
     bool hasActiveAnimations() const
@@ -316,6 +340,7 @@ public:
 
         SnapPolicy::SnapParams params;
         params.profile = m_profile;
+        params.retargetPolicy = m_retargetPolicy;
         // minDistance rides on the profile — SnapPolicy reads
         // params.profile.effectiveMinDistance(). See setMinDistance /
         // setProfile — both funnel into m_profile.minDistance.
@@ -374,9 +399,29 @@ public:
      * animation still progresses to completion on the clock's own
      * ticks — use `removeAnimation(handle)` to force termination).
      */
-    bool retarget(Handle handle, const QRectF& newFrame, RetargetPolicy policy = RetargetPolicy::PreserveVelocity)
+    bool retarget(Handle handle, const QRectF& newFrame, RetargetPolicy policy)
     {
         return retargetWithResult(handle, newFrame, policy) == RetargetResult::Accepted;
+    }
+
+    /**
+     * @brief Redirect using the per-animation stored retarget policy.
+     *
+     * Reads `animationFor(handle)->spec().retargetPolicy` (stamped by
+     * `startAnimation` from the controller's `retargetPolicy()`) and
+     * forwards to the three-argument overload. Callers that want
+     * drag-through-zones to feel like a reset-on-retarget set
+     * `setRetargetPolicy(ResetVelocity)` once at configure-time rather
+     * than passing the enum at every call site.
+     *
+     * Falls through to the controller's current default
+     * `retargetPolicy()` when the handle is unknown — the call still
+     * fails with `RetargetResult::UnknownHandle`, but the forwarded
+     * policy avoids a second branch in the dispatcher.
+     */
+    bool retarget(Handle handle, const QRectF& newFrame)
+    {
+        return retargetWithResult(handle, newFrame) == RetargetResult::Accepted;
     }
 
     /**
@@ -388,8 +433,7 @@ public:
      * so the caller must NOT treat this as a "start over" signal
      * (that's a double-completion).
      */
-    RetargetResult retargetWithResult(Handle handle, const QRectF& newFrame,
-                                      RetargetPolicy policy = RetargetPolicy::PreserveVelocity)
+    RetargetResult retargetWithResult(Handle handle, const QRectF& newFrame, RetargetPolicy policy)
     {
         if (!m_enabled) {
             return RetargetResult::Disabled;
@@ -431,6 +475,23 @@ public:
         // a subsequent removeAnimation + startAnimation from the caller
         // restores a known good state.
         return RetargetResult::InternalError;
+    }
+
+    /**
+     * @brief Policy-less overload that reads the per-animation stored
+     *        `MotionSpec::retargetPolicy`.
+     *
+     * `startAnimation` stamps `m_retargetPolicy` into the spec, so the
+     * default path is "controller-configured default". Callers that
+     * need a per-call policy override pass it to the three-argument
+     * overload directly. Symmetry with `AnimatedValue<T>::retarget(newTo)`
+     * which uses `m_spec.retargetPolicy` for the same reason.
+     */
+    RetargetResult retargetWithResult(Handle handle, const QRectF& newFrame)
+    {
+        auto it = m_animations.find(handle);
+        const RetargetPolicy policy = (it != m_animations.end()) ? it->second.spec().retargetPolicy : m_retargetPolicy;
+        return retargetWithResult(handle, newFrame, policy);
     }
 
     void removeAnimation(Handle handle)
@@ -801,6 +862,13 @@ private:
     // trips through Profile serialisation, and settings UIs can use
     // either entry point interchangeably.
     Profile m_profile;
+    // Controller-configured default stamped into every new animation's
+    // MotionSpec at startAnimation time. The two-argument retarget()
+    // overloads read the stamped per-animation value back out so a
+    // policy change only affects subsequent starts, not in-flight
+    // animations (config-reload immutability — same contract as
+    // setProfile).
+    RetargetPolicy m_retargetPolicy = RetargetPolicy::PreserveVelocity;
     bool m_enabled = true;
 };
 

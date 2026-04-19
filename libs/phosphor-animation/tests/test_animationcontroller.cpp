@@ -1015,6 +1015,105 @@ private Q_SLOTS:
         QVERIFY(v.isAnimating());
         QCOMPARE(v.spec().clock, &clock);
     }
+
+    /// Regression: per-output clocks latch `now()` from their own paint
+    /// cycles, so two steady_clock-backed clocks can return different
+    /// absolute values at the same wall instant. A rebind that doesn't
+    /// rebase latched timestamps would leave `m_startTime` (against the
+    /// old clock's advanced `now`) potentially ahead of the new clock's
+    /// current `now`, producing a negative `elapsed` on the next
+    /// stateless advance — the curve would sample `evaluate(t<0)` and
+    /// the animation would visually rewind for one tick.
+    ///
+    /// This test starts an animation on clockA (advanced), rebinds to
+    /// clockB (never advanced — sits at t=0, far behind clockA), then
+    /// advances clockB by a plausible frame duration. The value must
+    /// not regress relative to the pre-rebind reading.
+    void testRebindClockToBackDatedClockPreservesElapsed()
+    {
+        TestClock clockA;
+        TestClock clockB;
+        AnimatedValue<QRectF> v;
+        PhosphorAnimation::MotionSpec<QRectF> spec;
+        spec.profile.curve = std::make_shared<Easing>();
+        spec.profile.duration = 200.0;
+        spec.clock = &clockA;
+
+        // Advance clockA well past clockB before start, so clockA's
+        // `now()` and clockB's `now()` differ by 500 ms at the rebind
+        // point. clockB stays at 0.
+        clockA.advanceMs(500.0);
+
+        QVERIFY(v.start(QRectF(0, 0, 100, 100), QRectF(1000, 0, 100, 100), spec));
+        v.advance(); // latches startTime on clockA at 500 ms
+        clockA.advanceMs(50.0);
+        v.advance(); // elapsed 50 ms, somewhere mid-animation on clockA
+
+        const qreal midX = v.value().x();
+        QVERIFY(midX > 0.0);
+        QVERIFY(midX < 1000.0);
+
+        // Rebind to clockB — its `now()` sits ~550 ms behind clockA's.
+        // Without the timestamp rebase, the next advance would compute
+        // elapsed = 0 - 550 = -550 ms and sample evaluate(-2.75).
+        v.rebindClock(&clockB);
+
+        // First advance on the new clock: no elapsed change, no value
+        // change. State is preserved.
+        v.advance();
+        const qreal afterRebindX = v.value().x();
+        QVERIFY2(afterRebindX >= midX - 1.0, "value must not regress across rebind");
+        QVERIFY2(qAbs(afterRebindX - midX) < 5.0, "first tick after rebind must land within ~dt=0 of pre-rebind value");
+
+        // Continue progressing on clockB — value must monotonically
+        // advance past midX as elapsed grows.
+        clockB.advanceMs(50.0);
+        v.advance();
+        QVERIFY2(v.value().x() > midX, "post-rebind progression must continue forward, not rewind to a smaller t");
+    }
+
+    /// Regression: the two-argument `retarget(handle, newFrame)` overload
+    /// must honour `MotionSpec::retargetPolicy` (stamped by
+    /// `startAnimation` from the controller's `setRetargetPolicy`). The
+    /// three-argument overload always takes an explicit policy; the
+    /// two-argument overload's whole point is to let a settings UI pick
+    /// the behaviour once rather than threading the enum through every
+    /// call site.
+    ///
+    /// Concretely: configure `setRetargetPolicy(ResetVelocity)`, start a
+    /// Spring animation (stateful — velocity is meaningful), advance
+    /// until the spring carries non-zero velocity, then call the
+    /// two-argument retarget. Velocity must be zeroed (ResetVelocity
+    /// semantics), not carried (PreserveVelocity — the previous
+    /// hard-coded controller default).
+    void testControllerRetargetHonoursSpecRetargetPolicy()
+    {
+        TestClock clock;
+        MockController c;
+        c.setClock(&clock);
+        c.setRetargetPolicy(RetargetPolicy::ResetVelocity);
+
+        Profile profile;
+        profile.curve = std::make_shared<Spring>(Spring::snappy());
+        profile.duration = 500.0;
+        c.setProfile(profile);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(1000, 0, 100, 100)));
+        QCOMPARE(c.animationFor(1)->spec().retargetPolicy, RetargetPolicy::ResetVelocity);
+
+        c.advanceAnimations(); // latch
+        for (int i = 0; i < 5; ++i) {
+            clock.advanceMs(16.0);
+            c.advanceAnimations();
+        }
+        QVERIFY2(c.animationFor(1)->velocity() > 0.0, "spring must build velocity before retarget");
+
+        // Two-argument retarget — no explicit policy. Must pick up
+        // ResetVelocity from the stamped spec, not fall back to the
+        // old PreserveVelocity default.
+        QVERIFY(c.retarget(1, QRectF(2000, 0, 100, 100)));
+        QCOMPARE(c.animationFor(1)->velocity(), 0.0);
+    }
 };
 
 QTEST_MAIN(TestAnimationController)

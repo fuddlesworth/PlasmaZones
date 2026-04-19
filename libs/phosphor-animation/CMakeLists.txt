@@ -14,21 +14,24 @@
 #   • Profile + hierarchical ProfileTree with walk-up inheritance so shell
 #     events (window.open, zone.snapIn, osd.show, …) share defaults while
 #     allowing per-event overrides.
-#   • WindowMotion state + progression, AnimationMath helpers, StaggerTimer
-#     orchestration — the primitives previously co-located in
-#     src/compositor-common/ are now in their own domain-named library.
+#   • IMotionClock abstraction + per-handle AnimatedValue<T> template
+#     (qreal, QPointF, QSizeF, QRectF, QColor linear/OkLab, QTransform
+#     polar-decomposed) with MotionSpec<T> runtime bundle and
+#     RetargetPolicy for velocity-preserving redirects.
+#   • AnimationController<Handle> compositor-agnostic state machine
+#     built on AnimatedValue<QRectF>; SnapPolicy gate;
+#     StaggerTimer orchestration.
 #
-# Depends on Qt6 Core + Gui only. There is no compositor-common
-# forwarding shim — the old easingcurve.h / animation_math.h /
-# stagger_timer.h headers are gone and PlasmaZones consumers include
-# <PhosphorAnimation/...> directly.
+# Depends on Qt6 Core + Gui only. Qt6 Quick becomes a transitive
+# dependency when the opt-in PHOSPHOR_ANIMATION_QUICK flag is ON
+# (adds QtQuickClock for QML-side animation drivers).
 #
-# Future phases (separate branches, each gated):
-#   Phase 2  AnimationController base + WindowAnimator split
-#   Phase 3  IMotionClock abstraction + AnimatedValue<T> template
-#   Phase 4  QML value types (PhosphorEasing/Spring/Motion)
-#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator impl)
-#   Phase 6  Shader-backed animation pipeline
+# Phase status:
+#   Phase 2  AnimationController base + WindowAnimator split      ✓ landed
+#   Phase 3  IMotionClock + AnimatedValue<T> unified runtime       ✓ landed
+#   Phase 4  QML value types (PhosphorEasing/Spring/Motion)        — planned
+#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) — planned
+#   Phase 6  Shader-backed animation pipeline                      — planned
 
 cmake_minimum_required(VERSION 3.16)
 

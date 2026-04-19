@@ -545,27 +545,24 @@ initialization) and survives until process exit.
 
 ## Non-Goals (for this library)
 
-- **Animation driver / clock abstraction.** The Phase-3 `IMotionClock`
-  hasn't landed; today `WindowMotion` takes `presentTime` directly. The
-  abstraction cost wasn't justified until multiple compositors are
-  consuming the library.
+Phase 2 (`AnimationController` + `WindowAnimator` split) and Phase 3
+(`IMotionClock` + `AnimatedValue<T>` unified runtime) have landed —
+their previously-listed deferrals are now non-goals only in the sense
+that the work has completed and the scope has closed. The remaining
+out-of-scope items:
+
 - **QML integration.** `PhosphorEasing` / `PhosphorSpring` /
-  `PhosphorMotion` QML value types are Phase 4. The C++ runtime can
-  land first; QML bindings come once the API has been exercised in
+  `PhosphorMotion` QML value types are Phase 4. The C++ runtime landed
+  first; QML bindings come once the API has been exercised in
   kwin-effect and settings.
-- **Shader-backed composite transitions.** Phase 6. Belongs in
-  `phosphor-animation` (not `src/daemon/rendering/` or elsewhere) but
-  requires phase-2 progression refactor first so shader effects can
-  hang off `AnimationController`.
 - **`ISurfaceAnimator` implementation.** Phase 5. `phosphor-layer`
   defines the interface; a real animator implementation for OSDs /
   overlays / snap-assist will ship as a sub-target that depends on
   both `phosphor-animation` and `phosphor-layer`.
-- **`AnimatedValue<T>` template.** Phase 3. The current primitives
-  work with concrete `QPointF` / `QSizeF` state inside `WindowMotion`
-  because that's all the compositor side needs today. Generic
-  `AnimatedValue<T>` for color / transform / scalar properties comes
-  alongside QML integration.
+- **Shader-backed composite transitions.** Phase 6. Belongs in
+  `phosphor-animation` (not `src/daemon/rendering/` or elsewhere); the
+  Phase-3 `AnimationController` rewrite on `AnimatedValue<QRectF>` is
+  the hook-point that shader effects hang off.
 
 ---
 
@@ -808,13 +805,18 @@ template<> QRectF AnimatedValue<QRectF>::bounds() const;
 // Scalar specialisation exposes sweptRange()
 template<> std::pair<qreal, qreal> AnimatedValue<qreal>::sweptRange() const;
 
-// QColor: linear-space default, OkLab opt-in via template tag
-enum class ColorInterpolation { Linear, OkLab };
-template<ColorInterpolation Space = ColorInterpolation::Linear>
-class AnimatedValue<QColor, Space>;   // partial specialisation
+// QColor: linear-space default, OkLab opt-in via a second template
+// tag on the primary template (NOT a partial specialisation — the
+// primary AnimatedValue<T, Space> dispatches through `if constexpr`
+// on (T == QColor, Space == OkLab) inside lerpStateValue() so a
+// single class template serves every T).
+enum class ColorSpace { Linear, OkLab };
+template<typename T, ColorSpace Space = ColorSpace::Linear>
+class AnimatedValue;
 
-// QTransform: polar-decomposed lerp
-template<> class AnimatedValue<QTransform>;
+// QTransform uses the same primary template — polar-decomposed lerp
+// is selected inside Interpolate<QTransform>, no separate class
+// specialisation needed.
 ```
 
 ```cpp
