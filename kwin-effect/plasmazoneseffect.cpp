@@ -169,12 +169,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
 
     // Populate per-output clocks from the currently-known output set.
     // Subsequent hotplug events land in onScreenAdded / onScreenRemoved.
+    //
+    // Order: connect signals FIRST, then iterate the current screens()
+    // snapshot. A screen plugged in between those two steps would
+    // otherwise be missed — the signal wouldn't have an attached slot
+    // yet, and the loop would already have run. With the signals
+    // connected first, the worst case is a duplicate `onScreenAdded`
+    // call (once via signal, once via loop). `onScreenAdded` is
+    // idempotent (re-insertion check against m_motionClocksByOutput)
+    // so the duplicate is a no-op.
     if (KWin::effects) {
+        connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
+        connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);
         for (KWin::LogicalOutput* output : KWin::effects->screens()) {
             onScreenAdded(output);
         }
-        connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
-        connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);
     }
 
     // Wire the fallback clock as the animator's default. The animator's
@@ -3799,16 +3808,34 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // controller's reapAnimationsForClock() helper which iterates
     // m_animations and filters on spec().clock pointer equality.
     auto it = m_motionClocksByOutput.find(output);
-    if (it != m_motionClocksByOutput.end()) {
-        // m_windowAnimator is a unique_ptr initialized in the ctor and
-        // never reset except during ~PlasmaZonesEffect; any screenRemoved
-        // signal posted after our destruction is auto-disconnected by
-        // QObject's teardown, so a nullptr guard here would be dead
-        // code rather than defensive. Assert the invariant instead.
-        Q_ASSERT(m_windowAnimator);
-        m_windowAnimator->reapAnimationsForClock(it->second.get());
-        m_motionClocksByOutput.erase(it);
+    if (it == m_motionClocksByOutput.end()) {
+        return;
     }
+    // m_windowAnimator is a unique_ptr initialized in the ctor and
+    // never reset except during ~PlasmaZonesEffect; any screenRemoved
+    // signal posted after our destruction is auto-disconnected by
+    // QObject's teardown, so a nullptr guard here would be dead
+    // code rather than defensive. Assert the invariant instead.
+    Q_ASSERT(m_windowAnimator);
+
+    // Ordering matters: extract the unique_ptr and erase the map
+    // entry BEFORE calling reap. A re-entrant `onAnimationReaped` hook
+    // that starts a new animation on a handle whose `screen()` still
+    // returns the dying output would otherwise route through
+    // `clockForOutput(output)` → find this clock in the map → bind
+    // the new animation to it. The subsequent destructor run would
+    // then UAF on the next advanceAnimations. By erasing first, the
+    // lookup falls through to the fallback clock — new animations
+    // started during reap are born bound to the fallback, never the
+    // dying clock. The `dyingClock` unique_ptr keeps the clock alive
+    // for the reap iteration itself (the captured raw pointer remains
+    // valid through the function's scope).
+    std::unique_ptr<CompositorClock> dyingClock = std::move(it->second);
+    m_motionClocksByOutput.erase(it);
+    m_windowAnimator->reapAnimationsForClock(dyingClock.get());
+    // dyingClock destroyed at scope exit — at this point reap has
+    // cleared every animation that captured the pointer, so the
+    // destruction cannot strand a dangling MotionSpec::clock.
 }
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)

@@ -60,12 +60,18 @@ namespace PhosphorAnimation {
  * the time the slot resumes, the destructor could have returned and
  * `QtQuickClock`'s remaining fields (after `m_adapter` destruction)
  * could have been torn down in the normal member-destruction order.
- * `m_slotDepth` counts in-progress slots — entry increments, exit
- * decrements, and the destructor spins until the count reaches zero
- * *after* setting `m_detached` + disconnecting. This guarantees any
- * slot that raced past the detached check has fully exited before
- * the destructor returns; any slot that saw `detached == true` paid
- * only an atomic acquire-load and returned without touching state.
+ * `m_slotDepth` counts in-progress slots — entry increments *before*
+ * the detached check, exit decrements, and the destructor spins
+ * until the count reaches zero *after* setting `m_detached` +
+ * disconnecting. The increment-first ordering is load-bearing: an
+ * earlier implementation did a detached-fast-path check before the
+ * increment, which left a window where the destructor could observe
+ * `m_slotDepth == 0` and tear down the atomic while a preempted
+ * slot was about to issue its `fetch_add`. Paying the unconditional
+ * `fetch_add` on every beforeRendering (~1 ns on x86) closes that
+ * race entirely. Any slot that sees `detached == true` on the
+ * post-increment acquire-load back-paths out via `fetch_sub`
+ * without touching owner state.
  *
  * Deadlock constraint: the destructor MUST NOT run on the thread that
  * fires the slot (the render thread). If it did, the spin would wait
@@ -83,13 +89,15 @@ private:
     QtQuickClock* m_owner;
     std::atomic<bool> m_detached{false};
     // In-progress slot body count. Render-thread slot entries increment
-    // (after the detached check passes) and exits decrement; the
-    // destructor spins on this after setting `m_detached` so a
-    // preempted slot finishes before owner state is torn down. Int
-    // because the slot is reentrancy-free (one signal per window,
-    // serialised by Qt) and the count never exceeds 1 in practice —
-    // but the counter idiom is portable and matches the refcount
-    // pattern used elsewhere in PhosphorAnimation.
+    // *before* the detached check so the destructor's join-on-destroy
+    // cannot observe `m_slotDepth == 0` while a preempted slot is about
+    // to touch owner state. Exits decrement; the destructor spins on
+    // this after setting `m_detached` so a preempted slot finishes
+    // before owner state is torn down. Int because the slot is
+    // reentrancy-free (one signal per window, serialised by Qt) and
+    // the count never exceeds 1 in practice — but the counter idiom
+    // is portable and matches the refcount pattern used elsewhere in
+    // PhosphorAnimation.
     std::atomic<int> m_slotDepth{0};
     QMetaObject::Connection m_conn;
 };
@@ -115,20 +123,22 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
     m_conn = QObject::connect(
         window, &QQuickWindow::beforeRendering, this,
         [this]() {
-            // Acquire on every slot entry — `~SignalAdapter` publishes
-            // `m_detached=true` with release, so an entry observing
-            // `true` is guaranteed to observe every memory write that
-            // happened-before the destructor (even though here we just
-            // need the flag bit itself).
-            if (m_detached.load(std::memory_order_acquire)) {
-                return;
-            }
-            // Join-on-destroy: increment the in-progress counter *after*
-            // the detached check so the destructor's spin-wait reaches
-            // zero the moment the last non-detached slot exits. Re-read
-            // the detached flag under the counter — if the destructor
-            // published `detached` between the earlier check and this
-            // increment, we back out without touching owner state.
+            // Increment-first ordering. Claiming the slot-depth slot
+            // BEFORE checking `m_detached` is load-bearing for the
+            // join-on-destroy contract: an earlier fast-path design
+            // checked `detached` first and incremented only if false,
+            // which left a window where the destructor could observe
+            // `m_slotDepth == 0` while a preempted slot was on its way
+            // to `fetch_add` — the destructor would then tear down
+            // the atomic before the slot's increment landed (UB). By
+            // always paying the `fetch_add` first, any destructor spin
+            // that reaches zero is a genuine "no slots in flight."
+            //
+            // Acquire ordering pairs with the destructor's release
+            // store of `m_detached` and release store when spinning on
+            // `m_slotDepth`; release ordering on the exit decrement
+            // publishes this slot's cache writes happens-before the
+            // destructor's final observation of `m_slotDepth == 0`.
             m_slotDepth.fetch_add(1, std::memory_order_acquire);
             if (m_detached.load(std::memory_order_acquire)) {
                 m_slotDepth.fetch_sub(1, std::memory_order_release);

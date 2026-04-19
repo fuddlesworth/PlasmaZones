@@ -18,6 +18,28 @@ Q_DECLARE_LOGGING_CATEGORY(lcEffect)
 
 CompositorClock::CompositorClock(KWin::LogicalOutput* output)
     : m_output(output)
+    // Seed `m_latestPresentTime` from `std::chrono::steady_clock::now()`
+    // so `now()` returns a sensible timestamp BEFORE the first
+    // `updatePresentTime` call. Leaving it at zero produces a
+    // cross-output rebind hazard: a window migrating to a newly-added
+    // output mid-animation calls `AnimatedValue::rebindClock(newClock)`,
+    // which rebases `m_startTime` by
+    // `newClock->now() - oldClock->now()`. With a zero-initialised
+    // latch, new clock's `now()` = 0 while old clock's `now()` ≈ 10⁹ ns,
+    // producing `delta ≈ -10⁹ ns` and shoving `m_startTime` deep into
+    // the past. The next advance computes `elapsed ≫ duration` and the
+    // animation snaps to completion instantly. Seeding from the same
+    // `std::chrono::steady_clock` source that `updatePresentTime` feeds
+    // (KWin's presentTime is steady_clock-backed) keeps the rebase
+    // delta bounded by the freshness gap between the two clocks'
+    // last observation — small and benign.
+    //
+    // The fallback clock never reads `m_latestPresentTime` (its `now()`
+    // goes directly to `steady_clock`), so the initial value is unused
+    // there — but seeding it keeps the two construction paths
+    // symmetric and avoids a "why is the bound branch different?"
+    // puzzle on future reads.
+    , m_latestPresentTime(std::chrono::steady_clock::now().time_since_epoch())
     , m_wasBound(output != nullptr)
 {
 }

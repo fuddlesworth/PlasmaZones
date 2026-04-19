@@ -124,6 +124,10 @@ public:
 
 private:
     QPointer<KWin::LogicalOutput> m_output;
+    // Seeded from `std::chrono::steady_clock::now()` in the constructor
+    // — NOT zero — to keep `now()` sensible before the first
+    // `updatePresentTime` sample lands. See the ctor body for the
+    // cross-output rebind hazard the seed closes.
     std::chrono::nanoseconds m_latestPresentTime{0};
     // `true` if the clock was constructed bound to a non-null output
     // (per-output instance), `false` for the always-unbound fallback

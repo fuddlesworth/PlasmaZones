@@ -44,6 +44,32 @@ enum class RetargetPolicy {
     /// once per instance. Pure-translate transforms (the common case —
     /// window snap, scroll offsets) are handled on the normal
     /// velocity-preserving path.
+    ///
+    /// ### Caveat for `AnimatedValue<QRectF>` on size-dominated motion
+    ///
+    /// `Interpolate<QRectF>::distance` is a 4-D Euclidean norm over
+    /// `(x, y, w, h)` — position-pixels and size-pixels both contribute
+    /// equally per axis. For the typical snap use case
+    /// (position-dominated; size delta is ≤ the gap between adjacent
+    /// zones and ≪ the translate across the workspace) this is fine:
+    /// the velocity rescale is effectively a translate-rate rescale
+    /// with a small size-rate correction. Consumers of
+    /// `AnimatedValue<QRectF>` whose animations are size-dominated
+    /// (grid-cell resize, expanding tooltips, layouts where the
+    /// position delta is tiny relative to the size change) will observe
+    /// a rescaled velocity that confuses "pixels of translate per
+    /// second" with "pixels of resize per second". There is no
+    /// auto-degrade here — the gate would require introspecting the
+    /// old and new segments' translate-vs-size ratio and picking a
+    /// threshold that's inherently workload-specific.
+    ///
+    /// Size-dominated consumers SHOULD either pass `PreservePosition`
+    /// / `ResetVelocity` explicitly on retarget, or split the motion
+    /// into two separate `AnimatedValue` instances — one for
+    /// `QPointF`, one for `QSizeF` — whose distance metrics are pure.
+    /// The SnapPolicy + AnimationController flow stays on
+    /// `AnimatedValue<QRectF>` with `PreserveVelocity` as default
+    /// because window snap is position-dominated by construction.
     PreserveVelocity,
 
     /// Zero `state.velocity` on retarget. Position continuous; the

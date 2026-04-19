@@ -930,6 +930,22 @@ protected:
      * started animation: complete, replaced, or explicit
      * @ref removeAnimation. Default no-op.
      *
+     * ## Map state during the hook
+     *
+     * By the time this hook fires, `m_animations[handle]` already holds
+     * the NEW segment — the displaced entry has been moved out into
+     * the @p displaced parameter. A hook that inspects the controller
+     * (`hasAnimation(handle)`, `animationFor(handle)`) observes the
+     * new segment, not the displaced one. The @p displaced reference
+     * is the only inspection path for the segment that just ended.
+     *
+     * This ordering is load-bearing for re-entrancy: a spec-level
+     * `onValueChanged` callback on the currently-advancing
+     * AnimatedValue that triggers this displacement must not observe
+     * its own entry erased from the map under its feet. Move-assignment
+     * preserves object identity — the displaced entry's destruction
+     * runs only when @p displaced goes out of scope at hook exit.
+     *
      * The @p displaced reference is scoped to the call — see the
      * lifetime contract above.
      */
