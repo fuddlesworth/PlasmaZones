@@ -542,9 +542,9 @@ private Q_SLOTS:
         QCOMPARE(c.completedHandles.size(), 0);
     }
 
-    // ─── retarget degenerate fires onComplete for symmetry ───
+    // ─── retarget degenerate reaps immediately with one onAnimationComplete ───
 
-    void testRetargetToSameTargetFiresCompleteCallback()
+    void testRetargetToSameTargetReapsImmediatelyAndFiresCompleteOnce()
     {
         TestClock clock;
         MockController c;
@@ -556,20 +556,52 @@ private Q_SLOTS:
         c.advanceAnimations();
 
         // Retarget to the current visual value → newDistance ≈ 0 →
-        // degenerate-complete branch. AnimatedValue fires onComplete
-        // from its MotionSpec (here unset — no callback registered
-        // by SnapPolicy by default) so the observable signal comes
-        // via the animation state: isComplete == true and the entry
-        // flushes on the next advance.
+        // degenerate-complete branch. The controller reaps the entry
+        // synchronously inside retarget() and fires
+        // onAnimationComplete exactly once; spec callbacks stay
+        // silent (the degenerate path is symmetric with start()'s
+        // degenerate path). No zombie entry persists into the next
+        // advanceAnimations() tick.
+        const QRectF current = c.currentValue(1, QRectF());
+        QVERIFY(c.completedHandles.isEmpty());
+        QVERIFY(!c.retarget(1, current, RetargetPolicy::PreservePosition));
+        QVERIFY(!c.hasAnimation(1));
+        QCOMPARE(c.completedHandles.size(), 1);
+        QVERIFY(c.completedHandles.contains(1));
+
+        // Second advance does not double-fire completion.
+        c.advanceAnimations();
+        QCOMPARE(c.completedHandlesOrdered.size(), 1);
+    }
+
+    // ─── SnapPolicy retargetPolicy propagates into the MotionSpec ───
+
+    void testStartAnimationStampsDefaultPreserveVelocityRetargetPolicy()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        const AnimatedValue<QRectF>* anim = c.animationFor(1);
+        QVERIFY(anim);
+        QCOMPARE(anim->spec().retargetPolicy, RetargetPolicy::PreserveVelocity);
+    }
+
+    // ─── retarget-while-active doesn't fire retargeted when underlying rejects ───
+
+    void testRetargetToSameTargetDoesNotFireRetargetedHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        c.advanceAnimations();
+        clock.advanceMs(20.0);
+        c.advanceAnimations();
+
         const QRectF current = c.currentValue(1, QRectF());
         QVERIFY(!c.retarget(1, current, RetargetPolicy::PreservePosition));
-        // The old animation's degenerate-complete path does not fire
-        // the controller's onAnimationComplete hook directly (that
-        // hook is only called from advanceAnimations after erase).
-        // It does mark the AnimatedValue complete; the next advance
-        // reaps it.
-        c.advanceAnimations();
-        QVERIFY(!c.hasAnimation(1));
+        QVERIFY(c.retargetedHandlesOrdered.isEmpty());
     }
 };
 

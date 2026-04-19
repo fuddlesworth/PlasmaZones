@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QRectF>
@@ -32,7 +33,7 @@ class IMotionClock;
 namespace SnapPolicy {
 
 /// Parameters for the snap gate.
-struct PHOSPHORANIMATION_EXPORT SnapParams
+struct SnapParams
 {
     /// The full Profile to stamp into the animation's MotionSpec.
     /// Carries curve, duration, sequenceMode, staggerInterval, and any
@@ -45,6 +46,14 @@ struct PHOSPHORANIMATION_EXPORT SnapParams
     /// `max(1, minDistance)` with no size change is skipped as not
     /// worth animating (matches Phase 2 semantics exactly).
     int minDistance = 0;
+
+    /// Default retarget policy to stamp into the resulting MotionSpec.
+    /// `PreserveVelocity` matches the drag-through-zones expectation
+    /// (no visible stall mid-retarget). Callers that want a different
+    /// default — e.g. a workspace-switch interrupted by a click,
+    /// which feels more natural with `ResetVelocity` so the new
+    /// target starts from rest — set this explicitly.
+    RetargetPolicy retargetPolicy = RetargetPolicy::PreserveVelocity;
 };
 
 /**
@@ -60,7 +69,7 @@ struct PHOSPHORANIMATION_EXPORT SnapParams
  *   - `profile` = @p params.profile (full copy — curve, duration,
  *     sequence mode, etc. all propagate)
  *   - `clock` = @p clock
- *   - default `retargetPolicy = PreserveVelocity`
+ *   - `retargetPolicy` = @p params.retargetPolicy
  *   - callbacks left unset (caller wires onValueChanged / onComplete)
  *
  * The returned spec has no `onValueChanged` or `onComplete` callback —

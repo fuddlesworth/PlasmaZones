@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <PhosphorAnimation/phosphoranimation_export.h>
-
 namespace PhosphorAnimation {
 
 /**
@@ -25,13 +23,24 @@ namespace PhosphorAnimation {
  *   a debug hint so callers writing curve-agnostic retarget loops can
  *   see the downgrade rather than silently getting a different motion.
  */
-enum class PHOSPHORANIMATION_EXPORT RetargetPolicy {
+enum class RetargetPolicy {
     /// Carry `state.velocity` across the segment boundary, re-scaled
     /// from the old segment's world-distance to the new one. Position
     /// is continuous. This is the default — consumers that drag a
     /// window through multiple zones mid-snap expect "no visible stall"
     /// which maps to velocity preservation. Stateless curves downgrade
     /// to `PreservePosition` + a debug log.
+    ///
+    /// ### Caveat for `AnimatedValue<QTransform>`
+    ///
+    /// The Frobenius-norm distance used to rescale velocity mixes
+    /// units (translation-pixels and rotation-radians / scale-factors
+    /// all contribute equally), so on mixed translate+rotate+scale
+    /// retargets at non-trivial speed the rescaled velocity is
+    /// physically meaningless. Pure-translate transforms (the common
+    /// case — window snap, scroll offsets) are unaffected. For mixed
+    /// transforms prefer `PreservePosition` or `ResetVelocity` until
+    /// a unit-aware metric is designed.
     PreserveVelocity,
 
     /// Zero `state.velocity` on retarget. Position continuous; the

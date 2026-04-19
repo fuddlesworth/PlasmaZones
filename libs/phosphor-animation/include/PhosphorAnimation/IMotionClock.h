@@ -51,11 +51,23 @@ namespace PhosphorAnimation {
  *
  * ## Thread safety
  *
- * Every `IMotionClock` method is GUI-thread-only. Concrete clocks live
- * on the compositor / QtQuick render thread; cross-thread access is
- * outside the supported contract. Consumers that need to drive
- * animations from worker threads must serialize through the owning
- * paint-loop thread before calling any clock method.
+ * Each concrete implementation documents its own thread-safety model;
+ * the interface does NOT promise a single uniform contract. The
+ * shipped implementations:
+ *
+ * - `CompositorClock` (KWin): all methods run on the compositor
+ *   (main) thread. No cross-thread access.
+ * - `QtQuickClock`: `now()` is safe to read from any thread (cached
+ *   timestamp is `std::atomic`), because `beforeRendering` writes
+ *   from the render thread while GUI-thread QML consumers commonly
+ *   read. `requestFrame()` forwards to `QQuickWindow::update()`
+ *   which Qt documents as thread-safe. `refreshRate()` is
+ *   GUI-thread-only (touches `QScreen`).
+ *
+ * Consumers that need to drive animations from worker threads must
+ * either pick an implementation whose contract allows it or
+ * serialize through the owning paint-loop thread before calling any
+ * clock method.
  */
 class PHOSPHORANIMATION_EXPORT IMotionClock
 {

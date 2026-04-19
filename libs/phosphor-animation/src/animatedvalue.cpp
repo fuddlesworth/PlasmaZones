@@ -9,8 +9,20 @@
 
 #include <PhosphorAnimation/AnimatedValue.h>
 
+#include <PhosphorAnimation/Easing.h>
+
 namespace PhosphorAnimation {
 
 Q_LOGGING_CATEGORY(lcAnimatedValue, "phosphoranimation.animatedvalue")
+
+std::shared_ptr<const Curve> defaultFallbackCurve()
+{
+    // Meyers singleton: one shared OutCubic default across every
+    // AnimatedValue<T> instantiation. Default-constructed Easing is
+    // OutCubic per Easing::Easing's defaults — matches Phase 2
+    // CurveRegistry::create("")'s fallback shape.
+    static const std::shared_ptr<const Curve> sFallback = std::make_shared<const Easing>();
+    return sFallback;
+}
 
 } // namespace PhosphorAnimation

@@ -20,7 +20,6 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
     }
 
     const QRectF current = anim->value();
-    const QRectF target = anim->to();
 
     // Translate: desired visual top-left offset from the actual
     // frameGeometry. moveResize() was called once to set the final
@@ -34,11 +33,8 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
     // visual_size = frameGeometry.size * scale = desiredSize.
     // Scale converges to 1.0 at t=1, so the final state uses the
     // natural buffer with no transform applied.
-    const QSizeF desiredSize = current.size();
-    const QSizeF targetSize = target.size();
-    const bool sizeChanging =
-        qAbs(desiredSize.width() - targetSize.width()) > 0.5 || qAbs(desiredSize.height() - targetSize.height()) > 0.5;
-    if (sizeChanging) {
+    if (anim->hasSizeChange()) {
+        const QSizeF desiredSize = current.size();
         const QSizeF actualSize = window->frameGeometry().size();
         constexpr qreal MinDim = 1.0;
         // [0.01, 100] is wide enough that a 4K window snapping to a

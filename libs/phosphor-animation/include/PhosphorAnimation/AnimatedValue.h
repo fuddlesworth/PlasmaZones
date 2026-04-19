@@ -39,6 +39,14 @@ namespace PhosphorAnimation {
 // symbol resolves across the SO boundary.
 Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcAnimatedValue, PHOSPHORANIMATION_EXPORT)
 
+// Shared fallback curve used by every AnimatedValue<T> instantiation when
+// no explicit curve is set on the MotionSpec's Profile. Namespace-scope
+// (not a template-local static) so all instantiations share a single
+// default instead of leaking one per T. Matches Phase-2 CurveRegistry's
+// "empty spec → default OutCubic" semantics and the library-defaults
+// invariant in Profile::withDefaults.
+PHOSPHORANIMATION_EXPORT std::shared_ptr<const Curve> defaultFallbackCurve();
+
 /**
  * @brief Interpolation space selector for `AnimatedValue<QColor, …>`.
  *
@@ -593,10 +601,16 @@ public:
      * so there is no visual jump at the boundary. Velocity treatment
      * follows @p policy (see `RetargetPolicy`).
      *
-     * A `retarget()` call on an AnimatedValue that is not currently
-     * animating is equivalent to `start(currentValue, newTo,
-     * storedSpec)` — the stored spec is reused. If no spec has been
-     * stored (never started), this returns false.
+     * Returns `true` on acceptance (new segment installed); `false`
+     * on two distinct rejections distinguishable by `isComplete()`:
+     *
+     *   - **No stored spec** (`!isComplete()` post-call): retarget
+     *     was called without a prior successful `start()`.
+     *   - **Degenerate target** (`isComplete()` post-call): new
+     *     segment's distance is ≈ 0, motion is complete-in-place. No
+     *     spec callbacks fire (symmetric with `start()`'s degenerate
+     *     path); the AnimatedValue is silently marked complete and
+     *     the owning container is expected to reap.
      */
     bool retarget(T newTo, RetargetPolicy policy)
     {
@@ -658,23 +672,25 @@ public:
 
         if (qFuzzyIsNull(newDistance)) {
             // Re-targeting to the same point we're already at —
-            // complete-in-place, no motion. Fire completion callbacks
-            // so consumers that count started/complete pairs see a
-            // matching complete for the retarget segment. (start()'s
-            // degenerate path intentionally stays silent because it
-            // never "started" a motion; retarget always replaces an
-            // active segment, so symmetry matters here.)
+            // complete-in-place, no motion. The degenerate path is
+            // silent: no spec callbacks fire, matching start()'s
+            // degenerate-path silence.
+            //
+            // Rationale: the spec callbacks ultimately feed into the
+            // owning controller's lifecycle accounting. Firing
+            // onComplete here and then having the controller's own
+            // onAnimationComplete fire on the next advance would
+            // double-count terminal events against one started
+            // animation. Callers observe the degenerate path via
+            // (retarget() returning false && isComplete() == true)
+            // and let the controller reap on the next tick — or the
+            // controller detects the zombie immediately and reaps
+            // from within its retarget() dispatcher.
             m_current = m_to;
             m_state.value = 1.0;
             m_state.velocity = 0.0;
             m_isAnimating = false;
             m_isComplete = true;
-            if (m_spec.onValueChanged) {
-                m_spec.onValueChanged(m_current);
-            }
-            if (m_isComplete && m_spec.onComplete) {
-                m_spec.onComplete();
-            }
             return false;
         }
 
@@ -758,6 +774,28 @@ public:
      *
      * No-op when not animating. Safe to call every paint cycle
      * regardless of animation state.
+     *
+     * ## Callback lifetime contract (important)
+     *
+     * Spec callbacks (`onValueChanged`, `onComplete`) must NOT cause
+     * `*this` to be destroyed while they run. Concretely, a callback
+     * must not call `container.erase(handle)` / equivalent on the
+     * AnimatedValue currently firing — doing so destroys `*this`
+     * under the call stack of `advance()`, and subsequent code inside
+     * `advance()` (or its caller, if the caller re-inspects `this`)
+     * is use-after-free.
+     *
+     * In-place restart via `this->start(newFrom, newTo, newSpec)` is
+     * safe: the re-entrancy guard re-checks `m_isComplete` after
+     * `onValueChanged` fires and suppresses the old `onComplete` when
+     * a new segment has been installed.
+     *
+     * `AnimationController` honours this contract — its own
+     * `onAnimationComplete` hook fires on a locally-moved copy *after*
+     * the controller has erased the entry, so callers wiring that hook
+     * are free to erase / restart other handles. The contract only
+     * restricts what spec-level callbacks (attached via `MotionSpec`)
+     * may do.
      */
     void advance()
     {
@@ -953,6 +991,28 @@ public:
         return boundsImpl();
     }
 
+    /**
+     * @brief Has the current interpolated value diverged from the
+     *        target size by more than @p epsilonPx on either axis?
+     *
+     * Intended for compositor adapters that only need to apply a
+     * scale transform when size is actually changing (pure-translate
+     * snaps leave scale at identity). Replaces the hand-inlined
+     * "|current.w - target.w| > 0.5 || ..." check that otherwise
+     * duplicates across every adapter.
+     *
+     * Available only on the `QRectF` specialisation — `QSizeF` has
+     * no natural "target" distinct from the lerp endpoint (every
+     * animation of a size changes the size), and geometric `QPointF`
+     * has no size axis at all.
+     */
+    bool hasSizeChange(qreal epsilonPx = 0.5) const
+        requires std::same_as<T, QRectF>
+    {
+        return qAbs(m_current.width() - m_to.width()) > epsilonPx
+            || qAbs(m_current.height() - m_to.height()) > epsilonPx;
+    }
+
     // ─────── Scalar swept range (only for arithmetic T) ───────
 
     /**
@@ -993,11 +1053,7 @@ private:
         if (m_spec.profile.curve) {
             return m_spec.profile.curve;
         }
-        // Fallback: default OutCubic bezier. Matches the Phase-2
-        // CurveRegistry::create("") fallback and the library-defaults
-        // invariant in `Profile::withDefaults`.
-        static const std::shared_ptr<const Curve> sFallback = std::make_shared<const Easing>();
-        return sFallback;
+        return defaultFallbackCurve();
     }
 
     // Geometric bounds implementation shared across the three geometric T.

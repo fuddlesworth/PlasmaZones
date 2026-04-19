@@ -26,7 +26,9 @@ namespace PhosphorAnimation {
  * @brief Compositor-agnostic per-window snap-animation controller.
  *
  * Phase 3 rewrite on top of `AnimatedValue<QRectF>`. Owns a
- * `QHash<Handle, AnimatedValue<QRectF>>`, a Profile (curve + duration),
+ * `std::unordered_map<Handle, AnimatedValue<QRectF>>`
+ * (chosen over QHash because AnimatedValue<T> is move-only; see the
+ * m_animations rationale comment), a Profile (curve + duration),
  * a minimum-distance skip threshold, and a non-owning `IMotionClock*`.
  * Subclasses bind the @c Handle template parameter to their
  * compositor's window-handle type (`KWin::EffectWindow*` for KDE,
@@ -258,17 +260,26 @@ public:
             return false;
         }
         const bool accepted = it->second.retarget(newFrame, policy);
-        // Re-lookup: AnimatedValue::retarget fires onValueChanged /
-        // onComplete on its degenerate-retarget-to-same-point path,
-        // and a user callback could mutate m_animations in ways that
-        // rehash and invalidate `it`. Look up afresh for the hook.
         if (accepted) {
-            it = m_animations.find(handle);
-            if (it != m_animations.end()) {
-                onAnimationRetargeted(handle, it->second);
-            }
+            onAnimationRetargeted(handle, it->second);
+            return true;
         }
-        return accepted;
+
+        // Not accepted → either AnimatedValue rejected the retarget
+        // (no stored spec) or the new segment was degenerate (newFrom
+        // ≈ newTo; AnimatedValue silently marked itself complete).
+        // In the degenerate case we reap immediately so the controller's
+        // state is internally consistent: hasAnimation(handle) flips to
+        // false on return, instead of leaving a zombie entry until the
+        // next advanceAnimations() tick. Fires onAnimationComplete
+        // once — the same terminal event a naturally-completed
+        // animation produces.
+        if (it->second.isComplete()) {
+            AnimatedValue<QRectF> finished = std::move(it->second);
+            m_animations.erase(it);
+            onAnimationComplete(handle, finished);
+        }
+        return false;
     }
 
     void removeAnimation(Handle handle)
@@ -351,10 +362,12 @@ public:
             return;
         }
 
-        // Inline 64: covers layout-switch / workspace-switch bulk starts
-        // without falling through to heap allocation. 16 (the original
-        // Phase 2 figure) was tight for multi-window snap bursts.
-        QVarLengthArray<Handle, 64> handles;
+        // Inline capacity covers layout-switch / workspace-switch bulk
+        // starts without falling through to heap allocation. 16 (the
+        // original Phase 2 figure) was tight for multi-window snap
+        // bursts; kMaxInlineHandlesPerTick = 64 seats a full workspace
+        // on typical compositor/shell configurations.
+        QVarLengthArray<Handle, kMaxInlineHandlesPerTick> handles;
         handles.reserve(m_animations.size());
         for (const auto& [handle, _] : m_animations) {
             handles.append(handle);
@@ -471,6 +484,11 @@ protected:
     }
 
 private:
+    // Per-tick snapshot of handles to step. Sized to fit a typical
+    // full-workspace burst (layout-switch / workspace-switch) in the
+    // inline buffer without heap fallback.
+    static constexpr int kMaxInlineHandlesPerTick = 64;
+
     // std::unordered_map (not QHash) because AnimatedValue<T> is
     // move-only — Qt6's QHash still requires copy-constructible values
     // for its internal Node type. The functional difference is

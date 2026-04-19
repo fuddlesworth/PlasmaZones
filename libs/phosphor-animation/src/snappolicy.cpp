@@ -35,7 +35,7 @@ std::optional<MotionSpec<QRectF>> createSnapSpec(const QRectF& oldFrame, const Q
     MotionSpec<QRectF> spec;
     spec.profile = params.profile; // full copy — every field propagates
     spec.clock = clock;
-    spec.retargetPolicy = RetargetPolicy::PreserveVelocity;
+    spec.retargetPolicy = params.retargetPolicy;
     return spec;
 }
 
