@@ -288,10 +288,28 @@ inline qreal colorDistance(const QColor& from, const QColor& to)
 template<>
 struct Interpolate<QColor>
 {
+    /**
+     * @brief Linear-space sRGB lerp.
+     *
+     * **Always Linear-space.** The `ColorSpace::OkLab` opt-in is a
+     * property of `AnimatedValue<QColor, ColorSpace::OkLab>` — the
+     * template dispatches through `AnimatedValue::lerpStateValue()`
+     * which routes to `detail::lerpColorOkLab` directly for that
+     * instantiation. The free-standing `Interpolate<QColor>::lerp`
+     * does NOT honour the `Space` parameter and is unconditionally
+     * Linear; direct callers (non-`AnimatedValue`) who want OkLab
+     * must call `detail::lerpColorOkLab` themselves.
+     */
     static QColor lerp(const QColor& from, const QColor& to, qreal t)
     {
         return detail::lerpColorLinear(from, to, t);
     }
+    /// Linear-space L2 distance — matches the lerp space for the default
+    /// (Linear) path. An OkLab `AnimatedValue<QColor>` still uses this
+    /// metric for retarget velocity rescale; the OkLab perceptual
+    /// "distance" is different but the rescale ratio
+    /// (newVel = oldVel × oldDist / newDist) is close enough when both
+    /// distances use the same metric.
     static qreal distance(const QColor& from, const QColor& to)
     {
         return detail::colorDistance(from, to);
@@ -575,6 +593,7 @@ public:
         m_startTime.reset();
         m_lastTickTime.reset();
         m_loggedStatelessDegrade = false;
+        m_loggedNegativeDt = false;
 
         // Degenerate: start == target with no motion. Snap to target,
         // mark complete, fire no callbacks (start() is the contract
@@ -737,7 +756,15 @@ public:
      */
     void finish()
     {
-        if (!m_isAnimating && !m_isComplete) {
+        if (m_isComplete) {
+            // Idempotent: natural-completion already fired callbacks;
+            // finish() must not re-fire them. Covers both the
+            // never-started case (m_isAnimating=false, m_isComplete=false
+            // → this branch is false, early-return below catches it) and
+            // the already-completed case (m_isComplete=true → skip).
+            return;
+        }
+        if (!m_isAnimating) {
             return; // Never started — nothing to finish.
         }
         m_current = m_to;
@@ -830,7 +857,14 @@ public:
         // Defensive: negative dt indicates a non-monotonic clock
         // (IMotionClock mandates monotonicity; this is belt-and-
         // suspenders). Treat as zero-step and request another frame.
+        // Log once per instance so a misbehaving clock is visible in
+        // diagnostics without flooding at paint rate.
         if (dtSeconds < 0.0) {
+            if (!m_loggedNegativeDt) {
+                qCWarning(lcAnimatedValue) << "negative dt from clock (" << dtSeconds
+                                           << "s) — treating as zero-step. Monotonicity contract violated.";
+                m_loggedNegativeDt = true;
+            }
             m_spec.clock->requestFrame();
             return;
         }
@@ -1156,6 +1190,10 @@ private:
     // PreservePosition degrade on a stateless curve, to avoid flooding
     // logs when a consumer retargets every frame (drag-snap).
     bool m_loggedStatelessDegrade = false;
+    // Rate-limit: set once we've observed and logged a negative dt from
+    // the clock (monotonicity violation). Same reasoning — drag-snap
+    // workflows would flood logs otherwise.
+    bool m_loggedNegativeDt = false;
 };
 
 } // namespace PhosphorAnimation

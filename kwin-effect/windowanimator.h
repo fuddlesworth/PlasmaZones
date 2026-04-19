@@ -6,9 +6,16 @@
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/AnimationController.h>
 
+#include <functional>
+
 namespace KWin {
 class EffectWindow;
+class LogicalOutput;
 class WindowPaintData;
+}
+
+namespace PhosphorAnimation {
+class IMotionClock;
 }
 
 namespace PlasmaZones {
@@ -30,13 +37,28 @@ namespace PlasmaZones {
  * standard KDE effect pattern — effects are purely visual overlays on
  * the compositing pipeline and never call moveResize() per-frame.
  *
- * Timing is driven by an injected `CompositorClock` (see Phase 3
- * sub-commit 1). The effect sets the clock once at construction time;
- * every animation reads from it for frame-perfect progression.
+ * Timing is driven by per-output `CompositorClock` instances resolved
+ * via the `OutputClockResolver` callback — mixed-refresh-rate displays
+ * phase-lock independently instead of beating against a shared process-
+ * wide clock. The resolver is injected by the effect at construction
+ * time; the animator's `clockForHandle` override calls back into it
+ * with each window's current `LogicalOutput`.
  */
 class WindowAnimator : public PhosphorAnimation::AnimationController<KWin::EffectWindow*>
 {
 public:
+    /// Callback resolving an output to the matching IMotionClock. The
+    /// effect owns the clock instances; the animator just routes via
+    /// this resolver at `startAnimation` time. May return nullptr for
+    /// an unknown output — in that case the controller's default
+    /// clock (set via setClock) is used.
+    using OutputClockResolver = std::function<PhosphorAnimation::IMotionClock*(KWin::LogicalOutput*)>;
+
+    /// Install the per-output clock resolver. Safe to call at any time;
+    /// takes effect for subsequent `startAnimation` calls. In-flight
+    /// animations keep the clock captured at their own start time.
+    void setOutputClockResolver(OutputClockResolver resolver);
+
     /// Apply translate offset + scale transform to @p data so the window
     /// renders at the current interpolated visual position/size. No-op
     /// when @p window has no active animation or the motion is still
@@ -51,6 +73,10 @@ protected:
     bool isHandleValid(KWin::EffectWindow* window) const override;
     QMarginsF expandedPadding(KWin::EffectWindow* window,
                               const PhosphorAnimation::AnimatedValue<QRectF>& anim) const override;
+    PhosphorAnimation::IMotionClock* clockForHandle(KWin::EffectWindow* window) const override;
+
+private:
+    OutputClockResolver m_outputClockResolver;
 };
 
 } // namespace PlasmaZones

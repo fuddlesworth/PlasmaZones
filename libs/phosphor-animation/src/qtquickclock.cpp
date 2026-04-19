@@ -7,6 +7,8 @@
 #include <QQuickWindow>
 #include <QScreen>
 
+#include <mutex>
+
 namespace PhosphorAnimation {
 
 /**
@@ -18,19 +20,41 @@ namespace PhosphorAnimation {
  * clock's `now()` reader runs on whichever thread the consumer calls
  * from (typically also the render thread for Qt Quick animations).
  *
- * Thread safety: the cached timestamp is held as `std::atomic` on
- * `QtQuickClock` with relaxed ordering. Same-thread use incurs only
- * aligned-load/store cost on x86_64; cross-thread use (GUI-thread
- * reader) avoids formal data-race UB.
+ * ## Thread-safety of the cached timestamp
+ *
+ * The cached timestamp is held as `std::atomic` on `QtQuickClock` with
+ * relaxed ordering. Same-thread use incurs only aligned-load/store
+ * cost on x86_64; cross-thread use (GUI-thread reader) avoids formal
+ * data-race UB.
+ *
+ * ## Teardown race mitigation
+ *
+ * `Qt::DirectConnection` slots run on whichever thread emits the
+ * signal (render thread for `beforeRendering`). `~QObject` atomically
+ * disconnects future emissions but does not join already-executing
+ * slot bodies. Without mitigation, destroying the clock on the GUI
+ * thread while the render thread is mid-slot would write to a
+ * freed `m_nowCache`. The adapter guards against this with a mutex:
+ *
+ * - Slot: acquires `m_mutex` for the duration of the write; early-
+ *   returns if `m_detached` is set.
+ * - Destructor: explicitly `QObject::disconnect(m_conn)` first so no
+ *   NEW slot dispatches can occur, then acquires `m_mutex` (drains
+ *   any in-flight slot), flips `m_detached`, and releases. Any
+ *   already-running slot completes before the mutex is destructed
+ *   with the adapter.
  */
 class QtQuickClock::SignalAdapter : public QObject
 {
 public:
     explicit SignalAdapter(QtQuickClock* owner, QQuickWindow* window);
-    ~SignalAdapter() override = default;
+    ~SignalAdapter() override;
 
 private:
     QtQuickClock* m_owner;
+    std::mutex m_mutex;
+    bool m_detached = false;
+    QMetaObject::Connection m_conn;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -47,13 +71,36 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
     // beforeRendering fires. That's where we want the timestamp
     // captured — it's the thread that will subsequently drive
     // AnimatedValue::advance() via the consumer's render-thread hook.
-    QObject::connect(
+    //
+    // The connection is stored so ~SignalAdapter can explicitly
+    // disconnect BEFORE draining via m_mutex — Qt's implicit
+    // disconnect in ~QObject races with in-flight slot bodies on
+    // direct connections.
+    m_conn = QObject::connect(
         window, &QQuickWindow::beforeRendering, this,
         [this]() {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            if (m_detached) {
+                return;
+            }
             const auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
             m_owner->m_nowCache.store(ns, std::memory_order_relaxed);
         },
         Qt::DirectConnection);
+}
+
+QtQuickClock::SignalAdapter::~SignalAdapter()
+{
+    // Disconnect first so no new slot dispatches occur while we drain.
+    // `QObject::disconnect` is thread-safe and returns after the
+    // connection is marked as inactive for future emissions.
+    QObject::disconnect(m_conn);
+    // Acquire the mutex to wait out any in-flight slot body. Once we
+    // hold the lock, no slot is executing; set m_detached as
+    // belt-and-suspenders against any spurious future dispatch that
+    // slips past the disconnect (shouldn't happen but cheap to guard).
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_detached = true;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

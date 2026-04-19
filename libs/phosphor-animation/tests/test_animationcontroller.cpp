@@ -24,7 +24,9 @@ using PhosphorAnimation::Easing;
 using PhosphorAnimation::IMotionClock;
 using PhosphorAnimation::Profile;
 using PhosphorAnimation::RetargetPolicy;
+using PhosphorAnimation::RetargetResult;
 using PhosphorAnimation::Spring;
+using PhosphorAnimation::StartResult;
 
 namespace {
 
@@ -115,6 +117,23 @@ void configureLinearEasing(MockController& c, TestClock& clock, qreal durationMs
     p.duration = durationMs;
     c.setProfile(p);
 }
+
+/// Per-handle clock routing subclass. Routes handle 1 to `clockA`,
+/// all other handles to the default clock set via `setClock()`.
+class PerHandleController : public MockController
+{
+public:
+    IMotionClock* clockA = nullptr;
+
+protected:
+    IMotionClock* clockForHandle(int handle) const override
+    {
+        if (handle == 1 && clockA) {
+            return clockA;
+        }
+        return MockController::clockForHandle(handle);
+    }
+};
 
 } // namespace
 
@@ -602,6 +621,129 @@ private Q_SLOTS:
         const QRectF current = c.currentValue(1, QRectF());
         QVERIFY(!c.retarget(1, current, RetargetPolicy::PreservePosition));
         QVERIFY(c.retargetedHandlesOrdered.isEmpty());
+    }
+
+    // ─── retarget gating: isEnabled() + isHandleValid() ───
+
+    void testRetargetRejectedWhenDisabled()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        c.setEnabled(false);
+        QCOMPARE(c.retargetWithResult(1, QRectF(900, 0, 100, 100), RetargetPolicy::PreservePosition),
+                 RetargetResult::Disabled);
+        QVERIFY(c.retargetedHandlesOrdered.isEmpty());
+    }
+
+    void testRetargetRejectedWhenHandleInvalid()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        c.invalidHandles.insert(1);
+        QCOMPARE(c.retargetWithResult(1, QRectF(900, 0, 100, 100), RetargetPolicy::PreservePosition),
+                 RetargetResult::HandleInvalid);
+        QVERIFY(c.retargetedHandlesOrdered.isEmpty());
+    }
+
+    // ─── Enum-returning startAnimationWithResult discriminates failure modes ───
+
+    void testStartAnimationWithResultReportsDisabled()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        c.setEnabled(false);
+        QCOMPARE(c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)),
+                 StartResult::Disabled);
+    }
+
+    void testStartAnimationWithResultReportsHandleInvalid()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        c.invalidHandles.insert(7);
+        QCOMPARE(c.startAnimationWithResult(7, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)),
+                 StartResult::HandleInvalid);
+    }
+
+    void testStartAnimationWithResultReportsNoClock()
+    {
+        MockController c; // No clock configured.
+        Profile profile;
+        profile.curve = std::make_shared<Easing>();
+        profile.duration = 200.0;
+        c.setProfile(profile);
+        QCOMPARE(c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)), StartResult::NoClock);
+    }
+
+    void testStartAnimationWithResultReportsPolicyRejected()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        // Degenerate target (zero-sized newFrame) — SnapPolicy rejects.
+        QCOMPARE(c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(0, 0, 0, 100)),
+                 StartResult::PolicyRejected);
+    }
+
+    void testRetargetWithResultReportsUnknownHandle()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QCOMPARE(c.retargetWithResult(99, QRectF(0, 0, 100, 100), RetargetPolicy::PreservePosition),
+                 RetargetResult::UnknownHandle);
+    }
+
+    void testRetargetWithResultReportsDegenerateReap()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        c.advanceAnimations();
+        clock.advanceMs(20.0);
+        c.advanceAnimations();
+        const QRectF current = c.currentValue(1, QRectF());
+        QCOMPARE(c.retargetWithResult(1, current, RetargetPolicy::PreservePosition), RetargetResult::DegenerateReap);
+        QVERIFY(!c.hasAnimation(1));
+        QCOMPARE(c.completedHandlesOrdered.size(), 1);
+    }
+
+    void testRetargetWithResultReportsAccepted()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QCOMPARE(c.retargetWithResult(1, QRectF(900, 0, 100, 100), RetargetPolicy::PreservePosition),
+                 RetargetResult::Accepted);
+    }
+
+    // ─── clockForHandle override routes per-handle ───
+
+    void testClockForHandleOverrideRoutesPerHandle()
+    {
+        TestClock defaultClock;
+        TestClock outputClock;
+        PerHandleController c;
+        c.setClock(&defaultClock);
+        c.clockA = &outputClock;
+        Profile profile;
+        profile.curve = std::make_shared<Easing>();
+        profile.duration = 200.0;
+        c.setProfile(profile);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+
+        QCOMPARE(c.animationFor(1)->spec().clock, &outputClock);
+        QCOMPARE(c.animationFor(2)->spec().clock, &defaultClock);
     }
 };
 

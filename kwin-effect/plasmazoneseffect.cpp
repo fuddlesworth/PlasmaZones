@@ -151,26 +151,41 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
-    // Phase 3: the motion clock drives every AnimatedValue inside the
-    // controller. CURRENT STATE: single process-wide clock (nullptr
-    // output). The library supports per-KWin::Output clocks for mixed-
-    // refresh-rate phase isolation (see IMotionClock docs) — wiring
-    // that here requires tracking Output add/remove lifecycle and
-    // routing animations to the clock matching each window's current
-    // output. Deferred until a follow-up; for now all animations share
-    // one clock that falls back to addRepaintFull() in requestFrame(),
-    // matching pre-Phase-3 repaint coarseness.
-    , m_motionClock(std::make_unique<CompositorClock>(nullptr))
+    // Phase 3: per-output motion clocks drive every AnimatedValue in the
+    // controller. One `CompositorClock` per `LogicalOutput` so mixed
+    // refresh-rate displays (60 Hz + 144 Hz being the common case)
+    // phase-lock independently instead of beating against a shared
+    // process-wide clock. Populated below via effects->screens() and
+    // maintained via the screenAdded/screenRemoved signals. The
+    // fallback unbound clock covers: (a) the bootstrap window before
+    // screens() populates, (b) windows whose `screen()` is null
+    // mid-migration, (c) test paths that don't drive KWin::effects.
+    , m_motionClockFallback(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
 {
     PlasmaZones::registerDBusTypes();
 
-    // Wire the motion clock into the animator. The clock is fed per-
-    // frame in prePaintScreen; the animator reads from it inside every
-    // AnimatedValue<QRectF>::advance() call.
-    m_windowAnimator->setClock(m_motionClock.get());
+    // Populate per-output clocks from the currently-known output set.
+    // Subsequent hotplug events land in onScreenAdded / onScreenRemoved.
+    if (KWin::effects) {
+        for (KWin::LogicalOutput* output : KWin::effects->screens()) {
+            onScreenAdded(output);
+        }
+        connect(KWin::effects, &KWin::EffectsHandler::screenAdded, this, &PlasmaZonesEffect::onScreenAdded);
+        connect(KWin::effects, &KWin::EffectsHandler::screenRemoved, this, &PlasmaZonesEffect::onScreenRemoved);
+    }
+
+    // Wire the fallback clock as the animator's default. The animator's
+    // clockForHandle override resolves the per-output clock at
+    // startAnimation time; the default kicks in only when a window has
+    // no resolvable output (which is rare but real — XWayland
+    // bootstrap, mid-migration with a null screen()).
+    m_windowAnimator->setClock(m_motionClockFallback.get());
+    m_windowAnimator->setOutputClockResolver([this](KWin::LogicalOutput* output) -> PhosphorAnimation::IMotionClock* {
+        return clockForOutput(output);
+    });
 
     // Frame-geometry shadow flush timer. Debounces per-window
     // windowFrameGeometryChanged signals and pushes the latest geometry to
@@ -3744,13 +3759,80 @@ void PlasmaZonesEffect::updateAllBorders()
     }
 }
 
+PhosphorAnimation::IMotionClock* PlasmaZonesEffect::clockForOutput(KWin::LogicalOutput* output) const
+{
+    if (output) {
+        auto it = m_motionClocksByOutput.find(output);
+        if (it != m_motionClocksByOutput.end()) {
+            return it->second.get();
+        }
+    }
+    return m_motionClockFallback.get();
+}
+
+void PlasmaZonesEffect::onScreenAdded(KWin::LogicalOutput* output)
+{
+    if (!output) {
+        return;
+    }
+    // Construct a bound clock for this output. Idempotent: if the same
+    // output arrives twice (rare, but possible on some compositors'
+    // hotplug sequences) we keep the existing clock rather than
+    // replacing it — the old clock's latched presentTime would be
+    // lost and any in-flight animations bound to it would see a dt
+    // jump.
+    if (m_motionClocksByOutput.find(output) != m_motionClocksByOutput.end()) {
+        return;
+    }
+    m_motionClocksByOutput.emplace(output, std::make_unique<CompositorClock>(output));
+}
+
+void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
+{
+    if (!output) {
+        return;
+    }
+    // Any in-flight AnimatedValue whose MotionSpec captured this clock's
+    // pointer would UAF on its next advance() if we just dropped the
+    // unique_ptr. Clear the entire active animation set first — hotplug
+    // is rare enough that the one-frame visual skip from reaping
+    // unrelated animations is preferable to tracking clock-to-handle
+    // back-references for a safe per-output reap. Clients on remaining
+    // outputs will see their windows jump to final geometry (already
+    // applied via moveResize at startAnimation time) with no in-flight
+    // morph; the next snap operation will animate normally.
+    if (m_windowAnimator && m_windowAnimator->hasActiveAnimations()) {
+        m_windowAnimator->clear();
+    }
+    m_motionClocksByOutput.erase(output);
+}
+
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
 {
-    // Feed the motion clock first so every AnimatedValue inside
-    // advanceAnimations() reads the same vsync-aligned reading. Then
-    // step the animations — the controller pulls `dt` from the clock
-    // internally (Phase 3 clock model; no more presentTime parameter).
-    m_motionClock->updatePresentTime(presentTime);
+    // Feed presentTime to the clock for THIS output only — animations
+    // bound to other outputs' clocks will read stale `now` on their
+    // AnimatedValue::advance() calls this tick and step with dt=0
+    // (correct: they tick when their own output paints, not when any
+    // output paints). data.screen may be null during bootstrap /
+    // virtual-output transitions; fall back to the unbound clock in
+    // that case so we never drop a presentTime sample entirely.
+    CompositorClock* clock = nullptr;
+    if (data.screen) {
+        auto it = m_motionClocksByOutput.find(data.screen);
+        if (it != m_motionClocksByOutput.end()) {
+            clock = it->second.get();
+        }
+    }
+    if (!clock) {
+        clock = m_motionClockFallback.get();
+    }
+    clock->updatePresentTime(presentTime);
+
+    // advanceAnimations iterates all animations regardless of which
+    // clock was just updated; each animation reads its own clock's
+    // `now()` in AnimatedValue::advance and steps with its own dt.
+    // Cost is O(#animations) per prePaintScreen — typical paths see
+    // single-digit counts.
     m_windowAnimator->advanceAnimations();
 
     if (m_windowAnimator->hasActiveAnimations()) {

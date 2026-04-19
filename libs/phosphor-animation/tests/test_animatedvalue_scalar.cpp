@@ -249,6 +249,60 @@ private Q_SLOTS:
         QCOMPARE(completeCount, 1);
     }
 
+    /// A second finish() on an already-completed animation must NOT
+    /// re-fire onValueChanged or onComplete — they were contracted to
+    /// fire "exactly once" at natural completion. Regression test for
+    /// the double-fire bug where the early-return guard
+    /// `if (!m_isAnimating && !m_isComplete)` only caught the never-
+    /// started case and let a completed-then-finished() animation
+    /// re-run the full callback sequence.
+    void testFinishOnAlreadyCompletedIsIdempotent()
+    {
+        TestClock clock;
+        AnimatedValue<qreal> v;
+        int valueChangedCount = 0;
+        int completeCount = 0;
+        auto spec = makeSpec(&clock, std::make_shared<Easing>(), 100.0);
+        spec.onValueChanged = [&](const qreal&) {
+            ++valueChangedCount;
+        };
+        spec.onComplete = [&] {
+            ++completeCount;
+        };
+        v.start(0.0, 100.0, spec);
+
+        // Progress to natural completion.
+        v.advance();
+        clock.advanceMs(200.0);
+        v.advance();
+        QVERIFY(v.isComplete());
+        QCOMPARE(completeCount, 1);
+        const int baseValueChanged = valueChangedCount;
+
+        // finish() on a completed animation must be a no-op.
+        v.finish();
+        QCOMPARE(completeCount, 1);
+        QCOMPARE(valueChangedCount, baseValueChanged);
+        QCOMPARE(v.value(), 100.0);
+    }
+
+    /// finish() before start() is also a no-op (the "never started" case
+    /// the original guard was meant to catch).
+    void testFinishBeforeStartIsNoOp()
+    {
+        AnimatedValue<qreal> v;
+        int completeCount = 0;
+        MotionSpec<qreal> unusedSpec;
+        unusedSpec.onComplete = [&] {
+            ++completeCount;
+        };
+        // Note: the spec is never installed — v.start() was never called.
+        v.finish();
+        QCOMPARE(completeCount, 0);
+        QVERIFY(!v.isAnimating());
+        QVERIFY(!v.isComplete());
+    }
+
     // ─── Spring (stateful) progression ───
 
     void testStatefulSpringProgressesAndSettles()

@@ -65,6 +65,20 @@ namespace PhosphorAnimation {
  * cross-thread read is well-defined even though the common case (both
  * reader and writer on the render thread) pays only the cost of a
  * plain aligned load/store on x86_64.
+ *
+ * ## Teardown race
+ *
+ * `Qt::DirectConnection` slots execute synchronously on the signal's
+ * emitting thread; Qt's implicit `~QObject` disconnect does not
+ * *join* already-running slot bodies. Destroying the clock on the
+ * GUI thread while the render thread was mid-slot would otherwise
+ * write to a freed cache. The adapter mitigates this internally —
+ * explicit disconnect first, mutex-drained slot body, guard flag for
+ * any emission that slips through. Consumers do not need to
+ * externally synchronise destruction, but tearing down a clock while
+ * the render thread is still active is still wasteful (the drain
+ * blocks the GUI thread on a render-thread slot). Prefer destroying
+ * clocks after the scene graph has been torn down.
  */
 class PHOSPHORANIMATION_EXPORT QtQuickClock final : public IMotionClock
 {

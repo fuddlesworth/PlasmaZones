@@ -23,6 +23,41 @@
 namespace PhosphorAnimation {
 
 /**
+ * @brief Outcome of `AnimationController::startAnimation`.
+ *
+ * Bool overloads collapse every non-`Accepted` outcome into `false`;
+ * callers that need to distinguish configuration errors from a
+ * legitimate skip (sub-threshold motion, degenerate target) should
+ * use `startAnimationWithResult` and switch on this enum.
+ */
+enum class StartResult {
+    Accepted, ///< Animation stored, `onAnimationStarted` fired.
+    Disabled, ///< Controller `isEnabled()` returned false.
+    NoClock, ///< `clockForHandle(handle)` resolved to null.
+    HandleInvalid, ///< `isHandleValid(handle)` returned false.
+    PolicyRejected, ///< `SnapPolicy` rejected (below threshold or degenerate).
+    NoMotion, ///< `AnimatedValue::start()` rejected (internal degenerate path).
+};
+
+/**
+ * @brief Outcome of `AnimationController::retarget`.
+ *
+ * As with `StartResult`, bool overloads collapse non-`Accepted`
+ * outcomes into `false`. `DegenerateReap` is a terminating event —
+ * the handle is erased and `onAnimationComplete` fires during the
+ * `retarget` call — so a caller seeing `false` cannot assume an
+ * animation still exists. Switch on this enum when the distinction
+ * matters (e.g. event-count invariants in telemetry).
+ */
+enum class RetargetResult {
+    Accepted, ///< New segment installed, `onAnimationRetargeted` fired.
+    UnknownHandle, ///< No animation exists for this handle.
+    Disabled, ///< Controller `isEnabled()` returned false.
+    HandleInvalid, ///< `isHandleValid(handle)` returned false.
+    DegenerateReap, ///< New segment degenerate; entry reaped, `onAnimationComplete` fired.
+};
+
+/**
  * @brief Compositor-agnostic per-window snap-animation controller.
  *
  * Phase 3 rewrite on top of `AnimatedValue<QRectF>`. Owns a
@@ -133,11 +168,22 @@ public:
         return m_profile.curve;
     }
 
+    /// Upper bound on duration clamp in `setDuration`. 10 s is already
+    /// far outside any reasonable snap-animation range — the clamp
+    /// exists to keep a mis-configured settings UI from stalling the
+    /// controller with, e.g., 60 s values.
+    static constexpr qreal kMaxDurationMs = 10000.0;
+
+    /// Upper bound on minimum-distance clamp in `setMinDistance`. Same
+    /// rationale as `kMaxDurationMs` — protects against pathological
+    /// settings inputs, not a physical limit.
+    static constexpr int kMaxMinDistancePx = 10000;
+
     /// Convenience setter — equivalent to modifying `profile().duration`.
-    /// Clamps to [0, 10000] ms (same range as Phase 2).
+    /// Clamps to `[0, kMaxDurationMs]` ms (same range as Phase 2).
     void setDuration(qreal ms)
     {
-        m_profile.duration = qBound(qreal(0.0), ms, qreal(10000.0));
+        m_profile.duration = qBound(qreal(0.0), ms, kMaxDurationMs);
     }
     qreal duration() const
     {
@@ -145,11 +191,11 @@ public:
     }
 
     /// Minimum translate distance (in px) before a transition is worth
-    /// animating. Clamped to [0, 10000]. Callers wanting a tighter
-    /// clamp apply it themselves.
+    /// animating. Clamped to `[0, kMaxMinDistancePx]`. Callers wanting a
+    /// tighter clamp apply it themselves.
     void setMinDistance(int pixels)
     {
-        m_minDistance = qBound(0, pixels, 10000);
+        m_minDistance = qBound(0, pixels, kMaxMinDistancePx);
     }
     int minDistance() const
     {
@@ -171,12 +217,10 @@ public:
     /**
      * @brief Start an animation from @p oldFrame to @p newFrame.
      *
-     * Returns `false` when:
-     *   - @ref isEnabled() is false,
-     *   - no clock has been set,
-     *   - @ref isHandleValid returns false for @p handle,
-     *   - @ref SnapPolicy::createSnapSpec rejects the transition
-     *     (degenerate target, sub-threshold motion).
+     * Returns `false` when any of the rejection paths enumerated in
+     * @ref StartResult trigger. Use @ref startAnimationWithResult if
+     * the caller needs to distinguish configuration errors from a
+     * legitimate policy skip.
      *
      * Re-calling for a handle that already has an in-flight motion
      * replaces it: the displaced animation fires
@@ -192,27 +236,42 @@ public:
      */
     bool startAnimation(Handle handle, const QRectF& oldFrame, const QRectF& newFrame)
     {
+        return startAnimationWithResult(handle, oldFrame, newFrame) == StartResult::Accepted;
+    }
+
+    /**
+     * @brief Enum-returning companion to @ref startAnimation.
+     *
+     * Same semantics; distinguishes configuration errors (Disabled /
+     * NoClock / HandleInvalid) from legitimate policy skips
+     * (PolicyRejected / NoMotion). Callers that need to surface
+     * diagnostics to users or event counters use this overload.
+     */
+    StartResult startAnimationWithResult(Handle handle, const QRectF& oldFrame, const QRectF& newFrame)
+    {
         if (!m_enabled) {
-            return false;
-        }
-        if (!m_clock) {
-            return false;
+            return StartResult::Disabled;
         }
         if (!isHandleValid(handle)) {
-            return false;
+            return StartResult::HandleInvalid;
+        }
+
+        IMotionClock* clock = clockForHandle(handle);
+        if (!clock) {
+            return StartResult::NoClock;
         }
 
         SnapPolicy::SnapParams params;
         params.profile = m_profile;
         params.minDistance = m_minDistance;
-        const auto spec = SnapPolicy::createSnapSpec(oldFrame, newFrame, params, m_clock);
+        const auto spec = SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clock);
         if (!spec) {
-            return false;
+            return StartResult::PolicyRejected;
         }
 
         AnimatedValue<QRectF> anim;
         if (!anim.start(oldFrame, newFrame, *spec)) {
-            return false;
+            return StartResult::NoMotion;
         }
 
         // Displace + notify: a naïve insert_or_assign would silently
@@ -232,7 +291,7 @@ public:
         // emplace (C++17) which accepts rvalue value.
         auto [it, inserted] = m_animations.emplace(handle, std::move(anim));
         onAnimationStarted(handle, it->second);
-        return true;
+        return StartResult::Accepted;
     }
 
     /**
@@ -240,8 +299,9 @@ public:
      *
      * Preserves the visible value (new segment starts from current
      * value) and reshapes state per @p policy. Returns `false` when
-     * no animation exists for @p handle — in that case the caller
-     * should use @ref startAnimation instead.
+     * any of the rejection paths enumerated in @ref RetargetResult
+     * trigger — use @ref retargetWithResult if the caller needs to
+     * distinguish them.
      *
      * `PreserveVelocity` on a stateful curve (Spring) carries the
      * world-space rate of change across the retarget boundary.
@@ -252,17 +312,44 @@ public:
      * latch per-segment state (damage annotation, telemetry) can
      * observe the new segment without conflating it with a fresh
      * `startAnimation` call.
+     *
+     * Gated by `isEnabled()` and `isHandleValid(handle)` for symmetry
+     * with `startAnimation`; disabling the controller mid-animation
+     * blocks further redirects until re-enabled (the existing
+     * animation still progresses to completion on the clock's own
+     * ticks — use `removeAnimation(handle)` to force termination).
      */
     bool retarget(Handle handle, const QRectF& newFrame, RetargetPolicy policy = RetargetPolicy::PreserveVelocity)
     {
+        return retargetWithResult(handle, newFrame, policy) == RetargetResult::Accepted;
+    }
+
+    /**
+     * @brief Enum-returning companion to @ref retarget.
+     *
+     * Returns `RetargetResult::DegenerateReap` when the redirect
+     * collapsed the animation — in that case `hasAnimation(handle)`
+     * is false on return and `onAnimationComplete` has already fired,
+     * so the caller must NOT treat this as a "start over" signal
+     * (that's a double-completion).
+     */
+    RetargetResult retargetWithResult(Handle handle, const QRectF& newFrame,
+                                      RetargetPolicy policy = RetargetPolicy::PreserveVelocity)
+    {
+        if (!m_enabled) {
+            return RetargetResult::Disabled;
+        }
+        if (!isHandleValid(handle)) {
+            return RetargetResult::HandleInvalid;
+        }
         auto it = m_animations.find(handle);
         if (it == m_animations.end()) {
-            return false;
+            return RetargetResult::UnknownHandle;
         }
         const bool accepted = it->second.retarget(newFrame, policy);
         if (accepted) {
             onAnimationRetargeted(handle, it->second);
-            return true;
+            return RetargetResult::Accepted;
         }
 
         // Not accepted → either AnimatedValue rejected the retarget
@@ -278,8 +365,14 @@ public:
             AnimatedValue<QRectF> finished = std::move(it->second);
             m_animations.erase(it);
             onAnimationComplete(handle, finished);
+            return RetargetResult::DegenerateReap;
         }
-        return false;
+        // Pathological: AnimatedValue rejected without marking complete
+        // (no stored spec — should not happen via controller path since
+        // startAnimation always installs a spec). Return UnknownHandle
+        // as the closest match; the controller's own bookkeeping is
+        // inconsistent at this point.
+        return RetargetResult::UnknownHandle;
     }
 
     void removeAnimation(Handle handle)
@@ -321,6 +414,17 @@ public:
     /// (e.g., KWin's applyTransform reads value() + from() to compute
     /// translate/scale in WindowPaintData). Returns nullptr when no
     /// animation exists for @p handle.
+    ///
+    /// ## Pointer lifetime
+    ///
+    /// `std::unordered_map` guarantees that element references
+    /// survive insertions and rehashes, so the returned pointer stays
+    /// valid across subsequent `startAnimation`/`retarget` calls on
+    /// *other* handles. It does NOT survive `removeAnimation(handle)`,
+    /// `clear()`, or the per-tick reap paths inside `advanceAnimations`
+    /// (completion, handle-invalid reap). Safe pattern: consume the
+    /// pointer fully within the same synchronous scope that obtained
+    /// it; do not cache across controller mutations on @p handle.
     const AnimatedValue<QRectF>* animationFor(Handle handle) const
     {
         auto it = m_animations.find(handle);
@@ -358,9 +462,13 @@ public:
      */
     void advanceAnimations()
     {
-        if (!m_clock) {
-            return;
-        }
+        // No top-level clock guard: per-handle routing via
+        // `clockForHandle` allows a null `m_clock` default so long as
+        // each started animation captured a non-null clock into its
+        // own spec (validated at `startAnimation` time). Individual
+        // `AnimatedValue::advance()` calls short-circuit when their
+        // spec's clock is null, so iterating an empty map or a map of
+        // correctly-specced animations is both safe and cheap.
 
         // Inline capacity covers layout-switch / workspace-switch bulk
         // starts without falling through to heap allocation. 16 (the
@@ -481,6 +589,27 @@ protected:
     virtual QMarginsF expandedPadding(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/) const
     {
         return QMarginsF();
+    }
+
+    /**
+     * @brief Resolve the clock to drive animations for @p handle.
+     *
+     * Default implementation returns the controller-wide `m_clock`
+     * (the one set via `setClock()`). Override when per-handle routing
+     * is required — e.g., a compositor adapter that binds animations
+     * to the clock matching each window's current output so mixed
+     * refresh-rate displays phase-lock independently.
+     *
+     * Called once per `startAnimation`; the resolved clock is then
+     * captured into the animation's `MotionSpec` and used for the
+     * life of that animation. Window migrations between outputs
+     * mid-animation do not re-route — the animation completes on the
+     * clock captured at start time (deferred: would require exposing
+     * `retarget(newTo, newClock)` on AnimatedValue).
+     */
+    virtual IMotionClock* clockForHandle(Handle /*handle*/) const
+    {
+        return m_clock;
     }
 
 private:

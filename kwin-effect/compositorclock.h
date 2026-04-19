@@ -21,10 +21,13 @@ namespace PlasmaZones {
  * Each instance is bound to one `KWin::LogicalOutput` so a multi-monitor
  * session with mixed refresh rates (60 Hz + 144 Hz being the common case
  * we need to handle correctly) can phase-lock per-output without
- * cross-output beating. The effect holds one `CompositorClock` per output
- * and feeds each instance its matching `presentTime` from the paint
- * loop's `prePaintScreen` / `paintScreen` cycle; animations that belong
- * to a particular output read `now()` off their output's clock only.
+ * cross-output beating. The effect holds one `CompositorClock` per
+ * output (maintained via `screenAdded` / `screenRemoved` signals) plus a
+ * fallback unbound clock for the bootstrap-before-screens-populate and
+ * null-screen() migration windows. Each `prePaintScreen` feeds the
+ * presentTime to the clock matching `data.screen`; animations bound to
+ * that output tick on that clock, animations bound to other outputs
+ * step with dt=0 (correct — they tick when their own output paints).
  *
  * ## Driver contract
  *

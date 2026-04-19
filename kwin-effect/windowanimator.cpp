@@ -8,9 +8,31 @@
 #include <effect/effectwindow.h>
 #include <QLoggingCategory>
 
+#include <utility>
+
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
+
+void WindowAnimator::setOutputClockResolver(OutputClockResolver resolver)
+{
+    m_outputClockResolver = std::move(resolver);
+}
+
+PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWindow* window) const
+{
+    // Resolve via the effect-provided per-output map. Fall back to the
+    // controller's default clock when:
+    //   - no resolver is installed (tests, minimal embeddings),
+    //   - the window has no current output (mid-migration, destroyed),
+    //   - the resolver returns nullptr for an unknown output.
+    if (m_outputClockResolver && window && !window->isDeleted()) {
+        if (auto* clock = m_outputClockResolver(window->screen())) {
+            return clock;
+        }
+    }
+    return PhosphorAnimation::AnimationController<KWin::EffectWindow*>::clockForHandle(window);
+}
 
 void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const
 {
