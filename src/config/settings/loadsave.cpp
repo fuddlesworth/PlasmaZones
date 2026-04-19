@@ -70,7 +70,11 @@ void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
             config.screens.append(vs);
         }
 
-        // Validate loaded regions — skip invalid entries instead of discarding entire config
+        // Drop individually-invalid entries (surviving entries keep contiguous
+        // indices so save round-trips don't cause ID drift). The final
+        // pairwise-overlap + total-coverage check is delegated to
+        // VirtualScreenConfig::isValid so there's one authoritative predicate
+        // shared with the D-Bus admission path and the swap/rotate validator.
         QVector<Phosphor::Screens::VirtualScreenDef> validScreens;
         for (const auto& vs : config.screens) {
             if (!vs.isValid()) {
@@ -79,52 +83,20 @@ void Settings::loadVirtualScreenConfigs(PhosphorConfig::IBackend* backend)
             }
             validScreens.append(vs);
         }
-        // Renumber surviving entries with contiguous indices (0..N-1) so that
-        // save round-trips don't cause ID drift when interior entries were invalid.
         for (int i = 0; i < validScreens.size(); ++i) {
             validScreens[i].index = i;
             validScreens[i].id = PhosphorIdentity::VirtualScreenId::make(physId, i);
         }
         config.screens = validScreens;
 
-        // Need at least minVirtualScreensPerPhysical() screens for a meaningful subdivision
         if (config.screens.size() < ConfigDefaults::minVirtualScreensPerPhysical())
             continue;
 
-        // Validate no overlapping regions (pairwise intersection, tolerance-aware)
-        {
-            bool hasOverlap = false;
-            for (int i = 0; i < config.screens.size(); ++i) {
-                for (int j = i + 1; j < config.screens.size(); ++j) {
-                    QRectF intersection = config.screens[i].region.intersected(config.screens[j].region);
-                    if (intersection.width() > Phosphor::Screens::VirtualScreenDef::Tolerance
-                        && intersection.height() > Phosphor::Screens::VirtualScreenDef::Tolerance) {
-                        qCWarning(lcConfig)
-                            << "loadVirtualScreenConfigs: overlapping regions between" << config.screens[i].id << "and"
-                            << config.screens[j].id << "for" << physId << "- skipping config";
-                        hasOverlap = true;
-                        break;
-                    }
-                }
-                if (hasOverlap)
-                    break;
-            }
-            if (hasOverlap)
-                continue;
-        }
-
-        // Validate total area coverage is approximately 1.0
-        {
-            qreal totalArea = 0.0;
-            for (const auto& vs : config.screens) {
-                totalArea += vs.region.width() * vs.region.height();
-            }
-            constexpr qreal tol = ConfigDefaults::areaCoverageTolerance();
-            if (totalArea < 1.0 - tol || totalArea > 1.0 + tol) {
-                qCWarning(lcConfig) << "loadVirtualScreenConfigs: total area" << totalArea << "outside tolerance for"
-                                    << physId << "- skipping config";
-                continue;
-            }
+        QString error;
+        if (!Phosphor::Screens::VirtualScreenConfig::isValid(config, physId,
+                                                             ConfigDefaults::maxVirtualScreensPerPhysical(), &error)) {
+            qCWarning(lcConfig) << "loadVirtualScreenConfigs: rejecting config for" << physId << "—" << error;
+            continue;
         }
 
         m_virtualScreenConfigs.insert(physId, config);

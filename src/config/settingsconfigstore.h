@@ -21,7 +21,7 @@ class Settings;
  * configurations (config file persistence, schema validation, KCM
  * round-trip). This adapter exposes that surface through the
  * library-defined IConfigStore contract so PhosphorScreens consumers
- * (Phosphor::Screens::VirtualScreenSwapper today, ScreenManager tomorrow) can mutate the
+ * (Phosphor::Screens::VirtualScreenSwapper today, Phosphor::Screens::ScreenManager tomorrow) can mutate the
  * same data without taking a hard dependency on Settings.
  *
  * Lifetime: holds a QPointer to Settings — the adapter survives Settings

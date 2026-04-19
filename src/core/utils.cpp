@@ -17,51 +17,6 @@
 namespace PlasmaZones {
 namespace Utils {
 
-// All screen-identity helpers below have moved to PhosphorScreens::ScreenIdentity
-// (and PhosphorIdentity::ScreenId for the cross-process EDID primitives).
-// The Utils:: API surface stays unchanged so the daemon's ~50 call sites
-// keep compiling — these are thin trampolines into the lib.
-
-QString readEdidHeaderSerial(const QString& connectorName)
-{
-    return PhosphorIdentity::ScreenId::readEdidHeaderSerial(connectorName);
-}
-
-void invalidateEdidCache(const QString& connectorName)
-{
-    Phosphor::Screens::ScreenIdentity::invalidateEdidCache(connectorName);
-}
-
-QString screenIdentifier(const QScreen* screen)
-{
-    return Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-}
-
-QString screenIdForName(const QString& connectorName)
-{
-    return Phosphor::Screens::ScreenIdentity::idForName(connectorName);
-}
-
-QString screenNameForId(const QString& screenId)
-{
-    return Phosphor::Screens::ScreenIdentity::nameForId(screenId);
-}
-
-bool isConnectorName(const QString& identifier)
-{
-    return Phosphor::Screens::ScreenIdentity::isConnectorName(identifier);
-}
-
-QScreen* findScreenByIdOrName(const QString& identifier)
-{
-    return Phosphor::Screens::ScreenIdentity::findByIdOrName(identifier);
-}
-
-bool screensMatch(const QString& a, const QString& b)
-{
-    return Phosphor::Screens::ScreenIdentity::screensMatch(a, b);
-}
-
 bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physicalScreenId)
 {
     if (storedScreenId.isEmpty() || physicalScreenId.isEmpty()) {
@@ -81,12 +36,13 @@ bool belongsToPhysicalScreen(const QString& storedScreenId, const QString& physi
     // "Dell:U2722D:115107"); both forms can appear in stored window state
     // depending on which code path produced the ID.
     if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreenId)) {
-        return screensMatch(PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
+        return Phosphor::Screens::ScreenIdentity::screensMatch(
+            PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreenId), physicalScreenId);
     }
 
     // Stored ID is physical (or a connector name): defer to screensMatch
     // which handles connector-name ↔ screen-ID equivalence via QScreen lookup.
-    return screensMatch(storedScreenId, physicalScreenId);
+    return Phosphor::Screens::ScreenIdentity::screensMatch(storedScreenId, physicalScreenId);
 }
 
 void warnDuplicateScreenIds()
@@ -118,12 +74,12 @@ QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
     if (!screen) {
         screen = findScreenAtPosition(pos);
     }
-    return screen ? screenIdentifier(screen) : QString();
+    return screen ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : QString();
 }
 
 qreal screenAspectRatio(const QString& screenNameOrId)
 {
-    // For virtual screen IDs, use ScreenManager geometry
+    // For virtual screen IDs, use Phosphor::Screens::ScreenManager geometry
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenNameOrId)) {
         auto* mgr = screenManager();
         if (mgr) {
@@ -135,7 +91,7 @@ qreal screenAspectRatio(const QString& screenNameOrId)
     }
 
     // Fallback: physical screen lookup
-    return screenAspectRatio(findScreenByIdOrName(screenNameOrId));
+    return screenAspectRatio(Phosphor::Screens::ScreenIdentity::findByIdOrName(screenNameOrId));
 }
 
 } // namespace Utils

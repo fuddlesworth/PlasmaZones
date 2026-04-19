@@ -286,7 +286,7 @@ private:
     QScreen* screenAtPoint(int x, int y) const;
 
     // Helper: Returns the effective (virtual-aware) screen ID for a cursor position.
-    // Prefers virtual screen resolution via ScreenManager, falls back to physical screen.
+    // Prefers virtual screen resolution via Phosphor::Screens::ScreenManager, falls back to physical screen.
     QString effectiveScreenIdAt(int x, int y) const;
 
     // Shared preamble for drag handler methods (DRY extraction)

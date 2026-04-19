@@ -3,7 +3,7 @@
 
 /**
  * @file test_virtual_screen_manager.cpp
- * @brief Unit tests for ScreenManager virtual screen management methods
+ * @brief Unit tests for Phosphor::Screens::ScreenManager virtual screen management methods
  *
  * Tests config storage (set/get), virtualScreenIdsFor(), hasVirtualScreens(),
  * effectiveScreenIds(), and the virtualScreensChanged signal.
@@ -36,7 +36,7 @@ private Q_SLOTS:
 
     void testSetAndGetConfig()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         auto config = makeSplitConfig(physId);
 
@@ -48,7 +48,7 @@ private Q_SLOTS:
 
     void testGetConfig_noConfig_returnsEmpty()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         auto config = mgr.virtualScreenConfig(QStringLiteral("nonexistent"));
 
         QVERIFY(config.isEmpty());
@@ -57,7 +57,7 @@ private Q_SLOTS:
 
     void testSetEmptyConfig_clearsSubdivisions()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         // Set a real config, then clear it
@@ -74,13 +74,13 @@ private Q_SLOTS:
 
     void testHasVirtualScreens_noConfig_returnsFalse()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         QVERIFY(!mgr.hasVirtualScreens(QStringLiteral("Dell:U2722D:115107")));
     }
 
     void testHasVirtualScreens_withTwoScreens_returnsTrue()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
@@ -89,7 +89,7 @@ private Q_SLOTS:
 
     void testHasVirtualScreens_singleScreen_returnsFalse()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         Phosphor::Screens::VirtualScreenConfig config;
@@ -108,7 +108,7 @@ private Q_SLOTS:
 
     void testVirtualScreenIdsFor_noConfig_returnsPhysicalId()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         QStringList ids = mgr.virtualScreenIdsFor(physId);
@@ -118,7 +118,7 @@ private Q_SLOTS:
 
     void testVirtualScreenIdsFor_twoVirtualScreens()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
@@ -130,7 +130,7 @@ private Q_SLOTS:
 
     void testVirtualScreenIdsFor_threeVirtualScreens()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("LG:27GP850:XYZ789");
         mgr.setVirtualScreenConfig(physId, makeThreeWayConfig(physId));
 
@@ -147,7 +147,7 @@ private Q_SLOTS:
 
     void testEffectiveScreenIds_noScreensOrConfigs_returnsEmpty()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         // No QScreens tracked and no virtual configs -> empty
         QStringList ids = mgr.effectiveScreenIds();
         QVERIFY(ids.isEmpty());
@@ -159,10 +159,10 @@ private Q_SLOTS:
 
     void testSignal_virtualScreensChanged_emittedOnConfigSet()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
         QCOMPARE(spy.count(), 1);
@@ -171,11 +171,11 @@ private Q_SLOTS:
 
     void testSignal_virtualScreensChanged_emittedOnConfigClear()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.setVirtualScreenConfig(physId, Phosphor::Screens::VirtualScreenConfig{});
 
         QCOMPARE(spy.count(), 1);
@@ -188,12 +188,12 @@ private Q_SLOTS:
     /// changes don't run for what is just a geometry update.
     void testSignal_regionEdit_firesRegionsChangedOnly()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        QSignalSpy topologySpy(&mgr, &ScreenManager::virtualScreensChanged);
-        QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
+        QSignalSpy topologySpy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
+        QSignalSpy regionsSpy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged);
 
         // Same ids and display names, just a different split point.
         Phosphor::Screens::VirtualScreenConfig edited;
@@ -213,12 +213,12 @@ private Q_SLOTS:
     /// virtualScreensChanged signal, not the lightweight regions-only one.
     void testSignal_displayNameOnly_firesVirtualScreensChanged()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
 
-        QSignalSpy topologySpy(&mgr, &ScreenManager::virtualScreensChanged);
-        QSignalSpy regionsSpy(&mgr, &ScreenManager::virtualScreenRegionsChanged);
+        QSignalSpy topologySpy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
+        QSignalSpy regionsSpy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged);
 
         // Same ids, same regions, just renamed display names.
         Phosphor::Screens::VirtualScreenConfig renamed;
@@ -238,7 +238,7 @@ private Q_SLOTS:
 
     void testConfigReplacement_overwritesPrevious()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
@@ -254,7 +254,7 @@ private Q_SLOTS:
 
     void testMultiplePhysicalScreens_independentConfigs()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physA = QStringLiteral("Dell:U2722D:111");
         const QString physB = QStringLiteral("LG:27GP850:222");
 
@@ -278,7 +278,7 @@ private Q_SLOTS:
 
     void testSetVirtualScreenConfig_overlapping_rejected()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         // Build a config with two overlapping regions: both start at x=0 and
@@ -297,14 +297,14 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // refreshVirtualConfigs — Settings → ScreenManager observer pattern
+    // refreshVirtualConfigs — Settings → Phosphor::Screens::ScreenManager observer pattern
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Refreshing with a brand-new map applies all entries and emits one
     /// virtualScreensChanged signal per added entry.
     void testRefreshVirtualConfigs_addsNewEntries()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physA = QStringLiteral("Dell:U2722D:111");
         const QString physB = QStringLiteral("LG:27GP850:222");
 
@@ -312,7 +312,7 @@ private Q_SLOTS:
         configs.insert(physA, makeSplitConfig(physA));
         configs.insert(physB, makeThreeWayConfig(physB));
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.refreshVirtualConfigs(configs);
 
         QVERIFY(mgr.hasVirtualScreens(physA));
@@ -325,12 +325,12 @@ private Q_SLOTS:
     /// Refreshing with an empty map tears down existing subdivisions.
     void testRefreshVirtualConfigs_removesMissingEntries()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         mgr.setVirtualScreenConfig(physId, makeSplitConfig(physId));
         QVERIFY(mgr.hasVirtualScreens(physId));
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.refreshVirtualConfigs({});
 
         QVERIFY(!mgr.hasVirtualScreens(physId));
@@ -341,7 +341,7 @@ private Q_SLOTS:
     /// Refreshing with the same map is a no-op (no signals fired).
     void testRefreshVirtualConfigs_idempotentForUnchanged()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const auto config = makeSplitConfig(physId);
         mgr.setVirtualScreenConfig(physId, config);
@@ -349,7 +349,7 @@ private Q_SLOTS:
         QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs;
         configs.insert(physId, config);
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.refreshVirtualConfigs(configs);
 
         QCOMPARE(spy.count(), 0);
@@ -360,7 +360,7 @@ private Q_SLOTS:
     /// Exactly two virtualScreensChanged signals fire (added + removed).
     void testRefreshVirtualConfigs_mixedDelta()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physA = QStringLiteral("Dell:U2722D:111");
         const QString physB = QStringLiteral("LG:27GP850:222");
         const QString physC = QStringLiteral("Asus:VG279QM:333");
@@ -374,7 +374,7 @@ private Q_SLOTS:
         configs.insert(physA, makeSplitConfig(physA));
         configs.insert(physC, makeSplitConfig(physC));
 
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
         mgr.refreshVirtualConfigs(configs);
 
         QVERIFY(mgr.hasVirtualScreens(physA));
@@ -406,7 +406,7 @@ private Q_SLOTS:
     /// silently broken — this test exists to lock the contract in.
     void testRefreshVirtualConfigs_emissionsBeforeConnectAreNotReplayed()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("Dell:U2722D:115107");
 
         // Refresh first (no listener attached). This is the boot-time
@@ -418,12 +418,12 @@ private Q_SLOTS:
 
         // Connect spy AFTER refresh — simulates the daemon's
         // connect-onVirtualScreensReconfigured-after-initial-sync pattern.
-        QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+        QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
 
         // Qt signals do not replay past emissions to newly-connected slots,
         // so the spy must see exactly zero signals from the prior refresh.
         // If this assertion ever fails, someone has broken either the
-        // signal semantics or has wired ScreenManager to replay state on
+        // signal semantics or has wired Phosphor::Screens::ScreenManager to replay state on
         // connect (e.g. via QMetaObject::invokeMethod from setSettings) —
         // both would re-introduce the boot-time fan-out hazard.
         QCOMPARE(spy.count(), 0);
@@ -445,13 +445,13 @@ private Q_SLOTS:
     /// exactly one signal per affected physId.
     void testRefreshVirtualConfigs_createRemoveRecreateCycle()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         const QString physId = QStringLiteral("LG Electronics:LG Ultra HD:115107");
         const auto config = makeSplitConfig(physId);
 
         // Phase 1: create
         {
-            QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+            QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
             QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs{{physId, config}};
             mgr.refreshVirtualConfigs(configs);
             QCOMPARE(spy.count(), 1);
@@ -461,7 +461,7 @@ private Q_SLOTS:
 
         // Phase 2: remove (refresh with empty map)
         {
-            QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+            QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
             mgr.refreshVirtualConfigs({});
             QCOMPARE(spy.count(), 1);
             QCOMPARE(spy.first().first().toString(), physId);
@@ -472,7 +472,7 @@ private Q_SLOTS:
         // any prior session/wta state referencing "physId/vs:0" and
         // "physId/vs:1" remains valid after this restoration.
         {
-            QSignalSpy spy(&mgr, &ScreenManager::virtualScreensChanged);
+            QSignalSpy spy(&mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged);
             QHash<QString, Phosphor::Screens::VirtualScreenConfig> configs{{physId, config}};
             mgr.refreshVirtualConfigs(configs);
             QCOMPARE(spy.count(), 1);

@@ -2008,7 +2008,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         return *it;
     }
 
-    // Build a screen ID that exactly matches the daemon's Utils::screenIdentifier().
+    // Build a screen ID that exactly matches the daemon's Phosphor::Screens::ScreenIdentity::identifierFor().
     // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //

@@ -9,7 +9,7 @@ ScreenAdaptor::ScreenAdaptor(Phosphor::Screens::ScreenManager* manager, QObject*
     : Phosphor::Screens::DBusScreenAdaptor(parent)
 {
     // Explicit constructor injection — the caller (Daemon::init) owns the
-    // ScreenManager instance and hands it to us directly. No read from
+    // Phosphor::Screens::ScreenManager instance and hands it to us directly. No read from
     // the `PlasmaZones::screenManager()` service-locator here: that
     // locator is a legacy-compat shim for call sites too deep in utility
     // chains to take an injected pointer, and the adaptor is neither.

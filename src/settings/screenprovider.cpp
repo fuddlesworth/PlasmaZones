@@ -11,6 +11,7 @@
 #include "../../src/core/constants.h"
 #include "../../src/core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -98,7 +99,7 @@ QList<ScreenInfo> fetchScreens()
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
             info.connectorName = screen->name();
-            info.screenId = Utils::screenIdentifier(screen);
+            info.screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             result.append(info);
         }
     }
@@ -180,7 +181,7 @@ void setMonitorDisabledFor(Settings* settings, const QString& screenName, bool d
     if (!settings || screenName.isEmpty())
         return;
 
-    QString id = Utils::screenIdForName(screenName);
+    QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
     QStringList list = settings->disabledMonitors();
 
     if (disabled) {

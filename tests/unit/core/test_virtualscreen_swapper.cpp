@@ -70,7 +70,7 @@ private Q_SLOTS:
 
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(leftId, Utils::Direction::Right), Result::Ok);
+        QCOMPARE(swapper.swapInDirection(leftId, Phosphor::Screens::Direction::Right), Result::Ok);
 
         const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
         QCOMPARE(after.screens.size(), 2);
@@ -97,10 +97,12 @@ private Q_SLOTS:
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
         // Left VS — "left" has no sibling in that direction.
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0), Utils::Direction::Left),
+        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
+                                         Phosphor::Screens::Direction::Left),
                  Result::NoSiblingInDirection);
         // Vertical direction on a horizontal split has no sibling either.
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0), Utils::Direction::Up),
+        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
+                                         Phosphor::Screens::Direction::Up),
                  Result::NoSiblingInDirection);
 
         const Phosphor::Screens::VirtualScreenConfig after = settings.virtualScreenConfig(physId);
@@ -116,7 +118,7 @@ private Q_SLOTS:
 
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(physId, Utils::Direction::Right), Result::NotVirtual);
+        QCOMPARE(swapper.swapInDirection(physId, Phosphor::Screens::Direction::Right), Result::NotVirtual);
     }
 
     void swap_unknownPhysical_returnsNoSubdivision()
@@ -128,7 +130,8 @@ private Q_SLOTS:
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
         // Looks like a virtual id, but its physical screen has no entry in
         // Settings — the helper falls through to the size-check failure.
-        QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Utils::Direction::Right), Result::NoSubdivision);
+        QCOMPARE(swapper.swapInDirection(QStringLiteral("ghost/vs:0"), Phosphor::Screens::Direction::Right),
+                 Result::NoSubdivision);
     }
 
     void swap_unknownVirtualInExistingConfig_returnsUnknownVirtualScreen()
@@ -144,7 +147,8 @@ private Q_SLOTS:
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
         // Index 7 is out-of-range; id format still parses as virtual.
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 7), Utils::Direction::Right),
+        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 7),
+                                         Phosphor::Screens::Direction::Right),
                  Result::UnknownVirtualScreen);
     }
 
@@ -170,7 +174,8 @@ private Q_SLOTS:
 
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0), Utils::Direction::Right),
+        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physId, 0),
+                                         Phosphor::Screens::Direction::Right),
                  Result::Ok);
 
         QString err;
@@ -192,7 +197,8 @@ private Q_SLOTS:
 
         SettingsConfigStore swapStore(&settings);
         Phosphor::Screens::VirtualScreenSwapper swapper(&swapStore);
-        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physA, 0), Utils::Direction::Right),
+        QCOMPARE(swapper.swapInDirection(PhosphorIdentity::VirtualScreenId::make(physA, 0),
+                                         Phosphor::Screens::Direction::Right),
                  Result::Ok);
 
         QCOMPARE(settings.virtualScreenConfig(physB), bBefore);

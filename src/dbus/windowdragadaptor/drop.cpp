@@ -16,6 +16,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -352,7 +353,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // handle it via screenId lookup inside buildEmptyZoneList itself.
     QScreen* releaseScreen = nullptr;
     for (QScreen* s : QGuiApplication::screens()) {
-        if (Utils::screenIdentifier(s) == screenId || s->name() == screenId) {
+        if (Phosphor::Screens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
             releaseScreen = s;
             break;
         }

@@ -9,6 +9,7 @@
 #include <PhosphorZones/Layout.h>
 #include <QGuiApplication>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 namespace DbusHelpers {
@@ -24,12 +25,14 @@ QString resolveScreenId(const QString& screenId)
         if (primary && mgr) {
             // If the primary screen has virtual subdivisions, returns the first
             // virtual screen ID. Otherwise returns the physical screen ID.
-            const QStringList ids = mgr->virtualScreenIdsFor(Utils::screenIdentifier(primary));
-            return ids.isEmpty() ? Utils::screenIdentifier(primary) : ids.first();
+            const QStringList ids = mgr->virtualScreenIdsFor(Phosphor::Screens::ScreenIdentity::identifierFor(primary));
+            return ids.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : ids.first();
         }
-        return primary ? Utils::screenIdentifier(primary) : QString();
+        return primary ? Phosphor::Screens::ScreenIdentity::identifierFor(primary) : QString();
     }
-    return PhosphorIdentity::VirtualScreenId::isVirtual(screenId) ? screenId : Utils::screenIdForName(screenId);
+    return PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? screenId
+        : Phosphor::Screens::ScreenIdentity::idForName(screenId);
 }
 
 QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
@@ -41,7 +44,8 @@ QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& scree
             return GeometryUtils::effectiveScreenGeometry(layout, screenId);
         }
     }
-    QScreen* screen = Utils::findScreenByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(
+        PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
     if (!screen) {
         screen = resolvePhysicalScreen(screenId);
     }
@@ -60,7 +64,8 @@ QScreen* resolvePhysicalQScreen(const QString& screenId)
             return screen;
         }
     }
-    return Utils::findScreenByIdOrName(PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
+    return Phosphor::Screens::ScreenIdentity::findByIdOrName(
+        PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
 }
 
 } // namespace DbusHelpers

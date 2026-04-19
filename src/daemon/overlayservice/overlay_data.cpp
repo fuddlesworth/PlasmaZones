@@ -20,6 +20,7 @@
 #include <QMutexLocker>
 #include <QGuiApplication>
 #include <QPalette>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -171,8 +172,8 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // When virtual screens are configured, this delegates to the first VS in config
     // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
-    const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = screenManager();
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         if (!vsIds.isEmpty()) {
@@ -224,8 +225,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     // Defensive check: if virtual screens are configured for this physical screen,
     // screen center disambiguation always resolves to the same VS. Callers must
     // use the QString overload instead.
-    const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = screenManager();
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
                              << "has virtual screens configured — caller should use QString overload.";

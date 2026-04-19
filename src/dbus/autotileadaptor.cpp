@@ -200,7 +200,7 @@ void AutotileAdaptor::dispatchWindowOpened(const WindowOpenedEntry& entry)
 
 bool AutotileAdaptor::deferUntilPanelReady()
 {
-    // Fast path: panel geometry already known, or no ScreenManager at all (tests
+    // Fast path: panel geometry already known, or no Phosphor::Screens::ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
     if (!screenManager() || isPanelGeometryReady()) {
         return false;
@@ -211,9 +211,10 @@ bool AutotileAdaptor::deferUntilPanelReady()
     // watcher's finished callback runs on the main thread, same as us), so there
     // is no posted-event reentrancy. Leaving the connection installed for the
     // session is fine — panelGeometryReady is a one-shot signal (see
-    // ScreenManager::queryKdePlasmaPanels).
+    // Phosphor::Screens::ScreenManager::queryKdePlasmaPanels).
     if (!m_pendingOpensListenerInstalled) {
-        connect(screenManager(), &ScreenManager::panelGeometryReady, this, &AutotileAdaptor::flushPendingWindowOpens);
+        connect(screenManager(), &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+                &AutotileAdaptor::flushPendingWindowOpens);
         m_pendingOpensListenerInstalled = true;
     }
     return true;
@@ -255,7 +256,7 @@ void AutotileAdaptor::windowOpened(const QString& windowId, const QString& scree
     }
     // Non-blocking startup gate: if the first panel D-Bus query has not completed
     // yet, queue this entry and return. Processing immediately would compute zones
-    // against the unreserved full-screen rect (ScreenManager's availability cache
+    // against the unreserved full-screen rect (Phosphor::Screens::ScreenManager's availability cache
     // is empty until the sensor windows and Plasma D-Bus panel query finish), and
     // the daemon would emit a visible correction a frame later. Flushing happens in
     // flushPendingWindowOpens() when panelGeometryReady fires.

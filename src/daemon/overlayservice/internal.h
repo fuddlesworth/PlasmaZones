@@ -111,7 +111,7 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 }
 
 // Resolve target screen from a screen name/ID string with fallback to primary.
-// Delegates to ScreenManager::resolvePhysicalScreen which handles virtual screen
+// Delegates to Phosphor::Screens::ScreenManager::resolvePhysicalScreen which handles virtual screen
 // IDs, connector names, and falls back to primary screen.
 inline QScreen* resolveTargetScreen(const QString& screenId)
 {
@@ -165,7 +165,7 @@ inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& phy
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).
 /// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
-/// geometry from ScreenManager. For physical screens, falls back to QScreen::geometry().
+/// geometry from Phosphor::Screens::ScreenManager. For physical screens, falls back to QScreen::geometry().
 /// Returns the geometry the overlay window should cover.
 inline QRect resolveScreenGeometry(const QString& screenId)
 {
@@ -176,7 +176,7 @@ inline QRect resolveScreenGeometry(const QString& screenId)
             return geom;
         }
     }
-    // Fallback: physical screen geometry only. This path is hit when ScreenManager
+    // Fallback: physical screen geometry only. This path is hit when Phosphor::Screens::ScreenManager
     // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
     // screen. The caller gets raw QScreen::geometry() which is always the full
     // physical monitor — acceptable as a last-resort fallback.

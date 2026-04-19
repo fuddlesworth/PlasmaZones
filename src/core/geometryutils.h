@@ -14,6 +14,7 @@
 #include <QVector>
 #include <QSize>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
 class Layout;
@@ -53,7 +54,7 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * @param screenId Optional virtual screen ID for physical-edge lookup.
  *        When non-empty, used for physicalEdgesFor() so that internal virtual
  *        screen edges get inner gap instead of outer gap. When empty, falls
- *        back to Utils::screenIdentifier(screen) (physical ID, all edges outer).
+ *        back to Phosphor::Screens::ScreenIdentity::identifierFor(screen) (physical ID, all edges outer).
  * @return Geometry with appropriate gaps applied
  */
 PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, QScreen* screen, int innerGap,
@@ -89,9 +90,9 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, con
 /**
  * @brief Get zone geometry with gaps, auto-resolving virtual screen geometry
  *
- * Unified helper that resolves virtual screen geometry via ScreenManager when
+ * Unified helper that resolves virtual screen geometry via Phosphor::Screens::ScreenManager when
  * available, falling back to the physical QScreen* geometry. Eliminates the
- * repeated pattern of querying ScreenManager + branching on vsGeom.isValid()
+ * repeated pattern of querying Phosphor::Screens::ScreenManager + branching on vsGeom.isValid()
  * that appears in navigation, resnap, snap-all, rotation, and overlay code.
  *
  * @param zone PhosphorZones::Zone to get geometry for
@@ -176,7 +177,7 @@ PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout,
  * @param screenId Screen identifier (physical or virtual, e.g. "physicalId/vs:N")
  * @return Virtual screen geometry if available, otherwise falls back to physical screen geometry
  *
- * Virtual-screen-aware overload: resolves geometry via ScreenManager first,
+ * Virtual-screen-aware overload: resolves geometry via Phosphor::Screens::ScreenManager first,
  * then falls back to finding the physical QScreen by ID.
  */
 PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId);
@@ -217,7 +218,7 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layou
 /**
  * @brief Build typed list of empty zones using explicit screen ID (virtual-screen-aware)
  *
- * Uses ScreenManager to resolve virtual screen geometry when available, falling back
+ * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
  * to the physical QScreen* geometry.
  */
 PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layout, const QString& screenId,

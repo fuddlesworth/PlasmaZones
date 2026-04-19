@@ -17,6 +17,7 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -109,7 +110,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
         screenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].layoutOsdWindow)) {
         createLayoutOsdWindow(effectiveId, physScreen);
@@ -290,8 +291,8 @@ void OverlayService::ensureOsdScreenAddedConnected()
         return;
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-        auto* mgr2 = screenManager();
-        const QString physId = Utils::screenIdentifier(screen);
+        auto* mgr2 = m_screenManager;
+        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
         const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
         if (m_layoutOsdWarmed) {
             for (const QString& sid : ids) {
@@ -313,11 +314,12 @@ void OverlayService::ensureOsdScreenAddedConnected()
 
 void OverlayService::warmUpLayoutOsd()
 {
-    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-            QScreen* physScreen = resolvePhysicalScreen(sid);
+            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
+                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
             if (physScreen) {
                 createLayoutOsdWindow(sid, physScreen);
             }
@@ -331,11 +333,12 @@ void OverlayService::warmUpLayoutOsd()
 
 void OverlayService::warmUpNavigationOsd()
 {
-    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-            QScreen* physScreen = resolvePhysicalScreen(sid);
+            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
+                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
             if (physScreen) {
                 createNavigationOsdWindow(sid, physScreen);
             }
@@ -424,7 +427,7 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
         navScreenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones

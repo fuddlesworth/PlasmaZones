@@ -39,9 +39,6 @@ inline QScreen* findScreenByName(const QString& connectorName)
     return nullptr;
 }
 
-// Defined in utils.cpp (EDID-based lookup)
-PLASMAZONES_EXPORT QScreen* findScreenByIdOrName(const QString& identifier);
-
 /**
  * @brief Get the aspect ratio of a screen
  * @param screen QScreen pointer (returns 0.0 if null or degenerate geometry)
@@ -62,7 +59,7 @@ inline qreal screenAspectRatio(QScreen* screen)
  * @param screenNameOrId Screen connector name, EDID-based ID, or virtual screen ID
  * @return width/height ratio, or 0.0 if screen not found
  *
- * For virtual screen IDs, uses ScreenManager::screenGeometry() to get the
+ * For virtual screen IDs, uses Phosphor::Screens::ScreenManager::screenGeometry() to get the
  * virtual screen dimensions. Falls back to physical QScreen* for non-virtual IDs.
  */
 PLASMAZONES_EXPORT qreal screenAspectRatio(const QString& screenNameOrId);
@@ -171,16 +168,6 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
     return doc.object();
 }
 
-/**
- * @brief Direction constants for use in comparisons
- */
-namespace Direction {
-inline constexpr QLatin1StringView Left{"left"};
-inline constexpr QLatin1StringView Right{"right"};
-inline constexpr QLatin1StringView Up{"up"};
-inline constexpr QLatin1StringView Down{"down"};
-} // namespace Direction
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Window ID Utilities
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -209,7 +196,7 @@ inline constexpr QLatin1StringView Down{"down"};
 /**
  * @brief Resolve the effective screen ID at a global position (virtual-screen-aware)
  *
- * Queries ScreenManager::effectiveScreenAt() for virtual screen resolution,
+ * Queries Phosphor::Screens::ScreenManager::effectiveScreenAt() for virtual screen resolution,
  * falling back to the physical QScreen's stable identifier. Eliminates the
  * repeated pattern of:
  *   auto* mgr = screenManager();
@@ -217,62 +204,13 @@ inline constexpr QLatin1StringView Down{"down"};
  *   if (id.isEmpty()) id = Utils::screenIdentifier(screen);
  *
  * @param pos Global compositor position
- * @param fallbackScreen Physical QScreen* to derive screen ID from if ScreenManager
+ * @param fallbackScreen Physical QScreen* to derive screen ID from if Phosphor::Screens::ScreenManager
  *        is unavailable or pos is outside all virtual screens. If nullptr, the
  *        QScreen at pos (via QGuiApplication::screenAt) is used.
  * @return Effective screen ID (virtual if subdivided, physical otherwise), or
  *         empty string if no screen could be resolved
  */
 PLASMAZONES_EXPORT QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen = nullptr);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// Screen Identity Utilities (EDID-based stable identification)
-// Declarations — bodies in utils.cpp
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/**
- * @brief Read the EDID header serial number from sysfs (cached)
- */
-PLASMAZONES_EXPORT QString readEdidHeaderSerial(const QString& connectorName);
-
-/**
- * @brief Invalidate the EDID header serial cache for a connector
- */
-PLASMAZONES_EXPORT void invalidateEdidCache(const QString& connectorName = QString());
-
-/**
- * @brief Stable EDID-based identifier for a physical monitor
- */
-PLASMAZONES_EXPORT QString screenIdentifier(const QScreen* screen);
-
-/**
- * @brief Resolve a connector name to a stable screen ID
- */
-PLASMAZONES_EXPORT QString screenIdForName(const QString& connectorName);
-
-/**
- * @brief Reverse lookup: stable screen ID to current connector name
- */
-PLASMAZONES_EXPORT QString screenNameForId(const QString& screenId);
-
-/**
- * @brief Check if a string looks like a connector name rather than a screen ID
- */
-PLASMAZONES_EXPORT bool isConnectorName(const QString& identifier);
-
-/**
- * @brief Format-agnostic screen comparison (virtual-screen aware).
- *
- * Returns true if both identifiers refer to the same effective screen.
- * Handles connector names ("DP-2"), EDID-based screen IDs
- * ("LG Electronics:LG Ultra HD:115107"), and virtual screen IDs
- * ("Dell:U2722D:115107/vs:0"). Virtual screen IDs are never equal to
- * each other (unless identical strings) and never equal to their parent
- * physical screen ID — the physical screen has been subdivided, so the
- * physical ID no longer represents a usable screen. Resolves non-virtual
- * identifiers to QScreen* via findScreenByIdOrName and compares pointers.
- */
-PLASMAZONES_EXPORT bool screensMatch(const QString& a, const QString& b);
 
 /**
  * @brief Check whether @p storedScreenId belongs to a given physical screen

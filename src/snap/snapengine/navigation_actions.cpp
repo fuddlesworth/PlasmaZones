@@ -38,6 +38,7 @@
 #include "../../dbus/snapnavigationtargets.h"
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -65,14 +66,14 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
             if (!storedScreen.isEmpty()) {
                 if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-                    QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+                    QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
                     if (physScreen) {
                         auto* mgr = screenManager();
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }
                     }
-                } else if (Utils::findScreenByIdOrName(storedScreen)) {
+                } else if (Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen)) {
                     return storedScreen;
                 }
             }

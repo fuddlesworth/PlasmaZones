@@ -14,6 +14,7 @@
 #include <QUuid>
 #include <QString>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -223,7 +224,7 @@ inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* m
 template<typename LogCategory>
 QScreen* getScreenOrWarn(const QString& screenId, const QString& operation, LogCategory category)
 {
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         qCWarning(category) << operation << ": screen not found:" << screenId;
         return nullptr;
@@ -303,20 +304,20 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  *
  * When screenId is empty, resolves via cursor position then primary screen fallback.
  * When non-empty, passes virtual screen IDs through and resolves physical names
- * via Utils::screenIdForName.
+ * via Phosphor::Screens::ScreenIdentity::idForName.
  */
 QString resolveScreenId(const QString& screenId);
 
 /**
  * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
  *
- * Uses ScreenManager::physicalQScreenFor() when available, then falls back to
- * Utils::findScreenByIdOrName(). Does NOT fall back to primaryScreen — returns
+ * Uses Phosphor::Screens::ScreenManager::physicalQScreenFor() when available, then falls back to
+ * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen — returns
  * nullptr so the caller can decide the appropriate fallback behavior.
  *
  * This replaces the duplicated pattern:
  *   if (PhosphorIdentity::VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
- *   if (!screen) { Utils::findScreenByIdOrName(id); }
+ *   if (!screen) { Phosphor::Screens::ScreenIdentity::findByIdOrName(id); }
  */
 QScreen* resolvePhysicalQScreen(const QString& screenId);
 
@@ -327,7 +328,7 @@ QScreen* resolvePhysicalQScreen(const QString& screenId);
 /**
  * @brief Resolve effective screen geometry for a layout, handling virtual screens
  *
- * Prefers ScreenManager geometry (virtual-screen-aware) when available,
+ * Prefers Phosphor::Screens::ScreenManager geometry (virtual-screen-aware) when available,
  * falls back to resolving the physical QScreen and using the QScreen overload.
  * Returns an invalid QRectF if no geometry can be resolved.
  */

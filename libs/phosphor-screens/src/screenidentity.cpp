@@ -229,19 +229,25 @@ QScreen* findByIdOrName(const QString& identifier)
     // the duplicates is unplugged: identifierFor() no longer returns the
     // suffixed form, the exact-match loop above misses, and this block
     // was previously gated out for virtual IDs.
+    //
+    // Cache inserts key on `physId` (not the raw `identifier`) so a later
+    // lookup with any /vs:N-suffixed form of the same physical id hits
+    // the reverse-cache fast path — extractPhysicalId strips the suffix
+    // before the lookup at the top of this function, so keying on the
+    // raw identifier would leave dead entries that never got read.
     int slashPos = physId.lastIndexOf(QLatin1Char('/'));
     if (slashPos > 0) {
         const QString connectorPart = physId.mid(slashPos + 1);
         const QString basePart = physId.left(slashPos);
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screen->name() == connectorPart && baseIdentifierFor(screen) == basePart) {
-                cache.insert(identifier, screen);
+                cache.insert(physId, screen);
                 return screen;
             }
         }
         for (QScreen* screen : QGuiApplication::screens()) {
             if (identifierFor(screen) == basePart) {
-                cache.insert(identifier, screen);
+                cache.insert(physId, screen);
                 return screen;
             }
         }

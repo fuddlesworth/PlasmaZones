@@ -4,7 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "utils.h"
+
+#include <PhosphorScreens/Swapper.h>
 
 #include <QRectF>
 #include <QString>
@@ -53,25 +54,25 @@ inline int findAdjacentRect(const QRectF& current, const QList<QRectF>& candidat
         bool valid = false;
         qreal distance = 0;
 
-        if (direction == Utils::Direction::Left) {
+        if (direction == Phosphor::Screens::Direction::Left) {
             if (candidateCenter.x() < currentCenter.x()) {
                 valid = true;
                 distance = currentCenter.x() - candidateCenter.x();
                 distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
             }
-        } else if (direction == Utils::Direction::Right) {
+        } else if (direction == Phosphor::Screens::Direction::Right) {
             if (candidateCenter.x() > currentCenter.x()) {
                 valid = true;
                 distance = candidateCenter.x() - currentCenter.x();
                 distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
             }
-        } else if (direction == Utils::Direction::Up) {
+        } else if (direction == Phosphor::Screens::Direction::Up) {
             if (candidateCenter.y() < currentCenter.y()) {
                 valid = true;
                 distance = currentCenter.y() - candidateCenter.y();
                 distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
             }
-        } else if (direction == Utils::Direction::Down) {
+        } else if (direction == Phosphor::Screens::Direction::Down) {
             if (candidateCenter.y() > currentCenter.y()) {
                 valid = true;
                 distance = candidateCenter.y() - currentCenter.y();

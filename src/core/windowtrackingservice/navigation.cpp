@@ -18,6 +18,7 @@
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -39,7 +40,7 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         // from making zones appear occupied on the target screen.
         if (!screenFilter.isEmpty()) {
             QString windowScreen = m_windowScreenAssignments.value(it.key());
-            if (!Utils::screensMatch(windowScreen, screenFilter)) {
+            if (!Phosphor::Screens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
                 continue;
             }
         }
@@ -108,7 +109,8 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
-    QScreen* screen = resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return {};
     }
@@ -139,7 +141,8 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     }
 
     // Resolve physical screen (virtual IDs resolve to backing QScreen*)
-    QScreen* screen = resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return QRect();
     }
@@ -153,7 +156,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
-    QScreen* screen = resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return combined.toAlignedRect();
     }
@@ -200,7 +204,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         QString screenId = m_windowScreenAssignments.value(it.key());
 
         // When a screen filter is set, only include windows on that screen
-        if (!screenFilter.isEmpty() && !Utils::screensMatch(screenId, screenFilter)) {
+        if (!screenFilter.isEmpty() && !Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
             continue;
         }
 
@@ -259,7 +263,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         }
 
         // Resolve physical screen for zone geometry calculation
-        QScreen* screen = resolvePhysicalScreen(screenId);
+        QScreen* screen = (m_screenManager ? m_screenManager->physicalQScreenFor(screenId)
+                                           : Utils::findScreenAtPosition(QPoint(0, 0)));
         if (!screen) {
             continue;
         }

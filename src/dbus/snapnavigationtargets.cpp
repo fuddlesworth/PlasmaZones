@@ -16,6 +16,7 @@
 
 #include <QRect>
 #include <QStringList>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -69,13 +70,13 @@ bool isStoredScreenValid(const QString& storedScreen)
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
         QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
-        if (!Utils::findScreenByIdOrName(physId)) {
+        if (!Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
             return false;
         }
         auto* mgr = screenManager();
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
     }
-    return Utils::findScreenByIdOrName(storedScreen) != nullptr;
+    return Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
 }
 
 // Pre-call contract checks. Target-resolver callers (the WTA slots) are

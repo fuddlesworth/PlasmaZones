@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QStandardPaths>
 #include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -119,7 +120,9 @@ PhosphorZones::Layout* LayoutManager::cycleLayoutImpl(const QString& screenId, i
     // Translate connector name to screen ID for allowedScreens matching
     QString resolvedScreenId;
     if (!screenId.isEmpty()) {
-        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
+        resolvedScreenId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
+            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+            : screenId;
     }
 
     // Build filtered list of visible layouts for current context

@@ -99,6 +99,14 @@ void PlasmaPanelSource::stop()
         return;
     }
     m_running = false;
+    // Clear the latched "panels have been queried" flag so a subsequent
+    // start() restarts the first-ready state machine. Mirrors
+    // ScreenManager::stop() which intentionally keeps its own
+    // m_panelGeometryReadyEmitted latched for test determinism — the two
+    // latches coordinate via panelOffsetsChanged emissions, so resetting
+    // m_ready here triggers a fresh first-ready signal only when panels
+    // are actually re-observed after restart, not on every start() call.
+    m_ready = false;
     m_requeryTimer.stop();
     if (m_plasmaShellWatcher) {
         // Disconnect BEFORE deleteLater — the watcher lingers on Qt's
@@ -182,22 +190,22 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         QHash<QString, Offsets> previous = m_offsets;
         m_offsets.clear();
 
+        const bool firstReady = !m_ready;
         for (auto* screen : QGuiApplication::screens()) {
-            if (previous.contains(screen->name())) {
+            // On the first-ready transition we want a fan-out for every
+            // screen. Once ready, only screens whose prior offsets were
+            // non-zero actually changed — the rest stay at zero and don't
+            // warrant re-emission. Merge the two loops so a screen that
+            // was both previously non-zero AND is being fanned out for
+            // first-ready gets exactly one emit, not two.
+            if (firstReady || previous.contains(screen->name())) {
                 Q_EMIT panelOffsetsChanged(screen);
             }
         }
 
-        if (!m_ready) {
+        if (firstReady) {
             m_ready = true;
             qCInfo(lcPhosphorScreens) << "Panel geometry: ready, no Plasma shell";
-            // First-ready transition — kick a synthetic per-screen
-            // change so listeners refresh available-geometry. Otherwise
-            // a host that wires panelGeometryReady to "now compute zones"
-            // would try to compute against stale (Qt-default) availability.
-            for (auto* screen : QGuiApplication::screens()) {
-                Q_EMIT panelOffsetsChanged(screen);
-            }
         }
         if (emitRequeryCompleted) {
             Q_EMIT requeryCompleted();

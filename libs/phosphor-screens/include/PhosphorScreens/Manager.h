@@ -89,6 +89,16 @@ public:
     QScreen* primaryScreen() const;
     QScreen* screenByName(const QString& name) const;
 
+    /// Maximum number of virtual screens per physical monitor this manager
+    /// will admit. Mirrors @ref ScreenManagerConfig::maxVirtualScreensPerPhysical
+    /// — exposed so callers (D-Bus adaptor, KCM validator) can pre-validate
+    /// incoming configs before handing them to @ref setVirtualScreenConfig
+    /// and surface a specific rejection reason on cap overflow.
+    int maxVirtualScreensPerPhysical() const
+    {
+        return m_cfg.maxVirtualScreensPerPhysical;
+    }
+
     /**
      * @brief Per-screen panel-aware available geometry.
      *
@@ -132,15 +142,6 @@ public:
 
     QStringList effectiveScreenIds() const;
     QStringList virtualScreenIdsFor(const QString& physicalScreenId) const;
-    /// Synonym for @ref virtualScreenIdsFor — exists because in-tree call
-    /// sites use both spellings interchangeably and converging to one name
-    /// is a cross-cutting rename out of scope for this library's surface.
-    /// New code should prefer @ref virtualScreenIdsFor. Thin inline forward.
-    [[deprecated("use virtualScreenIdsFor")]]
-    QStringList effectiveIdsForPhysical(const QString& physicalScreenId) const
-    {
-        return virtualScreenIdsFor(physicalScreenId);
-    }
 
     QRect screenGeometry(const QString& screenId) const;
     QRect screenAvailableGeometry(const QString& screenId) const;

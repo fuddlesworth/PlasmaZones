@@ -60,7 +60,7 @@ void Daemon::initializeAutotile()
                     screenId = m_unifiedLayoutController->currentScreenName();
                 }
                 if (screenId.isEmpty() && m_windowTrackingAdaptor) {
-                    screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+                    screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
                 }
                 showAlgorithmOsdDeferred(algorithmId, displayName, screenId);
             }
@@ -156,7 +156,7 @@ void Daemon::initializeAutotile()
             // so we can check the flag for the TARGET mode (not just autotile).
 
             // Resolve focused screen
-            const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+            const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
             if (screenId.isEmpty()) {
                 qCWarning(lcDaemon) << "Mode toggle: empty screenId from resolveShortcutScreenId";
                 return;

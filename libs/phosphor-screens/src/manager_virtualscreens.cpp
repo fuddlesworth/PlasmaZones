@@ -344,15 +344,13 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
     for (auto* screen : m_trackedScreens) {
-        // Exclusive-right containment to match VS lookup semantics — a
-        // point on the boundary between two adjacent physical screens
-        // belongs to the screen whose origin is that pixel, never both.
-        // QRect::contains() is inclusive on all four edges, which would
-        // pick the first screen in iteration order and hide layout bugs
-        // where two screens share an edge.
-        const QRect g = screen->geometry();
-        if (!(globalPos.x() >= g.x() && globalPos.x() < g.x() + g.width() && globalPos.y() >= g.y()
-              && globalPos.y() < g.y() + g.height())) {
+        // Exclusive-right containment (shared helper) to match VS lookup
+        // semantics — a point on the boundary between two adjacent physical
+        // screens belongs to the screen whose origin is that pixel, never
+        // both. QRect::contains() is inclusive on all four edges, which
+        // would pick the first screen in iteration order and hide layout
+        // bugs where two screens share an edge.
+        if (!containsExclusive(screen->geometry(), globalPos)) {
             continue;
         }
         QString physId = ScreenIdentity::identifierFor(screen);

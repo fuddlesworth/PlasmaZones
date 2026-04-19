@@ -14,7 +14,7 @@
 
 #include "shortcutmanager.h"
 #include "../core/layoutsourcefactory.h"
-#include "../core/screenmanagerservice.h" // ScreenManager alias + service-locator helpers
+#include "../core/screenmanagerservice.h" // Phosphor::Screens::ScreenManager alias + service-locator helpers
 #include "../core/types.h"
 #include <PhosphorScreens/Swapper.h> // shim → Phosphor::Screens::VirtualScreenSwapper alias
 #include "../autotile/AutotileEngine.h"
@@ -37,7 +37,7 @@ class LayoutManager;
 class LayoutComputeService;
 class Settings;
 class OverlayService;
-// ScreenManager type alias + service-locator helpers come from
+// Phosphor::Screens::ScreenManager type alias + service-locator helpers come from
 // "../core/screenmanagerservice.h" included above.
 class VirtualDesktopManager;
 class ActivityManager;
@@ -124,7 +124,7 @@ public:
     {
         return m_overlayService.get();
     }
-    ScreenManager* screenManager() const
+    Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager.get();
     }
@@ -311,9 +311,9 @@ private:
     void updateAutotileScreens();
 
     /**
-     * @brief Respond to a ScreenManager VS cache change for a physical screen
+     * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
-     * Wired to ScreenManager::virtualScreensChanged. Performs the post-change
+     * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
      * fan-out: clears stale resnap buffer, migrates window assignments to the
      * new VS IDs (when subdivisions exist), prunes stale autotile orders,
      * refreshes the autotile screen set, recalculates affected zone
@@ -383,7 +383,7 @@ private:
     /// (constructor arg). Declared before both so destruction order
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
-    std::unique_ptr<ScreenManager> m_screenManager;
+    std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

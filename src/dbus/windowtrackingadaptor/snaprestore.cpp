@@ -15,7 +15,7 @@ namespace {
 // Non-blocking startup gate shared by all synchronous snap D-Bus methods.
 //
 // Rationale: these slots return zone geometry synchronously to the KWin effect.
-// Before the first panel D-Bus query completes, ScreenManager's availability cache
+// Before the first panel D-Bus query completes, Phosphor::Screens::ScreenManager's availability cache
 // is empty and zones would be computed against the unreserved full-screen rect —
 // handing the effect coordinates that place the window partially behind the panel.
 //
@@ -32,9 +32,10 @@ namespace {
 // reentrancy hazard, and no bounded-timeout guesswork. The tradeoff is that snap
 // restore becomes best-effort if the effect-side gate is broken; we prefer a visible
 // warning over a silent jump to wrong coordinates.
-bool isSnapReadyOrWarn(const char* method)
+bool isSnapReadyOrWarn(WindowTrackingService* service, const char* method)
 {
-    if (!screenManager() || isPanelGeometryReady()) {
+    auto* mgr = service ? service->screenManager() : nullptr;
+    if (!mgr || mgr->isPanelGeometryReady()) {
         return true;
     }
     static bool warned = false;
@@ -56,7 +57,7 @@ void WindowTrackingAdaptor::snapToLastZone(const QString& windowId, const QStrin
     snapX = snapY = snapWidth = snapHeight = 0;
     shouldSnap = false;
 
-    if (!isSnapReadyOrWarn("snapToLastZone")) {
+    if (!isSnapReadyOrWarn(m_service, "snapToLastZone")) {
         return;
     }
 
@@ -79,7 +80,7 @@ void WindowTrackingAdaptor::snapToAppRule(const QString& windowId, const QString
         return;
     }
 
-    if (!isSnapReadyOrWarn("snapToAppRule")) {
+    if (!isSnapReadyOrWarn(m_service, "snapToAppRule")) {
         return;
     }
 
@@ -102,7 +103,7 @@ void WindowTrackingAdaptor::snapToEmptyZone(const QString& windowId, const QStri
         return;
     }
 
-    if (!isSnapReadyOrWarn("snapToEmptyZone")) {
+    if (!isSnapReadyOrWarn(m_service, "snapToEmptyZone")) {
         return;
     }
 
@@ -133,7 +134,7 @@ void WindowTrackingAdaptor::restoreToPersistedZone(const QString& windowId, cons
         return;
     }
 
-    if (!isSnapReadyOrWarn("restoreToPersistedZone")) {
+    if (!isSnapReadyOrWarn(m_service, "restoreToPersistedZone")) {
         return;
     }
 
@@ -174,7 +175,7 @@ void WindowTrackingAdaptor::resolveWindowRestore(const QString& windowId, const 
         return;
     }
 
-    if (!isSnapReadyOrWarn("resolveWindowRestore")) {
+    if (!isSnapReadyOrWarn(m_service, "resolveWindowRestore")) {
         return;
     }
 

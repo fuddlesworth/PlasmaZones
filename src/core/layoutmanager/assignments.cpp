@@ -12,6 +12,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -58,8 +59,8 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
 
     // 4. Connector name fallback: if screenId looks like a connector name (no colons),
     // try resolving to a screen ID and looking up again.
-    if (Utils::isConnectorName(screenId)) {
-        QString resolved = Utils::screenIdForName(screenId);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             return walkCascade(assignments, resolved, virtualDesktop, activity, std::forward<Visitor>(visitor));
         }

@@ -27,6 +27,7 @@
 #include <QScreen>
 #include <QTimer>
 #include "pz_i18n.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -139,7 +140,7 @@ void Daemon::showLockedPreviewOsd(const QString& screenId)
 
     // Show the visual preview OSD with lock overlay showing the current layout
     if (style == OsdStyle::Preview && m_overlayService && m_layoutManager) {
-        const QString resolvedId = Utils::screenIdForName(screenId);
+        const QString resolvedId = Phosphor::Screens::ScreenIdentity::idForName(screenId);
         PhosphorZones::Layout* layout =
             m_layoutManager->resolveLayoutForScreen(resolvedId.isEmpty() ? screenId : resolvedId);
         if (layout) {
@@ -368,14 +369,15 @@ void Daemon::syncModeFromAssignments()
     // Sync UnifiedLayoutController's current layout ID to match this desktop.
     // Without this, layout cycling uses the old desktop's current index.
     if (m_unifiedLayoutController) {
-        QString focusedScreenId =
-            m_windowTrackingAdaptor ? resolveShortcutScreenId(m_windowTrackingAdaptor) : QString();
+        QString focusedScreenId = m_windowTrackingAdaptor
+            ? resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor)
+            : QString();
         if (focusedScreenId.isEmpty()) {
             const QStringList effectiveIds = m_screenManager->effectiveScreenIds();
             if (!effectiveIds.isEmpty()) {
                 focusedScreenId = effectiveIds.first();
             } else if (!m_screenManager->screens().isEmpty()) {
-                focusedScreenId = Utils::screenIdentifier(m_screenManager->screens().first());
+                focusedScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(m_screenManager->screens().first());
             }
         }
         if (!focusedScreenId.isEmpty()) {

@@ -49,8 +49,8 @@ QString SupportReport::redactHomePath(const QString& input)
     return result;
 }
 
-SupportReport::Snapshot SupportReport::collectSnapshot(ScreenManager* screenManager, LayoutManager* layoutManager,
-                                                       AutotileEngine* autotileEngine)
+SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
+                                                       LayoutManager* layoutManager, AutotileEngine* autotileEngine)
 {
     Snapshot snap;
 
@@ -323,7 +323,7 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     return report;
 }
 
-QString SupportReport::generate(ScreenManager* screenManager, LayoutManager* layoutManager,
+QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager, LayoutManager* layoutManager,
                                 AutotileEngine* autotileEngine, int sinceMinutes)
 {
     return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);

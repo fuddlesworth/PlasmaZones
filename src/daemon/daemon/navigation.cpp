@@ -76,7 +76,7 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 static INavigationActions* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
                                                 NavigationContext& outCtx, const char* shortcutName)
 {
-    outCtx.screenId = resolveShortcutScreenId(wta);
+    outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
     if (outCtx.screenId.isEmpty()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: no screen info";
         return nullptr;
@@ -220,7 +220,7 @@ void Daemon::handleIncreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
@@ -233,7 +233,7 @@ void Daemon::handleDecreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
@@ -251,7 +251,7 @@ void Daemon::handleRetile()
     }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
             // QSet iteration order is non-deterministic; sort to get a stable fallback
             QStringList sorted = m_autotileEngine->autotileScreens().values();
@@ -306,7 +306,7 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     }
     m_virtualScreenDebounce.restart();
 
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
         return;
@@ -348,7 +348,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     }
     m_virtualScreenDebounce.restart();
 
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "RotateVirtualScreens shortcut: no screen info";
         return;

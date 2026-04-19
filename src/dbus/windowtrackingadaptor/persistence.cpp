@@ -18,6 +18,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -97,7 +98,7 @@ PreTileGeometryList WindowTrackingAdaptor::getPreTileGeometries()
         if (!it.value().connectorName.isEmpty()) {
             entry.screenId = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().connectorName)
                 ? it.value().connectorName
-                : Utils::screenIdForName(it.value().connectorName);
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().connectorName);
         }
         result.append(entry);
     }
@@ -137,7 +138,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
 
     QRect geometry(x, y, width, height);
     // Use effective screen IDs (virtual if subdivided) for correct geometry checks
-    auto* mgr = screenManager();
+    auto* mgr = m_service->screenManager();
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
             QRect screenGeom = mgr->screenGeometry(sid);
@@ -150,7 +151,7 @@ bool WindowTrackingAdaptor::isGeometryOnScreen(int x, int y, int width, int heig
             }
         }
     } else {
-        // Fallback: no ScreenManager, use physical screens
+        // Fallback: no Phosphor::Screens::ScreenManager, use physical screens
         for (QScreen* screen : Utils::allScreens()) {
             QRect intersection = screen->geometry().intersected(geometry);
             if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -229,18 +230,20 @@ void WindowTrackingAdaptor::tryEmitPendingRestoresAvailable()
         return;
     }
 
-    // Check if panel geometry is ready, or if ScreenManager doesn't exist (fallback)
-    // If ScreenManager instance is null, we proceed anyway with a warning - this is
+    // Check if panel geometry is ready, or if Phosphor::Screens::ScreenManager doesn't exist (fallback)
+    // If Phosphor::Screens::ScreenManager instance is null, we proceed anyway with a warning - this is
     // better than blocking window restoration indefinitely
-    if (screenManager() && !isPanelGeometryReady()) {
+    if (m_service->screenManager()
+        && !(m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
         qCDebug(lcDbusWindow) << "pendingRestoresAvailable: cannot emit, panel geometry not ready yet";
         return;
     }
 
-    // Both conditions met (or ScreenManager unavailable) - emit the signal
+    // Both conditions met (or Phosphor::Screens::ScreenManager unavailable) - emit the signal
     m_pendingRestoresEmitted = true;
-    if (!screenManager()) {
-        qCWarning(lcDbusWindow) << "pendingRestoresAvailable: no ScreenManager, geometry may be incorrect";
+    if (!m_service->screenManager()) {
+        qCWarning(lcDbusWindow)
+            << "pendingRestoresAvailable: no Phosphor::Screens::ScreenManager, geometry may be incorrect";
     } else {
         qCInfo(lcDbusWindow) << "Pending restores: panel geometry ready, notifying effect";
     }
@@ -262,7 +265,8 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
     // Search per-screen layouts to find which screen's layout contains this zone.
     // This correctly handles multi-monitor setups where each screen has a different layout.
     // Use effective screen IDs (virtual + physical) so virtual screen layouts are searched too.
-    const QStringList effectiveIds = effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds =
+        (m_service->screenManager() ? m_service->screenManager()->effectiveScreenIds() : QStringList());
     for (const QString& sid : effectiveIds) {
         PhosphorZones::Layout* layout =
             m_layoutManager->layoutForScreen(sid, currentDesktop, m_layoutManager->currentActivity());
@@ -282,7 +286,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         return QString();
     }
     // Use effective screen IDs for virtual screen support
-    auto* mgr = screenManager();
+    auto* mgr = m_service->screenManager();
     if (mgr) {
         for (const QString& sid : mgr->effectiveScreenIds()) {
             QScreen* screen = mgr->physicalQScreenFor(sid);
@@ -312,7 +316,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
             QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
                               refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));
             if (screen->geometry().contains(zoneCenter)) {
-                return Utils::screenIdentifier(screen);
+                return Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             }
         }
     }

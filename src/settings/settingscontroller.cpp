@@ -74,6 +74,7 @@ static void sortMergedLayoutList(QVariantList& list)
 
 #include <algorithm>
 #include <memory>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -129,15 +130,15 @@ SettingsController::~SettingsController()
 namespace {
 // Install the library-level screen-id resolver once per process so
 // Layout::fromJson() normalises legacy connector names ("DP-2") to
-// EDID-based IDs ("LG:Model:Serial") during load. Uses Utils::screenIdForName
+// EDID-based IDs ("LG:Model:Serial") during load. Uses Phosphor::Screens::ScreenIdentity::idForName
 // which walks QGuiApplication::screens().
 void ensureScreenIdResolver()
 {
     static const bool installed = [] {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Utils::isConnectorName(name))
+            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
                 return name;
-            return Utils::screenIdForName(name);
+            return Phosphor::Screens::ScreenIdentity::idForName(name);
         });
         return true;
     }();
@@ -930,7 +931,7 @@ void SettingsController::duplicateLayout(const QString& layoutId)
 QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
 {
     QVariantMap result;
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     if (screen) {
         result[QStringLiteral("width")] = screen->geometry().width();
         result[QStringLiteral("height")] = screen->geometry().height();
@@ -1049,7 +1050,7 @@ QString SettingsController::assignmentCacheKey(const QString& screen, int deskto
 {
     // Resolve connector names to EDID-based screen IDs so cache keys
     // match regardless of whether the caller passes "DP-3" or the full ID
-    QString resolved = Utils::screenIdForName(screen);
+    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screen);
     return resolved + QChar(0x1F) + QString::number(desktop) + QChar(0x1F) + activity;
 }
 
@@ -1060,7 +1061,7 @@ SettingsController::StagedAssignment& SettingsController::stagedEntry(const QStr
     auto it = m_stagedAssignments.find(key);
     if (it == m_stagedAssignments.end()) {
         StagedAssignment entry;
-        entry.screenId = Utils::screenIdForName(screen);
+        entry.screenId = Phosphor::Screens::ScreenIdentity::idForName(screen);
         entry.virtualDesktop = desktop;
         entry.activityId = activity;
         it = m_stagedAssignments.insert(key, entry);
@@ -1635,7 +1636,7 @@ static QString lockKey(const QString& screenName, int mode)
 {
     // Resolve connector names (e.g., "DP-3") to EDID-based screen IDs
     // to match the daemon's lock key format
-    QString resolved = Utils::screenIdForName(screenName);
+    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
     return QString::number(mode) + QStringLiteral(":") + resolved;
 }
 

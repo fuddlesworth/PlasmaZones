@@ -29,7 +29,7 @@ private Q_SLOTS:
 void TestSpatialAdjacency::emptyCandidates()
 {
     const QRectF current(0, 0, 100, 100);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(current, {}, Utils::Direction::Right), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(current, {}, Phosphor::Screens::Direction::Right), -1);
 }
 
 void TestSpatialAdjacency::twoSplitHorizontal()
@@ -38,10 +38,10 @@ void TestSpatialAdjacency::twoSplitHorizontal()
     const QRectF right(0.5, 0, 0.5, 1.0);
     const QList<QRectF> rects{left, right};
 
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Utils::Direction::Right), 1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(right, rects, Utils::Direction::Left), 0);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Utils::Direction::Left), -1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(right, rects, Utils::Direction::Right), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Phosphor::Screens::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(right, rects, Phosphor::Screens::Direction::Left), 0);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Phosphor::Screens::Direction::Left), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(right, rects, Phosphor::Screens::Direction::Right), -1);
 }
 
 void TestSpatialAdjacency::twoSplitVertical()
@@ -50,9 +50,9 @@ void TestSpatialAdjacency::twoSplitVertical()
     const QRectF bottom(0, 0.5, 1.0, 0.5);
     const QList<QRectF> rects{top, bottom};
 
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(top, rects, Utils::Direction::Down), 1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottom, rects, Utils::Direction::Up), 0);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(top, rects, Utils::Direction::Up), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(top, rects, Phosphor::Screens::Direction::Down), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottom, rects, Phosphor::Screens::Direction::Up), 0);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(top, rects, Phosphor::Screens::Direction::Up), -1);
 }
 
 void TestSpatialAdjacency::gridPrefersSameRow()
@@ -65,10 +65,10 @@ void TestSpatialAdjacency::gridPrefersSameRow()
     const QRectF bottomRight(0.5, 0.5, 0.5, 0.5);
     const QList<QRectF> rects{topLeft, topRight, bottomLeft, bottomRight};
 
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(topLeft, rects, Utils::Direction::Right), 1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(topRight, rects, Utils::Direction::Left), 0);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomLeft, rects, Utils::Direction::Right), 3);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomRight, rects, Utils::Direction::Left), 2);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(topLeft, rects, Phosphor::Screens::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(topRight, rects, Phosphor::Screens::Direction::Left), 0);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomLeft, rects, Phosphor::Screens::Direction::Right), 3);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomRight, rects, Phosphor::Screens::Direction::Left), 2);
 }
 
 void TestSpatialAdjacency::gridPrefersSameColumn()
@@ -79,10 +79,10 @@ void TestSpatialAdjacency::gridPrefersSameColumn()
     const QRectF bottomRight(0.5, 0.5, 0.5, 0.5);
     const QList<QRectF> rects{topLeft, topRight, bottomLeft, bottomRight};
 
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(topLeft, rects, Utils::Direction::Down), 2);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(topRight, rects, Utils::Direction::Down), 3);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomLeft, rects, Utils::Direction::Up), 0);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomRight, rects, Utils::Direction::Up), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(topLeft, rects, Phosphor::Screens::Direction::Down), 2);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(topRight, rects, Phosphor::Screens::Direction::Down), 3);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomLeft, rects, Phosphor::Screens::Direction::Up), 0);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(bottomRight, rects, Phosphor::Screens::Direction::Up), 1);
 }
 
 void TestSpatialAdjacency::skipsCurrentByCentre()
@@ -94,17 +94,17 @@ void TestSpatialAdjacency::skipsCurrentByCentre()
     const QList<QRectF> rects{left, right};
 
     // `current` equals `left` — from left, the only valid neighbour is right.
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Utils::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Phosphor::Screens::Direction::Right), 1);
 }
 
 void TestSpatialAdjacency::noMatchInDirection()
 {
     const QRectF only(0, 0, 1.0, 1.0);
     const QList<QRectF> rects{only};
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Utils::Direction::Left), -1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Utils::Direction::Right), -1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Utils::Direction::Up), -1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Utils::Direction::Down), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Phosphor::Screens::Direction::Left), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Phosphor::Screens::Direction::Right), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Phosphor::Screens::Direction::Up), -1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(only, rects, Phosphor::Screens::Direction::Down), -1);
 }
 
 void TestSpatialAdjacency::threeColumnChain()
@@ -116,10 +116,10 @@ void TestSpatialAdjacency::threeColumnChain()
     const QRectF col2(2.0 / 3.0, 0, 1.0 / 3.0, 1.0);
     const QList<QRectF> rects{col0, col1, col2};
 
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(col1, rects, Utils::Direction::Left), 0);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(col1, rects, Utils::Direction::Right), 2);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(col0, rects, Utils::Direction::Right), 1);
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(col2, rects, Utils::Direction::Left), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(col1, rects, Phosphor::Screens::Direction::Left), 0);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(col1, rects, Phosphor::Screens::Direction::Right), 2);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(col0, rects, Phosphor::Screens::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(col2, rects, Phosphor::Screens::Direction::Left), 1);
 }
 
 void TestSpatialAdjacency::asymmetricGridFirstSeenWins()
@@ -139,11 +139,11 @@ void TestSpatialAdjacency::asymmetricGridFirstSeenWins()
     // dy from left to topRight = |0.25 - 0.5| = 0.25, weighted 2x = 0.5
     // dy from left to bottomRight = |0.75 - 0.5| = 0.25, weighted 2x = 0.5
     // Both have dx = 0.5, so weighted distance is equal — first-seen (topRight, idx 1) wins.
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Utils::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, rects, Phosphor::Screens::Direction::Right), 1);
 
     // Reverse order in the input — now bottomRight is seen first.
     const QList<QRectF> reversed{left, bottomRight, topRight};
-    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, reversed, Utils::Direction::Right), 1);
+    QCOMPARE(SpatialAdjacency::findAdjacentRect(left, reversed, Phosphor::Screens::Direction::Right), 1);
 }
 
 QTEST_MAIN(TestSpatialAdjacency)

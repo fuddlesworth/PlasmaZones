@@ -13,6 +13,7 @@
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 namespace WindowTrackingInternal {
@@ -58,7 +59,7 @@ inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::
         if (!entry.connectorName.isEmpty()) {
             obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.connectorName)
                 ? entry.connectorName
-                : Utils::screenIdForName(entry.connectorName);
+                : Phosphor::Screens::ScreenIdentity::idForName(entry.connectorName);
         }
         return obj;
     };
@@ -112,7 +113,7 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         if (!it.value().connectorName.isEmpty()) {
             obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().connectorName)
                 ? it.value().connectorName
-                : Utils::screenIdForName(it.value().connectorName);
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().connectorName);
         }
         result.append(obj);
     }

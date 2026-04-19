@@ -7,14 +7,14 @@
  *
  * Root cause: when the daemon starts up, the KWin effect sends windowsOpenedBatch
  * immediately. If that batch arrives before the first D-Bus panel query has
- * completed, ScreenManager's availability cache is still empty and the autotile
+ * completed, Phosphor::Screens::ScreenManager's availability cache is still empty and the autotile
  * engine computes zone geometry against the unreserved full-screen rect — producing
  * oversized tile requests that get corrected a frame later (visible jump at login).
  *
  * Fix: AutotileAdaptor defers windowOpened/windowsOpenedBatch entries into a
- * pending queue until ScreenManager::panelGeometryReady fires, then flushes them.
+ * pending queue until Phosphor::Screens::ScreenManager::panelGeometryReady fires, then flushes them.
  * This test exercises the queue behavior end-to-end using the real adaptor and
- * engine, with the ScreenManager singleton constructed but not started (so the
+ * engine, with the Phosphor::Screens::ScreenManager singleton constructed but not started (so the
  * panel query never runs and isPanelGeometryReady() stays false until we manually
  * fire the signal).
  *
@@ -39,11 +39,11 @@
 using namespace PlasmaZones;
 
 namespace {
-/// Fire ScreenManager::panelGeometryReady directly on the instance. The signal
-/// is only emitted from within ScreenManager's D-Bus panel callback in
+/// Fire Phosphor::Screens::ScreenManager::panelGeometryReady directly on the instance. The signal
+/// is only emitted from within Phosphor::Screens::ScreenManager's D-Bus panel callback in
 /// production; for unit tests we need a way to simulate that moment without
 /// running a real Plasma shell.
-void emitPanelGeometryReady(ScreenManager& mgr)
+void emitPanelGeometryReady(Phosphor::Screens::ScreenManager& mgr)
 {
     QMetaObject::invokeMethod(&mgr, "panelGeometryReady");
 }
@@ -56,10 +56,10 @@ class TestAutotileAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // Baseline: with no ScreenManager singleton at all (null-instance path),
+    // Baseline: with no Phosphor::Screens::ScreenManager singleton at all (null-instance path),
     // windowOpened forwards straight to the engine without queueing. This is
     // the path exercised in headless unit tests that don't construct a
-    // ScreenManager — the adaptor must not force a dependency on it.
+    // Phosphor::Screens::ScreenManager — the adaptor must not force a dependency on it.
     // -------------------------------------------------------------------------
     void testNoScreenManager_passThrough()
     {
@@ -79,7 +79,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testDefersWhenPanelNotReady_flushesOnSignal()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         setScreenManager(&mgr);
         auto unregister = qScopeGuard([] {
             setScreenManager(nullptr);
@@ -117,7 +117,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testRejectsInvalidSingleOpens()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         setScreenManager(&mgr);
         auto unregister = qScopeGuard([] {
             setScreenManager(nullptr);
@@ -148,7 +148,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testBatchOrderPreservedAcrossFlush()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         setScreenManager(&mgr);
         auto unregister = qScopeGuard([] {
             setScreenManager(nullptr);
@@ -169,7 +169,7 @@ private Q_SLOTS:
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
 
         // Second batch arriving after flush: depending on whether
-        // m_panelGeometryReceived got set on the real ScreenManager (we only
+        // m_panelGeometryReceived got set on the real Phosphor::Screens::ScreenManager (we only
         // emitted the signal, didn't flip the flag), the adaptor either
         // dispatches synchronously (count stays 0) or re-queues (count = 1).
         // The contract we care about here is simply that flush did empty the
@@ -185,7 +185,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testFlushWithClearedEngine_noCrash()
     {
-        ScreenManager mgr;
+        Phosphor::Screens::ScreenManager mgr;
         setScreenManager(&mgr);
         auto unregister = qScopeGuard([] {
             setScreenManager(nullptr);

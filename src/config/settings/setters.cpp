@@ -45,7 +45,7 @@ void Settings::setVirtualScreenConfigs(const QHash<QString, Phosphor::Screens::V
 {
     // Filter out 1-screen configs: hasSubdivisions() returns false for size==1,
     // so effectiveScreenIds() would not emit virtual IDs for them, but storing them
-    // causes inconsistency (settings says VS exists, ScreenManager disagrees).
+    // causes inconsistency (settings says VS exists, Phosphor::Screens::ScreenManager disagrees).
     // Also reject individually-invalid entries via Phosphor::Screens::VirtualScreenConfig::isValid
     // — Settings is the source of truth, so it must apply the same admission
     // rules as the singular setVirtualScreenConfig path.
@@ -100,7 +100,7 @@ bool Settings::setVirtualScreenConfig(const QString& physicalScreenId,
     } else {
         // Validate before storing — Settings is the source of truth for VS
         // configs, so it must reject inputs that would later be refused by
-        // ScreenManager. Otherwise Settings and ScreenManager diverge in
+        // Phosphor::Screens::ScreenManager. Otherwise Settings and Phosphor::Screens::ScreenManager diverge in
         // memory and the disk save persists garbage that next-load drops.
         QString error;
         if (!Phosphor::Screens::VirtualScreenConfig::isValid(config, physicalScreenId,

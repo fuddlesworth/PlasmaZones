@@ -17,6 +17,7 @@
 #include <QUuid>
 #include <algorithm>
 #include <tuple>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -238,7 +239,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             // match windows stored on that physical screen OR on any of its
             // virtual children — belongsToPhysicalScreen handles both cases.
             const bool match = PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Utils::screensMatch(screenId, screenFilter)
+                ? Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)
                 : Utils::belongsToPhysicalScreen(screenId, screenFilter);
             if (!match) {
                 continue;
@@ -282,7 +283,7 @@ WindowTrackingService::calculateResnapFromCurrentAssignments(const QString& scre
             if (screenFilter.isEmpty())
                 return true;
             return PhosphorIdentity::VirtualScreenId::isVirtual(screenFilter)
-                ? Utils::screensMatch(screen, screenFilter)
+                ? Phosphor::Screens::ScreenIdentity::screensMatch(screen, screenFilter)
                 : Utils::belongsToPhysicalScreen(screen, screenFilter);
         };
         for (auto it = m_windowZoneAssignments.constBegin(); it != m_windowZoneAssignments.constEnd(); ++it) {
@@ -448,7 +449,7 @@ QStringList WindowTrackingService::buildZoneOrderedWindowList(const QString& scr
     int insertionIdx = 0;
     QVector<std::tuple<int, int, QString>> windowsByZone; // (zoneNum, insertionIdx, windowId)
     for (auto it = m_windowScreenAssignments.constBegin(); it != m_windowScreenAssignments.constEnd(); ++it) {
-        if (!Utils::screensMatch(it.value(), screenId)) {
+        if (!Phosphor::Screens::ScreenIdentity::screensMatch(it.value(), screenId)) {
             continue;
         }
         const QString& windowId = it.key();
@@ -508,7 +509,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
     QSet<QUuid> occupiedZoneIds = buildOccupiedZoneSet(screenId, desktopFilter);
 
     // Resolve physical screen for zone geometry calculation
-    QScreen* screen = resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return result;
     }

@@ -26,6 +26,7 @@
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -401,7 +402,8 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 {
     if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == targetScreen || screen->name() == targetScreen) {
+            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == targetScreen
+                || screen->name() == targetScreen) {
                 return screen;
             }
         }
@@ -468,11 +470,11 @@ void EditorController::refreshUsableAreaInsets()
             return;
         }
         fullGeom = screen->geometry();
-        screenId = Utils::screenIdentifier(screen);
+        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     }
 
     // Query the daemon for both full and available geometry via D-Bus.
-    // The daemon's ScreenManager handles VS IDs natively.
+    // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
     QDBusMessage geoMsg = QDBusMessage::createMethodCall(
         QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
         QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));

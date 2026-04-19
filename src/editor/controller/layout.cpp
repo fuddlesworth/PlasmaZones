@@ -28,6 +28,7 @@
 #include <QScreen>
 #include <QTimer>
 #include <QUuid>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -52,7 +53,7 @@ void EditorController::cacheVirtualScreenGeometry(const QString& screenName)
         if (geo.isValid()) {
             m_virtualScreenSize = geo.size();
             QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
-            QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
             QPoint physOrigin = physScreen ? physScreen->geometry().topLeft() : QPoint();
             m_virtualScreenRect = QRect(geo.topLeft() - physOrigin, geo.size());
             qCDebug(lcEditor) << "Virtual screen" << screenName << "geometry:" << geo
@@ -69,7 +70,7 @@ QVariantList EditorController::screenModel() const
         // Fallback: use Qt's physical screens (editor opened before daemon responded)
         for (QScreen* screen : QGuiApplication::screens()) {
             QVariantMap entry;
-            entry[QStringLiteral("name")] = Utils::screenIdentifier(screen);
+            entry[QStringLiteral("name")] = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             entry[QStringLiteral("displayName")] = screen->name();
             model.append(entry);
         }
@@ -114,7 +115,7 @@ QVariantList EditorController::screenModel() const
             entry[QStringLiteral("displayName")] = vsDisplayName;
         } else {
             // Physical screen: use connector name for brevity
-            QScreen* screen = Utils::findScreenByIdOrName(screenId);
+            QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
             entry[QStringLiteral("displayName")] = screen ? screen->name() : screenId;
         }
         model.append(entry);
@@ -211,7 +212,7 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     EditorWindowPlan plan;
     if (m_virtualScreenRect.isValid()) {
         const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_targetScreen);
-        if (QScreen* physScreen = Utils::findScreenByIdOrName(physId)) {
+        if (QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
             plan.screen = physScreen;
             // Absolute VS coordinates = physical screen origin + VS offset.
             plan.geometry =
@@ -223,7 +224,8 @@ void EditorController::showFullScreenOnTargetScreen(QQuickWindow* window)
     if (!plan.isValid()) {
         // Physical-screen path: match by identifier, take full geometry.
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == m_targetScreen || screen->name() == m_targetScreen) {
+            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == m_targetScreen
+                || screen->name() == m_targetScreen) {
                 plan.screen = screen;
                 plan.geometry = screen->geometry();
                 plan.fullScreen = true;

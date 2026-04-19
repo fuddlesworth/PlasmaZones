@@ -568,7 +568,7 @@ private Q_SLOTS:
     // Note: there is no Unlimited → Float test in this fixture. The reverse
     // direction is handled by OverflowManager::applyOverflow during the next
     // recalculateLayout, which requires valid screen geometry — the
-    // null-ScreenManager engine used by these unit tests can't supply it.
+    // null-Phosphor::Screens::ScreenManager engine used by these unit tests can't supply it.
     // The reverse path is exercised by the integration tests that run the
     // full daemon graph.
 

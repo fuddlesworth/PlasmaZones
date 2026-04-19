@@ -31,7 +31,6 @@ namespace PlasmaZones {
 
 /// Replaces `Phosphor::Screens::ScreenManager` for in-tree call sites
 /// that haven't migrated to the canonical name yet.
-using ScreenManager = Phosphor::Screens::ScreenManager;
 
 /// Register the process-global ScreenManager pointer. Pass nullptr to
 /// unregister (called by Daemon's destructor). Subsequent `screenManager()`

@@ -17,6 +17,7 @@
 #include <QJsonObject>
 #include <QScreen>
 #include <QVariantMap>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -185,14 +186,14 @@ QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, QScreen* screen, int i
     // Detect which edges are at screen boundaries
     QRectF screenGeom = useAvailableGeometry ? actualAvailableGeometry(screen) : screen->geometry();
 
-    // Look up physical edges via ScreenManager so virtual screen internal edges
+    // Look up physical edges via Phosphor::Screens::ScreenManager so virtual screen internal edges
     // get inner gap instead of outer gap, matching the QRect overload behavior.
     // When the caller provides a virtual screen ID, use it; otherwise fall back
     // to the physical screen identifier (which yields all-true physical edges).
     Phosphor::Screens::VirtualScreenDef::PhysicalEdges physEdges{true, true, true, true};
     auto* mgr = screenManager();
     if (mgr) {
-        QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+        QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
         physEdges = mgr->physicalEdgesFor(resolvedId);
     }
 
@@ -404,7 +405,7 @@ QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, const QString& scr
         return availGeom.isValid() ? QRectF(availGeom) : QRectF(geom);
     }
     // Fallback to physical screen
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     return effectiveScreenGeometry(layout, screen);
 }
 
@@ -495,7 +496,7 @@ EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layout, QScreen* screen,
     bool useAvail = !layout->useFullScreenGeometry();
     LayoutComputeService::recalculateSync(layout, effectiveScreenGeometry(layout, screen));
 
-    QString screenId = Utils::screenIdentifier(screen);
+    QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     int zonePadding = getEffectiveZonePadding(layout, settings, screenId);
     ::PhosphorLayout::EdgeGaps outerGaps = getEffectiveOuterGaps(layout, settings, screenId);
 

@@ -96,7 +96,7 @@ private Q_SLOTS:
     {
         // Two identical virtual screen IDs must match (fast path: a == b)
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        QVERIFY(Utils::screensMatch(vsId, vsId));
+        QVERIFY(Phosphor::Screens::ScreenIdentity::screensMatch(vsId, vsId));
     }
 
     void testScreensMatch_differentVirtualIndexes_returnsFalse()
@@ -104,7 +104,7 @@ private Q_SLOTS:
         // Two different virtual screens on the same physical monitor must NOT match
         QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
-        QVERIFY(!Utils::screensMatch(vs0, vs1));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(vs0, vs1));
     }
 
     void testScreensMatch_physicalVsVirtual_returnsFalse()
@@ -113,8 +113,8 @@ private Q_SLOTS:
         // (once virtual screens are configured, the physical ID is no longer a valid screen)
         QString physId = QStringLiteral("Dell:U2722D:115107");
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        QVERIFY(!Utils::screensMatch(physId, vsId));
-        QVERIFY(!Utils::screensMatch(vsId, physId));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(physId, vsId));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(vsId, physId));
     }
 
     void testScreensMatch_differentPhysicalVirtual_returnsFalse()
@@ -122,21 +122,21 @@ private Q_SLOTS:
         // Virtual screens from different physical monitors must NOT match
         QString vsA = QStringLiteral("Dell:U2722D:115107/vs:0");
         QString vsB = QStringLiteral("LG:27GL850:ABC123/vs:0");
-        QVERIFY(!Utils::screensMatch(vsA, vsB));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(vsA, vsB));
     }
 
     void testScreensMatch_emptyVsVirtual_returnsFalse()
     {
         // Empty string vs virtual screen ID must NOT match
         QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
-        QVERIFY(!Utils::screensMatch(QString(), vsId));
-        QVERIFY(!Utils::screensMatch(vsId, QString()));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(QString(), vsId));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(vsId, QString()));
     }
 
     void testScreensMatch_bothEmpty_returnsTrue()
     {
         // Two empty strings are identical -> true via fast path
-        QVERIFY(Utils::screensMatch(QString(), QString()));
+        QVERIFY(Phosphor::Screens::ScreenIdentity::screensMatch(QString(), QString()));
     }
 
     void testScreensMatch_identicalPhysicalIds_returnsTrue()
@@ -147,7 +147,7 @@ private Q_SLOTS:
         // are non-virtual and neither resolves to a QScreen. The fast path a==b
         // handles the identical case.)
         QString physId = QStringLiteral("Dell:U2722D:115107");
-        QVERIFY(Utils::screensMatch(physId, physId));
+        QVERIFY(Phosphor::Screens::ScreenIdentity::screensMatch(physId, physId));
     }
 
     // =====================================================================
@@ -439,12 +439,12 @@ private Q_SLOTS:
         QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
 
         // Both are virtual, different index -> should be false (correct behavior)
-        QVERIFY(!Utils::screensMatch(vs0, vs1));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(vs0, vs1));
 
         // Physical parent vs virtual child -> should be false (correct behavior for
         // the "virtual screens are separate screens" model)
         QString physId = QStringLiteral("Dell:U2722D:115107");
-        QVERIFY(!Utils::screensMatch(physId, vs0));
+        QVERIFY(!Phosphor::Screens::ScreenIdentity::screensMatch(physId, vs0));
     }
 
     // =====================================================================
@@ -486,3 +486,4 @@ private:
 
 QTEST_MAIN(TestSnapAssistVirtual)
 #include "test_snap_assist_virtual.moc"
+#include <PhosphorScreens/ScreenIdentity.h>

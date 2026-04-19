@@ -56,6 +56,7 @@
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -76,9 +77,9 @@ struct InstallScreenIdResolver
     InstallScreenIdResolver()
     {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Utils::isConnectorName(name))
+            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
                 return name;
-            return Utils::screenIdForName(name);
+            return Phosphor::Screens::ScreenIdentity::idForName(name);
         });
     }
 };
@@ -102,7 +103,7 @@ Daemon::Daemon(QObject* parent)
     , m_overlayService(std::make_unique<OverlayService>(nullptr))
     , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
     , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
-    , m_screenManager(std::make_unique<ScreenManager>(
+    , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
           Phosphor::Screens::ScreenManager::Config{
               /*panelSource=*/m_panelSource.get(),
               /*configStore=*/m_virtualScreenStore.get(),
@@ -110,7 +111,7 @@ Daemon::Daemon(QObject* parent)
               // Align the lib's cap with the daemon's source-of-truth (Settings
               // uses ConfigDefaults::maxVirtualScreensPerPhysical() when
               // validating writes). A lower cap here would silently reject
-              // configs Settings accepted, leaving Settings ↔ ScreenManager
+              // configs Settings accepted, leaving Settings ↔ Phosphor::Screens::ScreenManager
               // divergent.
               /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
           },
@@ -127,7 +128,7 @@ Daemon::Daemon(QObject* parent)
     // because that idiom reads as an accidental typo.
     ensureScreenIdResolver();
 
-    // Register this daemon's ScreenManager as the process-global instance
+    // Register this daemon's Phosphor::Screens::ScreenManager as the process-global instance
     // so the service-locator helpers (PlasmaZones::screenManager(),
     // actualAvailableGeometry, isPanelGeometryReady, ...) and the ~107
     // legacy callers of those resolve to the same pointer this Daemon owns.
@@ -275,7 +276,7 @@ bool Daemon::init()
             // on the fly via GeometryUtils::getZoneGeometryWithGaps().
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                QString screenId = Utils::screenIdentifier(primary);
+                QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
                 m_layoutComputeService->requestRecalculate(layout, screenId,
                                                            GeometryUtils::effectiveScreenGeometry(layout, primary));
             }
@@ -418,6 +419,11 @@ bool Daemon::init()
                                                         m_virtualDesktopManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
+    // Inject ScreenManager into the tracking service so its geometry /
+    // effective-screen lookups no longer rely on a process-global
+    // service-locator (the former PlasmaZones::screenManager()).
+    m_windowTrackingAdaptor->service()->setScreenManager(m_screenManager.get());
+    m_overlayService->setScreenManager(m_screenManager.get());
 
     // Reapply window geometries after each geometry batch (processPendingGeometryUpdates).
     // When the delayed panel requery completes it emits availableGeometryChanged, which triggers

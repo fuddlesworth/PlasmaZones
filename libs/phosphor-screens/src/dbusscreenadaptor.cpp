@@ -183,17 +183,28 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
             });
         }
 
-        const QString cachedId = physId;
-        connect(screen, &QScreen::geometryChanged, screen, [this, screen, cachedId]() {
-            handleScreenGeometryChanged(screen, cachedId);
+        // Lambdas recompute identifierFor(screen) at call time rather than
+        // capturing it here. When a same-model sibling joins/leaves later,
+        // identifierFor's output flips between bare and "/CONNECTOR"-
+        // suffixed forms for this screen. Capturing the value at add-time
+        // would leave the lambdas retracting under a stale id after a
+        // disambiguation flip, breaking the D-Bus signal stream for
+        // consumers that track the live id.
+        connect(screen, &QScreen::geometryChanged, screen, [this, screen]() {
+            handleScreenGeometryChanged(screen, ScreenIdentity::identifierFor(screen));
         });
 
         if (m_screenManager && m_screenManager->hasVirtualScreens(physId)) {
             m_cachedEffectiveIdsPerScreen[physId] = m_screenManager->virtualScreenIdsFor(physId);
         }
 
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
-            handleScreenRemoved(removedScreen, screen, cachedId);
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen](QScreen* removedScreen) {
+            // identifierFor is safe to call pre-destruction of @p screen —
+            // it reads QScreen name/manufacturer/model/serialNumber before
+            // Qt tears the object down. The screen-removed signal fires
+            // while the QScreen is still a live object; only the underlying
+            // output is gone.
+            handleScreenRemoved(removedScreen, screen, ScreenIdentity::identifierFor(screen));
         });
     });
 
@@ -201,14 +212,14 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
     // keyed on m_screenManager happens in setScreenManager() — the manager
     // may not be wired yet when the constructor runs this loop. The
     // screen-removed lambda is still installed here so consumer-visible
-    // retraction works from the moment the adaptor exists.
+    // retraction works from the moment the adaptor exists. See the same-
+    // reasoning note above: lambdas recompute identifierFor at call time.
     for (QScreen* screen : QGuiApplication::screens()) {
-        const QString cachedId = ScreenIdentity::identifierFor(screen);
-        connect(screen, &QScreen::geometryChanged, screen, [this, screen, cachedId]() {
-            handleScreenGeometryChanged(screen, cachedId);
+        connect(screen, &QScreen::geometryChanged, screen, [this, screen]() {
+            handleScreenGeometryChanged(screen, ScreenIdentity::identifierFor(screen));
         });
-        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen, cachedId](QScreen* removedScreen) {
-            handleScreenRemoved(removedScreen, screen, cachedId);
+        connect(qGuiApp, &QGuiApplication::screenRemoved, screen, [this, screen](QScreen* removedScreen) {
+            handleScreenRemoved(removedScreen, screen, ScreenIdentity::identifierFor(screen));
         });
     }
 }
@@ -551,6 +562,19 @@ QString DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenI
         return reject("too_few_screens",
                       QStringLiteral("screens[] has %1 entries; need at least 2 (send an empty array to remove)")
                           .arg(screensArr.size()));
+    }
+
+    // Reject over-cap up front with a specific token. The store's isValid
+    // predicate would otherwise produce `store_rejected` — which consumers
+    // can't distinguish from IConfigStore I/O failure. Query the cap from
+    // the wired manager (the daemon shares one cap between Settings,
+    // ScreenManager, and the adaptor by construction).
+    if (m_screenManager) {
+        const int cap = m_screenManager->maxVirtualScreensPerPhysical();
+        if (cap > 0 && screensArr.size() > cap) {
+            return reject("too_many_screens",
+                          QStringLiteral("screens[] has %1 entries; max is %2").arg(screensArr.size()).arg(cap));
+        }
     }
 
     VirtualScreenConfig config;

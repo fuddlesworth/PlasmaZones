@@ -17,6 +17,7 @@
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -433,10 +434,10 @@ std::optional<QRect> WindowTrackingService::validatePreTileEntry(const QString& 
     // 2. Different virtual screens on the same physical monitor (e.g. DP-1/vs:0 vs DP-1/vs:1)
     //    — the virtual screens have different geometry bounds, so coordinates are wrong.
     if (!storedScreen.isEmpty() && !currentScreenName.isEmpty()
-        && !Utils::screensMatch(storedScreen, currentScreenName)) {
-        auto* mgr = screenManager();
-        QScreen* target =
-            mgr ? mgr->physicalQScreenFor(currentScreenName) : Utils::findScreenByIdOrName(currentScreenName);
+        && !Phosphor::Screens::ScreenIdentity::screensMatch(storedScreen, currentScreenName)) {
+        auto* mgr = m_screenManager;
+        QScreen* target = mgr ? mgr->physicalQScreenFor(currentScreenName)
+                              : Phosphor::Screens::ScreenIdentity::findByIdOrName(currentScreenName);
         if (target) {
             // For virtual screens, prefer virtual screen bounds over full physical screen
             QRect available = (mgr && mgr->screenGeometry(currentScreenName).isValid())
@@ -653,7 +654,8 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
         // Validate virtual screen still exists — configuration may have changed since float
         restoreScreen = resolveEffectiveScreenId(restoreScreen);
         // Check if the physical screen still exists
-        QScreen* physScreen = resolvePhysicalScreen(restoreScreen);
+        QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(restoreScreen)
+                                               : Utils::findScreenAtPosition(QPoint(0, 0)));
         if (!physScreen) {
             restoreScreen.clear();
         }

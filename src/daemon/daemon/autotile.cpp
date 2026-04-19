@@ -24,6 +24,7 @@
 #include <QGuiApplication>
 #include <memory>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -523,7 +524,7 @@ void Daemon::processPendingGeometryUpdates()
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
-                QString primaryId = Utils::screenIdentifier(primaryScreen);
+                QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(primaryScreen);
                 requestFor(layout, primaryId, GeometryUtils::effectiveScreenGeometry(layout, primaryId));
             }
         }

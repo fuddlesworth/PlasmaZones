@@ -94,12 +94,13 @@ QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds
     return vsIds[bestIdx];
 }
 
-// Takes an explicit ScreenManager* parameter rather than using screenManager()
+// Takes an explicit Phosphor::Screens::ScreenManager* parameter rather than using m_screenManager
 // because this method is called during daemon startup (Daemon::start) before the
 // singleton instance may be fully initialized, and the caller already holds a valid
-// ScreenManager pointer from its own member (m_screenManager.get()).
+// Phosphor::Screens::ScreenManager pointer from its own member (m_screenManager.get()).
 void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& physicalScreenId,
-                                                              const QStringList& virtualScreenIds, ScreenManager* mgr)
+                                                              const QStringList& virtualScreenIds,
+                                                              Phosphor::Screens::ScreenManager* mgr)
 {
     if (virtualScreenIds.isEmpty() || !mgr) {
         return;
@@ -811,7 +812,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     // Check virtual screens first (covers both virtual and non-subdivided physical screens).
     // Use area-overlap semantics (not center-point containment) so windows on virtual
     // screen boundaries are handled consistently with the physical-screen fallback path.
-    auto* mgr = screenManager();
+    auto* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
@@ -827,7 +828,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
         return false;
     }
 
-    // Fallback: physical screens only (no ScreenManager available)
+    // Fallback: physical screens only (no Phosphor::Screens::ScreenManager available)
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = geometry.intersected(screen->geometry());
         if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -839,8 +840,8 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
-    // Try virtual/effective screens first via ScreenManager
-    auto* mgr = screenManager();
+    // Try virtual/effective screens first via Phosphor::Screens::ScreenManager
+    auto* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
@@ -899,7 +900,7 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
         return screenId;
     }
 
-    auto* smgr = screenManager();
+    auto* smgr = m_screenManager;
     if (!smgr) {
         return screenId;
     }

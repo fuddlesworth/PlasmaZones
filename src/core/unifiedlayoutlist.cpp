@@ -21,6 +21,7 @@
 #include <QJsonArray>
 #include <QRectF>
 #include <QUuid>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones::LayoutUtils {
 
@@ -182,7 +183,9 @@ QVector<LayoutPreview> buildUnifiedLayoutList(PhosphorZones::ILayoutManager* lay
     // Translate connector name to screen ID for allowedScreens matching.
     QString resolvedScreenId;
     if (!screenId.isEmpty()) {
-        resolvedScreenId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
+        resolvedScreenId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
+            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+            : screenId;
     }
 
     // Track the active layout so we can guarantee it appears in the list

@@ -26,6 +26,7 @@
 #include <QClipboard>
 #include <QDBusConnection>
 #include <QGuiApplication>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -33,14 +34,14 @@ namespace {
 // Install the library-level screen-id resolver once per process so
 // Layout::fromJson() can normalise legacy connector names ("DP-2") to
 // EDID-based IDs ("LG:Model:Serial") during load. Uses QGuiApplication's
-// screen list via Utils::screenIdForName.
+// screen list via Phosphor::Screens::ScreenIdentity::idForName.
 void ensureScreenIdResolver()
 {
     static const bool installed = [] {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Utils::isConnectorName(name))
+            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
                 return name;
-            return Utils::screenIdForName(name);
+            return Phosphor::Screens::ScreenIdentity::idForName(name);
         });
         return true;
     }();

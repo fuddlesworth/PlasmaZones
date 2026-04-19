@@ -20,6 +20,7 @@
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/constants.h"
 #include "../../autotile/AutotileEngine.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -116,7 +117,7 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
-                screenId = Utils::screenIdentifier(screen);
+                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
                 LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, screenId));

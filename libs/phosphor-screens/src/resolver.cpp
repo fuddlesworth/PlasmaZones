@@ -60,7 +60,13 @@ QString ScreenResolver::effectiveScreenAt(const QPoint& pos, const ResolverEndpo
         hardCap.setSingleShot(true);
         QObject::connect(&hardCap, &QTimer::timeout, &loop, &QEventLoop::quit);
         hardCap.start(timeoutMs + kResolverHardCapMarginMs);
-        loop.exec();
+        // ExcludeUserInputEvents so a click / keypress that lands during the
+        // wait doesn't re-enter UI handlers that could call back into the
+        // resolver (editor's own screen-picker → this function → nested
+        // event loop → editor again). Queued signals, timers, and D-Bus
+        // traffic still dispatch, which is exactly what we need to let the
+        // pending reply land.
+        loop.exec(QEventLoop::ExcludeUserInputEvents);
 
         if (watcher.isFinished() && !watcher.isError()) {
             QDBusPendingReply<QString> reply = pending;

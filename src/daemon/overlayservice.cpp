@@ -42,6 +42,7 @@
 #include <PhosphorLayer/defaults/PhosphorShellTransport.h>
 #include <QQuickItem>
 #include "overlayservice/pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -140,10 +141,10 @@ OverlayService::OverlayService(QObject* parent)
     }
 
     // Connect to virtual screen configuration changes
-    if (auto* mgr = screenManager()) {
+    if (auto* mgr = m_screenManager) {
         auto onVirtualScreensChangedHandler = [this](const QString& physicalScreenId) {
             // Destroy old overlays for this physical screen, recreate with new config
-            QScreen* physScreen = Utils::findScreenByIdOrName(physicalScreenId);
+            QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId);
             if (!physScreen) {
                 // Physical screen removed -- destroy windows and clean up stale virtual screen entries
                 const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
@@ -163,7 +164,7 @@ OverlayService::OverlayService(QObject* parent)
             // destroy any overlay window keyed by the bare physical screen ID
             // itself. Virtual screens use prefixed keys; the bare key would be
             // a leftover from the previous (non-virtual) configuration.
-            auto* mgr2 = screenManager();
+            auto* mgr2 = m_screenManager;
             if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
                 destroyOverlayWindow(physicalScreenId);
                 destroyZoneSelectorWindow(physicalScreenId);
@@ -190,7 +191,7 @@ OverlayService::OverlayService(QObject* parent)
             }
 
             // Recreate with new virtual screen config if visible. Reuses
-            // mgr2 from above — the ScreenManager singleton doesn't change
+            // mgr2 from above — the Phosphor::Screens::ScreenManager singleton doesn't change
             // mid-lambda, so re-querying would just be noise.
             if (isVisible()) {
                 if (mgr2 && mgr2->hasVirtualScreens(physicalScreenId)) {
@@ -226,12 +227,13 @@ OverlayService::OverlayService(QObject* parent)
                 });
             }
         };
-        connect(mgr, &ScreenManager::virtualScreensChanged, this, onVirtualScreensChangedHandler);
+        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this, onVirtualScreensChangedHandler);
         // Regions-only changes (swap/rotate/boundary-resize) also need the
         // overlay windows destroyed and recreated with the new VS geometry.
         // The handler is heavy but only runs when overlays are visible
         // (active drag), so the cost is bounded.
-        connect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, onVirtualScreensChangedHandler);
+        connect(mgr, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
+                onVirtualScreensChangedHandler);
     }
 
     // Connect to system sleep/resume via logind to restart shader timer after wake.
@@ -762,7 +764,7 @@ PhosphorZones::Layout* OverlayService::resolveScreenLayout(QScreen* screen) cons
     if (!screen) {
         return m_layout;
     }
-    return resolveScreenLayout(Utils::screenIdentifier(screen));
+    return resolveScreenLayout(Phosphor::Screens::ScreenIdentity::identifierFor(screen));
 }
 
 PhosphorZones::Layout* OverlayService::resolveScreenLayout(const QString& screenId) const
@@ -832,8 +834,8 @@ void OverlayService::setCurrentActivity(const QString& activityId)
 void OverlayService::setupForScreen(QScreen* screen)
 {
     // Set up overlay windows for all effective screens on this physical screen
-    auto* mgr = screenManager();
-    const QString physId = Utils::screenIdentifier(screen);
+    auto* mgr = m_screenManager;
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (mgr && mgr->hasVirtualScreens(physId)) {
         for (const QString& vsId : mgr->virtualScreenIdsFor(physId)) {
             if (!m_screenStates.contains(vsId) || !m_screenStates[vsId].overlayWindow) {
@@ -881,9 +883,9 @@ void OverlayService::handleScreenAdded(QScreen* screen)
     if (!m_visible || !screen) {
         return;
     }
-    const QString physScreenId = Utils::screenIdentifier(screen);
+    const QString physScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
 
-    auto* mgr = screenManager();
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physScreenId)) {
         // Create overlays for each virtual screen on this physical screen
         for (const QString& vsId : mgr->virtualScreenIdsFor(physScreenId)) {
@@ -949,7 +951,7 @@ void OverlayService::destroyAllWindowsForPhysicalScreen(QScreen* screen)
     // is reconnected (hot-plug cycle) it inherits the stale flag and we
     // silently refuse to recreate the OSD. Matching is prefix-based because
     // virtual-screen ids embed the physical id as the prefix.
-    const QString physId = Utils::screenIdentifier(screen);
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     if (!physId.isEmpty()) {
         for (auto it = m_navigationOsdCreationFailed.begin(); it != m_navigationOsdCreationFailed.end();) {
             if (it.key() == physId || it.key().startsWith(physId + PhosphorIdentity::VirtualScreenId::Separator)) {
@@ -973,7 +975,9 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
     bool includeManual = m_includeManualLayouts;
     bool includeAutotile = m_includeAutotileLayouts;
     if (m_layoutManager) {
-        const QString resolvedId = Utils::isConnectorName(screenId) ? Utils::screenIdForName(screenId) : screenId;
+        const QString resolvedId = Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)
+            ? Phosphor::Screens::ScreenIdentity::idForName(screenId)
+            : screenId;
         if (!resolvedId.isEmpty()) {
             const QString assignmentId =
                 m_layoutManager->assignmentIdForScreen(resolvedId, m_currentVirtualDesktop, m_currentActivity);

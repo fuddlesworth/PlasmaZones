@@ -22,7 +22,7 @@ namespace PlasmaZones {
  * `Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")` so
  * registrations go to the right interface name.
  *
- * Wiring: the daemon constructs this with an explicit ScreenManager
+ * Wiring: the daemon constructs this with an explicit Phosphor::Screens::ScreenManager
  * pointer and separately calls the base's `setConfigStore` with its
  * SettingsConfigStore. Constructor-injection removes what was a hidden
  * read from the `PlasmaZones::screenManager()` service-locator at ctor

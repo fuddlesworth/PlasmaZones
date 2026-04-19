@@ -14,6 +14,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <limits>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -112,7 +113,7 @@ ZoneGeometryRect ZoneDetectionAdaptor::getZoneGeometryForScreen(const QString& z
     PhosphorZones::Layout* zoneLayout = qobject_cast<PhosphorZones::Layout*>(zone->parent());
     // Prefer the caller-supplied screenId (may be a virtual screen ID) over
     // deriving from QScreen which always yields the physical screen ID
-    QString resolvedScreenId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    QString resolvedScreenId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
     QRect snapped = GeometryUtils::getZoneGeometryForScreen(zone, screen, resolvedScreenId, zoneLayout, m_settings);
 
     return ZoneGeometryRect::fromRect(snapped);
@@ -266,7 +267,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
         QRectF geom = zone->normalizedGeometry(refGeom);
         qreal value = 0;
 
-        if (direction == Utils::Direction::Left) {
+        if (direction == Phosphor::Screens::Direction::Left) {
             // Find leftmost zone (smallest x)
             value = geom.x();
             if (!initialized || value < bestValue) {
@@ -274,7 +275,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Right) {
+        } else if (direction == Phosphor::Screens::Direction::Right) {
             // Find rightmost zone (largest x + width, i.e., right edge)
             value = geom.x() + geom.width();
             if (!initialized || value > bestValue) {
@@ -282,7 +283,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Up) {
+        } else if (direction == Phosphor::Screens::Direction::Up) {
             // Find topmost zone (smallest y)
             value = geom.y();
             if (!initialized || value < bestValue) {
@@ -290,7 +291,7 @@ QString ZoneDetectionAdaptor::getFirstZoneInDirection(const QString& direction, 
                 bestZone = zone;
                 initialized = true;
             }
-        } else if (direction == Utils::Direction::Down) {
+        } else if (direction == Phosphor::Screens::Direction::Down) {
             // Find bottommost zone (largest y + height, i.e., bottom edge)
             value = geom.y() + geom.height();
             if (!initialized || value > bestValue) {
@@ -352,7 +353,7 @@ NamedZoneGeometryList ZoneDetectionAdaptor::getAllZoneGeometries(const QString& 
     // Prefer the caller-supplied screenId (may be a virtual screen ID) over
     // deriving from QScreen which always yields the physical screen ID
     if (resolvedScreenId.isEmpty()) {
-        resolvedScreenId = Utils::screenIdentifier(screen);
+        resolvedScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     }
     for (auto* zone : layout->zones()) {
         // Use geometry with gaps (matches snap behavior), auto-resolving virtual screen geometry

@@ -352,7 +352,7 @@ private Q_SLOTS:
     /**
      * @brief Flush any windowOpened events that were deferred waiting for panel geometry
      *
-     * Connected to ScreenManager::panelGeometryReady. See the rationale comment on
+     * Connected to Phosphor::Screens::ScreenManager::panelGeometryReady. See the rationale comment on
      * windowsOpenedBatch() for why deferral is needed.
      */
     void flushPendingWindowOpens();
@@ -394,7 +394,7 @@ private:
 
     // Window-opened events received before the first panel D-Bus query completed.
     // Processing them immediately would compute zones against the unreserved screen rect
-    // (the s_availableGeometryCache in ScreenManager is still empty), so we queue them
+    // (the s_availableGeometryCache in Phosphor::Screens::ScreenManager is still empty), so we queue them
     // until panelGeometryReady fires. Non-blocking — no nested event loops, no reentrancy.
     WindowOpenedList m_pendingOpens;
     bool m_pendingOpensListenerInstalled = false;
