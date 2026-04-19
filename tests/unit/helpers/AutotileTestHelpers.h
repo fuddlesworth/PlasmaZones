@@ -13,15 +13,23 @@
 
 namespace PlasmaZones::TestHelpers {
 
-/// Test-process AlgorithmRegistry singleton replacement.
+/// Test-process AlgorithmRegistry.
 ///
 /// AlgorithmRegistry::instance() was removed when PlasmaZones moved to
 /// per-process registry ownership for plugin-friendly architecture.
 /// Tests need *some* shared registry across factory calls so that
 /// engines built in different test cases see the same set of registered
-/// built-in algorithms — this Meyer-style local replaces the old
-/// singleton with one test-process registry. Production code injects
-/// its own registry per composition root and never uses this helper.
+/// built-in algorithms without paying the cost of re-registering the
+/// (sizeable) built-in catalog per test case — this Meyer-style local
+/// serves that purpose. Production code injects its own registry per
+/// composition root and never uses this helper.
+///
+/// @warning State is shared across ALL tests in a single test-binary
+/// run. Tests that call @c registerAlgorithm / @c unregisterAlgorithm
+/// leak that mutation into subsequent tests — order them so the state
+/// is restored at teardown, or construct a local
+/// @c PhosphorTiles::AlgorithmRegistry on the stack instead of using
+/// this shared helper when per-test isolation matters.
 inline PhosphorTiles::AlgorithmRegistry* testRegistry()
 {
     static PhosphorTiles::AlgorithmRegistry s_registry;

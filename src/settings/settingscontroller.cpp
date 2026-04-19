@@ -118,9 +118,12 @@ Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantM
 
 SettingsController::~SettingsController()
 {
-    // Disconnect all pending algorithm registration watchers — PhosphorTiles::AlgorithmRegistry
-    // is a singleton that outlives this object, so dangling connections would fire
-    // into a destroyed SettingsController.
+    // Disconnect all pending algorithm registration watchers. The registry
+    // is now owned by this controller (m_localAlgorithmRegistry) and is
+    // destroyed after this destructor body runs, so any in-flight watcher
+    // signal queued between here and ~unique_ptr would otherwise fire into
+    // a half-destructed SettingsController. Eager disconnect keeps that
+    // window closed regardless of member destruction order.
     for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
         const auto& connPtr = it.value();
         if (connPtr && *connPtr)

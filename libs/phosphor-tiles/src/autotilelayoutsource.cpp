@@ -208,6 +208,17 @@ void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLa
     // probes previewAt() with a wide range of window counts.
     const int cap = qMax(10, m_algorithmCountCache * 10);
 
+    // Re-insert semantics: if the key is already present (e.g. a caller
+    // re-queries after eviction or deliberately overrides), drop the old
+    // FIFO slot first so m_cacheOrder never accumulates duplicates.
+    // Without this, a hot key's repeated insert leaves stale entries in
+    // m_cacheOrder that the eviction loop walks past as no-ops on
+    // m_cache.remove(), eventually evicting a valid live entry.
+    if (m_cache.contains(key)) {
+        m_cacheOrder.removeAll(key);
+        m_cache.remove(key);
+    }
+
     // If the algorithm count shrank since the last insert, m_cache may
     // already hold more entries than the current cap allows. Prune the
     // excess (oldest first) before inserting so we never leave the cache

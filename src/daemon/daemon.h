@@ -117,7 +117,7 @@ public:
      */
     PhosphorLayout::ILayoutSource* layoutSource() const
     {
-        return m_layoutSources.composite.get();
+        return m_layoutSources.composite();
     }
     OverlayService* overlayService() const
     {

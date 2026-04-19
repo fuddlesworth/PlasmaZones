@@ -152,7 +152,10 @@ Daemon::Daemon(QObject* parent)
     // project_plugin_based_compositor.md). Built-in algorithms register
     // automatically in the constructor; scripted algorithms are loaded
     // later by ScriptedAlgorithmLoader during init().
-    m_algorithmRegistry = std::make_unique<PhosphorTiles::AlgorithmRegistry>(this);
+    // Pass nullptr as Qt parent: the unique_ptr owns lifetime and the
+    // rest of this ctor follows that convention (see comment above on
+    // m_layoutManager et al.).
+    m_algorithmRegistry = std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr);
 
     // Build the layout sources here (rather than later in init()) because they
     // are thin wrappers — no I/O, no signal hookup — and consumers can ask for

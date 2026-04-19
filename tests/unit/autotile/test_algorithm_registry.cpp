@@ -20,8 +20,13 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: singleton, built-in algorithms,
+ * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: built-in algorithms,
  *        retrieval, and default algorithm behavior.
+ *
+ * The registry is no longer a process-global singleton; composition roots
+ * (daemon, editor, settings, this test fixture) each own their own instance.
+ * Tests share a fixture registry via ScriptedAlgoTestSetup::registry() so
+ * built-ins only register once per test-process run.
  */
 class TestAlgorithmRegistry : public QObject
 {
@@ -37,11 +42,15 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Singleton tests
+    // Fixture sanity
     // =========================================================================
 
-    void testSingleton_sameInstance()
+    void testFixture_registryNonNull()
     {
+        // Sanity-check the fixture: the test setup hands back a non-null
+        // registry and the same instance for both calls (it's a
+        // fixture-owned instance, not a process singleton — but within
+        // one test run the fixture's accessor is stable).
         auto* instance1 = m_scriptSetup.registry();
         auto* instance2 = m_scriptSetup.registry();
 
