@@ -618,10 +618,12 @@ numbering reflects dependency order, not required calendar order.
   and the controller base is plain C++) — construction site changed
   from `make_unique<WindowAnimator>(this)` to `make_unique<WindowAnimator>()`.
 
-### Phase 3 — Unified motion runtime (IMotionClock + AnimatedValue<T>)
+### Phase 3 — Unified motion runtime (IMotionClock + AnimatedValue<T>) ✅ DONE
 
-**Status:** architecture ratified 2026-04-18; implementation pending
-on `feat/phosphor-animation-phase3`.
+**Status:** shipped on `feat/phosphor-animation-phase3` as five
+sub-commits (plus the architecture pass). All success criteria met;
+~2400 LOC of library code, 121 tests green (120 default build +1
+opt-in QtQuickClock test).
 
 #### Scope shift from the original Phase 3 draft
 
