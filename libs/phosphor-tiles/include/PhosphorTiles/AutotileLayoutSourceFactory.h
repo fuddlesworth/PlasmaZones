@@ -11,6 +11,22 @@ namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
 
+/// Anchor symbol that forces the translation unit owning the static
+/// @c LayoutSourceProviderRegistrar for this provider to be linked in.
+///
+/// Under @c SHARED builds (today's default) every TU of the loaded
+/// library has its static initialisers run, so this anchor is a no-op.
+/// The function exists so that @c STATIC builds + linker GC
+/// (@c --gc-sections, @c --as-needed) can't drop
+/// @c autotilelayoutsourcefactory.cpp silently — at which point the
+/// static registrar never runs and the bundle ships without the
+/// autotile provider. Composition-root glue
+/// (@c buildStandardLayoutSourceBundle) calls this once during bundle
+/// wiring. The body is an empty no-op; only the symbol reference
+/// matters. See the @c @@todo(plugin-compositor) note in
+/// @c PhosphorLayoutApi/LayoutSourceProviderRegistry.h.
+PHOSPHORTILES_EXPORT void ensureAutotileLayoutSourceProviderLinked();
+
 /// Factory for @c AutotileLayoutSource.
 ///
 /// Composition roots register an instance with their

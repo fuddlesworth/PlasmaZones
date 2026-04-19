@@ -9,6 +9,15 @@
 
 namespace PhosphorTiles {
 
+// Anchor definition — see AutotileLayoutSourceFactory.h for rationale.
+// The body is deliberately empty; what matters is that this function
+// lives in the same TU as the LayoutSourceProviderRegistrar below, so
+// any caller (buildStandardLayoutSourceBundle) referencing the symbol
+// forces the linker to keep this TU and its static init.
+void ensureAutotileLayoutSourceProviderLinked()
+{
+}
+
 AutotileLayoutSourceFactory::AutotileLayoutSourceFactory(ITileAlgorithmRegistry* registry)
     : m_registry(registry)
 {

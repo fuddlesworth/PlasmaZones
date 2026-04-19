@@ -178,15 +178,15 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
-    // In production the factory registrar returns nullptr from its
-    // builder lambda when the ctx has no ITileAlgorithmRegistry, so the
-    // source is never constructed with null — asserting in debug catches
-    // tests that accidentally pass nullptr instead of silently returning
-    // an empty list. Release builds keep the null-tolerance branch below
-    // (for parity with ZonesLayoutSource and public API callers that
-    // legitimately want an empty source).
-    Q_ASSERT_X(m_registry, "AutotileLayoutSource",
-               "constructed with null ITileAlgorithmRegistry — factory registrar should have returned nullptr instead");
+    // Null registry is a documented public-API case — the source then
+    // reports an empty layout list (mirrored in every query method
+    // below). In production the factory registrar returns nullptr from
+    // its builder lambda when the ctx has no ITileAlgorithmRegistry, so
+    // this constructor is normally only reached with a valid registry;
+    // direct public-API callers that legitimately want an empty source
+    // rely on this branch. No debug-only assert — the null-tolerance
+    // contract in the header must hold in every build configuration
+    // (parity with ZonesLayoutSource).
     if (m_registry) {
         // Subscribe to the unified ILayoutSourceRegistry::contentsChanged
         // signal — AlgorithmRegistry already bridges its three specific

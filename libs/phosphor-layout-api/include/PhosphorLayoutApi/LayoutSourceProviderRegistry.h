@@ -43,6 +43,24 @@ namespace PhosphorLayout {
 /// T* that set<T> stored. Callers who set under one interface and
 /// get under a different one (e.g. the base class) simply miss (the
 /// keys differ → nullptr), avoiding UB.
+///
+/// Constraints on @c T (must hold for every interface used as a
+/// service key):
+///   - **Non-virtual inheritance only.** The
+///     @c static_cast<void*>(T*) → @c static_cast<T*>(void*) round-trip
+///     assumes a fixed, vtable-independent offset between the derived
+///     object and its @c T subobject. Virtual inheritance makes that
+///     offset dynamic, and the void* detour silently discards it.
+///     Every interface in the PhosphorLayout provider chain
+///     (@c ILayoutSourceRegistry, @c IZoneLayoutRegistry,
+///     @c ITileAlgorithmRegistry, future @c IScrollingRegistry) is
+///     non-virtually inherited; preserve that when adding new services.
+///   - **Top-level cv is stripped.** @c std::type_index(typeid(T))
+///     collapses @c const-qualification (and volatile), so
+///     @c set<const IFoo>(...) and @c get<IFoo>() resolve to the same
+///     slot. This is intentional — const doesn't change service
+///     identity — but it means you cannot register two distinct
+///     entries keyed by constness alone.
 class PHOSPHORLAYOUTAPI_EXPORT FactoryContext
 {
 public:

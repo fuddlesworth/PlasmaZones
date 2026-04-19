@@ -52,6 +52,7 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         m_factories = std::move(other.m_factories);
         m_sources = std::move(other.m_sources);
         m_sourceNames = std::move(other.m_sourceNames);
+        m_sourceIndex = std::move(other.m_sourceIndex);
         m_composite = std::move(other.m_composite);
         // Post-condition: std::move on unique_ptr leaves `other` empty and
         // std::vector's move leaves its storage empty. Assert in debug so a
@@ -62,6 +63,7 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         Q_ASSERT(other.m_sources.empty());
         Q_ASSERT(other.m_factories.empty());
         Q_ASSERT(other.m_sourceNames.empty());
+        Q_ASSERT(other.m_sourceIndex.isEmpty());
     }
     return *this;
 }
@@ -80,6 +82,21 @@ void LayoutSourceBundle::addFactory(std::unique_ptr<ILayoutSourceFactory> factor
     }
     if (!factory) {
         qWarning("LayoutSourceBundle::addFactory: ignoring null factory");
+        return;
+    }
+    // Reject empty names up front so the duplicate-name first-wins pass in
+    // build() never has to special-case them. An empty name can never be
+    // looked up via source(QString) — the public accessor matches on string
+    // equality, and returning a non-null ILayoutSource* for "" would let
+    // composition roots paper over a misconfigured factory. Matches
+    // FactoryContext::set's fail-safe first-wins discipline on programmer
+    // errors: assert in debug, warn + drop in release.
+    const QString name = factory->name();
+    Q_ASSERT_X(!name.isEmpty(), "LayoutSourceBundle::addFactory",
+               "factory must supply a non-empty name — source(QString) lookups and the duplicate-name guard "
+               "require a stable identifier");
+    if (name.isEmpty()) {
+        qWarning("LayoutSourceBundle::addFactory: ignoring factory with empty name");
         return;
     }
     m_factories.push_back(std::move(factory));
@@ -101,12 +118,13 @@ void LayoutSourceBundle::build()
     }
     m_sources.reserve(m_factories.size());
     m_sourceNames.reserve(m_factories.size());
+    m_sourceIndex.reserve(static_cast<int>(m_factories.size()));
     QList<ILayoutSource*> raw;
     raw.reserve(static_cast<int>(m_factories.size()));
     for (auto& factory : m_factories) {
         const QString name = factory->name();
-        // Duplicate-name detection: source(name) walks m_sourceNames and
-        // returns the first match, so a collision would silently route
+        // Duplicate-name detection: source(name) is an O(1) hash lookup
+        // over m_sourceIndex, so a collision would silently route
         // composition-root setAutotileLayoutSource (and similar) at the
         // wrong source. availableLayouts() on the composite would also
         // return duplicate previews. Fail-safe policy: first-registration
@@ -116,7 +134,7 @@ void LayoutSourceBundle::build()
         // future plugin-loading cycle (XDG path duplication, dlopen +
         // static-init re-run) — the warning identifies the offending
         // provider by name for diagnostics.
-        if (std::find(m_sourceNames.begin(), m_sourceNames.end(), name) != m_sourceNames.end()) {
+        if (m_sourceIndex.contains(name)) {
             qWarning(
                 "LayoutSourceBundle::build: duplicate factory name '%s' — skipping later registration (first "
                 "wins)",
@@ -134,8 +152,10 @@ void LayoutSourceBundle::build()
             qWarning("LayoutSourceBundle::build: factory '%s' returned null — skipping", qUtf8Printable(name));
             continue;
         }
+        const std::size_t idx = m_sources.size();
         m_sourceNames.push_back(name);
         m_sources.push_back(std::move(source));
+        m_sourceIndex.insert(name, idx);
         raw.append(m_sources.back().get());
     }
     m_composite = std::make_unique<CompositeLayoutSource>();
@@ -206,12 +226,16 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
 
 ILayoutSource* LayoutSourceBundle::source(const QString& name) const
 {
-    for (std::size_t i = 0; i < m_sourceNames.size(); ++i) {
-        if (m_sourceNames[i] == name) {
-            return m_sources[i].get();
-        }
+    // O(1) hash lookup — build() populates m_sourceIndex alongside
+    // m_sourceNames with duplicate-name skips already applied, so a
+    // hit maps to exactly one valid index into m_sources. Returns
+    // nullptr when no factory with that name has been registered or
+    // when build() has not run yet.
+    const auto it = m_sourceIndex.constFind(name);
+    if (it == m_sourceIndex.constEnd()) {
+        return nullptr;
     }
-    return nullptr;
+    return m_sources[it.value()].get();
 }
 
 } // namespace PhosphorLayout

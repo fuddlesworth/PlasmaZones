@@ -10,6 +10,8 @@
 #include <PhosphorLayoutApi/ILayoutSourceFactory.h>
 #include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>
 
+#include <QHash>
+
 #include <memory>
 #include <vector>
 
@@ -99,6 +101,17 @@ public:
     /// @c LayoutSourceProviderRegistry.h flags a redesign as the path
     /// forward for dynamic plugin loading rather than an incremental
     /// API addition.
+    ///
+    /// Exception contract: provider builder lambdas and factory
+    /// @c create() calls MUST NOT throw. The bundle performs no
+    /// rollback on partial failure — a thrown builder leaves
+    /// @c m_factories partially populated with already-consumed
+    /// entries and @c m_composite null, and the single-shot gate then
+    /// prevents any retry. Every in-tree builder is a trivial
+    /// @c make_unique around a factory that stores a borrowed pointer,
+    /// so this is currently impossible; any future builder that wants
+    /// fallible construction needs to return nullptr (the documented
+    /// "not hosted" signal) rather than throw.
     void buildFromRegistered(const FactoryContext& ctx);
 
     /// The unified composite over every registered source. Null until
@@ -133,7 +146,16 @@ private:
     std::vector<std::unique_ptr<ILayoutSource>> m_sources;
     /// Source-name → m_sources index. Populated during @c build();
     /// the underlying source pointer is borrowed from m_sources.
+    /// Kept in lockstep with @c m_sourceIndex (same entries, same
+    /// ordering) so the composite's iteration order — which mirrors
+    /// registration order — stays observable without a map walk.
     std::vector<QString> m_sourceNames;
+    /// Source-name → index in @c m_sources for O(1) @c source(name)
+    /// lookup. Populated during @c build(). Duplicate-name factories
+    /// are skipped before reaching this map, so every key maps to
+    /// exactly one index and @c source(name) never has to walk a
+    /// collision chain.
+    QHash<QString, std::size_t> m_sourceIndex;
     /// composite holds raw pointers into m_sources, so it must be
     /// destroyed first. Declaration order is load-bearing — never
     /// reorder. The destructor + move-assign clear composite's

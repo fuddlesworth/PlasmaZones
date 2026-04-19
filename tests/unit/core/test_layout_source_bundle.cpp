@@ -274,6 +274,33 @@ private Q_SLOTS:
         QCOMPARE(layouts[0].id, QStringLiteral("first"));
     }
 
+    void testBundle_addFactoryRejectsEmptyName()
+    {
+        // addFactory must reject factories that return an empty name(): the
+        // source(QString) lookup keys on the name, and an empty key would
+        // let a misconfigured factory silently route through public
+        // lookups. Asserts in debug, warn + drop in release. Run the
+        // release-path assertion here because Q_ASSERT_X aborts under
+        // QT_DEBUG.
+#ifndef QT_DEBUG
+        PhosphorLayout::LayoutSourceBundle bundle;
+        auto empty =
+            std::make_unique<FixtureSourceFactory>(QString(), QStringList{QStringLiteral("should-not-appear")});
+        bundle.addFactory(std::move(empty));
+        auto ok = std::make_unique<FixtureSourceFactory>(QStringLiteral("ok"), QStringList{QStringLiteral("ok1")});
+        bundle.addFactory(std::move(ok));
+        bundle.build();
+
+        QVERIFY(bundle.source(QString()) == nullptr);
+        QVERIFY(bundle.source(QStringLiteral("ok")) != nullptr);
+        const auto layouts = bundle.composite()->availableLayouts();
+        QCOMPARE(layouts.size(), 1);
+        QCOMPARE(layouts[0].id, QStringLiteral("ok1"));
+#else
+        QSKIP("Q_ASSERT_X aborts in debug builds — empty-name release behaviour covered on release runs");
+#endif
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // buildFromRegistered
     // ═══════════════════════════════════════════════════════════════════════

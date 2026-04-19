@@ -65,18 +65,18 @@ ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::IZoneLayoutRegistry* registr
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
-    // In production the factory registrar returns nullptr from its
-    // builder lambda when the ctx has no IZoneLayoutRegistry, so the
-    // source is never constructed with null — asserting in debug catches
-    // tests that accidentally pass nullptr instead of silently returning
-    // an empty list. Release builds keep the null-tolerance branch below
-    // for public API callers that legitimately want an empty source.
-    Q_ASSERT_X(m_registry, "ZonesLayoutSource",
-               "constructed with null IZoneLayoutRegistry — factory registrar should have returned nullptr instead");
-    // Mirror AutotileLayoutSource's pattern: self-wire the registry's
-    // unified contentsChanged signal (inherited from
-    // PhosphorLayout::ILayoutSourceRegistry) into our own, so callers
-    // don't have to bridge the registry's change signal manually.
+    // Null registry is a documented public-API case — the source then
+    // reports an empty layout list (mirrored in every query method
+    // below). In production the factory registrar returns nullptr from
+    // its builder lambda when the ctx has no IZoneLayoutRegistry, so
+    // this constructor is normally only reached with a valid registry;
+    // direct public-API callers that legitimately want an empty source
+    // rely on this branch. No debug-only assert — the null-tolerance
+    // contract in the header must hold in every build configuration.
+    //
+    // Self-wire the registry's unified contentsChanged signal (inherited
+    // from PhosphorLayout::ILayoutSourceRegistry) into our own, so
+    // callers don't have to bridge the registry's change signal manually.
     if (m_registry) {
         connect(m_registry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, this,
                 &PhosphorLayout::ILayoutSource::contentsChanged);
