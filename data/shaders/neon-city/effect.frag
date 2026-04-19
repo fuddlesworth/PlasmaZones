@@ -72,12 +72,16 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
     vec4 result = vec4(0.0);
 
     if (d < 0.0) {
-        vec2 sceneUv = channelUv(0, fragCoord);
+        vec2 sceneUv   = channelUv(0, fragCoord);
+        vec2 texelSize = 1.0 / max(iChannelResolution[0], vec2(1.0));
+        float pixelDepth = readDepth(sceneUv);
 
-        // ── Depth-of-field blur ─────────────────────────────
-        // Find nearest visible depth across a wide 3×3 lookup near screen
-        // center so focal depth doesn't flicker when the camera crosses a
-        // thin building and a distant one alternates.
+        // ── Depth-of-field — bokeh disc sampling ───────────
+        // Two concentric rings of 6 taps + center, with bright-sample
+        // weighting so neon signs and street lights become circular
+        // bokeh discs when out of focus instead of square box-blur.
+        // Focal depth picked from a wide 3×3 lookup near screen center
+        // so it doesn't flicker when the camera crosses a thin building.
         vec4 scene;
         if (dofStrength > 0.001) {
             float focalDepth = 1.0;
@@ -91,27 +95,77 @@ vec4 renderZone(vec2 fragCoord, vec4 rect, vec4 params, bool isHighlighted,
             }
             focalDepth = min(focalDepth, 0.6);
 
-            float pixelDepth = readDepth(sceneUv);
             float coc = abs(pixelDepth - focalDepth) * 2.0 * dofStrength;
 
-            vec4 blurred = vec4(0.0);
-            float total = 0.0;
-            vec2 texelSize = 1.0 / max(iChannelResolution[0], vec2(1.0));
-            for (int by = -1; by <= 1; by++) {
-                for (int bx = -1; bx <= 1; bx++) {
-                    vec2 offset = vec2(float(bx), float(by)) * texelSize * coc * 8.0;
-                    blurred += texture(iChannel0, sceneUv + offset);
-                    total += 1.0;
+            vec4 center = texture(iChannel0, sceneUv);
+            float cw = 1.0 + max(max(center.r, center.g), center.b);
+            vec4 bokeh = center * cw;
+            float total = cw;
+
+            const int RINGS = 2;
+            const int SAMPLES_PER_RING = 6;
+            for (int r = 1; r <= RINGS; r++) {
+                float radius = float(r) / float(RINGS);
+                for (int s = 0; s < SAMPLES_PER_RING; s++) {
+                    // Offset each ring's start angle so taps don't align
+                    // radially — gives the bokeh disc a fuller fill.
+                    float angle = (float(s) / float(SAMPLES_PER_RING)) * TAU
+                                + float(r) * 0.7;
+                    vec2 offset = vec2(cos(angle), sin(angle))
+                                * radius * texelSize * coc * 12.0;
+                    vec4 samp = texture(iChannel0, sceneUv + offset);
+                    // Bright samples weighted higher → neon highlights
+                    // expand into circular discs (true bokeh look) rather
+                    // than smearing uniformly.
+                    float w = 1.0 + max(max(samp.r, samp.g), samp.b);
+                    bokeh += samp * w;
+                    total += w;
                 }
             }
-            scene = blurred / total;
+            scene = bokeh / total;
         } else {
             scene = texture(iChannel0, sceneUv);
         }
 
+        vec3 sceneRgb = scene.rgb;
+
+        // ── Depth-edge silhouettes ──────────────────────────
+        // Sobel-light gradient on the depth buffer detects building
+        // outlines (against sky, against deeper buildings). Near edges
+        // glow brighter than far edges (atmospheric perspective); mids
+        // drive a subtle pulse. pixelDepth ≥ ~0.99 == sky/miss → skip.
+        if (pixelDepth < 0.99) {
+            float dL = readDepth(sceneUv - vec2(texelSize.x, 0.0));
+            float dR = readDepth(sceneUv + vec2(texelSize.x, 0.0));
+            float dU = readDepth(sceneUv - vec2(0.0, texelSize.y));
+            float dD = readDepth(sceneUv + vec2(0.0, texelSize.y));
+            float gx = dR - dL;
+            float gy = dD - dU;
+            float gradient = sqrt(gx * gx + gy * gy);
+            // Lower bound of 0.006 skips quantization noise on smooth
+            // building faces; upper bound saturates on sky silhouettes.
+            float edge = smoothstep(0.006, 0.04, gradient);
+            edge *= 1.0 - pixelDepth * 0.55;
+
+            vec3 silhouette = mix(accent, bassCol, 0.35)
+                            * edgeGlow * (1.0 + aMids * 0.4 + aBass * 0.25);
+            sceneRgb += silhouette * edge * mix(0.25, 0.7, vitality);
+        }
+
+        // ── Depth-based atmospheric haze ────────────────────
+        // Layered on top of the buffer's baked-in fog. Highlighted zones
+        // get less haze (≈0.18 ceiling) so they read as the focus while
+        // dimmed zones recede further into the city. Bass momentarily
+        // clears the haze on the kick.
+        float hazeStrength = mix(0.55, 0.18, vitality);
+        float hazeAmount   = pixelDepth * hazeStrength
+                           * (1.0 - clamp(aBass, 0.0, 1.0) * 0.35);
+        vec3 hazeColor = mix(bassCol * 0.35, accent * 0.45, pixelDepth);
+        hazeColor = mix(hazeColor, lightC * 0.4, clamp(aMids, 0.0, 1.0) * 0.3);
+        sceneRgb = mix(sceneRgb, hazeColor, clamp(hazeAmount, 0.0, 0.85));
+
         // Non-highlighted zones: desaturate + darken sampled scene so the
         // active zone clearly reads as the focus.
-        vec3 sceneRgb = scene.rgb;
         if (!isHighlighted) {
             float lum = dot(sceneRgb, vec3(0.2126, 0.7152, 0.0722));
             sceneRgb = mix(vec3(lum), sceneRgb, 0.45);
