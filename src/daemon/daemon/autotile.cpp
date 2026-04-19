@@ -120,8 +120,8 @@ void Daemon::updateAutotileScreens()
                 // without a per-screen override. The override here is an optimization.
                 const QString globalAlgo = m_autotileEngine->algorithm();
                 if (screenAlgo != globalAlgo && !overrides.contains(PerScreenKeys::MaxWindows)) {
-                    auto* screenAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(screenAlgo);
-                    auto* globalAlgoPtr = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(globalAlgo);
+                    auto* screenAlgoPtr = m_algorithmRegistry.get()->algorithm(screenAlgo);
+                    auto* globalAlgoPtr = m_algorithmRegistry.get()->algorithm(globalAlgo);
                     if (screenAlgoPtr) {
                         if (!globalAlgoPtr) {
                             qCDebug(lcDaemon) << "updateAutotileScreens: global algorithm" << globalAlgo
@@ -277,7 +277,7 @@ void Daemon::handleSnappingToAutotile()
     // Resolve algorithm from settings (this is a global enable, not per-desktop toggle)
     QString algoId = m_settings->defaultAutotileAlgorithm();
     if (algoId.isEmpty()) {
-        algoId = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+        algoId = PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId();
     }
     const QString autotileLayoutId = PhosphorLayout::LayoutId::makeAutotileId(algoId);
 

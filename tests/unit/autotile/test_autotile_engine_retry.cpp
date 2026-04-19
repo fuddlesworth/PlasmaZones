@@ -7,6 +7,7 @@
 #include <QTimer>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -31,7 +32,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        PhosphorTiles::AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // =========================================================================
@@ -40,7 +41,7 @@ private Q_SLOTS:
 
     void testRecalculateLayout_emptyScreenId_noTilingChanged()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -60,7 +61,7 @@ private Q_SLOTS:
 
     void testUnfloat_clearsMinSizeCache()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-unfloat-minsize");
 
@@ -95,7 +96,7 @@ private Q_SLOTS:
 
     void testUnfloat_minSizeNotClearedOnFloat()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-float-keep-minsize");
 
@@ -122,7 +123,7 @@ private Q_SLOTS:
 
     void testSetAutotileScreens_clearsRetryState()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenA = QStringLiteral("ScreenA");
         const QString screenB = QStringLiteral("ScreenB");
 
@@ -151,7 +152,7 @@ private Q_SLOTS:
 
     void testRetile_noWindows_emitsTilingChanged()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -172,7 +173,7 @@ private Q_SLOTS:
 
     void testRetile_nonAutotileScreen_noEmission()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};

@@ -25,6 +25,9 @@
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/ZoneDetector.h>
@@ -62,6 +65,8 @@
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "../common/screenidresolver.h"
+#include "../common/layoutbundlebuilder.h"
 
 namespace PlasmaZones {
 
@@ -71,29 +76,6 @@ namespace {
 // follow-up panel geometry requery after the debounced update completes).
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 } // anonymous namespace
-
-namespace {
-// Install the library-level screen-id resolver before any layouts load so
-// fromJson() can normalise legacy connector names ("DP-2") to the daemon's
-// EDID-based IDs ("LG:Model:Serial") during load. Installed on first Daemon
-// construction (a static local ensures it runs exactly once).
-struct InstallScreenIdResolver
-{
-    InstallScreenIdResolver()
-    {
-        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
-                return name;
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
-        });
-    }
-};
-void ensureScreenIdResolver()
-{
-    static InstallScreenIdResolver s_installer;
-    (void)s_installer;
-}
-} // namespace
 
 Daemon::Daemon(QObject* parent)
     : QObject(parent)
@@ -149,18 +131,43 @@ Daemon::Daemon(QObject* parent)
         m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
     });
 
+    // Construct the daemon-owned tile-algorithm registry up front so the
+    // layout-source bundle below can bind its autotile source to it. The
+    // registry was previously a process-global singleton; per-daemon
+    // ownership is the plugin-architecture-friendly shape (see
+    // project_plugin_based_compositor.md). Built-in algorithms register
+    // automatically in the constructor; scripted algorithms are loaded
+    // later by ScriptedAlgorithmLoader during init().
+    // Pass nullptr as Qt parent: the unique_ptr owns lifetime and the
+    // rest of this ctor follows that convention (see comment above on
+    // m_layoutManager et al.).
+    m_algorithmRegistry = std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr);
+
     // Build the layout sources here (rather than later in init()) because they
     // are thin wrappers — no I/O, no signal hookup — and consumers can ask for
     // layoutSource() any time after Daemon is constructed.  Population happens
     // lazily on first availableLayouts() call: the layout manager has loaded
-    // from disk by then, and the algorithm registry is populated by the
-    // PhosphorTiles::ScriptedAlgorithmLoader during init().
-    m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get());
-    // Forward the manager's layouts-changed signal into the zones source so
-    // the composite's contentsChanged fires when manual layouts are added /
-    // removed / renamed. Autotile side self-wires to AlgorithmRegistry.
-    connect(m_layoutManager.get(), &LayoutManager::layoutsChanged, m_layoutSources.zones.get(),
-            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    // from disk by then, and the algorithm registry is populated by
+    // ScriptedAlgorithmLoader during init().
+    //
+    // Auto-discovery pattern: every provider library that links into
+    // this process registers a builder in its static-init block. The
+    // daemon just publishes the registries it owns into the
+    // FactoryContext and calls buildFromRegistered (both steps are
+    // wrapped in buildStandardLayoutSourceBundle — shared with editor
+    // + settings so service additions touch one helper rather than
+    // three near-identical blocks). Adding a new engine library
+    // (the planned scrolling engine) is purely a library-side change
+    // — daemon source only edits if the new engine demands a service
+    // the daemon doesn't already publish here. ZonesLayoutSource and
+    // AutotileLayoutSource both self-wire to their registry's
+    // ILayoutSourceRegistry::contentsChanged signal, so no manual
+    // bridging is required after build.
+    buildStandardLayoutSourceBundle(m_layoutSources, m_layoutManager.get(), m_algorithmRegistry.get());
+    // Cache the bundle's autotile source once so the four init() wiring
+    // sites that need it don't each re-call source(QStringLiteral("autotile"))
+    // (one literal typo away from silently breaking preview-cache reuse).
+    m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 
     // Phase 4 sub-commit 7: wire Settings::animationProfile into
     // PhosphorProfileRegistry so QML `PhosphorMotionAnimation { profile: … }`
@@ -325,6 +332,7 @@ bool Daemon::init()
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
+
     // Load layouts (defaultLayout() reads settings internally)
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();
@@ -341,6 +349,8 @@ bool Daemon::init()
     // Configure overlay service with settings, layout manager, and default layout
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
+    m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
+    m_overlayService->setAutotileLayoutSource(m_autotileLayoutSource);
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
@@ -412,7 +422,8 @@ bool Daemon::init()
         m_prevAutotileEnabled = autotileNow;
 
         // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams = PhosphorTiles::AlgorithmRegistry::configuredPreviewParams();
+        const auto prevPreviewParams =
+            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
 
         // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
@@ -421,7 +432,7 @@ bool Daemon::init()
 
         // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
         // notify layout list consumers to refetch with updated previews
-        if (PhosphorTiles::AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
+        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
         }
 
@@ -478,7 +489,13 @@ bool Daemon::init()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
-    m_layoutAdaptor->setLayoutSource(m_layoutSources.composite.get());
+    m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
+    // Thread the bundle-owned autotile source through the adaptor's
+    // buildUnifiedLayoutList path so its preview cache survives across
+    // D-Bus calls. The full composite above drives the
+    // getLayoutPreview* methods; this separate pointer targets only the
+    // autotile enumeration slot — see LayoutAdaptor::setAutotileLayoutSource.
+    m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
@@ -548,19 +565,21 @@ bool Daemon::init()
                 m_windowDragAdaptor->clearForCompositorReconnect();
             });
 
-    // Initialize autotile engine
+    // Initialize autotile engine. Tile-algorithm registry was created
+    // earlier so the engine + its sub-services pick up the same
+    // per-daemon registry every other consumer uses.
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), this);
+                                                        m_screenManager.get(), m_algorithmRegistry.get(), this);
     // Attach the shared window registry so the engine queries current class
     // instead of parsing canonical windowIds — fixes Emby-style mid-session
     // class mutations (discussion #271).
     m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
-    // user-defined algorithms are registered in PhosphorTiles::AlgorithmRegistry before the
-    // engine resolves the configured algorithm ID.
-    m_scriptedAlgorithmLoader =
-        std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir));
+    // user-defined algorithms are registered in the daemon registry before
+    // the engine resolves the configured algorithm ID.
+    m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(
+        QString(ScriptedAlgorithmSubdir), m_algorithmRegistry.get());
     // When scripted algorithms change (hot-reload), notify layout list consumers
     connect(m_scriptedAlgorithmLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             [this]() {
@@ -689,7 +708,8 @@ bool Daemon::init()
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
-    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), this);
+    m_autotileAdaptor =
+        new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations
     new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),

@@ -34,31 +34,31 @@ private:
 
     PhosphorTiles::TilingAlgorithm* deck()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("deck"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("deck"));
     }
     PhosphorTiles::TilingAlgorithm* hDeck()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("horizontal-deck"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("horizontal-deck"));
     }
     PhosphorTiles::TilingAlgorithm* zen()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("zen"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("zen"));
     }
     PhosphorTiles::TilingAlgorithm* focusSidebar()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("focus-sidebar"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("focus-sidebar"));
     }
     PhosphorTiles::TilingAlgorithm* floatingCenter()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("floating-center"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("floating-center"));
     }
     PhosphorTiles::TilingAlgorithm* paper()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("paper"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("paper"));
     }
     PhosphorTiles::TilingAlgorithm* tatami()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("tatami"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("tatami"));
     }
 
 private Q_SLOTS:

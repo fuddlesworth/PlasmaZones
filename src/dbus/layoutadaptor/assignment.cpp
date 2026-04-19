@@ -291,9 +291,12 @@ QString LayoutAdaptor::getScreenStates()
         // Tiling algorithm — use resolved algorithm (includes fallback)
         const QString algoId = m_layoutManager->tilingAlgorithmForScreen(screenId, desktop, activity);
         obj[QLatin1String("algorithmId")] = algoId;
-        if (!algoId.isEmpty()) {
-            auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-            PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algoId);
+        // Null-tolerant: D-Bus clients can hit getScreenStates before the
+        // composition root finishes wiring setAlgorithmRegistry. Mirror the
+        // null-fallback the layoutId branch above does (algoId without a
+        // registry yields an empty algorithmName rather than a crash).
+        if (!algoId.isEmpty() && m_algorithmRegistry) {
+            PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algoId);
             obj[QLatin1String("algorithmName")] = algo ? algo->name() : algoId;
         } else {
             obj[QLatin1String("algorithmName")] = QString();
@@ -605,7 +608,7 @@ void LayoutAdaptor::setAssignmentEntry(const QString& screenId, int virtualDeskt
 
     // Validate tiling algorithm if non-empty
     if (!tilingAlgorithm.isEmpty()) {
-        if (!PhosphorTiles::AlgorithmRegistry::instance()->algorithm(tilingAlgorithm)) {
+        if (!m_algorithmRegistry || !m_algorithmRegistry->algorithm(tilingAlgorithm)) {
             qCWarning(lcDbusLayout) << "setAssignmentEntry: unknown tiling algorithm:" << tilingAlgorithm;
             return;
         }

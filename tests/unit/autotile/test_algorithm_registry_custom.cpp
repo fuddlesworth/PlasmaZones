@@ -73,7 +73,7 @@ private Q_SLOTS:
     void cleanupTestCase()
     {
         // Clean up any test algorithms that might still be registered
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QStringList testIds = {
             QStringLiteral("test-replace"),  QStringLiteral("test-signal"),     QStringLiteral("test-double-1"),
             QStringLiteral("test-double-2"), QStringLiteral("test-unregister"), QStringLiteral("test-order-remove"),
@@ -92,7 +92,7 @@ private Q_SLOTS:
 
     void testRegister_emptyIdIgnored()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered);
@@ -106,7 +106,7 @@ private Q_SLOTS:
 
     void testRegister_nullptrIgnored()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         int countBefore = registry->availableAlgorithms().size();
 
         QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered);
@@ -119,7 +119,7 @@ private Q_SLOTS:
 
     void testRegister_replacesExisting()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-replace");
 
         auto* algo1 = new CustomTestAlgorithm(QStringLiteral("First"));
@@ -140,7 +140,7 @@ private Q_SLOTS:
 
     void testRegister_signalEmitted()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-signal");
 
         QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered);
@@ -154,7 +154,7 @@ private Q_SLOTS:
 
     void testRegister_doubleRegistrationRejected()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QString id1 = QStringLiteral("test-double-1");
         const QString id2 = QStringLiteral("test-double-2");
 
@@ -179,7 +179,7 @@ private Q_SLOTS:
 
     void testUnregister_success()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-unregister");
 
         registry->registerAlgorithm(testId, new CustomTestAlgorithm());
@@ -196,7 +196,7 @@ private Q_SLOTS:
 
     void testUnregister_nonexistentReturnsFalse()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
 
         QSignalSpy spy(registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered);
         bool result = registry->unregisterAlgorithm(QStringLiteral("nonexistent-id"));
@@ -207,7 +207,7 @@ private Q_SLOTS:
 
     void testUnregister_removesFromOrder()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QString testId = QStringLiteral("test-order-remove");
 
         registry->registerAlgorithm(testId, new CustomTestAlgorithm());
@@ -223,7 +223,7 @@ private Q_SLOTS:
 
     void testOrder_preservedInAvailableAlgorithms()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
 
         // At least 15 built-in algorithms should be present (loaded from JS scripts)
@@ -249,7 +249,7 @@ private Q_SLOTS:
 
     void testOrder_matchesAllAlgorithms()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
         auto all = registry->allAlgorithms();
 
@@ -267,7 +267,7 @@ private Q_SLOTS:
 
     void testFunctionality_algorithmsWork()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         QRect screen(0, 0, 1920, 1080);
         PhosphorTiles::TilingState state(QStringLiteral("test"));
 

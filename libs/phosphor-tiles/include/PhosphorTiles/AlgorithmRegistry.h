@@ -4,11 +4,16 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+#include "AlgorithmPreviewParams.h"
 #include "AutotileConstants.h"
+#include "ITileAlgorithmRegistry.h"
 #include <QHash>
 #include <QLatin1String>
 #include <QList>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QObject>
+#include <QPointer>
 #include <QRect>
 #include <QString>
 #include <QStringList>
@@ -21,133 +26,88 @@ namespace PhosphorTiles {
 class TilingAlgorithm;
 
 /**
- * @brief Singleton registry for tiling algorithms
+ * @brief Concrete tiling-algorithm registry.
  *
- * AlgorithmRegistry provides factory access to all available tiling algorithms.
- * It manages algorithm lifecycle and provides discovery for UI components.
+ * Implements the @c ITileAlgorithmRegistry contract. Composition roots
+ * (daemon, editor, settings, tests) construct their own instance and
+ * inject it into every consumer that needs algorithm enumeration /
+ * lookup / preview-param access. There is no process-global singleton —
+ * plugin-based compositor/WM/shell deployment requires per-instance
+ * ownership so plugins cannot corrupt each other's registry state.
  *
- * Built-in algorithms are registered automatically on first access:
- * - BSP (default): Binary space partitioning
- * - Master-Stack: Classic master/stack layout
- * - Columns: Equal-width vertical columns
+ * Built-in algorithms (BSP, Master-Stack, Columns) register
+ * automatically in the constructor via the static
+ * @c pendingAlgorithmRegistrations list populated by
+ * @c AlgorithmRegistrar. Additional scripted algorithms are loaded by
+ * @c ScriptedAlgorithmLoader against an injected registry.
  *
- * All built-in algorithms are registered via @c builtinId JS scripts.
- *
- * Usage:
- * @code
- * auto *algo = AlgorithmRegistry::instance()->algorithm("master-stack");
- * if (algo) {
- *     auto zones = algo->calculateZones(windowCount, screenGeometry, state);
- * }
- * @endcode
- *
- * @note Thread Safety: The singleton instance() method uses Meyer's singleton
- *       pattern (C++11 static local), which is thread-safe. Read operations
- *       (algorithm(), availableAlgorithms(), hasAlgorithm()) are thread-safe.
- *       Registration/unregistration should only occur during initialization
- *       or from the main thread.
- *
- * @note Process scope: the singleton lives per-process. Daemon, editor, and
- *       settings each hold their own instance — registered algorithms and
- *       configured preview params do not cross process boundaries. Callers
- *       that need cross-process state (e.g. SettingsBridge seeding preview
- *       params on settings change) must invoke setConfiguredPreviewParams
- *       in each process that will render previews.
+ * @note Thread Safety: read operations (@c algorithm, @c availableAlgorithms,
+ *       @c hasAlgorithm) are thread-safe once construction has completed.
+ *       Registration/unregistration should only occur from the thread
+ *       that owns the registry (typically the main thread).
  *
  * @see TilingAlgorithm for the algorithm interface
- * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
+ * @see ITileAlgorithmRegistry for the abstract contract
  */
-class PHOSPHORTILES_EXPORT AlgorithmRegistry : public QObject
+class PHOSPHORTILES_EXPORT AlgorithmRegistry : public ITileAlgorithmRegistry
 {
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(AlgorithmRegistry)
 
 public:
     /**
-     * @brief Get the singleton instance
+     * @brief Early cleanup of all registered algorithms.
      *
-     * Creates the registry and registers built-in algorithms on first call.
+     * Wired to @c QCoreApplication::aboutToQuit so algorithm objects
+     * (especially @c ScriptedAlgorithm instances with @c QJSEngine
+     * internals) are destroyed while Qt is still fully alive, avoiding
+     * teardown crashes if an instance outlives @c QCoreApplication.
      *
-     * @return Pointer to the global AlgorithmRegistry instance
-     */
-    static AlgorithmRegistry* instance();
-
-    /**
-     * @brief Early cleanup of all registered algorithms
+     * Drains exclusively this registry's own pending @c deleteLater()
+     * algorithms (tracked in @c m_pendingDeletes), never the process-
+     * wide DeferredDelete queue. This narrow scoping is load-bearing
+     * after the singleton kill in PR #343: multiple registries
+     * (daemon, editor, settings) each connect to @c aboutToQuit, and a
+     * process-wide drain from one registry would force-delete pending
+     * @c deleteLater() events for unrelated subsystems whose owners
+     * have not yet run their teardown.
      *
-     * Connected to QCoreApplication::aboutToQuit() so that algorithm objects
-     * (especially ScriptedAlgorithm instances with QJSEngine internals) are
-     * destroyed while Qt is still fully alive, avoiding crashes during static
-     * destruction when the singleton outlives QCoreApplication.
+     * Safe to call from the destructor as well — idempotent after the
+     * first invocation.
      */
     void cleanup();
 
-    /**
-     * @brief Register a tiling algorithm
-     *
-     * The registry takes ownership of the algorithm. If an algorithm with
-     * the same ID already exists, the old one is deleted and replaced.
-     *
-     * @param id Unique identifier for the algorithm (e.g. QLatin1String("bsp"))
-     * @param algorithm Algorithm instance (ownership transferred)
-     */
-    void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm);
+    // ─── ITileAlgorithmRegistry implementation ─────────────────────────────
+
+    void registerAlgorithm(const QString& id, TilingAlgorithm* algorithm) override;
+    bool unregisterAlgorithm(const QString& id) override;
+    TilingAlgorithm* algorithm(const QString& id) const override;
+    QStringList availableAlgorithms() const override;
+    QList<TilingAlgorithm*> allAlgorithms() const override;
+    bool hasAlgorithm(const QString& id) const override;
+    TilingAlgorithm* defaultAlgorithm() const override;
 
     /**
-     * @brief Unregister and delete an algorithm
+     * @brief Get the library's recommended default algorithm ID.
      *
-     * @param id Algorithm ID to remove
-     * @return true if algorithm was found and removed
+     * Owned by the algorithm layer itself (not the application config
+     * layer) so the registry remains self-contained. Application config
+     * layers may expose their own user-facing default; that is
+     * intentionally independent.
+     *
+     * Returns the same id from any instance (type-level policy, not
+     * per-instance state) — the static helper @c defaultAlgorithmId()
+     * is still available for callers that don't hold a registry pointer.
      */
-    bool unregisterAlgorithm(const QString& id);
+    QString defaultAlgorithmId() const override
+    {
+        return staticDefaultAlgorithmId();
+    }
 
-    /**
-     * @brief Get an algorithm by ID
-     *
-     * @param id Algorithm identifier
-     * @return Pointer to algorithm, or nullptr if not found
-     */
-    TilingAlgorithm* algorithm(const QString& id) const;
-
-    /**
-     * @brief Get list of all registered algorithm IDs
-     *
-     * @return List of algorithm IDs in registration order
-     */
-    QStringList availableAlgorithms() const noexcept;
-
-    /**
-     * @brief Get all registered algorithm instances
-     *
-     * @return List of algorithm pointers (owned by registry)
-     */
-    QList<TilingAlgorithm*> allAlgorithms() const;
-
-    /**
-     * @brief Check if an algorithm is registered
-     *
-     * @param id Algorithm identifier
-     * @return true if algorithm exists
-     */
-    bool hasAlgorithm(const QString& id) const noexcept;
-
-    /**
-     * @brief Get the library's recommended default algorithm ID
-     *
-     * Owned by the algorithm layer itself (not the application config layer)
-     * so the registry remains self-contained.  Application config layers may
-     * expose their own user-facing default; that is intentionally independent.
-     */
-    static QString defaultAlgorithmId();
-
-    /**
-     * @brief Get the default algorithm instance
-     *
-     * Convenience method equivalent to algorithm(defaultAlgorithmId())
-     *
-     * @return Pointer to default algorithm
-     */
-    TilingAlgorithm* defaultAlgorithm() const;
+    /// Static accessor for the same id @c defaultAlgorithmId() returns.
+    /// Provided for callers that already had a hard dependency on the
+    /// concrete @c AlgorithmRegistry type.
+    static QString staticDefaultAlgorithmId();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Preview utilities for unified layout model (shared by zone selector,
@@ -160,94 +120,18 @@ public:
     /// preview) scale against the same canvas without drift.
     static constexpr int PreviewCanvasSize = 1000;
 
-    /**
-     * @brief Tiling parameters that affect algorithm preview generation
-     */
-    struct PreviewParams
-    {
-        QString algorithmId; ///< Active algorithm — maxWindows/splitRatio/masterCount apply only to this
-        int maxWindows = -1; ///< -1 = use algorithm default
-        int masterCount = -1; ///< -1 = use default (1)
-        qreal splitRatio = -1.0; ///< -1 = use algorithm default
+    // ─── Preview params (ITileAlgorithmRegistry overrides) ─────────────────
 
-        /**
-         * @brief Per-algorithm saved settings (masterCount, splitRatio)
-         *
-         * Generalised replacement for hard-coded centered-master fields.
-         * Key = algorithm ID, value = QVariantMap with "masterCount" (int)
-         * and "splitRatio" (qreal).
-         */
-        QHash<QString, QVariantMap> savedAlgorithmSettings;
+    void setPreviewParams(const AlgorithmPreviewParams& params) override;
+    const AlgorithmPreviewParams& previewParams() const noexcept override;
 
-        bool operator==(const PreviewParams& other) const;
-        bool operator!=(const PreviewParams& other) const
-        {
-            return !(*this == other);
-        }
-    };
-
-    /**
-     * @brief Set the user-configured tiling parameters for preview generation
-     *
-     * Call this when the user's tiling settings change — the next
-     * @c previewFromAlgorithm invocation will apply the updated master-count
-     * / split-ratio / max-windows values for the active algorithm and consult
-     * the per-algorithm saved entries for others. Emits @c previewParamsChanged
-     * if the value differs from the currently configured one.
-     *
-     * Instance-owned state — each AlgorithmRegistry tracks its own preview
-     * params. The static overloads below delegate to @c instance() for
-     * backwards compatibility.
-     */
-    void setPreviewParams(const PreviewParams& params);
-
-    /**
-     * @brief Get the configured preview parameters for this registry
-     */
-    const PreviewParams& previewParams() const noexcept;
-
-    /// Static backwards-compat shim — forwards to `instance()->setPreviewParams(...)`.
-    static void setConfiguredPreviewParams(const PreviewParams& params);
-
-    /// Static backwards-compat shim — forwards to `instance()->previewParams()`.
-    static const PreviewParams& configuredPreviewParams();
-
-Q_SIGNALS:
-    /**
-     * @brief Emitted when an algorithm is registered
-     *
-     * On replacement (re-registration of an existing ID),
-     * algorithmUnregistered(id, true) is emitted first, then
-     * algorithmRegistered(id). The new algorithm is already queryable
-     * via algorithm(id) when either signal fires.
-     *
-     * @param id The registered algorithm's ID
-     */
-    void algorithmRegistered(const QString& id);
-
-    /**
-     * @brief Emitted when an algorithm is unregistered or replaced
-     *
-     * @param id The algorithm's ID
-     * @param replacing true if a new algorithm has already been registered
-     *        under @p id (replacement case). false if the algorithm was
-     *        explicitly removed and @c algorithm(id) now returns nullptr.
-     */
-    void algorithmUnregistered(const QString& id, bool replacing);
-
-    /**
-     * @brief Emitted when the configured preview params change
-     *
-     * Fired from @c setConfiguredPreviewParams so preview caches
-     * (AutotileLayoutSource) can invalidate and re-render with the new
-     * master-count / split-ratio / per-algorithm saved values.
-     */
-    void previewParamsChanged();
-
-private:
+    /// Composition roots (daemon, editor, settings, tests) construct
+    /// their own registry instance. Built-in algorithms register
+    /// automatically in the constructor.
     explicit AlgorithmRegistry(QObject* parent = nullptr);
     ~AlgorithmRegistry() override;
 
+private:
     /**
      * @brief Register all built-in algorithms
      *
@@ -279,7 +163,15 @@ private:
     QHash<QString, TilingAlgorithm*> m_algorithms;
     QStringList m_registrationOrder; ///< Preserve order for UI
 
-    PreviewParams m_previewParams; ///< User-configured tiling parameters for previews
+    /// Algorithms detached from the registry via @c safeDeleteAlgorithm
+    /// and queued for deferred deletion. Tracked so @c cleanup can drain
+    /// only these objects' pending @c QEvent::DeferredDelete events
+    /// rather than the entire process-wide queue. @c QPointer auto-clears
+    /// when Qt finally processes the deferred-delete event, so stale
+    /// entries are harmless.
+    QList<QPointer<TilingAlgorithm>> m_pendingDeletes;
+
+    AlgorithmPreviewParams m_previewParams; ///< User-configured tiling parameters for previews
 };
 
 /**
@@ -293,12 +185,26 @@ struct PHOSPHORTILES_EXPORT PendingAlgorithmRegistration
 };
 
 /**
- * @brief Global list of pending algorithm registrations
+ * @brief Global list of pending algorithm registrations.
  *
- * This is separate from the template to ensure all registrations go to the
- * same list regardless of template instantiation.
+ * Separate from the template so every registrar instantiation appends
+ * to the same list regardless of template specialisation.
+ *
+ * @warning Callers MUST hold @c pendingAlgorithmRegistrationsMutex()
+ * across every access. The list is append-only at static-init time
+ * and snapshot-only at @c AlgorithmRegistry construction, so contention
+ * is rare — but with the singleton gone (PR #343) two registries can
+ * be constructed concurrently in the same process (daemon + KCM tests),
+ * and a Qt plugin loader spawning a worker thread that triggers
+ * @c dlopen of an algorithm library is a realistic future case.
  */
 PHOSPHORTILES_EXPORT QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations();
+
+/**
+ * @brief Mutex protecting @c pendingAlgorithmRegistrations(). Same
+ * Meyer's-singleton lifetime as the list itself.
+ */
+PHOSPHORTILES_EXPORT class QMutex& pendingAlgorithmRegistrationsMutex();
 
 /**
  * @brief Helper for static self-registration of built-in algorithms
@@ -329,7 +235,11 @@ public:
      */
     explicit AlgorithmRegistrar(const QString& id, int priority = 100)
     {
-        // Store in the global (non-template) pending list
+        // Store in the global (non-template) pending list. Locked so
+        // multiple algorithm libraries' static-init can run concurrently
+        // (Qt plugin loader on a worker thread, parallel test binaries
+        // sharing a process) without corrupting the QList.
+        QMutexLocker locker(&pendingAlgorithmRegistrationsMutex());
         pendingAlgorithmRegistrations().append({id, priority, []() {
                                                     return new T();
                                                 }});

@@ -12,13 +12,16 @@
 
 namespace PhosphorTiles {
 
+class ITileAlgorithmRegistry;
+
 /**
  * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
  *
  * Scans system and user algorithm directories for .js files, creates
- * ScriptedAlgorithm instances, and registers them with AlgorithmRegistry.
- * Watches directories and files via QFileSystemWatcher with debounced
- * refresh so that new/modified/deleted scripts are picked up automatically.
+ * ScriptedAlgorithm instances, and registers them with the injected
+ * ITileAlgorithmRegistry. Watches directories and files via
+ * QFileSystemWatcher with debounced refresh so that new/modified/
+ * deleted scripts are picked up automatically.
  *
  * The application injects the subdirectory name (relative to
  * `QStandardPaths::GenericDataLocation`) at construction — the library is
@@ -39,8 +42,13 @@ public:
      * @p subdirectory is a relative path (no leading slash) appended to
      * every `QStandardPaths::GenericDataLocation` entry. Pass the empty
      * string to disable all discovery (the loader becomes a no-op).
+     *
+     * @p registry is the tile-algorithm registry the loader registers
+     * discovered scripts against. Caller owns @p registry and must keep
+     * it alive for the loader's lifetime.
      */
-    explicit ScriptedAlgorithmLoader(const QString& subdirectory, QObject* parent = nullptr);
+    explicit ScriptedAlgorithmLoader(const QString& subdirectory, ITileAlgorithmRegistry* registry,
+                                     QObject* parent = nullptr);
     ~ScriptedAlgorithmLoader() override;
 
     /**
@@ -86,6 +94,7 @@ private:
     QStringList validatedJsFiles(const QString& dirPath, int maxFiles) const;
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
+    ITileAlgorithmRegistry* m_registry = nullptr; ///< Borrowed; owner outlives loader
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;
     /// Second follow-up rescan that fires @ref FollowupRescanMs after the

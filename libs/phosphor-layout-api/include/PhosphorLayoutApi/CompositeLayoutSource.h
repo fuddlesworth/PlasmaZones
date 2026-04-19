@@ -68,6 +68,14 @@ public:
     /// before its children go out of scope.
     void clearSources();
 
+    /// Drop every child source WITHOUT emitting @c contentsChanged.
+    /// Use from destructors / teardown paths where emitting a signal
+    /// into potentially-mid-destruction subscribers is undesirable.
+    /// @c LayoutSourceBundle's destructor uses this to break borrowed
+    /// pointers safely without notifying observers whose own destructors
+    /// may have already begun.
+    void clearSourcesSilent();
+
     QVector<LayoutPreview> availableLayouts() const override;
 
     LayoutPreview previewAt(const QString& id, int windowCount = DefaultPreviewWindowCount,

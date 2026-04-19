@@ -15,6 +15,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 
+#include "AutotileTestHelpers.h"
 #include "XdgEnvGuard.h"
 
 namespace PlasmaZones {
@@ -27,9 +28,15 @@ namespace TestHelpers {
  * data/algorithms/ directory, sets XDG env vars, and runs the PhosphorTiles::ScriptedAlgorithmLoader.
  * Restores the original environment on destruction via XdgEnvGuard.
  *
+ * Owns its own AlgorithmRegistry instance — replaces the previous use of
+ * the AlgorithmRegistry::instance() singleton, which has been removed for
+ * plugin-friendly per-process ownership. Tests that need access to the
+ * registry call @ref registry().
+ *
  * Usage in test class:
  *   ScriptedAlgoTestSetup m_scriptSetup;
  *   void initTestCase() { QVERIFY(m_scriptSetup.init(QStringLiteral(PZ_SOURCE_DIR))); }
+ *   // then: m_scriptSetup.registry()->algorithm(id);
  */
 class ScriptedAlgoTestSetup
 {
@@ -74,17 +81,33 @@ public:
         qputenv("XDG_DATA_DIRS", m_xdgRoot.path().toUtf8());
         qputenv("XDG_DATA_HOME", m_xdgRoot.path().toUtf8());
 
-        m_loader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"));
+        // Reuse the test-process-wide testRegistry() so engines built
+        // via createEngineWithWindows (or any direct AutotileEngine
+        // construction with testRegistry()) see the same registered
+        // algorithms this loader populates. The previous design owned
+        // a separate registry; that worked when AlgorithmRegistry was
+        // a singleton, but per-instance ownership means engines built
+        // against testRegistry() can't see scripts loaded into a
+        // different instance.
+        m_loader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QStringLiteral("plasmazones/algorithms"),
+                                                                            registry());
         m_loader->scanAndRegister();
 
         // Verify a minimum number of algorithms loaded to catch silent JS/builtin failures
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-        if (registry->availableAlgorithms().size() < 24) {
-            qWarning() << "ScriptedAlgoTestSetup: Only" << registry->availableAlgorithms().size()
+        if (registry()->availableAlgorithms().size() < 24) {
+            qWarning() << "ScriptedAlgoTestSetup: Only" << registry()->availableAlgorithms().size()
                        << "algorithms loaded, expected at least 24 (15 C++ builtins + 9 JS-native)";
             return false;
         }
         return true;
+    }
+
+    /// Borrowed access to the test-process algorithm registry. Same
+    /// instance as @c PlasmaZones::TestHelpers::testRegistry() — every
+    /// helper-using test sees the same set of registered algorithms.
+    PhosphorTiles::AlgorithmRegistry* registry() const
+    {
+        return PlasmaZones::TestHelpers::testRegistry();
     }
 
 private:

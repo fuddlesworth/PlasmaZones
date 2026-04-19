@@ -4,6 +4,8 @@
 #include "settingscontroller.h"
 
 #include "../common/layoutpreviewserialize.h"
+#include "../common/screenidresolver.h"
+#include "../common/layoutbundlebuilder.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
@@ -40,7 +42,9 @@ static void sortMergedLayoutList(QVariantList& list)
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -116,9 +120,12 @@ Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantM
 
 SettingsController::~SettingsController()
 {
-    // Disconnect all pending algorithm registration watchers — PhosphorTiles::AlgorithmRegistry
-    // is a singleton that outlives this object, so dangling connections would fire
-    // into a destroyed SettingsController.
+    // Disconnect all pending algorithm registration watchers. The registry
+    // is now owned by this controller (m_localAlgorithmRegistry) and is
+    // destroyed after this destructor body runs, so any in-flight watcher
+    // signal queued between here and ~unique_ptr would otherwise fire into
+    // a half-destructed SettingsController. Eager disconnect keeps that
+    // window closed regardless of member destruction order.
     for (auto it = m_algorithmWatchers.begin(); it != m_algorithmWatchers.end(); ++it) {
         const auto& connPtr = it.value();
         if (connPtr && *connPtr)
@@ -127,58 +134,45 @@ SettingsController::~SettingsController()
     m_algorithmWatchers.clear();
 }
 
-namespace {
-// Install the library-level screen-id resolver once per process so
-// Layout::fromJson() normalises legacy connector names ("DP-2") to
-// EDID-based IDs ("LG:Model:Serial") during load. Uses Phosphor::Screens::ScreenIdentity::idForName
-// which walks QGuiApplication::screens().
-void ensureScreenIdResolver()
-{
-    static const bool installed = [] {
-        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
-                return name;
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
-        });
-        return true;
-    }();
-    (void)installed;
-}
-} // namespace
+// ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
+// so daemon/editor/settings share the same install-once helper instead of
+// maintaining three parallel copies.
 
 SettingsController::SettingsController(QObject* parent)
-    : QObject((ensureScreenIdResolver(), parent))
+    : QObject(parent)
     , m_screenHelper(&m_settings, this)
+    , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get()))
 {
-    // Load the user's layouts immediately so localLayoutPreviews() returns
-    // a populated list on first call (before any QML query has had a
-    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
-    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
-    // and installs a QFileSystemWatcher so any subsequent disk changes
-    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
-    m_localLayoutManager->loadLayouts();
-    // Force a synchronous recalc over the primary screen so manual layouts
-    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
-    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
-    // referenceAspectRatio. Without this, settings-process previews render
-    // with zero-size rects for authored-pixel layouts. Daemon runs the
-    // same recalc in Daemon::init(); settings does it here because it owns
-    // an in-process LayoutManager independent of the daemon.
-    recalcLocalLayouts();
-    // Forward manager layouts-changed into the source so composite
-    // consumers (if any) see contentsChanged. Also re-run the recalc so
-    // future reads through the local source pick up current geometry.
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
-            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
-    // When the file watcher detects a layout change on disk, refresh
-    // m_layouts from the local composite (manual + autotile) so QML
-    // rebinds even if the daemon isn't broadcasting D-Bus signals (or is
-    // down). The async refresh through scheduleLayoutLoad() /
-    // loadLayoutsAsync() also fires from daemon-side D-Bus signals and
-    // replaces m_layouts with the D-Bus-enriched view when the daemon is
-    // up — these two paths converge at m_layouts.
+    // Install the library-level screen-id resolver before any layout load
+    // runs. First call initialises the static; subsequent constructions
+    // in the same process reuse it. Moved out of the ctor-initializer
+    // comma-operator trick so the intent is obvious at a glance —
+    // matches the daemon's handling.
+    ensureScreenIdResolver();
+
+    // Auto-discovery pattern: every linked provider library has
+    // already registered a builder via static-init. The KCM just
+    // publishes the registries it owns via the shared helper
+    // (buildStandardLayoutSourceBundle) so the context-wiring is the
+    // same across daemon/editor/settings. Adding a new engine library
+    // doesn't require editing this file unless the engine demands a
+    // service the KCM doesn't already publish.
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
+
+    // Wire the layoutsChanged handler BEFORE the initial loadLayouts() so
+    // any QFileSystemWatcher event landing in the window between load +
+    // connect (e.g. the daemon writing to ~/.local/share/plasmazones/layouts/
+    // mid-ctor) is handled. ZonesLayoutSource self-wires to the registry's
+    // unified ILayoutSourceRegistry::contentsChanged; future reads through
+    // the local source reflect current geometry once recalcLocalLayouts has
+    // run. When the file watcher detects a layout change on disk, refresh
+    // m_layouts from the local composite (manual + autotile) so QML rebinds
+    // even if the daemon isn't broadcasting D-Bus signals (or is down). The
+    // async refresh through scheduleLayoutLoad() / loadLayoutsAsync() also
+    // fires from daemon-side D-Bus signals and replaces m_layouts with the
+    // D-Bus-enriched view when the daemon is up — these two paths converge
+    // at m_layouts.
     connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
@@ -197,6 +191,22 @@ SettingsController::SettingsController(QObject* parent)
         }
     });
 
+    // Load the user's layouts immediately so localLayoutPreviews() returns
+    // a populated list on first call (before any QML query has had a
+    // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
+    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
+    // and installs a QFileSystemWatcher so any subsequent disk changes
+    // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
+    m_localLayoutManager->loadLayouts();
+    // Force a synchronous recalc over the primary screen so manual layouts
+    // with fixed-geometry zones have a non-empty lastRecalcGeometry() —
+    // ZonesLayoutSource reads that to populate LayoutPreview::zones and
+    // referenceAspectRatio. Without this, settings-process previews render
+    // with zero-size rects for authored-pixel layouts. Daemon runs the
+    // same recalc in Daemon::init(); settings does it here because it owns
+    // an in-process LayoutManager independent of the daemon.
+    recalcLocalLayouts();
+
     // Translate rendering backend display names once at construction
     for (const auto& name : PlasmaZones::ConfigDefaults::renderingBackendDisplayNames())
         m_renderingBackendDisplayNames.append(PzI18n::tr(name.toUtf8().constData()));
@@ -205,19 +215,27 @@ SettingsController::SettingsController(QObject* parent)
     m_startupRenderingBackend = m_settings.renderingBackend();
 
     // Load scripted algorithms so they appear in the algorithm dropdown.
-    // The daemon also creates its own PhosphorTiles::ScriptedAlgorithmLoader — the KCM runs
-    // in a separate process, so both need an independent loader to populate
-    // the shared PhosphorTiles::AlgorithmRegistry singleton within their respective processes.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir), this);
-    scriptLoader->scanAndRegister();
+    // The daemon owns its own AlgorithmRegistry + loader; the KCM runs in
+    // a separate process and binds to its own per-process registry
+    // (m_localAlgorithmRegistry) so picker-side previews stay live even
+    // when the daemon is down.
+    //
+    // Owned by unique_ptr (not parented to `this`) so reverse member-
+    // destruction tears the loader down BEFORE m_localAlgorithmRegistry.
+    // Parenting to `this` would defer destruction to ~QObject, which runs
+    // AFTER the registry's unique_ptr has already been reset — a UAF in
+    // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
+    m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
+                                                                              m_localAlgorithmRegistry.get());
+    m_scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Emit both signals: availableAlgorithmsChanged for algorithm-specific
     // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
     // (the layouts list includes autotile entries from the registry).
-    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::availableAlgorithmsChanged);
-    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::layoutsChanged);
 
     // Listen for external settings changes from the daemon
@@ -810,10 +828,10 @@ void SettingsController::loadLayoutsAsync()
 QVariantList SettingsController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (!m_localSources.composite) {
+    if (!m_localSources.composite()) {
         return list;
     }
-    const auto previews = m_localSources.composite->availableLayouts();
+    const auto previews = m_localSources.composite()->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
         list.append(toVariantMap(preview));
@@ -843,10 +861,10 @@ void SettingsController::recalcLocalLayouts()
 
 QVariantMap SettingsController::localLayoutPreview(const QString& id, int windowCount)
 {
-    if (id.isEmpty() || !m_localSources.composite) {
+    if (id.isEmpty() || !m_localSources.composite()) {
         return {};
     }
-    const auto preview = m_localSources.composite->previewAt(id, windowCount);
+    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }
@@ -2398,7 +2416,7 @@ QVariantMap SettingsController::getStagedAssignment(const QString& screenName, i
 QVariantList SettingsController::availableAlgorithms() const
 {
     QVariantList algorithms;
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     for (const QString& id : registry->availableAlgorithms()) {
         PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(id);
         if (algo) {
@@ -2426,7 +2444,7 @@ QVariantList SettingsController::availableAlgorithms() const
 
 QVariantList SettingsController::customParamsForAlgorithm(const QString& algorithmId) const
 {
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return {};
@@ -2457,7 +2475,7 @@ void SettingsController::setCustomParam(const QString& algorithmId, const QStrin
     }
 
     // Validate paramName exists in the algorithm's declared custom params
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->supportsCustomParams()) {
         return;
@@ -2536,7 +2554,7 @@ QVariantMap SettingsController::savedCustomParams(const QString& algorithmId) co
 QVariantList SettingsController::generateAlgorithmPreview(const QString& algorithmId, int windowCount,
                                                           double splitRatio, int masterCount) const
 {
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         return {};
@@ -2628,7 +2646,7 @@ QString SettingsController::scriptedFilePath(const QString& algorithmId) const
 {
     if (algorithmId.isEmpty())
         return QString();
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo)
         return QString();
@@ -2657,7 +2675,7 @@ void SettingsController::watchForAlgorithmRegistration(const QString& expectedId
     // Cancel any existing watcher for this ID to prevent stacking
     cancelAlgorithmWatcher(expectedId);
 
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     auto conn = std::make_shared<QMetaObject::Connection>();
     m_algorithmWatchers[expectedId] = conn;
     *conn = connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
@@ -2740,7 +2758,7 @@ bool SettingsController::deleteAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo || !algo->isUserScript()) {
         qCWarning(lcCore) << "Cannot delete algorithm — not a user script:" << algorithmId;
@@ -2793,7 +2811,7 @@ bool SettingsController::duplicateAlgorithm(const QString& algorithmId)
         return false;
     }
 
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_localAlgorithmRegistry.get();
     PhosphorTiles::TilingAlgorithm* algo = registry->algorithm(algorithmId);
     if (!algo) {
         Q_EMIT algorithmOperationFailed(PzI18n::tr("Cannot duplicate — algorithm is no longer registered."));

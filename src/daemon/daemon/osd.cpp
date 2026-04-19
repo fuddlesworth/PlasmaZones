@@ -215,7 +215,7 @@ void Daemon::showContextDisabledOsd(const QString& screenId, int desktop, const 
 
 void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId)
 {
-    auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
+    auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDaemon) << "OSD: algorithm not found, algorithmId=" << algorithmId;
         return;
@@ -249,8 +249,8 @@ void Daemon::showLayoutOsdForAlgorithm(const QString& algorithmId, const QString
             // overlay expects `{zoneNumber, relativeGeometry:{x,y,w,h},
             // id, name, useCustomColors}` — we project the preview's zones
             // directly without going through a second preview-generation path.
-            const PhosphorLayout::LayoutPreview preview =
-                PhosphorTiles::previewFromAlgorithm(algorithmId, algo, windowCount > 0 ? windowCount : -1);
+            const PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(
+                algorithmId, algo, windowCount > 0 ? windowCount : -1, m_algorithmRegistry.get());
             QVariantList zones;
             zones.reserve(preview.zones.size());
             for (int i = 0; i < preview.zones.size(); ++i) {
@@ -451,7 +451,7 @@ void Daemon::showOsdForAllScreens(int desktop, const QString& activity)
         const QString assignmentId = m_layoutManager->assignmentIdForScreen(screenId, desktop, activity);
         if (PhosphorLayout::LayoutId::isAutotile(assignmentId)) {
             const QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(assignmentId);
-            auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algoId);
+            auto* algo = m_algorithmRegistry.get()->algorithm(algoId);
             const QString displayName = algo ? algo->name() : algoId;
             showAlgorithmOsdDeferred(algoId, displayName, screenId);
         } else {

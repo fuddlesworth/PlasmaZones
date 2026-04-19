@@ -94,6 +94,14 @@ pz_add_test(test_tiling_algo_bsp autotile/test_tiling_algo_bsp.cpp)
 target_compile_definitions(test_tiling_algo_bsp PRIVATE "PZ_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\"")
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# core/ — PhosphorLayoutApi LayoutSourceBundle + FactoryContext
+# ═══════════════════════════════════════════════════════════════════════════════
+# Covers the PR #343 plugin-discovery API directly: FactoryContext
+# set/get, bundle lifecycle, duplicate-name handling, priority sort, and
+# the ~LayoutSourceBundle "no spurious emit" guarantee.
+pz_add_test(test_layout_source_bundle core/test_layout_source_bundle.cpp)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # autotile/ — Algorithm Registry Tests
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_algorithm_registry autotile/test_algorithm_registry.cpp)

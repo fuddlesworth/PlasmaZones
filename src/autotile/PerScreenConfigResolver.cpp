@@ -4,6 +4,7 @@
 #include "PerScreenConfigResolver.h"
 #include "AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "AutotileConfig.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
@@ -60,7 +61,7 @@ void PerScreenConfigResolver::applyPerScreenConfig(const QString& screenId, cons
     it = overrides.constFind(QStringLiteral("Algorithm"));
     if (it != overrides.constEnd()) {
         QString algoId = it->toString();
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_engine->algorithmRegistry();
         PhosphorTiles::TilingAlgorithm* newAlgo = registry->algorithm(algoId);
         if (newAlgo) {
             if (!overrides.contains(QStringLiteral("SplitRatio"))) {
@@ -243,7 +244,7 @@ int PerScreenConfigResolver::effectiveMaxWindows(const QString& screenId) const
     //    explicitly customized global maxWindows away from the global algo's default.
     const QString screenAlgo = effectiveAlgorithmId(screenId);
     if (screenAlgo != m_engine->m_algorithmId) {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_engine->algorithmRegistry();
         auto* screenAlgoPtr = registry->algorithm(screenAlgo);
         auto* globalAlgoPtr = registry->algorithm(m_engine->m_algorithmId);
         if (screenAlgoPtr) {
@@ -279,7 +280,7 @@ QString PerScreenConfigResolver::effectiveAlgorithmId(const QString& screenId) c
 
 PhosphorTiles::TilingAlgorithm* PerScreenConfigResolver::effectiveAlgorithm(const QString& screenId) const
 {
-    return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(effectiveAlgorithmId(screenId));
+    return m_engine->algorithmRegistry()->algorithm(effectiveAlgorithmId(screenId));
 }
 
 } // namespace PlasmaZones

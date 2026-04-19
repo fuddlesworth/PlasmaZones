@@ -34,15 +34,15 @@ private:
 
     PhosphorTiles::TilingAlgorithm* cascade()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("cascade"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("cascade"));
     }
     PhosphorTiles::TilingAlgorithm* stair()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("stair"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("stair"));
     }
     PhosphorTiles::TilingAlgorithm* spread()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("spread"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("spread"));
     }
 
 private Q_SLOTS:

@@ -22,6 +22,10 @@ namespace PhosphorLayout {
 class ILayoutSource;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PhosphorZones {
 class Layout;
 }
@@ -53,6 +57,23 @@ public:
     void setVirtualDesktopManager(VirtualDesktopManager* vdm);
     void setActivityManager(ActivityManager* am);
     void setSettings(ISettings* settings);
+
+    /// Inject the daemon-owned tile-algorithm registry — required for
+    /// autotile entries in @ref getLayoutList and @ref getLayout.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, @ref getLayoutList reuses its preview cache across calls
+    /// instead of constructing a transient source per call. The existing
+    /// @ref setLayoutSource handles the composite used by the
+    /// @c getLayoutPreview* D-Bus surface separately; this setter threads
+    /// the autotile-specific source to the @c buildUnifiedLayoutList path.
+    ///
+    /// @note Expected to be called at most once after construction. The
+    /// adaptor does not subscribe to the source's own signals — match the
+    /// "set-once" discipline used by every other setAutotileLayoutSource
+    /// call site (UnifiedLayoutController, OverlayService, …).
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     /**
      * @brief Wire in the source-agnostic ILayoutSource bridge.
@@ -450,7 +471,12 @@ private:
     ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
     PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
+    /// Autotile-specific source used for buildUnifiedLayoutList preview-cache reuse.
+    /// Separate from m_layoutSource (which is the full composite used for
+    /// getLayoutPreview* D-Bus output).
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
 
     // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —
     // the KCM initiated the change and doesn't need the echo back.

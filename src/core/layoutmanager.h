@@ -23,10 +23,17 @@ namespace PlasmaZones {
  * Central component for zone layouts: loading/saving, screen/desktop/activity
  * assignment, keyboard shortcuts, and built-in templates.
  *
- * Inherits QObject for signals and PhosphorZones::ILayoutManager for the interface contract.
- * PhosphorZones::ILayoutManager avoids QObject to prevent signal shadowing issues.
+ * Inherits @c PhosphorZones::ILayoutManager, which brings in a single
+ * QObject base via its @c IZoneLayoutRegistry sibling (which inherits
+ * @c PhosphorLayout::ILayoutSourceRegistry → @c QObject). No direct
+ * @c QObject base is needed — adding one would yield two QObject
+ * subobjects and break @c moc. The concrete @c layoutsChanged /
+ * @c activeLayoutChanged / etc. signals below are declared here; the
+ * inherited @c contentsChanged signal (from @c ILayoutSourceRegistry)
+ * is forwarded whenever @c layoutsChanged fires so @c ZonesLayoutSource
+ * auto-refreshes.
  */
-class PLASMAZONES_EXPORT LayoutManager : public QObject, public PhosphorZones::ILayoutManager
+class PLASMAZONES_EXPORT LayoutManager : public PhosphorZones::ILayoutManager
 {
     Q_OBJECT
 

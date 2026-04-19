@@ -4,7 +4,7 @@
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
-#include <PhosphorZones/ILayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
@@ -17,7 +17,7 @@
 namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               PhosphorZones::ILayoutRegistry* layoutRegistry,
+                               PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
                                Phosphor::Screens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
@@ -51,21 +51,33 @@ OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDet
 
 void OverlayAdaptor::showOverlay()
 {
+    if (!m_overlayService) {
+        qCWarning(lcDbus) << "showOverlay: overlay service not wired";
+        return;
+    }
     m_overlayService->show();
 }
 
 void OverlayAdaptor::hideOverlay()
 {
+    if (!m_overlayService) {
+        qCWarning(lcDbus) << "hideOverlay: overlay service not wired";
+        return;
+    }
     m_overlayService->hide();
 }
 
 bool OverlayAdaptor::isOverlayVisible()
 {
-    return m_overlayService->isVisible();
+    return m_overlayService ? m_overlayService->isVisible() : false;
 }
 
 void OverlayAdaptor::highlightZone(const QString& zoneId)
 {
+    if (!m_overlayService || !m_zoneDetector) {
+        qCWarning(lcDbus) << "highlightZone: overlay service or zone detector not wired";
+        return;
+    }
     auto* zone = DbusHelpers::getZoneFromActiveLayout(m_layoutRegistry, zoneId, QStringLiteral("highlight zone"));
     if (!zone) {
         return;
@@ -84,6 +96,11 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
 
     if (!m_layoutRegistry || !m_layoutRegistry->activeLayout()) {
         qCWarning(lcDbus) << "highlightZones: no active layout";
+        return;
+    }
+
+    if (!m_overlayService || !m_zoneDetector) {
+        qCWarning(lcDbus) << "highlightZones: overlay service or zone detector not wired";
         return;
     }
 
@@ -106,6 +123,9 @@ void OverlayAdaptor::highlightZones(const QStringList& zoneIds)
 
 void OverlayAdaptor::clearHighlight()
 {
+    if (!m_zoneDetector) {
+        return;
+    }
     m_zoneDetector->clearHighlights();
 }
 
@@ -131,23 +151,37 @@ void OverlayAdaptor::showShaderPreview(int x, int y, int width, int height, cons
                                        const QString& shaderId, const QString& shaderParamsJson,
                                        const QString& zonesJson)
 {
+    if (!m_overlayService) {
+        qCWarning(lcDbus) << "showShaderPreview: overlay service not wired";
+        return;
+    }
     m_overlayService->showShaderPreview(x, y, width, height, screenId, shaderId, shaderParamsJson, zonesJson);
 }
 
 void OverlayAdaptor::updateShaderPreview(int x, int y, int width, int height, const QString& shaderParamsJson,
                                          const QString& zonesJson)
 {
+    if (!m_overlayService) {
+        return;
+    }
     m_overlayService->updateShaderPreview(x, y, width, height, shaderParamsJson, zonesJson);
 }
 
 void OverlayAdaptor::hideShaderPreview()
 {
+    if (!m_overlayService) {
+        return;
+    }
     m_overlayService->hideShaderPreview();
 }
 
 bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList& emptyZones,
                                     const SnapAssistCandidateList& candidates)
 {
+    if (!m_overlayService) {
+        qCWarning(lcDbus) << "showSnapAssist: overlay service not wired";
+        return false;
+    }
     // Respect master toggle — don't show snap assist when the feature is disabled
     if (m_settings && !m_settings->snapAssistFeatureEnabled()) {
         return false;
@@ -184,16 +218,22 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList
 
 void OverlayAdaptor::hideSnapAssist()
 {
+    if (!m_overlayService) {
+        return;
+    }
     m_overlayService->hideSnapAssist();
 }
 
 bool OverlayAdaptor::isSnapAssistVisible()
 {
-    return m_overlayService->isSnapAssistVisible();
+    return m_overlayService ? m_overlayService->isSnapAssistVisible() : false;
 }
 
 void OverlayAdaptor::setSnapAssistThumbnail(const QString& compositorHandle, const QString& dataUrl)
 {
+    if (!m_overlayService) {
+        return;
+    }
     m_overlayService->setSnapAssistThumbnail(compositorHandle, dataUrl);
 }
 

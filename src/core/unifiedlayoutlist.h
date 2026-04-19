@@ -31,9 +31,17 @@
 #include <QVariantMap>
 #include <QVector>
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
 namespace PhosphorZones {
 class ILayoutManager;
 class Layout;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
 }
 
 namespace PlasmaZones {
@@ -48,10 +56,24 @@ using ::PlasmaZones::IOrderingSettings;
 
 /**
  * @brief Build list of all available layouts (manual, and optionally autotile)
+ *
+ * When @p includeAutotile is true the helper needs a way to enumerate
+ * autotile previews. It picks the input as follows:
+ *   1. @p autotileSource — a long-lived @c PhosphorLayout::ILayoutSource
+ *      (typically the autotile source owned by a
+ *      @c PhosphorLayout::LayoutSourceBundle) whose internal preview cache
+ *      is reused across calls. Pass the composition root's bundle source
+ *      here when available — this is the fast path.
+ *   2. @p algorithmRegistry — fallback. When @p autotileSource is null
+ *      the helper constructs a transient @c AutotileLayoutSource over the
+ *      registry for this one call. Cache is discarded between calls.
+ * Either must be non-null when @p includeAutotile is true; the registry
+ * is acceptable for code paths that don't yet hold a bundle reference.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, bool includeAutotile = false,
-                       const QStringList& customOrder = {});
+buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
+                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr);
 
 /**
  * @brief Build filtered list of layouts visible in the given context
@@ -65,12 +87,16 @@ buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, bool includ
  * they are moved to the end of the list so the selector can show them in a
  * collapsed "Other" section. The `recommended` field in the returned entry
  * indicates whether the layout matches the current screen's aspect ratio.
+ *
+ * See the non-filtered overload for @p autotileSource / @p algorithmRegistry
+ * semantics — same fallback rules apply.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
-                       const QString& activity, bool includeManual = true, bool includeAutotile = true,
-                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
-                       const QStringList& customOrder = {});
+buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
+                       int virtualDesktop, const QString& activity, bool includeManual = true,
+                       bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+                       const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr);
 
 /**
  * @brief Build a combined custom order list from settings

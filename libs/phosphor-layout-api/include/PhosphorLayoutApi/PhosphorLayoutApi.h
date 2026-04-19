@@ -12,5 +12,9 @@
 #include <PhosphorLayoutApi/EdgeGaps.h>
 #include <PhosphorLayoutApi/GapKeys.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
+#include <PhosphorLayoutApi/ILayoutSourceFactory.h>
+#include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
+#include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>

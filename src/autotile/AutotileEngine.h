@@ -96,6 +96,7 @@ class WindowTrackingService;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
 class TilingAlgorithm;
 class TilingState;
 }
@@ -123,8 +124,15 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IEngineLifecycl
 
 public:
     explicit AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                            Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
+                            Phosphor::Screens::ScreenManager* screenManager,
+                            PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileEngine() override;
+
+    /// The injected tile-algorithm registry. Borrowed — owner outlives the engine.
+    PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry() const
+    {
+        return m_algorithmRegistry;
+    }
 
     /**
      * @brief Wire up the shared WindowRegistry.
@@ -1295,6 +1303,7 @@ private:
     WindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     WindowRegistry* m_windowRegistry = nullptr; ///< Shared registry for class lookups; not owned
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives engine
     std::unique_ptr<AutotileConfig> m_config;
     std::unique_ptr<PerScreenConfigResolver> m_configResolver;
     std::unique_ptr<NavigationController> m_navigation;

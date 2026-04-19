@@ -31,19 +31,19 @@ private:
 
     PhosphorTiles::TilingAlgorithm* spiral()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("spiral"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("spiral"));
     }
     PhosphorTiles::TilingAlgorithm* dwindleAlgo()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle"));
     }
     PhosphorTiles::TilingAlgorithm* monocle()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("monocle"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("monocle"));
     }
     PhosphorTiles::TilingAlgorithm* rows()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("rows"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("rows"));
     }
 
 private Q_SLOTS:
@@ -80,7 +80,7 @@ private Q_SLOTS:
     void testDwindleMemory_zeroWindows()
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        auto* dwMem = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
+        auto* dwMem = m_scriptSetup.registry()->algorithm(QLatin1String("dwindle-memory"));
         QVERIFY(dwMem != nullptr);
         QVERIFY(
             dwMem->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))

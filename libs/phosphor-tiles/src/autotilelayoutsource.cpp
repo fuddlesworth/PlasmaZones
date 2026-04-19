@@ -7,11 +7,13 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 
 #include "tileslogging.h"
 
+#include <QMutexLocker>
 #include <QRect>
 #include <QRectF>
 
@@ -47,6 +49,14 @@ QString makePreviewId(const QString& algorithmId)
 
 QString cacheKey(const QString& algorithmId, int windowCount)
 {
+    // The '|' separator is unambiguous because AlgorithmRegistry's
+    // id-charset validator (see registerAlgorithm in algorithmregistry.cpp)
+    // rejects '|' in algorithm ids. Removing that validator without
+    // updating this cache key construction would let two different
+    // (id, count) pairs collide on the same cache slot — silently
+    // returning the wrong preview. If the validator changes, switch
+    // here to a multi-field key (e.g. QPair-keyed hash) at the same
+    // time.
     return algorithmId + QLatin1Char('|') + QString::number(windowCount);
 }
 
@@ -54,11 +64,24 @@ QString cacheKey(const QString& algorithmId, int windowCount)
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
                                                    PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::AlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!algorithm || algorithmId.isEmpty()) {
         return preview;
+    }
+    // PR #343 killed the AlgorithmRegistry singleton specifically so every
+    // preview computation goes through an explicit, injected registry.
+    // Q_ASSERT_X in debug catches silent null-registry calls that would
+    // render with built-in defaults instead of the user's live preview
+    // params; release builds fall back to defaults (non-fatal parity with
+    // the previous behaviour) but a warn lets us see it in logs.
+    Q_ASSERT_X(registry, "previewFromAlgorithm",
+               "null ITileAlgorithmRegistry — preview will render with built-in defaults rather than user's saved "
+               "master-count / split-ratio / maxWindows tuning");
+    if (!registry) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "previewFromAlgorithm: null registry for algorithm" << algorithmId
+                                             << "— falling back to built-in defaults";
     }
 
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
@@ -67,14 +90,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     // previews reflect the user's saved master-count / split-ratio / max-windows
     // tuning. Active algorithm gets the global configured values; other
     // algorithms fall back to their per-algorithm saved entry, then to the
-    // algorithm's own defaults. Fall back to AlgorithmRegistry::instance()
-    // when no registry is provided.
+    // algorithm's own defaults.
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     qreal splitRatio = algorithm->defaultSplitRatio();
     int effectiveCount = windowCount;
-    if (!registry) {
-        registry = PhosphorTiles::AlgorithmRegistry::instance();
-    }
     if (registry) {
         const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
@@ -122,8 +141,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     preview.algorithm = buildMetadata(algorithm);
     // Built-in C++ algorithms and system-installed scripts are system
     // entries; user scripts are not. Consumers should not recompute this
-    // — they treat LayoutPreview::isSystem as authoritative.
-    preview.isSystem = !preview.algorithm->isScripted || !preview.algorithm->isUserScript;
+    // — they treat LayoutPreview::isSystem as authoritative. Parenthesised
+    // form so the !(scripted ∧ user-script) intent is unambiguous and a
+    // future flag flip can't quietly invert the expression.
+    preview.isSystem = !(preview.algorithm->isScripted && preview.algorithm->isUserScript);
 
     preview.zones.reserve(rects.size());
     preview.zoneNumbers.reserve(rects.size());
@@ -142,7 +163,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
 }
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::AlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     if (!algorithm) {
         return {};
@@ -162,31 +183,28 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
 
-AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry, QObject* parent)
+AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry* registry, QObject* parent)
     : PhosphorLayout::ILayoutSource(parent)
-    , m_registry(registry ? registry : PhosphorTiles::AlgorithmRegistry::instance())
+    , m_registry(registry)
 {
+    // Null registry is a documented public-API case — the source then
+    // reports an empty layout list (mirrored in every query method
+    // below). In production the factory registrar returns nullptr from
+    // its builder lambda when the ctx has no ITileAlgorithmRegistry, so
+    // this constructor is normally only reached with a valid registry;
+    // direct public-API callers that legitimately want an empty source
+    // rely on this branch. No debug-only assert — the null-tolerance
+    // contract in the header must hold in every build configuration
+    // (parity with ZonesLayoutSource).
     if (m_registry) {
-        // Seed the algorithm-count cache — insertCacheEntry() relies on it
-        // for its FIFO cap, and the first invalidation signal may not fire
-        // until long after the first availableLayouts() call.
-        m_algorithmCountCache = m_registry->availableAlgorithms().size();
-        // Every invalidation path must emit contentsChanged — wire all three
-        // registry signals to the same slot so the emit is owned by a single
-        // function (invalidateCache) instead of duplicated in each lambda.
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
-            invalidateCache();
-        });
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this,
-                [this](const QString&, bool /*replacing*/) {
-                    invalidateCache();
-                });
-        // User-tuned master-count / split-ratio updates must invalidate the
-        // preview cache — otherwise the next availableLayouts() returns
-        // geometry rendered against the old state.
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::previewParamsChanged, this, [this]() {
-            invalidateCache();
-        });
+        // Subscribe to the unified ILayoutSourceRegistry::contentsChanged
+        // signal — AlgorithmRegistry already bridges its three specific
+        // mutation signals (algorithmRegistered / algorithmUnregistered /
+        // previewParamsChanged) into that single emission, so the cache
+        // invalidates exactly once per registry change regardless of
+        // which mutation caused it.
+        connect(m_registry, &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this,
+                &AutotileLayoutSource::invalidateCache);
     }
 }
 
@@ -194,26 +212,46 @@ AutotileLayoutSource::~AutotileLayoutSource() = default;
 
 void AutotileLayoutSource::invalidateCache()
 {
-    m_cache.clear();
-    m_cacheOrder.clear();
-    // Refresh the cached algorithm count at the same time — the registry's
-    // algorithm set is exactly what just changed, and this is the only path
-    // where the count can drift. availableAlgorithms() allocates a fresh
-    // QStringList so we pay the cost here (on change) rather than on every
-    // insertCacheEntry().
-    m_algorithmCountCache = m_registry ? m_registry->availableAlgorithms().size() : 0;
+    {
+        QMutexLocker locker(&m_cacheMutex);
+        m_cache.clear();
+        m_cacheOrder.clear();
+    }
     // All invalidation paths converge here, so emitting once guarantees no
-    // listener misses a rebuild regardless of which signal fired.
+    // listener misses a rebuild regardless of which signal fired. Emit
+    // outside the lock — Qt direct connections deliver synchronously, and
+    // a slot that re-enters the source through availableLayouts() would
+    // otherwise deadlock on m_cacheMutex.
     Q_EMIT contentsChanged();
 }
 
 void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLayout::LayoutPreview& preview) const
 {
+    // Caller must already hold m_cacheMutex (availableLayouts / previewAt
+    // both lock around the cache lookup + insert pair).
     // FIFO cap: registered-algorithm-count × 10 entries. Enough headroom for
     // the layout-picker UI (one preview per algorithm × a handful of
     // windowCount values) while preventing unbounded growth if a caller
     // probes previewAt() with a wide range of window counts.
-    const int cap = qMax(10, m_algorithmCountCache * 10);
+    //
+    // Read the count live from the registry rather than caching: QStringList
+    // is implicitly shared (COW), so availableAlgorithms() is a cheap
+    // reference bump + .size() lookup. Caching opened a window where the
+    // cap was wrong if the source was constructed against an empty registry
+    // and saw inserts before the first contentsChanged fired.
+    const int algoCount = m_registry ? m_registry->availableAlgorithms().size() : 0;
+    const int cap = qMax(10, algoCount * 10);
+
+    // Re-insert semantics: if the key is already present (e.g. a caller
+    // re-queries after eviction or deliberately overrides), drop the old
+    // FIFO slot first so m_cacheOrder never accumulates duplicates.
+    // Without this, a hot key's repeated insert leaves stale entries in
+    // m_cacheOrder that the eviction loop walks past as no-ops on
+    // m_cache.remove(), eventually evicting a valid live entry.
+    if (m_cache.contains(key)) {
+        m_cacheOrder.removeAll(key);
+        m_cache.remove(key);
+    }
 
     // If the algorithm count shrank since the last insert, m_cache may
     // already hold more entries than the current cap allows. Prune the
@@ -239,6 +277,7 @@ QVector<PhosphorLayout::LayoutPreview> AutotileLayoutSource::availableLayouts() 
     // O(N²) in the number of registered algorithms).
     const auto ids = m_registry->availableAlgorithms();
     result.reserve(ids.size());
+    QMutexLocker locker(&m_cacheMutex);
     for (const QString& id : ids) {
         PhosphorTiles::TilingAlgorithm* algorithm = m_registry->algorithm(id);
         if (!algorithm) {
@@ -270,6 +309,7 @@ PhosphorLayout::LayoutPreview AutotileLayoutSource::previewAt(const QString& id,
     }
     const QString algorithmId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
     const QString key = cacheKey(algorithmId, windowCount);
+    QMutexLocker locker(&m_cacheMutex);
     auto it = m_cache.constFind(key);
     if (it != m_cache.constEnd()) {
         return it.value();
