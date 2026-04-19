@@ -8,14 +8,17 @@
 
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/AnimationController.h>
-#include <PhosphorAnimation/AnimationMath.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/IMotionClock.h>
+#include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/RetargetPolicy.h>
 #include <PhosphorAnimation/ProfilePaths.h>
 #include <PhosphorAnimation/ProfileTree.h>
+#include <PhosphorAnimation/SnapPolicy.h>
 #include <PhosphorAnimation/Spring.h>
 #include <PhosphorAnimation/StaggerTimer.h>
-#include <PhosphorAnimation/WindowMotion.h>

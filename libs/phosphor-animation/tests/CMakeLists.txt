@@ -8,6 +8,13 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 function(pa_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
+    # AUTOMOC explicit per-target so tests still build in standalone
+    # configurations (future `-DUSE_KDE_FRAMEWORKS=OFF` portable builds
+    # or split test-only CMake subprojects) where the parent directory's
+    # CMAKE_AUTOMOC ON isn't inherited. Each test_*.cpp declares
+    # `#include "foo.moc"` for its local Q_OBJECT class, which needs
+    # AUTOMOC to generate.
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
     target_include_directories(${_name}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -36,7 +43,18 @@ pa_add_test(pa_test_curve test_curve.cpp)
 pa_add_test(pa_test_curveregistry test_curveregistry.cpp)
 pa_add_test(pa_test_profile test_profile.cpp)
 pa_add_test(pa_test_profiletree test_profiletree.cpp)
-pa_add_test(pa_test_windowmotion test_windowmotion.cpp)
-pa_add_test(pa_test_animationmath test_animationmath.cpp)
 pa_add_test(pa_test_animationcontroller test_animationcontroller.cpp)
+pa_add_test(pa_test_imotionclock test_imotionclock.cpp)
+pa_add_test(pa_test_animatedvalue_scalar test_animatedvalue_scalar.cpp)
+pa_add_test(pa_test_animatedvalue_geometry test_animatedvalue_geometry.cpp)
+pa_add_test(pa_test_animatedvalue_color test_animatedvalue_color.cpp)
+pa_add_test(pa_test_animatedvalue_transform test_animatedvalue_transform.cpp)
 pa_add_test(pa_test_staggertimer test_staggertimer.cpp)
+
+# QtQuickClock test is gated on the same CMake flag that gates the
+# class itself — the test links Qt6::Quick which isn't available
+# when PHOSPHOR_ANIMATION_QUICK=OFF.
+if(PHOSPHOR_ANIMATION_QUICK)
+    pa_add_test(pa_test_qtquickclock test_qtquickclock.cpp)
+    target_link_libraries(pa_test_qtquickclock PRIVATE Qt6::Quick)
+endif()
