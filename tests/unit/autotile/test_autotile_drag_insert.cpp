@@ -70,7 +70,7 @@ private Q_SLOTS:
 
     void testBegin_rejectsEmptyWindowId()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
         QVERIFY(!engine.beginDragInsertPreview(QString(), QLatin1String(Screen1)));
         QVERIFY(!engine.hasDragInsertPreview());
@@ -78,7 +78,7 @@ private Q_SLOTS:
 
     void testBegin_rejectsEmptyScreenId()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
         QVERIFY(!engine.beginDragInsertPreview(QStringLiteral("win1"), QString()));
         QVERIFY(!engine.hasDragInsertPreview());
@@ -86,7 +86,7 @@ private Q_SLOTS:
 
     void testBegin_rejectsNonAutotileScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QLatin1String(Screen1)});
         QVERIFY(!engine.beginDragInsertPreview(QStringLiteral("win1"), QLatin1String(Screen2)));
         QVERIFY(!engine.hasDragInsertPreview());
@@ -98,7 +98,7 @@ private Q_SLOTS:
 
     void testSameScreen_beginSetsPreview()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -111,7 +111,7 @@ private Q_SLOTS:
 
     void testSameScreen_updateMovesWindow()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -131,7 +131,7 @@ private Q_SLOTS:
 
     void testSameScreen_commitClearsPreview()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -152,7 +152,7 @@ private Q_SLOTS:
 
     void testSameScreen_cancelRestoresOrder()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -173,7 +173,7 @@ private Q_SLOTS:
 
     void testCrossScreen_adoptionMovesBetweenScreens()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString s1 = QLatin1String(Screen1);
         const QString s2 = QLatin1String(Screen2);
         engine.setAutotileScreens({s1, s2});
@@ -191,7 +191,7 @@ private Q_SLOTS:
 
     void testCrossScreen_cancelRestoresOriginalScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString s1 = QLatin1String(Screen1);
         const QString s2 = QLatin1String(Screen2);
         engine.setAutotileScreens({s1, s2});
@@ -216,7 +216,7 @@ private Q_SLOTS:
 
     void testFreshAdoption_addsWindowToStack()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         addWindowsToState(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
@@ -228,7 +228,7 @@ private Q_SLOTS:
 
     void testFreshAdoption_cancelRemovesWindow()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         addWindowsToState(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
@@ -248,7 +248,7 @@ private Q_SLOTS:
 
     void testDoubleCancel_isIdempotent()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
@@ -262,7 +262,7 @@ private Q_SLOTS:
 
     void testDoubleCommit_isIdempotent()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
@@ -279,7 +279,7 @@ private Q_SLOTS:
 
     void testBegin_cancelsExistingPreview()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -298,7 +298,7 @@ private Q_SLOTS:
 
     void testUpdate_sameIndexNoOp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -316,7 +316,7 @@ private Q_SLOTS:
 
     void testUpdate_clampsNegativeIndex()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -329,7 +329,7 @@ private Q_SLOTS:
 
     void testUpdate_clampsOverflowIndex()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B"), QStringLiteral("C")});
@@ -346,7 +346,7 @@ private Q_SLOTS:
 
     void testComputeIndex_noStateReturnsMinus1()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QCOMPARE(engine.computeDragInsertIndexAtPoint(QStringLiteral("nonexistent"), QPoint(50, 50)), -1);
     }
 
@@ -356,7 +356,7 @@ private Q_SLOTS:
 
     void testCommit_freshAdoptionEmitsFloatSync()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         addWindowsToState(engine, screen, {QStringLiteral("A")});
@@ -384,7 +384,7 @@ private Q_SLOTS:
 
     void testEviction_cancelRestoresFloatedNeighbour()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 3;
@@ -406,7 +406,7 @@ private Q_SLOTS:
 
     void testEviction_commitEmitsBatchFloated()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -427,7 +427,7 @@ private Q_SLOTS:
 
     void testWindowClosed_draggedWindowClearsPreview()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         openWindows(engine, screen, {QStringLiteral("A"), QStringLiteral("B")});
@@ -442,7 +442,7 @@ private Q_SLOTS:
 
     void testWindowClosed_evictedNeighbourClearsEviction()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QLatin1String(Screen1);
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -468,7 +468,7 @@ private Q_SLOTS:
 
     void testSetAutotileScreens_cancelsPreviewOnTargetRemoval()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString s1 = QLatin1String(Screen1);
         const QString s2 = QLatin1String(Screen2);
         engine.setAutotileScreens({s1, s2});

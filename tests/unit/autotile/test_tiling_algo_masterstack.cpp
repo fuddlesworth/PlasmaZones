@@ -28,7 +28,7 @@ private:
 
     PhosphorTiles::TilingAlgorithm* ms()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
     }
 
 private Q_SLOTS:

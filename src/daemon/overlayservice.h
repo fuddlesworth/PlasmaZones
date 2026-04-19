@@ -35,6 +35,14 @@ namespace PhosphorZones {
 class Zone;
 }
 
+namespace PhosphorLayout {
+class ILayoutSource;
+}
+
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
@@ -132,6 +140,25 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
+
+    /// Inject the daemon-owned tile-algorithm registry. Required when
+    /// autotile entries should appear in @ref visibleLayoutCount /
+    /// @ref layoutListForScreen output. Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
+    /// Inject the daemon's bundle-owned autotile layout source. Optional —
+    /// when set, @ref buildUnifiedLayoutList reuses its internal preview
+    /// cache across calls instead of constructing a transient source per
+    /// call (which throws away the cache). Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    ///
+    /// @note Expected to be called at most once. The service does not
+    /// subscribe to the source's own signals — replacing the pointer
+    /// later would not require a disconnect today, but matching the
+    /// "set-once after construction" discipline used by every other
+    /// setAutotileLayoutSource call site keeps the contract uniform.
+    void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
     Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -378,6 +405,8 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 

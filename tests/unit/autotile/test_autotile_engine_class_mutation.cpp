@@ -23,6 +23,7 @@
 #include <QTest>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorTiles/TilingState.h>
 #include "core/windowregistry.h"
 
@@ -52,7 +53,7 @@ private Q_SLOTS:
 
     void embyScenario_toggleFloatSurvivesClassMutation()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
@@ -109,7 +110,7 @@ private Q_SLOTS:
 
     void multipleClassMutations_stayConvergent()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 
@@ -151,7 +152,7 @@ private Q_SLOTS:
 
     void windowClosed_releasesCanonicalEntry()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("DP-1");
         const QString instanceId = QStringLiteral("deadbeef");
 
@@ -185,7 +186,7 @@ private Q_SLOTS:
 
     void bareInstanceId_wireFormat_worksEndToEnd()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         WindowRegistry registry;
         engine.setWindowRegistry(&registry);
 

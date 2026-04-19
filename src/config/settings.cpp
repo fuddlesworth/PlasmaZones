@@ -1398,16 +1398,17 @@ QString Settings::defaultAutotileAlgorithm() const
 }
 void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
-    QString validated = algorithm;
-    if (!algorithm.startsWith(QLatin1String("script:"))
-        && !PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithm)) {
-        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
-        validated = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
-    }
-    if (defaultAutotileAlgorithm() == validated) {
+    // Settings does not hold a tile-algorithm registry — composition
+    // roots own one each. The id is stored as-is and validated by the
+    // engine (which has the registry) when the setting is consumed.
+    // The previous in-place built-in allow-list went stale every time
+    // PhosphorTiles added a new built-in (false-positive warnings); the
+    // engine-side validation is authoritative, so the dual gate just
+    // rotted.
+    if (defaultAutotileAlgorithm() == algorithm) {
         return;
     }
-    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::defaultKey(), validated);
+    m_store->write(ConfigDefaults::tilingAlgorithmGroup(), ConfigDefaults::defaultKey(), algorithm);
     Q_EMIT defaultAutotileAlgorithmChanged();
     Q_EMIT settingsChanged();
 }

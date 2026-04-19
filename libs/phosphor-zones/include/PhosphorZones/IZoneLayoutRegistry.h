@@ -3,16 +3,27 @@
 
 #pragma once
 
-// ILayoutRegistry — enumeration + mutation of the catalog of manual
-// layouts.
+// IZoneLayoutRegistry — enumeration + mutation of the catalog of
+// manual zone layouts.
 //
-// Split out of ILayoutManager so callers that need the layout
-// set (editor save path, layout-import flow, settings create-layout
+// Split out of ILayoutManager so callers that need the layout set
+// (editor save path, layout-import flow, settings create-layout
 // button, read-only preview renderers) can depend on one contract
 // instead of the full manager. "Active layout" selection lives here
 // because it mutates the manager's active-layout slot.
+//
+// Inherits PhosphorLayout::ILayoutSourceRegistry so concrete registries
+// (LayoutManager) carry the unified `contentsChanged` signal that
+// ZonesLayoutSource subscribes to — matching the pattern every other
+// provider library (phosphor-tiles, future phosphor-scrolling, …)
+// follows. Inheriting QObject via the unified base rather than
+// directly keeps ILayoutManager's non-virtual multi-inheritance safe:
+// every path through ILayoutManager reaches QObject exactly once, so
+// LayoutManager has a single QObject subobject.
 
 #include <phosphorzones_export.h>
+
+#include <PhosphorLayoutApi/ILayoutSourceRegistry.h>
 
 #include <QString>
 #include <QUuid>
@@ -23,16 +34,18 @@ namespace PhosphorZones {
 class Layout;
 
 /**
- * @brief Enumeration + mutation surface for the in-memory layout set.
+ * @brief Enumeration + mutation surface for the in-memory zone-layout
+ * catalog.
  *
  * Fixture tests can stub this contract without implementing
  * persistence / assignments / quick-slots.
  */
-class PHOSPHORZONES_EXPORT ILayoutRegistry
+class PHOSPHORZONES_EXPORT IZoneLayoutRegistry : public PhosphorLayout::ILayoutSourceRegistry
 {
+    Q_OBJECT
 public:
-    ILayoutRegistry() = default;
-    virtual ~ILayoutRegistry();
+    explicit IZoneLayoutRegistry(QObject* parent = nullptr);
+    ~IZoneLayoutRegistry() override;
 
     /// Enumerate every known layout. Borrowed pointers — owned by the
     /// concrete registry (typically @c LayoutManager). Order is the
@@ -65,10 +78,6 @@ public:
     virtual Layout* activeLayout() const = 0;
     virtual void setActiveLayout(Layout* layout) = 0;
     virtual void setActiveLayoutById(const QUuid& id) = 0;
-
-protected:
-    ILayoutRegistry(const ILayoutRegistry&) = default;
-    ILayoutRegistry& operator=(const ILayoutRegistry&) = default;
 };
 
 } // namespace PhosphorZones

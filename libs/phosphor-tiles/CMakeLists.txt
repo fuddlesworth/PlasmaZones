@@ -60,19 +60,24 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/TilingParams.h
     include/PhosphorTiles/TilingState.h
     include/PhosphorTiles/SplitTree.h
+    include/PhosphorTiles/AlgorithmPreviewParams.h
     include/PhosphorTiles/AlgorithmRegistry.h
+    include/PhosphorTiles/ITileAlgorithmRegistry.h
     include/PhosphorTiles/ScriptedAlgorithm.h
     include/PhosphorTiles/ScriptedAlgorithmHelpers.h
     include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
     include/PhosphorTiles/ScriptedAlgorithmSandbox.h
     include/PhosphorTiles/AutotileLayoutSource.h
+    include/PhosphorTiles/AutotileLayoutSourceFactory.h
     include/PhosphorTiles/AutotilePreviewRender.h
 )
 
 set(phosphortiles_SRCS
     src/algorithmregistry.cpp
+    src/itilealgorithmregistry.cpp
     src/autotilelayoutsource.cpp
+    src/autotilelayoutsourcefactory.cpp
     src/tilingalgorithm.cpp
     src/tilingstate.cpp
     src/tilingstateserialization.cpp

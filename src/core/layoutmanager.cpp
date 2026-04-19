@@ -17,8 +17,7 @@
 namespace PlasmaZones {
 
 LayoutManager::LayoutManager(QObject* parent)
-    : QObject(parent)
-    , PhosphorZones::ILayoutManager()
+    : PhosphorZones::ILayoutManager(parent)
     , m_ownedBackend(createAssignmentsBackend())
     , m_configBackend(m_ownedBackend.get())
 {
@@ -26,16 +25,20 @@ LayoutManager::LayoutManager(QObject* parent)
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
     ensureLayoutDirectory();
+    // Forward the detailed layoutsChanged signal into the unified
+    // ILayoutSourceRegistry::contentsChanged notifier so any subscribed
+    // ILayoutSource (e.g. ZonesLayoutSource) refreshes automatically.
+    connect(this, &LayoutManager::layoutsChanged, this, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged);
 }
 
 LayoutManager::LayoutManager(PhosphorConfig::IBackend* backend, QObject* parent)
-    : QObject(parent)
-    , PhosphorZones::ILayoutManager()
+    : PhosphorZones::ILayoutManager(parent)
     , m_configBackend(backend)
 {
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/layouts");
     ensureLayoutDirectory();
+    connect(this, &LayoutManager::layoutsChanged, this, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged);
 }
 
 LayoutManager::~LayoutManager()

@@ -31,6 +31,7 @@
 #include <QObject>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "dbus/windowdragadaptor.h"
 
 #include "../helpers/StubSettings.h"
@@ -73,7 +74,7 @@ public:
 std::unique_ptr<AutotileEngine> makeEngine(bool screenIsAutotile, const QString& screenId,
                                            const QString& trackedWindowId = {})
 {
-    auto engine = std::make_unique<AutotileEngine>(nullptr, nullptr, nullptr);
+    auto engine = std::make_unique<AutotileEngine>(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
     if (screenIsAutotile) {
         engine->setAutotileScreens(QSet<QString>{screenId});
     }

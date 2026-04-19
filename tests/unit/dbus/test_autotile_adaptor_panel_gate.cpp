@@ -19,6 +19,7 @@
 #include <dbus_types.h>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor.h"
 
@@ -48,9 +49,9 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testNoScreenManager_passThrough()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, nullptr, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, nullptr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
         adaptor.windowOpened(QStringLiteral("kitty|uuid-1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -65,9 +66,9 @@ private Q_SLOTS:
         Phosphor::Screens::ScreenManager mgr;
         QVERIFY(!mgr.isPanelGeometryReady());
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
         // Single-open path: queues.
         adaptor.windowOpened(QStringLiteral("konsole|uuid-a"), QStringLiteral("HDMI-1"), 100, 50);
@@ -98,9 +99,9 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
         adaptor.windowOpened(QString(), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -125,9 +126,9 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
         WindowOpenedList batch;
         for (int i = 0; i < 5; ++i) {
@@ -158,9 +159,9 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, PlasmaZones::TestHelpers::testRegistry(), &adaptorParent);
 
         adaptor.windowOpened(QStringLiteral("a|1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);

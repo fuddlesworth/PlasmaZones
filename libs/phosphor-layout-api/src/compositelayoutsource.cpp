@@ -135,6 +135,24 @@ void CompositeLayoutSource::clearSources()
     Q_EMIT contentsChanged();
 }
 
+void CompositeLayoutSource::clearSourcesSilent()
+{
+    // Mirror clearSources() without the terminal Q_EMIT. Intended for
+    // teardown paths (LayoutSourceBundle's destructor) where the composite
+    // is about to be destroyed and firing contentsChanged into observers
+    // whose own destructors may have begun is undesirable. Callers that
+    // need the notification should use clearSources() instead.
+    if (m_sources.isEmpty()) {
+        return;
+    }
+    for (ILayoutSource* source : std::as_const(m_sources)) {
+        if (source) {
+            disconnectSource(source);
+        }
+    }
+    m_sources.clear();
+}
+
 QVector<LayoutPreview> CompositeLayoutSource::availableLayouts() const
 {
     QVector<LayoutPreview> result;
@@ -153,6 +171,13 @@ QVector<LayoutPreview> CompositeLayoutSource::availableLayouts() const
 
 LayoutPreview CompositeLayoutSource::previewAt(const QString& id, int windowCount, const QSize& canvas)
 {
+    // Empty input id can't match any child's id; short-circuit before
+    // walking the source list. Per ILayoutSource contract empty input
+    // is well-formed (each child would also bail), so this is a small
+    // O(1) win on miss-the-cache callers.
+    if (id.isEmpty()) {
+        return {};
+    }
     for (ILayoutSource* source : m_sources) {
         if (!source) {
             continue;

@@ -92,7 +92,7 @@ inline std::optional<QUuid> parseAndValidateUuid(const QString& id, const QStrin
  *   if (!layout) { qCWarning() << "no active layout"; return; }
  */
 template<typename LogCategory>
-PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::ILayoutRegistry* mgr, const QString& operation,
+PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& operation,
                                              LogCategory category)
 {
     if (!mgr) {
@@ -120,7 +120,7 @@ PhosphorZones::Layout* getActiveLayoutOrWarn(PhosphorZones::ILayoutRegistry* mgr
  * Combines UUID validation + active layout check + zone lookup.
  */
 template<typename LogCategory>
-PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr, const QString& zoneId,
+PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
                                              const QString& operation, LogCategory category)
 {
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
@@ -145,7 +145,7 @@ PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr
 /**
  * @brief Overload using default lcDbus category
  */
-inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegistry* mgr, const QString& zoneId,
+inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRegistry* mgr, const QString& zoneId,
                                                     const QString& operation)
 {
     return getZoneFromActiveLayout(mgr, zoneId, operation, lcDbus);
@@ -161,12 +161,17 @@ inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::ILayoutRegist
  *
  * Searches active layout first, then all layouts.
  * Useful for per-screen layout assignments where zone may be in non-active layout.
+ *
+ * @note O(N×M) in (layouts, zones-per-layout) on the cold path. Acceptable
+ * for the per-screen-assignment fallback use case where N is small (a few
+ * layouts) and only triggers when the active layout misses; not suitable
+ * for hot-path zone lookups (use the IZoneLayoutRegistry by-id surface).
  */
 template<typename LogCategory>
 PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
-    // Takes the full ILayoutManager here (rather than ILayoutRegistry
+    // Takes the full ILayoutManager here (rather than IZoneLayoutRegistry
     // alone) because the active-layout-first search walks the full
     // assignment + enumeration surface that callers already hold via
     // the manager.

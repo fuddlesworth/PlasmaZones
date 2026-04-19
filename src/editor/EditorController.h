@@ -17,11 +17,16 @@
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
-#include "../core/layoutsourcefactory.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
 
 #include <memory>
+
+namespace PhosphorTiles {
+class AlgorithmRegistry;
+class ScriptedAlgorithmLoader;
+}
 
 namespace PhosphorZones {
 class Layout;
@@ -898,11 +903,30 @@ private:
     // gallery, layout-import preview thumbnails, etc.).
     //
     // The bundle aggregates manual layouts (over m_localLayoutManager) and
-    // autotile previews (over the AlgorithmRegistry singleton) behind a
-    // single ILayoutSource. Declaration order matters — the LayoutManager
-    // must outlive the bundle's zones source that borrows its catalog.
+    // autotile previews (over the editor-owned m_localAlgorithmRegistry)
+    // behind a single ILayoutSource.
+    //
+    // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
+    // m_localAlgorithmRegistry + m_localLayoutManager are borrowed by the
+    // bundle's sources AND by m_scriptLoader below. Reverse-order member
+    // destruction must tear down the loader and the bundle BEFORE the
+    // registries those consumers borrow. With the order below:
+    //   1. ~m_scriptLoader first (unregisters scripted algorithms while
+    //      registry is still alive — fixes a UAF the QObject-child-parent
+    //      pattern had, where ~QObject ran after unique_ptr reset).
+    //   2. ~m_localSources drops borrowed source pointers.
+    //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
+    // Do not reorder without revisiting every borrower's destructor.
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    LayoutSourceBundle m_localSources;
+    PhosphorLayout::LayoutSourceBundle m_localSources;
+    /// Owned here (not parented to `this`) so destruction runs via the
+    /// unique_ptr reset in reverse declaration order — BEFORE the
+    /// m_localAlgorithmRegistry it borrows. A QObject-child parent would
+    /// destroy the loader in ~QObject, which runs AFTER the registry
+    /// unique_ptr, leaving the loader's destructor to call
+    /// unregisterAlgorithm on a freed registry.
+    std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptLoader;
 
     /// Debounces D-Bus layout-mutation bursts (layoutCreated / layoutDeleted /
     /// layoutChanged / layoutListChanged / layoutPropertyChanged) into a

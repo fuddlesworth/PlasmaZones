@@ -24,6 +24,7 @@
 #include "autotile/AutotileEngine.h"
 #include "core/layoutmanager.h"
 #include "core/screenmoderouter.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "snap/SnapEngine.h"
 
 using namespace PlasmaZones;
@@ -56,7 +57,10 @@ private Q_SLOTS:
         // AutotileEngine with all-nullptr dependencies is explicitly
         // supported for headless tests — see the comment at the top of
         // AutotileEngine::AutotileEngine (src/autotile/AutotileEngine.cpp).
-        m_autotileEngine = new AutotileEngine(nullptr, nullptr, nullptr);
+        // The algorithm registry is non-null even in headless mode because
+        // the engine resolves an initial algorithm in its constructor;
+        // share the test-process registry.
+        m_autotileEngine = new AutotileEngine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         m_router = new ScreenModeRouter(m_layoutManager, m_snapEngine, m_autotileEngine);
     }

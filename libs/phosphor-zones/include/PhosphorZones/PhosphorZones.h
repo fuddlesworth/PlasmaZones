@@ -5,8 +5,8 @@
 
 /// Umbrella include for PhosphorZones. Consumers may include individual
 /// headers for tighter dependencies. Consumers that only need to
-/// enumerate / look up layouts should prefer @c ILayoutRegistry (in
-/// ILayoutRegistry.h) over the full @c ILayoutManager surface.
+/// enumerate / look up layouts should prefer @c IZoneLayoutRegistry (in
+/// IZoneLayoutRegistry.h) over the full @c ILayoutManager surface.
 
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/IZoneDetector.h>

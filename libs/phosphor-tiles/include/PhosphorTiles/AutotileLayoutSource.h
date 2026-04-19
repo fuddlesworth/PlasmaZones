@@ -15,16 +15,17 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 #include <QHash>
+#include <QMutex>
 #include <QStringList>
 
 namespace PhosphorTiles {
-class AlgorithmRegistry;
+class ITileAlgorithmRegistry;
 class TilingAlgorithm;
 } // namespace PhosphorTiles
 
 namespace PhosphorTiles {
 
-/// ILayoutSource adapter wrapping the AlgorithmRegistry singleton.
+/// ILayoutSource adapter wrapping an ITileAlgorithmRegistry.
 ///
 /// Implements PhosphorLayout::ILayoutSource so editor / settings / overlay
 /// code can render autotile-algorithm previews uniformly with manual zone
@@ -34,22 +35,23 @@ namespace PhosphorTiles {
 ///
 /// Caches previews keyed on (algorithmId, windowCount) so repeated
 /// queries (typical for the layout-picker UI) don't re-execute scripted
-/// (JS) algorithms. The cache is invalidated when the registry emits
-/// @c algorithmRegistered / @c algorithmUnregistered, at which point the
+/// (JS) algorithms. The cache is invalidated on the registry's unified
+/// @c ILayoutSourceRegistry::contentsChanged signal (covering algorithm
+/// register/unregister and preview-params changes), at which point the
 /// source also emits @c contentsChanged.
 ///
-/// Borrows the registry — caller (typically the default singleton,
-/// `AlgorithmRegistry::instance()`) owns it and outlives this source.
-/// Source is non-copyable (inherited from ILayoutSource).
+/// Borrows the registry — caller owns it and must keep it alive for the
+/// source's lifetime. Source is non-copyable (inherited from
+/// ILayoutSource).
 class PHOSPHORTILES_EXPORT AutotileLayoutSource : public PhosphorLayout::ILayoutSource
 {
     Q_OBJECT
 public:
-    /// Construct over a borrowed algorithm registry.  Pass nullptr (the
-    /// default) to bind to @c AlgorithmRegistry::instance() — this is the
-    /// normal production path. Passing an explicit registry is reserved
-    /// for tests that want an isolated instance.
-    explicit AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry = nullptr, QObject* parent = nullptr);
+    /// Construct over a borrowed algorithm registry. Composition roots
+    /// (daemon, editor, settings, tests) create their own
+    /// @c AlgorithmRegistry instance and thread it here. Null is tolerated
+    /// (source returns empty) — matches @c ZonesLayoutSource's discipline.
+    explicit AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry* registry, QObject* parent = nullptr);
     ~AutotileLayoutSource() override;
 
     QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override;
@@ -73,18 +75,18 @@ private:
     /// (FIFO) when the cap `availableAlgorithms().size() * 10` is reached.
     void insertCacheEntry(const QString& key, const PhosphorLayout::LayoutPreview& preview) const;
 
-    PhosphorTiles::AlgorithmRegistry* m_registry;
+    PhosphorTiles::ITileAlgorithmRegistry* m_registry;
     /// Cache key is `"<algorithmId>|<windowCount>"`. Hash preserves
     /// insertion-order-independent lookup semantics.
     mutable QHash<QString, PhosphorLayout::LayoutPreview> m_cache;
     /// FIFO eviction order — keys appended on insert, head evicted on overflow.
     mutable QStringList m_cacheOrder;
-    /// Cached `availableAlgorithms().size()` — refreshed on every
-    /// registry-change signal via invalidateCache(). Without the cache,
-    /// each insertCacheEntry() re-queries the registry (returning a fresh
-    /// QStringList) just to compute the FIFO cap; for picker UIs that
-    /// churn the cache repeatedly that adds up.
-    mutable int m_algorithmCountCache = 0;
+    /// Guards @c m_cache + @c m_cacheOrder. The registry's read API
+    /// advertises thread-safety (see @c AlgorithmRegistry.h note), and
+    /// @c availableLayouts() / @c previewAt() are advertised as @c const
+    /// reads — but both populate the mutable cache, which would race on
+    /// concurrent reads from different threads without this guard.
+    mutable QMutex m_cacheMutex;
 };
 
 } // namespace PhosphorTiles

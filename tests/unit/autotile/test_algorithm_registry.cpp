@@ -20,8 +20,13 @@ using namespace PlasmaZones;
 using namespace PlasmaZones::TestHelpers;
 
 /**
- * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: singleton, built-in algorithms,
+ * @brief Unit tests for PhosphorTiles::AlgorithmRegistry: built-in algorithms,
  *        retrieval, and default algorithm behavior.
+ *
+ * The registry is no longer a process-global singleton; composition roots
+ * (daemon, editor, settings, this test fixture) each own their own instance.
+ * Tests share a fixture registry via ScriptedAlgoTestSetup::registry() so
+ * built-ins only register once per test-process run.
  */
 class TestAlgorithmRegistry : public QObject
 {
@@ -37,13 +42,17 @@ private Q_SLOTS:
     }
 
     // =========================================================================
-    // Singleton tests
+    // Fixture sanity
     // =========================================================================
 
-    void testSingleton_sameInstance()
+    void testFixture_registryNonNull()
     {
-        auto* instance1 = PhosphorTiles::AlgorithmRegistry::instance();
-        auto* instance2 = PhosphorTiles::AlgorithmRegistry::instance();
+        // Sanity-check the fixture: the test setup hands back a non-null
+        // registry and the same instance for both calls (it's a
+        // fixture-owned instance, not a process singleton — but within
+        // one test run the fixture's accessor is stable).
+        auto* instance1 = m_scriptSetup.registry();
+        auto* instance2 = m_scriptSetup.registry();
 
         QVERIFY(instance1 != nullptr);
         QCOMPARE(instance1, instance2);
@@ -55,7 +64,7 @@ private Q_SLOTS:
 
     void testBuiltIn_masterStackRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("master-stack"));
 
         QVERIFY(algo != nullptr);
@@ -66,7 +75,7 @@ private Q_SLOTS:
 
     void testBuiltIn_columnsRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("columns"));
 
         QVERIFY(algo != nullptr);
@@ -77,7 +86,7 @@ private Q_SLOTS:
 
     void testBuiltIn_bspRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("bsp"));
 
         QVERIFY(algo != nullptr);
@@ -88,7 +97,7 @@ private Q_SLOTS:
 
     void testBuiltIn_rowsRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("rows"));
 
         QVERIFY(algo != nullptr);
@@ -99,7 +108,7 @@ private Q_SLOTS:
 
     void testBuiltIn_dwindleRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("dwindle"));
 
         QVERIFY(algo != nullptr);
@@ -110,7 +119,7 @@ private Q_SLOTS:
 
     void testBuiltIn_spiralRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("spiral"));
 
         QVERIFY(algo != nullptr);
@@ -121,7 +130,7 @@ private Q_SLOTS:
 
     void testBuiltIn_monocleRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("monocle"));
 
         QVERIFY(algo != nullptr);
@@ -132,7 +141,7 @@ private Q_SLOTS:
 
     void testBuiltIn_threeColumnRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("three-column"));
 
         QVERIFY(algo != nullptr);
@@ -143,7 +152,7 @@ private Q_SLOTS:
 
     void testBuiltIn_gridRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("grid"));
 
         QVERIFY(algo != nullptr);
@@ -154,7 +163,7 @@ private Q_SLOTS:
 
     void testBuiltIn_wideRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("wide"));
 
         QVERIFY(algo != nullptr);
@@ -165,7 +174,7 @@ private Q_SLOTS:
 
     void testBuiltIn_centeredMasterRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QLatin1String("centered-master"));
 
         QVERIFY(algo != nullptr);
@@ -176,7 +185,7 @@ private Q_SLOTS:
 
     void testBuiltIn_allRegistered()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto available = registry->availableAlgorithms();
 
         QVERIFY(available.contains(QLatin1String("master-stack")));
@@ -204,7 +213,7 @@ private Q_SLOTS:
 
     void testBuiltIn_builtinIdBackwardsCompatibility()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         const QStringList builtinIds = {
             // 15 original C++-to-JS converted algorithms
             QLatin1String("bsp"),
@@ -240,7 +249,7 @@ private Q_SLOTS:
 
     void testBuiltIn_allAlgorithmsCalculateZones()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         const QRect screen(0, 0, 1920, 1080);
         const auto allIds = registry->availableAlgorithms();
@@ -267,12 +276,17 @@ private Q_SLOTS:
 
     void testDefault_algorithmId()
     {
-        QCOMPARE(PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId(), QLatin1String("bsp"));
+        QCOMPARE(PhosphorTiles::AlgorithmRegistry::staticDefaultAlgorithmId(), QLatin1String("bsp"));
+        // Round-trip through the virtual interface — concrete registry's
+        // override resolves to the same id, so a future test fake that
+        // overrides the policy can substitute its own.
+        auto* registry = m_scriptSetup.registry();
+        QCOMPARE(registry->defaultAlgorithmId(), QLatin1String("bsp"));
     }
 
     void testDefault_algorithmInstance()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* defaultAlgo = registry->defaultAlgorithm();
         auto* bsp = registry->algorithm(QLatin1String("bsp"));
 
@@ -286,7 +300,7 @@ private Q_SLOTS:
 
     void testRetrieval_unknownReturnsNull()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QStringLiteral("nonexistent-algorithm"));
 
         QVERIFY(algo == nullptr);
@@ -294,7 +308,7 @@ private Q_SLOTS:
 
     void testRetrieval_emptyIdReturnsNull()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto* algo = registry->algorithm(QString());
 
         QVERIFY(algo == nullptr);
@@ -302,7 +316,7 @@ private Q_SLOTS:
 
     void testRetrieval_hasAlgorithm()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
 
         QVERIFY(registry->hasAlgorithm(QLatin1String("master-stack")));
         QVERIFY(registry->hasAlgorithm(QLatin1String("columns")));
@@ -320,7 +334,7 @@ private Q_SLOTS:
 
     void testRetrieval_allAlgorithms()
     {
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         auto all = registry->allAlgorithms();
 
         // At least 15 built-in algorithms are registered before any scripted loader runs
@@ -361,7 +375,7 @@ private Q_SLOTS:
 
         // Verify determinism as an indirect frozen-globals check: two identical
         // calls must produce identical output.
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+        auto* registry = m_scriptSetup.registry();
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.5);
         const QRect screen(0, 0, 1920, 1080);

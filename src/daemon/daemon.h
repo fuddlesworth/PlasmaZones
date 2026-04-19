@@ -13,7 +13,7 @@
 #include <memory>
 
 #include "shortcutmanager.h"
-#include "../core/layoutsourcefactory.h"
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
@@ -63,6 +63,7 @@ class WindowRegistry;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
+class AlgorithmRegistry;
 class ScriptedAlgorithmLoader;
 }
 
@@ -108,15 +109,16 @@ public:
      *
      * Returns a composite that aggregates PhosphorZones::ZonesLayoutSource
      * (over m_layoutManager) and PhosphorTiles::AutotileLayoutSource (over
-     * the in-process PhosphorTiles::AlgorithmRegistry singleton).  Daemon-internal
-     * consumers — overlay layout picker, snap-assist preview thumbnails,
-     * the layout adaptor's D-Bus surface — see one ILayoutSource* and
-     * branch on `LayoutPreview::isAutotile` rather than on which
-     * concrete provider produced an entry.
+     * the daemon-owned PhosphorTiles::AlgorithmRegistry instance at
+     * m_algorithmRegistry).  Daemon-internal consumers — overlay layout
+     * picker, snap-assist preview thumbnails, the layout adaptor's D-Bus
+     * surface — see one ILayoutSource* and branch on
+     * `LayoutPreview::isAutotile` rather than on which concrete provider
+     * produced an entry.
      */
     PhosphorLayout::ILayoutSource* layoutSource() const
     {
-        return m_layoutSources.composite.get();
+        return m_layoutSources.composite();
     }
     OverlayService* overlayService() const
     {
@@ -360,11 +362,47 @@ private:
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
     std::unique_ptr<LayoutManager> m_layoutManager;
+    // Daemon-owned tile-algorithm registry. Replaces the old
+    // AlgorithmRegistry::instance() singleton — per-process ownership is
+    // the only shape that works once PlasmaZones becomes a plugin-based
+    // compositor/WM/shell (plugins can't share process-global state
+    // safely).
+    //
+    // ─── DECLARATION ORDER INVARIANT ─────────────────────────────────
+    // Every FactoryContext service the bundle borrows (m_layoutManager
+    // → IZoneLayoutRegistry, m_algorithmRegistry → ITileAlgorithmRegistry)
+    // MUST be declared before m_layoutSources so reverse-order member
+    // destruction tears the bundle (and its ZonesLayoutSource /
+    // AutotileLayoutSource children) down BEFORE the registries those
+    // children borrow. The LayoutSourceBundle contract
+    // (libs/phosphor-layout-api/.../LayoutSourceBundle.h) is explicit
+    // about this — violating the order produces dangling pointers in
+    // every source's destructor, hidden today only by Qt's signal
+    // auto-disconnect. Do not reorder these three lines without revisiting
+    // every source's destructor.
+    //
+    // Also declared before ScriptedAlgorithmLoader + AutotileEngine
+    // because both take a borrowed pointer to it in their constructor.
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
     // Manual layouts + autotile algorithms composed behind layoutSource().
     // The bundle owns all three objects so destruction is deterministic
     // (composite first, then the child sources it borrows from). See
-    // layoutsourcefactory.h for the construction contract.
-    LayoutSourceBundle m_layoutSources;
+    // libs/phosphor-layout-api/.../LayoutSourceBundle.h for the
+    // construction contract.
+    PhosphorLayout::LayoutSourceBundle m_layoutSources;
+    /// Cached pointer to the bundle's autotile source — populated once
+    /// after buildFromRegistered in the ctor, then handed to every
+    /// consumer that wants the long-lived preview-cache fast path
+    /// (overlay service, layout adaptor, unified controller). Avoids
+    /// repeating m_layoutSources.source(autotileLayoutSourceName())
+    /// at every wiring site (DRY) and removes the temptation to typo
+    /// the literal. Borrowed; lifetime tied to m_layoutSources, so it
+    /// MUST stay declared immediately adjacent (and below) the bundle
+    /// so reverse-order member destruction nulls borrowed-pointer
+    /// consumers before the source itself is gone — see
+    /// "DECLARATION ORDER INVARIANT" comment above.
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
+    // ─── End of layout-source declaration block ─────────────────────────
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;
@@ -406,7 +444,9 @@ private:
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
 
-    // Scripted algorithm loader (file watcher for user-defined JS algorithms)
+    // Scripted algorithm loader (file watcher for user-defined JS algorithms).
+    // m_algorithmRegistry is declared up at the top of the member block with
+    // m_layoutManager — see the DECLARATION ORDER INVARIANT comment there.
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;
 
     // Window engines

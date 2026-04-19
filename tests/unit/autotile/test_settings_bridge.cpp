@@ -6,6 +6,7 @@
 #include <QTimer>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
@@ -101,7 +102,7 @@ private Q_SLOTS:
     {
         // Without a Settings object, syncFromSettings should return early without
         // crashing or retiling. This tests the null-check guard.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setAutotileScreens({QStringLiteral("eDP-1")});
 
         QSignalSpy tilingSpy(&engine, &AutotileEngine::tilingChanged);
@@ -118,7 +119,7 @@ private Q_SLOTS:
 
     void testSettingsBridge_maxWindowsIncrease_triggersBackfill()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -156,7 +157,7 @@ private Q_SLOTS:
 
     void testSettingsBridge_savedAlgorithmSettings_onlyAffectsActiveAlgorithm()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -194,7 +195,7 @@ private Q_SLOTS:
 
         // Serialize window orders
         {
-            AutotileEngine engine(nullptr, nullptr, nullptr);
+            AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
             PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
             state->addWindow(QStringLiteral("win1"));
@@ -209,7 +210,7 @@ private Q_SLOTS:
 
         // Deserialize into a fresh engine — window orders become pending initial orders
         {
-            AutotileEngine engine(nullptr, nullptr, nullptr);
+            AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
             engine.deserializeWindowOrders(serialized);
 
             // Verify JSON structure contains screen context + window orders
@@ -228,7 +229,7 @@ private Q_SLOTS:
     void testSettingsBridge_deserializeWindowOrders_emptyArray()
     {
         // Should not crash — empty array is handled gracefully
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.deserializeWindowOrders(QJsonArray{});
 
         // Engine should still be in a valid state
@@ -237,7 +238,7 @@ private Q_SLOTS:
 
     void testSettingsBridge_serializeWindowOrders_includesFloating()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("firefox|{uuid1}"));
@@ -275,7 +276,7 @@ private Q_SLOTS:
             buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
 
         // Engine defaults to desktop=1 — only desktop 1's order should be pending immediately
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.deserializeWindowOrders(multiDesktopData);
 
         // Desktop 1 should have pending orders
@@ -303,7 +304,7 @@ private Q_SLOTS:
         multiDesktopData.append(
             buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win3"), QStringLiteral("win4")}));
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.deserializeWindowOrders(multiDesktopData);
 
         // Switch to desktop 2 — should promote saved orders for desktop 2
@@ -333,7 +334,7 @@ private Q_SLOTS:
         data.append(buildEntry(QStringLiteral("eDP-1"), 1, {QStringLiteral("win1")}, {QStringLiteral("win1")}));
         data.append(buildEntry(QStringLiteral("eDP-1"), 2, {QStringLiteral("win2")}, {QStringLiteral("win2")}));
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.deserializeWindowOrders(data);
 
         // Floating state for both desktops should be restored (keyed by TilingStateKey)
@@ -360,7 +361,7 @@ private Q_SLOTS:
     void testSettingsBridge_persistenceDelegate_noOpWithoutDelegate()
     {
         // saveState()/loadState() should silently no-op when no delegate is set
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("win1"));
@@ -376,7 +377,7 @@ private Q_SLOTS:
 
     void testSettingsBridge_persistenceDelegate_invokesCallbacks()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         bool saveCalled = false;
         bool loadCalled = false;
@@ -406,7 +407,7 @@ private Q_SLOTS:
         // When a shortcut adjustment is pending save (debounce timer active),
         // syncFromSettings must NOT overwrite the runtime splitRatio or
         // masterCount with stale Settings values.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -454,7 +455,7 @@ private Q_SLOTS:
 
     void testSyncFromSettings_duringShortcutDebounce_preservesRuntimeMasterCount()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -496,7 +497,7 @@ private Q_SLOTS:
     {
         // Float → Unlimited: previously-overflowed (auto-floated) windows must
         // be re-tiled by the backfill path inside applyOverflowBehaviorChange.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -532,7 +533,7 @@ private Q_SLOTS:
         // syncFromSettings, applyOverflowBehaviorChange already runs a backfill
         // — the trailing maxWindows-increase block must NOT run a second.
         // This guards the no-double-backfill fix in syncFromSettings.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -583,7 +584,7 @@ private Q_SLOTS:
         // debounce. Without a Settings object, we cannot trigger the signal
         // connections, but we can verify the engine handles rapid config changes
         // without crashing and only retiles when explicitly told to.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -638,7 +639,7 @@ private Q_SLOTS:
             data.append(entry);
         }
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         // Set initial context to (desktop=1, activityA)
         engine.setCurrentDesktop(1);
         engine.setCurrentActivity(activityA);
@@ -689,7 +690,7 @@ private Q_SLOTS:
             data.append(entry);
         }
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine.setCurrentDesktop(1);
         engine.setCurrentActivity(activityA);
         QCoreApplication::processEvents();
@@ -733,7 +734,7 @@ private Q_SLOTS:
         auto backend = std::make_unique<PhosphorConfig::JsonBackend>(ConfigDefaults::configFilePath());
 
         // Create engine with windows
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("eDP-1"));
         state->addWindow(QStringLiteral("firefox|{uuid1}"));
         state->addWindow(QStringLiteral("konsole|{uuid2}"));
@@ -759,7 +760,7 @@ private Q_SLOTS:
         QJsonDocument doc = QJsonDocument::fromJson(readBack.toUtf8());
         QVERIFY(doc.isArray());
 
-        AutotileEngine engine2(nullptr, nullptr, nullptr);
+        AutotileEngine engine2(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         engine2.deserializeWindowOrders(doc.array());
 
         // Re-serialize from the restored engine and verify structure matches
