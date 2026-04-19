@@ -3,24 +3,19 @@
 
 #include "screenadaptor.h"
 
-#include "../core/screenmanagerservice.h"
-
 namespace PlasmaZones {
 
-ScreenAdaptor::ScreenAdaptor(QObject* parent)
+ScreenAdaptor::ScreenAdaptor(Phosphor::Screens::ScreenManager* manager, QObject* parent)
     : Phosphor::Screens::DBusScreenAdaptor(parent)
 {
-    // Wire up the process-global ScreenManager pointer as soon as the
-    // adaptor is constructed. The daemon's Daemon ctor calls
-    // setScreenManager() with its m_screenManager.get() before any
-    // D-Bus queries can land (D-Bus registration happens during init()),
-    // so the value we read here is authoritative.
-    setScreenManager(screenManager());
-    // setConfigStore() is invoked directly by the daemon with its
-    // SettingsConfigStore after construction — keeping a single store
-    // instance per process so VS writes go through one change-signal
-    // channel instead of the adaptor owning a parallel store backed
-    // by the same Settings.
+    // Explicit constructor injection — the caller (Daemon::init) owns the
+    // ScreenManager instance and hands it to us directly. No read from
+    // the `PlasmaZones::screenManager()` service-locator here: that
+    // locator is a legacy-compat shim for call sites too deep in utility
+    // chains to take an injected pointer, and the adaptor is neither.
+    // setConfigStore() is invoked by the daemon separately with its
+    // single SettingsConfigStore instance.
+    setScreenManager(manager);
 }
 
 ScreenAdaptor::~ScreenAdaptor() = default;

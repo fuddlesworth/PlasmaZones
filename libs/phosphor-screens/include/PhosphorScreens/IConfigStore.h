@@ -64,6 +64,16 @@ public:
 
     /// Drop the entry for @p physicalScreenId. No-op + true if no entry
     /// exists; a removal of a missing entry is not an error.
+    ///
+    /// Contract: `remove(id)` MUST be functionally equivalent to
+    /// `save(id, VirtualScreenConfig{})` — i.e. both forms drop the
+    /// entry and emit `changed()`. The empty-config-as-removal sentinel
+    /// exists because some hosts (Settings-backed adapters) have a
+    /// single unified setter on their underlying store; exposing both
+    /// forms lets callers use whichever reads more cleanly at the call
+    /// site without forcing implementers to duplicate the mutation path.
+    /// @return true if the entry was dropped OR did not exist. false is
+    ///         reserved for backing-store write failure.
     virtual bool remove(const QString& physicalScreenId) = 0;
 
 Q_SIGNALS:

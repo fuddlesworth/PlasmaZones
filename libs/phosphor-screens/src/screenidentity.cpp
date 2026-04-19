@@ -8,10 +8,12 @@
 #include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/VirtualScreenId.h>
 
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QHash>
 #include <QPointer>
 #include <QScreen>
+#include <QThread>
 
 namespace Phosphor::Screens::ScreenIdentity {
 
@@ -40,10 +42,21 @@ QHash<QString, QPointer<QScreen>>& reverseCache()
     return s_cache;
 }
 
+/// GUI-thread guard for the unsynchronised static caches. The header
+/// documents the threading contract but nothing enforced it at runtime,
+/// so a worker-thread misuse would silently corrupt the caches. In
+/// debug builds this fires immediately at the misuse site; release
+/// builds compile it out (matching the cache's lock-free posture).
+#define PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD()                                                                         \
+    Q_ASSERT_X(QCoreApplication::instance() != nullptr                                                                 \
+                   && QThread::currentThread() == QCoreApplication::instance()->thread(),                              \
+               Q_FUNC_INFO, "ScreenIdentity helpers must be called on the GUI thread")
+
 } // namespace
 
 void invalidateEdidCache(const QString& connectorName)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     // Cascade through the cross-process EDID cache in PhosphorIdentity
     // first so subsequent identifier rebuilds see the fresh hardware
     // state.
@@ -81,6 +94,7 @@ void invalidateEdidCache(const QString& connectorName)
 
 QString baseIdentifierFor(const QScreen* screen)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (!screen) {
         return QString();
     }
@@ -92,6 +106,7 @@ QString baseIdentifierFor(const QScreen* screen)
 
 QString identifierFor(const QScreen* screen)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (!screen) {
         return QString();
     }
@@ -119,6 +134,7 @@ QString identifierFor(const QScreen* screen)
 
 QString idForName(const QString& connectorName)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (connectorName.isEmpty()) {
         return connectorName;
     }
@@ -132,6 +148,7 @@ QString idForName(const QString& connectorName)
 
 QString nameForId(const QString& screenId)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (screenId.isEmpty()) {
         return QString();
     }
@@ -141,6 +158,7 @@ QString nameForId(const QString& screenId)
 
 QScreen* findByIdOrName(const QString& identifier)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (identifier.isEmpty()) {
         return QGuiApplication::primaryScreen();
     }
@@ -211,6 +229,7 @@ QScreen* findByIdOrName(const QString& identifier)
 
 bool screensMatch(const QString& a, const QString& b)
 {
+    PS_SCREEN_IDENTITY_ASSERT_GUI_THREAD();
     if (a == b) {
         return true;
     }

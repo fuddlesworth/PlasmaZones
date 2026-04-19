@@ -131,6 +131,11 @@ set_target_properties(PhosphorScreens PROPERTIES
     VISIBILITY_INLINES_HIDDEN ON
     UNITY_BUILD OFF
     AUTOMOC ON
+    # Explicit PIC — SHARED targets on most platforms get this inferred,
+    # but ARM64 and cross-compile toolchains occasionally don't. Matches
+    # the policy in the sibling phosphor-* libraries so downstream
+    # packagers see consistent relocation behaviour.
+    POSITION_INDEPENDENT_CODE ON
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════

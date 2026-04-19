@@ -426,7 +426,7 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
-    m_screenAdaptor = new ScreenAdaptor(this);
+    m_screenAdaptor = new ScreenAdaptor(m_screenManager.get(), this);
     // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
     // of truth) via the IConfigStore — the daemon's single SettingsConfigStore
     // instance, shared with m_screenManager (as its Config::configStore) and

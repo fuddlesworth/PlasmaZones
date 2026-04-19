@@ -11,6 +11,8 @@
 #include <PhosphorScreens/NoOpPanelSource.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSignalSpy>
@@ -60,7 +62,8 @@ private Q_SLOTS:
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
         // The ready fan-out is queued to the next event-loop tick.
-        QVERIFY(spy.wait(1000));
+        // 2s upper bound covers slow CI runners under sanitizers.
+        QVERIFY(spy.wait(2000));
         QVERIFY(mgr.isPanelGeometryReady());
     }
 
@@ -69,16 +72,18 @@ private Q_SLOTS:
         ScreenManager mgr(ScreenManagerConfig{nullptr, nullptr, false});
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
-        QVERIFY(spy.wait(1000));
+        QVERIFY(spy.wait(2000));
         const int firstCount = spy.count();
         QCOMPARE(firstCount, 1);
 
         mgr.stop();
         // isPanelGeometryReady intentionally stays true across restart
         // unless the panel source re-transitions. Second start() should
-        // NOT emit again with no source.
+        // NOT emit again with no source. Drain the posted events
+        // deterministically instead of sleeping — the ready fan-out is
+        // a QTimer::singleShot(0), which dispatches during processEvents.
         mgr.start();
-        QTest::qWait(50);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
         QCOMPARE(spy.count(), firstCount);
     }
 
@@ -98,11 +103,13 @@ private Q_SLOTS:
         QSignalSpy spy(&mgr, &ScreenManager::panelGeometryReady);
         mgr.start();
         mgr.start(); // second start must be a no-op
-        QTest::qWait(50);
-        // NoOpPanelSource has ready()==true from the outset, but
-        // ScreenManager's ready transition is driven by panelOffsetsChanged.
-        // With no screens changing offsets, it may not emit — but the
-        // double-start must not crash or double-wire.
+        // Drain any posted events deterministically — with no screens
+        // changing offsets the NoOpPanelSource doesn't fan out a ready
+        // signal, so we don't wait on a specific signal. The double-
+        // start contract is "idempotent wiring, no crash, never more
+        // than one ready emission" — all three are inspectable after
+        // the event queue drains.
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
         QVERIFY(spy.count() <= 1);
     }
 
@@ -152,8 +159,13 @@ private Q_SLOTS:
         mgr.start();
         QVERIFY(mgr.hasVirtualScreens(physId));
 
+        QSignalSpy vsSpy(&mgr, &ScreenManager::virtualScreensChanged);
         QVERIFY(store.remove(physId));
-        QTest::qWait(50);
+        // Wait on the specific signal instead of a bare sleep — the
+        // changed() → refreshVirtualConfigs → virtualScreensChanged
+        // chain is synchronous per-signal but the emission is queued
+        // across the connection.
+        QVERIFY(vsSpy.wait(1000));
         QVERIFY(!mgr.hasVirtualScreens(physId));
     }
 
@@ -192,15 +204,20 @@ private Q_SLOTS:
         cfg.physicalScreenId = physId;
         cfg.screens.append(makeDef(physId, 0, QRectF(0.0, 0.0, 0.5, 1.0)));
         cfg.screens.append(makeDef(physId, 1, QRectF(0.5, 0.0, 0.5, 1.0)));
-        QVERIFY(store.save(physId, cfg));
-        QTest::qWait(50);
+        {
+            QSignalSpy primeSpy(&mgr, &ScreenManager::virtualScreensChanged);
+            QVERIFY(store.save(physId, cfg));
+            QVERIFY(primeSpy.wait(1000));
+        }
 
         QSignalSpy vsSpy(&mgr, &ScreenManager::virtualScreensChanged);
         // Same payload written again — InMemoryConfigStore's equal-write
         // short-circuit suppresses the changed() signal, so the manager
-        // never re-applies.
+        // never re-applies. Drain the event queue deterministically;
+        // a bare sleep risks flakes under CI load without actually
+        // strengthening the negative assertion.
         QVERIFY(store.save(physId, cfg));
-        QTest::qWait(50);
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
         QCOMPARE(vsSpy.count(), 0);
     }
 };

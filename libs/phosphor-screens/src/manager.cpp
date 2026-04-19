@@ -100,10 +100,14 @@ void ScreenManager::stop()
 
     if (m_cfg.panelSource) {
         m_cfg.panelSource->stop();
-        disconnect(m_cfg.panelSource, nullptr, this, nullptr);
+        // Explicit per-signal disconnects (mirroring the start() connects)
+        // so a future signal added to IPanelSource doesn't get silently
+        // torn down by a blanket `disconnect(source, nullptr, this, nullptr)`.
+        disconnect(m_cfg.panelSource, &IPanelSource::panelOffsetsChanged, this, &ScreenManager::onPanelOffsetsChanged);
+        disconnect(m_cfg.panelSource, &IPanelSource::requeryCompleted, this, &ScreenManager::onPanelRequeryCompleted);
     }
     if (m_cfg.configStore) {
-        disconnect(m_cfg.configStore, nullptr, this, nullptr);
+        disconnect(m_cfg.configStore, &IConfigStore::changed, this, &ScreenManager::onConfigStoreChanged);
     }
 
     while (!m_geometrySensors.isEmpty()) {

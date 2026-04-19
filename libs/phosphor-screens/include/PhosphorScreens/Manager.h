@@ -221,6 +221,15 @@ private:
 
     // Per-screen-name available-geometry cache (was file-static in
     // pre-extraction class — instance state now to avoid singleton coupling).
+    //
+    // NOTE on the `mutable` accessor caches below (this one, the
+    // effective-ID cache, and the virtual-geometry cache): they're
+    // populated lazily by nominally-const accessors and not protected by
+    // any synchronisation. The class contract is GUI-thread-only (see
+    // class-level doc and ScreenIdentity.h for the same constraint) —
+    // callers on worker threads will race these caches. Don't add locks
+    // here without also re-auditing every const accessor to make sure
+    // the mutation isn't leaked via returned QString&/QRect& references.
     mutable QHash<QString, QRect> m_availableGeometryCache;
 
     // Virtual screen configurations, keyed by physical screen ID.

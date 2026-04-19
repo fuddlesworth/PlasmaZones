@@ -8,6 +8,13 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 function(ps_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
+    # Explicit per-target properties rather than relying on directory/
+    # parent-project inheritance: (1) AUTOMOC because each test has its
+    # own Q_OBJECT class that needs MOC generation, (2) cxx_std_20 so a
+    # future CMake preset scoping CXX_STANDARD differently doesn't
+    # quietly downgrade the tests to 17.
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
+    target_compile_features(${_name} PRIVATE cxx_std_20)
     target_include_directories(${_name}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     )
@@ -31,3 +38,4 @@ ps_add_test(ps_test_inmemoryconfigstore test_inmemoryconfigstore.cpp)
 ps_add_test(ps_test_swapper test_swapper.cpp)
 ps_add_test(ps_test_manager_lifecycle test_manager_lifecycle.cpp)
 ps_add_test(ps_test_resolver test_resolver.cpp)
+ps_add_test(ps_test_plasma_panel_source test_plasma_panel_source.cpp)
