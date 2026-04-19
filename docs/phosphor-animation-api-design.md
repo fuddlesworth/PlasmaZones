@@ -972,45 +972,394 @@ suite green after each.
 set + `AnimationController` rewrite + `QtQuickClock`), ~30 new unit
 tests, ~50 LOC KWin adapter migration.
 
-### Phase 4 — QML integration
+### Phase 4 — QML integration + user-authored curves/profiles
 
-**Scope:** Expose the motion-runtime to QML so shell UI can bind
+**Scope:** Expose the motion runtime to QML so shell UI binds
 animations to user-configured profiles instead of hardcoded
-`Easing.OutCubic`.
+`Easing.OutCubic`; migrate settings to persist whole `Profile` JSON
+blobs; add user-authored curve + profile discovery via a
+consumer-agnostic `CurveLoader` / `ProfileLoader`.
 
-**Library additions:**
-- `include/PhosphorAnimation/qml/PhosphorEasing.h` — Q_GADGET value
-  type wrapping `Easing`, constructible from string.
-- `include/PhosphorAnimation/qml/PhosphorSpring.h` — Q_GADGET for
-  `Spring`.
-- `include/PhosphorAnimation/qml/PhosphorCurve.h` — Q_GADGET opaque
-  handle for `shared_ptr<const Curve>`, usable from QML as a curve
-  reference.
-- `include/PhosphorAnimation/qml/PhosphorMotion.h` — attached type
-  for `Behavior { PhosphorMotion { profile: ... } }` sites.
-- `include/PhosphorAnimation/qml/PhosphorAnimatedValue.h` — QML-
-  facing wrapper around `AnimatedValue<T>` (Phase-3 dependency).
+The surface targets three distinct consumer classes simultaneously:
+(a) the PlasmaZones shell and editor QML, (b) out-of-tree Quickshell
+/ Wayfire plugins that link phosphor-animation directly, (c) user
+authors who drop JSON files into a consumer-namespaced XDG directory
+without writing a line of C++ or QML. Architectural decisions below
+are driven by "works for all three" as the forcing function.
 
-**Build additions:**
-- QML plugin target `phosphor-animation-qml` (depends on
-  `phosphor-animation` core + `Qt6::Quick`).
-- Module URI `org.phosphor.animation`.
+#### Architecture decisions
 
-**Migration:**
-- `src/settings/qml/EasingSettings.qml` binds real `Profile`
-  instances; eliminates the duplicated bezier / elastic / bounce
-  parser that currently mirrors the C++ `Easing::fromString`.
-- `src/editor/qml/**`, `src/settings/qml/**`, `src/ui/**` animation
-  sites migrate from hardcoded easings to theme-bound `PhosphorMotion`.
+**L. Module URI — `org.phosphor.animation`.**
 
-**Success criteria:**
+The library is positioned for extraction (see `docs/library-
+extraction-survey.md`). Downstream consumers — a future Wayfire
+plugin, a Quickshell shell, a third-party KCM that wants the curve
+editor — import the library by its extracted name, not by
+PlasmaZones's namespace. Renaming the module post-extraction would
+break every downstream plugin's `import` line; picking the
+extraction-ready URI today is the one-time migration cost.
+
+The in-tree `org.kde.plasmazones` namespace keeps its QML types
+(settings, editor, overlays) but those do not cross into
+phosphor-animation territory.
+
+**M. Registration — `qt6_add_qml_module()`.**
+
+Declarative QML module registration is the modern KDE pattern
+(Kirigami uses it), handles type registration + plugin lifecycle +
+qmldir generation through one CMake call, and works identically
+in-tree and for third-party consumers that link via CMake's
+`find_package`. Manual `qmlRegisterType` is rejected because it
+couples registration order to the library's C++ init, and
+`Q_DECLARE_FOREIGN` is rejected because every Q_GADGET the library
+ships is authored in-tree (no foreign types to annotate).
+
+**N. Clock ownership — `QtQuickClockManager` singleton keyed on `QQuickWindow*`.**
+
+`QtQuickClock`'s class doc (Phase 3) documents the "one clock per
+window" contract. Phase 4 mechanically enforces it via a process-
+global manager:
+
+```cpp
+class PHOSPHORANIMATION_EXPORT QtQuickClockManager
+{
+public:
+    static QtQuickClockManager& instance();
+    /// Return the clock for @p window, constructing it on first call.
+    /// The clock's lifetime tracks the window's — the manager listens
+    /// for QQuickWindow::destroyed and drops the clock, which in turn
+    /// triggers reapAnimationsForClock on every controller that
+    /// captured it.
+    IMotionClock* clockFor(QQuickWindow* window);
+};
+```
+
+QML authors never see the clock — `PhosphorMotionAnimation` looks it
+up from its enclosing `Item.window`. Plugin authors writing C++
+against the library call `QtQuickClockManager::instance().clockFor(w)`
+with the same guarantee. Rejected alternatives: attached property
+(makes the clock a QML-only concept, hides it from C++ consumers),
+caller-supplied (pushes the "one per window" burden onto QML authors
+who can't be expected to audit it).
+
+**O. Per-T Q_GADGET wrappers — skip `QTransform`.**
+
+Five concrete types ship: `PhosphorAnimatedReal`,
+`PhosphorAnimatedPoint`, `PhosphorAnimatedSize`,
+`PhosphorAnimatedRect`, `PhosphorAnimatedColor`. Each is a Q_GADGET
+wrapping the matching `AnimatedValue<T>` specialisation with Q_PROPERTY
+bindings for `from`, `to`, `value`, `isAnimating`, `isComplete`, plus
+Q_INVOKABLE `start(from, to)` / `retarget(to)` / `cancel()` / `finish()`.
+
+Rejected alternatives: one generic `PhosphorAnimatedValue` dispatched
+via QVariant (loses compile-time type safety, IntelliSense gets worse
+for plugin authors), templating (Q_GADGETs can't be templated).
+
+`QTransform` is deferred — `Item.transform` is a `list<Transform>` in
+QML, not a matrix property, so there's no natural binding site. The
+C++ specialisation remains available for adapter authors.
+
+**P. `ColorSpace` as runtime enum property.**
+
+`PhosphorAnimatedColor.colorSpace: PhosphorAnimatedColor.OkLab` selects
+the interpolation space at runtime. The underlying template parameter
+becomes a runtime branch inside `lerpStateValue()` — one compiled
+instance per `QColor`, two runtime paths. Rejected: two separate QML
+types (`PhosphorAnimatedColorLinear` / `PhosphorAnimatedColorOkLab`) —
+QML idiom prefers enum flags over type bifurcation, and a per-call
+space swap would otherwise require re-binding the property.
+
+**Q. `Behavior` carrier — `PhosphorMotionAnimation : QAbstractAnimation`.**
+
+Qt's `Behavior` machinery only accepts `QAbstractAnimation` subclasses.
+The "attached type for Behavior" wording in the original Phase 4 draft
+is loose — the working shape is a first-class animation subclass that
+bridges Qt's `updateCurrentTime(int ms)` to `AnimatedValue<T>::advance()`:
+
+```qml
+Behavior on opacity {
+    PhosphorMotionAnimation { profile: "overlay.fade" }
+}
+```
+
+The subclass holds an `AnimatedValue<qreal>` internally, pulls the
+clock from `QtQuickClockManager`, and drives property writes via the
+QAbstractAnimation virtuals. The one-shot attached-property shape
+(`Behavior { PhosphorMotion.profile: ... }`) doesn't actually wire
+into Qt's animation evaluator and is rejected.
+
+**R. Profile binding — QVariant accepting path string OR `PhosphorProfile` value.**
+
+`PhosphorMotionAnimation.profile` is a `QVariant`. Two accepted shapes:
+
+- **Path string** — `"overlay.fade"`, resolved live through
+  `PhosphorProfileRegistry` at property-change time and re-resolved on
+  the registry's `profileChanged(path)` signal. User edits a curve in
+  Settings → registry emits → the path rebinds without a shell restart.
+
+- **`PhosphorProfile` value** — Q_GADGET snapshot. The plugin author's
+  literal `PhosphorProfile { curve: PhosphorSpring { omega: 14; zeta: 0.6 } }`
+  shape. Installed as-is, no registry indirection, no live update — the
+  plugin owns the profile and treats it as a compiled constant.
+
+Runtime dispatch on `QVariant::typeId()`: a `QString` hits the registry
+path, a `PhosphorProfile` hits the snapshot path. Both shapes coexist
+in one property so a plugin can start with `PhosphorProfile { … }` and
+graduate to `"plugin.fade"` once it wires its profiles through the
+registry.
+
+**S. Settings migration — persist Profile JSON blobs, no backwards compat.**
+
+Current settings persists five per-field values (curve string,
+duration, minDistance, sequenceMode, staggerInterval) and reassembles
+on read. Phase 4 replaces this with a single `Profile` JSON blob per
+config key, via `Profile::toJson` / `Profile::fromJson`. The old
+per-field keys are deleted — v3's no-backwards-compat freedom (project
+convention: "never add migration code for individual renamed keys")
+means existing user configs fall back to defaults on first read after
+the migration commit.
+
+This retires `EasingSettings.qml`'s hand-rolled curve-string composer
+over time; for Phase 4 the QML editor keeps its shape but writes the
+assembled Profile instead of the per-field values.
+
+**T. Plugin SDK — deferred to Phase 5.**
+
+A third-party plugin mounting its own profile subtree
+(`PhosphorProfileRegistry::mount("taskbar", path)`) is a separate
+design surface. Phase 4 ships the consumer-agnostic `CurveLoader` and
+`ProfileLoader` (see U), which are sufficient for plugin authors who
+drop JSON files; a programmatic mount API layered on top is a Phase 5
+decision once real plugins exist to test the shape against.
+
+**U. User-authored curve / profile discovery — consumer-supplied paths.**
+
+The library ships `CurveLoader` and `ProfileLoader` that scan a caller-
+supplied directory for `*.json` and register results into `CurveRegistry`
+/ `ProfileTree`. The library is consumer-agnostic: it does not know or
+care about the word "plasmazones." The *consumer* picks its XDG
+namespace:
+
+```cpp
+// In PlasmaZones daemon — consumer chooses its own namespace.
+auto dirs = QStandardPaths::locateAll(
+    QStandardPaths::GenericDataLocation,
+    QStringLiteral("plasmazones/curves"),
+    QStandardPaths::LocateDirectory);
+std::reverse(dirs.begin(), dirs.end()); // system first, user last
+for (const QString& dir : dirs) {
+    curveLoader.loadFromDirectory(dir, CurveRegistry::instance());
+}
+```
+
+A Wayfire plugin calls the same `loadFromDirectory` with its own
+namespace (`"wayfire-plasma/curves"`). Quickshell does the same with
+its namespace. The library's *own* built-in curve pack (if any ships)
+lives at its install-relative `data/curves/` and is loaded via a single
+`loadLibraryBuiltins(registry)` helper — the one self-referential path
+the library owns.
+
+This mirrors the existing `LayoutManager::loadLayouts` pattern
+(`src/core/layoutmanager/persistence.cpp:22-60`) which scans
+`plasmazones/layouts` the same way. The pattern was validated across
+the layout / shader / whatsnew data pipelines and is the project
+convention.
+
+**V. Curve authoring scope — tune existing types, no new curve classes.**
+
+User-authored curve JSON files reference an existing `typeId`
+(`easing` or `spring`) and supply parameters:
+
+```json
+{
+  "name": "smooth-overshoot",
+  "displayName": "Smooth Overshoot",
+  "typeId": "spring",
+  "parameters": { "omega": 14.0, "zeta": 0.6 }
+}
+```
+
+A new `Piecewise` / lookup-table curve type was considered and
+rejected — niri / Hyprland cap user authoring at parameterizing
+existing types, and the complexity of exposing piecewise-interpolation
+semantics (cubic vs linear segments, monotonicity guarantees,
+overshoot reporting) does not pay for itself against the available use
+cases. If a future plugin needs it, it's a localized curve-class
+addition; it does not gate Phase 4.
+
+**W. Live-reload — `QFileSystemWatcher` inside the loaders + 50ms debounce.**
+
+Both `CurveLoader` and `ProfileLoader` install a `QFileSystemWatcher`
+on the directories passed to `loadFromDirectory(..., LiveReload::On)`
+(opt-in — tests and batch importers pass `LiveReload::Off`). Filesystem
+changes are coalesced through a 50ms single-shot QTimer and then fire
+`curvesChanged()` / `profilesChanged()` signals. Consumers rescan and
+emit their own change signals to QML.
+
+Cross-process robustness: `QFileSystemWatcher` is known to miss
+atomic-rename writes (the kind `QSaveFile` produces). Consumers that
+have a D-Bus notification stream for the edited data (e.g., the daemon
+notifies settings of profile changes) should tie that signal to the
+same rescan as belt-and-suspenders. This mirrors
+`EditorController.cpp:63-116`'s pattern exactly.
+
+**X. Collision policy — user wins, system source preserved.**
+
+Per-entry bookkeeping on loaded curves / profiles:
+
+```cpp
+struct RegistryEntry {
+    QString sourcePath;        // where this copy lives (user or system)
+    QString systemSourcePath;  // if shadows a system entry, the system source
+};
+```
+
+When a user-dir entry collides with a system-dir entry on `name`:
+
+1. User entry replaces system in the registry.
+2. The user entry records the system's `sourcePath` as its
+   `systemSourcePath`.
+3. Deleting the user entry restores the system version from the stored
+   `systemSourcePath` without rescanning.
+
+System-vs-system collisions log a warning and keep the first-loaded
+entry (undefined scan order is a packaging bug — system packs should
+not collide).
+
+Mirrors `LayoutManager::loadLayoutsFromDirectory`
+(`persistence.cpp:130-156`) exactly. The load order (system first,
+user last) is achieved by reversing the `locateAll` output, same as
+the layout pattern.
+
+**Y. Preset apply — deep-copy fields, no live reference-back.**
+
+User clicks "Apply preset: snappy-spring" in Settings →
+`PhosphorProfileRegistry::applyPreset(targetPath, presetName)`
+deep-copies the preset's `Profile` fields into the target profile. The
+user now owns a free-standing profile; the preset file on disk is
+untouched, and subsequent edits to the preset do NOT propagate into
+the user's copy.
+
+"Reset to preset" is the symmetric operation — re-apply.
+
+Mirrors `LayoutManager::duplicateLayout`
+(`layoutmanager.cpp:308-327`) — the project convention for
+preset-derived user customizations. Rejected: reference-back semantics
+(preset edits propagate to applied copies) — confusing mental model
+for users, conflicts with the "user can freely edit after apply"
+expectation that layouts already established.
+
+#### Public API shape
+
+```cpp
+// Library-level loaders (consumer-agnostic)
+namespace PhosphorAnimation {
+
+enum class LiveReload : quint8 { Off, On };
+
+class PHOSPHORANIMATION_EXPORT CurveLoader : public QObject
+{
+    Q_OBJECT
+public:
+    explicit CurveLoader(QObject* parent = nullptr);
+
+    int loadFromDirectory(const QString& directory,
+                          CurveRegistry& registry,
+                          LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectories(const QStringList& directories,
+                            CurveRegistry& registry,
+                            LiveReload liveReload = LiveReload::Off);
+    int loadLibraryBuiltins(CurveRegistry& registry);
+
+Q_SIGNALS:
+    void curvesChanged();
+};
+
+class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
+{
+    Q_OBJECT
+public:
+    explicit ProfileLoader(QObject* parent = nullptr);
+
+    int loadFromDirectory(const QString& directory,
+                          ProfileTree& tree,
+                          LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectories(const QStringList& directories,
+                            ProfileTree& tree,
+                            LiveReload liveReload = LiveReload::Off);
+
+Q_SIGNALS:
+    void profilesChanged();
+};
+
+// Singleton profile registry — resolves path strings to Profile values
+class PHOSPHORANIMATION_EXPORT PhosphorProfileRegistry : public QObject
+{
+    Q_OBJECT
+public:
+    static PhosphorProfileRegistry& instance();
+    std::optional<Profile> resolve(const QString& path) const;
+
+Q_SIGNALS:
+    void profileChanged(const QString& path);
+    void profilesReloaded();
+};
+
+} // namespace PhosphorAnimation
+
+// QML plugin (phosphor-animation-qml)
+// Module: org.phosphor.animation
+//
+// Q_GADGETs: PhosphorEasing, PhosphorSpring, PhosphorCurve, PhosphorProfile
+// Q_OBJECTs: PhosphorAnimatedReal/Point/Size/Rect/Color, PhosphorMotionAnimation
+// Q_NAMESPACE enums: RetargetPolicy, SequenceMode, ColorSpace
+```
+
+#### Sub-commit plan
+
+1. **Architecture pass** (this commit) — decisions L–Y ratified in
+   the design doc.
+2. **QML plugin scaffolding** — `org.phosphor.animation` module,
+   `qt6_add_qml_module()` target, `PhosphorEasing` + `PhosphorSpring`
+   + `PhosphorCurve` + `PhosphorProfile` Q_GADGETs, `QtQuickClockManager`
+   singleton. No migrations. Plumbing-only commit.
+3. **`PhosphorAnimatedValue<T>` wrappers** — five per-T Q_GADGETs,
+   `ColorSpace` runtime property on the color variant, unit tests.
+4. **`PhosphorMotionAnimation`** — `QAbstractAnimation` subclass,
+   QVariant `profile` property accepting path string or value,
+   registry live-resolution wiring.
+5. **`PhosphorProfileRegistry` + `CurveLoader` + `ProfileLoader`** —
+   consumer-agnostic loaders, XDG discovery helper for PlasmaZones
+   daemon to call from its own namespace, live-reload opt-in,
+   user-wins collision policy.
+6. **Settings migration** — replace per-field persistence with
+   `Profile` JSON blobs, keep `EasingSettings.qml` curve editor
+   surface but route writes through `Profile`, drop old config keys.
+7. **QML call-site migration** — 19 QML files move from hardcoded
+   `Easing.*` / fixed `duration:` to profile-bound
+   `PhosphorMotionAnimation`. ProfilePath constants minted in
+   `ProfilePaths.h` as each site lands.
+
+#### Success criteria
+
 - User-edited curve in Settings visibly affects zone-highlight fade,
   layout OSD, and snap animation *without* restarting the daemon.
 - QML-only shell extensions (future Quickshell-style consumers) can
   author animations without touching C++.
+- User drops `~/.local/share/plasmazones/curves/my-spring.json` →
+  curve appears in Settings picker → any Profile referencing the name
+  resolves to it, with no daemon restart.
+- User drops `~/.local/share/plasmazones/profiles/my-snap.json` →
+  preset appears in Settings' preset picker → "Apply" deep-copies it
+  into the active Profile per decision Y.
 
-**Estimated scope:** ~500 LOC library + QML plugin, ~200 LOC QML
-migration, 10 new unit tests + integration smoke tests.
+#### Estimated scope
+
+~800 LOC library (5 Q_GADGETs + 5 AnimatedValue wrappers +
+`PhosphorMotionAnimation` + `CurveLoader` + `ProfileLoader` +
+`PhosphorProfileRegistry` + `QtQuickClockManager`), ~200 LOC Settings
+migration, ~150 LOC daemon wiring (consumer XDG dance), ~300 LOC of
+QML migration across 19 files, ~25 new unit tests.
 
 ### Phase 5 — ISurfaceAnimator adapter
 
@@ -1158,6 +1507,23 @@ above. The load-bearing call: full unification.
 freedom makes this the architecturally correct choice over preserving
 two parallel progression engines.
 
+**Phase 4 architecture pass (resolved 2026-04-19):** Fifteen implicit
+architectural questions that the original Phase 4 draft did not
+explicitly answer — module URI + registration mechanism, clock
+ownership for QML, QML specialisation set, `ColorSpace` surface shape,
+`Behavior` integration mechanics, Profile binding model (path vs value),
+settings persistence migration, plugin SDK scope, user-authored curve
+/ profile discovery path, library-vs-consumer namespace responsibility,
+curve authoring surface (new types vs parameter tuning), live-reload
+file watching, collision policy, preset apply semantics — are all
+resolved in decisions L–Y of the Phase 4 roadmap section above. The
+load-bearing calls: library stays consumer-agnostic
+(`CurveLoader::loadFromDirectory` takes the XDG path from the
+consumer; the library does not know the word "plasmazones"), QML
+binding uses path strings resolved live through a singleton registry
+for settings-driven live updates, and settings fully migrates to
+Profile JSON blobs with no backwards compatibility (v3 convention).
+
 1. **~~Should `AnimationConfig` be retired in favor of `Profile`?~~**
    Resolved in the scaffold PR — `AnimationConfig` was a parallel-shape
    shim with no production benefit, so it was removed before merge.
@@ -1216,10 +1582,15 @@ two parallel progression engines.
      the final paint lands on target regardless of the curve's
      endpoint arithmetic.
 
-4. **Plugin curve discovery.** Today `registerFactory` must be called
-   imperatively. Phase 4/5 could add a `data/curves/*.json` discovery
-   layer so third-party curve packs install as data files. Open; not
-   urgent.
+4. **~~Plugin curve discovery.~~** Resolved in Phase 4 decision U:
+   `CurveLoader::loadFromDirectory(path, registry)` is the library-
+   agnostic scanner; consumers (PlasmaZones daemon, Wayfire plugin,
+   Quickshell) supply their own XDG path via
+   `QStandardPaths::locateAll(GenericDataLocation, "<consumer>/curves",
+   LocateDirectory)`. Library ships its own built-ins via
+   `loadLibraryBuiltins(registry)`. User-authored curves in
+   `~/.local/share/<consumer>/curves/` layer on top with user-wins
+   collision policy mirroring `LayoutManager`.
 
 5. **Shader profile schema.** Phase 6 will need a per-event shader
    selection layered on top of `Profile`. Option A: extend `Profile`
