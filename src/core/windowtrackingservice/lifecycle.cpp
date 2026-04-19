@@ -8,7 +8,7 @@
 #include "../constants.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorScreens/Manager.h>
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
@@ -516,7 +516,7 @@ void WindowTrackingService::onLayoutChanged()
     // Include BOTH m_windowZoneAssignments (tracked) AND m_pendingRestoreQueues (session-restored
     // windows that KWin placed in zones before we got windowSnapped - e.g. after login).
     //
-    // LayoutManager ensures prevLayout is never null (captures current as previous on first set).
+    // PhosphorZones::LayoutManager ensures prevLayout is never null (captures current as previous on first set).
     // When prevLayout != newLayout: capture assignments to OLD layout (real switch).
     // When prevLayout == newLayout: capture assignments to CURRENT layout (startup re-apply).
     //

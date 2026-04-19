@@ -44,6 +44,20 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
+# PhosphorConfig::IBackend is taken by reference in LayoutManager's public
+# constructor so callers can wire any persistent-store backend they own.
+# PUBLIC because the type leaks through the header.
+if(NOT TARGET PhosphorConfig::PhosphorConfig)
+    find_package(PhosphorConfig CONFIG REQUIRED)
+endif()
+
+# PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
+# and VirtualScreen helpers used by LayoutManager's assignment cascade.
+# PRIVATE because no public header leaks the type.
+if(NOT TARGET PhosphorScreens::PhosphorScreens)
+    find_package(PhosphorScreens CONFIG REQUIRED)
+endif()
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Library
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -66,6 +80,8 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/IQuickLayouts.h
     include/PhosphorZones/ZonesLayoutSource.h
     include/PhosphorZones/ZonesLayoutSourceFactory.h
+    include/PhosphorZones/AssignmentEntry.h
+    include/PhosphorZones/LayoutManager.h
 )
 
 set(phosphorzones_SRCS
@@ -81,6 +97,9 @@ set(phosphorzones_SRCS
     src/zoneslogging.h
     src/zoneslogging.cpp
     src/interfaces.cpp
+    src/layoutmanager.cpp
+    src/layoutmanager_assignments.cpp
+    src/layoutmanager_persistence.cpp
 )
 
 add_library(PhosphorZones SHARED
@@ -114,11 +133,18 @@ target_link_libraries(PhosphorZones
         Qt6::Core
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
+        # LayoutManager's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
+        # — type must be visible to callers that include LayoutManager.h.
+        PhosphorConfig::PhosphorConfig
     PRIVATE
         # Layout::matchAppRule uses PhosphorIdentity::WindowId for
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
+        # LayoutManager impl uses ScreenIdentity / VirtualScreen for
+        # the assignment-cascade screen-id normalisation. PRIVATE — no
+        # public header surfaces these types.
+        PhosphorScreens::PhosphorScreens
 )
 
 set_target_properties(PhosphorZones PROPERTIES

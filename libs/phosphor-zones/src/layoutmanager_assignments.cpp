@@ -1,20 +1,21 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// PhosphorZones::Layout assignment management (per-screen, per-desktop, per-activity).
+// Layout assignment management (per-screen, per-desktop, per-activity).
 // Part of LayoutManager — split from layoutmanager.cpp for SRP.
 
-#include "../layoutmanager.h"
-#include "../constants.h"
-#include "../logging.h"
-#include "../utils.h"
+#include <PhosphorZones/LayoutManager.h>
+
+#include "zoneslogging.h"
+
+#include <PhosphorScreens/ScreenIdentity.h>
 #include <PhosphorScreens/VirtualScreen.h>
+
 #include <QFile>
 #include <QJsonDocument>
 #include <optional>
-#include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 namespace {
 
@@ -100,9 +101,9 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
         entry.mode = AssignmentEntry::Snapping;
         entry.snappingLayout = layout->id().toString();
         // Preserve existing tilingAlgorithm — only mode + snappingLayout change
-        qCDebug(lcLayout) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
-                          << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
-                          << "layout=" << layout->name();
+        qCDebug(lcZonesLib) << "assignLayout: screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity)
+                            << "layout=" << layout->name();
     } else {
         // Clearing: remove the entry entirely.
         // Skip save/signal when there's nothing to remove — avoids a redundant
@@ -112,8 +113,8 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
         if (!hadAssignment) {
             return;
         }
-        qCDebug(lcLayout) << "assignLayout: removed screen=" << screenId << "desktop=" << virtualDesktop
-                          << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity);
+        qCDebug(lcZonesLib) << "assignLayout: removed screen=" << screenId << "desktop=" << virtualDesktop
+                            << "activity=" << (activity.isEmpty() ? QStringLiteral("(all)") : activity);
     }
 
     Q_EMIT layoutAssigned(screenId, key.virtualDesktop, layout);
@@ -146,9 +147,9 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
     // are valid when explicitly set by the KCM to preserve mode at a context level.
     m_assignments[key] = entry;
 
-    qCDebug(lcLayout) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
-                      << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
-                      << "tiling=" << entry.tilingAlgorithm;
+    qCDebug(lcZonesLib) << "setAssignmentEntryDirect: screen=" << screenId << "desktop=" << virtualDesktop
+                        << "activity=" << activity << "mode=" << entry.mode << "snapping=" << entry.snappingLayout
+                        << "tiling=" << entry.tilingAlgorithm;
 
     // Resolve layout for signal emission
     PhosphorZones::Layout* layout = nullptr;
@@ -178,10 +179,15 @@ PhosphorZones::Layout* LayoutManager::layoutForScreen(const QString& screenId, i
     if (result)
         return *result;
 
-    // No assignment: use defaultLayoutId from settings when set, else first layout (by defaultOrder)
-    if (m_settings && !m_settings->defaultLayoutId().isEmpty()) {
-        if (PhosphorZones::Layout* L = layoutById(QUuid::fromString(m_settings->defaultLayoutId()))) {
-            return L;
+    // No assignment: ask the project-supplied default-layout-id provider
+    // (e.g. PlasmaZones wires it to ISettings::defaultLayoutId), then
+    // fall back to the first registered layout (by defaultOrder).
+    if (m_defaultLayoutIdProvider) {
+        const QString configuredId = m_defaultLayoutIdProvider();
+        if (!configuredId.isEmpty()) {
+            if (PhosphorZones::Layout* L = layoutById(QUuid::fromString(configuredId))) {
+                return L;
+            }
         }
     }
     return m_layouts.isEmpty() ? nullptr : m_layouts.first();
@@ -254,8 +260,8 @@ void LayoutManager::clearAutotileAssignments()
         // Flip mode to Snapping — preserve both snappingLayout and tilingAlgorithm
         // so re-enabling autotile can restore the previous algorithm.
         entry.mode = AssignmentEntry::Snapping;
-        qCDebug(lcLayout) << "clearAutotileAssignments: flipped to Snapping for screen=" << key.screenId
-                          << "desktop=" << key.virtualDesktop;
+        qCDebug(lcZonesLib) << "clearAutotileAssignments: flipped to Snapping for screen=" << key.screenId
+                            << "desktop=" << key.virtualDesktop;
         Q_EMIT layoutAssigned(key.screenId, key.virtualDesktop, nullptr);
     }
 
@@ -271,7 +277,7 @@ void LayoutManager::clearAutotileAssignments()
 
     if (changed) {
         saveAssignments();
-        qCInfo(lcLayout) << "Cleared all autotile assignments";
+        qCInfo(lcZonesLib) << "Cleared all autotile assignments";
     }
 }
 
@@ -297,7 +303,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
         const QString& layoutId = it.value();
 
         if (screenId.isEmpty()) {
-            qCWarning(lcLayout) << "Skipping assignment with empty screen ID";
+            qCWarning(lcZonesLib) << "Skipping assignment with empty screen ID";
             continue;
         }
         if (shouldSkipLayoutAssignment(layoutId, QStringLiteral("screen ") + screenId)) {
@@ -309,7 +315,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
         m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
+        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to screen" << screenId;
     }
 
     saveAssignments();
@@ -322,7 +328,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
         emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
     }
 
-    qCInfo(lcLayout) << "Batch set" << count << "screen assignments";
+    qCInfo(lcZonesLib) << "Batch set" << count << "screen assignments";
 }
 
 void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
@@ -347,7 +353,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
         const QString& layoutId = it.value();
 
         if (screenId.isEmpty() || virtualDesktop < 1) {
-            qCWarning(lcLayout) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
+            qCWarning(lcZonesLib) << "Skipping invalid desktop assignment:" << screenId << virtualDesktop;
             continue;
         }
         QString context = QStringLiteral("%1 desktop %2").arg(screenId).arg(virtualDesktop);
@@ -360,7 +366,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
         m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
+        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "desktop" << virtualDesktop;
     }
 
     saveAssignments();
@@ -372,7 +378,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
                            assignmentIdForScreen(screenId, m_currentVirtualDesktop, m_currentActivity));
     }
 
-    qCInfo(lcLayout) << "Batch set" << count << "desktop assignments";
+    qCInfo(lcZonesLib) << "Batch set" << count << "desktop assignments";
 }
 
 void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
@@ -397,7 +403,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         const QString& layoutId = it.value();
 
         if (screenId.isEmpty() || activityId.isEmpty()) {
-            qCWarning(lcLayout) << "Skipping invalid activity assignment:" << screenId << activityId;
+            qCWarning(lcZonesLib) << "Skipping invalid activity assignment:" << screenId << activityId;
             continue;
         }
         QString context = QStringLiteral("%1 activity %2").arg(screenId, activityId);
@@ -410,7 +416,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         m_assignments[key] = entry;
         storedScreens.insert(screenId);
         ++count;
-        qCDebug(lcLayout) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
+        qCDebug(lcZonesLib) << "Batch: assigned layout" << layoutId << "to" << screenId << "activity" << activityId;
     }
 
     saveAssignments();
@@ -422,7 +428,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
         emitLayoutAssigned(screenId, 0, assignmentIdForScreen(screenId, 0, QString()));
     }
 
-    qCInfo(lcLayout) << "Batch set" << count << "activity assignments";
+    qCInfo(lcZonesLib) << "Batch set" << count << "activity assignments";
 }
 
 QHash<QPair<QString, int>, QString> LayoutManager::desktopAssignments() const
@@ -472,7 +478,7 @@ void LayoutManager::saveAllAutotileOverrides(const QJsonObject& all)
     ensureLayoutDirectory();
     QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
     if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcLayout) << "Failed to save autotile overrides:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to save autotile overrides:" << file.errorString();
         return;
     }
     file.write(QJsonDocument(all).toJson());
@@ -494,4 +500,4 @@ void LayoutManager::saveAutotileOverrides(const QString& algorithmId, const QJso
     saveAllAutotileOverrides(all);
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

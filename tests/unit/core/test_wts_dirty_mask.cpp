@@ -32,7 +32,8 @@
 #include <QRect>
 
 #include <PhosphorZones/Layout.h>
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
@@ -313,7 +314,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;

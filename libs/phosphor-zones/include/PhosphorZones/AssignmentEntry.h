@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
 #include <PhosphorLayoutApi/LayoutId.h>
+
+#include <QHash>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 /**
  * @brief Key for layout assignment (screen + desktop + activity)
@@ -140,4 +142,4 @@ struct AssignmentEntry
     }
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

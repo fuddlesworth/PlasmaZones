@@ -15,7 +15,7 @@
 #include "screenhelper.h"
 #include "../core/constants.h"
 #include "../core/enums.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include "../core/modifierutils.h"
 
@@ -240,7 +240,7 @@ public:
     // Settings runs in its own process, separate from the daemon. The legacy
     // path fetches the layout list over D-Bus (getLayoutList) which only
     // works while the daemon is running. The methods below load the SAME
-    // on-disk layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource,
+    // on-disk layouts via an in-process PhosphorZones::LayoutManager + PhosphorZones::ZonesLayoutSource,
     // so QML preview-rendering paths can render layouts even when the
     // daemon isn't up (early settings launch, daemon crashed, etc.).
     //
@@ -896,7 +896,7 @@ private:
     // Suppresses the local-path layoutsChanged emit while a D-Bus
     // getLayoutList round-trip is in flight. Without this gate, every
     // loadLayoutsAsync() emits twice: once synchronously from the
-    // LayoutManager::layoutsChanged lambda (local composite) and once
+    // PhosphorZones::LayoutManager::layoutsChanged lambda (local composite) and once
     // from the async D-Bus reply lambda (daemon-enriched list). Set true
     // right before the D-Bus asyncCall dispatch; cleared in the reply
     // lambda's entry (before any early-return on error, so the local
@@ -906,7 +906,7 @@ private:
     bool m_awaitingDaemonLayouts = false;
 
     // Daemon-independent layout source — see localLayoutPreviews() doc.
-    // LayoutManager opens its own assignments backend + scans the standard
+    // PhosphorZones::LayoutManager opens its own assignments backend + scans the standard
     // layouts directory; the bundle's composite aggregates manual + autotile
     // entries so consumers query a single ILayoutSource and never branch on
     // id-prefix.
@@ -923,7 +923,7 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
-    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    std::unique_ptr<PhosphorZones::LayoutManager> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
     /// unique_ptr reset in reverse declaration order — BEFORE the

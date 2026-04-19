@@ -579,7 +579,7 @@ public:
 
     // Returns the absolute path to assignments.json (layout assignments and
     // quick layout shortcuts).  Separate from config.json so that Settings
-    // and LayoutManager have independent ownership of their files.
+    // and PhosphorZones::LayoutManager have independent ownership of their files.
     PLASMAZONES_EXPORT static QString assignmentsFilePath();
 
     // Returns the absolute path to the legacy plasmazonesrc file (INI format).

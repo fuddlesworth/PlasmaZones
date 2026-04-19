@@ -12,7 +12,11 @@ class QDBusMessage;
 
 namespace PlasmaZones {
 
+}
+namespace PhosphorZones {
 class LayoutManager;
+}
+namespace PlasmaZones {
 
 /**
  * @brief Manages virtual desktop changes and layout switching
@@ -25,7 +29,7 @@ class PLASMAZONES_EXPORT VirtualDesktopManager : public QObject
     Q_OBJECT
 
 public:
-    explicit VirtualDesktopManager(LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit VirtualDesktopManager(PhosphorZones::LayoutManager* layoutManager, QObject* parent = nullptr);
     ~VirtualDesktopManager() override;
 
     /**
@@ -95,7 +99,7 @@ private:
     void initKWinDBus();
     void applyDesktopListReply(const QDBusMessage& reply, const QString& currentId);
 
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     QDBusInterface* m_kwinVDInterface = nullptr;
     bool m_running = false;
     bool m_useKWinDBus = false; // True if KWin D-Bus is available

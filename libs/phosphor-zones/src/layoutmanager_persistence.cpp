@@ -1,13 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// PhosphorZones::Layout file I/O: loading, saving, importing, exporting.
+// Layout file I/O: loading, saving, importing, exporting.
 // Part of LayoutManager — split from layoutmanager.cpp for SRP.
 
-#include "../layoutmanager.h"
-#include "../constants.h"
-#include "../logging.h"
-#include "../utils.h"
+#include <PhosphorZones/LayoutManager.h>
+
+#include "zoneslogging.h"
+
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -15,7 +15,28 @@
 #include <QStandardPaths>
 #include <algorithm>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
+
+namespace {
+
+// Wire-format keys for the assignments.json file. Owned by this lib
+// because the file IS the LayoutManager's serialization format —
+// composition roots that swap backends still need the on-disk shape
+// to round-trip. PlasmaZones used to keep these in src/core/constants.h
+// alongside other PZ-specific JSON keys; lifting them in here is part
+// of the same "PZ-knowledge stays project-side" cleanup that moved the
+// schema-string ConfigDefaults reads behind LayoutManagerConfig.
+namespace JsonKeys {
+constexpr QLatin1String Assignments{"assignments"};
+constexpr QLatin1String ScreenId{"screenId"};
+constexpr QLatin1String Screen{"screen"}; ///< Legacy alias retained for backwards-compat reads
+constexpr QLatin1String Desktop{"desktop"};
+constexpr QLatin1String Activity{"activity"};
+constexpr QLatin1String LayoutId{"layoutId"};
+constexpr QLatin1String QuickShortcuts{"quickShortcuts"};
+} // namespace JsonKeys
+
+} // namespace
 
 void LayoutManager::loadLayouts()
 {
@@ -33,10 +54,10 @@ void LayoutManager::loadLayouts()
     for (const QString& dir : allDirs) {
         int beforeCount = m_layouts.size();
         loadLayoutsFromDirectory(dir);
-        qCInfo(lcLayout) << "Loaded layouts=" << (m_layouts.size() - beforeCount) << "from=" << dir;
+        qCInfo(lcZonesLib) << "Loaded layouts=" << (m_layouts.size() - beforeCount) << "from=" << dir;
     }
 
-    qCInfo(lcLayout) << "Total layouts=" << m_layouts.size();
+    qCInfo(lcZonesLib) << "Total layouts=" << m_layouts.size();
 
     // Sort by defaultOrder (from layout JSON) so the preferred default is first when defaultLayoutId is empty
     std::stable_sort(m_layouts.begin(), m_layouts.end(), [](PhosphorZones::Layout* a, PhosphorZones::Layout* b) {
@@ -47,8 +68,8 @@ void LayoutManager::loadLayouts()
     if (!m_activeLayout && !m_layouts.isEmpty()) {
         PhosphorZones::Layout* initial = defaultLayout();
         if (initial) {
-            qCInfo(lcLayout) << "Active layout name=" << initial->name() << "id=" << initial->id().toString()
-                             << "zones=" << initial->zoneCount();
+            qCInfo(lcZonesLib) << "Active layout name=" << initial->name() << "id=" << initial->id().toString()
+                               << "zones=" << initial->zoneCount();
         }
         setActiveLayout(initial);
     }
@@ -61,12 +82,12 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
 {
     QDir dir(directory);
     if (!dir.exists()) {
-        qCWarning(lcLayout) << "Layout directory does not exist:" << directory;
+        qCWarning(lcZonesLib) << "Layout directory does not exist:" << directory;
         return;
     }
 
     if (!dir.isReadable()) {
-        qCWarning(lcLayout) << "Layout directory is not readable:" << directory;
+        qCWarning(lcZonesLib) << "Layout directory is not readable:" << directory;
         return;
     }
 
@@ -81,32 +102,32 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
         QFile file(filePath);
 
         if (!file.exists()) {
-            qCWarning(lcLayout) << "Layout file does not exist:" << filePath;
+            qCWarning(lcZonesLib) << "Layout file does not exist:" << filePath;
             continue;
         }
 
         if (!file.open(QIODevice::ReadOnly)) {
-            qCWarning(lcLayout) << "Failed to open layout file:" << filePath << "Error:" << file.errorString();
+            qCWarning(lcZonesLib) << "Failed to open layout file:" << filePath << "Error:" << file.errorString();
             continue;
         }
 
         const QByteArray data = file.readAll();
         if (data.isEmpty()) {
-            qCWarning(lcLayout) << "Layout file is empty:" << filePath;
+            qCWarning(lcZonesLib) << "Layout file is empty:" << filePath;
             continue;
         }
 
         QJsonParseError parseError;
         const auto doc = QJsonDocument::fromJson(data, &parseError);
         if (parseError.error != QJsonParseError::NoError) {
-            qCWarning(lcLayout) << "Failed to parse layout file:" << filePath << "Error:" << parseError.errorString()
-                                << "at offset" << parseError.offset;
+            qCWarning(lcZonesLib) << "Failed to parse layout file:" << filePath << "Error:" << parseError.errorString()
+                                  << "at offset" << parseError.offset;
             continue;
         }
 
         auto layout = PhosphorZones::Layout::fromJson(doc.object(), this);
         if (!layout) {
-            qCWarning(lcLayout) << "Failed to create layout from JSON:" << filePath;
+            qCWarning(lcZonesLib) << "Failed to create layout from JSON:" << filePath;
             continue;
         }
 
@@ -123,8 +144,9 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                 connect(layout, &PhosphorZones::Layout::layoutModified, this, [this, layout]() {
                     saveLayout(layout);
                 });
-                qCInfo(lcLayout) << "Loaded layout name=" << layout->name() << "zones=" << layout->zoneCount()
-                                 << "source=" << (layout->isSystemLayout() ? "system" : "user") << "from=" << filePath;
+                qCInfo(lcZonesLib) << "Loaded layout name=" << layout->name() << "zones=" << layout->zoneCount()
+                                   << "source=" << (layout->isSystemLayout() ? "system" : "user")
+                                   << "from=" << filePath;
             } else {
                 // Duplicate ID found - user layouts (from .local) should override system layouts
                 if (!layout->isSystemLayout() && existing->isSystemLayout()) {
@@ -143,20 +165,20 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
                         saveLayout(layout);
                     });
                     delete existing;
-                    qCInfo(lcLayout) << "User layout overrides system layout name=" << layout->name()
-                                     << "from=" << filePath;
+                    qCInfo(lcZonesLib) << "User layout overrides system layout name=" << layout->name()
+                                       << "from=" << filePath;
                 } else {
                     // Same source type or system trying to override user - skip
-                    qCInfo(lcLayout) << "Skipping duplicate layout name=" << layout->name() << "id=" << layout->id();
+                    qCInfo(lcZonesLib) << "Skipping duplicate layout name=" << layout->name() << "id=" << layout->id();
                     delete layout;
                 }
             }
         } else {
-            qCWarning(lcLayout) << "Skipping invalid layout entry=" << entry << "reason=empty name or no zones";
+            qCWarning(lcZonesLib) << "Skipping invalid layout entry=" << entry << "reason=empty name or no zones";
             // Clean up orphaned file from user directory (don't delete system layouts)
             if (!layout->isSystemLayout()) {
                 QFile::remove(filePath);
-                qCInfo(lcLayout) << "Removed orphaned layout file:" << filePath;
+                qCInfo(lcZonesLib) << "Removed orphaned layout file:" << filePath;
             }
             delete layout;
         }
@@ -172,7 +194,7 @@ void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
     // Don't persist invalid layouts (empty name or no zones) — they would be
     // skipped on reload anyway, creating orphaned files on disk.
     if (layout->name().isEmpty() || layout->zoneCount() == 0) {
-        qCDebug(lcLayout) << "saveLayout: skipping invalid layout (name empty or no zones)" << layout->id();
+        qCDebug(lcZonesLib) << "saveLayout: skipping invalid layout (name empty or no zones)" << layout->id();
         return;
     }
 
@@ -182,14 +204,15 @@ void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
     // capture the system origin path before toJson/sourcePath changes
     if (layout->isSystemLayout() && !layout->hasSystemOrigin()) {
         layout->setSystemSourcePath(layout->sourcePath());
-        qCInfo(lcLayout) << "Captured system origin for" << layout->name() << "from=" << layout->sourcePath();
+        qCInfo(lcZonesLib) << "Captured system origin for" << layout->name() << "from=" << layout->sourcePath();
     }
 
     const QString filePath = layoutFilePath(layout->id());
     QFile file(filePath);
 
     if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcLayout) << "Failed to open layout file for writing:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to open layout file for writing:" << filePath
+                              << "Error:" << file.errorString();
         return;
     }
 
@@ -198,12 +221,12 @@ void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
     if (file.write(data) != data.size()) {
-        qCWarning(lcLayout) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to write layout file:" << filePath << "Error:" << file.errorString();
         return;
     }
 
     if (!file.flush()) {
-        qCWarning(lcLayout) << "Failed to flush layout file:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to flush layout file:" << filePath << "Error:" << file.errorString();
         return;
     }
 
@@ -282,7 +305,7 @@ void LayoutManager::loadAssignments()
                 const auto doc = QJsonDocument::fromJson(data, &parseError);
                 if (parseError.error == QJsonParseError::NoError) {
                     const auto root = doc.object();
-                    qCInfo(lcLayout) << "Migrating assignments from JSON to KConfig";
+                    qCInfo(lcZonesLib) << "Migrating assignments from JSON to KConfig";
 
                     // Load shadowed assignments from old format
                     QHash<LayoutAssignmentKey, QString> oldShadows;
@@ -389,14 +412,14 @@ void LayoutManager::loadAssignments()
                         for (auto it = toAdd.constBegin(); it != toAdd.constEnd(); ++it)
                             m_assignments[it.key()] = it.value();
                         if (!toRemove.isEmpty()) {
-                            qCInfo(lcLayout) << "Migrated" << toRemove.size()
-                                             << "activity-keyed per-desktop assignments to empty-activity";
+                            qCInfo(lcZonesLib) << "Migrated" << toRemove.size()
+                                               << "activity-keyed per-desktop assignments to empty-activity";
                         }
                     }
 
                     // Write migrated data immediately
                     saveAssignments();
-                    qCInfo(lcLayout) << "Migration from assignments.json complete";
+                    qCInfo(lcZonesLib) << "Migration from assignments.json complete";
 
                     // Rename old file so it isn't re-read on next startup
                     file.close();
@@ -410,12 +433,17 @@ void LayoutManager::loadAssignments()
     // Prior to this split, Assignment:* and QuickLayouts groups lived in
     // config.json alongside Settings-owned groups.  If assignments.json is
     // still empty, check config.json for legacy groups and migrate them.
-    if (!foundGroups && m_quickLayoutShortcuts.isEmpty()) {
+    if (!foundGroups && m_quickLayoutShortcuts.isEmpty() && m_config.legacyMigrationBackendFactory) {
         // Note: concurrent startup of daemon + settings app could race on this
         // migration (both read config.json, both write assignments.json).  The
         // atomic-write pattern means last-writer-wins, which is acceptable for
         // a one-time migration that produces identical output from identical input.
-        auto configBackend = createDefaultConfigBackend();
+        //
+        // The legacy backend (project-supplied — PZ wires it to
+        // createDefaultConfigBackend) holds the older [Assignment:*] /
+        // [QuickLayouts] groups when the file split hasn't run yet.
+        // No factory configured = no migration — clean install or non-PZ.
+        auto configBackend = m_config.legacyMigrationBackendFactory();
         readAssignmentGroups(configBackend.get());
         readQuickLayouts(configBackend.get());
 
@@ -432,7 +460,7 @@ void LayoutManager::loadAssignments()
                 }
             }
             configBackend->deleteGroup(m_config.quickLayoutsGroup);
-            qCInfo(lcLayout) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
+            qCInfo(lcZonesLib) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
         }
 
         // Also clean up legacy groups from config.json while we have it open
@@ -462,9 +490,9 @@ void LayoutManager::loadAssignments()
                 configBackend->deleteGroup(m_config.modeTrackingGroup);
                 if (migrated) {
                     saveAssignments();
-                    qCInfo(lcLayout) << "Migrated [ModeTracking] into base screen entries";
+                    qCInfo(lcZonesLib) << "Migrated [ModeTracking] into base screen entries";
                 } else {
-                    qCInfo(lcLayout) << "Cleaned up obsolete [ModeTracking] group";
+                    qCInfo(lcZonesLib) << "Cleaned up obsolete [ModeTracking] group";
                 }
             }
         }
@@ -482,7 +510,7 @@ void LayoutManager::loadAssignments()
                 }
             }
             if (cleaned) {
-                qCInfo(lcLayout) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
+                qCInfo(lcZonesLib) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
             }
         }
 
@@ -490,14 +518,15 @@ void LayoutManager::loadAssignments()
         configBackend->sync();
     }
 
-    qCInfo(lcLayout) << "Loaded assignments=" << m_assignments.size()
-                     << "quickShortcuts=" << m_quickLayoutShortcuts.size();
+    qCInfo(lcZonesLib) << "Loaded assignments=" << m_assignments.size()
+                       << "quickShortcuts=" << m_quickLayoutShortcuts.size();
     for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
         const AssignmentEntry& entry = it.value();
-        qCDebug(lcLayout) << "Assignment screenId=" << it.key().screenId << "desktop=" << it.key().virtualDesktop
-                          << "activity=" << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
-                          << "mode=" << static_cast<int>(entry.mode) << "snapping=" << entry.snappingLayout
-                          << "tiling=" << entry.tilingAlgorithm;
+        qCDebug(lcZonesLib) << "Assignment screenId=" << it.key().screenId << "desktop=" << it.key().virtualDesktop
+                            << "activity="
+                            << (it.key().activity.isEmpty() ? QStringLiteral("(all)") : it.key().activity)
+                            << "mode=" << static_cast<int>(entry.mode) << "snapping=" << entry.snappingLayout
+                            << "tiling=" << entry.tilingAlgorithm;
     }
 }
 
@@ -542,52 +571,52 @@ void LayoutManager::saveAssignments()
     }
 
     m_configBackend->sync();
-    qCInfo(lcLayout) << "Saved assignments=" << m_assignments.size()
-                     << "quickShortcuts=" << m_quickLayoutShortcuts.size();
+    qCInfo(lcZonesLib) << "Saved assignments=" << m_assignments.size()
+                       << "quickShortcuts=" << m_quickLayoutShortcuts.size();
 }
 
 void LayoutManager::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
-        qCWarning(lcLayout) << "Cannot import layout: file path is empty";
+        qCWarning(lcZonesLib) << "Cannot import layout: file path is empty";
         return;
     }
 
     QFile file(filePath);
     if (!file.exists()) {
-        qCWarning(lcLayout) << "Cannot import layout: file does not exist:" << filePath;
+        qCWarning(lcZonesLib) << "Cannot import layout: file does not exist:" << filePath;
         return;
     }
 
     if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcLayout) << "Failed to open layout file for import:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to open layout file for import:" << filePath << "Error:" << file.errorString();
         return;
     }
 
     const QByteArray data = file.readAll();
     if (data.isEmpty()) {
-        qCWarning(lcLayout) << "Cannot import layout: file is empty:" << filePath;
+        qCWarning(lcZonesLib) << "Cannot import layout: file is empty:" << filePath;
         return;
     }
 
     QJsonParseError parseError;
     const auto doc = QJsonDocument::fromJson(data, &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcLayout) << "Failed to parse layout file for import:" << filePath
-                            << "Error:" << parseError.errorString() << "at offset" << parseError.offset;
+        qCWarning(lcZonesLib) << "Failed to parse layout file for import:" << filePath
+                              << "Error:" << parseError.errorString() << "at offset" << parseError.offset;
         return;
     }
 
     auto* parsed = PhosphorZones::Layout::fromJson(doc.object(), this);
     if (!parsed) {
-        qCWarning(lcLayout) << "Failed to create layout from imported JSON:" << filePath;
+        qCWarning(lcZonesLib) << "Failed to create layout from imported JSON:" << filePath;
         return;
     }
 
     // Regenerate IDs if UUID collides with an existing layout
     PhosphorZones::Layout* layout = parsed;
     if (layoutById(parsed->id())) {
-        qCInfo(lcLayout) << "importLayout: UUID collision, regenerating IDs";
+        qCInfo(lcZonesLib) << "importLayout: UUID collision, regenerating IDs";
         layout = new PhosphorZones::Layout(*parsed);
         delete parsed;
     }
@@ -600,24 +629,24 @@ void LayoutManager::importLayout(const QString& filePath)
 
     addLayout(layout);
 
-    qCInfo(lcLayout) << "Imported layout:" << layout->name() << "from" << filePath;
+    qCInfo(lcZonesLib) << "Imported layout:" << layout->name() << "from" << filePath;
 }
 
 void LayoutManager::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {
-        qCWarning(lcLayout) << "Cannot export layout: layout is null";
+        qCWarning(lcZonesLib) << "Cannot export layout: layout is null";
         return;
     }
 
     if (filePath.isEmpty()) {
-        qCWarning(lcLayout) << "Cannot export layout: file path is empty";
+        qCWarning(lcZonesLib) << "Cannot export layout: file path is empty";
         return;
     }
 
     QFile file(filePath);
     if (!file.open(QIODevice::WriteOnly)) {
-        qCWarning(lcLayout) << "Failed to open file for layout export:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to open file for layout export:" << filePath << "Error:" << file.errorString();
         return;
     }
 
@@ -625,15 +654,15 @@ void LayoutManager::exportLayout(PhosphorZones::Layout* layout, const QString& f
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
 
     if (file.write(data) != data.size()) {
-        qCWarning(lcLayout) << "Failed to write layout to file:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to write layout to file:" << filePath << "Error:" << file.errorString();
         return;
     }
 
     if (!file.flush()) {
-        qCWarning(lcLayout) << "Failed to flush layout export file:" << filePath << "Error:" << file.errorString();
+        qCWarning(lcZonesLib) << "Failed to flush layout export file:" << filePath << "Error:" << file.errorString();
     }
 
-    qCInfo(lcLayout) << "Exported layout:" << layout->name() << "to" << filePath;
+    qCInfo(lcZonesLib) << "Exported layout:" << layout->name() << "to" << filePath;
 }
 
 PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& systemPath)
@@ -644,14 +673,14 @@ PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const
 
     QFile file(systemPath);
     if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcLayout) << "System layout file missing:" << systemPath;
+        qCWarning(lcZonesLib) << "System layout file missing:" << systemPath;
         return nullptr;
     }
 
     QJsonParseError parseError;
     const auto doc = QJsonDocument::fromJson(file.readAll(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcLayout) << "System layout parse error:" << systemPath << parseError.errorString();
+        qCWarning(lcZonesLib) << "System layout parse error:" << systemPath << parseError.errorString();
         return nullptr;
     }
 
@@ -667,7 +696,7 @@ PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const
         saveLayout(layout);
     });
     Q_EMIT layoutAdded(layout);
-    qCInfo(lcLayout) << "Restored system layout name=" << layout->name() << "from=" << systemPath;
+    qCInfo(lcZonesLib) << "Restored system layout name=" << layout->name() << "from=" << systemPath;
     return layout;
 }
 
@@ -685,4 +714,4 @@ QString LayoutManager::layoutFilePath(const QUuid& id) const
     return m_layoutDirectory + QStringLiteral("/") + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");
 }
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

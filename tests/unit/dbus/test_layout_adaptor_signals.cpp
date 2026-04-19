@@ -22,7 +22,8 @@
 
 #include "dbus/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
 
@@ -223,7 +224,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     LayoutAdaptor* m_adaptor = nullptr;
     QString m_layoutId;
 };

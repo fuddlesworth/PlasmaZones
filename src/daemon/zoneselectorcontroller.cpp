@@ -8,7 +8,7 @@
 #include <PhosphorZones/LayoutUtils.h>
 #include "../core/unifiedlayoutlist.h"
 #include "../core/utils.h"
-#include "../core/assignmententry.h"
+#include <PhosphorZones/AssignmentEntry.h>
 #include <PhosphorScreens/Manager.h>
 #include "overlayservice/internal.h"
 #include <QGuiApplication>
@@ -178,7 +178,7 @@ void ZoneSelectorController::setSelectorGeometry(const QRectF& geometry)
     Q_EMIT selectorGeometryChanged(geometry);
 }
 
-void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
+void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutManager* layoutManager)
 {
     if (m_layoutManager == layoutManager) {
         return;
@@ -191,28 +191,30 @@ void ZoneSelectorController::setLayoutManager(LayoutManager* layoutManager)
 
     m_layoutManager = layoutManager;
 
-    // Connect new manager using LayoutManager (concrete) - PhosphorZones::ILayoutManager has no signals
+    // Connect new manager using PhosphorZones::LayoutManager (concrete) - PhosphorZones::ILayoutManager has no signals
     if (m_layoutManager) {
-        connect(m_layoutManager, &LayoutManager::layoutsChanged, this, &ZoneSelectorController::onLayoutsChanged);
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
-            // Use screen-specific layout if available, fall back to global active layout
-            // Pass current virtual desktop for per-desktop layout lookup
-            PhosphorZones::Layout* effectiveLayout = nullptr;
-            if (m_screen) {
-                effectiveLayout =
-                    m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
-            }
-            if (!effectiveLayout) {
-                effectiveLayout = layout;
-            }
-            if (effectiveLayout) {
-                setActiveLayoutId(effectiveLayout->id().toString());
-            }
-        });
+        connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutsChanged, this,
+                &ZoneSelectorController::onLayoutsChanged);
+        connect(m_layoutManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+                [this](PhosphorZones::Layout* layout) {
+                    // Use screen-specific layout if available, fall back to global active layout
+                    // Pass current virtual desktop for per-desktop layout lookup
+                    PhosphorZones::Layout* effectiveLayout = nullptr;
+                    if (m_screen) {
+                        effectiveLayout =
+                            m_layoutManager->layoutForScreen(m_screenId, m_currentVirtualDesktop, m_currentActivity);
+                    }
+                    if (!effectiveLayout) {
+                        effectiveLayout = layout;
+                    }
+                    if (effectiveLayout) {
+                        setActiveLayoutId(effectiveLayout->id().toString());
+                    }
+                });
         // Also respond to per-screen layout assignments
         // Only update when the popup is actually visible (during drag) to avoid
         // excessive updates during startup or layout switching when popup is hidden
-        connect(m_layoutManager, &LayoutManager::layoutAssigned, this,
+        connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutAssigned, this,
                 [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                     // Only update if:
                     // 1. We're currently dragging (popup may be visible)

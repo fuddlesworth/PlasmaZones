@@ -3,7 +3,7 @@
 
 /**
  * @file test_layoutmanager_assignment.cpp
- * @brief Unit tests for LayoutManager fallback cascade, default layout, quick slots
+ * @brief Unit tests for PhosphorZones::LayoutManager fallback cascade, default layout, quick slots
  */
 
 #include <QTest>
@@ -19,7 +19,8 @@
 #include <memory>
 #include <vector>
 
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/constants.h"
@@ -43,7 +44,7 @@ private:
         return layout;
     }
 
-    LayoutManager* createManager(QObject* parent = nullptr)
+    PhosphorZones::LayoutManager* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
         auto* mgr = makePzLayoutManager(parent).release();
@@ -68,7 +69,7 @@ private Q_SLOTS:
 
     void testLayoutManager_layoutForScreen_fallbackCascade()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* defaultLayout = createTestLayout(QStringLiteral("Default"));
         mgr->addLayout(defaultLayout);
@@ -97,7 +98,7 @@ private Q_SLOTS:
 
     void testLayoutManager_quickLayoutSlot_validRange_1to9()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Quick"));
         mgr->addLayout(layout);
@@ -126,9 +127,11 @@ private Q_SLOTS:
 
     void testLayoutManager_defaultLayout_settingsIdTakesPrecedence()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
         auto* settings = new StubSettings(mgr.data());
-        mgr->setSettings(settings);
+        mgr->setDefaultLayoutIdProvider([settings]() {
+            return settings->defaultLayoutId();
+        });
 
         auto* first = createTestLayout(QStringLiteral("First"));
         mgr->addLayout(first);
@@ -144,9 +147,11 @@ private Q_SLOTS:
 
     void testLayoutManager_defaultLayout_fallbackToFirstLayout()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
         auto* settings = new StubSettings(mgr.data());
-        mgr->setSettings(settings);
+        mgr->setDefaultLayoutIdProvider([settings]() {
+            return settings->defaultLayoutId();
+        });
 
         auto* layout = createTestLayout(QStringLiteral("OnlyLayout"));
         mgr->addLayout(layout);
@@ -159,12 +164,12 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P3: AssignmentEntry explicit fields
+    // P3: PhosphorZones::AssignmentEntry explicit fields
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testAssignmentEntry_snappingAssignment_setsFields()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -172,7 +177,7 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
 
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, layout->id().toString());
         QVERIFY(entry.tilingAlgorithm.isEmpty());
         QCOMPARE(entry.activeLayoutId(), layout->id().toString());
@@ -180,7 +185,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_autotileAssignment_setsFields()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -192,7 +197,7 @@ private Q_SLOTS:
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
 
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
         // snappingLayout should be preserved from the earlier assignment
         QCOMPARE(entry.snappingLayout, layout->id().toString());
@@ -201,7 +206,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_togglePreservesBothFields()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -212,7 +217,7 @@ private Q_SLOTS:
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:dwindle"));
 
         auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry1.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry1.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry1.snappingLayout, layout->id().toString());
         QCOMPARE(entry1.tilingAlgorithm, QStringLiteral("dwindle"));
 
@@ -220,7 +225,7 @@ private Q_SLOTS:
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
 
         auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry2.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry2.snappingLayout, layout->id().toString());
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("dwindle"));
         QCOMPARE(entry2.activeLayoutId(), layout->id().toString());
@@ -228,21 +233,21 @@ private Q_SLOTS:
 
     void testAssignmentEntry_modeForScreen_delegates()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
 
         mgr->assignLayout(QStringLiteral("DP-1"), 0, QString(), layout);
-        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), AssignmentEntry::Snapping);
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Snapping);
 
         mgr->assignLayoutById(QStringLiteral("DP-1"), 0, QString(), QStringLiteral("autotile:wide"));
-        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), AssignmentEntry::Autotile);
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
     }
 
     void testAssignmentEntry_snappingLayoutForScreen_returnsField()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -256,7 +261,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_tilingAlgorithmForScreen_returnsField()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -271,7 +276,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_perDesktop_independentEntries()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
         mgr->addLayout(layoutA);
@@ -285,18 +290,18 @@ private Q_SLOTS:
         mgr->assignLayoutById(QStringLiteral("DP-1"), 2, QString(), QStringLiteral("autotile:dwindle"));
 
         auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 1);
-        QCOMPARE(entry1.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry1.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry1.snappingLayout, layoutA->id().toString());
 
         auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
-        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry2.snappingLayout, layoutB->id().toString());
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("dwindle"));
     }
 
     void testAssignmentEntry_clearAutotile_flipsToSnapping()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -308,7 +313,7 @@ private Q_SLOTS:
         mgr->clearAutotileAssignments();
 
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, layout->id().toString());
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
     }
@@ -319,7 +324,7 @@ private Q_SLOTS:
 
     void testConfigRoundTrip_saveAndLoad_preservesAllFields()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
         mgr->addLayout(layoutA);
@@ -348,7 +353,7 @@ private Q_SLOTS:
         mgr->saveAssignments();
 
         // Create a new manager and load — same config file sees the data
-        QScopedPointer<LayoutManager> mgr2(makePzLayoutManager(nullptr).release());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr2(makePzLayoutManager(nullptr).release());
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
         QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");
@@ -358,19 +363,19 @@ private Q_SLOTS:
 
         // Verify base screen
         auto base = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(base.mode, AssignmentEntry::Autotile);
+        QCOMPARE(base.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(base.snappingLayout, idA);
         QCOMPARE(base.tilingAlgorithm, QStringLiteral("wide"));
 
         // Verify per-desktop
         auto desk2 = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 2);
-        QCOMPARE(desk2.mode, AssignmentEntry::Snapping);
+        QCOMPARE(desk2.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(desk2.snappingLayout, idB);
         QCOMPARE(desk2.tilingAlgorithm, QStringLiteral("dwindle"));
 
         // Verify per-activity
         auto act = mgr2->assignmentEntryForScreen(QStringLiteral("DP-1"), 0, QStringLiteral("act-123"));
-        QCOMPARE(act.mode, AssignmentEntry::Autotile);
+        QCOMPARE(act.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(act.tilingAlgorithm, QStringLiteral("tall"));
 
         // Verify quick layout slot
@@ -383,7 +388,7 @@ private Q_SLOTS:
 
     void testMigration_oldJsonWithShadows_mergesIntoAssignmentEntry()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -425,7 +430,7 @@ private Q_SLOTS:
         mgr->loadAssignments();
 
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
         // Shadow should be merged into snappingLayout field
         QCOMPARE(entry.snappingLayout, layoutId);
@@ -441,7 +446,7 @@ private Q_SLOTS:
 
     void testMigration_modeTrackingGroup_fillsMissingFields()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -469,7 +474,7 @@ private Q_SLOTS:
         mgr->loadAssignments();
 
         auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // Existing value preserved
         QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
 
@@ -479,13 +484,13 @@ private Q_SLOTS:
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P6: AssignmentEntry::fromLayoutId static factory
+    // P6: PhosphorZones::AssignmentEntry::fromLayoutId static factory
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testAssignmentEntry_fromLayoutId_autotile()
     {
-        auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"));
-        QCOMPARE(entry.mode, AssignmentEntry::Autotile);
+        auto entry = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"));
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
         QVERIFY(entry.snappingLayout.isEmpty());
     }
@@ -493,20 +498,20 @@ private Q_SLOTS:
     void testAssignmentEntry_fromLayoutId_snapping()
     {
         QString uuid = QUuid::createUuid().toString();
-        auto entry = AssignmentEntry::fromLayoutId(uuid);
-        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        auto entry = PhosphorZones::AssignmentEntry::fromLayoutId(uuid);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, uuid);
         QVERIFY(entry.tilingAlgorithm.isEmpty());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // P7: LayoutAssignmentKey::fromGroupName parser
+    // P7: PhosphorZones::LayoutAssignmentKey::fromGroupName parser
     // ═══════════════════════════════════════════════════════════════════════════
 
     void testFromGroupName_fullKey_parsesAllFields()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:2:Activity:abc-123"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(
+            QStringLiteral("Assignment:eDP-1:Desktop:2:Activity:abc-123"), QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 2);
         QCOMPARE(key.activity, QStringLiteral("abc-123"));
@@ -514,8 +519,8 @@ private Q_SLOTS:
 
     void testFromGroupName_screenOnly_parsesScreenId()
     {
-        auto key =
-            LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:HDMI-A-1"), QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:HDMI-A-1"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("HDMI-A-1"));
         QCOMPARE(key.virtualDesktop, 0);
         QVERIFY(key.activity.isEmpty());
@@ -523,53 +528,54 @@ private Q_SLOTS:
 
     void testFromGroupName_noPrefix_returnsEmpty()
     {
-        auto key =
-            LayoutAssignmentKey::fromGroupName(QStringLiteral("Snapping.Behavior"), QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Snapping.Behavior"),
+                                                                     QStringLiteral("Assignment:"));
         QVERIFY(key.screenId.isEmpty());
     }
 
     void testFromGroupName_emptyAfterPrefix_returnsEmpty()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:"), QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:"),
+                                                                     QStringLiteral("Assignment:"));
         QVERIFY(key.screenId.isEmpty());
     }
 
     void testFromGroupName_emptyActivity_treatedAsAllActivities()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Activity:"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Activity:"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QVERIFY(key.activity.isEmpty());
     }
 
     void testFromGroupName_invalidDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:abc"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:abc"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_negativeDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:-1"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:-1"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_zeroDesktop_treatedAsAllDesktops()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:0"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:eDP-1:Desktop:0"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("eDP-1"));
         QCOMPARE(key.virtualDesktop, 0);
     }
 
     void testFromGroupName_desktopOnly_parsesDesktop()
     {
-        auto key = LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:DP-2:Desktop:3"),
-                                                      QStringLiteral("Assignment:"));
+        auto key = PhosphorZones::LayoutAssignmentKey::fromGroupName(QStringLiteral("Assignment:DP-2:Desktop:3"),
+                                                                     QStringLiteral("Assignment:"));
         QCOMPARE(key.screenId, QStringLiteral("DP-2"));
         QCOMPARE(key.virtualDesktop, 3);
         QVERIFY(key.activity.isEmpty());
@@ -577,20 +583,20 @@ private Q_SLOTS:
 
     void testAssignmentEntry_fromLayoutId_setsModeSetsField_preservesOther()
     {
-        AssignmentEntry existing;
-        existing.mode = AssignmentEntry::Autotile;
+        PhosphorZones::AssignmentEntry existing;
+        existing.mode = PhosphorZones::AssignmentEntry::Autotile;
         existing.tilingAlgorithm = QStringLiteral("dwindle");
         existing.snappingLayout = QStringLiteral("{some-uuid}");
 
         // Update snapping field — mode switches to Snapping, tiling preserved
-        auto entry = AssignmentEntry::fromLayoutId(QStringLiteral("{new-uuid}"), existing);
-        QCOMPARE(entry.mode, AssignmentEntry::Snapping);
+        auto entry = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("{new-uuid}"), existing);
+        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry.snappingLayout, QStringLiteral("{new-uuid}"));
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // preserved
 
         // Update tiling field — mode switches to Autotile, snapping preserved
-        auto entry2 = AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"), existing);
-        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        auto entry2 = PhosphorZones::AssignmentEntry::fromLayoutId(QStringLiteral("autotile:wide"), existing);
+        QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
     }
@@ -641,12 +647,12 @@ private Q_SLOTS:
 
         // Verify assignments were loaded
         auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("eDP-1"));
-        QCOMPARE(entry1.mode, AssignmentEntry::Snapping);
+        QCOMPARE(entry1.mode, PhosphorZones::AssignmentEntry::Snapping);
         QCOMPARE(entry1.snappingLayout, QStringLiteral("{aaaa-bbbb}"));
         QCOMPARE(entry1.tilingAlgorithm, QStringLiteral("dwindle"));
 
         auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("HDMI-A-1"), 2);
-        QCOMPARE(entry2.mode, AssignmentEntry::Autotile);
+        QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("bsp"));
 
         // Quick layout slot should have migrated

@@ -325,7 +325,7 @@ private:
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
-    // Stop observing a layout (e.g. because LayoutManager just removed it).
+    // Stop observing a layout (e.g. because PhosphorZones::LayoutManager just removed it).
     // Disconnects the per-layout layoutModified signal and erases the entry
     // from m_observedLayouts. Idempotent — calling for an unobserved layout
     // is a no-op.

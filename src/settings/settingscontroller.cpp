@@ -3,6 +3,8 @@
 
 #include "settingscontroller.h"
 
+#include "../core/pzlayoutmanagerfactory.h"
+
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
 #include "../common/layoutbundlebuilder.h"
@@ -173,7 +175,7 @@ SettingsController::SettingsController(QObject* parent)
     // fires from daemon-side D-Bus signals and replaces m_layouts with the
     // D-Bus-enriched view when the daemon is up — these two paths converge
     // at m_layouts.
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, [this]() {
+    connect(m_localLayoutManager.get(), &PhosphorZones::LayoutManager::layoutsChanged, this, [this]() {
         recalcLocalLayouts();
         QVariantList localLayouts = localLayoutPreviews();
         if (!localLayouts.isEmpty()) {
@@ -194,7 +196,7 @@ SettingsController::SettingsController(QObject* parent)
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a
     // chance to trigger the legacy D-Bus loadLayoutsAsync path). The
-    // LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
+    // PhosphorZones::LayoutManager scans ~/.local/share/plasmazones/layouts/ on demand
     // and installs a QFileSystemWatcher so any subsequent disk changes
     // (daemon writes, editor saves) auto-reload without a D-Bus round-trip.
     m_localLayoutManager->loadLayouts();
@@ -204,7 +206,7 @@ SettingsController::SettingsController(QObject* parent)
     // referenceAspectRatio. Without this, settings-process previews render
     // with zero-size rects for authored-pixel layouts. Daemon runs the
     // same recalc in Daemon::init(); settings does it here because it owns
-    // an in-process LayoutManager independent of the daemon.
+    // an in-process PhosphorZones::LayoutManager independent of the daemon.
     recalcLocalLayouts();
 
     // Translate rendering backend display names once at construction
@@ -736,7 +738,7 @@ void SettingsController::endExternalEdit()
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// PhosphorZones::Layout management (D-Bus to daemon, no KCM LayoutManager class needed)
+// PhosphorZones::Layout management (D-Bus to daemon, no KCM PhosphorZones::LayoutManager class needed)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void SettingsController::scheduleLayoutLoad()
@@ -746,7 +748,7 @@ void SettingsController::scheduleLayoutLoad()
 
 void SettingsController::loadLayoutsAsync()
 {
-    // Force-reload the in-process LayoutManager from disk before reading.
+    // Force-reload the in-process PhosphorZones::LayoutManager from disk before reading.
     // The LayoutManager's QFileSystemWatcher catches most disk changes,
     // but Qt's QFSW has known misses on cross-process atomic-rename
     // writes (the daemon writes layouts via QSaveFile, which creates a
@@ -762,7 +764,7 @@ void SettingsController::loadLayoutsAsync()
     }
 
     // Step 1: instant paint from the in-process composite source is handled
-    // by the ctor-wired LayoutManager::layoutsChanged lambda (see ~line 180
+    // by the ctor-wired PhosphorZones::LayoutManager::layoutsChanged lambda (see ~line 180
     // — it calls recalcLocalLayouts() + swaps m_layouts from localLayoutPreviews()
     // and emits layoutsChanged). loadLayouts() above triggers that signal
     // synchronously when the disk contents actually changed, so the instant-paint
@@ -778,7 +780,7 @@ void SettingsController::loadLayoutsAsync()
                                        QString(DBus::Interface::LayoutManager), QStringLiteral("getLayoutList"));
 
     // Gate the local-path layoutsChanged emit (see the ctor-wired lambda
-    // on LayoutManager::layoutsChanged). The reply lambda clears this
+    // on PhosphorZones::LayoutManager::layoutsChanged). The reply lambda clears this
     // unconditionally so any subsequent local-only refresh (daemon down)
     // emits as usual.
     m_awaitingDaemonLayouts = true;
@@ -1045,7 +1047,7 @@ void SettingsController::setLayoutAspectRatio(const QString& layoutId, int aspec
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Assignment helpers (D-Bus to daemon LayoutManager)
+// Assignment helpers (D-Bus to daemon PhosphorZones::LayoutManager)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 QStringList SettingsController::fontStylesForFamily(const QString& family) const

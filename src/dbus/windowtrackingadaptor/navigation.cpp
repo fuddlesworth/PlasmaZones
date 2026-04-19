@@ -5,7 +5,7 @@
 #include "../../config/settings.h"
 #include "../../core/inavigationactions.h"
 #include "../../core/logging.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"

@@ -821,8 +821,8 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
     }
 
     // ── Extract Assignment/QuickLayouts to assignments.json ─────────────────
-    // LayoutManager owns its own persistence file, separate from config.json.
-    // Note: LayoutManager::loadAssignments() has a runtime migration fallback
+    // PhosphorZones::LayoutManager owns its own persistence file, separate from config.json.
+    // Note: PhosphorZones::LayoutManager::loadAssignments() has a runtime migration fallback
     // for users already on v2 whose Assignment:* groups were never extracted
     // by this path (e.g. upgraded between the v2 stamp and this split).
     {
@@ -841,7 +841,7 @@ void ConfigMigration::migrateV1ToV2(QJsonObject& root)
             keysToRemove.append(quickLayoutsKey);
         }
         // ModeTracking is NOT extracted to assignments.json — it is consumed
-        // by LayoutManager::loadAssignments() directly from config.json and
+        // by PhosphorZones::LayoutManager::loadAssignments() directly from config.json and
         // deleted after application.  Extracting it here would leave dead data
         // in assignments.json that nothing reads.
         const QString modeTrackingKey = ConfigDefaults::modeTrackingGroup();

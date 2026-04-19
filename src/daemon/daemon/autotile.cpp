@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include "../../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"

@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../SnapEngine.h"
-#include "core/assignmententry.h"
+#include <PhosphorZones/AssignmentEntry.h>
 #include "core/interfaces.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include "core/logging.h"
 #include "core/utils.h"
 #include "core/virtualdesktopmanager.h"
@@ -172,7 +172,7 @@ SnapResult SnapEngine::resolveWindowRestore(const QString& windowId, const QStri
     if (m_layoutManager) {
         int dt = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
         if (m_layoutManager->modeForScreen(screenId, dt, m_layoutManager->currentActivity())
-            != AssignmentEntry::Mode::Snapping) {
+            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(lcCore) << "resolveWindowRestore:" << windowId << "caller screen" << screenId
                             << "is autotile — skipping empty/last zone fallbacks";
             return SnapResult::noSnap();

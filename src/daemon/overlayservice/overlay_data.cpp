@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
 #include "../../core/geometryutils.h"
@@ -50,7 +50,7 @@ quint64 hashLabelsTextureInputs(const QVariantList& patched, const QSize& size, 
                                 const LabelFontSettings& lfs)
 {
     // NOTE: inside `namespace PlasmaZones {}` the unqualified name `qHash`
-    // resolves to user-defined overloads (TilingStateKey, LayoutAssignmentKey)
+    // resolves to user-defined overloads (TilingStateKey, PhosphorZones::LayoutAssignmentKey)
     // and never falls through to Qt's global `::qHash`. Always fully qualify.
     //
     // Mixer is the standard boost::hash_combine / Fibonacci-constant form.

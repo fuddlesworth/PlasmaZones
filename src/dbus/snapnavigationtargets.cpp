@@ -6,7 +6,7 @@
 
 #include "../core/interfaces.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include "../core/logging.h"
 #include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
@@ -98,7 +98,8 @@ bool checkDirection(const QString& direction)
 // Construction
 // ═══════════════════════════════════════════════════════════════════════════
 
-SnapNavigationTargetResolver::SnapNavigationTargetResolver(WindowTrackingService* service, LayoutManager* layoutManager,
+SnapNavigationTargetResolver::SnapNavigationTargetResolver(WindowTrackingService* service,
+                                                           PhosphorZones::LayoutManager* layoutManager,
                                                            ZoneDetectionAdaptor* zoneDetector, FeedbackFn feedback)
     : m_service(service)
     , m_layoutManager(layoutManager)

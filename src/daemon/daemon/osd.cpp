@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -390,7 +390,7 @@ void Daemon::syncModeFromAssignments()
             m_unifiedLayoutController->syncFromExternalState(focusedAssignmentId);
 
             // Update the global active layout to match this desktop's per-screen
-            // assignment. Without this, LayoutManager::activeLayout() returns the
+            // assignment. Without this, PhosphorZones::LayoutManager::activeLayout() returns the
             // previous desktop's layout, causing zone detection, overlay, and
             // onLayoutChanged to operate on the wrong zones.
             // Block activeLayoutChanged to prevent resnap buffer corruption.

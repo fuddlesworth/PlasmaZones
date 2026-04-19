@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
+#include <PhosphorZones/AssignmentEntry.h>
+#include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/Layout.h>
-#include "interfaces.h"
-#include "assignmententry.h"
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -13,9 +13,10 @@
 #include <QSet>
 #include <QUuid>
 #include <QString>
+#include <functional>
 #include <memory>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 /**
  * @brief Schema-key configuration for a LayoutManager instance.
@@ -49,6 +50,17 @@ struct LayoutManagerConfig
     /// an empty string to defer until @c setLayoutDirectory() is called
     /// explicitly.
     QString defaultLayoutDirectory;
+
+    /// One-shot factory for the LEGACY config backend the manager
+    /// inspects on first launch when @c assignments.json is empty —
+    /// migrates old @c [Assignment:*] / @c [QuickLayouts] groups out of
+    /// the project's general @c config.json into the dedicated
+    /// assignments backend. Optional. Empty function (the default)
+    /// disables migration entirely; clean installs and non-PlasmaZones
+    /// consumers simply skip it. PlasmaZones wires it to
+    /// @c createDefaultConfigBackend() — the lib has no business
+    /// knowing what that path resolves to.
+    std::function<std::unique_ptr<PhosphorConfig::IBackend>()> legacyMigrationBackendFactory;
 };
 
 /**
@@ -74,7 +86,7 @@ struct LayoutManagerConfig
  * composition roots and tests should prefer @ref makePzLayoutManager
  * instead of constructing directly.
  */
-class PLASMAZONES_EXPORT LayoutManager : public PhosphorZones::ILayoutManager
+class PHOSPHORZONES_EXPORT LayoutManager : public ILayoutManager
 {
     Q_OBJECT
 
@@ -272,7 +284,21 @@ public:
     QVector<PhosphorZones::Layout*> builtInLayouts() const override;
 
     Q_INVOKABLE void loadLayouts() override;
-    void setSettings(ISettings* settings);
+
+    /**
+     * @brief Inject a callback that returns the user-configured default
+     * layout id (or empty if unset / unavailable).
+     *
+     * The manager calls this every time @ref defaultLayout has to
+     * resolve the active default — there's no caching, so the callback
+     * is free to re-read settings on each call. Used by composition
+     * roots that own a settings object the lib doesn't (and can't)
+     * know about; PlasmaZones wires it to
+     * @c [s]{return s->defaultLayoutId();}. Pass an empty function to
+     * disable (the manager falls back to the first registered layout).
+     */
+    void setDefaultLayoutIdProvider(std::function<QString()> provider);
+
     Q_INVOKABLE void saveLayouts() override;
     void saveLayout(PhosphorZones::Layout* layout) override;
     Q_INVOKABLE void loadAssignments() override;
@@ -319,7 +345,7 @@ private:
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
-    ISettings* m_settings = nullptr;
+    std::function<QString()> m_defaultLayoutIdProvider; ///< Empty = no provider; falls back to first layout
     LayoutManagerConfig m_config;
     std::unique_ptr<PhosphorConfig::IBackend> m_ownedBackend;
     PhosphorConfig::IBackend* m_configBackend = nullptr; ///< Borrowed alias of @c m_ownedBackend.get()
@@ -334,20 +360,4 @@ private:
     QString m_currentActivity;
 };
 
-/**
- * @brief PlasmaZones-flavoured @ref LayoutManager factory.
- *
- * Pulls the schema-key strings from @c ConfigDefaults and the
- * persistent backend from @c createAssignmentsBackend(), constructs a
- * ready-to-use manager, and returns it as @c unique_ptr. Use this from
- * every PlasmaZones composition root (daemon, editor, settings) and
- * test fixture instead of calling the @ref LayoutManager constructor
- * directly — keeps PZ-specific config-schema knowledge centralized
- * here so the underlying class can move into the project-agnostic
- * @c phosphor-zones library without dragging it along.
- *
- * @param parent Qt parent for the resulting manager.
- */
-PLASMAZONES_EXPORT std::unique_ptr<LayoutManager> makePzLayoutManager(QObject* parent = nullptr);
-
-} // namespace PlasmaZones
+} // namespace PhosphorZones

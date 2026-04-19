@@ -34,7 +34,7 @@ private Q_SLOTS:
     void testLayout_dirtyTracking_newLayoutIsClean()
     {
         // A freshly constructed layout is NOT dirty -- it has never been modified.
-        // LayoutManager::addLayout() calls markDirty() explicitly when adding.
+        // PhosphorZones::LayoutManager::addLayout() calls markDirty() explicitly when adding.
         PhosphorZones::Layout layout(QStringLiteral("Fresh"));
         QVERIFY(!layout.isDirty());
     }

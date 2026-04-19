@@ -4,7 +4,7 @@
 #include "controladaptor.h"
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
@@ -22,9 +22,9 @@
 
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                               AutotileEngine* autotileEngine, Phosphor::Screens::ScreenManager* screenManager,
-                               QObject* parent)
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor,
+                               PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine,
+                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_layoutAdaptor(layoutAdaptor)

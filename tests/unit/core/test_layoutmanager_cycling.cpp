@@ -3,7 +3,7 @@
 
 /**
  * @file test_layoutmanager_cycling.cpp
- * @brief Unit tests for LayoutManager cycle behavior
+ * @brief Unit tests for PhosphorZones::LayoutManager cycle behavior
  */
 
 #include <QTest>
@@ -13,7 +13,8 @@
 #include <memory>
 #include <vector>
 
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/IsolatedConfigGuard.h"
@@ -35,7 +36,7 @@ private:
         return layout;
     }
 
-    LayoutManager* createManager(QObject* parent = nullptr)
+    PhosphorZones::LayoutManager* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
         auto* mgr = makePzLayoutManager(parent).release();
@@ -60,7 +61,7 @@ private Q_SLOTS:
 
     void testLayoutManager_cycleLayout_skipsHiddenLayouts()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* visible1 = createTestLayout(QStringLiteral("Visible1"));
         mgr->addLayout(visible1);
@@ -85,7 +86,7 @@ private Q_SLOTS:
 
     void testLayoutManager_cycleLayout_respectsAllowedScreens()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* layoutAll = createTestLayout(QStringLiteral("AllScreens"));
         mgr->addLayout(layoutAll);
@@ -104,7 +105,7 @@ private Q_SLOTS:
 
     void testLayoutManager_cycleLayout_allFilteredOut_returnsNull()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* hidden = createTestLayout(QStringLiteral("Hidden"));
         hidden->setHiddenFromSelector(true);
@@ -116,7 +117,7 @@ private Q_SLOTS:
 
     void testLayoutManager_cycleLayout_wrapsAround()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* l1 = createTestLayout(QStringLiteral("L1"));
         mgr->addLayout(l1);
@@ -143,7 +144,7 @@ private Q_SLOTS:
 
     void testLayoutManager_setActiveLayout_updatesPreviousLayout()
     {
-        QScopedPointer<LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
 
         auto* l1 = createTestLayout(QStringLiteral("First"));
         mgr->addLayout(l1);

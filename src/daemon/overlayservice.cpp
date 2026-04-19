@@ -7,7 +7,7 @@
 #include "windowthumbnailservice.h"
 
 #include <PhosphorZones/Layout.h>
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../common/layoutpreviewserialize.h"
@@ -208,7 +208,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             }
 
             // Recreate zone selectors for the new virtual screen configuration.
-            // Defer to the next event loop pass to allow LayoutManager to process
+            // Defer to the next event loop pass to allow PhosphorZones::LayoutManager to process
             // assignment migrations for the new virtual screen IDs first, ensuring
             // the zone selector shows the correct layout list.
             if (hadZoneSelector) {

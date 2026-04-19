@@ -27,7 +27,8 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -476,7 +477,7 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     StubSettingsSnapAssist* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;

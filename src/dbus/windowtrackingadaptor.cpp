@@ -9,7 +9,7 @@
 #include "../snap/SnapEngine.h"
 #include "../config/configbackends.h"
 #include "../core/interfaces.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
 #include "../core/virtualdesktopmanager.h"
@@ -27,7 +27,8 @@
 
 namespace PlasmaZones {
 
-WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
+WindowTrackingAdaptor::WindowTrackingAdaptor(PhosphorZones::LayoutManager* layoutManager,
+                                             PhosphorZones::IZoneDetector* zoneDetector,
                                              Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                              VirtualDesktopManager* virtualDesktopManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -123,7 +124,7 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
     // pending-restores notification side; we prepend a dirty-mark for the
     // DirtyActiveLayoutId field so the next save captures the new value
     // without needing an unrelated DirtyAll path to drag it along.
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this]() {
+    connect(m_layoutManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this, [this]() {
         if (m_service) {
             m_service->markDirty(WindowTrackingService::DirtyActiveLayoutId);
         }

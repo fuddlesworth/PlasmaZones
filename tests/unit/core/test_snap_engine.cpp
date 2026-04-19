@@ -6,7 +6,8 @@
 
 #include "snap/SnapEngine.h"
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include "core/interfaces.h"
 
 using namespace PlasmaZones;
@@ -78,7 +79,7 @@ class TestSnapEngine : public QObject
     Q_OBJECT
 
 private:
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     WindowTrackingService* m_wts = nullptr;

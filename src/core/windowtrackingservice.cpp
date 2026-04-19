@@ -8,7 +8,7 @@
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorZones/Zone.h>
-#include "layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include "virtualdesktopmanager.h"
 #include "utils.h"
 #include "logging.h"
@@ -21,7 +21,8 @@
 
 namespace PlasmaZones {
 
-WindowTrackingService::WindowTrackingService(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
+WindowTrackingService::WindowTrackingService(PhosphorZones::LayoutManager* layoutManager,
+                                             PhosphorZones::IZoneDetector* zoneDetector,
                                              Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                              VirtualDesktopManager* vdm, QObject* parent)
     : QObject(parent)

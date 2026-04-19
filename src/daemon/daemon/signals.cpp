@@ -8,7 +8,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -36,7 +36,7 @@ namespace PlasmaZones {
 
 void Daemon::initializeAutotile()
 {
-    // Initialize mode tracker (thin delegate to LayoutManager's per-context AssignmentEntry)
+    // Initialize mode tracker (thin delegate to LayoutManager's per-context PhosphorZones::AssignmentEntry)
     m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), m_layoutManager.get(), m_screenManager.get(), this);
 
     // Connect autotile engine signals
@@ -223,7 +223,7 @@ void Daemon::initializeAutotile()
 
             if (wasAutotile) {
                 // Autotile → Snapping: restore this context's snappingLayout
-                // from the AssignmentEntry (preserved even when mode is Autotile).
+                // from the PhosphorZones::AssignmentEntry (preserved even when mode is Autotile).
                 // Try current context first; fall back to broader scopes when the
                 // context-specific entry has no snappingLayout (e.g., fresh KCM
                 // autotile entry that never had a manual layout assigned).
@@ -441,7 +441,7 @@ void Daemon::connectLayoutSignals()
     // handle active layout themselves, and calling it here with QSignalBlocker
     // steals the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
-    connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::layoutAssigned, this,
             [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
                 updateAutotileScreens();
                 updateLayoutFilter();

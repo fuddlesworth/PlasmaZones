@@ -36,7 +36,8 @@
 #include "dbus/settingsadaptor.h"
 #include "dbus/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "core/pzlayoutmanagerfactory.h"
 #include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -210,7 +211,7 @@ private:
     QObject* m_parent = nullptr;
     StubSettings* m_settings = nullptr;
     SettingsAdaptor* m_settingsAdaptor = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
     LayoutAdaptor* m_layoutAdaptor = nullptr;
     QString m_benchLayoutId;
 };

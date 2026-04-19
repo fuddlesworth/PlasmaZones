@@ -4,7 +4,7 @@
 #include "supportreport.h"
 #include "logging.h"
 #include <PhosphorScreens/Manager.h>
-#include "layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "version.h"
@@ -50,7 +50,8 @@ QString SupportReport::redactHomePath(const QString& input)
 }
 
 SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
-                                                       LayoutManager* layoutManager, AutotileEngine* autotileEngine)
+                                                       PhosphorZones::LayoutManager* layoutManager,
+                                                       AutotileEngine* autotileEngine)
 {
     Snapshot snap;
 
@@ -324,8 +325,9 @@ QString SupportReport::generateFromSnapshot(const Snapshot& snapshot, int sinceM
     return report;
 }
 
-QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager, LayoutManager* layoutManager,
-                                AutotileEngine* autotileEngine, int sinceMinutes)
+QString SupportReport::generate(Phosphor::Screens::ScreenManager* screenManager,
+                                PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine,
+                                int sinceMinutes)
 {
     return generateFromSnapshot(collectSnapshot(screenManager, layoutManager, autotileEngine), sinceMinutes);
 }

@@ -17,7 +17,11 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 namespace PlasmaZones {
+}
+namespace PhosphorZones {
 class LayoutManager;
+}
+namespace PlasmaZones {
 class AutotileEngine;
 
 /**
@@ -72,8 +76,8 @@ public:
     /**
      * @brief Collect a thread-safe snapshot from QObject pointers (main thread only)
      */
-    static Snapshot collectSnapshot(Phosphor::Screens::ScreenManager* screenManager, LayoutManager* layoutManager,
-                                    AutotileEngine* autotileEngine);
+    static Snapshot collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
+                                    PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine);
 
     /**
      * @brief Generate a report from a pre-collected snapshot (thread-safe)
@@ -93,13 +97,14 @@ public:
      * so the report reflects the persisted state (which is what matters for diagnostics).
      *
      * @param screenManager Phosphor::Screens::ScreenManager instance (nullable)
-     * @param layoutManager LayoutManager instance (nullable)
+     * @param layoutManager PhosphorZones::LayoutManager instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
      * @param sinceMinutes How many minutes of journal logs to include (default 30, capped at 120)
      * @return Markdown-formatted support report
      */
-    static QString generate(Phosphor::Screens::ScreenManager* screenManager, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, int sinceMinutes = 30);
+    static QString generate(Phosphor::Screens::ScreenManager* screenManager,
+                            PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine,
+                            int sinceMinutes = 30);
 
     /**
      * @brief Redact home directory paths from a string

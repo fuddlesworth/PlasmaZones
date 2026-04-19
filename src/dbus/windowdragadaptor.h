@@ -33,7 +33,11 @@ class Zone;
 namespace PlasmaZones {
 
 class IOverlayService;
-class LayoutManager; // Concrete type needed for signal connections
+}
+namespace PhosphorZones {
+class LayoutManager;
+}
+namespace PlasmaZones {
 class ISettings;
 class WindowTrackingAdaptor;
 class AutotileEngine;
@@ -56,8 +60,9 @@ class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               LayoutManager* layoutManager, Phosphor::Screens::ScreenManager* screenManager,
-                               ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
+                               PhosphorZones::LayoutManager* layoutManager,
+                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                               WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
 
     /**
@@ -319,7 +324,7 @@ private:
 
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;
-    LayoutManager* m_layoutManager; // Concrete type for signal connections
+    PhosphorZones::LayoutManager* m_layoutManager; // Concrete type for signal connections
     Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;

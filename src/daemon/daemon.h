@@ -33,7 +33,11 @@ class ZoneDetector;
 namespace PlasmaZones {
 
 enum class DisabledReason;
+}
+namespace PhosphorZones {
 class LayoutManager;
+}
+namespace PlasmaZones {
 class LayoutComputeService;
 class Settings;
 class OverlayService;
@@ -92,7 +96,7 @@ public:
     void stop();
 
     // Component access
-    LayoutManager* layoutManager() const
+    PhosphorZones::LayoutManager* layoutManager() const
     {
         return m_layoutManager.get();
     }
@@ -362,7 +366,7 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
-    std::unique_ptr<LayoutManager> m_layoutManager;
+    std::unique_ptr<PhosphorZones::LayoutManager> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
     // the only shape that works once PlasmaZones becomes a plugin-based

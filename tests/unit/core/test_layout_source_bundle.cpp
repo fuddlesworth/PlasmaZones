@@ -37,7 +37,9 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+
+#include "core/pzlayoutmanagerfactory.h"
 
 // ─── Fixture sources / factories ────────────────────────────────────────────
 
@@ -512,7 +514,7 @@ private Q_SLOTS:
         // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.
         // Every step is non-virtual, single inheritance; the address must
         // not shift along the chain. A non-zero offset would mean
-        // LayoutManager picked up a second QObject base somewhere along
+        // PhosphorZones::LayoutManager picked up a second QObject base somewhere along
         // the way (e.g. a sibling interface accidentally re-derived from
         // QObject), which is exactly the multi-QObject hazard the static-
         // assert pair guards against at compile time.

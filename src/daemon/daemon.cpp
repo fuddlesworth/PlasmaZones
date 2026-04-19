@@ -17,7 +17,8 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutManager.h>
+#include "../core/pzlayoutmanagerfactory.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -237,7 +238,14 @@ bool Daemon::init()
         scheduleWarmForShader(info);
     }
 
-    m_layoutManager->setSettings(m_settings.get());
+    // PhosphorZones::LayoutManager now takes a free-function provider rather than an
+    // ISettings pointer — keeps the lib-side class out of project-side
+    // interface knowledge. Settings is owned by `this` (daemon) and
+    // outlives the layout manager (declared earlier in daemon.h), so
+    // the captured pointer is safe.
+    m_layoutManager->setDefaultLayoutIdProvider([this]() {
+        return m_settings->defaultLayoutId();
+    });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
@@ -276,27 +284,29 @@ bool Daemon::init()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
-        if (layout) {
-            // Recalculate zone geometries asynchronously using primary screen geometry.
-            // Active layout is global; recalculating per-screen overwrites each
-            // iteration (last-wins bug). The overlay computes per-screen geometry
-            // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
-            QScreen* primary = Utils::primaryScreen();
-            if (primary) {
-                QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
-                m_layoutComputeService->requestRecalculate(
-                    layout, screenId, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
-            }
-        }
-        m_zoneDetector->setLayout(layout);
-        m_overlayService->updateLayout(layout);
-    });
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+            [this](PhosphorZones::Layout* layout) {
+                if (layout) {
+                    // Recalculate zone geometries asynchronously using primary screen geometry.
+                    // Active layout is global; recalculating per-screen overwrites each
+                    // iteration (last-wins bug). The overlay computes per-screen geometry
+                    // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
+                    QScreen* primary = Utils::primaryScreen();
+                    if (primary) {
+                        QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
+                        m_layoutComputeService->requestRecalculate(
+                            layout, screenId,
+                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+                    }
+                }
+                m_zoneDetector->setLayout(layout);
+                m_overlayService->updateLayout(layout);
+            });
 
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
-    connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::layoutAssigned, this,
             [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                 if (!layout) {
                     return;

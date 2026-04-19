@@ -7,11 +7,13 @@
 #include "../snap/SnapEngine.h"
 #include "inavigationactions.h"
 #include "iwindowengine.h"
-#include "layoutmanager.h"
+
+#include <PhosphorZones/LayoutManager.h>
 
 namespace PlasmaZones {
 
-ScreenModeRouter::ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* snapEngine, AutotileEngine* autotileEngine)
+ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutManager* layoutManager, SnapEngine* snapEngine,
+                                   AutotileEngine* autotileEngine)
     : m_layoutManager(layoutManager)
     , m_snapEngine(snapEngine)
     , m_autotileEngine(autotileEngine)
@@ -21,14 +23,14 @@ ScreenModeRouter::ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* sna
     Q_ASSERT(autotileEngine);
 }
 
-AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
+PhosphorZones::AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
 {
     // Prefer the autotile engine's live set: it reflects the actual
     // runtime state including per-screen overrides that the layout
     // manager's cascade doesn't know about. Fall back to the layout
     // manager for screens the engine hasn't seen yet.
     if (m_autotileEngine->isAutotileScreen(screenId)) {
-        return AssignmentEntry::Autotile;
+        return PhosphorZones::AssignmentEntry::Autotile;
     }
     const int desktop = m_layoutManager->currentVirtualDesktop();
     const QString activity = m_layoutManager->currentActivity();
@@ -38,8 +40,8 @@ AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
     // stale assignment state during a mode transition — trust the engine
     // and downgrade to Snapping. (A second isAutotileScreen check here
     // would be dead code given the early return above.)
-    if (mode == AssignmentEntry::Autotile) {
-        return AssignmentEntry::Snapping;
+    if (mode == PhosphorZones::AssignmentEntry::Autotile) {
+        return PhosphorZones::AssignmentEntry::Snapping;
     }
     return mode;
 }
@@ -47,12 +49,12 @@ AssignmentEntry::Mode ScreenModeRouter::modeFor(const QString& screenId) const
 IEngineLifecycle* ScreenModeRouter::engineFor(const QString& screenId) const
 {
     switch (modeFor(screenId)) {
-    case AssignmentEntry::Autotile:
+    case PhosphorZones::AssignmentEntry::Autotile:
         return m_autotileEngine;
-    case AssignmentEntry::Snapping:
+    case PhosphorZones::AssignmentEntry::Snapping:
         return m_snapEngine;
     }
-    // Switch above is exhaustive over AssignmentEntry::Mode. Deliberately
+    // Switch above is exhaustive over PhosphorZones::AssignmentEntry::Mode. Deliberately
     // no `default:` case so that adding a new enum value triggers -Wswitch
     // at compile time instead of silently falling through to nullptr at
     // runtime. Q_UNREACHABLE + nullptr is the safe fallback if that happens.
@@ -69,9 +71,9 @@ void ScreenModeRouter::setNavigationAdapters(INavigationActions* snapNavigator, 
 INavigationActions* ScreenModeRouter::navigatorFor(const QString& screenId) const
 {
     switch (modeFor(screenId)) {
-    case AssignmentEntry::Autotile:
+    case PhosphorZones::AssignmentEntry::Autotile:
         return m_autotileNavigator;
-    case AssignmentEntry::Snapping:
+    case PhosphorZones::AssignmentEntry::Snapping:
         return m_snapNavigator;
     }
     Q_UNREACHABLE();
@@ -80,12 +82,12 @@ INavigationActions* ScreenModeRouter::navigatorFor(const QString& screenId) cons
 
 bool ScreenModeRouter::isSnapMode(const QString& screenId) const
 {
-    return modeFor(screenId) == AssignmentEntry::Snapping;
+    return modeFor(screenId) == PhosphorZones::AssignmentEntry::Snapping;
 }
 
 bool ScreenModeRouter::isAutotileMode(const QString& screenId) const
 {
-    return modeFor(screenId) == AssignmentEntry::Autotile;
+    return modeFor(screenId) == PhosphorZones::AssignmentEntry::Autotile;
 }
 
 ScreenModeRouter::Partitioned ScreenModeRouter::partitionByMode(const QStringList& screenIds) const

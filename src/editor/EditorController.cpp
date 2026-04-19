@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "EditorController.h"
+
+#include "../core/pzlayoutmanagerfactory.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"
 #include "services/ZoneManager.h"
@@ -91,11 +93,12 @@ EditorController::EditorController(QObject* parent)
     // ILayoutSource::contentsChanged, so slot ordering against
     // recalcLocalLayouts is not load-bearing here; consumers always query
     // availableLayouts() directly after an interactive edit.
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, this, &EditorController::recalcLocalLayouts);
+    connect(m_localLayoutManager.get(), &PhosphorZones::LayoutManager::layoutsChanged, this,
+            &EditorController::recalcLocalLayouts);
 
     // Populate the daemon-independent layout source from disk on startup
     // so localLayoutPreviews() returns a populated list immediately. The
-    // LayoutManager installs a QFileSystemWatcher so subsequent disk
+    // PhosphorZones::LayoutManager installs a QFileSystemWatcher so subsequent disk
     // changes (daemon writes, settings creates, hand edits) auto-reload.
     m_localLayoutManager->loadLayouts();
     // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
@@ -278,7 +281,7 @@ QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCo
 void EditorController::reloadLocalLayouts()
 {
     // Slot wired to the daemon's layout-mutation signals — see ctor for
-    // the connect block + rationale. Cheap on no-op (LayoutManager
+    // the connect block + rationale. Cheap on no-op (PhosphorZones::LayoutManager
     // diff-checks file mtimes / hashes internally).
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();
