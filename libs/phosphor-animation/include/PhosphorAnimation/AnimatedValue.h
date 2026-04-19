@@ -389,6 +389,21 @@ inline QTransform recomposeTransform(const DecomposedTransform& d)
     return QTransform(m11, m12, m21, m22, d.tx, d.ty);
 }
 
+/**
+ * @brief Is @p t a pure-translate transform (identity linear part)?
+ *
+ * Used by `AnimatedValue<QTransform>::retarget` to detect the one case
+ * where `PreserveVelocity` has physically-meaningful semantics — the
+ * Frobenius metric collapses to Euclidean distance on (dx, dy) when
+ * the 2×2 linear part is the identity on both segments.
+ */
+inline bool isPureTranslate(const QTransform& t)
+{
+    constexpr qreal kIdentityEps = 1.0e-9;
+    return qAbs(t.m11() - 1.0) < kIdentityEps && qAbs(t.m22() - 1.0) < kIdentityEps && qAbs(t.m12()) < kIdentityEps
+        && qAbs(t.m21()) < kIdentityEps;
+}
+
 inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qreal t)
 {
     // Short-circuit at segment endpoints: decompose/recompose is lossy
@@ -464,8 +479,24 @@ struct Interpolate<QTransform>
 
 namespace detail {
 
+/**
+ * @brief Geometric values that carry a position — their damage region
+ *        is fully determined by the animation's endpoints + overshoot.
+ *
+ * Used to gate `bounds()`. A `QSizeF` animation has no inherent
+ * position (only width/height), so it does NOT satisfy this concept
+ * and must instead use `boundsAt(anchor)` or `sweptSize()`.
+ */
 template<typename T>
-concept GeometricValue = std::same_as<T, QPointF> || std::same_as<T, QSizeF> || std::same_as<T, QRectF>;
+concept PositionalGeometric = std::same_as<T, QPointF> || std::same_as<T, QRectF>;
+
+/**
+ * @brief Geometric values that carry only a size — the caller must
+ *        supply an anchor to turn a "swept size envelope" into a
+ *        "damage rect in screen coordinates".
+ */
+template<typename T>
+concept SizeGeometric = std::same_as<T, QSizeF>;
 
 template<typename T>
 concept ScalarValue = std::is_arithmetic_v<T>;
@@ -587,6 +618,12 @@ public:
         m_to = std::move(to);
         m_spec = std::move(spec);
         m_current = m_from;
+        // Resolve and cache the effective curve once per spec. The
+        // curve pointer is immutable for the life of this segment
+        // (retarget preserves the spec) so we can pay the
+        // shared_ptr-copy + fallback-lookup cost one time and read
+        // m_cachedCurve on every advance / bounds sample.
+        m_cachedCurve = m_spec.profile.curve ? m_spec.profile.curve : defaultFallbackCurve();
         m_state = CurveState{};
         m_state.startValue = 0.0;
         m_state.duration = 1.0; // normalised; real time comes from clock dt
@@ -594,6 +631,7 @@ public:
         m_lastTickTime.reset();
         m_loggedStatelessDegrade = false;
         m_loggedNegativeDt = false;
+        m_loggedTransformDegrade = false;
 
         // Degenerate: start == target with no motion. Snap to target,
         // mark complete, fire no callbacks (start() is the contract
@@ -651,6 +689,28 @@ public:
         qreal newVelocity = 0.0;
         switch (policy) {
         case RetargetPolicy::PreserveVelocity:
+            if constexpr (std::same_as<T, QTransform>) {
+                // QTransform's distance metric is a Frobenius norm over
+                // translate + linear-part components — the units mix
+                // (pixels vs. radians vs. scale-factors). Velocity
+                // rescale via (vel * oldDist / newDist) is only
+                // physically meaningful when both segments are pure
+                // translate (linear part is identity on all four
+                // endpoints). Otherwise the rescaled velocity is a
+                // dimensionless artefact — auto-degrade to
+                // PreservePosition and log once per instance.
+                const bool pureTranslate = detail::isPureTranslate(m_from) && detail::isPureTranslate(m_to)
+                    && detail::isPureTranslate(newFrom) && detail::isPureTranslate(newTo);
+                if (!pureTranslate) {
+                    if (!m_loggedTransformDegrade) {
+                        qCDebug(lcAnimatedValue) << "QTransform PreserveVelocity degrading to PreservePosition: "
+                                                 << "non-translate components present (Frobenius metric mixes units)";
+                        m_loggedTransformDegrade = true;
+                    }
+                    newVelocity = 0.0;
+                    break;
+                }
+            }
             if (stateful && newDistance > 0.0) {
                 // Map scalar normalised-velocity through the world:
                 //   worldRate [T-units/s] = state.velocity [1/s] * oldDistance [T-units]
@@ -726,6 +786,59 @@ public:
     }
 
     /**
+     * @brief Swap the driving clock without touching target, state, or
+     *        interpolation.
+     *
+     * Used when the underlying handle migrates between paint drivers
+     * mid-animation — a window moving between physical outputs on a
+     * mixed-refresh-rate desktop, a QML scene re-parented to a
+     * different `QQuickWindow`. The animation's progress (value,
+     * velocity, elapsed) is preserved; the next `advance()` just reads
+     * `dt` from the new clock instead of the old one.
+     *
+     * ## Epoch contract
+     *
+     * Both clocks MUST share a monotonic epoch for the swap to
+     * produce a meaningful `dt`. The shipped clocks (`CompositorClock`
+     * backed by KWin's presentTime, `QtQuickClock` backed by
+     * `std::chrono::steady_clock`) both derive from
+     * `std::chrono::steady_clock`, so a swap between any two shipped
+     * clocks is safe. A third-party `IMotionClock` using a different
+     * epoch (e.g., wall-clock, a domain-specific counter) must not be
+     * rebound with this method — the first post-rebind `now() -
+     * startTime` would produce a nonsense dt. The monotonicity guard
+     * in `advance()` catches backwards dt and logs, but forward-jumps
+     * would still over-step the curve.
+     *
+     * Passing @p newClock == nullptr cancels the animation (same as
+     * `cancel()`) — a null clock means no driver; progress cannot
+     * continue.
+     *
+     * No-op when the new clock equals the current clock (cheap
+     * pointer compare). No callbacks fire — rebind is a pure plumbing
+     * operation, distinct from retarget (which may notify per
+     * `onAnimationRetargeted`).
+     */
+    void rebindClock(IMotionClock* newClock)
+    {
+        if (newClock == m_spec.clock) {
+            return;
+        }
+        if (!newClock) {
+            cancel();
+            return;
+        }
+        m_spec.clock = newClock;
+        if (m_isAnimating) {
+            // The new clock's paint loop may not be ticking this
+            // handle right now; kick it so the first frame on the
+            // new driver latches m_lastTickTime against a fresh
+            // timestamp.
+            newClock->requestFrame();
+        }
+    }
+
+    /**
      * @brief Stop animating; leave `value()` at its current position.
      *
      * Does not fire `onComplete` — cancellation is explicitly non-
@@ -756,17 +869,18 @@ public:
      */
     void finish()
     {
-        if (m_isComplete) {
-            // Idempotent: natural-completion already fired callbacks;
-            // finish() must not re-fire them. Covers both the
-            // never-started case (m_isAnimating=false, m_isComplete=false
-            // → this branch is false, early-return below catches it) and
-            // the already-completed case (m_isComplete=true → skip).
+        if (!m_isAnimating) {
+            // Never started (isAnimating=false, isComplete=false) OR
+            // already naturally-completed (isAnimating=false,
+            // isComplete=true). Both paths are idempotent no-ops —
+            // start() hasn't been called or the completion callbacks
+            // have already fired and must not re-fire.
             return;
         }
-        if (!m_isAnimating) {
-            return; // Never started — nothing to finish.
-        }
+        // m_isAnimating is true from here on. isComplete cannot be
+        // true simultaneously — advance() clears isAnimating when it
+        // sets isComplete. So no further guard is needed before the
+        // terminal-state writes below.
         m_current = m_to;
         m_state.value = 1.0;
         m_state.velocity = 0.0;
@@ -1003,26 +1117,71 @@ public:
         return m_to;
     }
 
-    // ─────── Geometric bounds (only for geometric T) ───────
+    // ─────── Geometric bounds (positional T only) ───────
 
     /**
      * @brief Bounding rectangle covering the full animation path
-     *        including curve overshoot.
+     *        including curve overshoot — positional specialisations.
      *
-     * Union of start and target rects; for curves where
-     * `overshoots()` is true, the curve is additionally sampled at
-     * 50 points and each sample union'd in. The result is the damage
-     * rect the consumer must invalidate so no frame of the animation
-     * paints outside an already-invalidated region.
+     * Union of the start and target values (treated as positions or
+     * rects); for curves where `overshoots()` is true, the curve is
+     * additionally sampled at 50 points and each sample union'd in.
+     * The result is the damage rect the consumer must invalidate so
+     * no frame of the animation paints outside an already-invalidated
+     * region.
      *
-     * Available only on geometric specialisations (`QPointF`,
-     * `QSizeF`, `QRectF`). Scalar / colour / transform specialisations
-     * do not expose this — see design doc decision E.
+     * Available only on specialisations that carry a position:
+     * `QPointF` (bounding box of the two endpoint positions) and
+     * `QRectF` (union of the two endpoint rects). `QSizeF` has no
+     * inherent position — use `boundsAt(anchor)` or `sweptSize()`
+     * instead. Scalar / colour / transform specialisations expose
+     * `sweptRange()` or leave damage to the owning item (see design
+     * doc decision E).
      */
     QRectF bounds() const
-        requires detail::GeometricValue<T>
+        requires detail::PositionalGeometric<T>
     {
         return boundsImpl();
+    }
+
+    /**
+     * @brief Bounding rectangle anchored at @p anchor — size-only T.
+     *
+     * Computes the envelope of widths and heights swept during the
+     * animation (including overshoot samples) and returns a rect
+     * rooted at @p anchor with those dimensions. The caller supplies
+     * the anchor because a `QSizeF` animation does not carry
+     * positional information — forcing the anchor through the API
+     * makes the precondition explicit and eliminates the silent
+     * origin-at-(0, 0) trap a combined `bounds()` signature would
+     * otherwise hide.
+     *
+     * Available only on the `QSizeF` specialisation.
+     */
+    QRectF boundsAt(QPointF anchor) const
+        requires detail::SizeGeometric<T>
+    {
+        const auto [loSize, hiSize] = sweptSizeImpl();
+        return QRectF(anchor, QSizeF(hiSize.width(), hiSize.height()));
+    }
+
+    /**
+     * @brief Min / max size the animation sweeps through, including
+     *        curve overshoot.
+     *
+     * Componentwise analogue of `sweptRange()` for scalar T. Returns
+     * `(minSize, maxSize)` where each field is the min/max of that
+     * dimension observed across the endpoints and any overshoot
+     * samples. Consumers doing their own anchor / layout math use
+     * this instead of `boundsAt` when the anchor isn't known ahead
+     * of time.
+     *
+     * Available only on the `QSizeF` specialisation.
+     */
+    std::pair<QSizeF, QSizeF> sweptSize() const
+        requires detail::SizeGeometric<T>
+    {
+        return sweptSizeImpl();
     }
 
     /**
@@ -1084,21 +1243,28 @@ private:
 
     std::shared_ptr<const Curve> effectiveCurve() const
     {
-        if (m_spec.profile.curve) {
-            return m_spec.profile.curve;
+        // Cached in start(); fallback lookup only runs for the
+        // default-constructed (never-started) case — avoids the
+        // shared_ptr copy + Meyers-singleton load on every advance.
+        if (m_cachedCurve) {
+            return m_cachedCurve;
         }
         return defaultFallbackCurve();
     }
 
-    // Geometric bounds implementation shared across the three geometric T.
+    // Positional bounds — position-carrying T only (QPointF, QRectF).
+    // QSizeF has its own sweptSizeImpl below; the public API routes
+    // QSizeF callers through boundsAt(anchor) / sweptSize() so the
+    // anchor precondition is explicit at the call site.
     //
-    // Implemented via explicit (minX, minY, maxX, maxY) reduction instead
-    // of `QRectF::united()` because Qt treats zero-width / zero-height
-    // rects as "empty" and drops them from a union — a QPointF sweep
-    // (effectively a degenerate rect at each endpoint) would collapse
-    // to a single endpoint if run through united(). min/max over the
-    // endpoint-and-sample set is the robust formulation.
+    // Implemented via explicit (minX, minY, maxX, maxY) reduction
+    // instead of `QRectF::united()` because Qt treats zero-width /
+    // zero-height rects as "empty" and drops them from a union — a
+    // QPointF sweep (effectively a degenerate rect at each endpoint)
+    // would collapse to a single endpoint if run through united().
+    // min/max over the endpoint-and-sample set is the robust formulation.
     QRectF boundsImpl() const
+        requires detail::PositionalGeometric<T>
     {
         qreal minX, minY, maxX, maxY;
         if constexpr (std::same_as<T, QPointF>) {
@@ -1109,19 +1275,6 @@ private:
             sampleOvershoots(minX, minY, maxX, maxY, [this](qreal p) {
                 const QPointF s = Interpolate<QPointF>::lerp(m_from, m_to, p);
                 return std::tuple<qreal, qreal, qreal, qreal>{s.x(), s.y(), s.x(), s.y()};
-            });
-        } else if constexpr (std::same_as<T, QSizeF>) {
-            // QSizeF's "bounds" is the rect at origin covering both
-            // the start size and the target size (plus overshoot
-            // samples). That's the damage rect the consumer would
-            // invalidate if the sized thing is anchored at the origin.
-            minX = 0.0;
-            minY = 0.0;
-            maxX = std::max(m_from.width(), m_to.width());
-            maxY = std::max(m_from.height(), m_to.height());
-            sampleOvershoots(minX, minY, maxX, maxY, [this](qreal p) {
-                const QSizeF s = Interpolate<QSizeF>::lerp(m_from, m_to, p);
-                return std::tuple<qreal, qreal, qreal, qreal>{0.0, 0.0, s.width(), s.height()};
             });
         } else {
             // QRectF — full swept rect including overshoot.
@@ -1135,6 +1288,33 @@ private:
             });
         }
         return QRectF(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    // Size-envelope implementation — QSizeF only. Returns the min/max
+    // width and height observed across the two endpoints plus any
+    // overshoot samples. The public surface wraps this with either an
+    // explicit anchor (`boundsAt`) or raw endpoint-pair access
+    // (`sweptSize`) so the caller controls the coordinate mapping.
+    std::pair<QSizeF, QSizeF> sweptSizeImpl() const
+        requires detail::SizeGeometric<T>
+    {
+        qreal minW = std::min(m_from.width(), m_to.width());
+        qreal maxW = std::max(m_from.width(), m_to.width());
+        qreal minH = std::min(m_from.height(), m_to.height());
+        qreal maxH = std::max(m_from.height(), m_to.height());
+        const auto curve = effectiveCurve();
+        if (curve && curve->overshoots()) {
+            constexpr int nSamples = 50;
+            for (int i = 1; i < nSamples; ++i) {
+                const qreal p = curve->evaluate(qreal(i) / nSamples);
+                const QSizeF sampled = Interpolate<QSizeF>::lerp(m_from, m_to, p);
+                minW = std::min(minW, sampled.width());
+                maxW = std::max(maxW, sampled.width());
+                minH = std::min(minH, sampled.height());
+                maxH = std::max(maxH, sampled.height());
+            }
+        }
+        return {QSizeF(minW, minH), QSizeF(maxW, maxH)};
     }
 
     template<typename Sampler>
@@ -1182,6 +1362,11 @@ private:
     T m_current{};
     CurveState m_state;
     MotionSpec<T> m_spec;
+    // Resolved curve pointer — cached in start() so the per-advance
+    // path does not pay a shared_ptr copy + fallback lookup. Empty for
+    // a default-constructed (never-started) instance; effectiveCurve()
+    // falls back to defaultFallbackCurve() in that case.
+    std::shared_ptr<const Curve> m_cachedCurve;
     std::optional<std::chrono::nanoseconds> m_startTime;
     std::optional<std::chrono::nanoseconds> m_lastTickTime;
     bool m_isAnimating = false;
@@ -1194,6 +1379,11 @@ private:
     // the clock (monotonicity violation). Same reasoning — drag-snap
     // workflows would flood logs otherwise.
     bool m_loggedNegativeDt = false;
+    // Rate-limit: set once we've auto-degraded a PreserveVelocity
+    // retarget on a non-pure-translate QTransform animation. Unused for
+    // every other T (the field is cheap and avoids the complexity of a
+    // conditional specialization).
+    bool m_loggedTransformDegrade = false;
 };
 
 } // namespace PhosphorAnimation

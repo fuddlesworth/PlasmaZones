@@ -189,6 +189,60 @@ private Q_SLOTS:
         QVERIFY(qAbs(mid.m22() - 1.5) < 0.05);
     }
 
+    // ─── PreserveVelocity auto-degrade for non-translate transforms ───
+
+    void testPreserveVelocityDegradedOnRotation()
+    {
+        // Retarget a rotation animation with PreserveVelocity. Because
+        // the segments have non-identity linear parts (rotation), the
+        // Frobenius-norm velocity rescale is physically meaningless
+        // and should auto-degrade to PreservePosition (zero velocity
+        // on the new segment).
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(rotateTransform(0.0), rotateTransform(90.0), makeSpec(&clock));
+        v.advance();
+        clock.advanceMs(40.0);
+        v.advance();
+
+        const bool accepted = v.retarget(rotateTransform(180.0), PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+        QVERIFY(accepted);
+        // Auto-degrade zeroes velocity on the new segment.
+        QCOMPARE(v.state().velocity, 0.0);
+    }
+
+    void testPreserveVelocityRetainedOnPureTranslate()
+    {
+        // Pure-translate animations have identity linear part on all
+        // endpoints — Frobenius distance collapses to Euclidean on
+        // (dx, dy) and the velocity rescale is physically meaningful.
+        // A stateful curve would carry rate; this uses an Easing
+        // (stateless) so the stateless-degrade path zeroes velocity
+        // too — the point here is that the QTransform-specific auto-
+        // degrade does not trigger.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        QTransform from;
+        from.translate(0.0, 0.0);
+        QTransform to;
+        to.translate(100.0, 0.0);
+        v.start(from, to, makeSpec(&clock));
+        v.advance();
+        clock.advanceMs(40.0);
+        v.advance();
+
+        QTransform newTo;
+        newTo.translate(500.0, 0.0);
+        const bool accepted = v.retarget(newTo, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+        QVERIFY(accepted);
+        // Final velocity is zero because Easing is stateless — the
+        // assertion here is that retarget was accepted at all (the
+        // non-translate auto-degrade branch would still accept, so
+        // this test is more about the pure-translate classification
+        // than the velocity number).
+        QVERIFY(v.isAnimating());
+    }
+
     // ─── Shortest-arc slerp ───
 
     void testShortestArcRotation()

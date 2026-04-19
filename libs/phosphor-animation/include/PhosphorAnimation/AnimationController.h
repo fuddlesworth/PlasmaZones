@@ -55,6 +55,11 @@ enum class RetargetResult {
     Disabled, ///< Controller `isEnabled()` returned false.
     HandleInvalid, ///< `isHandleValid(handle)` returned false.
     DegenerateReap, ///< New segment degenerate; entry reaped, `onAnimationComplete` fired.
+    InternalError, ///< AnimatedValue rejected retarget without marking complete — a class
+                   ///< invariant violation (should not be reachable via the controller
+                   ///< path, which always installs a spec on `startAnimation`). The
+                   ///< animation is left in place untouched; callers may choose to
+                   ///< `removeAnimation` and `startAnimation` again from a known state.
 };
 
 /**
@@ -146,9 +151,22 @@ public:
     /// keep their own MotionSpec copy and are unaffected by subsequent
     /// profile swaps — matches Phase 3 decision K (config-reload
     /// immutability).
+    ///
+    /// If `profile.duration` is engaged, its value is clamped to
+    /// `[0, kMaxDurationMs]` in the stored copy — same guard as
+    /// `setDuration()`, applied centrally so callers going through the
+    /// profile path cannot bypass the clamp. A settings UI writing a
+    /// pathological value (e.g., 60 000 ms) through `setProfile` still
+    /// lands safely in the controller.
     void setProfile(const Profile& profile)
     {
         m_profile = profile;
+        if (m_profile.duration) {
+            m_profile.duration = qBound(qreal(0.0), *m_profile.duration, kMaxDurationMs);
+        }
+        if (m_profile.minDistance) {
+            m_profile.minDistance = qBound(0, *m_profile.minDistance, kMaxMinDistancePx);
+        }
     }
     const Profile& profile() const
     {
@@ -369,10 +387,13 @@ public:
         }
         // Pathological: AnimatedValue rejected without marking complete
         // (no stored spec — should not happen via controller path since
-        // startAnimation always installs a spec). Return UnknownHandle
-        // as the closest match; the controller's own bookkeeping is
-        // inconsistent at this point.
-        return RetargetResult::UnknownHandle;
+        // startAnimation always installs a spec). Distinct from
+        // UnknownHandle so callers can tell "I passed a handle that
+        // never existed" from "the controller's internal state is
+        // inconsistent". The animation entry is left in place untouched;
+        // a subsequent removeAnimation + startAnimation from the caller
+        // restores a known good state.
+        return RetargetResult::InternalError;
     }
 
     void removeAnimation(Handle handle)
@@ -383,6 +404,41 @@ public:
     void clear()
     {
         m_animations.clear();
+    }
+
+    /**
+     * @brief Reap every animation whose MotionSpec captured @p clock.
+     *
+     * Intended for compositor-output teardown: when an output
+     * disconnects, its `IMotionClock` is about to be destroyed — every
+     * animation routing `dt` through that clock must be reaped first or
+     * the next `advanceAnimations()` tick reads through a dangling
+     * pointer.
+     *
+     * No terminating hook fires (`onAnimationComplete`,
+     * `onAnimationReplaced`) — matches `removeAnimation` semantics for
+     * batch cancellation. The caller already knows which output is
+     * going away and has the context to notify UX layers if needed.
+     *
+     * Safe to call with @p clock == nullptr (no-op — nothing matches
+     * the fallback-sentinel shape). Returns the number of reaped
+     * animations so callers can log or assert.
+     */
+    int reapAnimationsForClock(const IMotionClock* clock)
+    {
+        if (!clock) {
+            return 0;
+        }
+        int reaped = 0;
+        for (auto it = m_animations.begin(); it != m_animations.end();) {
+            if (it->second.spec().clock == clock) {
+                it = m_animations.erase(it);
+                ++reaped;
+            } else {
+                ++it;
+            }
+        }
+        return reaped;
     }
 
     // ─────── State queries ───────
@@ -491,6 +547,23 @@ public:
                 continue;
             }
 
+            // Per-tick clock re-resolution. If `clockForHandle(handle)`
+            // now resolves to a different pointer than the one captured
+            // at start (window migrated between outputs, QML item re-
+            // parented to a different QQuickWindow), rebind. Relies on
+            // the epoch contract documented on
+            // AnimatedValue::rebindClock — both shipped clocks share
+            // std::chrono::steady_clock so the rebind is a pointer
+            // swap with no timestamp rebase. Null result leaves the
+            // animation on its existing clock (no regression: if the
+            // resolver can't produce a clock now, the captured one is
+            // still the best we have).
+            if (IMotionClock* resolved = clockForHandle(handle)) {
+                if (resolved != it->second.spec().clock) {
+                    it->second.rebindClock(resolved);
+                }
+            }
+
             it->second.advance();
 
             // Re-lookup `it`: AnimatedValue::advance fires
@@ -541,6 +614,19 @@ public:
 
 protected:
     // ─────── Subclass hooks ───────
+    //
+    // ## Reference lifetime contract for `const AnimatedValue<QRectF>&`
+    //
+    // The reference parameter is valid for the duration of the hook
+    // call only. For `onAnimationStarted` / `onAnimationRetargeted` the
+    // reference points into `m_animations` (survives until the next
+    // mutation on the same handle). For `onAnimationReplaced` /
+    // `onAnimationComplete` the reference points to a locally-moved
+    // copy on the controller's stack — it goes out of scope as soon
+    // as the hook returns. Hooks MUST NOT store the reference for
+    // later use; if downstream code needs post-hook access, copy the
+    // interesting fields out by value (`anim.to()`, `anim.value()`,
+    // etc.) before returning from the hook.
 
     virtual void onAnimationStarted(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/)
     {
@@ -555,6 +641,9 @@ protected:
      * count lifecycle events observe exactly one terminating event per
      * started animation: complete, replaced, or explicit
      * @ref removeAnimation. Default no-op.
+     *
+     * The @p displaced reference is scoped to the call — see the
+     * lifetime contract above.
      */
     virtual void onAnimationReplaced(Handle /*handle*/, const AnimatedValue<QRectF>& /*displaced*/)
     {
@@ -573,6 +662,12 @@ protected:
     {
     }
 
+    /**
+     * @brief Fired exactly once when an animation completes naturally.
+     *
+     * The @p anim reference is scoped to the call (points to a locally
+     * moved-from map entry) — see the lifetime contract above.
+     */
     virtual void onAnimationComplete(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/)
     {
     }
@@ -600,12 +695,20 @@ protected:
      * to the clock matching each window's current output so mixed
      * refresh-rate displays phase-lock independently.
      *
-     * Called once per `startAnimation`; the resolved clock is then
-     * captured into the animation's `MotionSpec` and used for the
-     * life of that animation. Window migrations between outputs
-     * mid-animation do not re-route — the animation completes on the
-     * clock captured at start time (deferred: would require exposing
-     * `retarget(newTo, newClock)` on AnimatedValue).
+     * ## Call sites
+     *
+     * - `startAnimation`: captures the resolved clock into the
+     *   animation's `MotionSpec`.
+     * - `advanceAnimations`: re-resolves once per tick and rebinds
+     *   (via `AnimatedValue::rebindClock`) if the pointer changed —
+     *   so a handle that migrates between outputs mid-animation
+     *   automatically follows. Rebind relies on the epoch contract
+     *   (both clocks must be `std::chrono::steady_clock`-backed);
+     *   the shipped clocks both meet this, so per-tick rebind is
+     *   safe for all in-tree consumers.
+     *
+     * Override implementations should be cheap (O(1) lookup) since
+     * they are called on every `advanceAnimations` tick per handle.
      */
     virtual IMotionClock* clockForHandle(Handle /*handle*/) const
     {

@@ -3794,39 +3794,45 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     }
     // Any in-flight AnimatedValue whose MotionSpec captured this clock's
     // pointer would UAF on its next advance() if we just dropped the
-    // unique_ptr. Clear the entire active animation set first — hotplug
-    // is rare enough that the one-frame visual skip from reaping
-    // unrelated animations is preferable to tracking clock-to-handle
-    // back-references for a safe per-output reap. Clients on remaining
-    // outputs will see their windows jump to final geometry (already
-    // applied via moveResize at startAnimation time) with no in-flight
-    // morph; the next snap operation will animate normally.
-    if (m_windowAnimator && m_windowAnimator->hasActiveAnimations()) {
-        m_windowAnimator->clear();
+    // unique_ptr. Reap only the animations bound to THIS output's clock
+    // — other outputs' animations keep ticking uninterrupted. Uses the
+    // controller's reapAnimationsForClock() helper which iterates
+    // m_animations and filters on spec().clock pointer equality.
+    auto it = m_motionClocksByOutput.find(output);
+    if (it != m_motionClocksByOutput.end()) {
+        if (m_windowAnimator) {
+            m_windowAnimator->reapAnimationsForClock(it->second.get());
+        }
+        m_motionClocksByOutput.erase(it);
     }
-    m_motionClocksByOutput.erase(output);
 }
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
 {
-    // Feed presentTime to the clock for THIS output only — animations
-    // bound to other outputs' clocks will read stale `now` on their
+    // Feed presentTime to the clock for THIS output so animations
+    // bound to other outputs' clocks read stale `now` on their
     // AnimatedValue::advance() calls this tick and step with dt=0
     // (correct: they tick when their own output paints, not when any
-    // output paints). data.screen may be null during bootstrap /
-    // virtual-output transitions; fall back to the unbound clock in
-    // that case so we never drop a presentTime sample entirely.
-    CompositorClock* clock = nullptr;
+    // output paints).
+    //
+    // The fallback clock is ALSO updated every tick — unconditionally.
+    // WindowAnimator::clockForHandle routes animations to the fallback
+    // whenever `window->screen()` is null (XWayland bootstrap, mid-
+    // migration) or the resolver returns nullptr (unregistered output).
+    // Any such animation would otherwise freeze with `now()` stuck at
+    // its last-observed value. Updating the fallback on every
+    // prePaintScreen keeps it moving monotonically in lockstep with
+    // whichever output is currently painting — the animation gets dt
+    // from whichever output happens to tick next, which for fallback-
+    // bound animations is the best we can do without a dedicated
+    // driver.
+    m_motionClockFallback->updatePresentTime(presentTime);
     if (data.screen) {
         auto it = m_motionClocksByOutput.find(data.screen);
         if (it != m_motionClocksByOutput.end()) {
-            clock = it->second.get();
+            it->second->updatePresentTime(presentTime);
         }
     }
-    if (!clock) {
-        clock = m_motionClockFallback.get();
-    }
-    clock->updatePresentTime(presentTime);
 
     // advanceAnimations iterates all animations regardless of which
     // clock was just updated; each animation reads its own clock's

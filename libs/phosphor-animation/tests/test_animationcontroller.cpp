@@ -745,6 +745,167 @@ private Q_SLOTS:
         QCOMPARE(c.animationFor(1)->spec().clock, &outputClock);
         QCOMPARE(c.animationFor(2)->spec().clock, &defaultClock);
     }
+
+    // ─── setProfile clamps duration + minDistance ───
+
+    void testSetProfileClampsDurationUpperBound()
+    {
+        MockController c;
+        Profile p;
+        p.duration = 1'000'000.0;
+        c.setProfile(p);
+        QCOMPARE(c.duration(), 10000.0); // kMaxDurationMs
+    }
+
+    void testSetProfileClampsNegativeDurationToZero()
+    {
+        MockController c;
+        Profile p;
+        p.duration = -50.0;
+        c.setProfile(p);
+        QCOMPARE(c.duration(), 0.0);
+    }
+
+    void testSetProfileClampsMinDistanceUpperBound()
+    {
+        MockController c;
+        Profile p;
+        p.minDistance = 1'000'000;
+        c.setProfile(p);
+        QCOMPARE(c.profile().effectiveMinDistance(), 10000); // kMaxMinDistancePx
+    }
+
+    // ─── reapAnimationsForClock (per-output teardown helper) ───
+
+    void testReapAnimationsForClockRemovesOnlyMatchingAnimations()
+    {
+        TestClock clockA;
+        TestClock clockB;
+        PerHandleController c;
+        c.setClock(&clockB);
+        c.clockA = &clockA;
+        Profile profile;
+        profile.curve = std::make_shared<Easing>();
+        profile.duration = 200.0;
+        c.setProfile(profile);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100))); // clockA
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100))); // clockB
+        QVERIFY(c.startAnimation(3, QRectF(0, 0, 100, 100), QRectF(700, 0, 100, 100))); // clockB
+
+        QCOMPARE(c.reapAnimationsForClock(&clockA), 1);
+        QVERIFY(!c.hasAnimation(1));
+        QVERIFY(c.hasAnimation(2));
+        QVERIFY(c.hasAnimation(3));
+
+        QCOMPARE(c.reapAnimationsForClock(&clockB), 2);
+        QVERIFY(!c.hasAnimation(2));
+        QVERIFY(!c.hasAnimation(3));
+    }
+
+    void testReapAnimationsForClockWithNullIsNoOp()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QCOMPARE(c.reapAnimationsForClock(nullptr), 0);
+        QVERIFY(c.hasAnimation(1));
+    }
+
+    void testReapAnimationsForClockDoesNotFireCompletionHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QCOMPARE(c.reapAnimationsForClock(&clock), 1);
+        QVERIFY(!c.hasAnimation(1));
+        // Matches removeAnimation semantics — batch cancellation, no
+        // terminating event fires for the reaped entries.
+        QVERIFY(c.completedHandles.isEmpty());
+    }
+
+    // ─── retargetWithResult::InternalError distinguishes from UnknownHandle ───
+
+    void testRetargetWithResultInternalErrorEnumExists()
+    {
+        // Compile-time witness that InternalError is a distinct enum
+        // value — callers can switch on it. Cannot easily trigger the
+        // pathological path in isolation (would require clobbering
+        // m_spec.clock on a live AnimatedValue which the public API
+        // forbids); exercised only via the type system.
+        RetargetResult r = RetargetResult::InternalError;
+        QVERIFY(r != RetargetResult::UnknownHandle);
+        QVERIFY(r != RetargetResult::Accepted);
+    }
+
+    // ─── Mid-animation clock re-routing via advanceAnimations ───
+
+    void testAdvanceAnimationsRebindsClockWhenResolverChanges()
+    {
+        // Simulate a handle migrating between outputs mid-animation.
+        // The PerHandleController routes handle 1 via `clockA` when
+        // non-null. Start on clockA, then swap clockA out — the next
+        // advanceAnimations tick re-resolves and rebinds to the new
+        // target (here, the default clock).
+        TestClock defaultClock;
+        TestClock migrationClock;
+        PerHandleController c;
+        c.setClock(&defaultClock);
+        c.clockA = &migrationClock;
+        Profile profile;
+        profile.curve = std::make_shared<Easing>();
+        profile.duration = 200.0;
+        c.setProfile(profile);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        QCOMPARE(c.animationFor(1)->spec().clock, &migrationClock);
+
+        c.advanceAnimations(); // latch on migrationClock
+        migrationClock.advanceMs(50.0);
+        c.advanceAnimations();
+
+        // Simulate output migration: the resolver now returns
+        // defaultClock for handle 1. The next advanceAnimations()
+        // tick will re-resolve and rebind the animation's clock.
+        c.clockA = nullptr;
+        c.advanceAnimations();
+
+        QVERIFY(c.hasAnimation(1));
+        QCOMPARE(c.animationFor(1)->spec().clock, &defaultClock);
+    }
+
+    void testRebindClockNullCancelsAnimation()
+    {
+        TestClock clock;
+        AnimatedValue<QRectF> v;
+        PhosphorAnimation::MotionSpec<QRectF> spec;
+        spec.profile.curve = std::make_shared<Easing>();
+        spec.profile.duration = 100.0;
+        spec.clock = &clock;
+
+        QVERIFY(v.start(QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100), spec));
+        QVERIFY(v.isAnimating());
+
+        v.rebindClock(nullptr);
+        QVERIFY(!v.isAnimating());
+    }
+
+    void testRebindClockSameClockIsNoOp()
+    {
+        TestClock clock;
+        AnimatedValue<QRectF> v;
+        PhosphorAnimation::MotionSpec<QRectF> spec;
+        spec.profile.curve = std::make_shared<Easing>();
+        spec.profile.duration = 100.0;
+        spec.clock = &clock;
+
+        QVERIFY(v.start(QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100), spec));
+        v.rebindClock(&clock);
+        QVERIFY(v.isAnimating());
+        QCOMPARE(v.spec().clock, &clock);
+    }
 };
 
 QTEST_MAIN(TestAnimationController)

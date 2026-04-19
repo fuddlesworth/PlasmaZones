@@ -36,11 +36,14 @@ enum class RetargetPolicy {
     /// The Frobenius-norm distance used to rescale velocity mixes
     /// units (translation-pixels and rotation-radians / scale-factors
     /// all contribute equally), so on mixed translate+rotate+scale
-    /// retargets at non-trivial speed the rescaled velocity is
-    /// physically meaningless. Pure-translate transforms (the common
-    /// case — window snap, scroll offsets) are unaffected. For mixed
-    /// transforms prefer `PreservePosition` or `ResetVelocity` until
-    /// a unit-aware metric is designed.
+    /// retargets at non-trivial speed the rescaled velocity would be
+    /// physically meaningless. `AnimatedValue<QTransform>::retarget`
+    /// auto-detects this — when any of the segment endpoints has a
+    /// non-identity linear part, it silently downgrades
+    /// `PreserveVelocity` to `PreservePosition` and logs a debug hint
+    /// once per instance. Pure-translate transforms (the common case —
+    /// window snap, scroll offsets) are handled on the normal
+    /// velocity-preserving path.
     PreserveVelocity,
 
     /// Zero `state.velocity` on retarget. Position continuous; the

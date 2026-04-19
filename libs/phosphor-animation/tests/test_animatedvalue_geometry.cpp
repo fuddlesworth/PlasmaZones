@@ -130,16 +130,43 @@ private Q_SLOTS:
         QVERIFY(s.height() > 120.0 && s.height() < 280.0);
     }
 
-    void testSizeFBoundsAtOrigin()
+    void testSizeFBoundsAtExplicitAnchor()
     {
+        // QSizeF has no inherent position — the API forces the caller
+        // to name an anchor via `boundsAt(QPointF)`. A plain
+        // `bounds()` call would not compile (enforced by
+        // detail::PositionalGeometric), which is the whole point of
+        // the split: the origin-at-(0, 0) trap is unrepresentable.
         TestClock clock;
         AnimatedValue<QSizeF> v;
         v.start(QSizeF(100, 100), QSizeF(500, 300), makeSpec<QSizeF>(&clock, std::make_shared<Easing>()));
-        const QRectF b = v.bounds();
-        // QSizeF bounds interpret the size as a rect at origin, so
-        // bounds cover (0, 0, max(start.w, target.w), max(start.h, target.h)).
-        QVERIFY(b.contains(QRectF(0, 0, 100, 100)));
-        QVERIFY(b.contains(QRectF(0, 0, 500, 300)));
+
+        const QRectF atOrigin = v.boundsAt(QPointF(0, 0));
+        QVERIFY(atOrigin.contains(QRectF(0, 0, 100, 100)));
+        QVERIFY(atOrigin.contains(QRectF(0, 0, 500, 300)));
+
+        const QRectF atPopup = v.boundsAt(QPointF(500, 300));
+        QVERIFY(atPopup.contains(QRectF(500, 300, 100, 100)));
+        QVERIFY(atPopup.contains(QRectF(500, 300, 500, 300)));
+        // Anchor stays where the caller put it — no silent origin
+        // fallback.
+        QCOMPARE(atPopup.topLeft(), QPointF(500, 300));
+    }
+
+    void testSizeFSweptSizeReturnsEnvelopePair()
+    {
+        // sweptSize() is the raw endpoint-pair accessor — pairs with
+        // sweptRange() for scalars. Consumers doing their own anchor
+        // math use this when the anchor is unknown at the moment
+        // bounds are needed (e.g., a reflowing layout that hasn't
+        // decided the final origin yet).
+        TestClock clock;
+        AnimatedValue<QSizeF> v;
+        v.start(QSizeF(100, 100), QSizeF(500, 300), makeSpec<QSizeF>(&clock, std::make_shared<Easing>()));
+
+        const auto [lo, hi] = v.sweptSize();
+        QCOMPARE(lo, QSizeF(100, 100));
+        QCOMPARE(hi, QSizeF(500, 300));
     }
 
     // ─── QRectF ───
