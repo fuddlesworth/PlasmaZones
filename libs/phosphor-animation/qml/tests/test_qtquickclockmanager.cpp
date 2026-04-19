@@ -1,0 +1,102 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include <PhosphorAnimation/IMotionClock.h>
+#include <PhosphorAnimation/qml/QtQuickClockManager.h>
+
+#include <QGuiApplication>
+#include <QObject>
+#include <QQuickWindow>
+#include <QTest>
+
+#include <memory>
+
+using namespace PhosphorAnimation;
+
+class TestQtQuickClockManager : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+    void init()
+    {
+        // Each test gets a clean manager. Production code must not
+        // call clearForTest (see class doc); tests are the one
+        // sanctioned caller.
+        QtQuickClockManager::instance().clearForTest();
+    }
+
+    /// The manager is a process-wide singleton. Two `instance()` calls
+    /// return references to the same object.
+    void testSingletonIdentity()
+    {
+        QtQuickClockManager& a = QtQuickClockManager::instance();
+        QtQuickClockManager& b = QtQuickClockManager::instance();
+        QCOMPARE(&a, &b);
+    }
+
+    /// A null `QQuickWindow*` must return a null clock. Production
+    /// code hits this path when an Item has not yet been parented into
+    /// a window.
+    void testNullWindowReturnsNull()
+    {
+        QCOMPARE(QtQuickClockManager::instance().clockFor(nullptr), static_cast<IMotionClock*>(nullptr));
+    }
+
+    /// The load-bearing invariant: two `clockFor` calls with the same
+    /// window return the same clock pointer. Without this, every
+    /// AnimatedValue constructed against the same window would drive
+    /// its own QtQuickClock instance and multiply beforeRendering
+    /// subscriptions (the Phase-3 QtQuickClock class doc warns against
+    /// this).
+    void testOneClockPerWindow()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        IMotionClock* first = QtQuickClockManager::instance().clockFor(window.get());
+        IMotionClock* second = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(first != nullptr);
+        QCOMPARE(first, second);
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+    }
+
+    /// Two different windows get two different clocks.
+    void testDistinctWindowsGetDistinctClocks()
+    {
+        auto windowA = std::make_unique<QQuickWindow>();
+        auto windowB = std::make_unique<QQuickWindow>();
+        IMotionClock* clockA = QtQuickClockManager::instance().clockFor(windowA.get());
+        IMotionClock* clockB = QtQuickClockManager::instance().clockFor(windowB.get());
+        QVERIFY(clockA != nullptr);
+        QVERIFY(clockB != nullptr);
+        QVERIFY(clockA != clockB);
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 2);
+    }
+
+    /// releaseClockFor evicts the entry — test-only teardown and
+    /// future destroyed-signal wiring both rely on this.
+    void testReleaseClockFor()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        QtQuickClockManager::instance().clockFor(window.get());
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 1);
+
+        QtQuickClockManager::instance().releaseClockFor(window.get());
+        QCOMPARE(QtQuickClockManager::instance().entryCount(), 0);
+    }
+
+    /// Epoch identity must match IMotionClock::steadyClockEpoch — a
+    /// rebind from a CompositorClock onto the QML-side clock must be
+    /// accepted by AnimatedValue::rebindClock. Confirms the manager
+    /// hands out QtQuickClocks (which declare steady-clock epoch)
+    /// rather than some other implementation.
+    void testClockEpochIsSteady()
+    {
+        auto window = std::make_unique<QQuickWindow>();
+        IMotionClock* clock = QtQuickClockManager::instance().clockFor(window.get());
+        QVERIFY(clock);
+        QCOMPARE(clock->epochIdentity(), IMotionClock::steadyClockEpoch());
+    }
+};
+
+QTEST_MAIN(TestQtQuickClockManager)
+#include "test_qtquickclockmanager.moc"
