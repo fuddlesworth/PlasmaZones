@@ -12,8 +12,10 @@
 
 #include <PhosphorShell/LayerSurface.h>
 
+#include <QCoreApplication>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QThread>
 #include <QTimer>
 #include <QWindow>
 
@@ -52,6 +54,23 @@ void ScreenManager::start()
     connect(qApp, &QGuiApplication::screenAdded, this, &ScreenManager::onScreenAdded);
     connect(qApp, &QGuiApplication::screenRemoved, this, &ScreenManager::onScreenRemoved);
 
+    // Populate m_trackedScreens BEFORE any signal-emitting step that follows
+    // (panelSource->start, refreshVirtualConfigs). A synchronous IPanelSource
+    // implementation — NoOpPanelSource is the canonical example — fans out
+    // panelOffsetsChanged during start(); listeners that query
+    // effectiveScreenIds() from that handler must observe a coherent tracked-
+    // screen set, not the empty pre-populate state. The configStore path has
+    // the same invariant for virtualScreensChanged.
+    for (auto* screen : QGuiApplication::screens()) {
+        if (!m_trackedScreens.contains(screen)) {
+            connectScreenSignals(screen);
+            m_trackedScreens.append(screen);
+            if (m_cfg.useGeometrySensors) {
+                createGeometrySensor(screen);
+            }
+        }
+    }
+
     if (m_cfg.panelSource) {
         connect(m_cfg.panelSource, &IPanelSource::panelOffsetsChanged, this, &ScreenManager::onPanelOffsetsChanged);
         connect(m_cfg.panelSource, &IPanelSource::requeryCompleted, this, &ScreenManager::onPanelRequeryCompleted);
@@ -72,22 +91,6 @@ void ScreenManager::start()
                 Q_EMIT panelGeometryReady();
             }
         });
-    }
-
-    // Populate m_trackedScreens BEFORE the initial refreshVirtualConfigs so
-    // any virtualScreensChanged signal the seed refresh emits observes a
-    // coherent effectiveScreenIds() from a listener's handler. If this loop
-    // ran after the refresh, a listener that called effectiveScreenIds() in
-    // response to the seed would see an empty list even though VS configs
-    // are already cached.
-    for (auto* screen : QGuiApplication::screens()) {
-        if (!m_trackedScreens.contains(screen)) {
-            connectScreenSignals(screen);
-            m_trackedScreens.append(screen);
-            if (m_cfg.useGeometrySensors) {
-                createGeometrySensor(screen);
-            }
-        }
     }
 
     if (m_cfg.configStore) {
@@ -367,6 +370,7 @@ void ScreenManager::onConfigStoreChanged()
 
 QRect ScreenManager::actualAvailableGeometry(QScreen* screen) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!screen) {
         return QRect();
     }

@@ -220,11 +220,19 @@ QScreen* findByIdOrName(const QString& identifier)
     }
 
     // Disambiguated form: "Manuf:Model:Serial/CONNECTOR".
-    // Skip for virtual screen IDs (the slash there is the VS separator).
+    // Operate on `physId` — which is always the physical identifier with
+    // any "/vs:N" suffix already stripped — so this branch runs for BOTH
+    // purely physical inputs AND virtual IDs whose physical part carries
+    // a "/CONNECTOR" disambiguator. Without this, a persisted virtual ID
+    // captured while duplicate monitors were connected (e.g.
+    // "Dell:U2722D:115107/HDMI-1/vs:2") fails to resolve after one of
+    // the duplicates is unplugged: identifierFor() no longer returns the
+    // suffixed form, the exact-match loop above misses, and this block
+    // was previously gated out for virtual IDs.
     int slashPos = physId.lastIndexOf(QLatin1Char('/'));
-    if (slashPos > 0 && physId == identifier) {
-        const QString connectorPart = identifier.mid(slashPos + 1);
-        const QString basePart = identifier.left(slashPos);
+    if (slashPos > 0) {
+        const QString connectorPart = physId.mid(slashPos + 1);
+        const QString basePart = physId.left(slashPos);
         for (QScreen* screen : QGuiApplication::screens()) {
             if (screen->name() == connectorPart && baseIdentifierFor(screen) == basePart) {
                 cache.insert(identifier, screen);

@@ -11,6 +11,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QScreen>
+#include <QSet>
 #include <QTimer>
 #include <QVector>
 
@@ -239,6 +240,12 @@ private:
     mutable bool m_effectiveScreenIdsDirty = true;
 
     mutable QHash<QString, QRect> m_virtualGeometryCache;
+
+    // Warn-once set for effectiveScreenIds() identifier-round-trip misses.
+    // A tracked QScreen whose identifierFor() no longer resolves back via
+    // findByIdOrName is usually a stale persisted-config drift — surface it
+    // loudly once per physId per session instead of burying it at qCDebug.
+    mutable QSet<QString> m_warnedEffectiveIdMisses;
 
     void invalidateVirtualGeometryCache(const QString& physicalScreenId = {}) const;
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;

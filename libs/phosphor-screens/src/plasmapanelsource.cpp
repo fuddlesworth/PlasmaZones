@@ -329,7 +329,10 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 if (prev == m_offsets.constEnd() || !(prev.value() == it.value())) {
                     changedNames.insert(it.key());
                 }
-                qCInfo(lcPhosphorScreens)
+                // qCDebug not qCInfo: this line fires for every screen on
+                // every requery (and the daemon kicks a requery per panel-edit
+                // cycle). Keep qCInfo for transition events (ready, panel-gone).
+                qCDebug(lcPhosphorScreens)
                     << "Screen" << it.key() << "panel offsets T=" << it.value().top << "B=" << it.value().bottom
                     << "L=" << it.value().left << "R=" << it.value().right;
             }

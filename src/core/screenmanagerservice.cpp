@@ -54,16 +54,20 @@ bool isPanelGeometryReady()
 
 QScreen* resolvePhysicalScreen(const QString& screenId)
 {
-    auto* mgr = screenManager();
-    QScreen* screen = mgr ? mgr->physicalQScreenFor(screenId) : nullptr;
-    if (!screen) {
-        screen =
-            screenId.isEmpty() ? Utils::primaryScreen() : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    // physicalQScreenFor already funnels through ScreenIdentity::findByIdOrName
+    // internally (after stripping any /vs:N suffix), so a second
+    // findByIdOrName in the fallback path was redundant. Skip straight to the
+    // empty/primary fallback when the manager is absent or failed to resolve.
+    if (auto* mgr = screenManager()) {
+        if (QScreen* screen = mgr->physicalQScreenFor(screenId)) {
+            return screen;
+        }
+    } else if (!screenId.isEmpty()) {
+        if (QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId)) {
+            return screen;
+        }
     }
-    if (!screen) {
-        screen = Utils::primaryScreen();
-    }
-    return screen;
+    return Utils::primaryScreen();
 }
 
 QStringList effectiveScreenIdsWithFallback()

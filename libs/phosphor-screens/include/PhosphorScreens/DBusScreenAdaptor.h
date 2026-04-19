@@ -69,7 +69,13 @@ public Q_SLOTS:
 
     // Virtual screen management
     QString getVirtualScreenConfig(const QString& physicalScreenId);
-    void setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
+    /// Set the virtual screen subdivision configuration for a physical screen.
+    /// @return Empty string on success, otherwise a stable rejection token
+    ///         (e.g. `parse_error`, `missing_screens`, `bad_index`,
+    ///         `store_rejected`) so D-Bus callers can distinguish failure
+    ///         modes without parsing logs. Matches the pattern used by
+    ///         @ref swapVirtualScreenInDirection / @ref rotateVirtualScreens.
+    QString setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson);
     QStringList getPhysicalScreens();
     QString getEffectiveScreenAt(int x, int y);
 

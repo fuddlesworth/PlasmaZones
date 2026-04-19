@@ -496,46 +496,50 @@ QString DBusScreenAdaptor::getVirtualScreenConfig(const QString& physicalScreenI
     return QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
 }
 
-void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
+QString DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, const QString& configJson)
 {
+    // Stable rejection tokens kept as local constants so consumers (KCM,
+    // settings app) match on a single spelling even when the underlying
+    // log wording changes.
+    const auto reject = [](const char* token, const QString& detail) {
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig:" << token << "—" << detail;
+        return QString::fromUtf8(token);
+    };
+
     if (physicalScreenId.isEmpty()) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: empty physicalScreenId";
-        return;
+        return reject("empty_physical_id", QStringLiteral("physicalScreenId is empty"));
     }
     if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: expected physical screen ID, got virtual:"
-                                     << physicalScreenId;
-        return;
+        return reject("virtual_id_not_accepted",
+                      QStringLiteral("expected physical screen ID, got virtual: %1").arg(physicalScreenId));
     }
     if (!m_configStore) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: no IConfigStore wired";
-        return;
+        return reject("no_config_store", QStringLiteral("no IConfigStore wired"));
     }
 
     QJsonParseError parseError;
     QJsonDocument doc = QJsonDocument::fromJson(configJson.toUtf8(), &parseError);
     if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: invalid JSON:" << parseError.errorString();
-        return;
+        return reject("parse_error", parseError.errorString());
     }
     if (!doc.isObject()) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: JSON root is not an object";
-        return;
+        return reject("not_object", QStringLiteral("JSON root is not an object"));
     }
 
     QJsonObject root = doc.object();
     const QJsonValue screensVal = root.value(kKeyScreens);
     if (!screensVal.isArray()) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: missing or non-array 'screens' key";
-        return;
+        return reject("missing_screens", QStringLiteral("missing or non-array 'screens' key"));
     }
     const QJsonArray screensArr = screensVal.toArray();
 
     if (screensArr.isEmpty()) {
         VirtualScreenConfig empty;
         empty.physicalScreenId = physicalScreenId;
-        m_configStore->save(physicalScreenId, empty);
-        return;
+        if (!m_configStore->save(physicalScreenId, empty)) {
+            return reject("store_rejected", QStringLiteral("store rejected removal for %1").arg(physicalScreenId));
+        }
+        return QString();
     }
 
     // Reject a 1-entry screens[] up front. VirtualScreenConfig::hasSubdivisions
@@ -544,10 +548,9 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
     // 1-VS config over D-Bus sees their monitor's existing subdivision
     // erased with no error signal. Surface the rejection explicitly.
     if (screensArr.size() < 2) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: screens[] has" << screensArr.size()
-                                     << "entries; need at least 2 for a subdivision "
-                                        "(send an empty array to remove the existing config)";
-        return;
+        return reject("too_few_screens",
+                      QStringLiteral("screens[] has %1 entries; need at least 2 (send an empty array to remove)")
+                          .arg(screensArr.size()));
     }
 
     VirtualScreenConfig config;
@@ -559,14 +562,12 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
 
     for (const auto& entry : screensArr) {
         if (!entry.isObject()) {
-            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: screens[] entry is not an object";
-            return;
+            return reject("bad_entry", QStringLiteral("screens[] entry is not an object"));
         }
         const QJsonObject screenObj = entry.toObject();
         const QJsonValue regionVal = screenObj.value(kKeyRegion);
         if (!regionVal.isObject()) {
-            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: entry missing 'region' object";
-            return;
+            return reject("missing_region", QStringLiteral("entry missing 'region' object"));
         }
         const QJsonObject regionObj = regionVal.toObject();
         const double rx = regionObj.value(kKeyX).toDouble();
@@ -574,8 +575,7 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
         const double rw = regionObj.value(kKeyWidth).toDouble();
         const double rh = regionObj.value(kKeyHeight).toDouble();
         if (!finiteOrReject(rx) || !finiteOrReject(ry) || !finiteOrReject(rw) || !finiteOrReject(rh)) {
-            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: non-finite region value for" << physicalScreenId;
-            return;
+            return reject("non_finite_region", QStringLiteral("non-finite region value for %1").arg(physicalScreenId));
         }
 
         // Require an explicit integer `index`. A bare `.toInt()` silently returns 0
@@ -585,17 +585,17 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
         // specific message instead.
         const QJsonValue indexVal = screenObj.value(kKeyIndex);
         if (!indexVal.isDouble()) {
-            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: entry missing or non-numeric 'index' for"
-                                         << physicalScreenId;
-            return;
+            return reject("missing_index",
+                          QStringLiteral("entry missing or non-numeric 'index' for %1").arg(physicalScreenId));
         }
         // JSON numbers are doubles; confirm the value is a non-negative integer.
         const double idxD = indexVal.toDouble();
         if (!std::isfinite(idxD) || idxD < 0.0 || idxD > static_cast<double>(std::numeric_limits<int>::max())
             || std::floor(idxD) != idxD) {
-            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: 'index' must be a non-negative integer, got"
-                                         << idxD << "for" << physicalScreenId;
-            return;
+            return reject("bad_index",
+                          QStringLiteral("'index' must be a non-negative integer, got %1 for %2")
+                              .arg(idxD)
+                              .arg(physicalScreenId));
         }
 
         VirtualScreenDef def;
@@ -608,8 +608,9 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
     }
 
     if (!m_configStore->save(physicalScreenId, config)) {
-        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: store rejected config for" << physicalScreenId;
+        return reject("store_rejected", QStringLiteral("store rejected config for %1").arg(physicalScreenId));
     }
+    return QString();
 }
 
 QStringList DBusScreenAdaptor::getPhysicalScreens()

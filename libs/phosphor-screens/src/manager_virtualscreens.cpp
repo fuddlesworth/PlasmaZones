@@ -52,6 +52,7 @@ bool containsExclusive(const QRect& r, const QPoint& p)
 
 bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (physicalScreenId.isEmpty()) {
         qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: empty physicalScreenId";
         return false;
@@ -147,15 +148,30 @@ void ScreenManager::refreshVirtualConfigs(const QHash<QString, VirtualScreenConf
     for (const QString& physId : std::as_const(toRemove)) {
         VirtualScreenConfig empty;
         empty.physicalScreenId = physId;
-        setVirtualScreenConfig(physId, empty);
+        if (!setVirtualScreenConfig(physId, empty)) {
+            // Removal should never fail (setVirtualScreenConfig's empty-config
+            // path is unconditional), but log if the contract ever shifts so
+            // silent manager/store divergence doesn't mask it.
+            qCWarning(lcPhosphorScreens) << "refreshVirtualConfigs: removal rejected for" << physId;
+        }
     }
     for (const QString& physId : std::as_const(toApply)) {
-        setVirtualScreenConfig(physId, configs.value(physId));
+        if (!setVirtualScreenConfig(physId, configs.value(physId))) {
+            // Store accepted this payload but the manager (which shares the
+            // same isValid() predicate by contract) rejected it. That's a
+            // real divergence — warn loudly so it's debuggable instead of
+            // looking like a phantom "store says VSs exist but manager
+            // doesn't report them" bug at the daemon layer.
+            qCWarning(lcPhosphorScreens)
+                << "refreshVirtualConfigs: manager rejected config for" << physId
+                << "— manager cache now diverges from the IConfigStore (check admission rules / cap parity)";
+        }
     }
 }
 
 QStringList ScreenManager::effectiveScreenIds() const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!m_effectiveScreenIdsDirty) {
         return m_cachedEffectiveScreenIds;
     }
@@ -165,15 +181,27 @@ QStringList ScreenManager::effectiveScreenIds() const
         QString physId = ScreenIdentity::identifierFor(screen);
         if (!ScreenIdentity::findByIdOrName(physId)) {
             // Identifier round-trip fails — QScreen* exists in our tracked
-            // list but its identifier doesn't resolve back to any
-            // currently-connected screen. Usually a hotplug race (screen
-            // removal in flight). Log so identity-resolution drift doesn't
-            // mask itself silently.
-            qCDebug(lcPhosphorScreens) << "effectiveScreenIds: skipping tracked screen"
-                                       << (screen ? screen->name() : QString()) << "— identifier" << physId
-                                       << "does not resolve back to a live QScreen";
+            // list but its identifier doesn't resolve back to any currently-
+            // connected screen. Either a hotplug race (screen removal in
+            // flight — transient, bounded by the screenRemoved path clearing
+            // the caches) OR persisted-ID drift that will keep failing until
+            // the store is rewritten. Warn-once per physId per session so
+            // the drift case is visible without spamming the transient one.
+            if (!m_warnedEffectiveIdMisses.contains(physId)) {
+                m_warnedEffectiveIdMisses.insert(physId);
+                qCWarning(lcPhosphorScreens)
+                    << "effectiveScreenIds: skipping tracked screen" << (screen ? screen->name() : QString())
+                    << "— identifier" << physId
+                    << "does not resolve back to a live QScreen (persisted-ID drift suspected)";
+            } else {
+                qCDebug(lcPhosphorScreens) << "effectiveScreenIds: still-unresolved identifier" << physId;
+            }
             continue;
         }
+        // Screen resolved — clear any stale warn-once entry so a transient
+        // hotplug race that recovers doesn't permanently suppress a later,
+        // legitimately-new miss.
+        m_warnedEffectiveIdMisses.remove(physId);
         auto it = m_virtualConfigs.constFind(physId);
         if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
             for (const auto& vs : it->screens) {
@@ -204,6 +232,7 @@ QStringList ScreenManager::virtualScreenIdsFor(const QString& physicalScreenId) 
 
 QRect ScreenManager::screenGeometry(const QString& screenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         if (!m_virtualGeometryCache.contains(screenId)) {
             QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
@@ -223,6 +252,7 @@ QRect ScreenManager::screenGeometry(const QString& screenId) const
 
 QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         QRect vsGeom = screenGeometry(screenId);
         if (!vsGeom.isValid()) {

@@ -22,15 +22,24 @@ class PHOSPHORSCREENS_EXPORT InMemoryConfigStore final : public IConfigStore
 {
     Q_OBJECT
 public:
+    /// Production-matching default cap. Mirrors
+    /// @ref ScreenManagerConfig::maxVirtualScreensPerPhysical so tests that
+    /// spin up a store without specifying a cap still exercise the same
+    /// admission ceiling the daemon enforces. A lower default (or 0 = "no
+    /// cap") silently accepted over-limit configs the real consumer would
+    /// have rejected, which masked regressions at the layer boundary.
+    /// Tests that deliberately want no cap pass 0 explicitly.
+    static constexpr int DefaultMaxScreensPerPhysical = 8;
+
     explicit InMemoryConfigStore(QObject* parent = nullptr)
         : IConfigStore(parent)
+        , m_maxScreensPerPhysical(DefaultMaxScreensPerPhysical)
     {
     }
 
-    /// Construct with a maximum-virtual-screens-per-physical cap. Pass 0 for
-    /// "no cap" (the default-ctor behaviour). Tests that need to assert
-    /// production-parity admission pass the daemon's cap here so an
-    /// over-limit config is rejected at the same layer real consumers see it.
+    /// Construct with an explicit maximum-virtual-screens-per-physical cap.
+    /// Pass 0 for "no cap" (test-only; production parity requires matching
+    /// the daemon's cap).
     explicit InMemoryConfigStore(int maxScreensPerPhysical, QObject* parent = nullptr)
         : IConfigStore(parent)
         , m_maxScreensPerPhysical(maxScreensPerPhysical)
@@ -87,7 +96,7 @@ public:
 
 private:
     QHash<QString, VirtualScreenConfig> m_configs;
-    int m_maxScreensPerPhysical = 0; ///< 0 means "no cap" — matches the 1-arg ctor.
+    int m_maxScreensPerPhysical; ///< 0 means "no cap". Default is DefaultMaxScreensPerPhysical.
 };
 
 } // namespace Phosphor::Screens

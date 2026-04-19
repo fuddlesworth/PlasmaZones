@@ -104,8 +104,12 @@ PHOSPHORSCREENS_EXPORT void invalidateComputedIdentifiers();
  * @brief Compute the EDID-based base ID for a `QScreen*`.
  *
  * Identical-monitor disambiguation is NOT applied here (use @ref
- * identifierFor for that). Cached per-`QScreen*` for the screen's
- * lifetime.
+ * identifierFor for that). Not cached at this level — the underlying
+ * EDID-serial sysfs read IS cached inside
+ * @ref PhosphorIdentity::ScreenId::readEdidHeaderSerial, which is what
+ * dominates the cost; assembling the "manuf:model:serial" string from
+ * already-fetched QScreen fields is cheap enough that a second cache
+ * layer would trade memory for negligible speedup.
  */
 PHOSPHORSCREENS_EXPORT QString baseIdentifierFor(const QScreen* screen);
 

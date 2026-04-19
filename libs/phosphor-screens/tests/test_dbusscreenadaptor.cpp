@@ -181,6 +181,62 @@ private Q_SLOTS:
         QCOMPARE(spy.count(), 0);
         QVERIFY(store.get(physId).isEmpty());
     }
+
+    void testRejectionTokensAreStable()
+    {
+        // D-Bus callers parse these tokens to distinguish failure modes;
+        // assert the exact wire strings so accidental renames show up here
+        // rather than as silent client-side behaviour changes.
+        const QString physId = physIdForPrimary();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+        InMemoryConfigStore store;
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&host);
+        adaptor.setConfigStore(&store);
+
+        // Success path: empty string.
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, buildStripeJson(2)), QString());
+
+        // Parse failure → "parse_error".
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, QStringLiteral("not json")), QStringLiteral("parse_error"));
+
+        // Non-object root → "not_object".
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, QStringLiteral("[]")), QStringLiteral("not_object"));
+
+        // Missing 'screens' key → "missing_screens".
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, QStringLiteral("{}")), QStringLiteral("missing_screens"));
+
+        // Single-entry screens[] → "too_few_screens".
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, buildStripeJson(1)), QStringLiteral("too_few_screens"));
+
+        // Missing index field → "missing_index". Hand-build a payload with
+        // two entries that omit `index` (buildStripeJson always sets it).
+        QJsonArray badScreens;
+        for (int i = 0; i < 2; ++i) {
+            QJsonObject obj;
+            obj[QStringLiteral("region")] = QJsonObject{
+                {QStringLiteral("x"), i * 0.5},
+                {QStringLiteral("y"), 0.0},
+                {QStringLiteral("width"), 0.5},
+                {QStringLiteral("height"), 1.0},
+            };
+            badScreens.append(obj);
+        }
+        QJsonObject badRoot;
+        badRoot[QStringLiteral("screens")] = badScreens;
+        const QString badJson = QString::fromUtf8(QJsonDocument(badRoot).toJson(QJsonDocument::Compact));
+        QCOMPARE(adaptor.setVirtualScreenConfig(physId, badJson), QStringLiteral("missing_index"));
+
+        // Empty physicalScreenId → "empty_physical_id".
+        QCOMPARE(adaptor.setVirtualScreenConfig(QString(), buildStripeJson(2)), QStringLiteral("empty_physical_id"));
+
+        // No config store wired → "no_config_store".
+        AdaptorHost host2;
+        DBusScreenAdaptor adaptor2(&host2);
+        QCOMPARE(adaptor2.setVirtualScreenConfig(physId, buildStripeJson(2)), QStringLiteral("no_config_store"));
+    }
 };
 
 QTEST_MAIN(TestDBusScreenAdaptor)
