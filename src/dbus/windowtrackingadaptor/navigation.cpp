@@ -6,7 +6,7 @@
 #include "../../core/inavigationactions.h"
 #include "../../core/logging.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>

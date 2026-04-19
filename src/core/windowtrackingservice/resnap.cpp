@@ -7,7 +7,7 @@
 #include "../windowtrackingservice.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
-#include "../screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../utils.h"
@@ -533,7 +533,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateSnapAllWindows(cons
             break;
         }
 
-        QRect geo = GeometryUtils::getZoneGeometryForScreen(targetZone, screen, screenId, layout, m_settings);
+        QRect geo =
+            GeometryUtils::getZoneGeometryForScreen(m_screenManager, targetZone, screen, screenId, layout, m_settings);
 
         if (geo.isValid()) {
             ZoneAssignmentEntry entry;

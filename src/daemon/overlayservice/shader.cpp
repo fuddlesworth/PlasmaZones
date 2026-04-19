@@ -289,7 +289,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
-        screen = resolveTargetScreen(screenId);
+        screen = resolveTargetScreen(m_screenManager, screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);

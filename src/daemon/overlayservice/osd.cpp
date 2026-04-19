@@ -6,7 +6,7 @@
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -96,7 +96,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
                                             const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* physScreen = resolveTargetScreen(screenId);
+    QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
@@ -105,7 +105,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     outPhysScreen = physScreen;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    screenGeom = resolveScreenGeometry(screenId);
+    screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!screenGeom.isValid()) {
         screenGeom = physScreen->geometry();
     }
@@ -415,14 +415,14 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationTime.restart();
 
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* physScreen = resolveTargetScreen(screenId);
+    QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for navigation OSD";
         return;
     }
 
     // Use virtual screen geometry if applicable, otherwise physical
-    QRect navScreenGeom = resolveScreenGeometry(screenId);
+    QRect navScreenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!navScreenGeom.isValid()) {
         navScreenGeom = physScreen->geometry();
     }

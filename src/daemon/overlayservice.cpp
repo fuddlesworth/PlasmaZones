@@ -13,7 +13,7 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../core/unifiedlayoutlist.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 #include "../core/constants.h"
 
@@ -115,12 +115,13 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 
 } // namespace
 
-OverlayService::OverlayService(QObject* parent)
+OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : IOverlayService(parent)
     , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
     , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
 {
+    m_screenManager = screenManager;
     // Set up i18n for QML (makes i18n() available in QML)
     auto* localizedContext = new PzLocalizedContext(m_engine.get());
     m_engine->rootContext()->setContextObject(localizedContext);
@@ -515,7 +516,7 @@ void OverlayService::show()
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
         // Check both physical and effective (virtual) screen IDs
         if (cursorScreen && m_settings) {
-            QString effectiveId = Utils::effectiveScreenIdAt(QCursor::pos(), cursorScreen);
+            QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), cursorScreen);
             if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
@@ -543,7 +544,7 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         // If the cursor's screen has PlasmaZones disabled, don't show overlay at all
         // Check both physical and effective (virtual) screen IDs
         if (cursorScreen && m_settings) {
-            QString effectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
+            QString effectiveId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
             if (isContextDisabled(m_settings, effectiveId, m_currentVirtualDesktop, m_currentActivity)) {
                 return;
             }
@@ -567,7 +568,8 @@ void OverlayService::showAtPosition(int cursorX, int cursorY)
         if (!cursorScreen) {
             return;
         }
-        const QString cursorEffectiveId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), cursorScreen);
+        const QString cursorEffectiveId =
+            Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), cursorScreen);
         if (cursorEffectiveId.isEmpty()) {
             return;
         }
@@ -992,7 +994,7 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
     }
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
-        Utils::screenAspectRatio(screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
+        Utils::screenAspectRatio(m_screenManager, screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
     return PlasmaZones::toVariantList(entries);
 }
@@ -1018,7 +1020,7 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
     // Ordering doesn't affect count — skip custom order for performance
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
         m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, Utils::screenAspectRatio(screenId),
+        m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio());
     return entries.size();
 }

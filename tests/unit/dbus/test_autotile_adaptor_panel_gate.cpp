@@ -3,20 +3,6 @@
 
 /**
  * @file test_autotile_adaptor_panel_gate.cpp
- * @brief Regression guard for the "stale VS geometry at login" race
- *
- * Root cause: when the daemon starts up, the KWin effect sends windowsOpenedBatch
- * immediately. If that batch arrives before the first D-Bus panel query has
- * completed, Phosphor::Screens::ScreenManager's availability cache is still empty and the autotile
- * engine computes zone geometry against the unreserved full-screen rect — producing
- * oversized tile requests that get corrected a frame later (visible jump at login).
- *
- * Fix: AutotileAdaptor defers windowOpened/windowsOpenedBatch entries into a
- * pending queue until Phosphor::Screens::ScreenManager::panelGeometryReady fires, then flushes them.
- * This test exercises the queue behavior end-to-end using the real adaptor and
- * engine, with the Phosphor::Screens::ScreenManager singleton constructed but not started (so the
- * panel query never runs and isPanelGeometryReady() stays false until we manually
- * fire the signal).
  *
  * NOTE: the adaptor is parented to a plain QObject, not to the AutotileEngine.
  * QDBusAbstractAdaptor walks its parent's meta-object at construction and some
@@ -33,7 +19,7 @@
 #include <dbus_types.h>
 
 #include "autotile/AutotileEngine.h"
-#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor.h"
 
 using namespace PlasmaZones;
@@ -56,18 +42,15 @@ class TestAutotileAdaptorPanelGate : public QObject
 private Q_SLOTS:
 
     // -------------------------------------------------------------------------
-    // Baseline: with no Phosphor::Screens::ScreenManager singleton at all (null-instance path),
-    // windowOpened forwards straight to the engine without queueing. This is
-    // the path exercised in headless unit tests that don't construct a
-    // Phosphor::Screens::ScreenManager — the adaptor must not force a dependency on it.
+    // Baseline: with no ScreenManager injected, windowOpened forwards straight
+    // to the engine without queueing. The adaptor must not force a dependency
+    // on ScreenManager — headless unit tests inject nullptr.
     // -------------------------------------------------------------------------
     void testNoScreenManager_passThrough()
     {
-        QVERIFY(screenManager() == nullptr);
-
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, nullptr, &adaptorParent);
 
         adaptor.windowOpened(QStringLiteral("kitty|uuid-1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -80,15 +63,11 @@ private Q_SLOTS:
     void testDefersWhenPanelNotReady_flushesOnSignal()
     {
         Phosphor::Screens::ScreenManager mgr;
-        setScreenManager(&mgr);
-        auto unregister = qScopeGuard([] {
-            setScreenManager(nullptr);
-        });
-        QVERIFY(!isPanelGeometryReady());
+        QVERIFY(!mgr.isPanelGeometryReady());
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
         // Single-open path: queues.
         adaptor.windowOpened(QStringLiteral("konsole|uuid-a"), QStringLiteral("HDMI-1"), 100, 50);
@@ -118,14 +97,10 @@ private Q_SLOTS:
     void testRejectsInvalidSingleOpens()
     {
         Phosphor::Screens::ScreenManager mgr;
-        setScreenManager(&mgr);
-        auto unregister = qScopeGuard([] {
-            setScreenManager(nullptr);
-        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
         adaptor.windowOpened(QString(), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
@@ -149,14 +124,10 @@ private Q_SLOTS:
     void testBatchOrderPreservedAcrossFlush()
     {
         Phosphor::Screens::ScreenManager mgr;
-        setScreenManager(&mgr);
-        auto unregister = qScopeGuard([] {
-            setScreenManager(nullptr);
-        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
         WindowOpenedList batch;
         for (int i = 0; i < 5; ++i) {
@@ -169,7 +140,7 @@ private Q_SLOTS:
         QCOMPARE(adaptor.pendingWindowOpensCount(), 0);
 
         // Second batch arriving after flush: depending on whether
-        // m_panelGeometryReceived got set on the real Phosphor::Screens::ScreenManager (we only
+        // m_panelGeometryReceived got set on the real ScreenManager (we only
         // emitted the signal, didn't flip the flag), the adaptor either
         // dispatches synchronously (count stays 0) or re-queues (count = 1).
         // The contract we care about here is simply that flush did empty the
@@ -186,14 +157,10 @@ private Q_SLOTS:
     void testFlushWithClearedEngine_noCrash()
     {
         Phosphor::Screens::ScreenManager mgr;
-        setScreenManager(&mgr);
-        auto unregister = qScopeGuard([] {
-            setScreenManager(nullptr);
-        });
 
         AutotileEngine engine(nullptr, nullptr, nullptr);
         QObject adaptorParent;
-        AutotileAdaptor adaptor(&engine, &adaptorParent);
+        AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
         adaptor.windowOpened(QStringLiteral("a|1"), QStringLiteral("HDMI-1"), 0, 0);
         QCOMPARE(adaptor.pendingWindowOpensCount(), 1);

@@ -17,7 +17,7 @@
 #include <QTest>
 #include <QSignalSpy>
 
-#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "helpers/VirtualScreenTestHelpers.h"
 

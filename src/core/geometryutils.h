@@ -21,6 +21,10 @@ class Layout;
 class Zone;
 }
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PlasmaZones {
 
 class ISettings;
@@ -57,7 +61,8 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  *        back to Phosphor::Screens::ScreenIdentity::identifierFor(screen) (physical ID, all edges outer).
  * @return Geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, QScreen* screen, int innerGap,
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                  QScreen* screen, int innerGap,
                                                   const ::PhosphorLayout::EdgeGaps& outerGaps,
                                                   bool useAvailableGeometry = true, const QString& screenId = {});
 
@@ -82,9 +87,9 @@ PLASMAZONES_EXPORT QRectF availableAreaToOverlayCoordinates(const QRectF& geomet
  * @param useAvailableGeometry If true, calculate relative to available area
  * @return Geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, const QRect& screenGeometry,
-                                                  const QRect& availableGeometry, int innerGap,
-                                                  const ::PhosphorLayout::EdgeGaps& outerGaps,
+PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                  const QRect& screenGeometry, const QRect& availableGeometry,
+                                                  int innerGap, const ::PhosphorLayout::EdgeGaps& outerGaps,
                                                   bool useAvailableGeometry = true, const QString& screenId = {});
 
 /**
@@ -102,7 +107,8 @@ PLASMAZONES_EXPORT QRectF getZoneGeometryWithGaps(PhosphorZones::Zone* zone, con
  * @param settings Global settings for gap fallbacks
  * @return Snapped integer geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
+PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                  QScreen* screen, const QString& screenId,
                                                   PhosphorZones::Layout* layout, ISettings* settings);
 
 /**
@@ -119,7 +125,8 @@ PLASMAZONES_EXPORT QRect getZoneGeometryForScreen(PhosphorZones::Zone* zone, QSc
  * @param settings Global settings for gap fallbacks
  * @return Floating-point geometry with appropriate gaps applied
  */
-PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(PhosphorZones::Zone* zone, QScreen* screen, const QString& screenId,
+PLASMAZONES_EXPORT QRectF getZoneGeometryForScreenF(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Zone* zone,
+                                                    QScreen* screen, const QString& screenId,
                                                     PhosphorZones::Layout* layout, ISettings* settings);
 
 /**
@@ -169,7 +176,8 @@ PLASMAZONES_EXPORT ::PhosphorLayout::EdgeGaps getEffectiveOuterGaps(PhosphorZone
  * Centralizes the decision of whether to use full screen or available (panel-excluded)
  * geometry based on the layout's useFullScreenGeometry setting.
  */
-PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, QScreen* screen);
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                                                  QScreen* screen);
 
 /**
  * @brief Get the effective screen geometry for a layout using a screen ID
@@ -180,7 +188,8 @@ PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout,
  * Virtual-screen-aware overload: resolves geometry via Phosphor::Screens::ScreenManager first,
  * then falls back to finding the physical QScreen by ID.
  */
-PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId);
+PLASMAZONES_EXPORT QRectF effectiveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                                                  const QString& screenId);
 
 /**
  * @brief Extract geometry as QRectF from a zone QVariantMap
@@ -212,7 +221,8 @@ PLASMAZONES_EXPORT void setZoneGeometry(QVariantMap& zone, const QRectF& rect);
  * Used by WindowTrackingService::getEmptyZones and WindowDragAdaptor::dragStopped
  * to avoid duplicating the empty-zones building logic.
  */
-PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layout, QScreen* screen, ISettings* settings,
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
+                                                    PhosphorZones::Layout* layout, QScreen* screen, ISettings* settings,
                                                     const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 
 /**
@@ -221,7 +231,8 @@ PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layou
  * Uses Phosphor::Screens::ScreenManager to resolve virtual screen geometry when available, falling back
  * to the physical QScreen* geometry.
  */
-PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(PhosphorZones::Layout* layout, const QString& screenId,
+PLASMAZONES_EXPORT EmptyZoneList buildEmptyZoneList(Phosphor::Screens::ScreenManager* mgr,
+                                                    PhosphorZones::Layout* layout, const QString& screenId,
                                                     QScreen* physScreen, ISettings* settings,
                                                     const std::function<bool(const PhosphorZones::Zone*)>& isZoneEmpty);
 

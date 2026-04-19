@@ -8,7 +8,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
@@ -311,7 +311,7 @@ QString WindowTrackingAdaptor::detectScreenForZone(const QString& zoneId) const
         }
     } else {
         for (QScreen* screen : Utils::allScreens()) {
-            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(layout, screen);
+            QRectF refGeom = GeometryUtils::effectiveScreenGeometry(m_service->screenManager(), layout, screen);
             QRectF normGeom = zone->normalizedGeometry(refGeom);
             QPoint zoneCenter(refGeom.x() + qRound(normGeom.center().x() * refGeom.width()),
                               refGeom.y() + qRound(normGeom.center().y() * refGeom.height()));

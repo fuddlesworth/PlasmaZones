@@ -53,8 +53,8 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
-                                   ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                   QObject* parent = nullptr);
+                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                   VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
 
     /**

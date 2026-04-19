@@ -53,7 +53,7 @@ private Q_SLOTS:
         m_layoutManager = new LayoutManager(nullptr);
         m_settings = new StubSettingsMigration(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
-        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
 
         m_testLayout = createTestLayout(3, m_layoutManager);
         m_layoutManager->addLayout(m_testLayout);

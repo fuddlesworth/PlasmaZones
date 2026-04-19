@@ -8,7 +8,7 @@
 #include "../shortcutmanager.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layoutworker/layoutcomputeservice.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
@@ -89,8 +89,8 @@ void Daemon::connectScreenSignals()
         for (const QString& sid : vsIds) {
             PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
             if (screenLayout) {
-                LayoutComputeService::recalculateSync(screenLayout,
-                                                      GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+                LayoutComputeService::recalculateSync(
+                    screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
             }
         }
     });
@@ -619,8 +619,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(screenLayout,
-                                                  GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+            LayoutComputeService::recalculateSync(
+                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }
 
@@ -664,7 +664,8 @@ void Daemon::onVirtualScreensReconfigured(const QString& physicalScreenId)
     // Trigger debounced geometry recalculation for the rest of the system
     // (overlays, panel requery, autotile retile). Reuse the same debounced
     // path as physical screen geometry changes.
-    if (resolvePhysicalScreen(physicalScreenId)) {
+    if ((m_screenManager ? m_screenManager->physicalQScreenFor(physicalScreenId)
+                         : Phosphor::Screens::ScreenIdentity::findByIdOrName(physicalScreenId))) {
         m_geometryUpdatePending = true;
         m_geometryUpdateTimer.start();
     }
@@ -690,8 +691,8 @@ void Daemon::onVirtualScreenRegionsChanged(const QString& physicalScreenId)
     for (const QString& sid : affectedScreenIds) {
         PhosphorZones::Layout* screenLayout = m_layoutManager->layoutForScreen(sid, desktop, activity);
         if (screenLayout) {
-            LayoutComputeService::recalculateSync(screenLayout,
-                                                  GeometryUtils::effectiveScreenGeometry(screenLayout, sid));
+            LayoutComputeService::recalculateSync(
+                screenLayout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), screenLayout, sid));
         }
     }
 

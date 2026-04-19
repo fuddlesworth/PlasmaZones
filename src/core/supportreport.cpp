@@ -3,7 +3,7 @@
 
 #include "supportreport.h"
 #include "logging.h"
-#include "screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "layoutmanager.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -62,7 +62,8 @@ SupportReport::Snapshot SupportReport::collectSnapshot(Phosphor::Screens::Screen
             Snapshot::ScreenInfo info;
             info.name = screen->name();
             info.geometry = screen->geometry();
-            info.available = actualAvailableGeometry(screen);
+            info.available =
+                screenManager ? screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
             info.refreshRate = screen->refreshRate();
             info.devicePixelRatio = screen->devicePixelRatio();
             snap.screens.append(info);

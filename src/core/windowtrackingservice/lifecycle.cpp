@@ -9,7 +9,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
-#include "../screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
 #include <PhosphorScreens/VirtualScreen.h>

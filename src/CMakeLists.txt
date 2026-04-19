@@ -86,12 +86,9 @@ set(plasmazones_core_SRCS
     core/single_instance_service.cpp
     core/single_instance_service.h
     # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
-    # lifted to libs/phosphor-screens. Daemon-side service-locator
-    # (process-global screenManager() accessor + Qt-fallback wrappers)
-    # is in screenmanagerservice.{h,cpp}; in-tree callers include it
-    # directly.
-    core/screenmanagerservice.cpp
-    core/screenmanagerservice.h
+    # lifted to libs/phosphor-screens. Daemon consumers take
+    # Phosphor::Screens::ScreenManager* via constructor injection —
+    # no service-locator intermediary.
     core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
     core/activitymanager.cpp

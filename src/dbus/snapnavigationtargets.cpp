@@ -8,7 +8,7 @@
 #include <PhosphorZones/Layout.h>
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/windowtrackingservice.h"
@@ -63,7 +63,7 @@ SwapTargetResult swapResult(bool success, const QString& reason, const QString& 
 // For physical screen IDs, verifies the screen is connected.
 // ═══════════════════════════════════════════════════════════════════════════
 
-bool isStoredScreenValid(const QString& storedScreen)
+bool isStoredScreenValid(Phosphor::Screens::ScreenManager* mgr, const QString& storedScreen)
 {
     if (storedScreen.isEmpty()) {
         return false;
@@ -73,7 +73,6 @@ bool isStoredScreenValid(const QString& storedScreen)
         if (!Phosphor::Screens::ScreenIdentity::findByIdOrName(physId)) {
             return false;
         }
-        auto* mgr = screenManager();
         return mgr && mgr->effectiveScreenIds().contains(storedScreen);
     }
     return Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen) != nullptr;
@@ -161,7 +160,7 @@ MoveTargetResult SnapNavigationTargetResolver::getMoveTargetForWindow(const QStr
     QString effectiveScreenId = screenId;
     if (!currentZoneId.isEmpty()) {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (isStoredScreenValid(storedScreen)) {
+        if (isStoredScreenValid(m_service ? m_service->screenManager() : nullptr, storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
@@ -225,7 +224,7 @@ FocusTargetResult SnapNavigationTargetResolver::getFocusTargetForWindow(const QS
     QString effectiveScreenId = screenId;
     {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (isStoredScreenValid(storedScreen)) {
+        if (isStoredScreenValid(m_service ? m_service->screenManager() : nullptr, storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }
@@ -353,7 +352,7 @@ SwapTargetResult SnapNavigationTargetResolver::getSwapTargetForWindow(const QStr
     QString effectiveScreenId = screenId;
     {
         QString storedScreen = m_service->screenAssignments().value(windowId);
-        if (isStoredScreenValid(storedScreen)) {
+        if (isStoredScreenValid(m_service ? m_service->screenManager() : nullptr, storedScreen)) {
             effectiveScreenId = storedScreen;
         }
     }

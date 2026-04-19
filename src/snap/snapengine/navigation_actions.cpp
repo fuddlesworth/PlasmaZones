@@ -30,7 +30,7 @@
 #include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
 #include <PhosphorScreens/VirtualScreen.h>
@@ -68,7 +68,7 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
                     const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
                     QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
                     if (physScreen) {
-                        auto* mgr = screenManager();
+                        auto* mgr = service ? service->screenManager() : nullptr;
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }

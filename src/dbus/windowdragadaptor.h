@@ -16,6 +16,10 @@
 
 class QScreen;
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace Phosphor::Shortcuts::Integration {
 class IAdhocRegistrar;
 }
@@ -52,8 +56,8 @@ class PLASMAZONES_EXPORT WindowDragAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               LayoutManager* layoutManager, ISettings* settings, WindowTrackingAdaptor* windowTracking,
-                               QObject* parent = nullptr);
+                               LayoutManager* layoutManager, Phosphor::Screens::ScreenManager* screenManager,
+                               ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent = nullptr);
     ~WindowDragAdaptor() override = default;
 
     /**
@@ -316,6 +320,7 @@ private:
     IOverlayService* m_overlayService;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     LayoutManager* m_layoutManager; // Concrete type for signal connections
+    Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings;
     WindowTrackingAdaptor* m_windowTracking;
     AutotileEngine* m_autotileEngine = nullptr; // Optional: per-screen autotile check

@@ -8,6 +8,10 @@
 #include <QObject>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PlasmaZones {
 
 class Settings;
@@ -37,7 +41,8 @@ class ModeTracker : public QObject
     Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
 
 public:
-    explicit ModeTracker(Settings* settings, LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit ModeTracker(Settings* settings, LayoutManager* layoutManager,
+                         Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ModeTracker() override;
 
     /**
@@ -95,6 +100,7 @@ Q_SIGNALS:
 private:
     Settings* m_settings = nullptr;
     LayoutManager* m_layoutManager = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QString m_screenId;
     int m_desktop = 0;
     QString m_activity;

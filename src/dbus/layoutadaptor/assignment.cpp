@@ -9,7 +9,7 @@
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include "../../core/constants.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -136,7 +136,7 @@ QString LayoutAdaptor::getAllScreenAssignments()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the KCM sees one entry per virtual screen, not per physical monitor.
-    const QStringList screenIds = effectiveScreenIdsWithFallback();
+    const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
         // Derive connector name for the JSON key (KCM compatibility)
@@ -267,7 +267,7 @@ QString LayoutAdaptor::getScreenStates()
 
     // Use effective screen IDs (includes virtual screens when configured)
     // so the settings app sees one entry per virtual screen, not per physical monitor.
-    const QStringList screenIds = effectiveScreenIdsWithFallback();
+    const QStringList screenIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& screenId : std::as_const(screenIds)) {
         const auto entry = m_layoutManager->assignmentEntryForScreen(screenId, desktop, activity);

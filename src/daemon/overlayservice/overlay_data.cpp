@@ -10,7 +10,7 @@
 #include "../../core/constants.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../rendering/zonelabeltexturebuilder.h"
 #include <QCursor>
@@ -183,7 +183,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     }
 
     const QPoint screenCenter = screen->geometry().center();
-    QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, screenCenter, screen);
     return buildZonesList(screenId, screen);
 }
 
@@ -233,7 +233,7 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     }
 
     const QPoint screenCenter = screen->geometry().center();
-    QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, screenCenter, screen);
     QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
                              ? m_screenStates[screenId].overlayGeometry
                              : screen->geometry());
@@ -255,7 +255,8 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
-    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(zone, physScreen, screenId, layout, m_settings);
+    QRectF geom =
+        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout, m_settings);
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin

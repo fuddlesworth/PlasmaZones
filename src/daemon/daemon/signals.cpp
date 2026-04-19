@@ -9,7 +9,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
@@ -37,7 +37,7 @@ namespace PlasmaZones {
 void Daemon::initializeAutotile()
 {
     // Initialize mode tracker (thin delegate to LayoutManager's per-context AssignmentEntry)
-    m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), m_layoutManager.get(), this);
+    m_modeTracker = std::make_unique<ModeTracker>(m_settings.get(), m_layoutManager.get(), m_screenManager.get(), this);
 
     // Connect autotile engine signals
     if (m_autotileEngine) {
@@ -384,8 +384,8 @@ void Daemon::initializeAutotile()
 void Daemon::initializeUnifiedController()
 {
     // Initialize unified layout controller (manual layouts only)
-    m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(m_layoutManager.get(), m_settings.get(),
-                                                                          m_autotileEngine.get(), this);
+    m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
+        m_layoutManager.get(), m_settings.get(), m_screenManager.get(), m_autotileEngine.get(), this);
 
     // Set initial desktop/activity context for visibility-filtered cycling
     m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());
@@ -550,7 +550,8 @@ void Daemon::connectOverlaySignals()
             QString effectiveScreenId = screenId;
             if (effectiveScreenId.isEmpty()) {
                 // Prefer effective screen IDs (virtual-screen-aware) over physical screen
-                const QStringList effectiveIds = effectiveScreenIdsWithFallback();
+                const QStringList effectiveIds =
+                    (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
                 if (!effectiveIds.isEmpty()) {
                     effectiveScreenId = effectiveIds.first();
                 }

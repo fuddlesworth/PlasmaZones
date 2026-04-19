@@ -9,6 +9,10 @@
 #include <QPointer>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PhosphorZones {
 class Layout;
 }
@@ -44,6 +48,7 @@ class UnifiedLayoutController : public QObject
 
 public:
     explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
+                                     Phosphor::Screens::ScreenManager* screenManager,
                                      AutotileEngine* autotileEngine = nullptr, QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
@@ -191,6 +196,7 @@ private:
 
     QPointer<LayoutManager> m_layoutManager;
     QPointer<Settings> m_settings;
+    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<AutotileEngine> m_autotileEngine;
 
     QString m_currentLayoutId;

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "dbushelpers.h"
-#include "../core/screenmanagerservice.h"
 #include "../core/utils.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../core/geometryutils.h"
 #include <PhosphorZones/Layout.h>
@@ -14,13 +14,12 @@
 namespace PlasmaZones {
 namespace DbusHelpers {
 
-QString resolveScreenId(const QString& screenId)
+QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
     if (screenId.isEmpty()) {
         // Fall back to the primary screen's effective screen ID.
         // QCursor::pos() returns stale data for Wayland background daemons,
         // so we avoid it entirely and use the primary screen instead.
-        auto* mgr = screenManager();
         QScreen* primary = QGuiApplication::primaryScreen();
         if (primary && mgr) {
             // If the primary screen has virtual subdivisions, returns the first
@@ -35,29 +34,28 @@ QString resolveScreenId(const QString& screenId)
         : Phosphor::Screens::ScreenIdentity::idForName(screenId);
 }
 
-QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId)
+QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                             const QString& screenId)
 {
-    auto* mgr = screenManager();
     if (mgr) {
         const QRect geom = mgr->screenGeometry(screenId);
         if (geom.isValid()) {
-            return GeometryUtils::effectiveScreenGeometry(layout, screenId);
+            return GeometryUtils::effectiveScreenGeometry(mgr, layout, screenId);
         }
     }
     QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(
         PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId));
-    if (!screen) {
-        screen = resolvePhysicalScreen(screenId);
+    if (!screen && mgr) {
+        screen = mgr->physicalQScreenFor(screenId);
     }
     if (screen) {
-        return GeometryUtils::effectiveScreenGeometry(layout, screen);
+        return GeometryUtils::effectiveScreenGeometry(mgr, layout, screen);
     }
     return {};
 }
 
-QScreen* resolvePhysicalQScreen(const QString& screenId)
+QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
-    auto* mgr = screenManager();
     if (mgr) {
         QScreen* screen = mgr->physicalQScreenFor(screenId);
         if (screen) {

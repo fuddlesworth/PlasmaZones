@@ -29,7 +29,7 @@
 #include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
-#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
@@ -2880,7 +2880,7 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    return actualAvailableGeometry(screen);
+    return m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
 }
 
 bool AutotileEngine::isKnownScreen(const QString& screenId) const

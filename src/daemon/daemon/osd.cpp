@@ -6,7 +6,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../modetracker.h"
 #include "../../core/layoutmanager.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"

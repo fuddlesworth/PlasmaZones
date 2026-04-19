@@ -9,6 +9,10 @@
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PhosphorZones {
 class ILayoutRegistry;
 class IZoneDetector;
@@ -37,7 +41,8 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                            PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings,
+                            PhosphorZones::ILayoutRegistry* layoutRegistry,
+                            Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                             QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
 
@@ -83,6 +88,7 @@ private:
     // Narrow to ILayoutRegistry — overlay adaptor only reads the active
     // layout, never per-context assignments / quick slots / persistence.
     PhosphorZones::ILayoutRegistry* m_layoutRegistry;
+    Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 };
 

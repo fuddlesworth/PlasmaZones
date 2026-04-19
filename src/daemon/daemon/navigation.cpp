@@ -11,7 +11,7 @@
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
 #include "../../dbus/windowtrackingadaptor.h"
 #include <PhosphorIdentity/VirtualScreenId.h>

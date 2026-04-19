@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
 #include "../core/logging.h"
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include <QTimer>
@@ -17,11 +17,13 @@
 namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               PhosphorZones::ILayoutRegistry* layoutRegistry, ISettings* settings, QObject* parent)
+                               PhosphorZones::ILayoutRegistry* layoutRegistry,
+                               Phosphor::Screens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
     , m_layoutRegistry(layoutRegistry)
+    , m_screenManager(screenManager)
     , m_settings(settings)
 {
     Q_ASSERT(overlay);
@@ -160,7 +162,7 @@ bool OverlayAdaptor::showSnapAssist(const QString& screenId, const EmptyZoneList
     // virtual screen to target.
     QString resolvedScreen = screenId;
     if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = screenManager();
+        auto* mgr = m_screenManager;
         if (mgr && mgr->hasVirtualScreens(screenId) && !emptyZones.isEmpty()) {
             const EmptyZoneEntry& first = emptyZones.first();
             QPoint center(first.x + first.width / 2, first.y + first.height / 2);

@@ -100,7 +100,7 @@ public:
         QScreen* navigationOsdPhysScreen = nullptr;
     };
 
-    explicit OverlayService(QObject* parent = nullptr);
+    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~OverlayService() override;
 
     // IOverlayService interface
@@ -132,13 +132,6 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
-    /// Inject the process's ScreenManager. Replaces the legacy
-    /// PlasmaZones::screenManager() service-locator. Required for production;
-    /// left null in unit tests.
-    void setScreenManager(Phosphor::Screens::ScreenManager* mgr)
-    {
-        m_screenManager = mgr;
-    }
     Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager;

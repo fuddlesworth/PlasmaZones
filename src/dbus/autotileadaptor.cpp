@@ -8,7 +8,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 
 #include "core/logging.h"
-#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 
 #include <dbus_types.h>
 #include <QJsonArray>
@@ -17,9 +17,11 @@
 
 namespace PlasmaZones {
 
-AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, QObject* parent)
+AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::ScreenManager* screenManager,
+                                 QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
+    , m_screenManager(screenManager)
 {
     // Note: We use manual signal connections (below) instead of setAutoRelaySignals(true)
     // to avoid duplicate D-Bus signal emissions when engine signals are forwarded.
@@ -202,7 +204,7 @@ bool AutotileAdaptor::deferUntilPanelReady()
 {
     // Fast path: panel geometry already known, or no Phosphor::Screens::ScreenManager at all (tests
     // without a singleton fall through and proceed with whatever geometry exists).
-    if (!screenManager() || isPanelGeometryReady()) {
+    if (!m_screenManager || (m_screenManager && m_screenManager->isPanelGeometryReady())) {
         return false;
     }
 
@@ -213,7 +215,7 @@ bool AutotileAdaptor::deferUntilPanelReady()
     // session is fine — panelGeometryReady is a one-shot signal (see
     // Phosphor::Screens::ScreenManager::queryKdePlasmaPanels).
     if (!m_pendingOpensListenerInstalled) {
-        connect(screenManager(), &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
                 &AutotileAdaptor::flushPendingWindowOpens);
         m_pendingOpensListenerInstalled = true;
     }

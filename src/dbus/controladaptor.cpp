@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
 #include "../core/geometryutils.h"
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/supportreport.h"
 #include "../autotile/AutotileEngine.h"
 

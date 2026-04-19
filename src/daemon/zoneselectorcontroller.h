@@ -5,6 +5,11 @@
 
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
+
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 #include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
@@ -68,7 +73,7 @@ public:
     };
     Q_ENUM(State)
 
-    explicit ZoneSelectorController(QObject* parent = nullptr);
+    explicit ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ZoneSelectorController() override;
 
     // State management
@@ -251,6 +256,7 @@ private:
     // References (concrete type for signal connections)
     QPointer<LayoutManager> m_layoutManager;
     QPointer<ISettings> m_settings;
+    QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<QScreen> m_screen;
     QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)
     QPointer<QQuickItem> m_qmlItem;

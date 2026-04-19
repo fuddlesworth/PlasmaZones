@@ -21,7 +21,7 @@
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
-#include "core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include "../helpers/ScriptedAlgoTestSetup.h"

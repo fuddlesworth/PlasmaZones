@@ -7,7 +7,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/utils.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../windowthumbnailservice.h"
 #include <QQuickWindow>
@@ -76,7 +76,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
 
     // Resolve physical screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* screen = resolveTargetScreen(screenId);
+    QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
         Q_EMIT snapAssistDismissed();
@@ -110,7 +110,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
 
     // Use virtual screen geometry when available, otherwise physical
-    QRect screenGeom = resolveScreenGeometry(screenId);
+    QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
     }
@@ -416,7 +416,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* screen = resolveTargetScreen(screenId);
+    QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
         return;
@@ -424,7 +424,7 @@ void OverlayService::showLayoutPicker(const QString& screenId)
 
     // Use virtual screen geometry when available
     const QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
-    QRect screenGeom = resolveScreenGeometry(resolvedId);
+    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
     }

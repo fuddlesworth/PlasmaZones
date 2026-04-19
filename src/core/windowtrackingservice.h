@@ -64,7 +64,8 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
 
 public:
     explicit WindowTrackingService(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
-                                   ISettings* settings, VirtualDesktopManager* vdm, QObject* parent = nullptr);
+                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
 
     /**
@@ -87,18 +88,6 @@ public:
     WindowRegistry* windowRegistry() const
     {
         return m_windowRegistry;
-    }
-
-    /**
-     * @brief Wire up the process's ScreenManager for geometry / screen-id lookups.
-     *
-     * Replaces the legacy PlasmaZones::screenManager() service-locator.
-     * Required for production; unit tests may leave it null and the service
-     * falls back to Qt geometry where applicable.
-     */
-    void setScreenManager(Phosphor::Screens::ScreenManager* mgr)
-    {
-        m_screenManager = mgr;
     }
 
     Phosphor::Screens::ScreenManager* screenManager() const

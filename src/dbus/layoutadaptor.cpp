@@ -19,7 +19,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
@@ -55,10 +55,12 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
     initCoalesceTimer();
 }
 
-LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm, QObject* parent)
+LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
+                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
     , m_virtualDesktopManager(vdm)
+    , m_screenManager(screenManager)
 {
     Q_ASSERT(manager);
     if (!m_layoutManager) {
@@ -453,7 +455,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
         const QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
-        auto* mgr = screenManager();
+        auto* mgr = m_screenManager;
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
         layout->setAspectRatioClass(PhosphorLayout::ScreenClassification::classify(geo.width(), geo.height()));

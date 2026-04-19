@@ -6,6 +6,10 @@
 #include "plasmazones_export.h"
 #include <PhosphorIdentity/WindowId.h>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 #include <QGuiApplication>
 #include <QScreen>
 #include <QUuid>
@@ -62,7 +66,7 @@ inline qreal screenAspectRatio(QScreen* screen)
  * For virtual screen IDs, uses Phosphor::Screens::ScreenManager::screenGeometry() to get the
  * virtual screen dimensions. Falls back to physical QScreen* for non-virtual IDs.
  */
-PLASMAZONES_EXPORT qreal screenAspectRatio(const QString& screenNameOrId);
+PLASMAZONES_EXPORT qreal screenAspectRatio(Phosphor::Screens::ScreenManager* mgr, const QString& screenNameOrId);
 
 /**
  * @brief Get the primary screen
@@ -210,7 +214,8 @@ inline std::optional<QJsonObject> parseJsonObject(const QString& json)
  * @return Effective screen ID (virtual if subdivided, physical otherwise), or
  *         empty string if no screen could be resolved
  */
-PLASMAZONES_EXPORT QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen = nullptr);
+PLASMAZONES_EXPORT QString effectiveScreenIdAt(Phosphor::Screens::ScreenManager* mgr, const QPoint& pos,
+                                               QScreen* fallbackScreen = nullptr);
 
 /**
  * @brief Check whether @p storedScreenId belongs to a given physical screen

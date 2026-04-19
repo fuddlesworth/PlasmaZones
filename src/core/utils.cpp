@@ -3,7 +3,7 @@
 
 #include "utils.h"
 #include "logging.h"
-#include "screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
 
 #include <PhosphorScreens/ScreenIdentity.h>
@@ -61,9 +61,8 @@ void warnDuplicateScreenIds()
     }
 }
 
-QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
+QString effectiveScreenIdAt(Phosphor::Screens::ScreenManager* mgr, const QPoint& pos, QScreen* fallbackScreen)
 {
-    auto* mgr = screenManager();
     if (mgr) {
         QString id = mgr->effectiveScreenAt(pos);
         if (!id.isEmpty()) {
@@ -77,16 +76,13 @@ QString effectiveScreenIdAt(const QPoint& pos, QScreen* fallbackScreen)
     return screen ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : QString();
 }
 
-qreal screenAspectRatio(const QString& screenNameOrId)
+qreal screenAspectRatio(Phosphor::Screens::ScreenManager* mgr, const QString& screenNameOrId)
 {
-    // For virtual screen IDs, use Phosphor::Screens::ScreenManager geometry
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenNameOrId)) {
-        auto* mgr = screenManager();
-        if (mgr) {
-            QRect geom = mgr->screenGeometry(screenNameOrId);
-            if (geom.isValid() && geom.height() > 0) {
-                return static_cast<qreal>(geom.width()) / geom.height();
-            }
+    // For virtual screen IDs, use the injected ScreenManager for VS geometry
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenNameOrId) && mgr) {
+        QRect geom = mgr->screenGeometry(screenNameOrId);
+        if (geom.isValid() && geom.height() > 0) {
+            return static_cast<qreal>(geom.width()) / geom.height();
         }
     }
 

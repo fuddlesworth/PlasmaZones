@@ -8,7 +8,7 @@
 #include "../constants.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
-#include "../screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
@@ -122,7 +122,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings,
+    return GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, screen, m_settings,
                                              [&occupied](const PhosphorZones::Zone* z) {
                                                  return !occupied.contains(z->id());
                                              });
@@ -147,7 +147,7 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
         return QRect();
     }
 
-    return GeometryUtils::getZoneGeometryForScreen(zone, screen, screenId, layout, m_settings);
+    return GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, m_settings);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -172,7 +172,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             continue;
         }
 
-        QRectF geoF = GeometryUtils::getZoneGeometryForScreenF(zone, screen, screenId, layout, m_settings);
+        QRectF geoF =
+            GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, screen, screenId, layout, m_settings);
         if (geoF.isValid()) {
             if (combined.isValid()) {
                 combined = combined.united(geoF);
@@ -277,7 +278,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            QRect geo = GeometryUtils::getZoneGeometryForScreen(targetZone, screen, screenId, layout, m_settings);
+            QRect geo = GeometryUtils::getZoneGeometryForScreen(m_screenManager, targetZone, screen, screenId, layout,
+                                                                m_settings);
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;

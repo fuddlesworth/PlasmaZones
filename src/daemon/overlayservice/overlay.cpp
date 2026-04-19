@@ -10,7 +10,7 @@
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/shaderregistry.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -64,7 +64,7 @@ void OverlayService::initializeOverlay(QScreen* cursorScreen, const QPoint& curs
     QString cursorEffectiveId;
     if (!showOnAllMonitors && cursorScreen) {
         QPoint pos = (cursorPos.x() >= 0) ? cursorPos : QCursor::pos();
-        cursorEffectiveId = Utils::effectiveScreenIdAt(pos, cursorScreen);
+        cursorEffectiveId = Utils::effectiveScreenIdAt(m_screenManager, pos, cursorScreen);
     } else if (cursorScreen) {
         cursorEffectiveId = Phosphor::Screens::ScreenIdentity::identifierFor(cursorScreen);
     }
@@ -613,7 +613,7 @@ bool OverlayService::rekeyOverlayState(const QString& oldKey, const QString& new
         // through the mutable transport handle.
         if (rekeyed.overlaySurface) {
             if (auto* handle = rekeyed.overlaySurface->transport()) {
-                const QRect targetVsGeom = resolveScreenGeometry(newKey);
+                const QRect targetVsGeom = resolveScreenGeometry(m_screenManager, newKey);
                 const auto placement = layerPlacementForVs(isVS ? targetVsGeom : QRect(), physScreen->geometry());
                 handle->setAnchors(placement.anchors);
                 handle->setMargins(placement.margins);
@@ -685,7 +685,7 @@ QMetaObject::Connection OverlayService::installOverlayGeometryWatcher(QScreen* p
                 // (virtual proportions are relative to the physical screen) and
                 // push new margins via the PhosphorLayer transport handle.
                 // Anchors (Top|Left) are fixed at attach and can't change.
-                const QRect vsGeom = resolveScreenGeometry(sid);
+                const QRect vsGeom = resolveScreenGeometry(m_screenManager, sid);
                 if (vsGeom.isValid() && st.overlaySurface) {
                     if (auto* handle = st.overlaySurface->transport()) {
                         handle->setMargins(layerPlacementForVs(vsGeom, newGeom).margins);
@@ -786,7 +786,7 @@ void OverlayService::updateOverlayWindow(const QString& screenId, QScreen* physS
             const QString shaderId = screenLayout->shaderId();
             const ShaderRegistry::ShaderInfo info = registry->shader(shaderId);
             QVariantMap translatedParams = registry->translateParamsToUniforms(shaderId, screenLayout->shaderParams());
-            const QRect vsGeom = resolveScreenGeometry(screenId);
+            const QRect vsGeom = resolveScreenGeometry(m_screenManager, screenId);
             const QRect physGeom = physScreen ? physScreen->geometry() : vsGeom;
             applyShaderInfoToWindow(window, info, translatedParams, vsGeom, physGeom);
         }

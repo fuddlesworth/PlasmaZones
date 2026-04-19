@@ -372,8 +372,8 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // by WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
     const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
-    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings,
-                                                                 [&occupied](const PhosphorZones::Zone* z) {
+    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, releaseScreen,
+                                                                 m_settings, [&occupied](const PhosphorZones::Zone* z) {
                                                                      return !occupied.contains(z->id());
                                                                  });
 

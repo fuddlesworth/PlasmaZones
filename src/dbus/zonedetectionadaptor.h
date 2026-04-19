@@ -9,6 +9,10 @@
 #include <QDBusAbstractAdaptor>
 #include <QString>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PhosphorZones {
 class ILayoutManager;
 class IZoneDetector;
@@ -33,7 +37,8 @@ class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::ILayoutManager* layoutManager,
-                                  ISettings* settings, QObject* parent = nullptr);
+                                  Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                  QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
 
 public Q_SLOTS:
@@ -105,6 +110,7 @@ Q_SIGNALS:
 private:
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
     PhosphorZones::ILayoutManager* m_layoutManager; // Interface type (DIP)
+    Phosphor::Screens::ScreenManager* m_screenManager; // For VS-aware geometry / id resolution
     ISettings* m_settings; // For zonePadding setting
 };
 

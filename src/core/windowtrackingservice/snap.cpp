@@ -12,7 +12,7 @@
 #include "../virtualdesktopmanager.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../utils.h"
-#include "../screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../logging.h"
 #include <QGuiApplication>
 #include <QScreen>

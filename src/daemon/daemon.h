@@ -14,9 +14,9 @@
 
 #include "shortcutmanager.h"
 #include "../core/layoutsourcefactory.h"
-#include "../core/screenmanagerservice.h" // Phosphor::Screens::ScreenManager alias + service-locator helpers
 #include "../core/types.h"
-#include <PhosphorScreens/Swapper.h> // shim → Phosphor::Screens::VirtualScreenSwapper alias
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/Swapper.h>
 #include "../autotile/AutotileEngine.h"
 
 namespace Phosphor::Screens {
@@ -37,8 +37,6 @@ class LayoutManager;
 class LayoutComputeService;
 class Settings;
 class OverlayService;
-// Phosphor::Screens::ScreenManager type alias + service-locator helpers come from
-// "../core/screenmanagerservice.h" included above.
 class VirtualDesktopManager;
 class ActivityManager;
 class ShortcutManager;
@@ -374,7 +372,6 @@ private:
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
     std::unique_ptr<WindowRegistry> m_windowRegistry;
-    std::unique_ptr<OverlayService> m_overlayService;
     /// Plasma D-Bus panel-offset source. Declared before m_screenManager
     /// because the manager holds a non-owning IPanelSource* into it.
     std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
@@ -384,6 +381,10 @@ private:
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
     std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    /// OverlayService takes ScreenManager* via constructor injection — must
+    /// be declared AFTER m_screenManager so the initializer-list construction
+    /// order matches.
+    std::unique_ptr<OverlayService> m_overlayService;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;

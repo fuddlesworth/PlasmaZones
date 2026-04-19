@@ -834,7 +834,10 @@ void SettingsController::recalcLocalLayouts()
         if (!layout) {
             continue;
         }
-        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+        // Settings app is a separate process without a daemon ScreenManager — pass
+        // nullptr and accept the Qt-availableGeometry fallback (this preview code
+        // path doesn't need VS-aware sub-regions).
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
 }
 

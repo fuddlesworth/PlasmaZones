@@ -90,7 +90,7 @@ private Q_SLOTS:
         m_layoutManager = new LayoutManager(nullptr);
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
-        m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, nullptr, nullptr);
+        m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
     }
 
     void cleanup()

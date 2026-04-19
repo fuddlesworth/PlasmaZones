@@ -11,7 +11,7 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
@@ -28,8 +28,8 @@
 namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             QObject* parent)
+                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                             VirtualDesktopManager* virtualDesktopManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
@@ -41,7 +41,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
     Q_ASSERT(settings);
 
     // Create business logic service
-    m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
+    m_service =
+        new WindowTrackingService(layoutManager, zoneDetector, screenManager, settings, virtualDesktopManager, this);
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
@@ -375,7 +376,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
             // the window correctly unsnaps regardless.
             QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
             if (zoneGeo.isValid()) {
-                QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
+                QString vsId = Utils::effectiveScreenIdAt(m_service->screenManager(), zoneGeo.center());
                 if (!vsId.isEmpty()) {
                     resolvedNewScreen = vsId;
                 }

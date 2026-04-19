@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanagerservice.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/zoneselectorlayout.h"
@@ -161,7 +161,7 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
     // Update the zone selector window with cursor position for hover effects
     // Resolve to effective (virtual) screen ID if applicable
-    QString cursorScreenId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), screen);
+    QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
     // Skip excluded screens (autotile-managed) — matches showZoneSelector exclusion
     if (m_excludedScreens.contains(cursorScreenId)) {
@@ -448,7 +448,7 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     // Delegate to screenId overload for virtual-screen-aware geometry.
     // WARNING: QCursor::pos() may be stale on Wayland. Callers should prefer
     // the getSelectedZoneGeometry(const QString& screenId) overload when possible.
-    QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), screen);
     return getSelectedZoneGeometry(screenId);
 }
 
@@ -469,8 +469,8 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
             PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
-                QRect result =
-                    GeometryUtils::getZoneGeometryForScreen(zone, physScreen, screenId, selectedLayout, m_settings);
+                QRect result = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, physScreen, screenId,
+                                                                       selectedLayout, m_settings);
                 if (result.isValid()) {
                     return result;
                 }

@@ -277,7 +277,9 @@ void EditorController::recalcLocalLayouts()
         if (!layout) {
             continue;
         }
-        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+        // Editor is a separate process without a daemon ScreenManager — pass
+        // nullptr and accept the Qt-availableGeometry fallback for previews.
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
 }
 QString EditorController::selectedZoneId() const

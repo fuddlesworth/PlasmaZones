@@ -16,6 +16,10 @@
 #include <optional>
 #include <PhosphorScreens/ScreenIdentity.h>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PlasmaZones {
 
 /**
@@ -306,7 +310,7 @@ inline bool validateNonEmpty(const QString& value, const QString& paramName, con
  * When non-empty, passes virtual screen IDs through and resolves physical names
  * via Phosphor::Screens::ScreenIdentity::idForName.
  */
-QString resolveScreenId(const QString& screenId);
+QString resolveScreenId(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
 
 /**
  * @brief Resolve a screen ID (physical or virtual) to its backing QScreen*
@@ -314,12 +318,8 @@ QString resolveScreenId(const QString& screenId);
  * Uses Phosphor::Screens::ScreenManager::physicalQScreenFor() when available, then falls back to
  * Phosphor::Screens::ScreenIdentity::findByIdOrName(). Does NOT fall back to primaryScreen — returns
  * nullptr so the caller can decide the appropriate fallback behavior.
- *
- * This replaces the duplicated pattern:
- *   if (PhosphorIdentity::VirtualScreenId::isVirtual(id)) { mgr->physicalQScreenFor(id); }
- *   if (!screen) { Phosphor::Screens::ScreenIdentity::findByIdOrName(id); }
  */
-QScreen* resolvePhysicalQScreen(const QString& screenId);
+QScreen* resolvePhysicalQScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Screen Geometry Resolution (implemented in dbushelpers.cpp to reduce header weight)
@@ -332,7 +332,8 @@ QScreen* resolvePhysicalQScreen(const QString& screenId);
  * falls back to resolving the physical QScreen and using the QScreen overload.
  * Returns an invalid QRectF if no geometry can be resolved.
  */
-QRectF resolveScreenGeometry(PhosphorZones::Layout* layout, const QString& screenId);
+QRectF resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, PhosphorZones::Layout* layout,
+                             const QString& screenId);
 
 } // namespace DbusHelpers
 } // namespace PlasmaZones
