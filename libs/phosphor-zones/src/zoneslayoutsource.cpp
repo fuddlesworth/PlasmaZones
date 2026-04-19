@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorLayoutApi/LayoutId.h>
-#include <PhosphorZones/ILayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
@@ -61,10 +61,18 @@ PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout, c
 
 // ─── ZonesLayoutSource ──────────────────────────────────────────────────────
 
-ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::ILayoutRegistry* registry, QObject* parent)
+ZonesLayoutSource::ZonesLayoutSource(PhosphorZones::IZoneLayoutRegistry* registry, QObject* parent)
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
+    // Mirror AutotileLayoutSource's pattern: self-wire the registry's
+    // unified contentsChanged signal (inherited from
+    // PhosphorLayout::ILayoutSourceRegistry) into our own, so callers
+    // don't have to bridge the registry's change signal manually.
+    if (m_registry) {
+        connect(m_registry, &PhosphorLayout::ILayoutSourceRegistry::contentsChanged, this,
+                &PhosphorLayout::ILayoutSource::contentsChanged);
+    }
 }
 
 ZonesLayoutSource::~ZonesLayoutSource() = default;
@@ -109,11 +117,6 @@ PhosphorLayout::LayoutPreview ZonesLayoutSource::previewAt(const QString& id, in
     // project against the caller's screen rather than whichever screen
     // last triggered a recalc on the shared Layout*.
     return layout ? previewFromLayout(layout, canvas) : PhosphorLayout::LayoutPreview{};
-}
-
-void ZonesLayoutSource::notifyContentsChanged()
-{
-    Q_EMIT contentsChanged();
 }
 
 } // namespace PhosphorZones

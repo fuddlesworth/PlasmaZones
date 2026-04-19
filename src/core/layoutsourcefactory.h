@@ -22,7 +22,7 @@
 #include <memory>
 
 namespace PhosphorZones {
-class ILayoutRegistry;
+class IZoneLayoutRegistry;
 class ZonesLayoutSource;
 }
 
@@ -70,6 +70,6 @@ struct PLASMAZONES_EXPORT LayoutSourceBundle
 /// "layouts changed" signal to @c bundle.zones->notifyContentsChanged()
 /// if reactive refresh is desired (the bundle can't do this itself
 /// without knowing the concrete registry type).
-PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutRegistry* registry);
+PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* registry);
 
 } // namespace PlasmaZones

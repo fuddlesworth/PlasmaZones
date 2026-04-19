@@ -45,7 +45,7 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
     return *this;
 }
 
-LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::ILayoutRegistry* registry)
+LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* registry)
 {
     LayoutSourceBundle bundle;
     bundle.zones = std::make_unique<PhosphorZones::ZonesLayoutSource>(registry);

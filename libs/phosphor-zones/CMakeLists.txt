@@ -62,7 +62,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ILayoutAssignments.h
     include/PhosphorZones/ILayoutManager.h
     include/PhosphorZones/ILayoutPersistence.h
-    include/PhosphorZones/ILayoutRegistry.h
+    include/PhosphorZones/IZoneLayoutRegistry.h
     include/PhosphorZones/IQuickLayouts.h
     include/PhosphorZones/ZonesLayoutSource.h
 )

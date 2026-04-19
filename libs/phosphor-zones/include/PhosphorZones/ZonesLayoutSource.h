@@ -9,7 +9,7 @@
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
 namespace PhosphorZones {
-class ILayoutRegistry;
+class IZoneLayoutRegistry;
 class Layout;
 }
 
@@ -32,35 +32,29 @@ namespace PhosphorZones {
 PHOSPHORZONES_EXPORT PhosphorLayout::LayoutPreview previewFromLayout(PhosphorZones::Layout* layout,
                                                                      const QSize& canvas = {});
 
-/// ILayoutSource adapter wrapping an ILayoutRegistry.
+/// ILayoutSource adapter wrapping an IZoneLayoutRegistry.
 ///
 /// Implements PhosphorLayout::ILayoutSource so editor / settings / overlay
 /// code can render manual-layout previews uniformly with autotile-algorithm
 /// previews (the latter coming from PhosphorTiles::AutotileLayoutSource).
 ///
-/// @note ILayoutRegistry is not a QObject (see PhosphorZones::ILayoutManager
-/// for the rationale — signal shadowing in abstract-interface hierarchies).
-/// Callers that want this source to emit @c contentsChanged when their
-/// underlying registry changes must wire the registry's change signal
-/// explicitly to @c notifyContentsChanged:
+/// Self-wires the registry's @c contentsChanged signal (inherited from
+/// @c PhosphorLayout::ILayoutSourceRegistry) to its own
+/// @c contentsChanged at construction — no caller-side @c connect is
+/// required. Mirrors the pattern used by @c AutotileLayoutSource.
 ///
-/// @code
-///   connect(layoutManager, &LayoutManager::layoutsChanged,
-///           zonesSource,   &ZonesLayoutSource::notifyContentsChanged);
-/// @endcode
-///
-/// Borrows the registry — caller owns it and must keep it alive for this
-/// source's lifetime.  Taking ILayoutRegistry* rather than
-/// ILayoutManager* means fixture tests can stub just the enumeration
-/// surface (layouts() + layoutById()) instead of the full manager
-/// contract.
+/// Borrows the registry — caller owns it and must keep it alive for
+/// this source's lifetime. Taking @c IZoneLayoutRegistry* rather than
+/// @c ILayoutManager* means fixture tests can stub just the
+/// enumeration surface (layouts() + layoutById()) instead of the full
+/// manager contract.
 class PHOSPHORZONES_EXPORT ZonesLayoutSource : public PhosphorLayout::ILayoutSource
 {
     Q_OBJECT
 public:
     /// Construct over a borrowed layout registry. Caller owns @p registry
     /// and must keep it alive for the source's lifetime.
-    explicit ZonesLayoutSource(PhosphorZones::ILayoutRegistry* registry, QObject* parent = nullptr);
+    explicit ZonesLayoutSource(PhosphorZones::IZoneLayoutRegistry* registry, QObject* parent = nullptr);
     ~ZonesLayoutSource() override;
 
     QVector<PhosphorLayout::LayoutPreview> availableLayouts() const override;
@@ -72,13 +66,8 @@ public:
                                             int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
                                             const QSize& canvas = {}) override;
 
-public Q_SLOTS:
-    /// Caller-driven re-emit of @c contentsChanged. Hook this into the
-    /// owning LayoutManager's layout-set-changed signal (see class doc).
-    void notifyContentsChanged();
-
 private:
-    PhosphorZones::ILayoutRegistry* m_registry;
+    PhosphorZones::IZoneLayoutRegistry* m_registry;
 };
 
 } // namespace PhosphorZones

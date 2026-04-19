@@ -5,8 +5,8 @@
 #include <PhosphorZones/ILayoutAssignments.h>
 #include <PhosphorZones/ILayoutManager.h>
 #include <PhosphorZones/ILayoutPersistence.h>
-#include <PhosphorZones/ILayoutRegistry.h>
 #include <PhosphorZones/IQuickLayouts.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/IZoneDetector.h>
 
 namespace PhosphorZones {
@@ -20,11 +20,19 @@ namespace PhosphorZones {
 // ISettings + IOverlayService destructors live in src/core/interfaces.cpp
 // — those interfaces stay in PZ.
 
-ILayoutRegistry::~ILayoutRegistry() = default;
+IZoneLayoutRegistry::IZoneLayoutRegistry(QObject* parent)
+    : PhosphorLayout::ILayoutSourceRegistry(parent)
+{
+}
+IZoneLayoutRegistry::~IZoneLayoutRegistry() = default;
 ILayoutAssignments::~ILayoutAssignments() = default;
 IQuickLayouts::~IQuickLayouts() = default;
 IBuiltInLayouts::~IBuiltInLayouts() = default;
 ILayoutPersistence::~ILayoutPersistence() = default;
+ILayoutManager::ILayoutManager(QObject* parent)
+    : IZoneLayoutRegistry(parent)
+{
+}
 ILayoutManager::~ILayoutManager() = default;
 
 IZoneDetection::~IZoneDetection() = default;

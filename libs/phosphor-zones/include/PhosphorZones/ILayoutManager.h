@@ -9,26 +9,29 @@
 // to depend on; new code should prefer the narrower sibling
 // interfaces:
 //
-//   ILayoutRegistry     — enumeration + add/remove/duplicate/active-layout
+//   IZoneLayoutRegistry — enumeration + add/remove/duplicate/active-layout
+//                         (QObject via PhosphorLayout::ILayoutSourceRegistry)
 //   ILayoutAssignments  — per-context (screen/desktop/activity) routing
 //   IQuickLayouts       — numbered 1..9 shortcut slots
 //   IBuiltInLayouts     — bundled system templates
 //   ILayoutPersistence  — disk I/O + import/export
 //
-// Design rationale: Qt's signal system doesn't work well with
-// abstract interfaces because signal shadowing between base and
-// derived classes causes heap corruption when using new-style
-// Qt::connect with function pointers. These interfaces are all
-// non-QObject for that reason. Components needing signals should use
-// LayoutManager* directly.
+// Design rationale: only IZoneLayoutRegistry is QObject-derived
+// (through the unified ILayoutSourceRegistry notifier) — the other
+// four sibling interfaces stay non-QObject. Multi-inheritance in
+// ILayoutManager is therefore safe: every path leads to a single
+// QObject subobject via IZoneLayoutRegistry. Avoid re-declaring
+// signals in derived classes along that chain — signal shadowing on
+// new-style Qt::connect is the specific hazard that motivated the
+// earlier "keep everything non-QObject" rule.
 
 #include <phosphorzones_export.h>
 
 #include <PhosphorZones/IBuiltInLayouts.h>
 #include <PhosphorZones/ILayoutAssignments.h>
 #include <PhosphorZones/ILayoutPersistence.h>
-#include <PhosphorZones/ILayoutRegistry.h>
 #include <PhosphorZones/IQuickLayouts.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 
 #include <QUuid>
 #include <QVector>
@@ -46,32 +49,40 @@ class Layout;
  * against @c ILayoutManager*; narrower callers should type against
  * the specific interface they use so fixture tests stay small. In
  * particular, components that only need to enumerate / look up
- * layouts should type against @c ILayoutRegistry — it now covers the
- * read-only surface that used to live on the removed
+ * layouts should type against @c IZoneLayoutRegistry — it now covers
+ * the read-only surface that used to live on the removed
  * @c ILayoutCatalog.
  *
  * @note Inheritance model: non-virtual multiple inheritance of the five
- * sibling interfaces. The siblings share no state (none of them define
- * member variables), so virtual bases are unnecessary and would only
- * cost an extra indirection. Consequences for callers:
+ * sibling interfaces. The siblings share no member state (none of
+ * them define member variables). Only @c IZoneLayoutRegistry brings a
+ * QObject base (via @c PhosphorLayout::ILayoutSourceRegistry) — the
+ * other four stay non-QObject so every derived class reaches QObject
+ * along exactly one path. Consequences for callers:
  *   - Upcasting `ILayoutManager*` to any one sibling is free and
  *     unambiguous.
- *   - Downcasting a sibling pointer (e.g. `ILayoutRegistry*`) back to
- *     `ILayoutManager*` is **not** supported via `static_cast` — use
- *     `dynamic_cast` and be aware of cross-SO `typeinfo` availability,
- *     or restructure the call site to keep the wide pointer directly.
+ *   - Downcasting a sibling pointer (e.g. `IZoneLayoutRegistry*`) back
+ *     to `ILayoutManager*` is **not** supported via `static_cast` —
+ *     use `dynamic_cast` and be aware of cross-SO `typeinfo`
+ *     availability, or restructure the call site to keep the wide
+ *     pointer directly.
  *   - No sibling may grow member state without promoting to virtual
  *     inheritance; adding state silently multiplies the base subobject
  *     in the derived class and breaks the "upcast is free" invariant.
+ *   - No sibling may become a second QObject base. The sole QObject
+ *     chain runs through @c IZoneLayoutRegistry; giving another
+ *     sibling its own QObject base would produce two QObject
+ *     subobjects in @c LayoutManager and break @c moc.
  */
-class PHOSPHORZONES_EXPORT ILayoutManager : public ILayoutRegistry,
+class PHOSPHORZONES_EXPORT ILayoutManager : public IZoneLayoutRegistry,
                                             public ILayoutAssignments,
                                             public IQuickLayouts,
                                             public IBuiltInLayouts,
                                             public ILayoutPersistence
 {
+    Q_OBJECT
 public:
-    ILayoutManager() = default;
+    explicit ILayoutManager(QObject* parent = nullptr);
     ~ILayoutManager() override;
 };
 

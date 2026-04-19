@@ -14,7 +14,7 @@ class ScreenManager;
 }
 
 namespace PhosphorZones {
-class ILayoutRegistry;
+class IZoneLayoutRegistry;
 class IZoneDetector;
 }
 
@@ -41,7 +41,7 @@ class PLASMAZONES_EXPORT OverlayAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                            PhosphorZones::ILayoutRegistry* layoutRegistry,
+                            PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                             QObject* parent = nullptr);
     ~OverlayAdaptor() override = default;
@@ -85,9 +85,9 @@ Q_SIGNALS:
 private:
     IOverlayService* m_overlayService; // Interface type (DIP)
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP) - only for highlighting
-    // Narrow to ILayoutRegistry — overlay adaptor only reads the active
+    // Narrow to IZoneLayoutRegistry — overlay adaptor only reads the active
     // layout, never per-context assignments / quick slots / persistence.
-    PhosphorZones::ILayoutRegistry* m_layoutRegistry;
+    PhosphorZones::IZoneLayoutRegistry* m_layoutRegistry;
     Phosphor::Screens::ScreenManager* m_screenManager;
     ISettings* m_settings; // Interface type (DIP) - for configurable constants
 };

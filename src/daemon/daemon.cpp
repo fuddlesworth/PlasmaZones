@@ -150,11 +150,10 @@ Daemon::Daemon(QObject* parent)
     // from disk by then, and the algorithm registry is populated by the
     // PhosphorTiles::ScriptedAlgorithmLoader during init().
     m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get());
-    // Forward the manager's layouts-changed signal into the zones source so
-    // the composite's contentsChanged fires when manual layouts are added /
-    // removed / renamed. Autotile side self-wires to AlgorithmRegistry.
-    connect(m_layoutManager.get(), &LayoutManager::layoutsChanged, m_layoutSources.zones.get(),
-            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    // ZonesLayoutSource self-wires to the registry's
+    // ILayoutSourceRegistry::contentsChanged signal; no manual bridge is
+    // required here. Autotile side likewise self-wires to
+    // AlgorithmRegistry.
 }
 
 Daemon::~Daemon()

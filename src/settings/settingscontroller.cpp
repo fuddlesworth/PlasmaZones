@@ -167,11 +167,10 @@ SettingsController::SettingsController(QObject* parent)
     // same recalc in Daemon::init(); settings does it here because it owns
     // an in-process LayoutManager independent of the daemon.
     recalcLocalLayouts();
-    // Forward manager layouts-changed into the source so composite
-    // consumers (if any) see contentsChanged. Also re-run the recalc so
-    // future reads through the local source pick up current geometry.
-    connect(m_localLayoutManager.get(), &LayoutManager::layoutsChanged, m_localSources.zones.get(),
-            &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+    // ZonesLayoutSource self-wires to the registry's unified
+    // ILayoutSourceRegistry::contentsChanged; no manual bridge is
+    // required. Future reads through the local source reflect current
+    // geometry once the recalc above has run.
     // When the file watcher detects a layout change on disk, refresh
     // m_layouts from the local composite (manual + autotile) so QML
     // rebinds even if the daemon isn't broadcasting D-Bus signals (or is

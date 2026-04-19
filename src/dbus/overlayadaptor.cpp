@@ -4,7 +4,7 @@
 #include "overlayadaptor.h"
 #include "dbushelpers.h"
 #include "../core/interfaces.h"
-#include <PhosphorZones/ILayoutRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/constants.h"
@@ -17,7 +17,7 @@
 namespace PlasmaZones {
 
 OverlayAdaptor::OverlayAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                               PhosphorZones::ILayoutRegistry* layoutRegistry,
+                               PhosphorZones::IZoneLayoutRegistry* layoutRegistry,
                                Phosphor::Screens::ScreenManager* screenManager, ISettings* settings, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
