@@ -27,7 +27,11 @@ PlasmaZones: window tiling + zone management for KDE Plasma. Qt6, KF6, Kirigami,
 - Use `/examples` for example code
 
 ## License
-- SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth` / `// SPDX-License-Identifier: GPL-3.0-or-later`
+- SPDX headers on ALL files: `// SPDX-FileCopyrightText: 2026 fuddlesworth`
+- License identifier depends on the tree:
+  - **App / daemon / editor / settings / KCM / tests** (`src/**`, `kcm/**`, `kwin/**`, `tests/**`): `GPL-3.0-or-later`
+  - **Reusable libraries** (`libs/phosphor-*/**`): `LGPL-2.1-or-later`
+  - Rationale: the shell is GPL; libraries are LGPL so third-party plugins / tools can link them without inheriting GPL. Never "fix" a lib header to GPL-3 without understanding the split.
 - `#pragma once` for C++ headers
 
 ## C++ Style

@@ -11,6 +11,7 @@
 #include <QEvent>
 #include <QThread>
 #include <algorithm>
+#include <vector>
 
 namespace {
 /// Library-owned recommended default algorithm.
@@ -277,16 +278,29 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     // get their own freshly-constructed copy of every built-in. The
     // factory returns a `new T()` per call, so each registry owns its
     // own algorithm instances — no sharing.
-    auto& pending = pendingAlgorithmRegistrations();
+    //
+    // Snapshot into a local vector before sorting so concurrent registry
+    // constructions (e.g. daemon + settings in the same test process)
+    // don't race on the global list's underlying storage. The list is
+    // append-only at static-init time (stable once main() runs), but
+    // std::sort mutates container order — two constructors running on
+    // different threads would otherwise trip over each other's swaps.
+    std::vector<PendingAlgorithmRegistration> snapshot;
+    {
+        const auto& pending = pendingAlgorithmRegistrations();
+        snapshot.reserve(static_cast<std::size_t>(pending.size()));
+        for (const auto& p : pending) {
+            snapshot.push_back(p);
+        }
+    }
 
-    // Sort by priority (lower = first) for deterministic registration
-    // order. The sort is idempotent across instances; we touch the same
-    // list every constructor call but never mutate the entry set.
-    std::sort(pending.begin(), pending.end(), [](const auto& a, const auto& b) {
+    // Sort the local copy by priority (lower = first) for deterministic
+    // registration order.
+    std::sort(snapshot.begin(), snapshot.end(), [](const auto& a, const auto& b) {
         return a.priority < b.priority;
     });
 
-    for (const auto& reg : pending) {
+    for (const auto& reg : snapshot) {
         registerAlgorithm(reg.id, reg.factory());
     }
 }

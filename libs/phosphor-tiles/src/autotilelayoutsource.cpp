@@ -61,8 +61,9 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     if (!algorithm || algorithmId.isEmpty()) {
         return preview;
     }
-    Q_ASSERT_X(registry, "previewFromAlgorithm",
-               "registry must be non-null — composition roots own an AlgorithmRegistry and inject it");
+    // Null registry is tolerated (matches ZonesLayoutSource's discipline):
+    // the preview-params seeding loop below already guards on `if (registry)`,
+    // and callers that pass null just get defaults.
 
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 
@@ -165,8 +166,10 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry
     : PhosphorLayout::ILayoutSource(parent)
     , m_registry(registry)
 {
-    Q_ASSERT_X(m_registry, "AutotileLayoutSource",
-               "registry must be non-null — composition roots own an AlgorithmRegistry and inject it");
+    // Null registry is tolerated — mirrors ZonesLayoutSource. In production
+    // the factory's registrar returns nullptr when ctx doesn't surface the
+    // registry, so the source is never constructed with a null pointer.
+    // Public API callers that pass null just get an empty source.
     if (m_registry) {
         // Seed the algorithm-count cache — insertCacheEntry() relies on it
         // for its FIFO cap, and the first invalidation signal may not fire

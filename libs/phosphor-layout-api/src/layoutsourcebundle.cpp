@@ -99,6 +99,17 @@ void LayoutSourceBundle::build()
 
 void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
 {
+    // Single-shot per bundle: every auto-registered factory would otherwise
+    // be rejected by addFactory's post-build gate, leaving the caller with a
+    // silently-stale bundle. Asserts in debug; no-ops in release (matches the
+    // build() idempotency contract on the second call rather than crashing).
+    Q_ASSERT_X(!m_composite, "LayoutSourceBundle::buildFromRegistered",
+               "buildFromRegistered is single-shot per bundle; second call is a programmer error");
+    if (m_composite) {
+        qWarning("LayoutSourceBundle::buildFromRegistered: ignoring second call (bundle already built)");
+        return;
+    }
+
     // Sort by priority (lower first); stable_sort preserves registration
     // order for ties so the composite walks sources in a deterministic,
     // source-id-prefix-friendly order.

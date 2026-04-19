@@ -46,10 +46,10 @@ class PHOSPHORTILES_EXPORT AutotileLayoutSource : public PhosphorLayout::ILayout
 {
     Q_OBJECT
 public:
-    /// Construct over a borrowed algorithm registry. @p registry must be
-    /// non-null — there is no process-global fallback. Composition roots
+    /// Construct over a borrowed algorithm registry. Composition roots
     /// (daemon, editor, settings, tests) create their own
-    /// @c AlgorithmRegistry instance and thread it here.
+    /// @c AlgorithmRegistry instance and thread it here. Null is tolerated
+    /// (source returns empty) — matches @c ZonesLayoutSource's discipline.
     explicit AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry* registry, QObject* parent = nullptr);
     ~AutotileLayoutSource() override;
 

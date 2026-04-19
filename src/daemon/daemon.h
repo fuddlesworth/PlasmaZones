@@ -109,11 +109,12 @@ public:
      *
      * Returns a composite that aggregates PhosphorZones::ZonesLayoutSource
      * (over m_layoutManager) and PhosphorTiles::AutotileLayoutSource (over
-     * the in-process PhosphorTiles::AlgorithmRegistry singleton).  Daemon-internal
-     * consumers — overlay layout picker, snap-assist preview thumbnails,
-     * the layout adaptor's D-Bus surface — see one ILayoutSource* and
-     * branch on `LayoutPreview::isAutotile` rather than on which
-     * concrete provider produced an entry.
+     * the daemon-owned PhosphorTiles::AlgorithmRegistry instance at
+     * m_algorithmRegistry).  Daemon-internal consumers — overlay layout
+     * picker, snap-assist preview thumbnails, the layout adaptor's D-Bus
+     * surface — see one ILayoutSource* and branch on
+     * `LayoutPreview::isAutotile` rather than on which concrete provider
+     * produced an entry.
      */
     PhosphorLayout::ILayoutSource* layoutSource() const
     {

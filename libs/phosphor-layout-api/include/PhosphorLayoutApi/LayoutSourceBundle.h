@@ -18,12 +18,20 @@ namespace PhosphorLayout {
 /// Owning bundle that assembles a list of @c ILayoutSourceFactory
 /// instances into a single @c CompositeLayoutSource.
 ///
-/// Composition roots (daemon, editor, settings, future plugin hosts)
-/// register one factory per layout-source family they want surfaced,
-/// then call @c build() to materialise sources and wire the composite.
-/// Adding a new family — e.g. the planned scrolling engine — is one
-/// @c addFactory() line per composition root; no edits to this bundle
-/// or to @c phosphor-layout-api.
+/// Primary entry point: @c buildFromRegistered(ctx). Composition roots
+/// (daemon, editor, settings, future plugin hosts) populate a
+/// @c FactoryContext with the registries they own and let the bundle
+/// pick up every provider that self-registered at static-init time via
+/// @c LayoutSourceProviderRegistrar. Adding a new family — e.g. the
+/// planned scrolling engine — is purely a new provider library; no
+/// edits to this bundle or to composition roots (assuming the engine
+/// reuses an existing ctx service).
+///
+/// Escape hatch: @c addFactory for tests or custom compositions that
+/// want to pre-register a fixture-specific source alongside (or in
+/// place of) the auto-discovered set. The two sets are stitched into
+/// the same composite — pre-registered factories come first, then
+/// auto-discovered providers in priority order.
 ///
 /// Lifetime contract for consumers: the bundle owns every source and
 /// the composite. Callers may hold a borrowed pointer to
@@ -74,6 +82,10 @@ public:
     /// factories (typically tests with a fixture-specific source)
     /// before calling @c buildFromRegistered, and both sets will be
     /// stitched into the same composite.
+    ///
+    /// Single-shot per bundle: calling @c buildFromRegistered a second
+    /// time triggers a Q_ASSERT in debug builds and is a no-op in
+    /// release. Caller that needs a rebuild must reset the bundle.
     void buildFromRegistered(const FactoryContext& ctx);
 
     /// The unified composite over every registered source. Null until

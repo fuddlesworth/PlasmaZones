@@ -12,6 +12,7 @@
 
 #include <functional>
 #include <memory>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 
@@ -33,8 +34,17 @@ class PHOSPHORLAYOUTAPI_EXPORT FactoryContext
 {
 public:
     /// Register a service of type @c T. Repeated calls overwrite.
+    ///
+    /// @c T is intentionally non-deducible (wrapped in @c std::type_identity_t)
+    /// so callers must spell the interface explicitly:
+    /// @code
+    /// ctx.set<IZoneLayoutRegistry>(manager.get()); // keyed by the interface
+    /// @endcode
+    /// Without the non-deducing context, @c ctx.set(manager.get()) would deduce
+    /// @c T from the concrete class and the registrar's
+    /// @c ctx.get<IZoneLayoutRegistry>() would silently miss.
     template<typename T>
-    void set(T* service)
+    void set(std::type_identity_t<T*> service)
     {
         m_services[std::type_index(typeid(T))] = static_cast<void*>(service);
     }
@@ -78,6 +88,17 @@ struct PHOSPHORLAYOUTAPI_EXPORT PendingLayoutSourceProvider
 /// their own factory instances. A free function (rather than nested
 /// in a templated class) so every translation unit appends to the
 /// same QList regardless of template instantiation.
+///
+/// @note Plugin-loading constraint: this list is intended for
+/// static-init-time population. Bundles snapshot it at
+/// @c buildFromRegistered time, so providers introduced via a later
+/// @c dlopen are not picked up by bundles already built. Symmetrically,
+/// @c dlclose on a provider library leaves a dangling @c std::function
+/// closure in the list — safe as long as no bundle calls
+/// @c buildFromRegistered afterwards. When this codebase grows runtime
+/// plugin loading, revisit this contract (likely: mutex-protected list
+/// with explicit per-plugin handle + removal on unload, and a bundle
+/// rebuild API).
 PHOSPHORLAYOUTAPI_EXPORT QList<PendingLayoutSourceProvider>& pendingLayoutSourceProviders();
 
 /// Static-init self-registration helper for provider libraries.
