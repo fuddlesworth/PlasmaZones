@@ -10,8 +10,8 @@
 #include "../../core/constants.h"
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../rendering/zonelabeltexturebuilder.h"
 #include <QCursor>
 #include <QHashFunctions>
@@ -20,6 +20,7 @@
 #include <QMutexLocker>
 #include <QGuiApplication>
 #include <QPalette>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -171,8 +172,8 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     // When virtual screens are configured, this delegates to the first VS in config
     // order (virtualScreenIdsFor returns IDs in config order, not hash order).
     // Callers with an explicit virtual screen ID should use the QString overload directly.
-    const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         const QStringList vsIds = mgr->virtualScreenIdsFor(physId);
         if (!vsIds.isEmpty()) {
@@ -182,7 +183,7 @@ QVariantList OverlayService::buildZonesList(QScreen* screen) const
     }
 
     const QPoint screenCenter = screen->geometry().center();
-    QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, screenCenter, screen);
     return buildZonesList(screenId, screen);
 }
 
@@ -224,15 +225,15 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, QScreen*
     // Defensive check: if virtual screens are configured for this physical screen,
     // screen center disambiguation always resolves to the same VS. Callers must
     // use the QString overload instead.
-    const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         qCWarning(lcOverlay) << "zoneToVariantMap(Zone*, QScreen*, Layout*): physical screen" << physId
                              << "has virtual screens configured — caller should use QString overload.";
     }
 
     const QPoint screenCenter = screen->geometry().center();
-    QString screenId = Utils::effectiveScreenIdAt(screenCenter, screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, screenCenter, screen);
     QRect overlayGeom = (m_screenStates.contains(screenId) && m_screenStates[screenId].overlayGeometry.isValid()
                              ? m_screenStates[screenId].overlayGeometry
                              : screen->geometry());
@@ -254,11 +255,12 @@ QVariantMap OverlayService::zoneToVariantMap(PhosphorZones::Zone* zone, const QS
     // Uses the layout's geometry preference: available area (excluding panels/taskbars)
     // or full screen geometry depending on useFullScreenGeometry setting.
     // Calculate zone geometry with gaps, auto-resolving virtual screen geometry
-    QRectF geom = GeometryUtils::getZoneGeometryForScreenF(zone, physScreen, screenId, layout, m_settings);
+    QRectF geom =
+        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, physScreen, screenId, layout, m_settings);
 
     // Convert to overlay-local coordinates: virtual screens use the overlay rect origin,
     // physical screens use the QScreen origin
-    const bool isVirtual = VirtualScreenId::isVirtual(screenId);
+    const bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
     QRectF overlayGeom = isVirtual ? GeometryUtils::availableAreaToOverlayCoordinates(geom, overlayGeometry)
                                    : GeometryUtils::availableAreaToOverlayCoordinates(geom, physScreen);
 

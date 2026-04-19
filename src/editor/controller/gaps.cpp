@@ -13,7 +13,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../../shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDBusInterface>
@@ -26,6 +26,7 @@
 #include <QGuiApplication>
 #include <QPointer>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -401,7 +402,8 @@ static QScreen* findTargetScreen(const QString& targetScreen)
 {
     if (!targetScreen.isEmpty()) {
         for (QScreen* screen : QGuiApplication::screens()) {
-            if (Utils::screenIdentifier(screen) == targetScreen || screen->name() == targetScreen) {
+            if (Phosphor::Screens::ScreenIdentity::identifierFor(screen) == targetScreen
+                || screen->name() == targetScreen) {
                 return screen;
             }
         }
@@ -455,7 +457,7 @@ void EditorController::refreshUsableAreaInsets()
     // For virtual screens, use the daemon's geometry (QScreen doesn't know about VS).
     // The daemon's getScreenGeometry and getAvailableGeometry handle VS IDs.
     QString screenId = m_targetScreen;
-    bool isVirtual = VirtualScreenId::isVirtual(screenId);
+    bool isVirtual = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
 
     // For physical screens, pre-populate fullGeom from Qt as a fallback in case the
     // daemon D-Bus call fails. For virtual screens, fullGeom stays empty — the daemon
@@ -468,11 +470,11 @@ void EditorController::refreshUsableAreaInsets()
             return;
         }
         fullGeom = screen->geometry();
-        screenId = Utils::screenIdentifier(screen);
+        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     }
 
     // Query the daemon for both full and available geometry via D-Bus.
-    // The daemon's ScreenManager handles VS IDs natively.
+    // The daemon's Phosphor::Screens::ScreenManager handles VS IDs natively.
     QDBusMessage geoMsg = QDBusMessage::createMethodCall(
         QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
         QString::fromLatin1(DBus::Interface::Screen), QStringLiteral("getScreenGeometry"));

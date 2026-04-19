@@ -9,9 +9,9 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
 #include <QCursor>
@@ -22,6 +22,7 @@
 
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -46,10 +47,11 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
     m_zoneSelectorVisible = true;
 
     // Resolve target screen from screenId (supports virtual screen IDs)
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = m_screenManager;
     QScreen* targetScreen = nullptr;
     if (!targetScreenId.isEmpty()) {
-        targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId) : Utils::findScreenByIdOrName(targetScreenId);
+        targetScreen = mgr ? mgr->physicalQScreenFor(targetScreenId)
+                           : Phosphor::Screens::ScreenIdentity::findByIdOrName(targetScreenId);
     }
 
     const QStringList effectiveIds = mgr ? mgr->effectiveScreenIds() : QStringList();
@@ -91,19 +93,19 @@ void OverlayService::showZoneSelector(const QString& targetScreenId)
             QMetaObject::invokeMethod(window, "show");
         }
     } else {
-        // Fallback: no ScreenManager
+        // Fallback: no Phosphor::Screens::ScreenManager
         for (auto* screen : Utils::allScreens()) {
             if (targetScreen && screen != targetScreen) {
                 continue;
             }
-            QString screenId = Utils::screenIdentifier(screen);
+            QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             if (isContextDisabled(m_settings, screenId, m_currentVirtualDesktop, m_currentActivity)) {
                 continue;
             }
             if (m_excludedScreens.contains(screenId)) {
                 continue;
             }
-            auto* smgr = ScreenManager::instance();
+            auto* smgr = m_screenManager;
             QRect geom = (smgr && smgr->screenGeometry(screenId).isValid()) ? smgr->screenGeometry(screenId)
                                                                             : screen->geometry();
             destroyZoneSelectorWindow(screenId);
@@ -159,14 +161,14 @@ void OverlayService::updateSelectorPosition(int cursorX, int cursorY)
 
     // Update the zone selector window with cursor position for hover effects
     // Resolve to effective (virtual) screen ID if applicable
-    QString cursorScreenId = Utils::effectiveScreenIdAt(QPoint(cursorX, cursorY), screen);
+    QString cursorScreenId = Utils::effectiveScreenIdAt(m_screenManager, QPoint(cursorX, cursorY), screen);
 
     // Skip excluded screens (autotile-managed) — matches showZoneSelector exclusion
     if (m_excludedScreens.contains(cursorScreenId)) {
         return;
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = m_screenManager;
     // Clear selection highlight on all OTHER zone selector windows when cursor moves
     // to a different virtual screen, preventing stale highlights from previous screen.
     for (auto it = m_screenStates.begin(); it != m_screenStates.end(); ++it) {
@@ -348,7 +350,7 @@ void OverlayService::createZoneSelectorWindow(const QString& screenId, QScreen* 
     // sizes the surface to the VS sub-region. Without this, a VS selector
     // covers the whole physical screen and the QML-internal corner anchor
     // lands on the wrong VS.
-    const bool isVS = VirtualScreenId::isVirtual(screenId);
+    const bool isVS = PhosphorIdentity::VirtualScreenId::isVirtual(screenId);
     const auto placement = layerPlacementForVs(isVS ? screenGeom : QRect(), physScreen->geometry());
     std::optional<PhosphorLayer::Anchors> anchorsOverride(placement.anchors);
     std::optional<QMargins> marginsOverride;
@@ -446,7 +448,7 @@ QRect OverlayService::getSelectedZoneGeometry(QScreen* screen) const
     // Delegate to screenId overload for virtual-screen-aware geometry.
     // WARNING: QCursor::pos() may be stale on Wayland. Callers should prefer
     // the getSelectedZoneGeometry(const QString& screenId) overload when possible.
-    QString screenId = Utils::effectiveScreenIdAt(QCursor::pos(), screen);
+    QString screenId = Utils::effectiveScreenIdAt(m_screenManager, QCursor::pos(), screen);
     return getSelectedZoneGeometry(screenId);
 }
 
@@ -456,8 +458,9 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         return QRect();
     }
 
-    auto* mgr = ScreenManager::instance();
-    QScreen* physScreen = mgr ? mgr->physicalQScreenFor(screenId) : Utils::findScreenByIdOrName(screenId);
+    auto* mgr = m_screenManager;
+    QScreen* physScreen =
+        mgr ? mgr->physicalQScreenFor(screenId) : Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
 
     // Primary path: use layout/zone geometry pipeline with virtual screen bounds
     if (m_layoutManager && !m_selectedLayoutId.isEmpty()) {
@@ -466,8 +469,8 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
             && m_selectedZoneIndex < static_cast<int>(selectedLayout->zones().size())) {
             PhosphorZones::Zone* zone = selectedLayout->zones().at(m_selectedZoneIndex);
             if (zone) {
-                QRect result =
-                    GeometryUtils::getZoneGeometryForScreen(zone, physScreen, screenId, selectedLayout, m_settings);
+                QRect result = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, physScreen, screenId,
+                                                                       selectedLayout, m_settings);
                 if (result.isValid()) {
                     return result;
                 }
@@ -484,7 +487,8 @@ QRect OverlayService::getSelectedZoneGeometry(const QString& screenId) const
         }
     }
     if (!areaGeom.isValid() && physScreen) {
-        areaGeom = ScreenManager::actualAvailableGeometry(physScreen);
+        areaGeom = (m_screenManager ? m_screenManager->actualAvailableGeometry(physScreen)
+                                    : ((physScreen) ? (physScreen)->availableGeometry() : QRect()));
     }
     if (!areaGeom.isValid()) {
         return QRect();
@@ -522,7 +526,7 @@ void OverlayService::onZoneSelected(const QString& layoutId, int zoneIndex, cons
             }
         }
         if (screenId.isEmpty() && senderWindow->screen()) {
-            screenId = Utils::screenIdentifier(senderWindow->screen());
+            screenId = Phosphor::Screens::ScreenIdentity::identifierFor(senderWindow->screen());
         }
     }
 

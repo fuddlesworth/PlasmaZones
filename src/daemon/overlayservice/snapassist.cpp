@@ -7,8 +7,8 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/utils.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../windowthumbnailservice.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -19,6 +19,7 @@
 #include <PhosphorLayer/Surface.h>
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include "pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -75,7 +76,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
 
     // Resolve physical screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* screen = resolveTargetScreen(screenId);
+    QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showSnapAssist: no screen available";
         Q_EMIT snapAssistDismissed();
@@ -109,7 +110,7 @@ void OverlayService::showSnapAssist(const QString& screenId, const EmptyZoneList
     }
 
     // Use virtual screen geometry when available, otherwise physical
-    QRect screenGeom = resolveScreenGeometry(screenId);
+    QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
     }
@@ -320,7 +321,8 @@ void OverlayService::createSnapAssistWindowFor(QScreen* physScreen, const QRect&
         marginsOverride = placement.margins;
     }
 
-    const QString scopeId = resolvedId.isEmpty() ? Utils::screenIdentifier(screen) : resolvedId;
+    const QString scopeId =
+        resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
     const auto role = PzRoles::SnapAssist.withScopePrefix(
         QStringLiteral("plasmazones-snap-assist-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
 
@@ -394,7 +396,7 @@ void OverlayService::onSnapAssistWindowSelected(const QString& windowId, const Q
     // Use the virtual-aware screen ID stored when snap assist was shown
     QString screenId = m_snapAssistScreenId;
     if (screenId.isEmpty() && m_snapAssistScreen) {
-        screenId = Utils::screenIdentifier(m_snapAssistScreen);
+        screenId = Phosphor::Screens::ScreenIdentity::identifierFor(m_snapAssistScreen);
     }
     // geometryJson is overlay-local; daemon will fetch authoritative zone geometry from service
     Q_EMIT snapAssistWindowSelected(windowId, zoneId, geometryJson, screenId);
@@ -414,15 +416,15 @@ void OverlayService::showLayoutPicker(const QString& screenId)
     }
 
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* screen = resolveTargetScreen(screenId);
+    QScreen* screen = resolveTargetScreen(m_screenManager, screenId);
     if (!screen) {
         qCWarning(lcOverlay) << "showLayoutPicker: no screen available";
         return;
     }
 
     // Use virtual screen geometry when available
-    const QString resolvedId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
-    QRect screenGeom = resolveScreenGeometry(resolvedId);
+    const QString resolvedId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
+    QRect screenGeom = resolveScreenGeometry(m_screenManager, resolvedId);
     if (!screenGeom.isValid()) {
         screenGeom = screen->geometry();
     }
@@ -552,7 +554,8 @@ void OverlayService::createLayoutPickerWindowFor(QScreen* physScreen, const QRec
     // Per-instance scope disambiguator so the compositor sees each open/close
     // cycle as a fresh surface (prevents configure-event rate-limiting on rapid
     // reopens).
-    const QString scopeId = resolvedId.isEmpty() ? Utils::screenIdentifier(screen) : resolvedId;
+    const QString scopeId =
+        resolvedId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : resolvedId;
     const auto role = PzRoles::LayoutPicker.withScopePrefix(
         QStringLiteral("plasmazones-layout-picker-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
 

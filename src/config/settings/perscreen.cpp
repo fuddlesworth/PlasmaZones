@@ -7,6 +7,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -279,8 +280,8 @@ void migrateConnectorNames(QHash<QString, QVariantMap>& settings)
 {
     QHash<QString, QVariantMap> migrated;
     for (auto it = settings.begin(); it != settings.end();) {
-        if (Utils::isConnectorName(it.key())) {
-            QString resolved = Utils::screenIdForName(it.key());
+        if (Phosphor::Screens::ScreenIdentity::isConnectorName(it.key())) {
+            QString resolved = Phosphor::Screens::ScreenIdentity::idForName(it.key());
             if (resolved != it.key()) {
                 if (migrated.contains(resolved)) {
                     qCWarning(lcConfig) << "EDID collision during migration:" << it.key()
@@ -426,15 +427,15 @@ static typename QHash<QString, T>::const_iterator findPerScreenEntry(const QHash
     if (it != hash.constEnd()) {
         return it;
     }
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName) {
             it = hash.constFind(resolved);
             if (it != hash.constEnd())
                 return it;
         }
     }
-    QString connector = Utils::screenNameForId(screenIdOrName);
+    QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
     if (!connector.isEmpty() && connector != screenIdOrName) {
         it = hash.constFind(connector);
         if (it != hash.constEnd())
@@ -449,12 +450,12 @@ static bool removePerScreenEntry(QHash<QString, T>& hash, const QString& screenI
     if (hash.remove(screenIdOrName)) {
         return true;
     }
-    if (Utils::isConnectorName(screenIdOrName)) {
-        QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName && hash.remove(resolved))
             return true;
     }
-    QString connector = Utils::screenNameForId(screenIdOrName);
+    QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
     if (!connector.isEmpty() && connector != screenIdOrName && hash.remove(connector))
         return true;
     return false;
@@ -502,8 +503,9 @@ void Settings::setPerScreenZoneSelectorSetting(const QString& screenIdOrName, co
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenZoneSelectorSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;
@@ -558,8 +560,9 @@ void Settings::setPerScreenAutotileSetting(const QString& screenIdOrName, const 
     const QString normalizedKey = key.startsWith(QLatin1String("Autotile")) ? key.mid(8) : key;
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenAutotileSettings[resolved];
     if (screenSettings.value(normalizedKey) == validated) {
         return;
@@ -603,8 +606,9 @@ void Settings::setPerScreenSnappingSetting(const QString& screenIdOrName, const 
     }
 
     // Resolve to EDID-based screen ID so the key matches daemon lookups
-    const QString resolved =
-        Utils::isConnectorName(screenIdOrName) ? Utils::screenIdForName(screenIdOrName) : screenIdOrName;
+    const QString resolved = Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)
+        ? Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName)
+        : screenIdOrName;
     QVariantMap& screenSettings = m_perScreenSnappingSettings[resolved];
     if (screenSettings.value(key) == validated) {
         return;

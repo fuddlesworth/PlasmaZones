@@ -39,6 +39,9 @@ namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
 }
+namespace Phosphor::Screens {
+class ScreenManager;
+}
 class QQuickWindow;
 class QScreen;
 class QTimer;
@@ -97,7 +100,7 @@ public:
         QScreen* navigationOsdPhysScreen = nullptr;
     };
 
-    explicit OverlayService(QObject* parent = nullptr);
+    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~OverlayService() override;
 
     // IOverlayService interface
@@ -129,6 +132,10 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
+    Phosphor::Screens::ScreenManager* screenManager() const
+    {
+        return m_screenManager;
+    }
     void setCurrentVirtualDesktop(int desktop);
     void setCurrentActivity(const QString& activityId);
 
@@ -371,6 +378,7 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 
     // Precise disconnect handles for signal sources whose slots are lambdas

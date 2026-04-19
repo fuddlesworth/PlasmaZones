@@ -9,6 +9,7 @@
 #include "../core/enums.h"
 
 #include <QtGlobal>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -513,7 +514,7 @@ void appendExclusionsSchema(PhosphorConfig::Schema& schema)
 // Snapping.Behavior.Display plus the Effects sub-group entries that aren't
 // the blur toggle (already migrated via Appearance). Enum ints (OsdStyle,
 // OverlayDisplayMode) get clamp validators; lists use canonicalCommaList.
-// Note: disabled-monitor connector-name resolution (Utils::screenIdForName)
+// Note: disabled-monitor connector-name resolution (Phosphor::Screens::ScreenIdentity::idForName)
 // stays PZ-side — we keep the wire format as comma-joined and let the
 // Settings getter do the resolution step.
 

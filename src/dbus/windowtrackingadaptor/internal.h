@@ -11,8 +11,9 @@
 #include <QString>
 #include "../../core/constants.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 namespace WindowTrackingInternal {
@@ -56,9 +57,9 @@ inline QString serializeGeometryMap(const QHash<QString, WindowTrackingService::
     auto serialize = [](const WindowTrackingService::PreTileGeometry& entry) -> QJsonObject {
         QJsonObject obj = rectToJsonObject(entry.geometry);
         if (!entry.connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = VirtualScreenId::isVirtual(entry.connectorName)
+            obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(entry.connectorName)
                 ? entry.connectorName
-                : Utils::screenIdForName(entry.connectorName);
+                : Phosphor::Screens::ScreenIdentity::idForName(entry.connectorName);
         }
         return obj;
     };
@@ -110,9 +111,9 @@ inline QString serializeGeometryMapFull(const QHash<QString, WindowTrackingServi
         obj[::PhosphorZones::ZoneJsonKeys::Width] = it.value().geometry.width();
         obj[::PhosphorZones::ZoneJsonKeys::Height] = it.value().geometry.height();
         if (!it.value().connectorName.isEmpty()) {
-            obj[QLatin1String("screen")] = VirtualScreenId::isVirtual(it.value().connectorName)
+            obj[QLatin1String("screen")] = PhosphorIdentity::VirtualScreenId::isVirtual(it.value().connectorName)
                 ? it.value().connectorName
-                : Utils::screenIdForName(it.value().connectorName);
+                : Phosphor::Screens::ScreenIdentity::idForName(it.value().connectorName);
         }
         result.append(obj);
     }

@@ -67,8 +67,8 @@ private Q_SLOTS:
         m_layoutManager->addLayout(m_layout);
         m_zone1Id = zone1->id().toString();
 
-        m_service =
-            new WindowTrackingService(m_layoutManager, m_zoneDetector, m_settings, m_virtualDesktopManager, m_parent);
+        m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings,
+                                              m_virtualDesktopManager, m_parent);
         // Construction leaves mask = DirtyAll; clear so subsequent mutator
         // tests start from a known-clean state and only assert on the
         // bits that the mutator under test is responsible for.
@@ -102,8 +102,8 @@ private Q_SLOTS:
         auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
 
-        WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, freshSettings, freshVirtualDesktopManager,
-                                    &freshParent);
+        WindowTrackingService fresh(freshLayoutManager, freshZoneDetector, nullptr, freshSettings,
+                                    freshVirtualDesktopManager, &freshParent);
         QCOMPARE(fresh.peekDirty(), static_cast<WindowTrackingService::DirtyMask>(WindowTrackingService::DirtyAll));
     }
 

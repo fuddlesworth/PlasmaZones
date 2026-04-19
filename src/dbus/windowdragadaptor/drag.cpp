@@ -13,13 +13,14 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/zoneselectorlayout.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/constants.h"
 #include "../../autotile/AutotileEngine.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -116,14 +117,15 @@ void WindowDragAdaptor::dragStarted(const QString& windowId, double x, double y,
         if (screen) {
             QString screenId = effectiveScreenIdAt(m_originalGeometry.center().x(), m_originalGeometry.center().y());
             if (screenId.isEmpty())
-                screenId = Utils::screenIdentifier(screen);
+                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             auto* layout = m_layoutManager->resolveLayoutForScreen(screenId);
             if (layout) {
-                LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, screenId));
+                LayoutComputeService::recalculateSync(
+                    layout, GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, screenId));
 
                 for (auto* zone : layout->zones()) {
-                    QRect zoneRect =
-                        GeometryUtils::getZoneGeometryForScreen(zone, screen, screenId, layout, m_settings);
+                    QRect zoneRect = GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId,
+                                                                             layout, m_settings);
 
                     // Use class constants for tolerances
                     int xDiff = std::abs(m_originalGeometry.x() - zoneRect.x());
@@ -198,7 +200,7 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
     }
 
     // Use virtual screen geometry for zone calculation when available
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = m_screenManager;
     QRectF effectiveGeom;
     if (mgr) {
         QRect vsGeom = mgr->screenGeometry(outScreenId);
@@ -212,7 +214,7 @@ PhosphorZones::Layout* WindowDragAdaptor::prepareHandlerContext(int x, int y, QS
         }
     }
     if (!effectiveGeom.isValid()) {
-        effectiveGeom = GeometryUtils::effectiveScreenGeometry(layout, outScreen);
+        effectiveGeom = GeometryUtils::effectiveScreenGeometry(m_screenManager, layout, outScreen);
     }
     LayoutComputeService::recalculateSync(layout, effectiveGeom);
     return layout;
@@ -429,8 +431,8 @@ void WindowDragAdaptor::handleMultiZoneModifier(int x, int y)
             m_zoneDetector->highlightZone(result.primaryZone);
             m_overlayService->highlightZone(zoneId);
 
-            m_currentZoneGeometry =
-                GeometryUtils::getZoneGeometryForScreen(result.primaryZone, screen, screenId, layout, m_settings);
+            m_currentZoneGeometry = GeometryUtils::getZoneGeometryForScreen(m_screenManager, result.primaryZone, screen,
+                                                                            screenId, layout, m_settings);
             m_currentMultiZoneGeometry = QRect();
         }
     } else {

@@ -8,7 +8,7 @@
 #include "../constants.h"
 #include "../geometryutils.h"
 #include <PhosphorZones/Layout.h>
-#include "../screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
@@ -18,6 +18,7 @@
 #include <QSet>
 #include <QUuid>
 #include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -39,7 +40,7 @@ QSet<QUuid> WindowTrackingService::buildOccupiedZoneSet(const QString& screenFil
         // from making zones appear occupied on the target screen.
         if (!screenFilter.isEmpty()) {
             QString windowScreen = m_windowScreenAssignments.value(it.key());
-            if (!Utils::screensMatch(windowScreen, screenFilter)) {
+            if (!Phosphor::Screens::ScreenIdentity::screensMatch(windowScreen, screenFilter)) {
                 continue;
             }
         }
@@ -108,7 +109,8 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     }
 
     // Resolve physical screen for fallback (virtual screen IDs resolve to their backing QScreen*)
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return {};
     }
@@ -120,7 +122,7 @@ EmptyZoneList WindowTrackingService::getEmptyZones(const QString& screenId) cons
     // blocking snap assist (discussion #323).
     const int desktopFilter = m_virtualDesktopManager ? m_virtualDesktopManager->currentDesktop() : 0;
     QSet<QUuid> occupied = buildOccupiedZoneSet(screenId, desktopFilter);
-    return GeometryUtils::buildEmptyZoneList(layout, screenId, screen, m_settings,
+    return GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, screen, m_settings,
                                              [&occupied](const PhosphorZones::Zone* z) {
                                                  return !occupied.contains(z->id());
                                              });
@@ -139,12 +141,13 @@ QRect WindowTrackingService::zoneGeometry(const QString& zoneId, const QString& 
     }
 
     // Resolve physical screen (virtual IDs resolve to backing QScreen*)
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return QRect();
     }
 
-    return GeometryUtils::getZoneGeometryForScreen(zone, screen, screenId, layout, m_settings);
+    return GeometryUtils::getZoneGeometryForScreen(m_screenManager, zone, screen, screenId, layout, m_settings);
 }
 
 QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const QString& screenId) const
@@ -153,7 +156,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
     // Uniting independently-rounded QRects can produce 1px gaps at fractional
     // scaling factors (e.g. 1.2x on ultrawides).
     QRectF combined;
-    QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+    QScreen* screen =
+        (m_screenManager ? m_screenManager->physicalQScreenFor(screenId) : Utils::findScreenAtPosition(QPoint(0, 0)));
     if (!screen) {
         return combined.toAlignedRect();
     }
@@ -168,7 +172,8 @@ QRect WindowTrackingService::multiZoneGeometry(const QStringList& zoneIds, const
             continue;
         }
 
-        QRectF geoF = GeometryUtils::getZoneGeometryForScreenF(zone, screen, screenId, layout, m_settings);
+        QRectF geoF =
+            GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zone, screen, screenId, layout, m_settings);
         if (geoF.isValid()) {
             if (combined.isValid()) {
                 combined = combined.united(geoF);
@@ -200,7 +205,7 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         QString screenId = m_windowScreenAssignments.value(it.key());
 
         // When a screen filter is set, only include windows on that screen
-        if (!screenFilter.isEmpty() && !Utils::screensMatch(screenId, screenFilter)) {
+        if (!screenFilter.isEmpty() && !Phosphor::Screens::ScreenIdentity::screensMatch(screenId, screenFilter)) {
             continue;
         }
 
@@ -259,7 +264,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
         }
 
         // Resolve physical screen for zone geometry calculation
-        QScreen* screen = ScreenManager::resolvePhysicalScreen(screenId);
+        QScreen* screen = (m_screenManager ? m_screenManager->physicalQScreenFor(screenId)
+                                           : Utils::findScreenAtPosition(QPoint(0, 0)));
         if (!screen) {
             continue;
         }
@@ -272,7 +278,8 @@ QVector<ZoneAssignmentEntry> WindowTrackingService::calculateRotation(bool clock
 
             PhosphorZones::Zone* sourceZone = zones[currentIdx];
             PhosphorZones::Zone* targetZone = zones[targetIdx];
-            QRect geo = GeometryUtils::getZoneGeometryForScreen(targetZone, screen, screenId, layout, m_settings);
+            QRect geo = GeometryUtils::getZoneGeometryForScreen(m_screenManager, targetZone, screen, screenId, layout,
+                                                                m_settings);
 
             if (geo.isValid()) {
                 ZoneAssignmentEntry entry;

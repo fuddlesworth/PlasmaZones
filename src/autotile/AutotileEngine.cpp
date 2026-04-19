@@ -29,11 +29,12 @@
 #include <PhosphorZones/Layout.h>
 #include "core/layoutmanager.h"
 #include "core/logging.h"
-#include "core/screenmanager.h"
-#include "core/virtualscreen.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/VirtualScreen.h>
 #include "core/windowregistry.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -46,7 +47,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               ScreenManager* screenManager, QObject* parent)
+                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
@@ -127,107 +128,110 @@ void AutotileEngine::connectSignals()
 
     // Screen geometry changes
     if (m_screenManager) {
-        connect(m_screenManager, &ScreenManager::availableGeometryChanged, this, [this](QScreen* screen, const QRect&) {
-            QPointer<QScreen> guardedScreen = screen;
-            if (!guardedScreen) {
-                return;
-            }
-            const QString physId = Utils::screenIdentifier(guardedScreen);
-            // When virtual screens are configured, autotile state is keyed by
-            // virtual screen IDs — retile each one instead of the physical ID.
-            if (m_screenManager->hasVirtualScreens(physId)) {
-                for (const QString& vsId : m_screenManager->virtualScreenIdsFor(physId)) {
-                    onScreenGeometryChanged(vsId);
-                }
-            } else {
-                onScreenGeometryChanged(physId);
-            }
-        });
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::availableGeometryChanged, this,
+                [this](QScreen* screen, const QRect&) {
+                    QPointer<QScreen> guardedScreen = screen;
+                    if (!guardedScreen) {
+                        return;
+                    }
+                    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(guardedScreen);
+                    // When virtual screens are configured, autotile state is keyed by
+                    // virtual screen IDs — retile each one instead of the physical ID.
+                    if (m_screenManager->hasVirtualScreens(physId)) {
+                        for (const QString& vsId : m_screenManager->virtualScreenIdsFor(physId)) {
+                            onScreenGeometryChanged(vsId);
+                        }
+                    } else {
+                        onScreenGeometryChanged(physId);
+                    }
+                });
 
         // Virtual screen reconfiguration — retile new virtual screens and
         // clean up orphaned PhosphorTiles::TilingState entries for virtual screens that no longer exist.
-        connect(m_screenManager, &ScreenManager::virtualScreensChanged, this, [this](const QString& physicalScreenId) {
-            const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
-            const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreensChanged, this,
+                [this](const QString& physicalScreenId) {
+                    const QStringList newVsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
+                    const QSet<QString> newVsSet(newVsIds.begin(), newVsIds.end());
 
-            // Find and release orphaned virtual screen states for this physical screen
-            QStringList releasedWindows;
-            QSet<QString> orphanedVsIds;
-            QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
-            while (it.hasNext()) {
-                it.next();
-                const QString& sid = it.key().screenId;
-                if (!VirtualScreenId::isVirtual(sid)) {
-                    continue;
-                }
-                if (VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
-                    continue;
-                }
-                if (newVsSet.contains(sid)) {
-                    continue;
-                }
-                // This virtual screen no longer exists — release its windows.
-                // Save user-floated windows (excluding overflow) so they stay
-                // floating if autotile is re-enabled on a new VS config — mirrors
-                // the preservation logic in setAutotileScreens.
-                orphanedVsIds.insert(sid);
-                QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
-                const QStringList floated = it.value()->floatingWindows();
-                for (const QString& fid : floated) {
-                    if (!screenOverflow.contains(fid)) {
-                        m_savedFloatingWindows[it.key()].insert(fid);
+                    // Find and release orphaned virtual screen states for this physical screen
+                    QStringList releasedWindows;
+                    QSet<QString> orphanedVsIds;
+                    QMutableHashIterator<TilingStateKey, PhosphorTiles::TilingState*> it(m_screenStates);
+                    while (it.hasNext()) {
+                        it.next();
+                        const QString& sid = it.key().screenId;
+                        if (!PhosphorIdentity::VirtualScreenId::isVirtual(sid)) {
+                            continue;
+                        }
+                        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(sid) != physicalScreenId) {
+                            continue;
+                        }
+                        if (newVsSet.contains(sid)) {
+                            continue;
+                        }
+                        // This virtual screen no longer exists — release its windows.
+                        // Save user-floated windows (excluding overflow) so they stay
+                        // floating if autotile is re-enabled on a new VS config — mirrors
+                        // the preservation logic in setAutotileScreens.
+                        orphanedVsIds.insert(sid);
+                        QSet<QString> screenOverflow = m_overflow.takeForScreen(sid);
+                        const QStringList floated = it.value()->floatingWindows();
+                        for (const QString& fid : floated) {
+                            if (!screenOverflow.contains(fid)) {
+                                m_savedFloatingWindows[it.key()].insert(fid);
+                            }
+                        }
+                        releasedWindows.append(it.value()->tiledWindows());
+                        releasedWindows.append(floated);
+                        m_pendingInitialOrders.remove(sid);
+                        m_pendingOrderGeneration.remove(sid);
+                        it.value()->deleteLater();
+                        it.remove();
                     }
-                }
-                releasedWindows.append(it.value()->tiledWindows());
-                releasedWindows.append(floated);
-                m_pendingInitialOrders.remove(sid);
-                m_pendingOrderGeneration.remove(sid);
-                it.value()->deleteLater();
-                it.remove();
-            }
-            for (const QString& windowId : std::as_const(releasedWindows)) {
-                m_windowToStateKey.remove(windowId);
-            }
-            if (!releasedWindows.isEmpty()) {
-                Q_EMIT windowsReleasedFromTiling(releasedWindows, orphanedVsIds);
-            }
-
-            // Clean up per-screen autotile settings for removed virtual screens.
-            // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
-            // as virtual screen IDs are never reused after reconfiguration.
-            if (!orphanedVsIds.isEmpty()) {
-                if (Settings* settings = m_settingsBridge->settings()) {
-                    for (const QString& orphanId : std::as_const(orphanedVsIds)) {
-                        settings->clearPerScreenAutotileSettings(orphanId);
+                    for (const QString& windowId : std::as_const(releasedWindows)) {
+                        m_windowToStateKey.remove(windowId);
                     }
-                }
-            }
+                    if (!releasedWindows.isEmpty()) {
+                        Q_EMIT windowsReleasedFromTiling(releasedWindows, orphanedVsIds);
+                    }
 
-            // Clean up desktop overrides for removed virtual screens on this physical screen.
-            // Use newVsSet (freshly-computed from ScreenManager) rather than m_autotileScreens
-            // which reflects mode assignments and may not yet be updated for the new config.
-            auto overrideIt = m_screenDesktopOverride.begin();
-            while (overrideIt != m_screenDesktopOverride.end()) {
-                if (VirtualScreenId::isVirtual(overrideIt.key())
-                    && VirtualScreenId::extractPhysicalId(overrideIt.key()) == physicalScreenId
-                    && !newVsSet.contains(overrideIt.key()))
-                    overrideIt = m_screenDesktopOverride.erase(overrideIt);
-                else
-                    ++overrideIt;
-            }
+                    // Clean up per-screen autotile settings for removed virtual screens.
+                    // Orphaned AutotileScreen: groups would otherwise accumulate indefinitely
+                    // as virtual screen IDs are never reused after reconfiguration.
+                    if (!orphanedVsIds.isEmpty()) {
+                        if (Settings* settings = m_settingsBridge->settings()) {
+                            for (const QString& orphanId : std::as_const(orphanedVsIds)) {
+                                settings->clearPerScreenAutotileSettings(orphanId);
+                            }
+                        }
+                    }
 
-            // Retile the new virtual screens
-            for (const QString& vsId : newVsIds) {
-                onScreenGeometryChanged(vsId);
-            }
-        });
+                    // Clean up desktop overrides for removed virtual screens on this physical screen.
+                    // Use newVsSet (freshly-computed from Phosphor::Screens::ScreenManager) rather than
+                    // m_autotileScreens which reflects mode assignments and may not yet be updated for the new config.
+                    auto overrideIt = m_screenDesktopOverride.begin();
+                    while (overrideIt != m_screenDesktopOverride.end()) {
+                        if (PhosphorIdentity::VirtualScreenId::isVirtual(overrideIt.key())
+                            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(overrideIt.key())
+                                == physicalScreenId
+                            && !newVsSet.contains(overrideIt.key()))
+                            overrideIt = m_screenDesktopOverride.erase(overrideIt);
+                        else
+                            ++overrideIt;
+                    }
+
+                    // Retile the new virtual screens
+                    for (const QString& vsId : newVsIds) {
+                        onScreenGeometryChanged(vsId);
+                    }
+                });
 
         // Regions-only changes (VS swap/rotate/boundary resize) — skip the
         // orphan cleanup (no VSs removed/added) and just retile each VS with
         // its new geometry. This is the single authoritative retile for the
         // change; the Daemon's regions-only handler deliberately does NOT
         // call updateAutotileScreens so there is no second retile pass.
-        connect(m_screenManager, &ScreenManager::virtualScreenRegionsChanged, this,
+        connect(m_screenManager, &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
                 [this](const QString& physicalScreenId) {
                     const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physicalScreenId);
                     for (const QString& vsId : vsIds) {
@@ -2291,13 +2295,13 @@ bool AutotileEngine::recalculateLayout(const QString& screenId)
     PhosphorTiles::TilingScreenInfo screenInfo;
     screenInfo.id = screenId;
     {
-        QScreen* qscreen = Utils::findScreenByIdOrName(screenId);
+        QScreen* qscreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
         if (qscreen) {
             const QRect geom = qscreen->geometry();
             screenInfo.portrait = geom.height() > geom.width();
             screenInfo.aspectRatio = Utils::screenAspectRatio(qscreen);
         } else if (m_screenManager) {
-            // Virtual screen IDs have no QScreen — use ScreenManager geometry
+            // Virtual screen IDs have no QScreen — use Phosphor::Screens::ScreenManager geometry
             const QRect geom = m_screenManager->screenGeometry(screenId);
             if (geom.isValid()) {
                 screenInfo.portrait = geom.height() > geom.width();
@@ -2850,7 +2854,7 @@ QString AutotileEngine::screenForWindow(const QString& rawWindowId) const
                               << "not in m_windowToStateKey, falling back to primary screen";
         // If the primary monitor is subdivided into virtual screens, return
         // the first virtual screen ID instead of the physical ID.
-        const QString physId = Utils::screenIdentifier(m_screenManager->primaryScreen());
+        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(m_screenManager->primaryScreen());
         const QStringList vsIds = m_screenManager->virtualScreenIdsFor(physId);
         return vsIds.isEmpty() ? physId : vsIds.first();
     }
@@ -2865,30 +2869,30 @@ QRect AutotileEngine::screenGeometry(const QString& screenId) const
         return QRect();
     }
 
-    // Virtual screens: use ScreenManager's virtual-aware geometry
-    if (VirtualScreenId::isVirtual(screenId)) {
+    // Virtual screens: use Phosphor::Screens::ScreenManager's virtual-aware geometry
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenAvailableGeometry(screenId);
     }
 
     // Physical screens: existing behavior
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     if (!screen) {
         return QRect();
     }
 
-    return ScreenManager::actualAvailableGeometry(screen);
+    return m_screenManager ? m_screenManager->actualAvailableGeometry(screen) : screen->availableGeometry();
 }
 
 bool AutotileEngine::isKnownScreen(const QString& screenId) const
 {
     if (!m_screenManager) {
-        // Without ScreenManager, skip validation (test environments)
+        // Without Phosphor::Screens::ScreenManager, skip validation (test environments)
         return true;
     }
-    if (VirtualScreenId::isVirtual(screenId)) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return m_screenManager->screenGeometry(screenId).isValid();
     }
-    return Utils::findScreenByIdOrName(screenId) != nullptr;
+    return Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId) != nullptr;
 }
 
 void AutotileEngine::resetMaxWindowsForAlgorithmSwitch(PhosphorTiles::TilingAlgorithm* oldAlgo,
@@ -2978,7 +2982,7 @@ void AutotileEngine::retileScreen(const QString& screenId)
     // rather than proceeding — without this, the ratio change / window add
     // that triggered this retile is silently dropped, leaving stale zones.
     //
-    // Only gate on geometry when a ScreenManager exists (production). Without
+    // Only gate on geometry when a Phosphor::Screens::ScreenManager exists (production). Without
     // one (unit tests), the existing recalculateLayout gracefully handles
     // the empty geometry as a structural no-op, not a transient failure.
     if (m_screenManager) {

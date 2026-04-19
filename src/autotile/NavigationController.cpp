@@ -8,11 +8,12 @@
 #include "core/constants.h"
 #include <PhosphorTiles/AutotileConstants.h>
 #include "core/logging.h"
-#include "core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "core/utils.h"
 
 #include <QScreen>
 #include <algorithm>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -403,7 +404,7 @@ QStringList NavigationController::tiledWindowsForFocusedScreen(QString& outScree
 
     // No focused window found - fallback to primary screen if available
     if (m_engine->m_screenManager && m_engine->m_screenManager->primaryScreen()) {
-        outScreenId = Utils::screenIdentifier(m_engine->m_screenManager->primaryScreen());
+        outScreenId = Phosphor::Screens::ScreenIdentity::identifierFor(m_engine->m_screenManager->primaryScreen());
         const auto key = m_engine->currentKeyForScreen(outScreenId);
         auto sit = m_engine->m_screenStates.constFind(key);
         if (sit != m_engine->m_screenStates.constEnd() && sit.value()) {

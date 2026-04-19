@@ -9,13 +9,14 @@
 #include "../core/unifiedlayoutlist.h"
 #include "../core/utils.h"
 #include "../core/assignmententry.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "overlayservice/internal.h"
 #include <QGuiApplication>
 #include <QQuickItem>
 #include <QScreen>
 #include <QUuid>
 #include "../core/logging.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -24,8 +25,9 @@ constexpr int CollapseDelayMs = 300; // Delay before collapsing selector after c
 constexpr int ProximityCheckMs = 16; // ~60fps polling
 } // namespace
 
-ZoneSelectorController::ZoneSelectorController(QObject* parent)
+ZoneSelectorController::ZoneSelectorController(Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
+    , m_screenManager(screenManager)
 {
     m_collapseTimer.setSingleShot(true);
     m_collapseTimer.setInterval(CollapseDelayMs);
@@ -224,7 +226,7 @@ void ZoneSelectorController::setScreen(QScreen* screen)
     m_screen = screen;
     // Derive screen ID from QScreen if not already set by setScreenId()
     if (m_screenId.isEmpty() && screen) {
-        m_screenId = Utils::screenIdentifier(screen);
+        m_screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
     }
 
     // Update active layout ID for this screen and current desktop
@@ -447,7 +449,8 @@ void ZoneSelectorController::updateProximity()
             // Resolve to effective (virtual) screen ID at the cursor position.
             // Only update screen ID if it actually changed (different screen),
             // preserving any explicit setScreenId() call within the same screen.
-            const QString resolved = Utils::effectiveScreenIdAt(m_cursorPosition.toPoint(), cursorScreen);
+            const QString resolved =
+                Utils::effectiveScreenIdAt(m_screenManager, m_cursorPosition.toPoint(), cursorScreen);
             if (resolved != m_screenId) {
                 m_screenId = resolved;
             }
@@ -463,7 +466,7 @@ void ZoneSelectorController::updateProximity()
     }
 
     // Use virtual screen geometry if available, falling back to physical
-    const QRectF screenGeometry = QRectF(resolveScreenGeometry(m_screenId));
+    const QRectF screenGeometry = QRectF(resolveScreenGeometry(m_screenManager.data(), m_screenId));
     const qreal distanceFromTop = m_cursorPosition.y() - screenGeometry.top();
 
     // Horizontal zone check: cursor must be within the center area

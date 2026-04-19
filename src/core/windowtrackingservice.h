@@ -14,6 +14,7 @@
 #include <QRect>
 #include <functional>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PhosphorZones {
 class IZoneDetector;
@@ -25,7 +26,12 @@ namespace PlasmaZones {
 
 class LayoutManager;
 class ISettings;
+// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
+} // namespace PlasmaZones
+namespace Phosphor::Screens {
 class ScreenManager;
+}
+namespace PlasmaZones {
 class VirtualDesktopManager;
 class WindowRegistry;
 
@@ -58,7 +64,8 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
 
 public:
     explicit WindowTrackingService(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
-                                   ISettings* settings, VirtualDesktopManager* vdm, QObject* parent = nullptr);
+                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                   VirtualDesktopManager* vdm, QObject* parent = nullptr);
     ~WindowTrackingService() override;
 
     /**
@@ -81,6 +88,11 @@ public:
     WindowRegistry* windowRegistry() const
     {
         return m_windowRegistry;
+    }
+
+    Phosphor::Screens::ScreenManager* screenManager() const
+    {
+        return m_screenManager;
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -546,10 +558,10 @@ public:
      *
      * Screen resolution per entry (first non-empty wins):
      *   1. entry.targetScreenId — caller stamped an authoritative target
-     *   2. ScreenManager::effectiveScreenAt(geometry.center()) — VS-aware
+     *   2. Phosphor::Screens::ScreenManager::effectiveScreenAt(geometry.center()) — VS-aware
      *      point lookup
      *   3. QGuiApplication::screens() linear walk — physical fallback for
-     *      early startup when ScreenManager isn't initialised yet
+     *      early startup when Phosphor::Screens::ScreenManager isn't initialised yet
      *   4. fallbackScreenResolver() — caller-supplied last-resort, typically
      *      a compositor-layer cursor/active shadow read from
      *      WindowTrackingAdaptor
@@ -804,10 +816,10 @@ public:
      *
      * @param physicalScreenId The physical screen being subdivided
      * @param virtualScreenIds Virtual screen IDs for the physical screen
-     * @param mgr ScreenManager for geometry lookups
+     * @param mgr Phosphor::Screens::ScreenManager for geometry lookups
      */
     void migrateScreenAssignmentsToVirtual(const QString& physicalScreenId, const QStringList& virtualScreenIds,
-                                           ScreenManager* mgr);
+                                           Phosphor::Screens::ScreenManager* mgr);
 
     /**
      * @brief Reverse migration: virtual screen IDs → physical screen ID
@@ -1171,7 +1183,7 @@ private:
 public:
     /// Build set of occupied zone UUIDs, optionally filtered by screen and virtual desktop.
     ///
-    /// Uses Utils::screensMatch() for format-agnostic screen comparison.
+    /// Uses Phosphor::Screens::ScreenIdentity::screensMatch() for format-agnostic screen comparison.
     ///
     /// @param desktopFilter When > 0, only counts assignments whose window desktop
     ///   matches (or is 0 = pinned/all-desktops). Pass the current virtual desktop
@@ -1209,6 +1221,7 @@ private:
     // Shared registry for current-class queries and canonical key translation.
     // Not owned. Null in unit tests.
     WindowRegistry* m_windowRegistry = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
 
     // PhosphorZones::Zone assignments: windowId -> zoneIds (supports multi-zone snap)
     QHash<QString, QStringList> m_windowZoneAssignments;

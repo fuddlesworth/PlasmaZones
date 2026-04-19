@@ -4,7 +4,8 @@
 #pragma once
 
 #include "plasmazones_export.h"
-#include "utils.h"
+
+#include <PhosphorScreens/Swapper.h>
 
 #include <QRectF>
 #include <QString>
@@ -28,7 +29,7 @@ namespace PlasmaZones::SpatialAdjacency {
  * @note This function is coordinate-system agnostic — it only compares
  *       candidates against @p current using their shared space. Callers
  *       may pass absolute-pixel rects (ZoneDetectionAdaptor on normalized
- *       zone geometries) or unit-square rects (VirtualScreenSwapper on
+ *       zone geometries) or unit-square rects (Phosphor::Screens::VirtualScreenSwapper on
  *       [0,1] region coordinates). What matters is that @p current and
  *       all entries of @p candidates live in the same space.
  *
@@ -53,25 +54,25 @@ inline int findAdjacentRect(const QRectF& current, const QList<QRectF>& candidat
         bool valid = false;
         qreal distance = 0;
 
-        if (direction == Utils::Direction::Left) {
+        if (direction == Phosphor::Screens::Direction::Left) {
             if (candidateCenter.x() < currentCenter.x()) {
                 valid = true;
                 distance = currentCenter.x() - candidateCenter.x();
                 distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
             }
-        } else if (direction == Utils::Direction::Right) {
+        } else if (direction == Phosphor::Screens::Direction::Right) {
             if (candidateCenter.x() > currentCenter.x()) {
                 valid = true;
                 distance = candidateCenter.x() - currentCenter.x();
                 distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
             }
-        } else if (direction == Utils::Direction::Up) {
+        } else if (direction == Phosphor::Screens::Direction::Up) {
             if (candidateCenter.y() < currentCenter.y()) {
                 valid = true;
                 distance = currentCenter.y() - candidateCenter.y();
                 distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
             }
-        } else if (direction == Utils::Direction::Down) {
+        } else if (direction == Phosphor::Screens::Direction::Down) {
             if (candidateCenter.y() > currentCenter.y()) {
                 valid = true;
                 distance = candidateCenter.y() - currentCenter.y();

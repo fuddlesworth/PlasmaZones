@@ -14,9 +14,11 @@
 #include <QScreen>
 
 #include <PhosphorLayer/Role.h>
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 #include "overlay_helpers.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/interfaces.h"
 #include "../../core/shaderregistry.h"
@@ -111,11 +113,18 @@ inline ZoneSelectorConfig defaultZoneSelectorConfig()
 }
 
 // Resolve target screen from a screen name/ID string with fallback to primary.
-// Delegates to ScreenManager::resolvePhysicalScreen which handles virtual screen
-// IDs, connector names, and falls back to primary screen.
-inline QScreen* resolveTargetScreen(const QString& screenId)
+// Uses ScreenManager::physicalQScreenFor which handles virtual screen IDs +
+// connector names. Falls back to the primary screen when the manager is null
+// (unit tests) or the lookup returns nothing.
+inline QScreen* resolveTargetScreen(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
-    return ScreenManager::resolvePhysicalScreen(screenId);
+    if (mgr) {
+        if (QScreen* s = mgr->physicalQScreenFor(screenId)) {
+            return s;
+        }
+    }
+    QScreen* s = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
+    return s ? s : QGuiApplication::primaryScreen();
 }
 
 /// Resolve the PhosphorLayer anchors + margins for a surface that targets
@@ -165,22 +174,21 @@ inline VsLayerPlacement layerPlacementAt(const QPoint& topLeft, const QRect& phy
 
 /// Resolve target screen geometry for a screen ID (virtual or physical).
 /// For virtual screens (format "physicalId/vs:N"), returns the virtual screen
-/// geometry from ScreenManager. For physical screens, falls back to QScreen::geometry().
+/// geometry from Phosphor::Screens::ScreenManager. For physical screens, falls back to QScreen::geometry().
 /// Returns the geometry the overlay window should cover.
-inline QRect resolveScreenGeometry(const QString& screenId)
+inline QRect resolveScreenGeometry(Phosphor::Screens::ScreenManager* mgr, const QString& screenId)
 {
-    auto* mgr = ScreenManager::instance();
     if (mgr) {
         QRect geom = mgr->screenGeometry(screenId);
         if (geom.isValid()) {
             return geom;
         }
     }
-    // Fallback: physical screen geometry only. This path is hit when ScreenManager
+    // Fallback: physical screen geometry only. This path is hit when Phosphor::Screens::ScreenManager
     // is unavailable (e.g. early startup) or when screenId doesn't match any virtual
     // screen. The caller gets raw QScreen::geometry() which is always the full
     // physical monitor — acceptable as a last-resort fallback.
-    QScreen* screen = resolveTargetScreen(screenId);
+    QScreen* screen = resolveTargetScreen(mgr, screenId);
     return screen ? screen->geometry() : QRect();
 }
 

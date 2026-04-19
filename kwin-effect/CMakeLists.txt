@@ -55,7 +55,9 @@ set(plasmazones_effect_SRCS
     compositorclock.h
     dragtracker.cpp
     dragtracker.h
-    ${CMAKE_SOURCE_DIR}/shared/virtualscreenid.h
+    # virtualscreenid moved to libs/phosphor-identity (PhosphorIdentity::VirtualScreenId).
+    # Consumers include <PhosphorIdentity/VirtualScreenId.h> directly; reachable
+    # transitively via plasmazones_compositor_common's PhosphorIdentity link.
     kwin_compositor_bridge.cpp
     kwin_compositor_bridge.h
 )

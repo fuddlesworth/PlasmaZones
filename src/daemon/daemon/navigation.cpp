@@ -11,10 +11,10 @@
 #include "../../core/logging.h"
 #include "../../core/screenmoderouter.h"
 #include "../../core/utils.h"
-#include "../../core/screenmanager.h"
-#include "../../core/virtualscreenswapper.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/Swapper.h>
 #include "../../dbus/windowtrackingadaptor.h"
-#include "shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include "../../autotile/AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../../snap/SnapEngine.h"
@@ -76,7 +76,7 @@ bool Daemon::isAutotileScreen(const QString& screenId) const
 static INavigationActions* navigatorForShortcut(ScreenModeRouter* router, WindowTrackingAdaptor* wta,
                                                 NavigationContext& outCtx, const char* shortcutName)
 {
-    outCtx.screenId = resolveShortcutScreenId(wta);
+    outCtx.screenId = resolveShortcutScreenId(wta && wta->service() ? wta->service()->screenManager() : nullptr, wta);
     if (outCtx.screenId.isEmpty()) {
         qCDebug(lcDaemon) << shortcutName << "shortcut: no screen info";
         return nullptr;
@@ -220,7 +220,7 @@ void Daemon::handleIncreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
@@ -233,7 +233,7 @@ void Daemon::handleDecreaseMasterRatio()
 {
     if (!m_autotileEngine || !m_autotileEngine->isEnabled())
         return;
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty() || !isAutotileScreen(screenId))
         return;
     if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))
@@ -251,7 +251,7 @@ void Daemon::handleRetile()
     }
     m_autotileEngine->retile();
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
-        QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+        QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
         if (screenId.isEmpty() && !m_autotileEngine->autotileScreens().isEmpty()) {
             // QSet iteration order is non-deterministic; sort to get a stable fallback
             QStringList sorted = m_autotileEngine->autotileScreens().values();
@@ -306,15 +306,16 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     }
     m_virtualScreenDebounce.restart();
 
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "SwapVirtualScreen shortcut: no screen info";
         return;
     }
     // VS swap is a monitor-scope action, so the OSD should render on the
     // physical monitor's full geometry rather than inside one virtual screen.
-    const QString physId =
-        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    const QString physId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
+        : screenId;
 
     const QString dirStr = navigationDirectionToString(direction);
     if (dirStr.isEmpty()) {
@@ -329,13 +330,13 @@ void Daemon::handleSwapVirtualScreen(NavigationDirection direction)
     // shortcut signals are wired, so it's always non-null on this path —
     // no per-call assertion needed.
     const auto result = m_virtualScreenSwapper->swapInDirection(screenId, dirStr);
-    const bool ok = (result == VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "SwapVirtualScreen:" << screenId << dirStr << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
         // On success, surface the direction (the OSD style needs a string to
         // render the arrow). On failure, surface the structured reason.
-        const QString osdReason = ok ? dirStr : VirtualScreenSwapper::reasonString(result);
+        const QString osdReason = ok ? dirStr : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("swap_vs"), osdReason, QString(), QString(), physId);
     }
 }
@@ -347,18 +348,19 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
     }
     m_virtualScreenDebounce.restart();
 
-    const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);
+    const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);
     if (screenId.isEmpty()) {
         qCDebug(lcDaemon) << "RotateVirtualScreens shortcut: no screen info";
         return;
     }
-    const QString physId =
-        VirtualScreenId::isVirtual(screenId) ? VirtualScreenId::extractPhysicalId(screenId) : screenId;
+    const QString physId = PhosphorIdentity::VirtualScreenId::isVirtual(screenId)
+        ? PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)
+        : screenId;
 
     // Swapper is always non-null on the shortcut path — see matching
     // comment in handleSwapVirtualScreen above.
     const auto result = m_virtualScreenSwapper->rotate(physId, clockwise);
-    const bool ok = (result == VirtualScreenSwapper::Result::Ok);
+    const bool ok = (result == Phosphor::Screens::VirtualScreenSwapper::Result::Ok);
     qCDebug(lcDaemon) << "RotateVirtualScreens:" << physId << "cw=" << clockwise << "->" << static_cast<int>(result);
 
     if (m_settings && m_settings->showNavigationOsd() && m_overlayService) {
@@ -367,7 +369,7 @@ void Daemon::handleRotateVirtualScreens(bool clockwise)
         // rotation direction; on failure surface the structured reason so the
         // user sees "no_subdivision" instead of an ambiguous "clockwise" fail.
         const QString osdReason = ok ? (clockwise ? QStringLiteral("clockwise") : QStringLiteral("counterclockwise"))
-                                     : VirtualScreenSwapper::reasonString(result);
+                                     : Phosphor::Screens::VirtualScreenSwapper::reasonString(result);
         m_overlayService->showNavigationOsd(ok, QStringLiteral("rotate_vs"), osdReason, QString(), QString(), physId);
     }
 }

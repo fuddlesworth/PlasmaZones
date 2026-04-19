@@ -7,7 +7,7 @@
 #include "../unifiedlayoutcontroller.h"
 #include "../../core/layoutmanager.h"
 #include "../../core/layoutworker/layoutcomputeservice.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/geometryutils.h"
@@ -24,6 +24,7 @@
 #include <QGuiApplication>
 #include <memory>
 #include <QScreen>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -510,7 +511,8 @@ void Daemon::processPendingGeometryUpdates()
     for (const QString& screenId : screenIds) {
         PhosphorZones::Layout* layout = m_layoutManager->layoutForScreen(screenId, desktop, activity);
         if (layout) {
-            requestFor(layout, screenId, GeometryUtils::effectiveScreenGeometry(layout, screenId));
+            requestFor(layout, screenId,
+                       GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screenId));
             processedLayouts.insert(layout->id());
         }
     }
@@ -523,8 +525,9 @@ void Daemon::processPendingGeometryUpdates()
         if (!processedLayouts.contains(layout->id())) {
             const QScreen* primaryScreen = Utils::primaryScreen();
             if (primaryScreen) {
-                QString primaryId = Utils::screenIdentifier(primaryScreen);
-                requestFor(layout, primaryId, GeometryUtils::effectiveScreenGeometry(layout, primaryId));
+                QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(primaryScreen);
+                requestFor(layout, primaryId,
+                           GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primaryId));
             }
         }
     }

@@ -28,7 +28,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 namespace KWin {
 class OutlinedBorderItem;
@@ -309,7 +309,7 @@ private:
     /**
      * @brief Build a stable EDID-based screen identifier from a KWin::Output.
      *
-     * Mirrors the daemon's Utils::screenIdentifier() exactly: tries
+     * Mirrors the daemon's Phosphor::Screens::ScreenIdentity::identifierFor() exactly: tries
      * QScreen::serialNumber(), normalizes hex, falls back to sysfs EDID
      * header serial. This ensures both sides produce identical screen IDs
      * regardless of which EDID field KWin's Output::serialNumber() returns.
@@ -667,7 +667,7 @@ private:
      * definitions; the effect fetches them via D-Bus and resolves positions.
      *
      * Named EffectVirtualScreenDef to avoid collision with the daemon's
-     * VirtualScreenDef (which has many more fields).
+     * Phosphor::Screens::VirtualScreenDef (which has many more fields).
      */
     struct EffectVirtualScreenDef
     {

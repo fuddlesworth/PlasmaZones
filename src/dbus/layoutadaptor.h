@@ -14,6 +14,10 @@
 #include <QHash>
 #include <optional>
 
+namespace Phosphor::Screens {
+class ScreenManager;
+}
+
 namespace PhosphorLayout {
 class ILayoutSource;
 }
@@ -42,7 +46,8 @@ class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 
 public:
     explicit LayoutAdaptor(LayoutManager* manager, QObject* parent = nullptr);
-    explicit LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm, QObject* parent = nullptr);
+    explicit LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
+                           Phosphor::Screens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
     ~LayoutAdaptor() override = default;
 
     void setVirtualDesktopManager(VirtualDesktopManager* vdm);
@@ -443,6 +448,7 @@ private:
     LayoutManager* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
+    Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
     PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
 

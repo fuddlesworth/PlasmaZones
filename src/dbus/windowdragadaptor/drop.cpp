@@ -11,11 +11,12 @@
 #include "../../core/geometryutils.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../autotile/AutotileEngine.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -352,7 +353,7 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // handle it via screenId lookup inside buildEmptyZoneList itself.
     QScreen* releaseScreen = nullptr;
     for (QScreen* s : QGuiApplication::screens()) {
-        if (Utils::screenIdentifier(s) == screenId || s->name() == screenId) {
+        if (Phosphor::Screens::ScreenIdentity::identifierFor(s) == screenId || s->name() == screenId) {
             releaseScreen = s;
             break;
         }
@@ -371,8 +372,8 @@ void WindowDragAdaptor::computeAndEmitSnapAssist()
     // by WindowTrackingService::getEmptyZones()/calculateSnapAllWindows().
     const int desktopFilter = m_layoutManager ? m_layoutManager->currentVirtualDesktop() : 0;
     QSet<QUuid> occupied = m_windowTracking->service()->buildOccupiedZoneSet(screenId, desktopFilter);
-    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(layout, screenId, releaseScreen, m_settings,
-                                                                 [&occupied](const PhosphorZones::Zone* z) {
+    EmptyZoneList emptyZones = GeometryUtils::buildEmptyZoneList(m_screenManager, layout, screenId, releaseScreen,
+                                                                 m_settings, [&occupied](const PhosphorZones::Zone* z) {
                                                                      return !occupied.contains(z->id());
                                                                  });
 

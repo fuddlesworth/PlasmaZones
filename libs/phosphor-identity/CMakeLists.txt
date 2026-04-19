@@ -46,6 +46,8 @@ find_package(Qt6 6.6 REQUIRED COMPONENTS Core)
 
 set(phosphoridentity_public_HDRS
     include/PhosphorIdentity/PhosphorIdentity.h
+    include/PhosphorIdentity/ScreenId.h
+    include/PhosphorIdentity/VirtualScreenId.h
     include/PhosphorIdentity/WindowId.h
 )
 

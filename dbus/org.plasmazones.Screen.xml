@@ -86,12 +86,15 @@
             </arg>
         </method>
         <method name="setVirtualScreenConfig">
-            <annotation name="org.gtk.GDBus.DocString" value="Set the virtual screen subdivision configuration for a physical screen from JSON."/>
+            <annotation name="org.gtk.GDBus.DocString" value="Set the virtual screen subdivision configuration for a physical screen from JSON. Returns an empty string on success or a stable error token (e.g. parse_error, missing_screens, bad_index, store_rejected) on failure."/>
             <arg name="physicalScreenId" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Stable EDID-based physical screen identifier."/>
             </arg>
             <arg name="configJson" type="s" direction="in">
                 <annotation name="org.gtk.GDBus.DocString" value="Virtual screen config as JSON."/>
+            </arg>
+            <arg name="reason" type="s" direction="out">
+                <annotation name="org.gtk.GDBus.DocString" value="Empty on success; rejection token on failure."/>
             </arg>
         </method>
         <method name="getPhysicalScreens">

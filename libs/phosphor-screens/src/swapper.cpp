@@ -1,14 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "virtualscreenswapper.h"
+#include "PhosphorScreens/Swapper.h"
 
-#include "../config/settings.h"
-#include "logging.h"
-#include "shared/virtualscreenid.h"
-#include "spatialadjacency.h"
-#include "utils.h"
-#include "virtualscreen.h"
+#include "PhosphorScreens/IConfigStore.h"
+#include "PhosphorScreens/VirtualScreen.h"
+#include "screenslogging.h"
+
+#include <PhosphorIdentity/VirtualScreenId.h>
 
 #include <QList>
 #include <QPointF>
@@ -18,14 +17,77 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
-namespace PlasmaZones {
+namespace Phosphor::Screens {
 
 namespace {
 
 // Match VirtualScreenDef::Tolerance so collinearity detection stays
 // consistent with the rest of the codebase's float comparison policy.
 constexpr qreal kCollinearEpsilon = VirtualScreenDef::Tolerance;
+
+/// Direction-aware nearest-neighbour search inlined into the lib so the
+/// swapper has no cross-library dependency on a separate spatial-adjacency
+/// helper. Mirrors `PlasmaZones::SpatialAdjacency::findAdjacentRect`
+/// (src/core/spatialadjacency.h) — the daemon's other consumer
+/// (ZoneDetectionAdaptor) keeps using that copy for zone-to-zone
+/// navigation, which is out of scope for this library.
+///
+/// @return index into @p candidates, or -1 if no rect qualifies. Rects
+///         that compare equal to @p current (same centre) are skipped.
+int findAdjacentRect(const QRectF& current, const QList<QRectF>& candidates, const QString& direction)
+{
+    const QPointF currentCenter = current.center();
+
+    int bestIndex = -1;
+    qreal bestDistance = std::numeric_limits<qreal>::max();
+
+    for (int i = 0; i < candidates.size(); ++i) {
+        const QRectF& candidate = candidates.at(i);
+        const QPointF candidateCenter = candidate.center();
+
+        if (candidateCenter == currentCenter) {
+            continue;
+        }
+
+        bool valid = false;
+        qreal distance = 0;
+
+        if (direction == Direction::Left) {
+            if (candidateCenter.x() < currentCenter.x()) {
+                valid = true;
+                distance = currentCenter.x() - candidateCenter.x();
+                distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
+            }
+        } else if (direction == Direction::Right) {
+            if (candidateCenter.x() > currentCenter.x()) {
+                valid = true;
+                distance = candidateCenter.x() - currentCenter.x();
+                distance += std::abs(candidateCenter.y() - currentCenter.y()) * 2;
+            }
+        } else if (direction == Direction::Up) {
+            if (candidateCenter.y() < currentCenter.y()) {
+                valid = true;
+                distance = currentCenter.y() - candidateCenter.y();
+                distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
+            }
+        } else if (direction == Direction::Down) {
+            if (candidateCenter.y() > currentCenter.y()) {
+                valid = true;
+                distance = candidateCenter.y() - currentCenter.y();
+                distance += std::abs(candidateCenter.x() - currentCenter.x()) * 2;
+            }
+        }
+
+        if (valid && distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+
+    return bestIndex;
+}
 
 /// Build a clockwise ring order for the given virtual screen defs.
 ///
@@ -42,9 +104,6 @@ constexpr qreal kCollinearEpsilon = VirtualScreenDef::Tolerance;
 /// rotation users actually expect.
 QVector<int> computeCwRingOrder(const QVector<VirtualScreenDef>& screens)
 {
-    // Precondition: callers must pass at least one def. `rotate()` gates
-    // on `screens.size() >= 2`; this assert pins the contract so a future
-    // caller can't silently UB on `screens.first()` below.
     Q_ASSERT(!screens.isEmpty());
 
     QVector<int> order;
@@ -53,7 +112,6 @@ QVector<int> computeCwRingOrder(const QVector<VirtualScreenDef>& screens)
         order.append(i);
     }
 
-    // Detect 1D collinear layouts before computing the centroid.
     bool collinearY = true;
     bool collinearX = true;
     const qreal y0 = screens.first().region.center().y();
@@ -69,21 +127,18 @@ QVector<int> computeCwRingOrder(const QVector<VirtualScreenDef>& screens)
     }
 
     if (collinearY) {
-        // Horizontal strip — sort by x ascending (left to right).
         std::stable_sort(order.begin(), order.end(), [&screens](int a, int b) {
             return screens[a].region.center().x() < screens[b].region.center().x();
         });
         return order;
     }
     if (collinearX) {
-        // Vertical strip — sort by y ascending (top to bottom).
         std::stable_sort(order.begin(), order.end(), [&screens](int a, int b) {
             return screens[a].region.center().y() < screens[b].region.center().y();
         });
         return order;
     }
 
-    // 2D layout: angle-from-centroid sort, CW from "up".
     QPointF centroid(0.0, 0.0);
     for (const auto& def : screens) {
         centroid += def.region.center();
@@ -107,34 +162,28 @@ QVector<int> computeCwRingOrder(const QVector<VirtualScreenDef>& screens)
 
 } // namespace
 
-VirtualScreenSwapper::VirtualScreenSwapper(Settings* settings)
-    : m_settings(settings)
+VirtualScreenSwapper::VirtualScreenSwapper(IConfigStore* store)
+    : m_store(store)
 {
-    Q_ASSERT(settings);
+    Q_ASSERT(store);
 }
 
 VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString& currentVirtualScreenId,
                                                                    const QString& direction)
 {
-    if (!VirtualScreenId::isVirtual(currentVirtualScreenId)) {
-        qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: current id is not virtual:"
-                        << currentVirtualScreenId;
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(currentVirtualScreenId)) {
+        qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: current id is not virtual:"
+                                   << currentVirtualScreenId;
         return Result::NotVirtual;
     }
-    // Direction must be one of the four Utils::Direction tokens. Pre-validate
-    // here rather than defer to findAdjacentRect (which silently returns -1
-    // on unknown strings → would otherwise map to NoSiblingInDirection and
-    // hide the caller bug). The D-Bus adaptor already filters on this, but
-    // the core helper owns its own contract so internal callers get the
-    // right Result without going through the adaptor.
-    if (direction != Utils::Direction::Left && direction != Utils::Direction::Right && direction != Utils::Direction::Up
-        && direction != Utils::Direction::Down) {
-        qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: invalid direction:" << direction;
+    if (direction != Direction::Left && direction != Direction::Right && direction != Direction::Up
+        && direction != Direction::Down) {
+        qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: invalid direction:" << direction;
         return Result::InvalidDirection;
     }
 
-    const QString physId = VirtualScreenId::extractPhysicalId(currentVirtualScreenId);
-    VirtualScreenConfig cfg = m_settings->virtualScreenConfig(physId);
+    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(currentVirtualScreenId);
+    VirtualScreenConfig cfg = m_store->get(physId);
     if (cfg.screens.size() < 2) {
         return Result::NoSubdivision;
     }
@@ -149,24 +198,23 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
         }
     }
     if (currentIndex < 0) {
-        qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: current VS not in config:" << currentVirtualScreenId;
+        qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: current VS not in config:"
+                                   << currentVirtualScreenId;
         return Result::UnknownVirtualScreen;
     }
 
-    // findAdjacentRect already skips same-centre candidates, so a returned
-    // index can never equal currentIndex — only < 0 means "no sibling".
-    const int targetIndex = SpatialAdjacency::findAdjacentRect(regions[currentIndex], regions, direction);
+    const int targetIndex = findAdjacentRect(regions[currentIndex], regions, direction);
     if (targetIndex < 0) {
-        qCDebug(lcCore) << "VirtualScreenSwapper::swapInDirection: no adjacent VS in direction" << direction;
+        qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::swapInDirection: no adjacent VS in direction" << direction;
         return Result::NoSiblingInDirection;
     }
 
     const QString targetId = cfg.screens[targetIndex].id;
     if (!cfg.swapRegions(currentVirtualScreenId, targetId)) {
-        return Result::SettingsRejected;
+        return Result::SwapFailed;
     }
 
-    if (!m_settings->setVirtualScreenConfig(physId, cfg)) {
+    if (!m_store->save(physId, cfg)) {
         return Result::SettingsRejected;
     }
     return Result::Ok;
@@ -174,12 +222,12 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::swapInDirection(const QString
 
 VirtualScreenSwapper::Result VirtualScreenSwapper::rotate(const QString& physicalScreenId, bool clockwise)
 {
-    if (physicalScreenId.isEmpty() || VirtualScreenId::isVirtual(physicalScreenId)) {
-        qCDebug(lcCore) << "VirtualScreenSwapper::rotate: invalid physicalScreenId:" << physicalScreenId;
+    if (physicalScreenId.isEmpty() || PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
+        qCDebug(lcPhosphorScreens) << "VirtualScreenSwapper::rotate: invalid physicalScreenId:" << physicalScreenId;
         return Result::NotVirtual;
     }
 
-    VirtualScreenConfig cfg = m_settings->virtualScreenConfig(physicalScreenId);
+    VirtualScreenConfig cfg = m_store->get(physicalScreenId);
     if (cfg.screens.size() < 2) {
         return Result::NoSubdivision;
     }
@@ -193,10 +241,10 @@ VirtualScreenSwapper::Result VirtualScreenSwapper::rotate(const QString& physica
     }
 
     if (!cfg.rotateRegions(orderedIds, clockwise)) {
-        return Result::SettingsRejected;
+        return Result::SwapFailed;
     }
 
-    if (!m_settings->setVirtualScreenConfig(physicalScreenId, cfg)) {
+    if (!m_store->save(physicalScreenId, cfg)) {
         return Result::SettingsRejected;
     }
     return Result::Ok;
@@ -217,10 +265,12 @@ QString VirtualScreenSwapper::reasonString(Result result)
         return QStringLiteral("no_sibling");
     case Result::InvalidDirection:
         return QStringLiteral("invalid_direction");
+    case Result::SwapFailed:
+        return QStringLiteral("swap_failed");
     case Result::SettingsRejected:
         return QStringLiteral("settings_rejected");
     }
     return QString();
 }
 
-} // namespace PlasmaZones
+} // namespace Phosphor::Screens
