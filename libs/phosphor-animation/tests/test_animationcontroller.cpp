@@ -63,6 +63,7 @@ public:
     QList<int> completedHandlesOrdered;
     QList<int> retargetedHandlesOrdered;
     QList<int> replacedHandlesOrdered;
+    QList<int> reapedHandlesOrdered;
     mutable int repaintCalls = 0;
     QSet<int> invalidHandles;
 
@@ -93,6 +94,10 @@ protected:
         if (onCompleteCallback) {
             onCompleteCallback(handle, *this);
         }
+    }
+    void onAnimationReaped(int handle, const AnimatedValue<QRectF>&) override
+    {
+        reapedHandlesOrdered.append(handle);
     }
     void onRepaintNeeded(int, const QRectF&) const override
     {
@@ -775,6 +780,64 @@ private Q_SLOTS:
         QCOMPARE(c.profile().effectiveMinDistance(), 10000); // kMaxMinDistancePx
     }
 
+    // ─── setProfile + setMinDistance share a single source of truth ───
+
+    void testSetMinDistanceReflectsInProfile()
+    {
+        MockController c;
+        c.setMinDistance(42);
+        QCOMPARE(c.minDistance(), 42);
+        QCOMPARE(c.profile().effectiveMinDistance(), 42);
+        // Explicitly engaged — the engaged optional means "caller has an
+        // opinion", which is the invariant ProfileTree inheritance relies on.
+        QVERIFY(c.profile().minDistance.has_value());
+        QCOMPARE(*c.profile().minDistance, 42);
+    }
+
+    void testSetProfileMinDistanceReflectsInMinDistance()
+    {
+        MockController c;
+        Profile p;
+        p.minDistance = 13;
+        c.setProfile(p);
+        QCOMPARE(c.minDistance(), 13);
+    }
+
+    void testProfileMinDistanceRoutesIntoSnapPolicySkip()
+    {
+        // A position delta below profile.minDistance with no size change
+        // must be rejected by startAnimation. Without the Profile→
+        // SnapPolicy routing the old code ignored profile.minDistance and
+        // used a separate m_minDistance field that defaulted to 0.
+        TestClock clock;
+        MockController c;
+        c.setClock(&clock);
+        Profile p;
+        p.curve = std::make_shared<Easing>();
+        p.duration = 100.0;
+        p.minDistance = 200;
+        c.setProfile(p);
+
+        // 50px position delta, no size change — under the 200px threshold.
+        const auto result = c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(50, 0, 100, 100));
+        QCOMPARE(result, StartResult::PolicyRejected);
+        QVERIFY(!c.hasAnimation(1));
+    }
+
+    void testSetMinDistanceRoutesIntoSnapPolicySkip()
+    {
+        // Same contract as above but via the setMinDistance convenience
+        // setter — the two entry points must behave identically.
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        c.setMinDistance(200);
+
+        const auto result = c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(50, 0, 100, 100));
+        QCOMPARE(result, StartResult::PolicyRejected);
+        QVERIFY(!c.hasAnimation(1));
+    }
+
     // ─── reapAnimationsForClock (per-output teardown helper) ───
 
     void testReapAnimationsForClockRemovesOnlyMatchingAnimations()
@@ -821,9 +884,55 @@ private Q_SLOTS:
         QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
         QCOMPARE(c.reapAnimationsForClock(&clock), 1);
         QVERIFY(!c.hasAnimation(1));
-        // Matches removeAnimation semantics — batch cancellation, no
-        // terminating event fires for the reaped entries.
+        // onAnimationComplete / onAnimationReplaced are NOT fired —
+        // reap is a distinct terminating event with its own hook.
         QVERIFY(c.completedHandles.isEmpty());
+        QVERIFY(c.replacedHandlesOrdered.isEmpty());
+    }
+
+    void testReapAnimationsForClockFiresOnAnimationReapedHook()
+    {
+        // Reap must fire exactly one onAnimationReaped per entry it
+        // removes so telemetry/damage-region consumers can balance
+        // their started-vs-terminated counters without special-casing
+        // output teardown.
+        TestClock clockA;
+        TestClock clockB;
+        PerHandleController c;
+        c.setClock(&clockB);
+        c.clockA = &clockA;
+        Profile profile;
+        profile.curve = std::make_shared<Easing>();
+        profile.duration = 200.0;
+        c.setProfile(profile);
+
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100))); // clockA
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100))); // clockB
+        QVERIFY(c.startAnimation(3, QRectF(0, 0, 100, 100), QRectF(700, 0, 100, 100))); // clockB
+
+        QCOMPARE(c.reapAnimationsForClock(&clockA), 1);
+        QCOMPARE(c.reapedHandlesOrdered, QList<int>{1});
+
+        QCOMPARE(c.reapAnimationsForClock(&clockB), 2);
+        // Handle 2 and 3 reaped; order depends on unordered_map bucketing
+        // — just check both fired and the total count is right.
+        QCOMPARE(c.reapedHandlesOrdered.size(), 3);
+        QVERIFY(c.reapedHandlesOrdered.contains(2));
+        QVERIFY(c.reapedHandlesOrdered.contains(3));
+
+        // No natural-completion or replaced hooks fire.
+        QVERIFY(c.completedHandles.isEmpty());
+        QVERIFY(c.replacedHandlesOrdered.isEmpty());
+    }
+
+    void testReapAnimationsForClockWithNullDoesNotFireHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QCOMPARE(c.reapAnimationsForClock(nullptr), 0);
+        QVERIFY(c.reapedHandlesOrdered.isEmpty());
     }
 
     // ─── retargetWithResult::InternalError distinguishes from UnknownHandle ───

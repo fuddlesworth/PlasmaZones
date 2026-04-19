@@ -33,19 +33,21 @@ class IMotionClock;
 namespace SnapPolicy {
 
 /// Parameters for the snap gate.
+///
+/// `profile.minDistance` is the single source of truth for the skip
+/// threshold — `createSnapSpec` reads `profile.effectiveMinDistance()`
+/// directly. There is no separate `minDistance` field on `SnapParams`:
+/// persist the value on the `Profile` (where it round-trips through
+/// JSON / the settings UI) and stamp it into this struct via one
+/// `profile` copy.
 struct SnapParams
 {
     /// The full Profile to stamp into the animation's MotionSpec.
-    /// Carries curve, duration, sequenceMode, staggerInterval, and any
-    /// future orchestration fields. The spec's profile inherits
-    /// verbatim — unset optionals resolve via `Profile::effective*()`
-    /// at animation-time, not here.
+    /// Carries curve, duration, minDistance, sequenceMode,
+    /// staggerInterval, and any future orchestration fields. The
+    /// spec's profile inherits verbatim — unset optionals resolve via
+    /// `Profile::effective*()` at animation-time, not here.
     Profile profile;
-
-    /// Skip threshold in pixels. A position delta below
-    /// `max(1, minDistance)` with no size change is skipped as not
-    /// worth animating (matches Phase 2 semantics exactly).
-    int minDistance = 0;
 
     /// Default retarget policy to stamp into the resulting MotionSpec.
     /// `PreserveVelocity` matches the drag-through-zones expectation
@@ -56,18 +58,25 @@ struct SnapParams
     RetargetPolicy retargetPolicy = RetargetPolicy::PreserveVelocity;
 };
 
+/// Canonical size-change epsilon shared between the snap gate and
+/// adapter-side "should I apply scale this paint?" checks
+/// (`AnimatedValue<QRectF>::hasSizeChange`). Both sides use 1.0 px so
+/// a sub-pixel size delta is treated identically by both layers.
+constexpr qreal kSnapSizeEpsilonPx = 1.0;
+
 /**
  * @brief Build a `MotionSpec<QRectF>` if the transition merits animation.
  *
  * Returns `std::nullopt` when:
  *   - @p clock is null (no runtime to drive the animation);
  *   - @p newFrame is degenerate (zero or negative size);
- *   - position delta is below `max(1, minDistance)` AND the frame size
- *     is unchanged (the animation would not be visible).
+ *   - position delta is below `max(1, profile.effectiveMinDistance())`
+ *     AND the frame size is unchanged (the animation would not be
+ *     visible).
  *
  * Otherwise returns a `MotionSpec<QRectF>` populated with:
  *   - `profile` = @p params.profile (full copy — curve, duration,
- *     sequence mode, etc. all propagate)
+ *     minDistance, sequence mode, etc. all propagate)
  *   - `clock` = @p clock
  *   - `retargetPolicy` = @p params.retargetPolicy
  *   - callbacks left unset (caller wires onValueChanged / onComplete)

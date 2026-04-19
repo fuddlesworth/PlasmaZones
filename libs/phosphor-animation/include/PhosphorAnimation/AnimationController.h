@@ -36,7 +36,14 @@ enum class StartResult {
     NoClock, ///< `clockForHandle(handle)` resolved to null.
     HandleInvalid, ///< `isHandleValid(handle)` returned false.
     PolicyRejected, ///< `SnapPolicy` rejected (below threshold or degenerate).
-    NoMotion, ///< `AnimatedValue::start()` rejected (internal degenerate path).
+    /// Defensive fallback. `AnimatedValue::start()` rejected because
+    /// `from ≈ to` by `Interpolate<T>::distance`. Unreachable via the
+    /// standard path — `SnapPolicy::createSnapSpec` already filters the
+    /// degenerate cases before `AnimatedValue::start` sees them. Exists
+    /// only so the enum fully enumerates every possible failure from
+    /// the underlying primitive, mirroring
+    /// `RetargetResult::InternalError`.
+    NoMotion,
 };
 
 /**
@@ -97,9 +104,26 @@ enum class RetargetResult {
  *
  * - @ref onAnimationStarted   — fired when @ref startAnimation accepts.
  * - @ref onAnimationComplete  — fired when an animation completes.
+ * - @ref onAnimationReplaced  — in-flight animation displaced by a new start.
+ * - @ref onAnimationRetargeted — in-flight animation redirected (non-terminal).
+ * - @ref onAnimationReaped    — batch-reaped via @ref reapAnimationsForClock.
  * - @ref onRepaintNeeded      — fired with a bounds rect for damage.
  * - @ref isHandleValid        — reject stale handles.
  * - @ref expandedPadding      — compositor-specific shadow / decoration margin.
+ *
+ * ## Lifecycle events
+ *
+ * Every accepted `startAnimation` produces exactly one terminating
+ * event on the controller's hooks:
+ *   - @ref onAnimationComplete  — natural termination.
+ *   - @ref onAnimationReplaced  — displaced by a second
+ *     `startAnimation` on the same handle before the first completed.
+ *   - @ref onAnimationReaped    — dropped by
+ *     @ref reapAnimationsForClock (output teardown).
+ *   - silent removal via @ref removeAnimation / @ref clear — the
+ *     caller already has the context; no hook fires.
+ * `onAnimationRetargeted` is NOT a terminating event — the same
+ * handle keeps ticking, just toward a new target.
  *
  * ## Re-entrancy contract (preserved from Phase 2)
  *
@@ -146,18 +170,24 @@ public:
         return m_enabled;
     }
 
-    /// Profile bundling curve + duration (and any future orchestration
-    /// fields). Applied to new animations only; in-flight animations
-    /// keep their own MotionSpec copy and are unaffected by subsequent
-    /// profile swaps — matches Phase 3 decision K (config-reload
-    /// immutability).
+    /// Profile bundling curve + duration + minDistance (and any future
+    /// orchestration fields). Applied to new animations only; in-flight
+    /// animations keep their own MotionSpec copy and are unaffected by
+    /// subsequent profile swaps — matches Phase 3 decision K
+    /// (config-reload immutability).
     ///
-    /// If `profile.duration` is engaged, its value is clamped to
-    /// `[0, kMaxDurationMs]` in the stored copy — same guard as
-    /// `setDuration()`, applied centrally so callers going through the
-    /// profile path cannot bypass the clamp. A settings UI writing a
-    /// pathological value (e.g., 60 000 ms) through `setProfile` still
-    /// lands safely in the controller.
+    /// `profile.duration` and `profile.minDistance` are clamped to
+    /// `[0, kMaxDurationMs]` and `[0, kMaxMinDistancePx]` respectively
+    /// in the stored copy — same guards as `setDuration()` /
+    /// `setMinDistance()`, applied centrally so callers going through
+    /// the profile path cannot bypass them. A settings UI writing a
+    /// pathological value (e.g., 60 000 ms duration) through
+    /// `setProfile` still lands safely.
+    ///
+    /// `profile.minDistance` is the single source of truth for the
+    /// snap-skip threshold — both `setMinDistance()` and `setProfile()`
+    /// write through to the same field; `SnapPolicy::createSnapSpec`
+    /// reads `profile.effectiveMinDistance()` at animation-start time.
     void setProfile(const Profile& profile)
     {
         m_profile = profile;
@@ -211,13 +241,18 @@ public:
     /// Minimum translate distance (in px) before a transition is worth
     /// animating. Clamped to `[0, kMaxMinDistancePx]`. Callers wanting a
     /// tighter clamp apply it themselves.
+    ///
+    /// Convenience setter — equivalent to modifying
+    /// `profile().minDistance`. Both paths mutate the same underlying
+    /// field on `m_profile`, so a settings UI can use either entry
+    /// point interchangeably.
     void setMinDistance(int pixels)
     {
-        m_minDistance = qBound(0, pixels, kMaxMinDistancePx);
+        m_profile.minDistance = qBound(0, pixels, kMaxMinDistancePx);
     }
     int minDistance() const
     {
-        return m_minDistance;
+        return m_profile.effectiveMinDistance();
     }
 
     // ─────── Lifecycle ───────
@@ -281,7 +316,9 @@ public:
 
         SnapPolicy::SnapParams params;
         params.profile = m_profile;
-        params.minDistance = m_minDistance;
+        // minDistance rides on the profile — SnapPolicy reads
+        // params.profile.effectiveMinDistance(). See setMinDistance /
+        // setProfile — both funnel into m_profile.minDistance.
         const auto spec = SnapPolicy::createSnapSpec(oldFrame, newFrame, params, clock);
         if (!spec) {
             return StartResult::PolicyRejected;
@@ -415,10 +452,19 @@ public:
      * the next `advanceAnimations()` tick reads through a dangling
      * pointer.
      *
-     * No terminating hook fires (`onAnimationComplete`,
-     * `onAnimationReplaced`) — matches `removeAnimation` semantics for
-     * batch cancellation. The caller already knows which output is
-     * going away and has the context to notify UX layers if needed.
+     * Fires @ref onAnimationReaped for each removed entry so consumers
+     * that maintain per-animation accounting (telemetry counters,
+     * damage-region accumulators, UX "window X snapped to zone Y"
+     * tooltips) can balance their started-vs-terminated event counts
+     * without special-casing output teardown. The hook is distinct from
+     * `onAnimationComplete` / `onAnimationReplaced` so adapters can
+     * opt-in to batch cancellation notifications without treating them
+     * as natural completions.
+     *
+     * The reference passed to `onAnimationReaped` points to a
+     * locally-moved copy on the controller's stack — valid for the
+     * duration of the hook only. See the subclass-hooks reference
+     * lifetime contract.
      *
      * Safe to call with @p clock == nullptr (no-op — nothing matches
      * the fallback-sentinel shape). Returns the number of reaped
@@ -432,7 +478,10 @@ public:
         int reaped = 0;
         for (auto it = m_animations.begin(); it != m_animations.end();) {
             if (it->second.spec().clock == clock) {
+                AnimatedValue<QRectF> reapedAnim = std::move(it->second);
+                const Handle handle = it->first;
                 it = m_animations.erase(it);
+                onAnimationReaped(handle, reapedAnim);
                 ++reaped;
             } else {
                 ++it;
@@ -672,6 +721,24 @@ protected:
     {
     }
 
+    /**
+     * @brief Fired when @ref reapAnimationsForClock drops an animation
+     *        as part of output/clock teardown.
+     *
+     * Distinct from @ref onAnimationComplete (the animation did not
+     * reach its target) and @ref onAnimationReplaced (no new segment
+     * is about to start in its place). Consumers that count lifecycle
+     * events override this to balance started-vs-terminated accounting
+     * under multi-output hotplug; adapters that only care about
+     * user-visible completion can leave the default no-op.
+     *
+     * The @p anim reference is scoped to the call — see the lifetime
+     * contract above.
+     */
+    virtual void onAnimationReaped(Handle /*handle*/, const AnimatedValue<QRectF>& /*reaped*/)
+    {
+    }
+
     virtual void onRepaintNeeded(Handle /*handle*/, const QRectF& /*bounds*/) const
     {
     }
@@ -728,8 +795,12 @@ private:
     // nothing else changes.
     std::unordered_map<Handle, AnimatedValue<QRectF>> m_animations;
     IMotionClock* m_clock = nullptr;
+    // minDistance lives on m_profile.minDistance — no separate field.
+    // setMinDistance/setProfile both write through; minDistance() reads
+    // m_profile.effectiveMinDistance(). Single source of truth, round-
+    // trips through Profile serialisation, and settings UIs can use
+    // either entry point interchangeably.
     Profile m_profile;
-    int m_minDistance = 0;
     bool m_enabled = true;
 };
 

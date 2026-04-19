@@ -36,6 +36,16 @@ PhosphorAnimation::IMotionClock* WindowAnimator::clockForHandle(KWin::EffectWind
 
 void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPaintData& data) const
 {
+    // Symmetric with expandedPadding(): once a window is "deleted"
+    // its Item tree is torn down and frameGeometry()/windowClass()
+    // dereference a stale Item. slotWindowClosed / windowDeleted both
+    // call removeAnimation(w) so this path is normally unreachable,
+    // but mirroring the guard removes the latent hazard should
+    // ordering change.
+    if (!window || window->isDeleted()) {
+        return;
+    }
+
     const PhosphorAnimation::AnimatedValue<QRectF>* anim = animationFor(window);
     if (!anim || !anim->isAnimating()) {
         return;

@@ -24,10 +24,14 @@ std::optional<MotionSpec<QRectF>> createSnapSpec(const QRectF& oldFrame, const Q
     // detection mirror Phase 2's createSnapMotion exactly — preserving
     // the "is this worth animating?" invariant that's been tuned through
     // user feedback.
+    //
+    // `minDistance` is read from the Profile (single source of truth).
+    // The floor of 1.0 px matches Phase 2 — a zero-configured threshold
+    // still skips the no-op (oldFrame == newFrame) case.
     const qreal posDistance = QLineF(oldFrame.topLeft(), newFrame.topLeft()).length();
-    const bool sizeChanging =
-        qAbs(oldFrame.width() - newFrame.width()) > 1.0 || qAbs(oldFrame.height() - newFrame.height()) > 1.0;
-    const qreal threshold = qMax(1.0, qreal(params.minDistance));
+    const bool sizeChanging = qAbs(oldFrame.width() - newFrame.width()) > kSnapSizeEpsilonPx
+        || qAbs(oldFrame.height() - newFrame.height()) > kSnapSizeEpsilonPx;
+    const qreal threshold = qMax(1.0, qreal(params.profile.effectiveMinDistance()));
     if (posDistance < threshold && !sizeChanging) {
         return std::nullopt;
     }

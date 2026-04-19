@@ -9,6 +9,7 @@
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/RetargetPolicy.h>
+#include <PhosphorAnimation/SnapPolicy.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QColor>
@@ -812,7 +813,13 @@ public:
      *
      * Passing @p newClock == nullptr cancels the animation (same as
      * `cancel()`) — a null clock means no driver; progress cannot
-     * continue.
+     * continue. **Same owning-container stranding caveat as
+     * `cancel()`** — the entry stays in the owner's map with both
+     * `isAnimating()` and `isComplete()` false until explicitly
+     * removed. `AnimationController::advanceAnimations` only calls
+     * `rebindClock` when the per-tick resolver returns a non-null
+     * clock, so this path is never hit through the controller; it
+     * only matters for direct consumers of `AnimatedValue<T>`.
      *
      * No-op when the new clock equals the current clock (cheap
      * pointer compare). No callbacks fire — rebind is a pure plumbing
@@ -846,6 +853,20 @@ public:
      * cancellation via their own logic (e.g., after calling cancel()
      * the caller knows the animation was interrupted; onComplete
      * exists for natural termination only).
+     *
+     * ## Owning-container stranding
+     *
+     * `cancel()` leaves `isAnimating()` AND `isComplete()` both false.
+     * An `AnimatedValue` held inside an owning container
+     * (`AnimationController::m_animations`, the QML driver's handle
+     * map, …) is NOT self-reaping after cancel — the owner must
+     * explicitly remove the entry (e.g.,
+     * `AnimationController::removeAnimation(handle)`), otherwise it
+     * sticks around until the container is cleared. `AnimationController`
+     * never calls `cancel()` on a held entry for this reason — its
+     * re-target / replace flows either call `retarget()` (installs a
+     * new segment) or `startAnimation()` (drops+restarts with
+     * `onAnimationReplaced`).
      */
     void cancel()
     {
@@ -1191,15 +1212,20 @@ public:
      * Intended for compositor adapters that only need to apply a
      * scale transform when size is actually changing (pure-translate
      * snaps leave scale at identity). Replaces the hand-inlined
-     * "|current.w - target.w| > 0.5 || ..." check that otherwise
+     * "|current.w - target.w| > 1.0 || ..." check that otherwise
      * duplicates across every adapter.
+     *
+     * Default `epsilonPx` matches `SnapPolicy::kSnapSizeEpsilonPx` —
+     * the snap gate and the paint-path scale decision agree on what
+     * counts as "size changed", so a sub-pixel delta cannot flip one
+     * side without flipping the other.
      *
      * Available only on the `QRectF` specialisation — `QSizeF` has
      * no natural "target" distinct from the lerp endpoint (every
      * animation of a size changes the size), and geometric `QPointF`
      * has no size axis at all.
      */
-    bool hasSizeChange(qreal epsilonPx = 0.5) const
+    bool hasSizeChange(qreal epsilonPx = SnapPolicy::kSnapSizeEpsilonPx) const
         requires std::same_as<T, QRectF>
     {
         return qAbs(m_current.width() - m_to.width()) > epsilonPx
@@ -1225,6 +1251,12 @@ public:
 
 private:
     static constexpr std::chrono::seconds kSafetyCap{60};
+
+    // Overshoot sampling cadence — same across every bounds /
+    // swept-range query. 50 samples hits the peaks of elastic /
+    // bounce / underdamped-spring curves within sub-pixel tolerance
+    // (matches Phase 2's AnimationMath::repaintBounds cadence).
+    static constexpr int kOvershootSamples = 50;
 
     // Colour-space aware lerp dispatch. For T == QColor with
     // Space == OkLab, routes through the OkLab conversion path;
@@ -1304,9 +1336,8 @@ private:
         qreal maxH = std::max(m_from.height(), m_to.height());
         const auto curve = effectiveCurve();
         if (curve && curve->overshoots()) {
-            constexpr int nSamples = 50;
-            for (int i = 1; i < nSamples; ++i) {
-                const qreal p = curve->evaluate(qreal(i) / nSamples);
+            for (int i = 1; i < kOvershootSamples; ++i) {
+                const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
                 const QSizeF sampled = Interpolate<QSizeF>::lerp(m_from, m_to, p);
                 minW = std::min(minW, sampled.width());
                 maxW = std::max(maxW, sampled.width());
@@ -1324,13 +1355,8 @@ private:
         if (!curve || !curve->overshoots()) {
             return;
         }
-        // 50 samples — same cadence as Phase 2's AnimationMath::repaintBounds.
-        // Overshoot-covering is an upper bound on damage, not a physics
-        // simulation; 50 samples hits the peaks of elastic / bounce /
-        // underdamped-spring curves within sub-pixel tolerance.
-        constexpr int nSamples = 50;
-        for (int i = 1; i < nSamples; ++i) {
-            const qreal p = curve->evaluate(qreal(i) / nSamples);
+        for (int i = 1; i < kOvershootSamples; ++i) {
+            const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
             const auto [x1, y1, x2, y2] = sampleAt(p);
             minX = std::min(minX, x1);
             minY = std::min(minY, y1);
@@ -1345,9 +1371,8 @@ private:
         T hi = std::max(m_from, m_to);
         const auto curve = effectiveCurve();
         if (curve && curve->overshoots()) {
-            constexpr int nSamples = 50;
-            for (int i = 1; i < nSamples; ++i) {
-                const qreal p = curve->evaluate(qreal(i) / nSamples);
+            for (int i = 1; i < kOvershootSamples; ++i) {
+                const qreal p = curve->evaluate(qreal(i) / kOvershootSamples);
                 const T sampled = Interpolate<T>::lerp(m_from, m_to, p);
                 lo = std::min(lo, sampled);
                 hi = std::max(hi, sampled);
