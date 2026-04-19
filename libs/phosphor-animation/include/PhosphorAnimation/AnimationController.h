@@ -32,6 +32,18 @@ namespace PhosphorAnimation {
  */
 enum class StartResult {
     Accepted, ///< Animation stored, `onAnimationStarted` fired.
+    /// Animation was accepted and `onAnimationReplaced` fired on the
+    /// displaced entry, but a re-entrant callback inside the replace
+    /// hook (`removeAnimation(handle)` / `clear()` / direct erase)
+    /// retired the new entry before `onAnimationStarted` could fire.
+    /// Callers doing started/terminated accounting must treat this as
+    /// both a replace event AND a silent retire — no started event
+    /// fires, no terminating event will fire (the entry is already
+    /// gone). Distinct from `Accepted` so that exact event-count
+    /// invariants remain checkable without inspecting hook ordering.
+    /// Rare; emitted only when a subclass hook mutates the controller
+    /// during `onAnimationReplaced`.
+    AcceptedThenRemoved,
     Disabled, ///< Controller `isEnabled()` returned false.
     NoClock, ///< `clockForHandle(handle)` resolved to null.
     HandleInvalid, ///< `isHandleValid(handle)` returned false.
@@ -315,7 +327,14 @@ public:
      */
     bool startAnimation(Handle handle, const QRectF& oldFrame, const QRectF& newFrame)
     {
-        return startAnimationWithResult(handle, oldFrame, newFrame) == StartResult::Accepted;
+        // Accept both success codes: Accepted is the normal path;
+        // AcceptedThenRemoved means the animation was installed but
+        // retired by a re-entrant replace-hook before onAnimationStarted
+        // could fire. Both represent "controller accepted the start
+        // request"; the distinction only matters to callers doing
+        // exact event-count accounting via `startAnimationWithResult`.
+        const StartResult r = startAnimationWithResult(handle, oldFrame, newFrame);
+        return r == StartResult::Accepted || r == StartResult::AcceptedThenRemoved;
     }
 
     /**
@@ -396,8 +415,16 @@ public:
             auto placed = m_animations.find(handle);
             if (placed != m_animations.end()) {
                 onAnimationStarted(handle, placed->second);
+                return StartResult::Accepted;
             }
-            return StartResult::Accepted;
+            // The replace hook retired the new entry before
+            // `onAnimationStarted` could fire. Report the distinct
+            // status so callers counting started-vs-terminated events
+            // can balance correctly — Accepted would over-count the
+            // start side; a silent-return masks a genuine state
+            // transition. See the StartResult::AcceptedThenRemoved doc
+            // for the contract.
+            return StartResult::AcceptedThenRemoved;
         }
 
         // unordered_map's operator[] requires default-constructible value
@@ -479,6 +506,19 @@ public:
         if (it == m_animations.end()) {
             return RetargetResult::UnknownHandle;
         }
+        // Snapshot the displaced segment's bounds BEFORE calling
+        // retarget(). AnimatedValue::retarget overwrites m_from with
+        // the post-advance m_current, so a degenerate retarget (new
+        // target ≈ current) would leave bounds() collapsed to a
+        // near-point rect around the retarget point — any pixels the
+        // displaced segment had painted between its ORIGINAL m_from
+        // (at t=0) and the retarget-time current would never be
+        // invalidated by the terminal onRepaintNeeded below, leaking
+        // ghost frames on compositors that rely solely on the reap
+        // notification for damage. Union with the post-retarget bounds
+        // so the full swept region is covered regardless.
+        const QMarginsF preservedPadding = expandedPadding(handle, it->second);
+        const QRectF preservedBounds = it->second.bounds().marginsAdded(preservedPadding);
         const bool accepted = it->second.retarget(newFrame, policy);
         if (accepted) {
             onAnimationRetargeted(handle, it->second);
@@ -500,7 +540,14 @@ public:
         // (identical) target rect.
         if (it->second.isComplete()) {
             const QMarginsF padding = expandedPadding(handle, it->second);
-            const QRectF bounds = it->second.bounds().marginsAdded(padding);
+            const QRectF postBounds = it->second.bounds().marginsAdded(padding);
+            // Union pre-retarget + post-retarget bounds so damage
+            // covers the FULL displaced path (old from → retarget
+            // point) plus the degenerate-target rect. Without the
+            // union, compositors that only react to the terminal
+            // onRepaintNeeded would leave ghost pixels along the
+            // pre-retarget segment.
+            const QRectF bounds = preservedBounds.isValid() ? preservedBounds.united(postBounds) : postBounds;
             AnimatedValue<QRectF> finished = std::move(it->second);
             m_animations.erase(it);
             onAnimationComplete(handle, finished);

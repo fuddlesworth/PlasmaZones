@@ -10,6 +10,8 @@
 #include <QLoggingCategory>
 #include <QThread>
 
+#include <chrono>
+
 namespace PlasmaZones {
 
 Q_DECLARE_LOGGING_CATEGORY(lcEffect)
@@ -36,6 +38,18 @@ CompositorClock::~CompositorClock() = default;
 std::chrono::nanoseconds CompositorClock::now() const
 {
     PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+    if (!m_wasBound) {
+        // Fallback clock: self-driven from std::chrono::steady_clock so
+        // it advances monotonically with wall time rather than with paint
+        // cadence. The per-output path (updatePresentTime-driven) cannot
+        // be reused here because N outputs call prePaintScreen N× per
+        // vsync — pushing presentTime into the fallback every call makes
+        // fallback-bound animations step N× per frame on N-output
+        // systems. Self-driven avoids the double-advance entirely and
+        // matches the epoch of the presentTime-backed path (KWin's
+        // presentTime is sourced from std::chrono::steady_clock).
+        return std::chrono::steady_clock::now().time_since_epoch();
+    }
     return m_latestPresentTime;
 }
 
@@ -91,6 +105,14 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
     // Same assertion is applied on now() / refreshRate() via the
     // shared macro above.
     PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+
+    if (!m_wasBound) {
+        // Fallback clock self-drives from steady_clock in now(); ignore
+        // per-output presentTime pushes. The effect still calls this
+        // unconditionally today, but the call is a no-op for the
+        // fallback so N-output paint cadence cannot double-advance it.
+        return;
+    }
 
     const auto asNs = std::chrono::duration_cast<std::chrono::nanoseconds>(presentTime);
     // Monotonicity latch — KWin's presentTime is normally monotonic

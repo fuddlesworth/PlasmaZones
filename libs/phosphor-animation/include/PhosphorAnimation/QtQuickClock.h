@@ -109,9 +109,17 @@ private:
     // rendered. Written from the render thread by the SignalAdapter;
     // may be read from the GUI thread (QML animation drivers that
     // don't honour the render-thread-only contract). Stored as
-    // atomic<int64_t> with relaxed ordering — we only need tearing
-    // safety, not happens-before.
+    // atomic<int64_t>; the writer uses release and the reader uses
+    // acquire so a cross-thread reader sees a well-published value
+    // rather than just a tear-free one.
     std::atomic<std::chrono::nanoseconds::rep> m_nowCache{0};
+    // Set the first time `beforeRendering` fires — the render loop
+    // has become responsible for advancing `m_nowCache`. Until then
+    // `now()` falls back to reading `steady_clock` directly so an
+    // animation bound to a never-shown `QQuickWindow` (test mode,
+    // hidden offscreen render loop) doesn't freeze at the prime
+    // timestamp with dt=0 on every advance.
+    std::atomic<bool> m_renderLoopActive{false};
     QPointer<QQuickWindow> m_window;
     std::unique_ptr<SignalAdapter> m_adapter;
 };

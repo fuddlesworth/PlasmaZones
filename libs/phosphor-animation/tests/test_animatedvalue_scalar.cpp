@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "TestClock.h"
+
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -22,47 +24,9 @@ using PhosphorAnimation::MotionSpec;
 using PhosphorAnimation::Profile;
 using PhosphorAnimation::RetargetPolicy;
 using PhosphorAnimation::Spring;
+using TestClock = PhosphorAnimation::Testing::TestClock;
 
 namespace {
-
-/// Consumer-controlled clock — test advances time in explicit steps.
-class TestClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return m_now;
-    }
-    qreal refreshRate() const override
-    {
-        return 60.0;
-    }
-    void requestFrame() override
-    {
-        ++m_requestFrameCalls;
-    }
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-
-    void advanceMs(qreal ms)
-    {
-        m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
-    }
-    int requestFrameCalls() const
-    {
-        return m_requestFrameCalls;
-    }
-    void resetRequestFrameCounter()
-    {
-        m_requestFrameCalls = 0;
-    }
-
-private:
-    std::chrono::nanoseconds m_now{0};
-    int m_requestFrameCalls = 0;
-};
 
 // Helper: build a MotionSpec<qreal> with sane defaults.
 MotionSpec<qreal> makeSpec(TestClock* clock, std::shared_ptr<const PhosphorAnimation::Curve> curve,
@@ -467,16 +431,20 @@ private Q_SLOTS:
 
     void testSafetyCapBreaksRunaway()
     {
-        // A pathological stateful curve that never converges would
-        // run forever without the 60 s safety cap.
+        // A pathological stateful curve that never converges would run
+        // forever without the safety cap. Source the cap from the
+        // public accessor so a future change to the constant flips the
+        // failure mode clearly ("safety cap moved") instead of
+        // obliquely ("spring failed to converge").
         TestClock clock;
         AnimatedValue<qreal> v;
         // Near-zero-damping spring — effectively undamped, oscillates
         // forever in analytical terms. The safety cap terminates it.
         v.start(0.0, 100.0, makeSpec(&clock, std::make_shared<Spring>(Spring(1.0, 0.0)), 500.0));
         v.advance();
-        // Jump 61 s in one step.
-        clock.advanceMs(61'000.0);
+        // Jump just past the cap in one step.
+        const qreal capMs = std::chrono::duration<qreal, std::milli>(AnimatedValue<qreal>::safetyCap()).count();
+        clock.advanceMs(capMs + 1'000.0);
         v.advance();
         QVERIFY(v.isComplete());
         QCOMPARE(v.value(), 100.0);

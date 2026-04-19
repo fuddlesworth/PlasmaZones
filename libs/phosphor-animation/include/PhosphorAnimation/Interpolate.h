@@ -443,15 +443,21 @@ inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qr
     // rigid-body smooth path by construction — the library simply
     // cannot produce a meaningful interpolation and the caller should
     // split the animation into separate segments (to → identity →
-    // reflected-to) if they need continuous motion. Component-wise
-    // lerp is the most predictable fallback (linear in each entry,
-    // matches what a naïve caller would write by hand).
+    // reflected-to) if they need continuous motion.
     const qreal detFrom = from.m11() * from.m22() - from.m12() * from.m21();
     const qreal detTo = to.m11() * to.m22() - to.m12() * to.m21();
     if (detFrom * detTo < 0.0) {
-        return QTransform(from.m11() + (to.m11() - from.m11()) * t, from.m12() + (to.m12() - from.m12()) * t,
-                          from.m21() + (to.m21() - from.m21()) * t, from.m22() + (to.m22() - from.m22()) * t,
-                          from.dx() + (to.dx() - from.dx()) * t, from.dy() + (to.dy() - from.dy()) * t);
+        // Component-wise lerp via the canonical scalar form — avoids
+        // duplicating the `a + (b - a) * t` pattern per matrix entry
+        // (any future numerically-stable lerp change in
+        // Interpolate<qreal>::lerp reaches every specialisation from
+        // this one call site).
+        const auto lerpScalar = [t](qreal a, qreal b) {
+            return Interpolate<qreal>::lerp(a, b, t);
+        };
+        return QTransform(lerpScalar(from.m11(), to.m11()), lerpScalar(from.m12(), to.m12()),
+                          lerpScalar(from.m21(), to.m21()), lerpScalar(from.m22(), to.m22()),
+                          lerpScalar(from.dx(), to.dx()), lerpScalar(from.dy(), to.dy()));
     }
 
     const DecomposedTransform df = decomposeTransform(from);

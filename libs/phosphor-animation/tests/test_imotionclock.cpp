@@ -17,6 +17,8 @@ namespace {
 /// In-test concrete clock. Consumer-controlled `now()` via `setNow`,
 /// counts `requestFrame` calls, mutable refresh rate. Exists to
 /// exercise the IMotionClock contract without pulling in KWin.
+/// Deliberately does NOT override `epochIdentity()` — the base-class
+/// default (nullptr) is part of the contract being tested.
 class MockClock final : public IMotionClock
 {
 public:
@@ -51,6 +53,54 @@ private:
     std::chrono::nanoseconds m_now{0};
     qreal m_refreshRate = 0.0;
     int m_requestFrameCalls = 0;
+};
+
+/// Matches the in-tree family (CompositorClock, QtQuickClock): overrides
+/// `epochIdentity()` to return `steadyClockEpoch()`. Used by rebind-
+/// compatibility tests.
+class SteadyMockClock final : public IMotionClock
+{
+public:
+    std::chrono::nanoseconds now() const override
+    {
+        return {};
+    }
+    qreal refreshRate() const override
+    {
+        return 0.0;
+    }
+    void requestFrame() override
+    {
+    }
+    const void* epochIdentity() const override
+    {
+        return IMotionClock::steadyClockEpoch();
+    }
+};
+
+/// Third-party pattern: non-steady monotonic source. Returns a private
+/// sentinel so rebase attempts against a steady-backed clock refuse
+/// rather than silently corrupt progress. Used by the mixed-sentinel
+/// negative test.
+class PrivateEpochMockClock final : public IMotionClock
+{
+public:
+    std::chrono::nanoseconds now() const override
+    {
+        return {};
+    }
+    qreal refreshRate() const override
+    {
+        return 0.0;
+    }
+    void requestFrame() override
+    {
+    }
+    const void* epochIdentity() const override
+    {
+        static const char tag{};
+        return &tag;
+    }
 };
 
 } // namespace
@@ -216,6 +266,82 @@ private Q_SLOTS:
         b.requestFrame();
         QCOMPARE(a.requestFrameCalls(), 2);
         QCOMPARE(b.requestFrameCalls(), 1);
+    }
+
+    // ─── Epoch identity + rebind compatibility contract ───
+
+    void testDefaultEpochIdentityIsNullptr()
+    {
+        // The base class default is nullptr — "incompatible with rebind
+        // onto any other clock" per the header contract. Concrete
+        // implementations that want rebind support must override.
+        MockClock c; // does not override epochIdentity
+        QCOMPARE(c.epochIdentity(), static_cast<const void*>(nullptr));
+    }
+
+    void testSteadyClockEpochIsStable()
+    {
+        // The shared sentinel is the pointer identity by which
+        // epochCompatible decides rebase-safety; its address must be
+        // stable across every call and every caller (single process-
+        // global static under the hood).
+        const void* a = IMotionClock::steadyClockEpoch();
+        const void* b = IMotionClock::steadyClockEpoch();
+        QVERIFY(a != nullptr);
+        QCOMPARE(a, b);
+    }
+
+    void testEpochCompatibleRejectsNull()
+    {
+        // Null on either side refuses the rebind — two null-identity
+        // clocks opt out of the protocol even if they'd technically be
+        // compatible under a type-equality check. The null path is
+        // the "declined to participate" signal.
+        MockClock a; // default null identity
+        MockClock b; // default null identity
+        QVERIFY(!IMotionClock::epochCompatible(&a, &b));
+        QVERIFY(!IMotionClock::epochCompatible(nullptr, &a));
+        QVERIFY(!IMotionClock::epochCompatible(&a, nullptr));
+        QVERIFY(!IMotionClock::epochCompatible(nullptr, nullptr));
+    }
+
+    void testEpochCompatibleAcceptsMatchingSteadySentinels()
+    {
+        // Two clocks both reporting steadyClockEpoch() are rebind-safe.
+        // This is the in-tree CompositorClock ↔ QtQuickClock case.
+        SteadyMockClock a;
+        SteadyMockClock b;
+        QVERIFY(IMotionClock::epochCompatible(&a, &b));
+        QVERIFY(IMotionClock::epochCompatible(&b, &a));
+    }
+
+    void testEpochCompatibleRefusesMixedSentinels()
+    {
+        // A clock with a private (non-steady) sentinel must not rebase
+        // against a steadyClockEpoch-backed clock even when both are
+        // monotonic — the underlying tick sources are independent.
+        SteadyMockClock steady;
+        PrivateEpochMockClock priv;
+        QVERIFY(!IMotionClock::epochCompatible(&steady, &priv));
+        QVERIFY(!IMotionClock::epochCompatible(&priv, &steady));
+    }
+
+    void testEpochCompatibleIsReflexiveForNonNullIdentity()
+    {
+        // A non-null identity is compatible with itself — a degenerate
+        // single-clock rebind is a no-op, not a refusal.
+        SteadyMockClock a;
+        QVERIFY(IMotionClock::epochCompatible(&a, &a));
+    }
+
+    void testNullIdentityClockIsNotCompatibleWithItself()
+    {
+        // Deliberate opt-out: a clock with null identity is incompatible
+        // with every other clock including itself. Documented in the
+        // epochCompatible() doc — the protocol requires an explicit
+        // non-null sentinel to participate.
+        MockClock a;
+        QVERIFY(!IMotionClock::epochCompatible(&a, &a));
     }
 };
 

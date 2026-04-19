@@ -86,7 +86,12 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
                 return;
             }
             const auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
-            m_owner->m_nowCache.store(ns, std::memory_order_relaxed);
+            m_owner->m_nowCache.store(ns, std::memory_order_release);
+            // Latch once on first fire — `now()` flips from the
+            // steady_clock freshness fallback to reading the cache
+            // directly, so every consumer of this clock sees the same
+            // vsync-aligned reading for the rest of the frame.
+            m_owner->m_renderLoopActive.store(true, std::memory_order_release);
         },
         Qt::DirectConnection);
 }
@@ -120,14 +125,32 @@ QtQuickClock::QtQuickClock(QQuickWindow* window)
     // AnimatedValue bound to a freshly-constructed clock latches
     // m_startTime = 0ns; the NEXT advance (post-beforeRendering) would
     // see elapsed = seconds-since-boot and skip directly to completion.
-    m_nowCache.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_relaxed);
+    //
+    // Release store so a render-thread reader (the slot itself is on
+    // the render thread; consumers that share that thread don't need
+    // the fence, but cross-thread GUI-side consumers do) observes the
+    // prime without relying on implementation-defined publication of
+    // `std::atomic` relaxed stores from the constructing thread.
+    m_nowCache.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_release);
 }
 
 QtQuickClock::~QtQuickClock() = default;
 
 std::chrono::nanoseconds QtQuickClock::now() const
 {
-    return std::chrono::nanoseconds{m_nowCache.load(std::memory_order_relaxed)};
+    // Freshness fallback. A `QQuickWindow` that hasn't been shown yet
+    // never fires `beforeRendering`, so the cache holds the
+    // construction-time prime forever — an AnimatedValue advancing
+    // against this clock would see constant `now()` and `dt == 0` on
+    // every tick (latched startTime, no progression). Until the render
+    // loop fires for the first time, read `steady_clock` directly; once
+    // `m_renderLoopActive` is set, trust the cache so every
+    // AnimatedValue advanced in the same frame sees an identical
+    // vsync-aligned reading (the whole point of caching).
+    if (m_renderLoopActive.load(std::memory_order_acquire)) {
+        return std::chrono::nanoseconds{m_nowCache.load(std::memory_order_acquire)};
+    }
+    return std::chrono::steady_clock::now().time_since_epoch();
 }
 
 qreal QtQuickClock::refreshRate() const

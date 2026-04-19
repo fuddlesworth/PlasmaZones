@@ -139,9 +139,11 @@ public:
      *
      * `AnimatedValue<T>::rebindClock` rebases `m_startTime` by
      * `newClock->now() - oldClock->now()`. That arithmetic is only
-     * meaningful when both clocks share a monotonic time base; across
-     * independent epochs (wall-clock, domain-specific counters), the
-     * rebase produces a meaningless offset and corrupts progress.
+     * meaningful when both clocks are rooted in the **same physical
+     * time source** — not merely "both monotonic". Two clocks that
+     * independently read distinct steady sources (even if both are
+     * steady by contract) can drift arbitrarily; the delta between
+     * their `now()` readings at the same wall instant is unbounded.
      *
      * Two clocks with the same non-null `epochIdentity()` are declared
      * rebind-compatible. `nullptr` (the default) means "incompatible
@@ -149,13 +151,25 @@ public:
      * refuses the migration and `AnimationController::advanceAnimations`
      * skips the per-tick rebind, keeping the captured clock in place.
      *
-     * Concrete steady_clock-backed implementations return
-     * `steadyClockEpoch()` — the shared sentinel defined by this
-     * interface. Third-party clocks backed by a different monotonic
-     * source must define their own sentinel (a `static const char` at
-     * namespace or class scope returning `&sentinel`); consumers
-     * routing between clocks of different epochs will then correctly
-     * observe the mismatch and refuse to migrate.
+     * ### Choosing a sentinel
+     *
+     * Implementations rooted in `std::chrono::steady_clock` — and
+     * **only** `std::chrono::steady_clock`, not `boost::chrono::
+     * steady_clock`, not `std::chrono::high_resolution_clock` (which
+     * may alias steady_clock on some platforms but is not guaranteed
+     * to), not a custom monotonic counter — return `steadyClockEpoch()`.
+     * The guarantee rests on the libc++ / libstdc++ process-global
+     * singleton nature of `std::chrono::steady_clock::now()`: every
+     * in-tree implementation reads the same tick source, so rebase
+     * deltas between them are exactly zero at any shared wall instant.
+     *
+     * Every other monotonic source — including third-party clocks
+     * whose headers claim "steady" semantics but derive from a
+     * different backend — must define its own private sentinel
+     * (`static const char tag{}; return &tag;` at namespace or class
+     * scope). Mixing `steadyClockEpoch()` with a non-`std::chrono::
+     * steady_clock` source under the assumption "both are steady, so
+     * they're compatible" corrupts progress on rebind.
      */
     virtual const void* epochIdentity() const
     {
@@ -165,12 +179,26 @@ public:
     /**
      * @brief Shared sentinel for `std::chrono::steady_clock`-backed clocks.
      *
-     * Every in-tree `IMotionClock` implementation
-     * (`PlasmaZones::CompositorClock` wrapping KWin's presentTime,
-     * `PhosphorAnimation::QtQuickClock` wrapping `std::chrono::
-     * steady_clock::now()`) returns this pointer from `epochIdentity()`.
+     * Exclusively for implementations that read their timestamps from
+     * `std::chrono::steady_clock::now()` (directly or via a source KWin
+     * documents as `steady_clock`-backed, e.g. presentTime on current
+     * KDE). The shared sentinel is the pointer identity by which the
+     * `epochCompatible()` predicate decides two clocks are rebase-safe.
+     *
      * The address identity is stable across the process lifetime; the
      * pointee is an unused static byte.
+     *
+     * Every in-tree `IMotionClock` implementation returns this pointer
+     * from `epochIdentity()`:
+     *
+     * - `PlasmaZones::CompositorClock` — KWin's presentTime parameter
+     *   is sourced from `std::chrono::steady_clock`.
+     * - `PhosphorAnimation::QtQuickClock` — wraps
+     *   `std::chrono::steady_clock::now()` directly.
+     *
+     * Do NOT return this sentinel from a clock backed by a different
+     * time source, even another monotonic one. See `epochIdentity()`
+     * for the rationale and how to define a private sentinel instead.
      */
     static const void* steadyClockEpoch();
 
@@ -184,16 +212,17 @@ public:
      * advanceAnimations`, future consumers routing migrations) reads
      * the same predicate and cannot drift.
      *
-     * A null `epochIdentity()` is the default for third-party clocks
-     * backed by a non-steady source (wall-clock, domain-specific
-     * counters) — the rebase arithmetic is meaningless across such
-     * clocks and must be refused. Note that a clock with null
-     * `epochIdentity()` is incompatible with **every** other clock,
-     * including itself; this is deliberate opt-out semantics rather
-     * than a bug. Implementations that want to support rebind must
-     * override `epochIdentity()` to return a stable non-null pointer
-     * — typically `steadyClockEpoch()` for the in-tree family or a
-     * private sentinel for a custom time source.
+     * A null `epochIdentity()` is the default for clocks without a
+     * declared rebind-compatible time source — the rebase arithmetic
+     * is meaningless unless both endpoints are rooted in the same
+     * physical clock, and refusing the migration is the safe default.
+     * Note that a clock with null `epochIdentity()` is incompatible
+     * with **every** other clock, including itself; this is deliberate
+     * opt-out semantics rather than a bug. Implementations that want
+     * to support rebind must override `epochIdentity()` to return a
+     * stable non-null pointer — `steadyClockEpoch()` for clocks rooted
+     * specifically in `std::chrono::steady_clock`, or a private
+     * sentinel for any other time source.
      */
     static bool epochCompatible(const IMotionClock* a, const IMotionClock* b)
     {

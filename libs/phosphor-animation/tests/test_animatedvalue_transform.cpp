@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "TestClock.h"
+
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -20,35 +22,9 @@ using PhosphorAnimation::AnimatedValue;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::IMotionClock;
 using PhosphorAnimation::MotionSpec;
+using TestClock = PhosphorAnimation::Testing::TestClock;
 
 namespace {
-
-class TestClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return m_now;
-    }
-    qreal refreshRate() const override
-    {
-        return 60.0;
-    }
-    void requestFrame() override
-    {
-    }
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-    void advanceMs(qreal ms)
-    {
-        m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
-    }
-
-private:
-    std::chrono::nanoseconds m_now{0};
-};
 
 MotionSpec<QTransform> makeSpec(TestClock* clock, qreal durationMs = 100.0)
 {
@@ -151,15 +127,17 @@ private Q_SLOTS:
         // The component-wise midpoint of identity and rotate(90°) has
         // the 2x2 matrix [[0.5, -0.5], [0.5, 0.5]] — a rotation by 45°
         // scaled by √2/2. The sum of diagonals is 1.0. A rotation by
-        // exactly 45° has diagonals summing to ≈1.414. Asserting the
-        // diagonal sum > 1.1 is a loose but reliable distinguishing
-        // check: component-wise would fail, decomposed passes.
+        // exactly 45° has diagonals summing to 2·cos(45°) ≈ 1.4142.
+        // Threshold of 1.4 distinguishes polar-decomposed (passes) from
+        // component-wise (fails) AND from a near-miss implementation
+        // (e.g. returning 0.55,0.55 = sum 1.1) that a looser 1.1 gate
+        // would silently accept.
         TestClock clock;
         AnimatedValue<QTransform> v;
         v.start(QTransform(), rotateTransform(90.0), makeSpec(&clock));
 
         const QTransform mid = sampleAtProgress(v, clock, 0.5);
-        QVERIFY(mid.m11() + mid.m22() > 1.1);
+        QVERIFY(mid.m11() + mid.m22() > 1.4);
     }
 
     // ─── Translation interpolates linearly ───

@@ -116,7 +116,8 @@ void WindowAnimator::onAnimationStarted(KWin::EffectWindow* window,
                       << "duration:" << anim.spec().profile.effectiveDuration();
 }
 
-void WindowAnimator::onAnimationComplete(KWin::EffectWindow*, const PhosphorAnimation::AnimatedValue<QRectF>&)
+void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
+                                         const PhosphorAnimation::AnimatedValue<QRectF>& anim)
 {
     // The controller fires onRepaintNeeded(bounds) immediately after
     // this hook returns, and those bounds already cover the full
@@ -126,7 +127,8 @@ void WindowAnimator::onAnimationComplete(KWin::EffectWindow*, const PhosphorAnim
     // just a log anchor. Kept as a hook override so future adapters
     // can splice in completion-time work without touching the
     // controller.
-    qCDebug(lcEffect) << "Window snap animation complete";
+    qCDebug(lcEffect) << "Window snap animation complete:" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
 }
 
 void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) const

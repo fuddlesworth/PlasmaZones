@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "TestClock.h"
+
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/AnimationController.h>
 #include <PhosphorAnimation/Easing.h>
@@ -27,38 +29,9 @@ using PhosphorAnimation::RetargetPolicy;
 using PhosphorAnimation::RetargetResult;
 using PhosphorAnimation::Spring;
 using PhosphorAnimation::StartResult;
+using TestClock = PhosphorAnimation::Testing::TestClock;
 
 namespace {
-
-class TestClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return m_now;
-    }
-    qreal refreshRate() const override
-    {
-        return 60.0;
-    }
-    void requestFrame() override
-    {
-    }
-    /// Declare steady-clock-equivalent epoch so rebind tests exercise
-    /// the compatible-migration path. The manually-advanced counter
-    /// satisfies steady_clock's monotonic contract by construction.
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-    void advanceMs(qreal ms)
-    {
-        m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
-    }
-
-private:
-    std::chrono::nanoseconds m_now{0};
-};
 
 /// Mock controller using a plain int as the handle type.
 class MockController : public AnimationController<int>
@@ -77,6 +50,7 @@ public:
 
     std::function<void(int, MockController&)> onStartedCallback;
     std::function<void(int, MockController&)> onCompleteCallback;
+    std::function<void(int, MockController&)> onReplacedCallback;
 
 protected:
     void onAnimationStarted(int handle, const AnimatedValue<QRectF>&) override
@@ -94,6 +68,9 @@ protected:
     void onAnimationReplaced(int handle, const AnimatedValue<QRectF>&) override
     {
         replacedHandlesOrdered.append(handle);
+        if (onReplacedCallback) {
+            onReplacedCallback(handle, *this);
+        }
     }
     void onAnimationComplete(int handle, const AnimatedValue<QRectF>&) override
     {
@@ -1014,18 +991,55 @@ private Q_SLOTS:
         QVERIFY(c.reapedHandlesOrdered.isEmpty());
     }
 
-    // ─── retargetWithResult::InternalError distinguishes from UnknownHandle ───
+    // ─── Epoch gate fires before first advance (C4 regression) ───
 
-    void testRetargetWithResultInternalErrorEnumExists()
+    /// The epoch-compatibility gate in `rebindClock` must run whenever
+    /// the current clock exists — not only after `m_startTime` has
+    /// latched. A rebind between `start()` and the first `advance()`
+    /// previously bypassed the gate and silently installed an
+    /// incompatible clock, letting the next advance latch startTime
+    /// against the foreign epoch and silently corrupt progress on any
+    /// subsequent rebind back to a compatible clock.
+    void testRebindClockGatesEpochBeforeFirstAdvance()
     {
-        // Compile-time witness that InternalError is a distinct enum
-        // value — callers can switch on it. Cannot easily trigger the
-        // pathological path in isolation (would require clobbering
-        // m_spec.clock on a live AnimatedValue which the public API
-        // forbids); exercised only via the type system.
-        RetargetResult r = RetargetResult::InternalError;
-        QVERIFY(r != RetargetResult::UnknownHandle);
-        QVERIFY(r != RetargetResult::Accepted);
+        struct NullEpochClock final : public IMotionClock
+        {
+            std::chrono::nanoseconds now() const override
+            {
+                return {};
+            }
+            qreal refreshRate() const override
+            {
+                return 60.0;
+            }
+            void requestFrame() override
+            {
+            }
+            // default epochIdentity() == nullptr → refuses rebind
+        };
+
+        TestClock steadyClock;
+        NullEpochClock alienClock;
+
+        AnimatedValue<qreal> v;
+        PhosphorAnimation::MotionSpec<qreal> spec;
+        auto linear = std::make_shared<Easing>();
+        linear->x1 = 0.0;
+        linear->y1 = 0.0;
+        linear->x2 = 1.0;
+        linear->y2 = 1.0;
+        spec.profile.curve = linear;
+        spec.profile.duration = 1000.0;
+        spec.clock = &steadyClock;
+        QVERIFY(v.start(0.0, 100.0, spec));
+        QVERIFY(v.isAnimating());
+        // Deliberately do NOT call advance() — m_startTime stays unset.
+
+        // Rebind to the incompatible clock. Without the C4 fix this
+        // would silently install alienClock as m_spec.clock; with the
+        // fix, the gate refuses and the original clock stays captured.
+        v.rebindClock(&alienClock);
+        QCOMPARE(v.spec().clock, static_cast<IMotionClock*>(&steadyClock));
     }
 
     // ─── Mid-animation clock re-routing via advanceAnimations ───
@@ -1132,17 +1146,28 @@ private Q_SLOTS:
         QVERIFY(midX > 0.0);
         QVERIFY(midX < 1000.0);
 
-        // Rebind to clockB — its `now()` sits ~550 ms behind clockA's.
-        // Without the timestamp rebase, the next advance would compute
-        // elapsed = 0 - 550 = -550 ms and sample evaluate(-2.75).
+        // Rebind to clockB — its `now()` sits ~550 ms behind clockA's
+        // (clockA latched m_startTime at 500 ms, then advanced 50 ms
+        // to 550 ms; clockB is at 0). Without the timestamp rebase,
+        // the next advance would compute elapsed = 0 - 550 = -550 ms
+        // and sample evaluate(-2.75).
         v.rebindClock(&clockB);
 
         // First advance on the new clock: no elapsed change, no value
         // change. State is preserved.
+        //
+        // Tolerance of 0.5 px is load-bearing: the pre-rebind value
+        // reflects 50 ms of elapsed progression on a 200 ms animation
+        // across 1000 px of travel; a 5 ms first-tick dt (1 % of the
+        // segment's total budget) would move the value by about 25 px.
+        // A 5 px upper bound would have accepted that regression; 0.5
+        // px catches a first-tick dt larger than ~0.1 ms — the range
+        // where "rebase did not preserve elapsed" becomes observable.
         v.advance();
         const qreal afterRebindX = v.value().x();
-        QVERIFY2(afterRebindX >= midX - 1.0, "value must not regress across rebind");
-        QVERIFY2(qAbs(afterRebindX - midX) < 5.0, "first tick after rebind must land within ~dt=0 of pre-rebind value");
+        QVERIFY2(afterRebindX >= midX - 0.1, "value must not regress across rebind");
+        QVERIFY2(qAbs(afterRebindX - midX) < 0.5,
+                 "first tick after rebind must land within dt≈0 of pre-rebind value (rebase preserved elapsed)");
 
         // Continue progressing on clockB — value must monotonically
         // advance past midX as elapsed grows.
@@ -1231,54 +1256,43 @@ private Q_SLOTS:
         QCOMPARE(afterDisplace->to(), QRectF(500, 0, 100, 100));
     }
 
-    // ─── Regression: H2 NoMotion balances event count on displace ───
+    // ─── Regression: C3 re-entrant remove during onAnimationReplaced ───
 
-    /// `startAnimation` returning `NoMotion` must still fire
-    /// `onAnimationReplaced` for a pre-existing in-flight animation on
-    /// the same handle — otherwise the "started" event for the old
-    /// animation is stranded without a matching terminating event, and
-    /// any consumer counting started-vs-terminated sees a drift.
-    ///
-    /// Exercises the path where `AnimatedValue::start` rejects the new
-    /// motion (degenerate from == to). SnapPolicy normally filters this
-    /// before reaching the controller, but the controller's invariant
-    /// must hold regardless of who calls it.
-    void testStartNoMotionDisplacesExistingAnimation()
+    /// When `onAnimationReplaced` removes the newly-installed entry
+    /// before `onAnimationStarted` can fire, the start call returns
+    /// `StartResult::AcceptedThenRemoved` (distinct from `Accepted`).
+    /// Callers doing started-vs-terminated event accounting see the
+    /// replace event plus the distinct status, and can balance their
+    /// counts without inspecting hook ordering.
+    void testStartAcceptedThenRemovedOnReentrantReplaceRemoval()
     {
         TestClock clock;
         MockController c;
         configureLinearEasing(c, clock, 100.0);
 
-        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
-        QVERIFY(c.hasAnimation(1));
+        // Seed an existing animation for handle 1 so the next start
+        // triggers the replace branch.
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(200, 0, 100, 100)));
+        const int startedBefore = c.startedHandlesOrdered.size();
 
-        // Route the next call through the enum API to observe NoMotion
-        // explicitly. The `startAnimationWithResult` uses AnimatedValue::
-        // start's degenerate path via SnapPolicy bypass — force it by
-        // passing from == to. (SnapPolicy filters zero-dimension frames
-        // but not identical non-degenerate rects on a zero-minDistance
-        // profile.)
-        Profile zeroMin = c.profile();
-        zeroMin.minDistance = 0;
-        c.setProfile(zeroMin);
+        // Wire the replace hook to remove the freshly-installed entry
+        // out from under the controller. The controller then finds no
+        // entry to fire onAnimationStarted against; it must report the
+        // transition via AcceptedThenRemoved.
+        bool replaceFired = false;
+        c.onReplacedCallback = [&](int handle, MockController& self) {
+            QCOMPARE(handle, 1);
+            replaceFired = true;
+            self.removeAnimation(handle);
+        };
 
-        const QRectF identical(10, 10, 100, 100);
-        const StartResult result = c.startAnimationWithResult(1, identical, identical);
-        // SnapPolicy rejects identical frames before AnimatedValue::start
-        // is reached, so the actual observed result is PolicyRejected.
-        // Either way, the event-count invariant is the same: an
-        // in-flight animation on this handle must receive a terminating
-        // event (replaced OR the existing animation remains untouched).
-        // Verify the current post-condition contract: PolicyRejected
-        // leaves the existing animation intact (so no new replacement
-        // event fires); NoMotion would displace via the H2 fix.
-        if (result == StartResult::NoMotion) {
-            QVERIFY(!c.hasAnimation(1));
-            QVERIFY(c.replacedHandlesOrdered.contains(1));
-        } else {
-            QCOMPARE(result, StartResult::PolicyRejected);
-            QVERIFY(c.hasAnimation(1));
-        }
+        const StartResult r = c.startAnimationWithResult(1, QRectF(0, 0, 100, 100), QRectF(400, 0, 100, 100));
+        QCOMPARE(r, StartResult::AcceptedThenRemoved);
+        QVERIFY(replaceFired);
+        QVERIFY(!c.hasAnimation(1));
+        // Replace fired, started did not.
+        QVERIFY(c.replacedHandlesOrdered.contains(1));
+        QCOMPARE(c.startedHandlesOrdered.size(), startedBefore);
     }
 
     // ─── Regression: H1 rebindClock refuses across incompatible epochs ───

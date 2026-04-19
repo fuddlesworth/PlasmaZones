@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "TestClock.h"
+
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -19,35 +21,19 @@ using PhosphorAnimation::ColorSpace;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::IMotionClock;
 using PhosphorAnimation::MotionSpec;
+using TestClock = PhosphorAnimation::Testing::TestClock;
+
+// Detection concepts for the negative type-system assertions in
+// `testNoGeometricBoundsForColor`. Named concepts evaluate in an
+// unambiguous constraint-checking context (unlike ad-hoc `requires`
+// expressions inline at the static_assert site, which can trigger
+// GCC's eager instantiation of the constrained member).
+template<typename T>
+concept HasBounds = requires(const T& v) { v.bounds(); };
+template<typename T>
+concept HasSweptRange = requires(const T& v) { v.sweptRange(); };
 
 namespace {
-
-class TestClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return m_now;
-    }
-    qreal refreshRate() const override
-    {
-        return 60.0;
-    }
-    void requestFrame() override
-    {
-    }
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-    void advanceMs(qreal ms)
-    {
-        m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
-    }
-
-private:
-    std::chrono::nanoseconds m_now{0};
-};
 
 template<ColorSpace Space = ColorSpace::Linear>
 MotionSpec<QColor> makeSpec(TestClock* clock, qreal durationMs = 100.0)
@@ -128,10 +114,20 @@ private Q_SLOTS:
         // The two paths produce numerically distinct midpoints —
         // linear-space red+blue midpoint is dark purple (sqrt gamma
         // mixes), OkLab midpoint is a perceptually-central magenta.
+        //
+        // A weak "sum of channel deltas > 0.02" gate (≈5 out of 255 total)
+        // passes by float-rounding even when the OkLab path accidentally
+        // degrades to linear. Require at least one CHANNEL to diverge by
+        // at least 0.1 (26/255) — that's far outside rounding noise and
+        // matches the actual perceptual gap between the two interpolations
+        // for red→blue at t=0.5.
         const qreal dR = qAbs(midLinear.redF() - midOkLab.redF());
         const qreal dG = qAbs(midLinear.greenF() - midOkLab.greenF());
         const qreal dB = qAbs(midLinear.blueF() - midOkLab.blueF());
-        QVERIFY((dR + dG + dB) > 0.02); // measurably different
+        const qreal maxChannelDelta = qMax(dR, qMax(dG, dB));
+        QVERIFY2(maxChannelDelta > 0.1,
+                 "OkLab midpoint must diverge from linear midpoint by at least one channel ≥ 0.1; "
+                 "a smaller gap suggests the OkLab path degraded to linear RGB interpolation");
     }
 
     // ─── Endpoints round-trip exactly ───
@@ -197,15 +193,20 @@ private Q_SLOTS:
 
     void testNoGeometricBoundsForColor()
     {
-        // Compile-time: AnimatedValue<QColor>::bounds() does not exist
-        // (the concept guard excludes QColor). `sweptRange()` is
-        // similarly unavailable (QColor is not an arithmetic type).
-        // This is a negative test — if either method becomes callable,
-        // the test file stops compiling. Here we just confirm the
-        // types compile without either being present.
-        AnimatedValue<QColor> v;
-        Q_UNUSED(v)
-        QVERIFY(true);
+        // Compile-time negative test: AnimatedValue<QColor>::bounds()
+        // must not exist (the concept guard excludes QColor) and
+        // `sweptRange()` must not exist (QColor is not arithmetic).
+        // Expressed via named concepts evaluated in unambiguous
+        // constraint-checking context — a regression that makes
+        // either method callable on QColor fails the build at the
+        // static_assert, not just the compile of a body that happened
+        // to invoke the method. The previous `QVERIFY(true)` pattern
+        // passed whether or not the methods existed.
+        static_assert(!HasBounds<AnimatedValue<QColor>>, "bounds() must not be callable on AnimatedValue<QColor>");
+        static_assert(!HasSweptRange<AnimatedValue<QColor>>,
+                      "sweptRange() must not be callable on AnimatedValue<QColor>");
+        static_assert(!HasBounds<AnimatedValue<QColor, ColorSpace::OkLab>>,
+                      "bounds() must not be callable on AnimatedValue<QColor, OkLab>");
     }
 };
 

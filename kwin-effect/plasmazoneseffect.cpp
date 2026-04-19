@@ -3800,9 +3800,13 @@ void PlasmaZonesEffect::onScreenRemoved(KWin::LogicalOutput* output)
     // m_animations and filters on spec().clock pointer equality.
     auto it = m_motionClocksByOutput.find(output);
     if (it != m_motionClocksByOutput.end()) {
-        if (m_windowAnimator) {
-            m_windowAnimator->reapAnimationsForClock(it->second.get());
-        }
+        // m_windowAnimator is a unique_ptr initialized in the ctor and
+        // never reset except during ~PlasmaZonesEffect; any screenRemoved
+        // signal posted after our destruction is auto-disconnected by
+        // QObject's teardown, so a nullptr guard here would be dead
+        // code rather than defensive. Assert the invariant instead.
+        Q_ASSERT(m_windowAnimator);
+        m_windowAnimator->reapAnimationsForClock(it->second.get());
         m_motionClocksByOutput.erase(it);
     }
 }
@@ -3815,18 +3819,16 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     // (correct: they tick when their own output paints, not when any
     // output paints).
     //
-    // The fallback clock is ALSO updated every tick — unconditionally.
-    // WindowAnimator::clockForHandle routes animations to the fallback
-    // whenever `window->screen()` is null (XWayland bootstrap, mid-
-    // migration) or the resolver returns nullptr (unregistered output).
-    // Any such animation would otherwise freeze with `now()` stuck at
-    // its last-observed value. Updating the fallback on every
-    // prePaintScreen keeps it moving monotonically in lockstep with
-    // whichever output is currently painting — the animation gets dt
-    // from whichever output happens to tick next, which for fallback-
-    // bound animations is the best we can do without a dedicated
-    // driver.
-    m_motionClockFallback->updatePresentTime(presentTime);
+    // The fallback clock is intentionally NOT fed per-output presentTime
+    // here. It self-drives from std::chrono::steady_clock — on an
+    // N-output desktop, prePaintScreen fires N× per vsync, and pushing
+    // presentTime into the fallback every call would step fallback-bound
+    // animations N× per frame. Fallback's now() reads steady_clock
+    // directly so it advances once per wall-clock moment regardless of
+    // how many outputs painted. See CompositorClock::now()/updatePresentTime
+    // for the fallback branch; epoch identity is shared (both rooted at
+    // steady_clock) so rebinds between per-output and fallback remain
+    // compatible.
     if (data.screen) {
         auto it = m_motionClocksByOutput.find(data.screen);
         if (it != m_motionClocksByOutput.end()) {

@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "TestClock.h"
+
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
@@ -23,36 +25,9 @@ using PhosphorAnimation::IMotionClock;
 using PhosphorAnimation::MotionSpec;
 using PhosphorAnimation::RetargetPolicy;
 using PhosphorAnimation::Spring;
+using TestClock = PhosphorAnimation::Testing::TestClock;
 
 namespace {
-
-class TestClock final : public IMotionClock
-{
-public:
-    std::chrono::nanoseconds now() const override
-    {
-        return m_now;
-    }
-    qreal refreshRate() const override
-    {
-        return 60.0;
-    }
-    void requestFrame() override
-    {
-    }
-    const void* epochIdentity() const override
-    {
-        return IMotionClock::steadyClockEpoch();
-    }
-
-    void advanceMs(qreal ms)
-    {
-        m_now += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::duration<qreal, std::milli>(ms));
-    }
-
-private:
-    std::chrono::nanoseconds m_now{0};
-};
 
 template<typename T>
 MotionSpec<T> makeSpec(TestClock* clock, std::shared_ptr<const PhosphorAnimation::Curve> curve,

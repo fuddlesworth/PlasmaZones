@@ -406,7 +406,19 @@ public:
         // captured clock in place. The controller's per-tick call
         // path already guards this as well; this check is the
         // belt-and-suspenders for direct callers.
-        if (m_startTime && m_spec.clock) {
+        //
+        // Gate runs ANY time we have a current clock to compare against
+        // — not only when m_startTime is latched. A rebind between
+        // start() and the first advance() (i.e. isAnimating == true
+        // but m_startTime unset) would otherwise silently install an
+        // incompatible clock whose epoch identity then latches
+        // permanently at the next advance; a subsequent rebind back
+        // to the original clock would then rebase across incompatible
+        // epochs without a defensible gate (the stored-current clock
+        // by then IS the incompatible one). Checking before the
+        // rebase-ability check means the captured epoch is always a
+        // clock the instance deliberately accepted.
+        if (m_spec.clock) {
             if (!IMotionClock::epochCompatible(m_spec.clock, newClock)) {
                 if (!m_loggedEpochMismatch) {
                     qCWarning(lcAnimatedValue)
@@ -417,19 +429,25 @@ public:
                 }
                 return;
             }
-            // Rebase latched timestamps by the delta between the two
-            // clocks' current readings so `elapsed` and `dt` survive
-            // the swap unchanged. Without this, a new clock whose
-            // last-latched `now()` sits behind `m_startTime` produces
-            // a negative elapsed on the next stateless advance and
-            // the curve samples at t < 0.
-            const auto oldNow = m_spec.clock->now();
-            const auto newNow = newClock->now();
-            const auto delta = newNow - oldNow;
-            *m_startTime += delta;
-            if (m_lastTickTime) {
-                *m_lastTickTime += delta;
+            if (m_startTime) {
+                // Rebase latched timestamps by the delta between the
+                // two clocks' current readings so `elapsed` and `dt`
+                // survive the swap unchanged. Without this, a new
+                // clock whose last-latched `now()` sits behind
+                // `m_startTime` produces a negative elapsed on the
+                // next stateless advance and the curve samples at t < 0.
+                const auto oldNow = m_spec.clock->now();
+                const auto newNow = newClock->now();
+                const auto delta = newNow - oldNow;
+                *m_startTime += delta;
+                if (m_lastTickTime) {
+                    *m_lastTickTime += delta;
+                }
             }
+            // If m_startTime is unset (rebind between start() and
+            // first advance), nothing to rebase — the first advance
+            // on the new clock will latch startTime against newClock's
+            // `now()` directly.
         }
         m_spec.clock = newClock;
         if (m_isAnimating) {
@@ -778,8 +796,14 @@ public:
     QRectF boundsAt(QPointF anchor) const
         requires detail::SizeGeometric<T>
     {
-        const auto [loSize, hiSize] = sweptSizeImpl();
-        return QRectF(anchor, QSizeF(hiSize.width(), hiSize.height()));
+        // Damage envelope anchored at @p anchor is the MAX dimension
+        // observed over the swept path — a rect smaller than `hiSize`
+        // would be contained within the damage rect that `hiSize`
+        // produces. `sweptSize()` exposes both (lo, hi) for consumers
+        // doing explicit layout math; damage tracking only needs hi.
+        const auto [_lo, hiSize] = sweptSizeImpl();
+        (void)_lo;
+        return QRectF(anchor, hiSize);
     }
 
     /**
@@ -843,6 +867,19 @@ public:
         requires detail::ScalarValue<T>
     {
         return sweptRangeImpl();
+    }
+
+    /**
+     * @brief Terminal wall-clock guard for stateful curves.
+     *
+     * Any stateful progression still running after this many seconds
+     * is force-completed (see `advance()`). Public so tests can assert
+     * against the exact boundary instead of hard-coding "61 s" and
+     * silently re-interpreting the failure mode if the cap moves.
+     */
+    static constexpr std::chrono::seconds safetyCap() noexcept
+    {
+        return kSafetyCap;
     }
 
 private:

@@ -8,6 +8,13 @@ find_package(Qt6 REQUIRED COMPONENTS Test)
 function(pa_add_test _name)
     set(_sources ${ARGN})
     add_executable(${_name} ${_sources})
+    # AUTOMOC explicit per-target so tests still build in standalone
+    # configurations (future `-DUSE_KDE_FRAMEWORKS=OFF` portable builds
+    # or split test-only CMake subprojects) where the parent directory's
+    # CMAKE_AUTOMOC ON isn't inherited. Each test_*.cpp declares
+    # `#include "foo.moc"` for its local Q_OBJECT class, which needs
+    # AUTOMOC to generate.
+    set_target_properties(${_name} PROPERTIES AUTOMOC ON)
     target_include_directories(${_name}
         PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     )

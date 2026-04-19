@@ -70,8 +70,12 @@ public:
      *
      * @p output may be nullptr for the degenerate single-output /
      * test case where per-output phase-locking isn't required. In
-     * that mode `refreshRate()` returns 0 and `requestFrame()` falls
-     * through to `KWin::effects->addRepaintFull()`.
+     * that mode the clock self-drives from `std::chrono::steady_clock`
+     * (see `now()`), `refreshRate()` returns 0, `requestFrame()` falls
+     * through to `KWin::effects->addRepaintFull()`, and
+     * `updatePresentTime()` is a no-op — the fallback ignores per-output
+     * paint cadence to avoid N× stepping on N-output systems where
+     * `prePaintScreen` fires once per output per vsync.
      */
     explicit CompositorClock(KWin::LogicalOutput* output = nullptr);
     ~CompositorClock() override;
@@ -105,8 +109,9 @@ private:
     // "unbound by design" (normal, silent).
     const bool m_wasBound;
     // Rate-limit: set once a stale-output debug log fires so a misbehaving
-    // compositor sequence doesn't flood the log at paint rate.
-    mutable bool m_loggedStaleOutput = false;
+    // compositor sequence doesn't flood the log at paint rate. Written
+    // from requestFrame() which is non-const; no `mutable` needed.
+    bool m_loggedStaleOutput = false;
 };
 
 } // namespace PlasmaZones
