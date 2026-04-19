@@ -63,6 +63,14 @@ public:
      * then to `QGuiApplication::primaryScreen()`. Returns an empty string
      * only if Qt reports no screens at all (headless / test environments).
      *
+     * @note Reentrancy: while waiting for the daemon's reply, this method
+     *       spins a local QEventLoop. Queued signals, posted events, and
+     *       pending UI paints continue to run during the wait (that's the
+     *       whole point — QDBus::Block would freeze the thread). Callers
+     *       MUST NOT hold mutable state across the call that another slot
+     *       could invalidate; treat the return as a snapshot taken after
+     *       arbitrary event-loop activity.
+     *
      * @param pos          Position in global screen coordinates.
      * @param endpoint     D-Bus endpoint to query. Defaults to the
      *                     PlasmaZones daemon.

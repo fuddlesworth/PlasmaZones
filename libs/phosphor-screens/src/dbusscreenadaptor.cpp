@@ -25,6 +25,7 @@
 #include <QTimer>
 
 #include <cmath>
+#include <limits>
 
 namespace Phosphor::Screens {
 
@@ -121,10 +122,17 @@ void DBusScreenAdaptor::wireQGuiApplicationSignals()
         bool hadVirtual = emitForEffectiveScreens(physId, [this](const QString& id) {
             Q_EMIT screenAdded(id);
         });
+        // Refresh the effective-ids baseline on BOTH branches. The deferred
+        // re-check (below) diffs against m_lastEmittedEffectiveIds to decide
+        // whether a VS config arrived between this tick and the next event
+        // loop turn — if we only updated the baseline on the hadVirtual
+        // branch, the no-virtual path would leave a stale baseline that
+        // could mis-compare against the new state and spuriously retract
+        // (or suppress) the VS fan-out.
+        if (m_screenManager) {
+            m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
+        }
         if (hadVirtual) {
-            if (m_screenManager) {
-                m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
-            }
             Q_EMIT virtualScreensChanged(physId);
         } else {
             // ScreenManager may not be fully initialised yet — defer a re-check
@@ -548,8 +556,28 @@ void DBusScreenAdaptor::setVirtualScreenConfig(const QString& physicalScreenId, 
             return;
         }
 
+        // Require an explicit integer `index`. A bare `.toInt()` silently returns 0
+        // for missing/non-numeric values, which causes every malformed entry to
+        // collide at index 0 and surface as a misleading "duplicate def.index 0"
+        // error deeper in VirtualScreenConfig::isValid(). Reject up front with a
+        // specific message instead.
+        const QJsonValue indexVal = screenObj.value(kKeyIndex);
+        if (!indexVal.isDouble()) {
+            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: entry missing or non-numeric 'index' for"
+                                         << physicalScreenId;
+            return;
+        }
+        // JSON numbers are doubles; confirm the value is a non-negative integer.
+        const double idxD = indexVal.toDouble();
+        if (!std::isfinite(idxD) || idxD < 0.0 || idxD > static_cast<double>(std::numeric_limits<int>::max())
+            || std::floor(idxD) != idxD) {
+            qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: 'index' must be a non-negative integer, got"
+                                         << idxD << "for" << physicalScreenId;
+            return;
+        }
+
         VirtualScreenDef def;
-        def.index = screenObj.value(kKeyIndex).toInt();
+        def.index = static_cast<int>(idxD);
         def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, def.index);
         def.physicalScreenId = physicalScreenId;
         def.displayName = screenObj.value(kKeyDisplayName).toString();
@@ -585,16 +613,13 @@ QString DBusScreenAdaptor::swapVirtualScreenInDirection(const QString& currentVi
         qCWarning(lcPhosphorScreens) << "swapVirtualScreenInDirection: no IConfigStore wired";
         return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
     }
-    if (currentVirtualScreenId.isEmpty()) {
-        qCDebug(lcPhosphorScreens) << "swapVirtualScreenInDirection: empty currentVirtualScreenId";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
-    }
-    if (direction != Direction::Left && direction != Direction::Right && direction != Direction::Up
-        && direction != Direction::Down) {
-        qCWarning(lcPhosphorScreens) << "swapVirtualScreenInDirection: invalid direction" << direction;
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::InvalidDirection);
-    }
 
+    // Direction + id validation is delegated to VirtualScreenSwapper, which
+    // already surfaces InvalidDirection / NotVirtual via its Result enum. A
+    // duplicate check here buys no defense in depth (the swapper is the only
+    // caller that can mutate state) and used to drift whenever the accepted
+    // direction set was extended. VirtualScreenSwapper holds only a non-owning
+    // IConfigStore*, so per-call construction is free.
     VirtualScreenSwapper swapper(m_configStore);
     const auto result = swapper.swapInDirection(currentVirtualScreenId, direction);
     const QString reason = VirtualScreenSwapper::reasonString(result);
@@ -608,15 +633,6 @@ QString DBusScreenAdaptor::rotateVirtualScreens(const QString& physicalScreenId,
     if (!m_configStore) {
         qCWarning(lcPhosphorScreens) << "rotateVirtualScreens: no IConfigStore wired";
         return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::SettingsRejected);
-    }
-    if (physicalScreenId.isEmpty()) {
-        qCDebug(lcPhosphorScreens) << "rotateVirtualScreens: empty physicalScreenId";
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
-    }
-    if (PhosphorIdentity::VirtualScreenId::isVirtual(physicalScreenId)) {
-        qCWarning(lcPhosphorScreens) << "rotateVirtualScreens: expected physical screen ID, got virtual:"
-                                     << physicalScreenId;
-        return VirtualScreenSwapper::reasonString(VirtualScreenSwapper::Result::NotVirtual);
     }
 
     VirtualScreenSwapper swapper(m_configStore);

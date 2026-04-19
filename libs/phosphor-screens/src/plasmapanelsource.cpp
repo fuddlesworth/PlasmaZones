@@ -162,7 +162,6 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         m_queuedEmitRequeryCompleted = m_queuedEmitRequeryCompleted || emitRequeryCompleted;
         return;
     }
-    m_queryPending = true;
 
     auto* plasmaShell =
         new QDBusInterface(QString::fromLatin1(kPlasmaShellService), QString::fromLatin1(kPlasmaShellPath),
@@ -172,6 +171,8 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         // No Plasma shell — clear m_offsets (so previously-recorded panels
         // disappear after a Plasma shell exit), mark ready, fire per-screen
         // change signals so the manager re-runs availability calculation.
+        // This branch is fully synchronous: no async call in flight, so we
+        // never flip m_queryPending true.
         delete plasmaShell;
 
         QHash<QString, Offsets> previous = m_offsets;
@@ -197,14 +198,15 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
         if (emitRequeryCompleted) {
             Q_EMIT requeryCompleted();
         }
-        // Synchronous path — no pending async call to track.
-        m_queryPending = false;
         // Service absent: don't silently drain queued requeries; they would
         // all hit the same missing-service path. Clear and move on.
         m_requeryQueued = false;
         m_queuedEmitRequeryCompleted = false;
         return;
     }
+
+    // Only now do we have a genuine async call in flight.
+    m_queryPending = true;
 
     QDBusPendingCall pendingCall = plasmaShell->asyncCall(QStringLiteral("evaluateScript"), panelScript());
     auto* watcher = new QDBusPendingCallWatcher(pendingCall, this);
@@ -235,6 +237,13 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                     const QString output = reply.value();
                     qCDebug(lcPhosphorScreens) << "queryKdePlasmaPanels D-Bus reply=" << output;
 
+                    // Regex capture groups:
+                    //   1: plasma screen index
+                    //   2: location (top/bottom/left/right)
+                    //   3: hiding mode (none/autohide/dodgewindows/windowsgobelow)
+                    //   4: totalOffset (reserved edge in px)
+                    //   5: floating flag (0 or 1)
+                    //   6-9: plasma screen geometry (x,y,w,h) — used for Qt-screen match
                     static const QRegularExpression panelRegex(QStringLiteral(
                         "PANEL:(\\d+):(\\w+):(\\w+):(\\d+)(?::(\\d+))?(?::(\\d+),(\\d+),(\\d+),(\\d+))?"));
                     const auto qtScreens = QGuiApplication::screens();
@@ -245,6 +254,7 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                         const QString location = match.captured(2);
                         const QString hiding = match.captured(3);
                         int totalOffset = match.captured(4).toInt();
+                        const bool floating = (match.captured(5) == QLatin1String("1"));
 
                         QString connectorName;
                         if (!match.captured(6).isEmpty()) {
@@ -267,7 +277,12 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                         const bool autoHides =
                             (hiding == QLatin1String("autohide") || hiding == QLatin1String("dodgewindows")
                              || hiding == QLatin1String("windowsgobelow"));
-                        if (autoHides) {
+                        // Floating panels sit with margins off the screen edge and do
+                        // not reserve exclusive area — windows can extend under them.
+                        // Treat them like auto-hide for availability accounting;
+                        // otherwise calculateAvailableGeometry's qMin(sensor, dbus)
+                        // branch would shrink the rect by the floating panel's height.
+                        if (autoHides || floating) {
                             totalOffset = 0;
                         }
 

@@ -27,6 +27,16 @@ public:
     {
     }
 
+    /// Construct with a maximum-virtual-screens-per-physical cap. Pass 0 for
+    /// "no cap" (the default-ctor behaviour). Tests that need to assert
+    /// production-parity admission pass the daemon's cap here so an
+    /// over-limit config is rejected at the same layer real consumers see it.
+    explicit InMemoryConfigStore(int maxScreensPerPhysical, QObject* parent = nullptr)
+        : IConfigStore(parent)
+        , m_maxScreensPerPhysical(maxScreensPerPhysical)
+    {
+    }
+
     QHash<QString, VirtualScreenConfig> loadAll() const override
     {
         return m_configs;
@@ -45,9 +55,10 @@ public:
         // Honour the IConfigStore contract: reject what
         // VirtualScreenConfig::isValid rejects. Mirrors SettingsConfigStore's
         // behaviour so tests exercise the same acceptance surface real
-        // consumers see. A 0 cap means "no cap" — don't impose an arbitrary
-        // limit here; callers of the lib pass their own via ScreenManagerConfig.
-        if (!VirtualScreenConfig::isValid(config, physicalScreenId, /*maxScreensPerPhysical=*/0)) {
+        // consumers see. A 0 cap means "no cap" — the default — but callers
+        // can pass a production-matching cap via the constructor to catch
+        // over-limit regressions the lightweight default would otherwise hide.
+        if (!VirtualScreenConfig::isValid(config, physicalScreenId, m_maxScreensPerPhysical)) {
             return false;
         }
         const auto it = m_configs.constFind(physicalScreenId);
@@ -72,6 +83,7 @@ public:
 
 private:
     QHash<QString, VirtualScreenConfig> m_configs;
+    int m_maxScreensPerPhysical = 0; ///< 0 means "no cap" — matches the 1-arg ctor.
 };
 
 } // namespace Phosphor::Screens

@@ -126,6 +126,35 @@ private Q_SLOTS:
         const auto cfg = store.get(QStringLiteral("nonexistent"));
         QVERIFY(cfg.isEmpty());
     }
+
+    void testCapAwareCtorRejectsOverLimit()
+    {
+        // Production parity: with a cap of 2, a 3-entry config that the
+        // default-ctor store would accept must be rejected — same admission
+        // surface SettingsConfigStore exposes in the daemon.
+        InMemoryConfigStore store(/*maxScreensPerPhysical=*/2);
+        QSignalSpy spy(&store, &InMemoryConfigStore::changed);
+
+        VirtualScreenConfig tooMany;
+        tooMany.physicalScreenId = kPhys;
+        for (int i = 0; i < 3; ++i) {
+            VirtualScreenDef d;
+            d.index = i;
+            d.id = PhosphorIdentity::VirtualScreenId::make(kPhys, i);
+            d.physicalScreenId = kPhys;
+            d.region = QRectF(i / 3.0, 0.0, 1.0 / 3.0, 1.0);
+            tooMany.screens.append(d);
+        }
+
+        QVERIFY(!store.save(kPhys, tooMany));
+        QCOMPARE(spy.count(), 0);
+    }
+
+    void testCapAwareCtorAcceptsAtLimit()
+    {
+        InMemoryConfigStore store(/*maxScreensPerPhysical=*/2);
+        QVERIFY(store.save(kPhys, makeHalves()));
+    }
 };
 
 QTEST_APPLESS_MAIN(TestInMemoryConfigStore)

@@ -90,7 +90,7 @@ void ensureScreenIdResolver()
 } // namespace
 
 Daemon::Daemon(QObject* parent)
-    : QObject((ensureScreenIdResolver(), parent))
+    : QObject(parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
@@ -119,6 +119,14 @@ Daemon::Daemon(QObject* parent)
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
+    // Install the layout screen-id resolver before any Daemon-owned machinery
+    // starts loading layouts. First-call ensures the once-only install runs
+    // exactly once across all Daemon constructions in the process; subsequent
+    // Daemons share the already-installed resolver. Moved out of the
+    // `QObject((ensureScreenIdResolver(), parent))` comma-operator trick
+    // because that idiom reads as an accidental typo.
+    ensureScreenIdResolver();
+
     // Register this daemon's ScreenManager as the process-global instance
     // so the service-locator helpers (PlasmaZones::screenManager(),
     // actualAvailableGeometry, isPanelGeometryReady, ...) and the ~107
