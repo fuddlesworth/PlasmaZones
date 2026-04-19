@@ -3832,7 +3832,15 @@ void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chro
     if (data.screen) {
         auto it = m_motionClocksByOutput.find(data.screen);
         if (it != m_motionClocksByOutput.end()) {
-            it->second->updatePresentTime(presentTime);
+            // Pass `data.screen` so the clock can cross-check in debug
+            // builds that it is being fed presentTime only for the
+            // output it was constructed against. The map lookup above
+            // already guarantees this by construction, but the extra
+            // argument makes the invariant explicit at the call site —
+            // a future refactor that stops keying by output will fire
+            // the assertion instead of silently latching another
+            // output's timestamps.
+            it->second->updatePresentTime(presentTime, data.screen);
         }
     }
 

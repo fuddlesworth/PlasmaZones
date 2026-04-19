@@ -30,6 +30,23 @@ namespace PhosphorAnimation {
  * `AnimatedValue<T>` instances through the matching clock — same
  * per-output phase-locking rationale as `CompositorClock`.
  *
+ * ## One clock per window
+ *
+ * Two `QtQuickClock` instances bound to the *same* `QQuickWindow`
+ * will each connect to its `beforeRendering` signal and each write
+ * into its own independent `m_nowCache`. That works mechanically
+ * (no shared state between them, no UAF) but defeats the entire
+ * point of caching: the two clocks report identical timestamps
+ * with double the signal-dispatch cost, and a rebind from one to
+ * the other would waste an epoch-compatibility check on clocks that
+ * are already equivalent. Callers must therefore maintain one
+ * `QtQuickClock` per `QQuickWindow` (cache it on the window via
+ * dynamic property or a lookup map). The class does not enforce
+ * this because the identity lookup belongs on the caller's side —
+ * two unrelated shells may legitimately each want their own clock
+ * on the same embedded window — and a Q_ASSERT here would force
+ * that policy rather than document it.
+ *
  * ## Driver model
  *
  * The clock subscribes to `QQuickWindow::beforeRendering` — fires once
@@ -139,6 +156,21 @@ private:
     // animation bound to a never-shown `QQuickWindow` (test mode,
     // hidden offscreen render loop) doesn't freeze at the prime
     // timestamp with dt=0 on every advance.
+    //
+    // One-shot: never flips back to false even if the window is
+    // hidden and `beforeRendering` stops firing. This is intentional —
+    // once the render loop has written a post-vsync-aligned timestamp
+    // into `m_nowCache`, subsequent `now()` readers should see THAT
+    // reading (via the cache load) instead of a fresh `steady_clock`
+    // read that might skew ahead of the last paint by an entire hidden
+    // frame budget. If the window is later re-shown the next
+    // `beforeRendering` fire overwrites the cache with a fresh
+    // vsync-aligned reading; readers during the hidden interval see a
+    // stale-but-monotonic timestamp, which produces `dt=0` progressions
+    // (correct — nothing is rendering, so no motion) rather than
+    // spurious forward steps. If a consumer needs to release resources
+    // on window hide, the QObject destroyed signal is the right hook —
+    // not the clock's internal latch.
     std::atomic<bool> m_renderLoopActive{false};
     QPointer<QQuickWindow> m_window;
     std::unique_ptr<SignalAdapter> m_adapter;

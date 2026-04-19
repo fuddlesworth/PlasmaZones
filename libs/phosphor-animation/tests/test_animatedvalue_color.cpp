@@ -111,23 +111,39 @@ private Q_SLOTS:
         const QColor midLinear = sampleAtProgress(linear, clock1, 0.5);
         const QColor midOkLab = sampleAtProgress(oklab, clock2, 0.5);
 
-        // The two paths produce numerically distinct midpoints —
-        // linear-space red+blue midpoint is dark purple (sqrt gamma
-        // mixes), OkLab midpoint is a perceptually-central magenta.
+        // Physics-grounded assertion instead of a loose "channels differ
+        // by at least 0.1" gate. A broken OkLab path that silently
+        // degraded to linear RGB interpolation would still pass a loose
+        // delta check because float rounding accumulates through the
+        // OkLab chain's matrix multiplies — the loose gate doesn't
+        // distinguish "OkLab produced a correct perceptual midpoint"
+        // from "OkLab degraded to linear with bonus noise".
         //
-        // A weak "sum of channel deltas > 0.02" gate (≈5 out of 255 total)
-        // passes by float-rounding even when the OkLab path accidentally
-        // degrades to linear. Require at least one CHANNEL to diverge by
-        // at least 0.1 (26/255) — that's far outside rounding noise and
-        // matches the actual perceptual gap between the two interpolations
-        // for red→blue at t=0.5.
-        const qreal dR = qAbs(midLinear.redF() - midOkLab.redF());
-        const qreal dG = qAbs(midLinear.greenF() - midOkLab.greenF());
-        const qreal dB = qAbs(midLinear.blueF() - midOkLab.blueF());
-        const qreal maxChannelDelta = qMax(dR, qMax(dG, dB));
-        QVERIFY2(maxChannelDelta > 0.1,
-                 "OkLab midpoint must diverge from linear midpoint by at least one channel ≥ 0.1; "
-                 "a smaller gap suggests the OkLab path degraded to linear RGB interpolation");
+        // The distinguishing property: linear-space lerp of red(1,0,0)
+        // and blue(0,0,1) in linear RGB gives midpoint (0.5, 0, 0.5),
+        // which is pure magenta — green is EXACTLY zero because no
+        // cross-term in the lerp generates it. OkLab's perceptually-
+        // uniform midpoint MUST have a substantial positive green
+        // channel because the red↔blue perceptual path passes through
+        // colour space that biases toward luminance-balanced midtones
+        // (which requires green contribution). A degraded
+        // implementation cannot fake this — green ≈ 0 is the linear
+        // signature, green > 0.15 is the OkLab signature, and nothing
+        // in between is reachable by the two algorithms.
+        QVERIFY2(midLinear.greenF() < 0.02,
+                 "Linear midpoint of red+blue MUST have ~zero green (no cross-term in linear RGB lerp)");
+        QVERIFY2(midOkLab.greenF() > 0.15,
+                 "OkLab midpoint of red+blue MUST have substantial green channel — a smaller value "
+                 "means the OkLab path silently degraded to linear RGB interpolation");
+
+        // Belt-and-suspenders: the two paths must ALSO produce
+        // numerically distinct midpoints across all channels, not
+        // merely on green. Red and blue channels should each diverge
+        // by at least 0.05 (13/255) — the analytical gap is ≈0.16 on
+        // red and ≈0.07 on blue, so 0.05 is a conservative floor
+        // that still rejects accidental linear-RGB degradation.
+        QVERIFY(qAbs(midLinear.redF() - midOkLab.redF()) > 0.05);
+        QVERIFY(qAbs(midLinear.blueF() - midOkLab.blueF()) > 0.05);
     }
 
     // ─── Endpoints round-trip exactly ───

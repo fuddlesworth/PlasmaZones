@@ -106,7 +106,10 @@ PHOSPHORANIMATION_EXPORT std::shared_ptr<const Curve> defaultFallbackCurve();
  *   [0, 1]; `state.velocity` is dProgress/dt. Completion when
  *   `state.value` snaps to 1.0 AND `|state.velocity|` is zero
  *   (Spring::step's internal convergence lock), or when elapsed
- *   exceeds a 60-second safety cap.
+ *   exceeds a 60-second safety cap (chosen as 2× `Spring`'s internal
+ *   `MaxSettleSeconds = 30s` so a spring driven at the edge of its
+ *   own settle budget still terminates here under frame-drop-heavy
+ *   paint cycles where `dt` accumulation runs behind wall time).
  * - **Stateless curves (`Easing`):** `advance()` computes
  *   `t = elapsed_ms / profile.effectiveDuration()`, calls
  *   `state.value = curve->evaluate(t)`. Completion when `elapsed_ms >=
@@ -245,6 +248,23 @@ public:
      *     spec callbacks fire (symmetric with `start()`'s degenerate
      *     path); the AnimatedValue is silently marked complete and
      *     the owning container is expected to reap.
+     *
+     * ## Retarget before the first `advance()`
+     *
+     * Legal. Calling `retarget()` between `start()` and the first
+     * `advance()` leaves `m_startTime` unset (no first-tick latch has
+     * happened yet); the reset below (`m_startTime.reset()`) is then
+     * a no-op on an already-unset optional. `m_current` still equals
+     * `m_from` from `start()`, so the new segment runs from the
+     * original start value to the new target — exactly as if
+     * `start(m_from, newTo, spec)` had been called instead. The
+     * stateful `state.velocity` field in this scenario is whatever
+     * the curve was initialised with (zero by default); the
+     * PreserveVelocity rescale produces zero velocity through either
+     * the `oldDistance > epsilon` gate failing (segment hasn't moved)
+     * or the multiplication by zero if the gate were removed —
+     * physically correct because there is no in-flight motion to
+     * preserve.
      */
     bool retarget(T newTo, RetargetPolicy policy)
     {
@@ -298,25 +318,44 @@ public:
                     break;
                 }
             }
-            if (stateful && newDistance > Interpolate<T>::retargetEpsilon) {
+            if (stateful && newDistance > Interpolate<T>::retargetEpsilon
+                && oldDistance > Interpolate<T>::retargetEpsilon) {
                 // Map scalar normalised-velocity through the world:
                 //   worldRate [T-units/s] = state.velocity [1/s] * oldDistance [T-units]
                 //   newNormalisedVelocity [1/s] = worldRate / newDistance
                 // For vector T, distance() returns magnitude — direction
                 // is lost (documented limitation; see header intro).
                 //
-                // Per-type epsilon (`Interpolate<T>::retargetEpsilon`):
-                // a sub-threshold `newDistance` would let
-                // `oldDistance / newDistance` explode on a drag-snap or
-                // fade-retarget workflow that lands the new target
-                // arbitrarily close to the current visual value. A runaway
-                // `newVelocity` pumps the spring into oscillation or a
-                // force-complete clamp on the next tick. Below the epsilon
-                // the velocity-preserving rescale is not physically
-                // meaningful — degrade to PreservePosition (velocity=0)
-                // so the spring settles smoothly. The threshold scales
-                // per type: 0.5 px for pixel-coordinate T, tighter for
-                // scalar / colour domains whose natural range is [0, 1]-ish.
+                // Per-type epsilon (`Interpolate<T>::retargetEpsilon`) gates
+                // BOTH distances:
+                //
+                // - `newDistance` gate: a sub-threshold target would let
+                //   `oldDistance / newDistance` explode on a drag-snap or
+                //   fade-retarget workflow that lands the new target
+                //   arbitrarily close to the current visual value. A runaway
+                //   `newVelocity` pumps the spring into oscillation or a
+                //   force-complete clamp on the next tick.
+                //
+                // - `oldDistance` gate: a retarget fired at t=0 of a
+                //   segment (before the first advance has moved m_current
+                //   away from m_from) has oldDistance ≈ 0 by construction,
+                //   which collapses the rescaled velocity to 0 implicitly
+                //   via the multiply. Making the gate explicit symmetrises
+                //   the two distance checks and documents that a
+                //   zero-length source segment has no physical velocity to
+                //   preserve regardless of the stored `state.velocity` —
+                //   if the curve hasn't moved, there's no world-rate to
+                //   project forward even if the scalar velocity field is
+                //   non-zero (e.g., a retarget issued immediately after
+                //   setting initial velocity on a stateful curve that
+                //   hasn't stepped yet).
+                //
+                // Below either epsilon the velocity-preserving rescale is
+                // not physically meaningful — degrade to PreservePosition
+                // (velocity=0) so the spring settles smoothly. The
+                // threshold scales per type: 0.5 px for pixel-coordinate
+                // T, tighter for scalar / colour domains whose natural
+                // range is [0, 1]-ish.
                 newVelocity = (m_state.velocity * oldDistance) / newDistance;
             } else if (!stateful && !m_loggedStatelessDegrade) {
                 // One-shot per-instance. Logging every retarget on a

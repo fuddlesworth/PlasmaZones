@@ -40,6 +40,26 @@ class IMotionClock;
  * `Profile::effectiveXxx()` must resolve to something non-null through
  * the caller's inheritance chain. `clock` must be non-null. Every
  * other field is optional.
+ *
+ * ## Exception contract on callbacks
+ *
+ * `onValueChanged` and `onComplete` MUST NOT throw. The library does
+ * not catch exceptions propagating out of them — a throwing callback
+ * unwinds through `AnimatedValue::advance` / `finish`, skipping the
+ * post-callback state finalisation (the re-entrancy guard that checks
+ * `m_isComplete` after `onValueChanged` fires, the `requestFrame()`
+ * call that keeps the paint loop ticking) and leaves the owning
+ * container in whatever half-mutated state the erase-before-hook
+ * contract produced (typically: entry already erased, controller hook
+ * not yet fired, caller's stack still unwinding). The `AnimationController`
+ * virtual hooks (`onAnimationStarted`, `onAnimationComplete`, etc.) are
+ * held to the same no-throw contract for the same reason.
+ *
+ * In practice the shipped consumers (`WindowAnimator`, QtQuick drivers)
+ * all use non-throwing callbacks (QObject method calls, repaint
+ * scheduling) and this is a straightforward invariant to maintain.
+ * Consumers wrapping user code that can throw should catch at the
+ * callback boundary and downgrade to a diagnostic log.
  */
 template<typename T>
 struct MotionSpec

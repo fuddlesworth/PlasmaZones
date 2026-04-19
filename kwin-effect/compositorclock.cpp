@@ -139,7 +139,7 @@ void CompositorClock::requestFrame()
     KWin::effects->addRepaintFull();
 }
 
-void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
+void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime, KWin::LogicalOutput* paintingOutput)
 {
     // Contract: compositor (main) thread only — the `now()` read path
     // is unsynchronised, so every mutator must come from the same
@@ -148,6 +148,22 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
     // Same assertion is applied on now() / refreshRate() via the
     // shared macro above.
     assertMainThread();
+
+    // Per-output isolation cross-check. The effect routes presentTime
+    // by output via `m_motionClocksByOutput.find(data.screen)` so each
+    // bound clock only sees its own output's samples. Mis-plumbing
+    // (a future refactor that iterates all clocks per prePaintScreen,
+    // or a test harness feeding two clocks the same sample) would
+    // silently latch the wrong output's presentTime and step
+    // animations ahead of their own vsync — a correctness bug with
+    // no user-visible failure mode below 10 ms per frame. Debug-only
+    // assertion catches the mis-plumbing at its source; release
+    // builds are unaffected. `paintingOutput == nullptr` is the "no
+    // cross-check" opt-out (default arg) used by tests driving a
+    // bound clock without a real output; we skip validation in that
+    // case.
+    Q_ASSERT_X(!paintingOutput || paintingOutput == m_output, "CompositorClock::updatePresentTime",
+               "presentTime routed to the wrong clock — this clock is bound to a different output");
 
     if (!m_wasBound) {
         // Fallback clock self-drives from steady_clock in now(); ignore

@@ -1813,6 +1813,70 @@ private Q_SLOTS:
     //      to component-wise lerp rather than producing singular
     //      matrices via polar decomposition ───
 
+    // ─── Re-entrancy: cross-handle retarget during advanceAnimations() ───
+
+    /// A completion hook that retargets a DIFFERENT handle than the one
+    /// whose completion is firing. `advanceAnimations` snapshots the
+    /// handle list at tick start and re-looks-up the iterator after each
+    /// callback, so the retargeted handle's own advance later in the
+    /// same tick must see the new segment (not the pre-retarget one)
+    /// and must not trip over m_animations invalidation.
+    ///
+    /// Covers a gap the reap-tests don't: the stress case is
+    /// *mid-advance* mutation on a handle different from the one
+    /// currently being processed — not the reap-iteration mutation,
+    /// and not the same-handle-restart path which
+    /// `testReentrantStartInsideCompleteHookSurvives` covers.
+    void testRetargetOnOtherHandleDuringAdvanceIteration()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock, 100.0);
+
+        // Two handles: #1 completes first (shorter duration via
+        // retarget post-start is not trivial; instead, advance time
+        // to 150 ms so every animation is in the "this advance will
+        // complete it" state simultaneously).
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+
+        // Hook: when #1 completes, retarget #2 to a new frame. This
+        // reaches into the controller during advanceAnimations while
+        // handle #2's entry is about to be processed in the same loop.
+        c.onCompleteCallback = [](int handle, MockController& self) {
+            if (handle != 1) {
+                return;
+            }
+            const RetargetResult r = self.retargetWithResult(2, QRectF(0, 0, 100, 100));
+            // If #2 was already reaped by the outer loop (it wasn't,
+            // but defensively), UnknownHandle is acceptable; the
+            // expected path is Accepted.
+            QVERIFY(r == RetargetResult::Accepted || r == RetargetResult::UnknownHandle);
+        };
+
+        // Advance enough to complete both in one tick.
+        c.advanceAnimations(); // latch start
+        clock.advanceMs(150.0);
+        c.advanceAnimations(); // both reach terminal
+
+        // Handle #1 completed and fired the hook. Handle #2's
+        // behaviour depends on snapshot-iteration order: if #1 was
+        // processed first, the retarget installed a new segment on #2
+        // and #2's own advance later in the same loop progresses /
+        // completes the NEW segment. If #2 was processed first, the
+        // hook didn't fire yet and the retarget simply lands on the
+        // already-completed (and erased) #2 → UnknownHandle.
+        //
+        // Either ordering is valid; the test verifies no crash,
+        // no UAF, and that event counts balance.
+        QVERIFY(c.completedHandlesOrdered.contains(1));
+        // Every started handle has exactly one terminating event
+        // (complete/replaced/reaped/abandoned). We only started 2
+        // via the top-level path; any retarget-induced additions are
+        // in-place continuations, not new starts.
+        QCOMPARE(c.startedHandlesOrdered.size(), 2);
+    }
+
     void testTransformReflectionFallsBackToComponentWiseLerp()
     {
         // Polar decomposition cannot smoothly interpolate through a

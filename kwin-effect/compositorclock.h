@@ -101,8 +101,23 @@ public:
      * with the `presentTime` parameter KWin provides. The clock
      * upconverts to nanoseconds and latches the maximum so `now()`
      * stays monotonic even if the underlying source regresses.
+     *
+     * @param paintingOutput The output whose `prePaintScreen` is firing.
+     *     Passed by the caller so the clock can assert in debug builds
+     *     that it is receiving presentTime only for the output it was
+     *     constructed against. Mis-plumbing (feeding a 60 Hz output's
+     *     presentTime into a 144 Hz clock) would silently latch the
+     *     faster output's timestamps into the slower clock, stepping
+     *     its animations ahead of its own vsync — a correctness bug
+     *     that neither test harness nor runtime paint cycle exercises
+     *     unless this cross-check catches it. Release builds drop the
+     *     assertion; the argument is otherwise unused, and `nullptr`
+     *     is accepted (the fallback clock path is an intentional
+     *     skip). Defaulted so existing direct callers (tests driving
+     *     a bound CompositorClock without a real output) compile
+     *     unchanged.
      */
-    void updatePresentTime(std::chrono::milliseconds presentTime);
+    void updatePresentTime(std::chrono::milliseconds presentTime, KWin::LogicalOutput* paintingOutput = nullptr);
 
     /// The output this clock is bound to. May be null.
     KWin::LogicalOutput* output() const;

@@ -6,6 +6,7 @@
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/IMotionClock.h>
+#include <PhosphorAnimation/Interpolate.h>
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/Spring.h>
@@ -21,11 +22,22 @@ using namespace std::chrono_literals;
 using PhosphorAnimation::AnimatedValue;
 using PhosphorAnimation::Easing;
 using PhosphorAnimation::IMotionClock;
+using PhosphorAnimation::Interpolate;
 using PhosphorAnimation::MotionSpec;
 using PhosphorAnimation::Profile;
 using PhosphorAnimation::RetargetPolicy;
 using PhosphorAnimation::Spring;
 using TestClock = PhosphorAnimation::Testing::TestClock;
+
+// Anchor the per-type retarget-epsilon constants this suite straddles
+// below (`testRetargetPreserveVelocitySubEpsilonNewDistanceDegrades`
+// uses 1e-9 to sit well below; `testRetargetPreserveVelocityAboveScalarEpsilonCarriesVelocity`
+// uses 0.3 to sit well above). If `Interpolate<qreal>::retargetEpsilon`
+// is ever tuned, the failure should be at THIS assertion — not at a
+// downstream test passing silently because the test's magic-number
+// boundary drifted with the constant.
+static_assert(Interpolate<qreal>::retargetEpsilon == 1.0e-6,
+              "Scalar retarget-epsilon test boundaries (1e-9 below, 0.3 above) assume this constant");
 
 namespace {
 
