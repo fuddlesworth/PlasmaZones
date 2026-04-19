@@ -31,11 +31,23 @@ qt_add_qml_module(PhosphorAnimationQml
         phosphoranimation_qml_plugin.cpp
         phosphorcurve.cpp
         qtquickclockmanager.cpp
+        phosphoranimatedvaluebase.cpp
+        phosphoranimatedreal.cpp
+        phosphoranimatedpoint.cpp
+        phosphoranimatedsize.cpp
+        phosphoranimatedrect.cpp
+        phosphoranimatedcolor.cpp
         ../include/PhosphorAnimation/qml/PhosphorEasing.h
         ../include/PhosphorAnimation/qml/PhosphorSpring.h
         ../include/PhosphorAnimation/qml/PhosphorCurve.h
         ../include/PhosphorAnimation/qml/PhosphorProfile.h
         ../include/PhosphorAnimation/qml/QtQuickClockManager.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedValueBase.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedReal.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedPoint.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedSize.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedRect.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/animation
 )
 
@@ -94,5 +106,11 @@ install(FILES
         ../include/PhosphorAnimation/qml/PhosphorCurve.h
         ../include/PhosphorAnimation/qml/PhosphorProfile.h
         ../include/PhosphorAnimation/qml/QtQuickClockManager.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedValueBase.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedReal.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedPoint.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedSize.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedRect.h
+        ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/qml
 )

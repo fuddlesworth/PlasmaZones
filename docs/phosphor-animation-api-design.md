@@ -1042,22 +1042,51 @@ with the same guarantee. Rejected alternatives: attached property
 caller-supplied (pushes the "one per window" burden onto QML authors
 who can't be expected to audit it).
 
-**O. Per-T Q_GADGET wrappers — skip `QTransform`.**
+**O. Per-T Q_OBJECT wrappers — skip `QTransform`.**
 
 Five concrete types ship: `PhosphorAnimatedReal`,
 `PhosphorAnimatedPoint`, `PhosphorAnimatedSize`,
-`PhosphorAnimatedRect`, `PhosphorAnimatedColor`. Each is a Q_GADGET
+`PhosphorAnimatedRect`, `PhosphorAnimatedColor`. Each is a Q_OBJECT
 wrapping the matching `AnimatedValue<T>` specialisation with Q_PROPERTY
 bindings for `from`, `to`, `value`, `isAnimating`, `isComplete`, plus
-Q_INVOKABLE `start(from, to)` / `retarget(to)` / `cancel()` / `finish()`.
+Q_INVOKABLE `start(from, to)` / `retarget(to)` / `cancel()` / `finish()`
+and NOTIFY signals on every property.
+
+**Refinement from sub-commit 3:** the original draft said Q_GADGET (value
+type). Two load-bearing constraints forced Q_OBJECT:
+
+1. **`AnimatedValue<T>` is move-only.** Q_GADGETs must be
+   copy-constructible to round-trip through `QVariant` as value types.
+   Holding an `AnimatedValue<T>` directly would require either breaking
+   the Phase-3 move-only contract or hiding it behind a
+   `shared_ptr<AnimatedValue<T>>` (surprising "copies" share state —
+   not actually value semantics).
+2. **Reactive QML bindings require NOTIFY signals.** `value`,
+   `isAnimating`, `isComplete` change over time. Q_GADGETs don't
+   support signals, so QML bindings to their properties never
+   re-evaluate — consumers would see frozen snapshots only.
+   Q_OBJECTs emit NOTIFY as the underlying state changes, so
+   `Text { text: anim.value }` updates live.
 
 Rejected alternatives: one generic `PhosphorAnimatedValue` dispatched
 via QVariant (loses compile-time type safety, IntelliSense gets worse
-for plugin authors), templating (Q_GADGETs can't be templated).
+for plugin authors), templating (neither Q_GADGETs nor Q_OBJECTs can
+be templated — MOC can't handle templates).
 
 `QTransform` is deferred — `Item.transform` is a `list<Transform>` in
 QML, not a matrix property, so there's no natural binding site. The
 C++ specialisation remains available for adapter authors.
+
+**Shared base class:** `PhosphorAnimatedValueBase` (abstract Q_OBJECT,
+registered QML_UNCREATABLE) holds the cross-T plumbing — window
+property, profile property, lifecycle flags, auto-advance via
+`QQuickWindow::beforeSynchronizing`. Each typed subclass adds the
+T-specific `from` / `to` / `value` properties and `start` / `retarget`
+overloads. Rejected: macro-expansion (harder to read, MOC-unfriendly);
+pure duplication (700 LOC of near-identical code, maintenance
+liability). CRTP was rejected because MOC can't find signals across
+CRTP boundaries — the non-templated abstract base is the idiomatic
+Qt pattern.
 
 **P. `ColorSpace` as runtime enum property.**
 
