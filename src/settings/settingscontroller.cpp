@@ -40,7 +40,9 @@ static void sortMergedLayoutList(QVariantList& list)
 #include <PhosphorZones/ZonesLayoutSource.h>
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
@@ -152,14 +154,16 @@ SettingsController::SettingsController(QObject* parent)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
 {
-    // Factory-registry pattern: register one factory per surfaced
-    // layout-source family. Adding a new family (the planned scrolling
-    // engine) is a single addFactory() line — no edits to the bundle
-    // or to phosphor-layout-api.
-    m_localSources.addFactory(std::make_unique<PhosphorZones::ZonesLayoutSourceFactory>(m_localLayoutManager.get()));
-    m_localSources.addFactory(
-        std::make_unique<PhosphorTiles::AutotileLayoutSourceFactory>(m_localAlgorithmRegistry.get()));
-    m_localSources.build();
+    // Auto-discovery pattern: every linked provider library has
+    // already registered a builder via static-init. The KCM just
+    // publishes the registries it owns into the FactoryContext and
+    // calls buildFromRegistered. Adding a new engine library doesn't
+    // require editing this file unless the engine demands a service
+    // the KCM doesn't already publish.
+    PhosphorLayout::FactoryContext factoryCtx;
+    factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_localLayoutManager.get());
+    factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_localAlgorithmRegistry.get());
+    m_localSources.buildFromRegistered(factoryCtx);
 
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a

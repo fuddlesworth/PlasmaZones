@@ -18,8 +18,6 @@
 #include "../core/layoutmanager.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
-#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 #include "../core/modifierutils.h"
 
 #include <QHash>

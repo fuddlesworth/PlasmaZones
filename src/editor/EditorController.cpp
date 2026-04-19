@@ -11,7 +11,9 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include "../common/layoutpreviewserialize.h"
 #include "../core/constants.h"
 #include "../core/geometryutils.h"
@@ -59,14 +61,16 @@ EditorController::EditorController(QObject* parent)
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
 {
-    // Factory-registry pattern: register one factory per surfaced
-    // layout-source family. Adding a new family (the planned scrolling
-    // engine) is a single addFactory() line — no edits to the bundle
-    // or to phosphor-layout-api.
-    m_localSources.addFactory(std::make_unique<PhosphorZones::ZonesLayoutSourceFactory>(m_localLayoutManager.get()));
-    m_localSources.addFactory(
-        std::make_unique<PhosphorTiles::AutotileLayoutSourceFactory>(m_localAlgorithmRegistry.get()));
-    m_localSources.build();
+    // Auto-discovery pattern: every linked provider library has
+    // already registered a builder via static-init. The editor just
+    // publishes the registries it owns into the FactoryContext and
+    // calls buildFromRegistered. Adding a new engine library doesn't
+    // require editing this file unless the engine demands a service
+    // the editor doesn't already publish.
+    PhosphorLayout::FactoryContext factoryCtx;
+    factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_localLayoutManager.get());
+    factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_localAlgorithmRegistry.get());
+    m_localSources.buildFromRegistered(factoryCtx);
 
     // Discover + register user-authored scripted algorithms in the editor-
     // owned AlgorithmRegistry so standalone editor launches (daemon down)

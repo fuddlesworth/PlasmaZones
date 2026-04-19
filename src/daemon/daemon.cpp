@@ -19,6 +19,8 @@
 #include "rendering/zoneshadernoderhi.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
+#include <PhosphorZones/IZoneLayoutRegistry.h>
 #include <PhosphorZones/ZonesLayoutSource.h>
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/ZoneDetector.h>
@@ -159,17 +161,20 @@ Daemon::Daemon(QObject* parent)
     // from disk by then, and the algorithm registry is populated by
     // ScriptedAlgorithmLoader during init().
     //
-    // Factory-registry pattern: each provider library ships its own
-    // ILayoutSourceFactory; the daemon registers one per surfaced
-    // family. Adding a new family (the planned scrolling engine) is a
-    // single addFactory() line below — no edits to the bundle, no
-    // edits to phosphor-layout-api. ZonesLayoutSource and
-    // AutotileLayoutSource both self-wire to their registry's
-    // ILayoutSourceRegistry::contentsChanged signal, so no manual
-    // bridging is required after build().
-    m_layoutSources.addFactory(std::make_unique<PhosphorZones::ZonesLayoutSourceFactory>(m_layoutManager.get()));
-    m_layoutSources.addFactory(std::make_unique<PhosphorTiles::AutotileLayoutSourceFactory>(m_algorithmRegistry.get()));
-    m_layoutSources.build();
+    // Auto-discovery pattern: every provider library that links into
+    // this process registers a builder in its static-init block. The
+    // daemon just publishes the registries it owns into the
+    // FactoryContext and calls buildFromRegistered. Adding a new
+    // engine library (the planned scrolling engine) is purely a
+    // library-side change — daemon source only edits if the new
+    // engine demands a service the daemon doesn't already publish
+    // here. ZonesLayoutSource and AutotileLayoutSource both self-wire
+    // to their registry's ILayoutSourceRegistry::contentsChanged
+    // signal, so no manual bridging is required after build.
+    PhosphorLayout::FactoryContext factoryCtx;
+    factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_layoutManager.get());
+    factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_algorithmRegistry.get());
+    m_layoutSources.buildFromRegistered(factoryCtx);
 }
 
 Daemon::~Daemon()

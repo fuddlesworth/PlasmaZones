@@ -17,3 +17,4 @@
 #include <PhosphorLayoutApi/LayoutId.h>
 #include <PhosphorLayoutApi/LayoutPreview.h>
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
+#include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>

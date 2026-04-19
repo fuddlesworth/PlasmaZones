@@ -5,6 +5,8 @@
 
 #include <QtGlobal>
 
+#include <algorithm>
+
 namespace PhosphorLayout {
 
 LayoutSourceBundle::LayoutSourceBundle() = default;
@@ -67,6 +69,29 @@ void LayoutSourceBundle::build()
     // setSources fires contentsChanged exactly once; incremental
     // addSource calls would emit N times during initial wiring.
     m_composite->setSources(raw);
+}
+
+void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
+{
+    // Sort the pending list by priority (lower first); stable_sort
+    // preserves registration order for ties so the composite walks
+    // sources in a deterministic, source-id-prefix-friendly order.
+    // Sort the global list in place — every consumer wants the same
+    // order, so paying for the sort once per process is fine.
+    auto& providers = pendingLayoutSourceProviders();
+    std::stable_sort(providers.begin(), providers.end(), [](const auto& a, const auto& b) {
+        return a.priority < b.priority;
+    });
+    for (const auto& provider : providers) {
+        if (!provider.builder) {
+            continue;
+        }
+        auto factory = provider.builder(ctx);
+        if (factory) {
+            addFactory(std::move(factory));
+        }
+    }
+    build();
 }
 
 ILayoutSource* LayoutSourceBundle::source(const QString& name) const

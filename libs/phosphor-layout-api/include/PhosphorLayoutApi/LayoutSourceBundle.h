@@ -8,6 +8,7 @@
 #include <PhosphorLayoutApi/CompositeLayoutSource.h>
 #include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorLayoutApi/ILayoutSourceFactory.h>
+#include <PhosphorLayoutApi/LayoutSourceProviderRegistry.h>
 
 #include <memory>
 #include <vector>
@@ -57,6 +58,23 @@ public:
     /// build is a no-op. Each factory's @c create() is invoked exactly
     /// once.
     void build();
+
+    /// Auto-discovery convenience: drain every provider registered
+    /// via @c LayoutSourceProviderRegistrar (in priority order, ties
+    /// broken by registration order), invoke each builder with @p ctx,
+    /// add any non-null factories returned, and call @c build().
+    ///
+    /// Production composition roots (daemon, editor, settings) call
+    /// this once after populating @p ctx with the registries they own.
+    /// Builders that return nullptr (because @p ctx doesn't surface
+    /// the engine's required service) are silently skipped — that's
+    /// the "this composition root doesn't host this engine" signal.
+    ///
+    /// Coexists with @c addFactory: callers may pre-register custom
+    /// factories (typically tests with a fixture-specific source)
+    /// before calling @c buildFromRegistered, and both sets will be
+    /// stitched into the same composite.
+    void buildFromRegistered(const FactoryContext& ctx);
 
     /// The unified composite over every registered source. Null until
     /// @c build() has been called.

@@ -14,8 +14,6 @@
 
 #include "shortcutmanager.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
-#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>

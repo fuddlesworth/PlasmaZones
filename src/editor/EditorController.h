@@ -21,8 +21,6 @@
 #include "undo/UndoController.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
-#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
-#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 
 #include <memory>
 
