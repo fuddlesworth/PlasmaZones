@@ -60,7 +60,9 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/TilingParams.h
     include/PhosphorTiles/TilingState.h
     include/PhosphorTiles/SplitTree.h
+    include/PhosphorTiles/AlgorithmPreviewParams.h
     include/PhosphorTiles/AlgorithmRegistry.h
+    include/PhosphorTiles/ITileAlgorithmRegistry.h
     include/PhosphorTiles/ScriptedAlgorithm.h
     include/PhosphorTiles/ScriptedAlgorithmHelpers.h
     include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
@@ -72,6 +74,7 @@ set(phosphortiles_public_HDRS
 
 set(phosphortiles_SRCS
     src/algorithmregistry.cpp
+    src/itilealgorithmregistry.cpp
     src/autotilelayoutsource.cpp
     src/tilingalgorithm.cpp
     src/tilingstate.cpp

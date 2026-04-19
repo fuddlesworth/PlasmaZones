@@ -3,6 +3,7 @@
 
 #include "SettingsBridge.h"
 #include "AutotileEngine.h"
+#include <PhosphorTiles/AlgorithmPreviewParams.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
@@ -19,7 +20,7 @@ namespace PlasmaZones {
 
 namespace {
 /// DRY helper: populate PreviewParams::savedAlgorithmSettings from AutotileConfig
-void populatePreviewSavedSettings(PhosphorTiles::AlgorithmRegistry::PreviewParams& params,
+void populatePreviewSavedSettings(PhosphorTiles::AlgorithmPreviewParams& params,
                                   const QHash<QString, AlgorithmSettings>& savedSettings)
 {
     for (auto it = savedSettings.constBegin(); it != savedSettings.constEnd(); ++it) {
@@ -215,7 +216,7 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     // Update PhosphorTiles::AlgorithmRegistry so preview generation uses the configured values.
     // Per-algorithm settings are stored in the savedAlgorithmSettings map so
     // previewFromAlgorithm can look up any algorithm's saved params generically.
-    PhosphorTiles::AlgorithmRegistry::PreviewParams previewParams;
+    PhosphorTiles::AlgorithmPreviewParams previewParams;
     previewParams.algorithmId = m_engine->m_algorithmId;
     previewParams.maxWindows = cfg->maxWindows;
     previewParams.masterCount = cfg->masterCount;
@@ -335,7 +336,7 @@ void SettingsBridge::connectToSettings(Settings* settings)
             scheduleSettingsRetile();
         }
         // Update PhosphorTiles::AlgorithmRegistry preview params so previews reflect the new values
-        PhosphorTiles::AlgorithmRegistry::PreviewParams previewParams;
+        PhosphorTiles::AlgorithmPreviewParams previewParams;
         previewParams.algorithmId = m_engine->m_algorithmId;
         previewParams.maxWindows = m_engine->config()->maxWindows;
         previewParams.masterCount = m_engine->config()->masterCount;

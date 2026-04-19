@@ -23,7 +23,7 @@ constexpr auto RecommendedDefaultAlgorithmId = "bsp";
 
 namespace PhosphorTiles {
 
-bool AlgorithmRegistry::PreviewParams::operator==(const PreviewParams& other) const
+bool AlgorithmPreviewParams::operator==(const AlgorithmPreviewParams& other) const
 {
     return algorithmId == other.algorithmId && maxWindows == other.maxWindows && masterCount == other.masterCount
         && qFuzzyCompare(1.0 + splitRatio, 1.0 + other.splitRatio)
@@ -38,7 +38,7 @@ QList<PendingAlgorithmRegistration>& pendingAlgorithmRegistrations()
 }
 
 AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
-    : QObject(parent)
+    : ITileAlgorithmRegistry(parent)
 {
     registerBuiltInAlgorithms();
 
@@ -48,6 +48,20 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
         QObject::connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this,
                          &AlgorithmRegistry::cleanup);
     }
+
+    // Bridge the three finer-grained mutation signals into the unified
+    // ILayoutSourceRegistry::contentsChanged notifier. Any ILayoutSource
+    // that self-wires contentsChanged (AutotileLayoutSource does) picks
+    // up registry changes through this single connection instead of
+    // hooking each specific signal. Consumers that need discrimination
+    // still connect to the specific signals directly.
+    connect(this, &ITileAlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
+        Q_EMIT contentsChanged();
+    });
+    connect(this, &ITileAlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool) {
+        Q_EMIT contentsChanged();
+    });
+    connect(this, &ITileAlgorithmRegistry::previewParamsChanged, this, &ITileAlgorithmRegistry::contentsChanged);
 }
 
 AlgorithmRegistry::~AlgorithmRegistry()
@@ -220,7 +234,7 @@ TilingAlgorithm* AlgorithmRegistry::algorithm(const QString& id) const
     return m_algorithms.value(id, nullptr);
 }
 
-QStringList AlgorithmRegistry::availableAlgorithms() const noexcept
+QStringList AlgorithmRegistry::availableAlgorithms() const
 {
     return m_registrationOrder;
 }
@@ -242,7 +256,7 @@ QList<TilingAlgorithm*> AlgorithmRegistry::allAlgorithms() const
     return result;
 }
 
-bool AlgorithmRegistry::hasAlgorithm(const QString& id) const noexcept
+bool AlgorithmRegistry::hasAlgorithm(const QString& id) const
 {
     return m_algorithms.contains(id);
 }
@@ -283,7 +297,7 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     pending.clear();
 }
 
-void AlgorithmRegistry::setPreviewParams(const PreviewParams& params)
+void AlgorithmRegistry::setPreviewParams(const AlgorithmPreviewParams& params)
 {
     if (m_previewParams == params) {
         return;
@@ -292,17 +306,17 @@ void AlgorithmRegistry::setPreviewParams(const PreviewParams& params)
     Q_EMIT previewParamsChanged();
 }
 
-const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::previewParams() const noexcept
+const AlgorithmPreviewParams& AlgorithmRegistry::previewParams() const noexcept
 {
     return m_previewParams;
 }
 
-void AlgorithmRegistry::setConfiguredPreviewParams(const PreviewParams& params)
+void AlgorithmRegistry::setConfiguredPreviewParams(const AlgorithmPreviewParams& params)
 {
     instance()->setPreviewParams(params);
 }
 
-const AlgorithmRegistry::PreviewParams& AlgorithmRegistry::configuredPreviewParams()
+const AlgorithmPreviewParams& AlgorithmRegistry::configuredPreviewParams()
 {
     return instance()->previewParams();
 }
