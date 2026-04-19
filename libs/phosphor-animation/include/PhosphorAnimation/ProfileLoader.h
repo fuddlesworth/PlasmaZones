@@ -3,20 +3,19 @@
 
 #pragma once
 
-#include <PhosphorAnimation/CurveLoader.h> // LiveReload enum
+#include <PhosphorAnimation/CurveLoader.h> // LiveReload re-export
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <PhosphorJsonLoader/DirectoryLoader.h>
+#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+
 #include <QtCore/QHash>
 #include <QtCore/QObject>
-#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
-#include <QtCore/QTimer>
 
-QT_BEGIN_NAMESPACE
-class QFileSystemWatcher;
-QT_END_NAMESPACE
+#include <memory>
 
 namespace PhosphorAnimation {
 
@@ -31,6 +30,11 @@ class PhosphorProfileRegistry;
  * own XDG namespace. User curves referenced by profiles must already be
  * registered (via `CurveLoader` running FIRST on the same namespace)
  * for the profile's `curve` field to resolve.
+ *
+ * Like `CurveLoader`, the directory-walking, watching, debouncing, and
+ * user-wins-collision bookkeeping is delegated to
+ * `PhosphorJsonLoader::DirectoryLoader`. This class is the profile-
+ * specific sink on top of that.
  *
  * ## File format (schema v1)
  *
@@ -47,33 +51,17 @@ class PhosphorProfileRegistry;
  * }
  * ```
  *
- * `name` is required and opaque to the loader — whatever
- * `PhosphorProfileRegistry` path the consumer wants to reference.
- * Conventional naming (`"overlay.fade"`, `"snap.move"`) is a consumer
- * decision.
+ * ## Commit semantics
  *
- * The `curve` field round-trips through `CurveRegistry::create` — any
- * curve registered by `CurveLoader` (including user-authored tunings)
- * resolves by name.
+ * Each rescan produces a single `PhosphorProfileRegistry::reloadAll`
+ * call (decision W: coalesce). Bound consumers see one
+ * `profilesReloaded` signal per scan instead of N per-path signals,
+ * avoiding N² re-resolution cost when several files change at once.
  *
- * ## Collision / live-reload / rescan
- *
- * Same shape as `CurveLoader` — see that class's doc for the full
- * contract. Later-scanned directories override earlier on path
- * collision; `QFileSystemWatcher` installed when `LiveReload::On`
- * with 50 ms debounce; `requestRescan()` entry point for consumer
- * D-Bus signals to tie into the same rescan.
- *
- * ## Apply semantics (decision Y)
- *
- * Profiles loaded here are **preset templates** living as read-only
- * files on disk. When a settings UI offers "Apply preset X" to the
- * user's active profile, it deep-copies the preset's fields into the
- * user's settings-backed profile (the Phase-4 migrated settings blob
- * — sub-commit 6). The on-disk preset is untouched; the user's
- * active profile is independent post-apply. Mirrors
- * `LayoutManager::duplicateLayout` semantics — this loader does NOT
- * provide a live-reference-back path.
+ * Profiles loaded here are preset templates — decision Y says settings
+ * UIs deep-copy into the user's active profile rather than referencing
+ * the preset live. This loader does not implement preset → active
+ * linking.
  */
 class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
 {
@@ -107,18 +95,9 @@ Q_SIGNALS:
     void profilesChanged();
 
 private:
-    std::optional<std::pair<Entry, Profile>> parseFile(const QString& filePath) const;
-
-    void rescanAll();
-    void rescanDirectory(const QString& directory);
-    void installWatcherIfNeeded();
-
-    QPointer<PhosphorProfileRegistry> m_registry;
-    QStringList m_directories;
-    QHash<QString, Entry> m_entries; ///< path → entry
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer m_debounceTimer;
-    bool m_liveReloadEnabled = false;
+    class Sink;
+    std::unique_ptr<Sink> m_sink;
+    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation

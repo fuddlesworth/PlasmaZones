@@ -79,30 +79,23 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
         return false;
     }
     // Route through whichever space is active; emit our property-
-    // change signals from the spec callbacks.
-    auto onValueChanged = [this](const QColor&) {
+    // change signals from the spec callbacks. Spec is shape-identical
+    // across both color-space branches — build once, move into the
+    // start() call on the active AnimatedValue<T>.
+    MotionSpec<QColor> spec;
+    spec.profile = profile().value();
+    spec.clock = clock;
+    spec.onValueChanged = [this](const QColor&) {
         Q_EMIT valueChanged();
     };
-    auto onComplete = [this]() {
+    spec.onComplete = [this]() {
         Q_EMIT animatingChanged();
         Q_EMIT completeChanged();
     };
-    bool ok = false;
-    if (m_activeSpace == ColorSpace::OkLab) {
-        MotionSpec<QColor> spec;
-        spec.profile = profile().value();
-        spec.clock = clock;
-        spec.onValueChanged = onValueChanged;
-        spec.onComplete = onComplete;
-        ok = m_animatedValueOkLab.start(from, to, std::move(spec));
-    } else {
-        MotionSpec<QColor> spec;
-        spec.profile = profile().value();
-        spec.clock = clock;
-        spec.onValueChanged = onValueChanged;
-        spec.onComplete = onComplete;
-        ok = m_animatedValueLinear.start(from, to, std::move(spec));
-    }
+
+    const bool ok = (m_activeSpace == ColorSpace::OkLab) ? m_animatedValueOkLab.start(from, to, std::move(spec))
+                                                         : m_animatedValueLinear.start(from, to, std::move(spec));
+
     Q_EMIT fromChanged();
     Q_EMIT toChanged();
     Q_EMIT valueChanged();

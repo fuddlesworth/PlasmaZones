@@ -12,6 +12,7 @@
 #include <QDBusConnection>
 #include <QDBusError>
 #include <QFile>
+#include <QSet>
 #include <QThread>
 
 #include <PhosphorAnimation/CurveRegistry.h>
@@ -169,14 +170,37 @@ Daemon::Daemon(QObject* parent)
     // (one literal typo away from silently breaking preview-cache reuse).
     m_autotileLayoutSource = m_layoutSources.source(PhosphorTiles::autotileLayoutSourceName());
 
-    // Phase 4 sub-commit 7: wire Settings::animationProfile into
-    // PhosphorProfileRegistry so QML `PhosphorMotionAnimation { profile: … }`
-    // resolves to the user's active animation settings and live-updates
-    // on edit. Also populates the registry from user-authored JSON files
-    // under the plasmazones/ XDG namespace (per decision U's consumer-
-    // agnostic loader pattern).
+    // Wire Settings::animationProfile into PhosphorProfileRegistry so
+    // QML `PhosphorMotionAnimation { profile: … }` resolves to the
+    // user's active animation settings and live-updates on edit.
+    // Also populates the registry from user-authored JSON files under
+    // the `plasmazones/` XDG namespace (consumer-agnostic loader
+    // delegates directory walking to phosphor-jsonloader).
     setupAnimationProfiles();
 }
+
+// Well-known profile paths PlasmaZones publishes from the single
+// settings-backed Profile. Kept as a file-scope array so `publishActive…`
+// iterates one source of truth; adding a new publication target is
+// a one-line entry here, and the daemon code stays the same.
+//
+// Paths correspond to `PhosphorAnimation::ProfilePaths::*` references
+// exposed to QML. User-authored JSON files at the same path names
+// override these via the profile loader (see publishActiveAnimationProfile
+// for the user-wins semantics).
+const QString* kWellKnownProfilePaths[] = {
+    &PhosphorAnimation::ProfilePaths::Global,
+    &PhosphorAnimation::ProfilePaths::Zone,
+    &PhosphorAnimation::ProfilePaths::ZoneHighlight,
+    &PhosphorAnimation::ProfilePaths::ZoneSnapIn,
+    &PhosphorAnimation::ProfilePaths::ZoneSnapOut,
+    &PhosphorAnimation::ProfilePaths::ZoneSnapResize,
+    &PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchIn,
+    &PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchOut,
+    &PhosphorAnimation::ProfilePaths::Osd,
+    &PhosphorAnimation::ProfilePaths::OsdShow,
+    &PhosphorAnimation::ProfilePaths::OsdHide,
+};
 
 void Daemon::setupAnimationProfiles()
 {
@@ -187,12 +211,12 @@ void Daemon::setupAnimationProfiles()
     // CurveLoader / ProfileLoader are agnostic (decision U); the daemon
     // picks PlasmaZones's namespace here.
     //
-    // `locateAll` returns system dirs first, user dir last for the
-    // WritableLocation-inclusive set. `CurveLoader::loadFromDirectories`
+    // `QStandardPaths::locateAll` returns directories in priority order —
+    // the writable user location FIRST, system dirs AFTER. The loader
     // iterates in caller-supplied order and lets later entries override
-    // earlier on name collision — we reverse to achieve the standard
-    // "system first, user wins last" shape (decision X). Matches
-    // LayoutManager::loadLayouts (src/core/layoutmanager/persistence.cpp:29-34).
+    // earlier on key collision, so we reverse to achieve the standard
+    // "system first, user wins last" layering (decision X). Matches
+    // LayoutManager::loadLayouts (src/core/layoutmanager/persistence.cpp).
     QStringList curveDirs = QStandardPaths::locateAll(
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/curves"), QStandardPaths::LocateDirectory);
     std::reverse(curveDirs.begin(), curveDirs.end());
@@ -200,29 +224,49 @@ void Daemon::setupAnimationProfiles()
         QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/profiles"), QStandardPaths::LocateDirectory);
     std::reverse(profileDirs.begin(), profileDirs.end());
 
+    // locateAll returns an empty list when none of the candidate dirs
+    // exist yet (fresh install). Unconditionally include the writable
+    // location so the loader can watch it via the parent-directory
+    // fallback — once the user drops a file there, the watcher fires
+    // and the loader picks it up without a daemon restart.
+    const QString userCurveDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/curves");
+    if (!curveDirs.contains(userCurveDir)) {
+        curveDirs.append(userCurveDir);
+    }
+    const QString userProfileDir =
+        QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QStringLiteral("/plasmazones/profiles");
+    if (!profileDirs.contains(userProfileDir)) {
+        profileDirs.append(userProfileDir);
+    }
+
     // Library-level curve pack (if any ships) loads first so it's
     // visible for user-authored overrides. Today the library ships no
     // bundled curves — the call is a no-op that stays wired for future
     // curve-pack additions without a code change here.
     m_curveLoader = std::make_unique<CurveLoader>(nullptr);
     m_curveLoader->loadLibraryBuiltins(CurveRegistry::instance());
-    if (!curveDirs.isEmpty()) {
-        m_curveLoader->loadFromDirectories(curveDirs, CurveRegistry::instance(), LiveReload::On);
-    }
+    m_curveLoader->loadFromDirectories(curveDirs, CurveRegistry::instance(), LiveReload::On);
 
     m_profileLoader = std::make_unique<ProfileLoader>(nullptr);
     m_profileLoader->loadLibraryBuiltins(PhosphorProfileRegistry::instance());
-    if (!profileDirs.isEmpty()) {
-        m_profileLoader->loadFromDirectories(profileDirs, PhosphorProfileRegistry::instance(), LiveReload::On);
-    }
+    m_profileLoader->loadFromDirectories(profileDirs, PhosphorProfileRegistry::instance(), LiveReload::On);
 
-    // Publish the user's settings-backed Profile last so it overrides
-    // any on-disk preset file that happens to collide on a well-known
-    // path name (the user's active tuning is authoritative). Re-publishes
-    // whenever the settings Profile is rewritten via the Phase-4
-    // per-field projections or a future setAnimationProfile call.
+    // Publish the settings-backed Profile AFTER the profile loader has
+    // registered any user-authored files. publishActiveAnimationProfile
+    // respects user claims (see its doc), so this ordering gives user
+    // files consistent precedence at startup.
+    //
+    // Re-publish on:
+    //   - Settings edits (slider drag, per-field setter) — the aggregate
+    //     animationProfileChanged signal fires.
+    //   - ProfileLoader rescans — user added/removed a JSON file, which
+    //     flips the hasProfile() check for some paths.
     publishActiveAnimationProfile();
     connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
+        publishActiveAnimationProfile();
+    });
+    connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
         publishActiveAnimationProfile();
     });
 }
@@ -231,32 +275,43 @@ void Daemon::publishActiveAnimationProfile()
 {
     using namespace PhosphorAnimation;
 
-    // PlasmaZones currently exposes ONE global animation profile to
-    // users (duration / curve / minDistance / sequenceMode / stagger).
-    // Register it under every well-known shell path that conceptually
-    // maps to "the user's animation feel" — zone highlights, OSD
-    // show/hide, snap enter, layout switch. A future phase can split
-    // these into distinct settings-backed profiles when users ask for
-    // per-event customisation; until then, one Profile → many paths is
-    // the honest mapping.
+    // PlasmaZones currently exposes ONE settings-backed animation Profile
+    // (duration / curve / minDistance / sequenceMode / stagger). Fan it
+    // out under every well-known shell path that conceptually maps to
+    // "the user's animation feel" — zone highlights, OSD show/hide,
+    // snap enter, layout switch.
     //
-    // Every registerProfile emits profileChanged(path); bound
-    // PhosphorMotionAnimation / PhosphorAnimatedValue consumers
-    // re-resolve and pick up the new curve / duration on their next
-    // tick without a daemon restart.
+    // User-wins semantics: if the user has dropped a JSON file under
+    // `plasmazones/profiles/` that registers one of our well-known
+    // paths, the profile loader's reloadAll populated it and the
+    // user's tuning is authoritative. We skip those paths here. On
+    // file-delete, the loader's next reloadAll removes the user
+    // entry and the profilesChanged hookup re-runs this function
+    // so the gap gets filled with the settings profile.
+    //
+    // We consult the ProfileLoader's tracked entries (not the
+    // registry's hasProfile) because the registry is the shared
+    // output state — a previous publish from THIS function would
+    // also show up as hasProfile==true, masking the "no user
+    // claim" case.
+    QSet<QString> userClaimedPaths;
+    if (m_profileLoader) {
+        for (const auto& e : m_profileLoader->entries()) {
+            userClaimedPaths.insert(e.path);
+        }
+    }
+
+    // PhosphorProfileRegistry::registerProfile has an equality guard —
+    // iterating a static list on every settings edit is cheap (no-op
+    // re-registrations skip the signal).
     const Profile active = m_settings->animationProfile();
     auto& reg = PhosphorProfileRegistry::instance();
-    reg.registerProfile(ProfilePaths::Global, active);
-    reg.registerProfile(ProfilePaths::Zone, active);
-    reg.registerProfile(ProfilePaths::ZoneHighlight, active);
-    reg.registerProfile(ProfilePaths::ZoneSnapIn, active);
-    reg.registerProfile(ProfilePaths::ZoneSnapOut, active);
-    reg.registerProfile(ProfilePaths::ZoneSnapResize, active);
-    reg.registerProfile(ProfilePaths::ZoneLayoutSwitchIn, active);
-    reg.registerProfile(ProfilePaths::ZoneLayoutSwitchOut, active);
-    reg.registerProfile(ProfilePaths::Osd, active);
-    reg.registerProfile(ProfilePaths::OsdShow, active);
-    reg.registerProfile(ProfilePaths::OsdHide, active);
+    for (const QString* path : kWellKnownProfilePaths) {
+        if (userClaimedPaths.contains(*path)) {
+            continue;
+        }
+        reg.registerProfile(*path, active);
+    }
 }
 
 Daemon::~Daemon()

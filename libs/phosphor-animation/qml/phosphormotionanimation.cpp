@@ -60,10 +60,30 @@ const Profile& PhosphorMotionAnimation::resolvedProfile() const
 
 int PhosphorMotionAnimation::duration() const
 {
+    // While running, return the duration snapshotted at start(). Without
+    // the snapshot, a live settings edit mid-animation would change the
+    // value Qt reads per-tick for progress calculation and snap the
+    // animation backwards or forwards visibly.
+    if (m_activeDurationMs >= 0) {
+        return m_activeDurationMs;
+    }
     // qreal → int ms. `QVariantAnimation` expects integer milliseconds;
     // round rather than truncate so a 149.9 ms profile doesn't silently
     // lose a frame on a 60 Hz paint cycle.
     return qRound(m_resolvedProfile.effectiveDuration());
+}
+
+void PhosphorMotionAnimation::updateState(QAbstractAnimation::State newState, QAbstractAnimation::State oldState)
+{
+    // Capture the resolved duration on the transition INTO the Running
+    // state and hold it for the whole run. Reset on exit so the next
+    // start() reads whatever profile is current at that moment.
+    if (newState == QAbstractAnimation::Running && oldState != QAbstractAnimation::Running) {
+        m_activeDurationMs = qRound(m_resolvedProfile.effectiveDuration());
+    } else if (newState == QAbstractAnimation::Stopped) {
+        m_activeDurationMs = -1;
+    }
+    QVariantAnimation::updateState(newState, oldState);
 }
 
 QVariant PhosphorMotionAnimation::interpolated(const QVariant& from, const QVariant& to, qreal progress) const

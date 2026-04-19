@@ -5,9 +5,11 @@
 
 #include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
-#include <QDir>
+#include <PhosphorJsonLoader/DirectoryLoader.h>
+#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+#include <PhosphorJsonLoader/ParsedEntry.h>
+
 #include <QFile>
-#include <QFileSystemWatcher>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
@@ -19,45 +21,117 @@ namespace {
 Q_LOGGING_CATEGORY(lcProfileLoader, "phosphoranimation.profileloader")
 } // namespace
 
+class ProfileLoader::Sink : public PhosphorJsonLoader::IDirectoryLoaderSink
+{
+public:
+    PhosphorProfileRegistry* registry = nullptr;
+    QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
+
+    std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
+    {
+        QFile file(filePath);
+        if (!file.open(QIODevice::ReadOnly)) {
+            qCWarning(lcProfileLoader) << "Skipping unreadable file" << filePath << ":" << file.errorString();
+            return std::nullopt;
+        }
+        QJsonParseError parseError;
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+        if (parseError.error != QJsonParseError::NoError) {
+            qCWarning(lcProfileLoader) << "Skipping malformed JSON" << filePath << ":" << parseError.errorString();
+            return std::nullopt;
+        }
+        if (!doc.isObject()) {
+            qCWarning(lcProfileLoader) << "Skipping non-object root JSON in" << filePath;
+            return std::nullopt;
+        }
+        QJsonObject obj = doc.object();
+        const QString path = obj.value(QLatin1String("name")).toString();
+        if (path.isEmpty()) {
+            qCWarning(lcProfileLoader) << "Skipping" << filePath << ": missing required 'name' field";
+            return std::nullopt;
+        }
+
+        // Profile::fromJson reads the remaining fields (curve / duration /
+        // minDistance / sequenceMode / staggerInterval / presetName). We
+        // strip 'name' first so it doesn't leak into presetName — the two
+        // concepts are distinct (registry path vs. user-assigned preset
+        // label).
+        obj.remove(QLatin1String("name"));
+        const Profile profile = Profile::fromJson(obj);
+
+        PhosphorJsonLoader::ParsedEntry parsed;
+        parsed.key = path;
+        parsed.sourcePath = filePath;
+        parsed.payload = profile;
+        return parsed;
+    }
+
+    void commitBatch(const QStringList& removedKeys,
+                     const QList<PhosphorJsonLoader::ParsedEntry>& currentEntries) override
+    {
+        if (!registry) {
+            qCWarning(lcProfileLoader) << "commitBatch: registry not set";
+            return;
+        }
+
+        // Build the full replacement map from the current-entries list
+        // (the loader already applied user-wins-collision, so this
+        // map is the authoritative post-scan shape). Missing entries
+        // correspond to the removedKeys list — reloadAll handles both
+        // additions and removals in one atomic swap.
+        QHash<QString, Profile> map;
+        map.reserve(currentEntries.size());
+        for (const auto& p : currentEntries) {
+            const Profile* profile = std::any_cast<Profile>(&p.payload);
+            if (!profile) {
+                qCWarning(lcProfileLoader) << "commitBatch: payload type-mismatch for" << p.key;
+                continue;
+            }
+            map.insert(p.key, *profile);
+        }
+
+        // Single reloadAll → one profilesReloaded signal regardless of
+        // how many files changed (decision W: coalesce multiple filesystem
+        // events into one consumer-visible batch).
+        registry->reloadAll(map);
+
+        // Mirror the loader's tracked set in our own Entry map for
+        // entries() introspection.
+        for (const QString& key : removedKeys) {
+            entries.remove(key);
+        }
+        for (const auto& p : currentEntries) {
+            ProfileLoader::Entry e;
+            e.path = p.key;
+            e.sourcePath = p.sourcePath;
+            e.systemSourcePath = p.systemSourcePath;
+            entries.insert(p.key, std::move(e));
+        }
+    }
+};
+
 ProfileLoader::ProfileLoader(QObject* parent)
     : QObject(parent)
+    , m_sink(std::make_unique<Sink>())
+    , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(m_sink.get()))
 {
-    m_debounceTimer.setSingleShot(true);
-    m_debounceTimer.setInterval(50);
-    connect(&m_debounceTimer, &QTimer::timeout, this, &ProfileLoader::rescanAll);
+    connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this,
+            &ProfileLoader::profilesChanged);
 }
 
 ProfileLoader::~ProfileLoader() = default;
 
 int ProfileLoader::loadFromDirectory(const QString& directory, PhosphorProfileRegistry& registry, LiveReload liveReload)
 {
-    m_registry = &registry;
-    if (!m_directories.contains(directory)) {
-        m_directories.append(directory);
-    }
-    if (liveReload == LiveReload::On) {
-        m_liveReloadEnabled = true;
-        installWatcherIfNeeded();
-        if (m_watcher && !m_watcher->directories().contains(directory)) {
-            if (QDir(directory).exists()) {
-                m_watcher->addPath(directory);
-            }
-        }
-    }
-
-    const int countBefore = m_entries.size();
-    rescanDirectory(directory);
-    return m_entries.size() - countBefore;
+    m_sink->registry = &registry;
+    return m_loader->loadFromDirectory(directory, liveReload);
 }
 
 int ProfileLoader::loadFromDirectories(const QStringList& directories, PhosphorProfileRegistry& registry,
                                        LiveReload liveReload)
 {
-    int total = 0;
-    for (const QString& dir : directories) {
-        total += loadFromDirectory(dir, registry, liveReload);
-    }
-    return total;
+    m_sink->registry = &registry;
+    return m_loader->loadFromDirectories(directories, liveReload);
 }
 
 int ProfileLoader::loadLibraryBuiltins(PhosphorProfileRegistry& registry)
@@ -73,110 +147,17 @@ int ProfileLoader::loadLibraryBuiltins(PhosphorProfileRegistry& registry)
 
 void ProfileLoader::requestRescan()
 {
-    m_debounceTimer.start();
+    m_loader->requestRescan();
 }
 
 int ProfileLoader::registeredCount() const
 {
-    return m_entries.size();
+    return m_loader->registeredCount();
 }
 
 QList<ProfileLoader::Entry> ProfileLoader::entries() const
 {
-    return m_entries.values();
-}
-
-std::optional<std::pair<ProfileLoader::Entry, Profile>> ProfileLoader::parseFile(const QString& filePath) const
-{
-    QFile file(filePath);
-    if (!file.open(QIODevice::ReadOnly)) {
-        qCWarning(lcProfileLoader) << "Skipping unreadable file" << filePath << ":" << file.errorString();
-        return std::nullopt;
-    }
-    QJsonParseError parseError;
-    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError) {
-        qCWarning(lcProfileLoader) << "Skipping malformed JSON" << filePath << ":" << parseError.errorString();
-        return std::nullopt;
-    }
-    if (!doc.isObject()) {
-        qCWarning(lcProfileLoader) << "Skipping non-object root JSON in" << filePath;
-        return std::nullopt;
-    }
-    QJsonObject obj = doc.object();
-    const QString path = obj.value(QLatin1String("name")).toString();
-    if (path.isEmpty()) {
-        qCWarning(lcProfileLoader) << "Skipping" << filePath << ": missing required 'name' field";
-        return std::nullopt;
-    }
-
-    // Profile::fromJson reads the remaining fields (curve / duration /
-    // minDistance / sequenceMode / staggerInterval / presetName). We
-    // strip 'name' first so it doesn't leak into presetName — the two
-    // concepts are distinct (registry path vs. user-assigned preset
-    // label).
-    obj.remove(QLatin1String("name"));
-    const Profile profile = Profile::fromJson(obj);
-
-    Entry entry;
-    entry.path = path;
-    entry.sourcePath = filePath;
-    return std::make_pair(std::move(entry), profile);
-}
-
-void ProfileLoader::rescanDirectory(const QString& directory)
-{
-    if (!m_registry) {
-        qCWarning(lcProfileLoader) << "rescanDirectory: no registry bound";
-        return;
-    }
-    QDir dir(directory);
-    if (!dir.exists()) {
-        qCDebug(lcProfileLoader) << "Directory does not exist:" << directory;
-        return;
-    }
-    const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
-    for (const QString& file : files) {
-        const QString fullPath = dir.absoluteFilePath(file);
-        auto parsed = parseFile(fullPath);
-        if (!parsed) {
-            continue;
-        }
-        auto& [entry, profile] = *parsed;
-        const QString path = entry.path;
-
-        if (auto existing = m_entries.find(path); existing != m_entries.end()) {
-            entry.systemSourcePath = existing->sourcePath;
-        }
-
-        m_registry->registerProfile(path, profile);
-        m_entries.insert(path, std::move(entry));
-    }
-}
-
-void ProfileLoader::rescanAll()
-{
-    if (!m_registry) {
-        return;
-    }
-    for (const QString& dir : m_directories) {
-        rescanDirectory(dir);
-    }
-    Q_EMIT profilesChanged();
-}
-
-void ProfileLoader::installWatcherIfNeeded()
-{
-    if (m_watcher) {
-        return;
-    }
-    m_watcher = new QFileSystemWatcher(this);
-    connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString&) {
-        requestRescan();
-    });
-    connect(m_watcher, &QFileSystemWatcher::fileChanged, this, [this](const QString&) {
-        requestRescan();
-    });
+    return m_sink->entries.values();
 }
 
 } // namespace PhosphorAnimation

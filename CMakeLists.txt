@@ -317,6 +317,7 @@ add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
+add_subdirectory(libs/phosphor-jsonloader) # generic JSON directory loader with watched / debounced reload
 # PlasmaZones consumes the phosphor-animation QML module for shell UI
 # animations (Phase 4). Setting the flag BEFORE add_subdirectory picks
 # up the option() default; the QML subdirectory auto-enables

@@ -26,15 +26,6 @@ namespace PhosphorAnimation {
  * Every `PhosphorMotionAnimation` bound to `"<path>"` auto-re-resolves on the
  * emitted `profileChanged(path)` signal.
  *
- * ## Scope
- *
- * Sub-commit 4 ships the registry skeleton — singleton, in-memory map,
- * register / resolve / signal wiring. The loaders that POPULATE the registry
- * from on-disk JSON (`ProfileLoader::loadFromDirectory` scanning a consumer-
- * supplied XDG namespace) land in sub-commit 5. Until then, programmatic
- * `registerProfile` is the only way to fill it — useful for tests and
- * targeted feature wiring.
- *
  * ## Consumer model
  *
  * The registry is agnostic to path naming conventions. PlasmaZones populates
@@ -83,10 +74,10 @@ public:
     void unregisterProfile(const QString& path);
 
     /// Wholesale replace the entire registry contents with @p profiles
-    /// and fire `profilesReloaded()` exactly once. Bound consumers
-    /// re-resolve every path they care about. Used by the loader
-    /// pass in sub-commit 5 after a config-file directory rescan to
-    /// coalesce many per-path signals into one reload event.
+    /// and fire `profilesReloaded()` exactly once — provided the new
+    /// map actually differs from the current one (no-op + no signal
+    /// otherwise). Used by `ProfileLoader` after a directory rescan
+    /// to coalesce many per-path signals into a single reload event.
     void reloadAll(const QHash<QString, Profile>& profiles);
 
     /// Clear the registry. Fires `profilesReloaded()`. Test-only

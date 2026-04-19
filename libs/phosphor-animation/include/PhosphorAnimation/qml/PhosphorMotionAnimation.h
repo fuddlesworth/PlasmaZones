@@ -107,10 +107,14 @@ public:
     const Profile& resolvedProfile() const;
 
     /// `QAbstractAnimation::duration()` — driven by the resolved
-    /// profile's `effectiveDuration`. Qt queries this at `start()` time;
-    /// a profile change during a running animation updates the cached
-    /// value for the NEXT start, mid-flight runs keep their original
-    /// duration to avoid visual stalls.
+    /// profile's `effectiveDuration`, but SNAPSHOTTED at `start()`
+    /// so that a profile swap mid-flight (live settings edit) cannot
+    /// rewind the animation. Qt's animation framework reads `duration()`
+    /// on every tick to compute progress = elapsed/duration; letting
+    /// the live value leak through would turn a `200 ms → 400 ms` edit
+    /// at elapsed=150 ms into progress=0.375 (a visible backwards
+    /// jump) instead of the expected 0.75 continuing smoothly to 1.0.
+    /// The new duration takes effect on the next `start()`.
     int duration() const override;
 
 Q_SIGNALS:
@@ -123,6 +127,12 @@ protected:
     /// for the supported QVariant types.
     QVariant interpolated(const QVariant& from, const QVariant& to, qreal progress) const override;
 
+    /// `QAbstractAnimation::updateState` override — snapshots the
+    /// resolved profile's duration into `m_activeDurationMs` on the
+    /// `Stopped → Running` edge so mid-flight profile swaps can't
+    /// rewind progress. Cache cleared on `Running → Stopped`.
+    void updateState(QAbstractAnimation::State newState, QAbstractAnimation::State oldState) override;
+
 private:
     void resolveFromVariant(const QVariant& p);
     void rebindToRegistryPath(const QString& path);
@@ -131,6 +141,7 @@ private:
 
     QVariant m_profile; ///< The QML-facing input: QString or PhosphorProfile.
     Profile m_resolvedProfile; ///< Effective value used by duration() / interpolated.
+    int m_activeDurationMs = -1; ///< Frozen at start(); -1 while idle (fall through to resolved).
     QString m_boundPath; ///< Non-empty when the input was a path string — drives live-rebind.
     QMetaObject::Connection m_registryChangedConnection;
     QMetaObject::Connection m_registryReloadedConnection;

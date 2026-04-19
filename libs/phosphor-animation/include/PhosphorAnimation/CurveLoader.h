@@ -6,37 +6,28 @@
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <PhosphorJsonLoader/DirectoryLoader.h>
+#include <PhosphorJsonLoader/IDirectoryLoaderSink.h>
+
 #include <QtCore/QHash>
 #include <QtCore/QObject>
-#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
-#include <QtCore/QTimer>
 
 #include <memory>
-
-QT_BEGIN_NAMESPACE
-class QFileSystemWatcher;
-QT_END_NAMESPACE
 
 namespace PhosphorAnimation {
 
 class CurveRegistry;
 
 /**
- * @brief Opt-in policy for directory-scanning loaders — pair with
- *        `CurveLoader` / `ProfileLoader`.
+ * @brief Opt-in policy for directory-scanning loaders.
  *
- * Phase 4 decision W. `LiveReload::On` installs a
- * `QFileSystemWatcher` on the scanned directory with 50 ms debounce;
- * edits trigger a rescan + `curvesChanged` / `profilesChanged` signal.
- * `LiveReload::Off` is the fire-and-forget mode — tests, batch imports,
- * and consumers that prefer explicit refresh semantics.
+ * Thin re-export of `PhosphorJsonLoader::LiveReload` so the existing
+ * `PhosphorAnimation::LiveReload::On` call-sites keep compiling after
+ * the directory-watching scaffolding moved into `phosphor-jsonloader`.
  */
-enum class LiveReload : quint8 {
-    Off,
-    On,
-};
+using LiveReload = PhosphorJsonLoader::LiveReload;
 
 /**
  * @brief Scans JSON curve-definition files and registers them with `CurveRegistry`.
@@ -46,6 +37,10 @@ enum class LiveReload : quint8 {
  * (PlasmaZones daemon, Wayfire plugin, Quickshell shell) pick their
  * own XDG namespace via `QStandardPaths::locateAll(GenericDataLocation,
  * "<consumer>/curves", LocateDirectory)` and hand the results here.
+ *
+ * The directory-walking, watching, debouncing, and user-wins-collision
+ * bookkeeping is delegated to `PhosphorJsonLoader::DirectoryLoader`;
+ * this class is the curve-specific sink on top of that.
  *
  * ## File format (schema v1)
  *
@@ -61,52 +56,20 @@ enum class LiveReload : quint8 {
  * ```
  *
  * - `name` — required. Registry key under which the curve is registered.
- *   Callers reference it as `"smooth-overshoot"` when constructing
- *   Profiles or Curves.
- * - `displayName` — optional. Settings-UI label; the loader stores it
- *   but does not act on it.
+ * - `displayName` — optional. Settings-UI label; stored but not acted on.
  * - `typeId` — required. Must match an existing `CurveRegistry`
  *   factory (`"spring"`, `"cubic-bezier"`, `"elastic-in"`, etc.). No
- *   new curve classes can be defined through JSON (decision V —
- *   user curves parameterise existing types).
- * - `parameters` — object whose shape depends on `typeId`:
- *     * `spring`: `omega` (qreal), `zeta` (qreal)
- *     * `cubic-bezier`: `x1`, `y1`, `x2`, `y2` (all qreal)
- *     * `elastic-in` / `-out` / `-in-out`: `amplitude` (qreal), `period` (qreal)
- *     * `bounce-in` / `-out` / `-in-out`: `amplitude` (qreal), `bounces` (int)
+ *   new curve classes can be defined through JSON (decision V).
+ * - `parameters` — object whose shape depends on `typeId`.
  *
- * ## Collision policy (decision X)
+ * ## Collision / live reload
  *
- * `loadFromDirectories` scans in the order supplied. Later entries
- * override earlier — callers that want the usual XDG "user overrides
- * system" shape pass directories in system-first / user-last order
- * (matches the reverse of `QStandardPaths::locateAll`'s natural output;
- * see `LayoutManager::loadLayouts` for the in-tree precedent).
- *
- * Per-curve bookkeeping tracks the `sourcePath` plus `systemSourcePath`
- * (the shadowed system entry's file, if any). Unregistering via
- * `unregisterUserCurves(dir)` restores the shadowed system curves from
- * the tracked paths — mirrors `LayoutManager`'s user-copy-deletion
- * semantics.
- *
- * ## Live reload (decision W)
- *
- * When constructed with `LiveReload::On`, the loader installs a
- * `QFileSystemWatcher` on every scanned directory and debounces rescan
- * requests through a 50 ms single-shot `QTimer` — matches the
- * `LayoutManager` / `EditorController` pattern.
- *
- * `QFileSystemWatcher` has known misses on atomic-rename writes (e.g.,
- * `QSaveFile`). For cross-process robustness, consumers should wire a
- * D-Bus notification stream for their writer path through the same
- * rescan entry (`loader.requestRescan()` — public so consumer signals
- * can tie in as belt-and-suspenders).
- *
- * ## Thread safety
- *
- * GUI-thread only. `QFileSystemWatcher` / `QTimer` live on the thread
- * the loader was constructed on; call `loadFromDirectory` from the
- * same thread.
+ * Inherited from `DirectoryLoader`: later-scanned directories override
+ * earlier on name collision (pass dirs in system-first, user-last
+ * order); `LiveReload::On` installs a `QFileSystemWatcher` with 50 ms
+ * debounce, including parent-directory watching when the target
+ * doesn't exist yet. Deleted files are purged from `CurveRegistry`
+ * via `unregisterFactory`.
  */
 class PHOSPHORANIMATION_EXPORT CurveLoader : public QObject
 {
@@ -117,38 +80,21 @@ public:
     ~CurveLoader() override;
 
     /// Scan @p directory for `*.json` curve definitions and register
-    /// each into @p registry. Returns the count successfully registered
-    /// (may be less than the file count if some files failed to parse —
-    /// failures are logged but do not abort the rest of the scan).
-    ///
-    /// @p liveReload installs a `QFileSystemWatcher` on the directory
-    /// and re-registers on change. Multiple calls with the same
-    /// directory are idempotent — the watcher is installed once.
+    /// each into @p registry.
     int loadFromDirectory(const QString& directory, CurveRegistry& registry, LiveReload liveReload = LiveReload::Off);
 
-    /// Scan multiple directories in order. Later entries override
-    /// earlier on name collision (standard user-wins-over-system
-    /// layering). See class doc.
+    /// Scan multiple directories in order.
     int loadFromDirectories(const QStringList& directories, CurveRegistry& registry,
                             LiveReload liveReload = LiveReload::Off);
 
     /// Load curves bundled at the library's install-relative
-    /// `data/curves/` (discovered via `QStandardPaths` against the
-    /// library's own org/app). Returns the count registered. Returns
-    /// zero when no bundled curves ship with the library — currently
-    /// a stub that pays the scan cost but produces no output, for
-    /// consumers to call regardless of whether builtins exist yet.
+    /// `data/curves/`. Returns zero when no bundled curves ship.
     int loadLibraryBuiltins(CurveRegistry& registry);
 
-    /// Request a manual rescan of every watched directory. Callers
-    /// wire this to D-Bus notifications (cross-process safe — see
-    /// class doc) to cover `QFileSystemWatcher`'s atomic-rename
-    /// blind spot.
+    /// Manual rescan request (cross-process D-Bus signal → this).
     void requestRescan();
 
-    /// Count of currently-registered curves under this loader's
-    /// management. Excludes whatever CurveRegistry factories were
-    /// present before the loader was instantiated.
+    /// Count of currently-registered curves under this loader's management.
     int registeredCount() const;
 
     /// Tests / debug — access the tracked entries.
@@ -162,31 +108,13 @@ public:
     QList<Entry> entries() const;
 
 Q_SIGNALS:
-    /// Fired after a rescan when the set of registered curves changed
-    /// (addition, replacement, or removal). Consumers re-resolve any
-    /// named curves they care about. Debounced to coalesce multiple
-    /// filesystem events in the same 50 ms window.
+    /// Fired after a rescan when the set of registered curves changed.
     void curvesChanged();
 
 private:
-    /// Parse a single file, returning the registered entry on success
-    /// or `std::nullopt` on parse failure. Does not mutate the
-    /// registry — the caller installs the resulting curve.
-    std::optional<std::pair<Entry, std::shared_ptr<const Curve>>> parseFile(const QString& filePath) const;
-
-    void rescanAll();
-    void rescanDirectory(const QString& directory);
-    void installWatcherIfNeeded();
-
-    // Raw pointer — CurveRegistry is a process-wide singleton that
-    // outlives any loader, so QPointer's QObject-tracking is neither
-    // needed nor applicable (CurveRegistry isn't a QObject).
-    CurveRegistry* m_registry = nullptr;
-    QStringList m_directories; ///< Scanned directories in caller-supplied order.
-    QHash<QString, Entry> m_entries; ///< name → entry
-    QFileSystemWatcher* m_watcher = nullptr;
-    QTimer m_debounceTimer;
-    bool m_liveReloadEnabled = false;
+    class Sink;
+    std::unique_ptr<Sink> m_sink;
+    std::unique_ptr<PhosphorJsonLoader::DirectoryLoader> m_loader;
 };
 
 } // namespace PhosphorAnimation
