@@ -188,6 +188,16 @@ Q_SIGNALS:
     /// @ref virtualScreensChanged.
     void virtualScreenRegionsChanged(const QString& physicalScreenId);
 
+    /// Emitted when a connected screen's identifier flips — e.g. a bare
+    /// EDID ID promotes to "base/CONNECTOR" form because a second same-
+    /// model monitor joined, or vice versa on removal. The manager has
+    /// already re-keyed its own internal @c m_virtualConfigs by the time
+    /// this fires; external consumers (SettingsConfigStore-backed
+    /// persistence) must re-key their own stores under @p newId so the
+    /// next @ref IConfigStore::loadAll agrees with the manager's cache.
+    /// Both IDs are physical (no @c /vs:N suffix).
+    void screenIdentifierChanged(const QString& oldId, const QString& newId);
+
 private Q_SLOTS:
     void onScreenAdded(QScreen* screen);
     void onScreenRemoved(QScreen* screen);
@@ -252,6 +262,13 @@ private:
     void rebuildVirtualGeometryCache(const QString& physicalScreenId) const;
 
     QString virtualScreenAtWithScreen(const QPoint& globalPos, const QString& physicalScreenId, QScreen* screen) const;
+
+    /// Detect identifier flips between @p oldIds and the current computed
+    /// identifiers, re-key @c m_virtualConfigs in place, and emit
+    /// @ref screenIdentifierChanged so external stores can migrate too.
+    /// Called from @ref onScreenAdded and @ref onScreenRemoved after the
+    /// identifier caches are invalidated.
+    void propagateIdentifierDrift(const QHash<QScreen*, QString>& oldIds);
 };
 
 } // namespace Phosphor::Screens

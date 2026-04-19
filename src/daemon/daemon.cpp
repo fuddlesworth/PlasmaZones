@@ -419,13 +419,12 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
-    m_screenAdaptor = new ScreenAdaptor(m_screenManager.get(), this);
-    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
-    // of truth) via the IConfigStore — the daemon's single SettingsConfigStore
+    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source of
+    // truth) via the IConfigStore — the daemon's single SettingsConfigStore
     // instance, shared with m_screenManager (as its Config::configStore) and
     // m_virtualScreenSwapper. One store per process, one change-signal
     // channel, no parallel Settings observer.
-    m_screenAdaptor->setConfigStore(m_virtualScreenStore.get());
+    m_screenAdaptor = new ScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here

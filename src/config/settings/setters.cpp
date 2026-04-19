@@ -6,6 +6,7 @@
 #include "../../core/constants.h"
 #include "../../core/logging.h"
 #include "../../core/utils.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../../autotile/AutotileConfig.h"
 
@@ -123,6 +124,33 @@ bool Settings::setVirtualScreenConfig(const QString& physicalScreenId,
 Phosphor::Screens::VirtualScreenConfig Settings::virtualScreenConfig(const QString& physicalScreenId) const
 {
     return m_virtualScreenConfigs.value(physicalScreenId);
+}
+
+bool Settings::renameVirtualScreenConfig(const QString& oldPhysicalScreenId, const QString& newPhysicalScreenId)
+{
+    if (oldPhysicalScreenId.isEmpty() || newPhysicalScreenId.isEmpty() || oldPhysicalScreenId == newPhysicalScreenId) {
+        return true;
+    }
+    auto it = m_virtualScreenConfigs.constFind(oldPhysicalScreenId);
+    if (it == m_virtualScreenConfigs.constEnd()) {
+        return true; // nothing to migrate
+    }
+    // Rewrite the config so every def's physicalScreenId + id reflects the
+    // new key. VirtualScreenId::make derives ids from the physical id, so
+    // a bare move under the new key without this rewrite would leave stale
+    // "oldId/vs:N" ids inside the persisted record.
+    Phosphor::Screens::VirtualScreenConfig migrated = it.value();
+    migrated.physicalScreenId = newPhysicalScreenId;
+    for (auto& def : migrated.screens) {
+        def.physicalScreenId = newPhysicalScreenId;
+        def.id = PhosphorIdentity::VirtualScreenId::make(newPhysicalScreenId, def.index);
+    }
+    m_virtualScreenConfigs.remove(oldPhysicalScreenId);
+    m_virtualScreenConfigs.insert(newPhysicalScreenId, migrated);
+    qCInfo(lcConfig) << "VirtualScreen config migrated:" << oldPhysicalScreenId << "→" << newPhysicalScreenId;
+    Q_EMIT virtualScreenConfigsChanged();
+    Q_EMIT settingsChanged();
+    return true;
 }
 
 } // namespace PlasmaZones

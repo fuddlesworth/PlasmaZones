@@ -766,6 +766,15 @@ public:
     bool setVirtualScreenConfig(const QString& physicalScreenId, const Phosphor::Screens::VirtualScreenConfig& config);
     Phosphor::Screens::VirtualScreenConfig virtualScreenConfig(const QString& physicalScreenId) const;
 
+    /// Atomically re-key a persisted VS config from @p oldPhysicalScreenId to
+    /// @p newPhysicalScreenId. Used when a screen's disambiguation-aware
+    /// identifier flips (same-model hotplug) so the user's existing
+    /// subdivision doesn't orphan under the old key. No-op if no config
+    /// exists at @p oldPhysicalScreenId. Emits @ref virtualScreenConfigsChanged
+    /// exactly once (not twice, as remove+set would).
+    /// @return true on success or when nothing to migrate.
+    bool renameVirtualScreenConfig(const QString& oldPhysicalScreenId, const QString& newPhysicalScreenId);
+
     // Rendering (ISettings)
     // Rendering backend — PhosphorConfig::Store-backed; the schema's
     // validator runs normalizeRenderingBackend on every read/write so

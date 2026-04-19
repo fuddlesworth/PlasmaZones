@@ -58,10 +58,30 @@ constexpr QLatin1String kKeyHeight{"height"};
 constexpr QLatin1String kKeyId{"id"};
 } // namespace
 
-DBusScreenAdaptor::DBusScreenAdaptor(QObject* parent)
+DBusScreenAdaptor::DBusScreenAdaptor(ScreenManager* manager, IConfigStore* store, QObject* parent)
     : QDBusAbstractAdaptor(parent)
+    , m_screenManager(manager)
+    , m_configStore(store)
 {
+    // Wire per-QScreen signals and the deferred-effective-ids baseline.
+    // wireQGuiApplicationSignals internally reads m_screenManager (already
+    // set above via initializer list), so priming must happen AFTER the
+    // members are assigned.
     wireQGuiApplicationSignals();
+
+    if (m_screenManager) {
+        connectScreenManagerSignals(m_screenManager);
+        // Prime m_cachedEffectiveIdsPerScreen for screens that already exist.
+        // handleScreenRemoved relies on the cache to emit per-VS screenRemoved
+        // tokens without a round-trip through the (about-to-be-stale) manager.
+        for (QScreen* screen : QGuiApplication::screens()) {
+            const QString physId = ScreenIdentity::identifierFor(screen);
+            if (m_screenManager->hasVirtualScreens(physId)) {
+                m_cachedEffectiveIdsPerScreen[physId] = m_screenManager->virtualScreenIdsFor(physId);
+            }
+        }
+        m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
+    }
 }
 
 ScreenManager* DBusScreenAdaptor::screenManager() const
@@ -83,43 +103,7 @@ DBusScreenAdaptor::~DBusScreenAdaptor()
     // (QObject children are deleted AFTER the derived class's data members,
     // so a Daemon-owned ScreenManager held by unique_ptr is gone before a
     // Daemon-child ScreenAdaptor's destructor runs). m_screenManager is
-    // now QPointer-guarded for readers elsewhere.
-}
-
-void DBusScreenAdaptor::setScreenManager(ScreenManager* manager)
-{
-    if (m_screenManager == manager) {
-        return;
-    }
-    if (m_screenManager) {
-        disconnectScreenManagerSignals(m_screenManager);
-    }
-    m_screenManager = manager;
-    m_cachedEffectiveIdsPerScreen.clear();
-    if (m_screenManager) {
-        connectScreenManagerSignals(m_screenManager);
-        // Prime m_cachedEffectiveIdsPerScreen for screens that already exist.
-        // The per-screen signal wiring in the constructor ran before the
-        // manager was wired, so the cache population branch was skipped
-        // there. Do it here instead — handleScreenRemoved relies on the
-        // cache to emit per-VS screenRemoved tokens without a round-trip
-        // through the (about-to-be-stale) manager.
-        for (QScreen* screen : QGuiApplication::screens()) {
-            const QString physId = ScreenIdentity::identifierFor(screen);
-            if (m_screenManager->hasVirtualScreens(physId)) {
-                m_cachedEffectiveIdsPerScreen[physId] = m_screenManager->virtualScreenIdsFor(physId);
-            }
-        }
-        m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
-    } else {
-        m_lastEmittedEffectiveIds.clear();
-    }
-    invalidateScreenInfoCache();
-}
-
-void DBusScreenAdaptor::setConfigStore(IConfigStore* store)
-{
-    m_configStore = store;
+    // QPointer-guarded for readers elsewhere.
 }
 
 void DBusScreenAdaptor::wireQGuiApplicationSignals()

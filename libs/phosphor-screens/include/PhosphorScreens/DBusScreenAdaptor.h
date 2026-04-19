@@ -44,18 +44,12 @@ class PHOSPHORSCREENS_EXPORT DBusScreenAdaptor : public QDBusAbstractAdaptor
     // name so different hosts can register against their own services.
 
 public:
-    explicit DBusScreenAdaptor(QObject* parent = nullptr);
+    /// Primary constructor: wires the screen-topology service and the VS
+    /// config store at construction time. @p manager and @p store may be
+    /// null for bring-up paths that don't need either (most methods return
+    /// empty results / rejection tokens in that case).
+    explicit DBusScreenAdaptor(ScreenManager* manager, IConfigStore* store, QObject* parent = nullptr);
     ~DBusScreenAdaptor() override;
-
-    /// Wire the screen-topology service the adaptor queries. Null is
-    /// valid (most methods return empty results) to simplify early
-    /// wiring. Safe to call repeatedly.
-    void setScreenManager(ScreenManager* manager);
-
-    /// Wire the VS config store used by swap/rotate/setVirtualScreenConfig.
-    /// Null disables the VS mutation path (methods log + return a stable
-    /// rejection token).
-    void setConfigStore(IConfigStore* store);
 
 public Q_SLOTS:
     // Screen queries

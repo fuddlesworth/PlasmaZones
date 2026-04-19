@@ -69,6 +69,20 @@ void Daemon::connectScreenSignals()
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::virtualScreenRegionsChanged, this,
             &Daemon::onVirtualScreenRegionsChanged);
 
+    // Identifier-drift propagation: ScreenManager just re-keyed its own
+    // in-memory VS cache; the persistent store (Settings) must follow or
+    // the next reload would re-insert the orphaned entry under the old id.
+    // Fires on same-model hotplug where disambiguation flips
+    // bare ↔ "/CONNECTOR"-suffixed form. Gated on m_settings so tests that
+    // construct a manager without Settings don't crash.
+    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenIdentifierChanged, this,
+            [this](const QString& oldId, const QString& newId) {
+                if (m_settings) {
+                    m_settings->renameVirtualScreenConfig(oldId, newId);
+                    m_settings->save();
+                }
+            });
+
     // Connect screen manager signals
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this, [this](QScreen* screen) {
         // Invalidate cached EDID serial so a fresh sysfs read happens for this connector

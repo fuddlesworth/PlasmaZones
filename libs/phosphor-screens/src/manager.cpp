@@ -422,22 +422,85 @@ void ScreenManager::scheduleDelayedPanelRequery(int delayMs)
     m_cfg.panelSource->requestRequery(delayMs);
 }
 
+namespace {
+/// Capture {QScreen* → current identifier} for every screen in @p tracked.
+/// Used before a topology-change event to detect identifier drift after the
+/// caches are invalidated: any screen whose identifier differs post-flip had
+/// its disambiguation status change (bare ↔ "/CONNECTOR" suffix).
+QHash<QScreen*, QString> snapshotIdentifiers(const QVector<QScreen*>& tracked)
+{
+    QHash<QScreen*, QString> snapshot;
+    snapshot.reserve(tracked.size());
+    for (auto* s : tracked) {
+        if (s) {
+            snapshot.insert(s, ScreenIdentity::identifierFor(s));
+        }
+    }
+    return snapshot;
+}
+} // namespace
+
+void ScreenManager::propagateIdentifierDrift(const QHash<QScreen*, QString>& oldIds)
+{
+    // Compare old vs newly-computed identifiers for each still-tracked screen.
+    // Any diff is a disambiguation flip — the persisted VS config keyed under
+    // the old ID is now orphaned. Re-key the manager's own cache in place,
+    // then emit screenIdentifierChanged so the host's IConfigStore can do
+    // the same to its backing store. Both directions (bare→suffixed on add,
+    // suffixed→bare on remove) flow through this single code path.
+    for (auto it = oldIds.constBegin(); it != oldIds.constEnd(); ++it) {
+        QScreen* screen = it.key();
+        if (!screen || !m_trackedScreens.contains(screen)) {
+            continue;
+        }
+        const QString oldId = it.value();
+        const QString newId = ScreenIdentity::identifierFor(screen);
+        if (oldId == newId || oldId.isEmpty() || newId.isEmpty()) {
+            continue;
+        }
+
+        // Migrate the manager's cache: move any config at oldId → newId.
+        // If nothing was cached at oldId, the signal still fires so an
+        // external store that holds the only copy can migrate itself.
+        auto cached = m_virtualConfigs.find(oldId);
+        if (cached != m_virtualConfigs.end()) {
+            VirtualScreenConfig cfg = cached.value();
+            cfg.physicalScreenId = newId;
+            for (auto& def : cfg.screens) {
+                def.physicalScreenId = newId;
+                def.id = PhosphorIdentity::VirtualScreenId::make(newId, def.index);
+            }
+            m_virtualConfigs.erase(cached);
+            m_virtualConfigs.insert(newId, cfg);
+            m_effectiveScreenIdsDirty = true;
+            invalidateVirtualGeometryCache(oldId);
+            invalidateVirtualGeometryCache(newId);
+        }
+
+        qCInfo(lcPhosphorScreens) << "Screen identifier drift:" << oldId << "→" << newId;
+        Q_EMIT screenIdentifierChanged(oldId, newId);
+    }
+}
+
 void ScreenManager::onScreenAdded(QScreen* screen)
 {
     if (!screen || m_trackedScreens.contains(screen)) {
         return;
     }
-    // Topology changed — invalidate computed identifiers BEFORE emitting
-    // screenAdded so listeners that call identifierFor() on the existing
-    // tracked screens see freshly-disambiguated IDs. Scenario: a second
-    // same-model monitor joining promotes the first monitor's cached ID
-    // from bare "Manuf:Model:Serial" to "Manuf:Model:Serial/CONNECTOR".
-    // Without this, the first monitor's listeners keep reading the stale
-    // bare ID and downstream state keyed by ID desynchronises.
+    // Topology changed — snapshot current identifiers, invalidate computed
+    // identifiers BEFORE emitting screenAdded so listeners that call
+    // identifierFor() on the existing tracked screens see freshly-
+    // disambiguated IDs. Scenario: a second same-model monitor joining
+    // promotes the first monitor's cached ID from bare
+    // "Manuf:Model:Serial" to "Manuf:Model:Serial/CONNECTOR". Without the
+    // snapshot + propagateIdentifierDrift pair, persisted VS configs
+    // keyed on the old bare form silently orphan.
+    const QHash<QScreen*, QString> oldIds = snapshotIdentifiers(m_trackedScreens);
     ScreenIdentity::invalidateComputedIdentifiers();
     connectScreenSignals(screen);
     m_trackedScreens.append(screen);
     m_effectiveScreenIdsDirty = true;
+    propagateIdentifierDrift(oldIds);
     if (m_cfg.useGeometrySensors) {
         createGeometrySensor(screen);
     }
@@ -464,13 +527,15 @@ void ScreenManager::onScreenRemoved(QScreen* screen)
     // Drop EDID-cache entries pinned to this connector so a different
     // monitor on the same port gets fresh identifier resolution next time.
     ScreenIdentity::invalidateEdidCache(screen->name());
-    // Clear the broader computed-identifier caches too — a removal can
-    // also collapse a disambiguated ID back to bare form on the screen
-    // that previously had a same-model sibling. invalidateEdidCache above
-    // only drops entries tied to THIS connector; the still-connected
-    // sibling's cached disambiguated ID must go through this path.
+    // Snapshot identifiers of the SURVIVING tracked screens before clearing
+    // the computed-identifier cache. Removal can collapse a disambiguated ID
+    // back to bare form on a screen that previously had a same-model
+    // sibling; propagateIdentifierDrift migrates persisted configs in that
+    // direction too.
+    const QHash<QScreen*, QString> oldIds = snapshotIdentifiers(m_trackedScreens);
     ScreenIdentity::invalidateComputedIdentifiers();
     m_effectiveScreenIdsDirty = true;
+    propagateIdentifierDrift(oldIds);
 
     Q_EMIT screenRemoved(screen);
 }

@@ -107,8 +107,7 @@ private Q_SLOTS:
         InMemoryConfigStore store(/*maxScreensPerPhysical=*/2);
 
         AdaptorHost host;
-        DBusScreenAdaptor adaptor(&host);
-        adaptor.setConfigStore(&store);
+        DBusScreenAdaptor adaptor(nullptr, &store, &host);
 
         QSignalSpy spy(&store, &InMemoryConfigStore::changed);
 
@@ -128,8 +127,7 @@ private Q_SLOTS:
         InMemoryConfigStore store(/*maxScreensPerPhysical=*/2);
 
         AdaptorHost host;
-        DBusScreenAdaptor adaptor(&host);
-        adaptor.setConfigStore(&store);
+        DBusScreenAdaptor adaptor(nullptr, &store, &host);
 
         QSignalSpy spy(&store, &InMemoryConfigStore::changed);
 
@@ -172,9 +170,7 @@ private Q_SLOTS:
         // Adaptor admission for the same payload: same outcome — rejected,
         // no state mutation.
         AdaptorHost host;
-        DBusScreenAdaptor adaptor(&host);
-        adaptor.setScreenManager(&mgr);
-        adaptor.setConfigStore(&store);
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
 
         QSignalSpy spy(&store, &InMemoryConfigStore::changed);
         adaptor.setVirtualScreenConfig(physId, buildStripeJson(3));
@@ -193,8 +189,7 @@ private Q_SLOTS:
         }
         InMemoryConfigStore store;
         AdaptorHost host;
-        DBusScreenAdaptor adaptor(&host);
-        adaptor.setConfigStore(&store);
+        DBusScreenAdaptor adaptor(nullptr, &store, &host);
 
         // Success path: empty string.
         QCOMPARE(adaptor.setVirtualScreenConfig(physId, buildStripeJson(2)), QString());
@@ -234,7 +229,7 @@ private Q_SLOTS:
 
         // No config store wired → "no_config_store".
         AdaptorHost host2;
-        DBusScreenAdaptor adaptor2(&host2);
+        DBusScreenAdaptor adaptor2(nullptr, nullptr, &host2);
         QCOMPARE(adaptor2.setVirtualScreenConfig(physId, buildStripeJson(2)), QStringLiteral("no_config_store"));
     }
 };

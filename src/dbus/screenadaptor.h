@@ -9,6 +9,7 @@
 
 namespace Phosphor::Screens {
 class ScreenManager;
+class IConfigStore;
 }
 
 namespace PlasmaZones {
@@ -22,15 +23,9 @@ namespace PlasmaZones {
  * `Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")` so
  * registrations go to the right interface name.
  *
- * Wiring: the daemon constructs this with an explicit Phosphor::Screens::ScreenManager
- * pointer and separately calls the base's `setConfigStore` with its
- * SettingsConfigStore. Constructor-injection removes what was a hidden
- * read from the `PlasmaZones::screenManager()` service-locator at ctor
- * time — that made the adaptor implicitly depend on Daemon's own
- * initialisation order. One IConfigStore instance per process → single
- * change-signal channel.
- *
- * Interface name must match `dbus/org.plasmazones.Screen.xml` and
+ * Wiring: both the ScreenManager and the IConfigStore are passed through
+ * the constructor — no setters, no service-locator intermediary. Interface
+ * name must match `dbus/org.plasmazones.Screen.xml` and
  * `DBus::Interface::Screen` for KCM signal connections.
  */
 class PLASMAZONES_EXPORT ScreenAdaptor : public Phosphor::Screens::DBusScreenAdaptor
@@ -39,7 +34,8 @@ class PLASMAZONES_EXPORT ScreenAdaptor : public Phosphor::Screens::DBusScreenAda
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Screen")
 
 public:
-    explicit ScreenAdaptor(Phosphor::Screens::ScreenManager* manager, QObject* parent = nullptr);
+    explicit ScreenAdaptor(Phosphor::Screens::ScreenManager* manager, Phosphor::Screens::IConfigStore* store,
+                           QObject* parent = nullptr);
     ~ScreenAdaptor() override;
 };
 
