@@ -82,10 +82,11 @@ required for `QPointF` / `QSizeF` / `QRect` / `QRectF` used throughout
    `global`) respects their paths naturally.
 
 6. **Compositor-agnostic.** No references to KWin, Wayland, X11, or
-   any window-system. `WindowMotion` describes geometry transitions in
-   pure `QPointF` / `QSizeF` / `QRect` terms. The KWin-specific paint
-   glue lives in `kwin-effect/windowanimator.cpp`; future compositor
-   plugins will ship their own adapters against the same state model.
+   any window-system. `WindowMotion` (Phase 2) / `AnimatedValue<QRectF>`
+   (Phase 3+) describe geometry transitions in pure `QPointF` /
+   `QSizeF` / `QRect` / `QRectF` terms. The KWin-specific paint glue
+   lives in `kwin-effect/windowanimator.cpp`; future compositor plugins
+   ship their own `IMotionClock` adapters against the same state model.
 
 7. **String + JSON are the wire formats.** No QDataStream, no QDBusArgument
    at the curve / profile layer. Callers that need D-Bus marshalling
@@ -353,7 +354,14 @@ speculative legacy-object fallback: the library is brand new and has no
 prior persisted format, so per CLAUDE.md's "no ad-hoc migration code"
 rule, reads and writes share the same shape.
 
-### `WindowMotion.h` — per-window snap animation state
+### `WindowMotion.h` — (🗑 deleted in Phase 3 sub-commit 3)
+
+> **Status:** removed. Fields became internal state of
+> `AnimatedValue<QRectF>`; the snap-animation path flows through
+> `SnapPolicy::createSnapSpec` → `AnimatedValue<QRectF>::start()`.
+> The description below documents the Phase-2 shipped API for
+> historical reference only; the header and tests no longer exist.
+
 
 ```cpp
 struct WindowMotion {
@@ -394,7 +402,16 @@ on the last frame. Stateful step-based progression + velocity-preserving
 retarget are a Phase 3 concern (`AnimatedValue<T>` holds `CurveState`
 alongside the clock; see Open Question 3 below).
 
-### `AnimationMath.h`
+### `AnimationMath.h` (🗑 deleted in Phase 3 sub-commit 3)
+
+> **Status:** removed. `createSnapMotion` was replaced by
+> `SnapPolicy::createSnapSpec` (returns `std::optional<MotionSpec<QRectF>>`
+> instead of `std::optional<WindowMotion>`); `repaintBounds` was
+> absorbed into `AnimatedValue<QRectF>::bounds()` and the
+> `Curve::overshoots()` polymorphism. The description below documents
+> the Phase-2 shipped API for historical reference only; the header
+> and tests no longer exist.
+
 
 ```cpp
 namespace AnimationMath {
@@ -528,27 +545,24 @@ initialization) and survives until process exit.
 
 ## Non-Goals (for this library)
 
-- **Animation driver / clock abstraction.** The Phase-3 `IMotionClock`
-  hasn't landed; today `WindowMotion` takes `presentTime` directly. The
-  abstraction cost wasn't justified until multiple compositors are
-  consuming the library.
+Phase 2 (`AnimationController` + `WindowAnimator` split) and Phase 3
+(`IMotionClock` + `AnimatedValue<T>` unified runtime) have landed —
+their previously-listed deferrals are now non-goals only in the sense
+that the work has completed and the scope has closed. The remaining
+out-of-scope items:
+
 - **QML integration.** `PhosphorEasing` / `PhosphorSpring` /
-  `PhosphorMotion` QML value types are Phase 4. The C++ runtime can
-  land first; QML bindings come once the API has been exercised in
+  `PhosphorMotion` QML value types are Phase 4. The C++ runtime landed
+  first; QML bindings come once the API has been exercised in
   kwin-effect and settings.
-- **Shader-backed composite transitions.** Phase 6. Belongs in
-  `phosphor-animation` (not `src/daemon/rendering/` or elsewhere) but
-  requires phase-2 progression refactor first so shader effects can
-  hang off `AnimationController`.
 - **`ISurfaceAnimator` implementation.** Phase 5. `phosphor-layer`
   defines the interface; a real animator implementation for OSDs /
   overlays / snap-assist will ship as a sub-target that depends on
   both `phosphor-animation` and `phosphor-layer`.
-- **`AnimatedValue<T>` template.** Phase 3. The current primitives
-  work with concrete `QPointF` / `QSizeF` state inside `WindowMotion`
-  because that's all the compositor side needs today. Generic
-  `AnimatedValue<T>` for color / transform / scalar properties comes
-  alongside QML integration.
+- **Shader-backed composite transitions.** Phase 6. Belongs in
+  `phosphor-animation` (not `src/daemon/rendering/` or elsewhere); the
+  Phase-3 `AnimationController` rewrite on `AnimatedValue<QRectF>` is
+  the hook-point that shader effects hang off.
 
 ---
 
@@ -601,46 +615,362 @@ numbering reflects dependency order, not required calendar order.
   and the controller base is plain C++) — construction site changed
   from `make_unique<WindowAnimator>(this)` to `make_unique<WindowAnimator>()`.
 
-### Phase 3 — IMotionClock + AnimatedValue<T>
+### Phase 3 — Unified motion runtime (IMotionClock + AnimatedValue<T>) ✅ DONE
 
-**Scope:** Decouple progression from `presentTime` so QML OSDs and
-compositor-side window motion share one clock model. Introduce a
-generic `AnimatedValue<T>` template for non-geometry animations.
+**Status:** shipped on `feat/phosphor-animation-phase3` as five
+sub-commits (plus the architecture pass). All success criteria met;
+~2400 LOC of library code, 121 tests green (120 default build +1
+opt-in QtQuickClock test).
 
-**Library additions:**
-- `include/PhosphorAnimation/IMotionClock.h` — abstract clock with
-  `std::chrono::milliseconds now() const` and an optional repaint
-  request hook.
-- `include/PhosphorAnimation/CompositorClock.h` — concrete impl fed
-  by KWin presentTime (or equivalent on other compositors).
-- `include/PhosphorAnimation/QtQuickClock.h` — concrete impl driven
-  by `QQuickWindow::beforeRendering`.
-- `include/PhosphorAnimation/AnimatedValue.h` — template holding
-  `start`, `target`, current value, `CurveState`, clock reference,
-  and a curve pointer. Methods: `start(from, to, profile)`,
-  `retarget(newTo, policy)`, `cancel()`, `finish()`, `value()`,
-  `velocity()`, `bounds()`.
-- Specializations for `qreal`, `QPointF`, `QSizeF`, `QRectF`,
-  `QColor`, `QTransform`.
+#### Scope shift from the original Phase 3 draft
 
-**Retarget policy enum:**
+The original draft scoped Phase 3 as a clock abstraction plus a generic
+`AnimatedValue<T>` *alongside* the existing `WindowMotion`. Reviewing
+with niri / Hyprland / Quickshell / Wayfire-tier capability as the
+target and v3's no-backwards-compat freedom:
+
+**Decision — full unification.** `AnimatedValue<T>` *replaces*
+`WindowMotion`. `AnimationController<Handle>` is rewritten on top of
+`QHash<Handle, AnimatedValue<QRectF>>`. Two parallel progression
+engines is exactly the duplication Phase 2 was designed to eliminate;
+preserving `WindowMotion` just because Phase 2 shipped it would be the
+wrong trade for v3.
+
+#### Architecture decisions
+
+**A. `IMotionClock` — pull model, per-output scope, outgoing `requestFrame()`.**
+
 ```cpp
+class PHOSPHORANIMATION_EXPORT IMotionClock {
+public:
+    virtual ~IMotionClock() = default;
+    virtual std::chrono::nanoseconds now() const = 0;
+    virtual qreal refreshRate() const = 0;   // Hz
+    virtual void requestFrame() = 0;         // schedule next tick
+};
+```
+
+Pull model: compositor paint loops and `QQuickWindow::beforeRendering`
+are both paint-driven; a push-model clock would duplicate the
+subscription machinery the paint loop already owns. Outgoing
+`requestFrame()` replaces the compositor-specific `addRepaint` /
+QQuickWindow `update()` patterns with one portable call — it's the
+*only* outgoing edge on the clock. Per-output scope is non-negotiable
+for multi-monitor phase-locking; niri and Hyprland both multiplex
+per-monitor refresh rates (60 Hz + 144 Hz mixed), and a process-wide
+clock produces visible beating / double-stepping.
+
+Concrete impls:
+- `CompositorClock` — per-`KWin::Output`, driven by
+  `prePaintScreen(presentTime)`; `requestFrame()` forwards to
+  `KWin::effects->addRepaint()`.
+- `QtQuickClock` — per-`QQuickWindow`, driven by `beforeRendering`;
+  `requestFrame()` forwards to `QQuickWindow::update()`.
+
+**B. `AnimatedValue<T>` replaces `WindowMotion`.** The load-bearing
+decision. The snap-animation path becomes `AnimatedValue<QRectF>`;
+non-geometry animations (opacity, color, transform, scalar shader
+uniforms) use other specializations of the same template. Snap-
+specific policy (`minDistance`, `hasScaleChange`) moves into a
+`SnapPolicy::createSnapSpec` helper that returns a
+`std::optional<MotionSpec<QRectF>>`. The four Phase-2 adapter hooks
+(`onAnimationStarted`, `onAnimationComplete`, `onRepaintNeeded`,
+`isHandleValid`, `expandedPadding`) stay — they're compositor-
+integration surface, not progression logic.
+
+**C. `RetargetPolicy` honored per-curve-capability, not per-signature.**
+Stateless Easing honors `PreservePosition` (set
+`state.startValue = currentValue; state.time = 0`) and `ResetVelocity`
+(reset to `from`) as genuinely distinct behaviors. `PreserveVelocity`
+on stateless curves degrades to `PreservePosition` with a debug log —
+there is no physical velocity to preserve. Stateful Spring honors all
+three meaningfully. A compile-time `requires` constraint would
+fragment the API and block polymorphic retarget loops where the
+concrete curve type isn't known to the caller; capability-gating at
+runtime is the right choice.
+
+**D. Clock injection at `start()` time — no defaults, no registry.**
+Per-output clocks make defaults fundamentally wrong (a window moving
+between monitors must retarget its clock). No process-wide default;
+no scope-local registry. `start(from, to, MotionSpec)` carries the
+clock inside `MotionSpec`. QML's `Behavior { PhosphorMotion { ... } }`
+(Phase 4) pulls `item.window()->motionClock()` automatically so call
+sites stay clean without a hidden lookup.
+
+**E. `bounds()` is a geometric specialization only.** For geometric
+`T` (`QPointF`, `QSizeF`, `QRectF`) the bounds *are* the damage region
+(start ∪ target + overshoot sample). For scalar `T` (`qreal`, `int`),
+`sweptRange() → std::pair<T, T>` covers the motion range. For
+`QColor` / `QTransform` / opaque `T`, damage is owned by the *item
+the value drives* (opacity of an item invalidates that item's rect,
+not the animation's "bounds") — so the animation exposes neither
+`bounds()` nor `sweptRange()`, and the consumer drives damage via the
+`onValueChanged` callback (see J).
+
+**F. `QColor` — linear-space RGB default, `OkLab` opt-in via template
+tag.** sRGB component-wise lerp of complementary colors produces grey
+midpoints — visibly wrong at the tier we're targeting. Compositor
+shaders already work in linear space for blending; matching that is
+consistent. Convert sRGB→linear once at `start()` (cached), interpolate
+linear, convert back in `value()`. `AnimatedValue<QColor, OkLab>` is
+the perceptually-uniform opt-in for color pickers and gradient strips
+where perceptual uniformity matters more than render-correctness.
+
+**G. `QTransform` — polar decomposition, never component-wise.**
+Component-wise lerp of affine matrices shears during rotation.
+Implementation: decompose into translate + rotate + scale + shear;
+lerp translate/scale linearly, rotate via shortest-arc slerp, shear
+linearly (rare enough to accept the degradation). Implementation
+detail — user sees "transforms interpolate correctly through rotation".
+
+**H. `Profile` stays serializable config. `MotionSpec<T>` is the
+runtime call-site bundle.** `Profile = { duration, curve, sequence,
+staggerInterval, presetName }` is the user-facing config surface
+that round-trips through JSON / D-Bus / settings UI. Runtime concerns
+(clock reference, retarget policy, per-animation callbacks) have no
+business in a serialized profile.
+
+```cpp
+template<typename T>
+struct MotionSpec {
+    Profile profile;
+    IMotionClock* clock = nullptr;                 // required
+    RetargetPolicy retargetPolicy = RetargetPolicy::PreserveVelocity;
+    std::function<void(const T&)> onValueChanged;  // damage hook (J)
+    std::function<void()> onComplete;
+};
+```
+
+**I. Composite animations are first-class; `AnimatedValue<T>` is the
+atom.** niri / Hyprland configure "window open" as opacity + scale +
+position — three animations on one surface. Phase 3 ships atoms with
+composite-ready API (no atomic API that breaks when wrapped by a
+sequencer); `CompositeAnimation` with parallel / sequence / stagger
+operators lands in Phase 3.5 or Phase 4 alongside QML bindings. The
+atom must not leak assumptions that it's top-level (e.g. an atom's
+`onComplete` firing directly doesn't preclude a sequencer intercepting
+it).
+
+**J. Damage / invalidation — callback-driven, not polled.**
+`MotionSpec::onValueChanged = std::function<void(const T&)>;`.
+Compositor adapter installs `effects->addRepaint(bounds)`; QML
+`Behavior` installs `item->polishAndUpdate()`. Polling (`value()` is
+always cheap) is opt-in, but the default damage path is push from the
+animation to its driver. Keeps shader / uniform / custom consumers
+from having to invent their own dirty-tracking.
+
+**K. Config reload — immutable curves, atomic profile swap, no
+in-flight migration.** `shared_ptr<const Curve>` held per-animation
+survives a registry swap (the curve the animation started with is the
+curve it completes on). `ProfileRegistry::update(path, newProfile)`
+atomically swaps the registry entry; new `start()` calls read the new
+profile, in-flight animations do not migrate. "Live re-tune during
+animation" is a Phase 4 feature if a use case appears
+(`AnimatedValue::adopt(newProfile, policy)`).
+
+#### Public API shape
+
+```cpp
+// RetargetPolicy.h
 enum class RetargetPolicy {
-    PreserveVelocity,   // default — no stall
+    PreserveVelocity,   // default — stateful curves honor; stateless → PreservePosition + debug log
     ResetVelocity,
     PreservePosition,
 };
 ```
 
-**Success criteria:**
-- A QML-side animation and a compositor-side animation with the same
-  `Profile` produce visually identical motion.
-- Spring retarget-mid-flight test: snap A → B, midway issue retarget
-  to C, verify no visual stall (velocity preserved by default).
-- Overshoot bounds sampling generalized across parametric and
-  stateful curves.
+```cpp
+// AnimatedValue.h — base template + geometric / scalar / color specialisations
+template<typename T>
+class AnimatedValue {
+public:
+    bool start(T from, T to, MotionSpec<T> spec);
+    bool retarget(T newTo, RetargetPolicy policy);
+    void cancel();
+    void finish();
 
-**Estimated scope:** ~700 LOC library, ~15 new unit tests.
+    T value() const;
+    T velocity() const;           // meaningful for stateful curves
+    bool isAnimating() const;
+    bool isComplete() const;
+
+    void advance();               // pulls dt from clock, calls step()/evaluate()
+};
+
+// Geometric specialisations expose bounds() → QRectF (with overshoot)
+template<> QRectF AnimatedValue<QPointF>::bounds() const;
+template<> QRectF AnimatedValue<QSizeF>::bounds() const;
+template<> QRectF AnimatedValue<QRectF>::bounds() const;
+
+// Scalar specialisation exposes sweptRange()
+template<> std::pair<qreal, qreal> AnimatedValue<qreal>::sweptRange() const;
+
+// QColor: linear-space default, OkLab opt-in via a second template
+// tag on the primary template (NOT a partial specialisation — the
+// primary AnimatedValue<T, Space> dispatches through `if constexpr`
+// on (T == QColor, Space == OkLab) inside lerpStateValue() so a
+// single class template serves every T).
+enum class ColorSpace { Linear, OkLab };
+template<typename T, ColorSpace Space = ColorSpace::Linear>
+class AnimatedValue;
+
+// QTransform uses the same primary template — polar-decomposed lerp
+// is selected inside Interpolate<QTransform>, no separate class
+// specialisation needed.
+```
+
+```cpp
+// SnapPolicy.h — extracts the Phase-2 createSnapMotion gate
+namespace SnapPolicy {
+    struct SnapParams {
+        qreal duration;
+        std::shared_ptr<const Curve> curve;
+        int minDistance;
+    };
+
+    std::optional<MotionSpec<QRectF>>
+    createSnapSpec(const QRectF& oldFrame, const QRectF& newFrame,
+                   const SnapParams& params, IMotionClock* clock);
+}
+```
+
+#### AnimationController rewrite
+
+```cpp
+template<typename Handle>
+class AnimationController {
+public:
+    void setClock(IMotionClock* clock);
+    void setProfile(const Profile& profile);
+    void setMinDistance(int pixels);        // clamped [0, 10000]
+    void setEnabled(bool enabled);
+
+    bool startAnimation(Handle handle, const QRectF& oldFrame, const QRectF& newFrame);
+    bool retarget(Handle handle, const QRectF& newFrame, RetargetPolicy policy);
+    void removeAnimation(Handle handle);
+    void clear();
+
+    bool hasAnimation(Handle handle) const;
+    bool hasActiveAnimations() const;
+    bool isAnimatingToTarget(Handle handle, const QRectF& target) const;
+    QRectF currentValue(Handle handle, const QRectF& fallback) const;
+    QRectF animationBounds(Handle handle) const;  // delegates to AnimatedValue<QRectF>::bounds()
+
+    void advanceAnimations();                // pulls dt from clock
+    void scheduleRepaints() const;
+
+protected:
+    // Four adapter hooks preserved from Phase 2:
+    virtual void onAnimationStarted(Handle, const AnimatedValue<QRectF>&) {}
+    virtual void onAnimationComplete(Handle, const AnimatedValue<QRectF>&) {}
+    virtual void onRepaintNeeded(Handle, const QRectF&) const {}
+    virtual bool isHandleValid(Handle) const { return true; }
+    virtual QMarginsF expandedPadding(Handle, const AnimatedValue<QRectF>&) const { return {}; }
+
+private:
+    QHash<Handle, AnimatedValue<QRectF>> m_animations;
+    IMotionClock* m_clock = nullptr;
+    Profile m_profile;
+    int m_minDistance = 0;
+    bool m_enabled = true;
+};
+```
+
+Multi-output adapters hold one controller per output (each with its
+output's clock) rather than juggling per-animation clocks inside a
+single controller; the controller is intentionally single-clock for
+cache-locality and to make the "which clock drives this animation"
+question impossible to get wrong.
+
+#### Retirements (Phase 3 deletes)
+
+- `WindowMotion.h` — deleted. Its fields (`startPosition`, `startSize`,
+  `targetGeometry`, `startTime`, `duration`, `curve`, `cachedProgress`)
+  become internal state of `AnimatedValue<QRectF>`.
+- `AnimationMath::createSnapMotion` — deleted. Replaced by
+  `SnapPolicy::createSnapSpec`.
+- `AnimationMath::repaintBounds` — deleted. Its logic moves inside
+  `AnimatedValue<QRectF>::bounds()` and parameterizes on the internal
+  curve via `Curve::overshoots()`.
+
+#### Success criteria
+
+- A QML-side animation (`AnimatedValue<qreal>` on opacity) and a
+  compositor-side animation (`AnimatedValue<QRectF>` on window frame)
+  driven by the same `Profile` with the same curve produce visually
+  identical motion on a test harness.
+- Spring retarget-mid-flight (A → B, midway `retarget(C,
+  PreserveVelocity)`) — velocity preserved across the discontinuity,
+  no stall, no visible jump.
+- Multi-output: two displays at 60 Hz and 144 Hz animate
+  simultaneously; each animation steps on its own output's clock
+  without double-stepping or beating. Verified with a mock two-output
+  test harness.
+- `QColor` lerp midpoint for `Qt::red → Qt::green` is visibly green-
+  biased in linear-space RGB (vs. the muddy grey that sRGB component-
+  wise produces); opt-in OkLab produces a further-corrected perceptual
+  midpoint.
+- `QTransform` lerp from identity to `rotate(90°)` passes through
+  `rotate(45°)` exactly, not a sheared intermediate.
+- Config reload: `ProfileRegistry::update(path, newProfile)` while
+  motions are in flight does not mutate those motions' progression
+  (`shared_ptr<const Curve>` immutability invariant).
+
+#### Tests (~30 new cases)
+
+- `pa_test_imotionclock` — clock injection, per-output isolation,
+  `requestFrame()` forwarding (mock driver).
+- `pa_test_animatedvalue_scalar` — start / retarget / cancel / finish;
+  all three `RetargetPolicy` values on stateful and stateless curves
+  (6 retarget cases, plus capability-downgrade log assertion).
+- `pa_test_animatedvalue_geometry` — `QPointF` / `QSizeF` / `QRectF`
+  bounds() + overshoot sampling; swept-rect correctness.
+- `pa_test_animatedvalue_color` — sRGB-vs-linear midpoint verification
+  (the "complementary colors midway is not grey" regression), OkLab
+  opt-in path.
+- `pa_test_animatedvalue_transform` — polar decomposition correctness,
+  rotation without shear, shortest-arc slerp endpoint handling.
+- `pa_test_snappolicy` — ported from the removed `createSnapMotion`
+  tests; `MotionSpec<QRectF>` return shape.
+- `pa_test_animationcontroller` — existing Phase-2 cases rewritten
+  over `AnimatedValue<QRectF>`; re-entrancy contracts preserved;
+  two-controller multi-output test added.
+- `pa_test_config_reload` — profile swap does not mutate in-flight
+  motions; new `start()` after swap reads the new profile.
+
+#### Migration plan (sub-commits on the Phase 3 branch)
+
+1. **Clock abstraction.** Land `IMotionClock` + `CompositorClock`
+   (KWin-backed) as new headers. No consumer changes yet;
+   `AnimationController` / `WindowMotion` still ship unchanged. Unit
+   tests for the interface shape.
+2. **AnimatedValue core.** Land `MotionSpec<T>`, `RetargetPolicy`, and
+   the `AnimatedValue<T>` template with `qreal` / `QPointF` / `QSizeF`
+   / `QRectF` specializations. Still no consumer migration. Tests:
+   scalar/geometry specs, retarget continuity on stateful and stateless
+   curves.
+3. **Controller rewrite + `WindowMotion` delete.** Rewrite
+   `AnimationController<Handle>` on top of `AnimatedValue<QRectF>` +
+   `CompositorClock`. Delete `WindowMotion`, delete
+   `AnimationMath::createSnapMotion` + `repaintBounds`. Update the
+   KWin adapter. Phase-2 tests rewritten; they must stay green.
+4. **Color + transform specialisations.** Add `AnimatedValue<QColor>`
+   (linear-space + OkLab) and `AnimatedValue<QTransform>` (polar
+   decomposition). No consumer wiring yet — they exist for Phase 4
+   QML consumers.
+5. **QtQuickClock + optional CMake flag.** Add `QtQuickClock` impl.
+   Gate `Qt6::Quick` behind an optional CMake flag
+   (`PHOSPHOR_ANIMATION_QUICK=ON`, default OFF) so non-QML consumers
+   don't pull Qt Quick transitively.
+
+Each sub-commit is independently shippable + reviewable; full test
+suite green after each.
+
+#### Estimated scope
+
+~1500 LOC library (original ~700 + `AnimatedValue<T>` specialization
+set + `AnimationController` rewrite + `QtQuickClock`), ~30 new unit
+tests, ~50 LOC KWin adapter migration.
 
 ### Phase 4 — QML integration
 
@@ -812,6 +1142,21 @@ Full PlasmaZones suite (116 tests) runs green after every phase.
 ---
 
 ## Open Questions
+
+**Phase 3 architecture pass (resolved 2026-04-18):** Eight implicit
+architectural questions that the original Phase 3 draft did not
+explicitly answer — clock shape (push vs pull, per-output vs
+process-wide), `WindowMotion`-vs-`AnimatedValue` unification,
+`RetargetPolicy` semantics on stateless curves, clock injection
+model, `bounds()` for non-geometric `T`, `QColor` interpolation space,
+`QTransform` decomposition approach, `Profile`-vs-`MotionSpec` split —
+are all resolved in decisions A–K of the Phase 3 roadmap section
+above. The load-bearing call: full unification.
+`AnimatedValue<T>` replaces `WindowMotion`, and
+`AnimationController<Handle>` is rewritten on top of
+`QHash<Handle, AnimatedValue<QRectF>>` — v3's no-backwards-compat
+freedom makes this the architecturally correct choice over preserving
+two parallel progression engines.
 
 1. **~~Should `AnimationConfig` be retired in favor of `Profile`?~~**
    Resolved in the scaffold PR — `AnimationConfig` was a parallel-shape

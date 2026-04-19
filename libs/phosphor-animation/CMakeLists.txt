@@ -14,21 +14,24 @@
 #   • Profile + hierarchical ProfileTree with walk-up inheritance so shell
 #     events (window.open, zone.snapIn, osd.show, …) share defaults while
 #     allowing per-event overrides.
-#   • WindowMotion state + progression, AnimationMath helpers, StaggerTimer
-#     orchestration — the primitives previously co-located in
-#     src/compositor-common/ are now in their own domain-named library.
+#   • IMotionClock abstraction + per-handle AnimatedValue<T> template
+#     (qreal, QPointF, QSizeF, QRectF, QColor linear/OkLab, QTransform
+#     polar-decomposed) with MotionSpec<T> runtime bundle and
+#     RetargetPolicy for velocity-preserving redirects.
+#   • AnimationController<Handle> compositor-agnostic state machine
+#     built on AnimatedValue<QRectF>; SnapPolicy gate;
+#     StaggerTimer orchestration.
 #
-# Depends on Qt6 Core + Gui only. There is no compositor-common
-# forwarding shim — the old easingcurve.h / animation_math.h /
-# stagger_timer.h headers are gone and PlasmaZones consumers include
-# <PhosphorAnimation/...> directly.
+# Depends on Qt6 Core + Gui only. Qt6 Quick becomes a transitive
+# dependency when the opt-in PHOSPHOR_ANIMATION_QUICK flag is ON
+# (adds QtQuickClock for QML-side animation drivers).
 #
-# Future phases (separate branches, each gated):
-#   Phase 2  AnimationController base + WindowAnimator split
-#   Phase 3  IMotionClock abstraction + AnimatedValue<T> template
-#   Phase 4  QML value types (PhosphorEasing/Spring/Motion)
-#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator impl)
-#   Phase 6  Shader-backed animation pipeline
+# Phase status:
+#   Phase 2  AnimationController base + WindowAnimator split      ✓ landed
+#   Phase 3  IMotionClock + AnimatedValue<T> unified runtime       ✓ landed
+#   Phase 4  QML value types (PhosphorEasing/Spring/Motion)        — planned
+#   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) — planned
+#   Phase 6  Shader-backed animation pipeline                      — planned
 
 cmake_minimum_required(VERSION 3.16)
 
@@ -48,8 +51,17 @@ include(GenerateExportHeader)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Pin to 6.6 to match sibling phosphor-* libraries. Qt Gui is required for
-# QPointF/QSizeF/QRect/QRectF used across WindowMotion + AnimationMath.
+# QPointF/QSizeF/QRect/QRectF + QColor/QTransform used across AnimatedValue<T>.
 find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui)
+
+# Optional Qt Quick support — builds QtQuickClock for QML-side
+# animation drivers (Phase 3 sub-commit 5). Off by default so
+# compositor / daemon consumers that don't drive QML animations
+# don't pull Qt Quick into their link graph transitively.
+option(PHOSPHOR_ANIMATION_QUICK "Build QtQuickClock (requires Qt6::Quick)" OFF)
+if(PHOSPHOR_ANIMATION_QUICK)
+    find_package(Qt6 6.6 REQUIRED COMPONENTS Quick Qml)
+endif()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # PhosphorAnimation Library
@@ -63,8 +75,9 @@ set(phosphoranimation_SRCS
     src/profile.cpp
     src/profilepaths.cpp
     src/profiletree.cpp
-    src/windowmotion.cpp
-    src/animationmath.cpp
+    src/imotionclock.cpp
+    src/animatedvalue.cpp
+    src/snappolicy.cpp
     src/staggertimer.cpp
 )
 
@@ -74,11 +87,15 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/Easing.h
     include/PhosphorAnimation/Spring.h
     include/PhosphorAnimation/CurveRegistry.h
+    include/PhosphorAnimation/IMotionClock.h
+    include/PhosphorAnimation/RetargetPolicy.h
+    include/PhosphorAnimation/MotionSpec.h
+    include/PhosphorAnimation/Interpolate.h
+    include/PhosphorAnimation/AnimatedValue.h
     include/PhosphorAnimation/Profile.h
     include/PhosphorAnimation/ProfilePaths.h
     include/PhosphorAnimation/ProfileTree.h
-    include/PhosphorAnimation/WindowMotion.h
-    include/PhosphorAnimation/AnimationMath.h
+    include/PhosphorAnimation/SnapPolicy.h
     include/PhosphorAnimation/AnimationController.h
     include/PhosphorAnimation/StaggerTimer.h
 )
@@ -118,6 +135,19 @@ target_link_libraries(PhosphorAnimation
         Qt6::Core
         Qt6::Gui
 )
+
+# Gate QtQuickClock + its Qt Quick dependency behind the opt-in
+# flag. Header + source ship only when the feature is enabled so the
+# install set stays clean for non-QML consumers.
+if(PHOSPHOR_ANIMATION_QUICK)
+    target_sources(PhosphorAnimation PRIVATE
+        src/qtquickclock.cpp
+        include/PhosphorAnimation/QtQuickClock.h
+    )
+    target_link_libraries(PhosphorAnimation PUBLIC Qt6::Quick)
+    install(FILES include/PhosphorAnimation/QtQuickClock.h
+            DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation)
+endif()
 
 set_target_properties(PhosphorAnimation PROPERTIES
     VERSION ${PHOSPHORANIMATION_VERSION}

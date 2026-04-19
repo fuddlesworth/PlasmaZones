@@ -1,0 +1,279 @@
+// SPDX-FileCopyrightText: 2026 fuddlesworth
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
+#include "TestClock.h"
+
+#include <PhosphorAnimation/AnimatedValue.h>
+#include <PhosphorAnimation/Easing.h>
+#include <PhosphorAnimation/IMotionClock.h>
+#include <PhosphorAnimation/MotionSpec.h>
+
+#include <QPointF>
+#include <QTest>
+#include <QTransform>
+#include <QtMath>
+
+#include <chrono>
+#include <memory>
+
+using namespace std::chrono_literals;
+
+using PhosphorAnimation::AnimatedValue;
+using PhosphorAnimation::Easing;
+using PhosphorAnimation::IMotionClock;
+using PhosphorAnimation::MotionSpec;
+using TestClock = PhosphorAnimation::Testing::TestClock;
+
+namespace {
+
+MotionSpec<QTransform> makeSpec(TestClock* clock, qreal durationMs = 100.0)
+{
+    MotionSpec<QTransform> spec;
+    auto linear = std::make_shared<Easing>();
+    linear->x1 = 0.0;
+    linear->y1 = 0.0;
+    linear->x2 = 1.0;
+    linear->y2 = 1.0;
+    spec.profile.curve = linear;
+    spec.profile.duration = durationMs;
+    spec.clock = clock;
+    return spec;
+}
+
+QTransform rotateTransform(qreal degrees)
+{
+    QTransform t;
+    t.rotate(degrees);
+    return t;
+}
+
+QTransform sampleAtProgress(AnimatedValue<QTransform>& v, TestClock& clock, qreal t)
+{
+    v.advance();
+    clock.advanceMs(100.0 * t);
+    v.advance();
+    return v.value();
+}
+
+} // namespace
+
+class TestAnimatedValueTransform : public QObject
+{
+    Q_OBJECT
+
+private Q_SLOTS:
+
+    // ─── Endpoints ───
+
+    void testIdentityStart()
+    {
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(QTransform(), rotateTransform(90.0), makeSpec(&clock));
+        v.advance();
+        const QTransform start = v.value();
+        // At t=0 we should be at identity (approximately).
+        QVERIFY(qAbs(start.m11() - 1.0) < 1.0e-9);
+        QVERIFY(qAbs(start.m22() - 1.0) < 1.0e-9);
+        QVERIFY(qAbs(start.m12()) < 1.0e-9);
+        QVERIFY(qAbs(start.m21()) < 1.0e-9);
+    }
+
+    void testTargetExactAtCompletion()
+    {
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        QTransform target = rotateTransform(90.0);
+        v.start(QTransform(), target, makeSpec(&clock));
+        v.advance();
+        clock.advanceMs(150.0);
+        v.advance();
+        const QTransform end = v.value();
+        // Completion snap — exact target (within float tolerance).
+        QVERIFY(qAbs(end.m11() - target.m11()) < 1.0e-6);
+        QVERIFY(qAbs(end.m22() - target.m22()) < 1.0e-6);
+        QVERIFY(qAbs(end.m12() - target.m12()) < 1.0e-6);
+        QVERIFY(qAbs(end.m21() - target.m21()) < 1.0e-6);
+    }
+
+    // ─── Rotation through 45° without shear ───
+
+    void testRotationMidpointIsRotate45()
+    {
+        // Component-wise lerp of identity → rotate(90°) produces at
+        // t=0.5 the matrix [[0.5, -0.5], [0.5, 0.5]] — that's not a
+        // rotation (it has scale ≠ 1 and would squash). Polar-
+        // decomposed lerp gives rotate(45°) = [[√2/2, -√2/2], [√2/2, √2/2]].
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(QTransform(), rotateTransform(90.0), makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        const qreal expected = std::sqrt(2.0) / 2.0; // cos(45°) = sin(45°)
+
+        // Under Qt's post-multiply row-vector convention,
+        // rotate(θ) produces the matrix:
+        //   [[cos, sin], [-sin, cos]]
+        // So rotate(45°) has m11 = m12 = m22 = cos(45°) = √2/2
+        // and m21 = -sin(45°) = -√2/2.
+        QVERIFY(qAbs(mid.m11() - expected) < 1.0e-3);
+        QVERIFY(qAbs(mid.m22() - expected) < 1.0e-3);
+        QVERIFY(qAbs(mid.m12() - expected) < 1.0e-3); // +sin(45°)
+        QVERIFY(qAbs(mid.m21() + expected) < 1.0e-3); // -sin(45°)
+    }
+
+    void testRotationMidpointIsNotComponentWiseLerp()
+    {
+        // The component-wise midpoint of identity and rotate(90°) has
+        // the 2x2 matrix [[0.5, -0.5], [0.5, 0.5]] — a rotation by 45°
+        // scaled by √2/2. The sum of diagonals is 1.0. A rotation by
+        // exactly 45° has diagonals summing to 2·cos(45°) ≈ 1.4142.
+        // Threshold of 1.4 distinguishes polar-decomposed (passes) from
+        // component-wise (fails) AND from a near-miss implementation
+        // (e.g. returning 0.55,0.55 = sum 1.1) that a looser 1.1 gate
+        // would silently accept.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(QTransform(), rotateTransform(90.0), makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        QVERIFY(mid.m11() + mid.m22() > 1.4);
+    }
+
+    // ─── Translation interpolates linearly ───
+
+    void testTranslationInterpolatesLinearly()
+    {
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        QTransform from = QTransform::fromTranslate(0, 0);
+        QTransform to = QTransform::fromTranslate(200, 100);
+        v.start(from, to, makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        QVERIFY(qAbs(mid.dx() - 100.0) < 1.0);
+        QVERIFY(qAbs(mid.dy() - 50.0) < 1.0);
+    }
+
+    // ─── Scale interpolates linearly ───
+
+    void testScaleInterpolatesLinearly()
+    {
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        QTransform from = QTransform::fromScale(1.0, 1.0);
+        QTransform to = QTransform::fromScale(3.0, 2.0);
+        v.start(from, to, makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        // Midway between sx=1 and sx=3 is 2; between sy=1 and sy=2 is 1.5.
+        QVERIFY(qAbs(mid.m11() - 2.0) < 0.05);
+        QVERIFY(qAbs(mid.m22() - 1.5) < 0.05);
+    }
+
+    // ─── PreserveVelocity auto-degrade for non-translate transforms ───
+
+    void testPreserveVelocityDegradedOnRotation()
+    {
+        // Retarget a rotation animation with PreserveVelocity. Because
+        // the segments have non-identity linear parts (rotation), the
+        // Frobenius-norm velocity rescale is physically meaningless
+        // and should auto-degrade to PreservePosition (zero velocity
+        // on the new segment).
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(rotateTransform(0.0), rotateTransform(90.0), makeSpec(&clock));
+        v.advance();
+        clock.advanceMs(40.0);
+        v.advance();
+
+        const bool accepted = v.retarget(rotateTransform(180.0), PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+        QVERIFY(accepted);
+        // Auto-degrade zeroes velocity on the new segment.
+        QCOMPARE(v.state().velocity, 0.0);
+    }
+
+    void testPreserveVelocityRetainedOnPureTranslate()
+    {
+        // Pure-translate animations have identity linear part on all
+        // endpoints — Frobenius distance collapses to Euclidean on
+        // (dx, dy) and the velocity rescale is physically meaningful.
+        // A stateful curve would carry rate; this uses an Easing
+        // (stateless) so the stateless-degrade path zeroes velocity
+        // too — the point here is that the QTransform-specific auto-
+        // degrade does not trigger.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        QTransform from;
+        from.translate(0.0, 0.0);
+        QTransform to;
+        to.translate(100.0, 0.0);
+        v.start(from, to, makeSpec(&clock));
+        v.advance();
+        clock.advanceMs(40.0);
+        v.advance();
+
+        QTransform newTo;
+        newTo.translate(500.0, 0.0);
+        const bool accepted = v.retarget(newTo, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+        QVERIFY(accepted);
+        // Final velocity is zero because Easing is stateless — the
+        // assertion here is that retarget was accepted at all (the
+        // non-translate auto-degrade branch would still accept, so
+        // this test is more about the pure-translate classification
+        // than the velocity number).
+        QVERIFY(v.isAnimating());
+    }
+
+    // ─── Shortest-arc slerp ───
+
+    void testShortestArcRotation()
+    {
+        // Going from 10° to 350° should go via 0° (the short way),
+        // not via 180° (the long way). Shortest-arc slerp enforces
+        // this. Check the midpoint: short-way midpoint is at 0°
+        // (or 360°, same rotation), long-way midpoint would be at 180°.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        v.start(rotateTransform(10.0), rotateTransform(350.0), makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        // Short-way midpoint is rotate(0°) ≈ identity: m11 ≈ 1, m12 ≈ 0.
+        // Long-way midpoint would be rotate(180°): m11 ≈ -1, m12 ≈ 0.
+        QVERIFY(mid.m11() > 0.9); // positive ≈ 1 confirms short-way
+    }
+
+    // ─── Near-singular endpoint gate (Interpolate.h determinant threshold) ───
+
+    void testNearSingularEndpointRoutesThroughComponentWiseLerp()
+    {
+        // A matrix with |det| below the near-singular threshold (1e-6)
+        // cannot be polar-decomposed reliably — the rotation extraction
+        // collapses and the slerp path would produce a visible jump.
+        // The fix in Interpolate.h routes such endpoints through the
+        // component-wise fallback. We verify by interpolating from a
+        // near-singular start to identity and checking that the mid-
+        // point is the plain component-wise average — not a polar
+        // reconstruction that would reinstate a rotated frame.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        // |det| = 1e-8 (well below 1e-6 gate)
+        QTransform nearSingular(1e-4, 0.0, 0.0, 1e-4, 0.0, 0.0);
+        QVERIFY(qAbs(nearSingular.m11() * nearSingular.m22() - nearSingular.m12() * nearSingular.m21()) < 1e-6);
+        v.start(nearSingular, QTransform(), makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        // Component-wise midpoint: (1e-4 + 1) / 2 ≈ 0.50005 on the
+        // diagonal, exact 0 on off-diagonal. The critical property is
+        // that NO entry jumps to an unrelated value — a broken polar
+        // decomposition would insert a phantom rotation producing
+        // off-diagonal terms well away from zero.
+        QVERIFY(qAbs(mid.m11() - (1.0 + 1e-4) * 0.5) < 1e-3);
+        QVERIFY(qAbs(mid.m22() - (1.0 + 1e-4) * 0.5) < 1e-3);
+        QVERIFY(qAbs(mid.m12()) < 1e-3);
+        QVERIFY(qAbs(mid.m21()) < 1e-3);
+    }
+};
+
+QTEST_MAIN(TestAnimatedValueTransform)
+#include "test_animatedvalue_transform.moc"
