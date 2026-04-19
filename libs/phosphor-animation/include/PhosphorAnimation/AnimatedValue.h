@@ -181,6 +181,7 @@ public:
         m_loggedStatelessDegrade = false;
         m_loggedNegativeDt = false;
         m_loggedTransformDegrade = false;
+        m_loggedEpochMismatch = false;
 
         // Degenerate: start == target with no motion. Snap to target,
         // mark complete, fire no callbacks (start() is the contract

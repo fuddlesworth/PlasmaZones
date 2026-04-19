@@ -63,13 +63,33 @@ struct MotionSpec
     /// AnimatedValue has updated its cached state, so `AnimatedValue::
     /// value()` inside the callback returns the same value passed as
     /// the argument.
+    ///
+    /// ## Picking a notification path when going through
+    /// `AnimationController`
+    ///
+    /// The controller drives its own damage bookkeeping via
+    /// `onRepaintNeeded` + `scheduleRepaints()` and fires its lifecycle
+    /// hooks (`onAnimationStarted` / `onAnimationReplaced` /
+    /// `onAnimationComplete` / `onAnimationReaped` /
+    /// `onAnimationAbandoned`) from the controller thread. Consumers
+    /// that go through the controller should **prefer the virtual
+    /// hooks** and leave these callbacks unset — `SnapPolicy::
+    /// createSnapSpec` reflects that convention by returning a spec
+    /// with `onValueChanged` / `onComplete` blank.
+    ///
+    /// Direct consumers of `AnimatedValue<T>` (no controller layer —
+    /// a standalone shell component, a unit test, a QML `Behavior`
+    /// analogue) wire these callbacks instead. Mixing is legal
+    /// (callbacks fire regardless of whether a controller is present)
+    /// but makes double-counting easy; pick one surface per call site.
     std::function<void(const T&)> onValueChanged;
 
     /// Fired exactly once when the animation completes. After this
     /// callback returns, `isAnimating()` is false and `isComplete()` is
     /// true. Not fired on `cancel()` — that path is explicitly non-
     /// completion; consumers wanting cleanup on either path observe
-    /// the two separately.
+    /// the two separately. See `onValueChanged` for the
+    /// callback-vs-controller-hook notification-path guidance.
     std::function<void()> onComplete;
 };
 

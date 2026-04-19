@@ -290,7 +290,7 @@ public:
 
     bool hasAnimation(Handle handle) const
     {
-        return m_animations.find(handle) != m_animations.end();
+        return m_animations.contains(handle);
     }
 
     /**
@@ -384,7 +384,19 @@ public:
             AnimatedValue<QRectF> displaced = std::move(existing->second);
             existing->second = std::move(anim);
             onAnimationReplaced(handle, displaced);
-            onAnimationStarted(handle, existing->second);
+            // Re-lookup after the hook fires: a re-entrant call that
+            // inserts a different handle can rehash `m_animations` and
+            // invalidate `existing` (reference to second is stable per
+            // the unordered_map spec, but dereferencing an invalidated
+            // iterator is UB); a re-entrant `removeAnimation(handle)`
+            // or in-place `startAnimation(handle, …)` can also retire
+            // the placed entry entirely. find() is O(1) average and
+            // keeps this path aligned with `advanceAnimations`'s
+            // identical re-lookup after each hook.
+            auto placed = m_animations.find(handle);
+            if (placed != m_animations.end()) {
+                onAnimationStarted(handle, placed->second);
+            }
             return StartResult::Accepted;
         }
 
@@ -481,11 +493,20 @@ public:
         // false on return, instead of leaving a zombie entry until the
         // next advanceAnimations() tick. Fires onAnimationComplete
         // once — the same terminal event a naturally-completed
-        // animation produces.
+        // animation produces — followed by the same bounds-based
+        // onRepaintNeeded the natural-completion path schedules, so
+        // any interpolated pixels left behind by the displaced segment
+        // get invalidated and the compositor repaints to the final
+        // (identical) target rect.
         if (it->second.isComplete()) {
+            const QMarginsF padding = expandedPadding(handle, it->second);
+            const QRectF bounds = it->second.bounds().marginsAdded(padding);
             AnimatedValue<QRectF> finished = std::move(it->second);
             m_animations.erase(it);
             onAnimationComplete(handle, finished);
+            if (bounds.isValid()) {
+                onRepaintNeeded(handle, bounds);
+            }
             return RetargetResult::DegenerateReap;
         }
         // Pathological: AnimatedValue rejected without marking complete
@@ -621,7 +642,17 @@ public:
         if (it == m_animations.end()) {
             return false;
         }
-        return it->second.to() == target;
+        // Sub-pixel tolerance per component — direct `==` on QRectF is
+        // exact float equality and breaks when a caller round-trips the
+        // target through an intRect path or re-computes it from a
+        // different float chain. `kRectSizeEpsilonPx` is the same
+        // threshold the snap gate and the paint-path scale decision
+        // use, so "same target" here lines up with "size unchanged"
+        // there.
+        const QRectF to = it->second.to();
+        return qAbs(to.x() - target.x()) < kRectSizeEpsilonPx && qAbs(to.y() - target.y()) < kRectSizeEpsilonPx
+            && qAbs(to.width() - target.width()) < kRectSizeEpsilonPx
+            && qAbs(to.height() - target.height()) < kRectSizeEpsilonPx;
     }
 
     /// Current interpolated rect for @p handle, or @p fallback when

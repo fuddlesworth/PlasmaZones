@@ -65,6 +65,20 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
     // visual_size = frameGeometry.size * scale = desiredSize.
     // Scale converges to 1.0 at t=1, so the final state uses the
     // natural buffer with no transform applied.
+    //
+    // Client-buffer caveat: `moveResize()` was applied synchronously at
+    // animation start, so `frameGeometry().size()` is already at the
+    // target. The Wayland client, however, only repaints its buffer to
+    // the new size after acking the configure — typically one frame
+    // later. During that window the buffer pixels are still painted at
+    // `oldFrame.size()` but get stretched to `desiredSize` (which is
+    // between old and target) via this scale. The artefact is at most
+    // one frame of DPI-scaled content and settles the moment the
+    // client's next commit lands. Fixing it properly would require
+    // deferring moveResize until animation completion, which breaks
+    // downstream expansionGeometry lookups during the animation — the
+    // current tradeoff intentionally favours correct bounds over
+    // pixel-perfect scaling of the transition's first frame.
     if (anim->hasSizeChange()) {
         const QSizeF desiredSize = current.size();
         const QSizeF actualSize = window->frameGeometry().size();

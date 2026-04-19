@@ -187,7 +187,13 @@ public:
      * A null `epochIdentity()` is the default for third-party clocks
      * backed by a non-steady source (wall-clock, domain-specific
      * counters) — the rebase arithmetic is meaningless across such
-     * clocks and must be refused.
+     * clocks and must be refused. Note that a clock with null
+     * `epochIdentity()` is incompatible with **every** other clock,
+     * including itself; this is deliberate opt-out semantics rather
+     * than a bug. Implementations that want to support rebind must
+     * override `epochIdentity()` to return a stable non-null pointer
+     * — typically `steadyClockEpoch()` for the in-tree family or a
+     * private sentinel for a custom time source.
      */
     static bool epochCompatible(const IMotionClock* a, const IMotionClock* b)
     {

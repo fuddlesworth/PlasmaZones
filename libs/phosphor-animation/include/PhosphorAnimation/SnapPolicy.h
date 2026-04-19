@@ -65,8 +65,9 @@ struct SnapParams
 /// a sub-pixel size delta is treated identically by both layers.
 ///
 /// Aliases `PhosphorAnimation::kRectSizeEpsilonPx` (defined in
-/// AnimatedValue.h). Single source of truth on the generic layer; the
-/// snap-flavoured name is kept here for call-site clarity.
+/// `Interpolate.h`, which is the generic layer and is transitively
+/// included via `MotionSpec.h`). Single source of truth on the generic
+/// layer; the snap-flavoured name is kept here for call-site clarity.
 inline constexpr qreal kSnapSizeEpsilonPx = kRectSizeEpsilonPx;
 
 /**

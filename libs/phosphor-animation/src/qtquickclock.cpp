@@ -3,9 +3,11 @@
 
 #include <PhosphorAnimation/QtQuickClock.h>
 
+#include <QCoreApplication>
 #include <QObject>
 #include <QQuickWindow>
 #include <QScreen>
+#include <QThread>
 
 #include <mutex>
 
@@ -130,6 +132,15 @@ std::chrono::nanoseconds QtQuickClock::now() const
 
 qreal QtQuickClock::refreshRate() const
 {
+    // GUI-thread-only contract: QScreen lookup walks Qt's platform screen
+    // list, which is not render-thread-safe. `now()` and `requestFrame()`
+    // are the cross-thread methods by design; this one is explicitly not.
+    // Fail loudly in debug builds if a consumer routes it off the GUI
+    // thread so the constraint in the header doc bites on contact
+    // instead of manifesting as a subtle crash later.
+    Q_ASSERT_X(QCoreApplication::instance() == nullptr
+                   || QThread::currentThread() == QCoreApplication::instance()->thread(),
+               "QtQuickClock::refreshRate", "must be called on the GUI thread (touches QScreen)");
     if (!m_window) {
         return 0.0;
     }
