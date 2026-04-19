@@ -993,8 +993,9 @@ QVariantList OverlayService::buildLayoutsList(const QString& screenId) const
         }
     }
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual, includeAutotile,
-        Utils::screenAspectRatio(m_screenManager, screenId), m_settings && m_settings->filterLayoutsByAspectRatio(),
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity, includeManual,
+        includeAutotile, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, includeManual, includeAutotile));
     return PlasmaZones::toVariantList(entries);
 }
@@ -1019,8 +1020,8 @@ int OverlayService::visibleLayoutCount(const QString& screenId) const
 {
     // Ordering doesn't affect count — skip custom order for performance
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, screenId),
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, screenId),
         m_settings && m_settings->filterLayoutsByAspectRatio());
     return entries.size();
 }

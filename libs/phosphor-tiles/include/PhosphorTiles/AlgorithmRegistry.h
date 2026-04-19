@@ -23,41 +23,28 @@ namespace PhosphorTiles {
 class TilingAlgorithm;
 
 /**
- * @brief Singleton registry for tiling algorithms
+ * @brief Concrete tiling-algorithm registry.
  *
- * AlgorithmRegistry provides factory access to all available tiling algorithms.
- * It manages algorithm lifecycle and provides discovery for UI components.
+ * Implements the @c ITileAlgorithmRegistry contract. Composition roots
+ * (daemon, editor, settings, tests) construct their own instance and
+ * inject it into every consumer that needs algorithm enumeration /
+ * lookup / preview-param access. There is no process-global singleton —
+ * plugin-based compositor/WM/shell deployment requires per-instance
+ * ownership so plugins cannot corrupt each other's registry state.
  *
- * Built-in algorithms are registered automatically on first access:
- * - BSP (default): Binary space partitioning
- * - Master-Stack: Classic master/stack layout
- * - Columns: Equal-width vertical columns
+ * Built-in algorithms (BSP, Master-Stack, Columns) register
+ * automatically in the constructor via the static
+ * @c pendingAlgorithmRegistrations list populated by
+ * @c AlgorithmRegistrar. Additional scripted algorithms are loaded by
+ * @c ScriptedAlgorithmLoader against an injected registry.
  *
- * All built-in algorithms are registered via @c builtinId JS scripts.
- *
- * Usage:
- * @code
- * auto *algo = AlgorithmRegistry::instance()->algorithm("master-stack");
- * if (algo) {
- *     auto zones = algo->calculateZones(windowCount, screenGeometry, state);
- * }
- * @endcode
- *
- * @note Thread Safety: The singleton instance() method uses Meyer's singleton
- *       pattern (C++11 static local), which is thread-safe. Read operations
- *       (algorithm(), availableAlgorithms(), hasAlgorithm()) are thread-safe.
- *       Registration/unregistration should only occur during initialization
- *       or from the main thread.
- *
- * @note Process scope: the singleton lives per-process. Daemon, editor, and
- *       settings each hold their own instance — registered algorithms and
- *       configured preview params do not cross process boundaries. Callers
- *       that need cross-process state (e.g. SettingsBridge seeding preview
- *       params on settings change) must invoke setConfiguredPreviewParams
- *       in each process that will render previews.
+ * @note Thread Safety: read operations (@c algorithm, @c availableAlgorithms,
+ *       @c hasAlgorithm) are thread-safe once construction has completed.
+ *       Registration/unregistration should only occur from the thread
+ *       that owns the registry (typically the main thread).
  *
  * @see TilingAlgorithm for the algorithm interface
- * @see AlgorithmRegistry::availableAlgorithms() for discovering algorithm IDs
+ * @see ITileAlgorithmRegistry for the abstract contract
  */
 class PHOSPHORTILES_EXPORT AlgorithmRegistry : public ITileAlgorithmRegistry
 {
@@ -66,27 +53,12 @@ class PHOSPHORTILES_EXPORT AlgorithmRegistry : public ITileAlgorithmRegistry
 
 public:
     /**
-     * @brief Get the singleton instance
-     *
-     * Creates the registry and registers built-in algorithms on first call.
-     *
-     * @deprecated Singleton access is retained only during the plugin-based
-     * architecture migration. New call sites should inject an
-     * @c ITileAlgorithmRegistry* via constructor parameters; the singleton
-     * will be removed once the daemon / editor / settings composition roots
-     * own their own instances.
-     *
-     * @return Pointer to the global AlgorithmRegistry instance
-     */
-    static AlgorithmRegistry* instance();
-
-    /**
      * @brief Early cleanup of all registered algorithms
      *
      * Connected to QCoreApplication::aboutToQuit() so that algorithm objects
      * (especially ScriptedAlgorithm instances with QJSEngine internals) are
-     * destroyed while Qt is still fully alive, avoiding crashes during static
-     * destruction when the singleton outlives QCoreApplication.
+     * destroyed while Qt is still fully alive, avoiding crashes during
+     * teardown if an instance outlives QCoreApplication.
      */
     void cleanup();
 
@@ -127,16 +99,13 @@ public:
     void setPreviewParams(const AlgorithmPreviewParams& params) override;
     const AlgorithmPreviewParams& previewParams() const noexcept override;
 
-    /// Static backwards-compat shim — forwards to `instance()->setPreviewParams(...)`.
-    static void setConfiguredPreviewParams(const AlgorithmPreviewParams& params);
-
-    /// Static backwards-compat shim — forwards to `instance()->previewParams()`.
-    static const AlgorithmPreviewParams& configuredPreviewParams();
-
-private:
+    /// Composition roots (daemon, editor, settings, tests) construct
+    /// their own registry instance. Built-in algorithms register
+    /// automatically in the constructor.
     explicit AlgorithmRegistry(QObject* parent = nullptr);
     ~AlgorithmRegistry() override;
 
+private:
     /**
      * @brief Register all built-in algorithms
      *

@@ -18,6 +18,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
@@ -53,7 +54,7 @@ private Q_SLOTS:
     {
         // Without Phosphor::Screens::ScreenManager, validation is skipped — state creation succeeds
         // for any non-empty screen ID, including virtual screen IDs.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         PhosphorTiles::TilingState* state = engine.stateForScreen(vsId);
@@ -64,7 +65,7 @@ private Q_SLOTS:
 
     void stateForScreen_acceptsMultipleVirtualScreenIds()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -81,7 +82,7 @@ private Q_SLOTS:
 
     void stateForScreen_returnsSameInstanceForSameVsId()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
         PhosphorTiles::TilingState* first = engine.stateForScreen(vsId);
@@ -95,7 +96,7 @@ private Q_SLOTS:
         // With a real Phosphor::Screens::ScreenManager, stateForScreen validates that the screen
         // exists. A virtual screen ID with no matching config returns nullptr.
         Phosphor::Screens::ScreenManager screenMgr;
-        AutotileEngine engine(nullptr, nullptr, &screenMgr);
+        AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:99");
         PhosphorTiles::TilingState* state = engine.stateForScreen(vsId);
@@ -118,7 +119,7 @@ private Q_SLOTS:
         // Phosphor::Screens::ScreenManager-less path works (tested above) and that the
         // Phosphor::Screens::ScreenManager rejects unknown VS IDs (tested above).
         // This test verifies the validation path runs without crashing.
-        AutotileEngine engine(nullptr, nullptr, &screenMgr);
+        AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
         PhosphorTiles::TilingState* state = engine.stateForScreen(vs0);
@@ -137,7 +138,7 @@ private Q_SLOTS:
     {
         // stateForKey is private; test per-desktop state via the public API:
         // setCurrentDesktop() + stateForScreen().
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vsId = QStringLiteral("Dell:U2722D:115107/vs:0");
 
@@ -157,7 +158,7 @@ private Q_SLOTS:
 
     void stateForScreen_rejectsEmptyScreenId()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         PhosphorTiles::TilingState* state = engine.stateForScreen(QString());
         QVERIFY(state == nullptr);
     }
@@ -172,7 +173,7 @@ private Q_SLOTS:
     void virtualScreensChanged_doesNotCrash()
     {
         Phosphor::Screens::ScreenManager screenMgr;
-        AutotileEngine engine(nullptr, nullptr, &screenMgr);
+        AutotileEngine engine(nullptr, nullptr, &screenMgr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);
@@ -214,7 +215,7 @@ private Q_SLOTS:
         // A single virtual screen covering the full physical screen should behave
         // identically to no-VS configuration: the engine uses the VS ID as a
         // normal screen ID and produces independent per-VS tiling state.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString vsId = PhosphorIdentity::VirtualScreenId::make(physId, 0);
@@ -253,7 +254,7 @@ private Q_SLOTS:
     {
         // Verify that windowFocused on a different virtual screen migrates
         // the window from the old state to the new state.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -297,7 +298,7 @@ private Q_SLOTS:
 
     void virtualScreenRemoval_cleansUpState()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -329,7 +330,7 @@ private Q_SLOTS:
 
     void virtualScreenRemoval_allVirtualScreens_cleansUpAllStates()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -353,7 +354,7 @@ private Q_SLOTS:
 
     void virtualScreenRemoval_perScreenConfigCleaned()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         engine.setAutotileScreens({vs0});
@@ -376,7 +377,7 @@ private Q_SLOTS:
 
     void perScreenConfig_virtualScreenOverrideApplied()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         engine.setAutotileScreens({vs0});
@@ -394,7 +395,7 @@ private Q_SLOTS:
 
     void perScreenConfig_virtualScreenFallsBackToGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -416,7 +417,7 @@ private Q_SLOTS:
 
     void perScreenConfig_virtualScreenAlgorithmOverride()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -436,7 +437,7 @@ private Q_SLOTS:
 
     void perScreenConfig_clearOverrideRestoresGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         engine.setAutotileScreens({vs0});
@@ -462,7 +463,7 @@ private Q_SLOTS:
 
     void overrideCascade_physicalOverrideDoesNotAffectVirtualScreens()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
@@ -487,7 +488,7 @@ private Q_SLOTS:
 
     void overrideCascade_eachVirtualScreenIndependent()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -517,7 +518,7 @@ private Q_SLOTS:
 
     void windowLifecycle_virtualScreenId()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         const QString vs1 = QStringLiteral("Dell:U2722D:115107/vs:1");
@@ -559,7 +560,7 @@ private Q_SLOTS:
 
     void stateKeying_virtualScreenPerDesktop()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString vs0 = QStringLiteral("Dell:U2722D:115107/vs:0");
         engine.setCurrentDesktop(1);
@@ -675,7 +676,7 @@ private Q_SLOTS:
 
     void tripleSplit_allVirtualScreensGetIndependentStates()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString physId = QStringLiteral("Dell:U2722D:115107");
         const QString vs0 = PhosphorIdentity::VirtualScreenId::make(physId, 0);

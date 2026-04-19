@@ -14,6 +14,7 @@
 // Project headers
 #include "AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "core/geometryutils.h"
 #include "core/utils.h"
 #include "AutotileConfig.h"
@@ -47,11 +48,13 @@ constexpr int PendingOrderTimeoutMs = 10000;
 } // namespace
 
 AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
-                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+                               Phosphor::Screens::ScreenManager* screenManager,
+                               PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_windowTracker(windowTracker)
     , m_screenManager(screenManager)
+    , m_algorithmRegistry(algorithmRegistry)
     , m_config(std::make_unique<AutotileConfig>())
     , m_configResolver(std::make_unique<PerScreenConfigResolver>(this))
     , m_navigation(std::make_unique<NavigationController>(this))
@@ -628,7 +631,7 @@ QString AutotileEngine::algorithm() const noexcept
 void AutotileEngine::setAlgorithm(const QString& algorithmId)
 {
     // Validate algorithm exists
-    auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* registry = m_algorithmRegistry;
     QString newId = algorithmId;
 
     if (!registry->hasAlgorithm(newId)) {
@@ -740,7 +743,7 @@ void AutotileEngine::setAlgorithm(const QString& algorithmId)
 
 PhosphorTiles::TilingAlgorithm* AutotileEngine::currentAlgorithm() const
 {
-    return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(m_algorithmId);
+    return m_algorithmRegistry->algorithm(m_algorithmId);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -3095,7 +3098,7 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
     auto resolver = [this](const QString& windowId) {
         return currentAppIdFor(windowId);
     };
-    auto* algoRegistry = PhosphorTiles::AlgorithmRegistry::instance();
+    auto* algoRegistry = m_algorithmRegistry;
     for (PhosphorTiles::TilingAlgorithm* algo : algoRegistry->allAlgorithms()) {
         if (algo) {
             algo->setAppIdResolver(resolver);
@@ -3104,9 +3107,9 @@ void AutotileEngine::setWindowRegistry(WindowRegistry* registry)
     // Newly-registered (hot-reloaded) scripted algorithms must also pick up
     // the resolver at the moment they appear, otherwise the first
     // post-registration windowAdded hook would see empty class strings.
-    connect(algoRegistry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this,
+    connect(algoRegistry, &PhosphorTiles::ITileAlgorithmRegistry::algorithmRegistered, this,
             [this, resolver](const QString& id) {
-                auto* reg = PhosphorTiles::AlgorithmRegistry::instance();
+                auto* reg = m_algorithmRegistry;
                 if (auto* algo = reg->algorithm(id)) {
                     algo->setAppIdResolver(resolver);
                 }

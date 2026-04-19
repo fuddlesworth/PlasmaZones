@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
@@ -24,7 +25,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        PhosphorTiles::AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // =========================================================================
@@ -33,7 +34,7 @@ private Q_SLOTS:
 
     void testStartup_pendingOrderTimeoutCleansUp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -55,7 +56,7 @@ private Q_SLOTS:
 
     void testStartup_coalescedRetileFromBurstWindowOpens()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -76,7 +77,7 @@ private Q_SLOTS:
 
     void testStartup_pendingOrderSkipsRetileUntilWindowsArrive()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
 
         QStringList order = {QStringLiteral("win1"), QStringLiteral("win2")};
@@ -101,7 +102,7 @@ private Q_SLOTS:
 
     void testToggleWindowFloat_crossScreenFallback()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -118,7 +119,7 @@ private Q_SLOTS:
 
     void testWindowFocused_crossScreenMigration()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -139,7 +140,7 @@ private Q_SLOTS:
 
     void testToggleWindowFloat_untrackedWindowFeedback()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -160,7 +161,7 @@ private Q_SLOTS:
 
     void testSetWindowFloat_alreadyFloatedNoOp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -181,7 +182,7 @@ private Q_SLOTS:
 
     void testSetWindowFloat_unfloatNonAutotileScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 

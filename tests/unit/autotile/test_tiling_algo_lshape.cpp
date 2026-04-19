@@ -34,11 +34,11 @@ private:
 
     PhosphorTiles::TilingAlgorithm* cornerMaster()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("corner-master"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("corner-master"));
     }
     PhosphorTiles::TilingAlgorithm* quadrantPriority()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("quadrant-priority"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("quadrant-priority"));
     }
 
 private Q_SLOTS:

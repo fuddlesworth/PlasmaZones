@@ -32,6 +32,7 @@
 #include <QTest>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
@@ -89,7 +90,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void applyTiling_populatesScreenIdOnEveryTiledEntry()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-1");
 
         engine.setAutotileScreens({screenName});
@@ -131,7 +132,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void applyTiling_monocleEntriesStillValidate()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("HDMI-2");
         engine.setAutotileScreens({screenName});
         engine.setAlgorithm(QLatin1String("monocle"));
@@ -167,7 +168,7 @@ private Q_SLOTS:
     // ─────────────────────────────────────────────────────────────────────
     void applyTiling_overflowFloatingEntryIsValid()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("DP-3");
         engine.setAutotileScreens({screenName});
         engine.setAlgorithm(QLatin1String("master-stack"));

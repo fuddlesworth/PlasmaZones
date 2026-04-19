@@ -102,17 +102,6 @@ void AlgorithmRegistry::cleanup()
     m_registrationOrder.clear();
 }
 
-AlgorithmRegistry* AlgorithmRegistry::instance()
-{
-    Q_ASSERT_X(QCoreApplication::instance(), "AlgorithmRegistry::instance",
-               "must not be called before QCoreApplication is created");
-    // Meyer's singleton: C++11 guarantees thread-safe initialization
-    // of static local variables (§6.7 [stmt.dcl] p4).
-    // The constructor connects cleanup() — no separate connection needed.
-    static AlgorithmRegistry s_instance;
-    return &s_instance;
-}
-
 void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* algorithm)
 {
     Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
@@ -280,11 +269,19 @@ TilingAlgorithm* AlgorithmRegistry::defaultAlgorithm() const
 
 void AlgorithmRegistry::registerBuiltInAlgorithms()
 {
-    // Process all pending registrations from AlgorithmRegistrar instances
-    // Each algorithm registers itself via static initialization in its .cpp file
+    // Process all pending registrations from AlgorithmRegistrar instances.
+    // Each algorithm registers itself via static initialization in its
+    // .cpp file. The pending list is the canonical snapshot of every
+    // statically-known built-in; we iterate without draining so multiple
+    // AlgorithmRegistry instances (daemon, editor, settings, tests) each
+    // get their own freshly-constructed copy of every built-in. The
+    // factory returns a `new T()` per call, so each registry owns its
+    // own algorithm instances — no sharing.
     auto& pending = pendingAlgorithmRegistrations();
 
-    // Sort by priority (lower = first) for deterministic registration order
+    // Sort by priority (lower = first) for deterministic registration
+    // order. The sort is idempotent across instances; we touch the same
+    // list every constructor call but never mutate the entry set.
     std::sort(pending.begin(), pending.end(), [](const auto& a, const auto& b) {
         return a.priority < b.priority;
     });
@@ -292,9 +289,6 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
     for (const auto& reg : pending) {
         registerAlgorithm(reg.id, reg.factory());
     }
-
-    // Clear pending list (registrations are now complete)
-    pending.clear();
 }
 
 void AlgorithmRegistry::setPreviewParams(const AlgorithmPreviewParams& params)
@@ -309,16 +303,6 @@ void AlgorithmRegistry::setPreviewParams(const AlgorithmPreviewParams& params)
 const AlgorithmPreviewParams& AlgorithmRegistry::previewParams() const noexcept
 {
     return m_previewParams;
-}
-
-void AlgorithmRegistry::setConfiguredPreviewParams(const AlgorithmPreviewParams& params)
-{
-    instance()->setPreviewParams(params);
-}
-
-const AlgorithmPreviewParams& AlgorithmRegistry::configuredPreviewParams()
-{
-    return instance()->previewParams();
 }
 
 } // namespace PhosphorTiles

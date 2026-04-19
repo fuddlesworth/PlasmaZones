@@ -13,6 +13,21 @@
 
 namespace PlasmaZones::TestHelpers {
 
+/// Test-process AlgorithmRegistry singleton replacement.
+///
+/// AlgorithmRegistry::instance() was removed when PlasmaZones moved to
+/// per-process registry ownership for plugin-friendly architecture.
+/// Tests need *some* shared registry across factory calls so that
+/// engines built in different test cases see the same set of registered
+/// built-in algorithms — this Meyer-style local replaces the old
+/// singleton with one test-process registry. Production code injects
+/// its own registry per composition root and never uses this helper.
+inline PhosphorTiles::AlgorithmRegistry* testRegistry()
+{
+    static PhosphorTiles::AlgorithmRegistry s_registry;
+    return &s_registry;
+}
+
 /**
  * @brief Create an engine with a single autotile screen and N windows.
  *
@@ -28,7 +43,7 @@ namespace PlasmaZones::TestHelpers {
 inline AutotileEngine* createEngineWithWindows(const QString& screen, int count,
                                                const QString& focusedWindow = QString())
 {
-    auto* engine = new AutotileEngine(nullptr, nullptr, nullptr);
+    auto* engine = new AutotileEngine(nullptr, nullptr, nullptr, testRegistry());
     engine->setAutotileScreens({screen});
 
     for (int i = 1; i <= count; ++i) {

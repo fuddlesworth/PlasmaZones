@@ -29,7 +29,7 @@ private:
 
     PhosphorTiles::TilingAlgorithm* bsp()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("bsp"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("bsp"));
     }
 
     /**

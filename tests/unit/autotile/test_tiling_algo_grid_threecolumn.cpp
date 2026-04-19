@@ -44,19 +44,19 @@ private:
 
     PhosphorTiles::TilingAlgorithm* threeCol()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("three-column"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("three-column"));
     }
     PhosphorTiles::TilingAlgorithm* grid()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("grid"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
     }
     PhosphorTiles::TilingAlgorithm* masterStack()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
     }
     PhosphorTiles::TilingAlgorithm* dw()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle"));
     }
 
 private Q_SLOTS:
@@ -98,7 +98,7 @@ private Q_SLOTS:
     void testColumns_zeroWindows()
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        QVERIFY(PhosphorTiles::AlgorithmRegistry::instance()
+        QVERIFY(m_scriptSetup.registry()
                     ->algorithm(QLatin1String("columns"))
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -107,7 +107,7 @@ private Q_SLOTS:
     void testRows_zeroWindows()
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        QVERIFY(PhosphorTiles::AlgorithmRegistry::instance()
+        QVERIFY(m_scriptSetup.registry()
                     ->algorithm(QLatin1String("rows"))
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -249,7 +249,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("columns"))
                 ->calculateZones(makeParams(1, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 1);
@@ -263,7 +263,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("columns"))
                 ->calculateZones(makeParams(2, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(20)));
         QCOMPARE(zones.size(), 2);
@@ -298,7 +298,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("rows"))
                 ->calculateZones(makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(15)));
         QCOMPARE(zones.size(), 3);
@@ -387,7 +387,7 @@ private Q_SLOTS:
     {
         QRect screen(0, 0, 100, 100);
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        auto zones = PhosphorTiles::AlgorithmRegistry::instance()
+        auto zones = m_scriptSetup.registry()
                          ->algorithm(QLatin1String("bsp"))
                          ->calculateZones(makeParams(3, screen, &state, 200, ::PhosphorLayout::EdgeGaps::uniform(10)));
         QCOMPARE(zones.size(), 3);

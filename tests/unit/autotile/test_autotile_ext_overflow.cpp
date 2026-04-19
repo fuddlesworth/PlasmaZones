@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/TilingState.h>
@@ -25,7 +26,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        PhosphorTiles::AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // =========================================================================
@@ -34,7 +35,7 @@ private Q_SLOTS:
 
     void testMinimize_floatingWindowNotRemovedOnZoneClear()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -53,7 +54,7 @@ private Q_SLOTS:
 
     void testMinimize_windowClosedBypassesFloatingGuard()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -73,7 +74,7 @@ private Q_SLOTS:
 
     void testMinimize_retilingFlagSkipsZoneChanges()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -95,7 +96,7 @@ private Q_SLOTS:
 
     void testModeTransition_savedFloatingRestoredOnReEnable()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -123,7 +124,7 @@ private Q_SLOTS:
 
     void testModeTransition_overflowWindowsNotSaved()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -152,7 +153,7 @@ private Q_SLOTS:
 
     void testModeTransition_clearSavedFloatingForZoneSnappedWindows()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -175,7 +176,7 @@ private Q_SLOTS:
 
     void testModeTransition_wtsFloatingPreserved()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -189,7 +190,7 @@ private Q_SLOTS:
 
     void testModeTransition_windowClosedCleansSavedFloating()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -217,7 +218,7 @@ private Q_SLOTS:
 
     void testInsertWindow_preSeededOrder_correctPosition()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -240,7 +241,7 @@ private Q_SLOTS:
 
     void testInsertWindow_afterFocused_insertsAtCorrectIndex()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->insertPosition = AutotileConfig::InsertPosition::AfterFocused;
@@ -260,7 +261,7 @@ private Q_SLOTS:
 
     void testInsertWindow_asMaster_movesToFront()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->insertPosition = AutotileConfig::InsertPosition::AsMaster;
@@ -279,7 +280,7 @@ private Q_SLOTS:
 
     void testInsertWindow_duplicateWindowRejected()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -301,7 +302,7 @@ private Q_SLOTS:
 
     void testOverflow_signalsEmittedAfterGeometryBatch()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -321,7 +322,7 @@ private Q_SLOTS:
 
     void testOverflow_backfillPrioritizesRecoveryOverNew()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 2;
@@ -342,7 +343,7 @@ private Q_SLOTS:
 
     void testOverflow_maxWindowsDecreaseOverflowsCorrectly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
         engine.config()->maxWindows = 4;

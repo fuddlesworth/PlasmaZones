@@ -45,13 +45,12 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
     return *this;
 }
 
-LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* registry)
+LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* zoneRegistry,
+                                          PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry)
 {
     LayoutSourceBundle bundle;
-    bundle.zones = std::make_unique<PhosphorZones::ZonesLayoutSource>(registry);
-    // Autotile source defaults to AlgorithmRegistry::instance() — no need
-    // to thread the singleton through every construction site.
-    bundle.autotile = std::make_unique<PhosphorTiles::AutotileLayoutSource>();
+    bundle.zones = std::make_unique<PhosphorZones::ZonesLayoutSource>(zoneRegistry);
+    bundle.autotile = std::make_unique<PhosphorTiles::AutotileLayoutSource>(algorithmRegistry);
     bundle.composite = std::make_unique<PhosphorLayout::CompositeLayoutSource>();
     // Source order is significant for ID-namespace precedence (manual
     // layouts use bare UUIDs; autotile uses the `autotile:` prefix, so in

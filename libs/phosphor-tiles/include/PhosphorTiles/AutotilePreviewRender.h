@@ -10,7 +10,7 @@
 #include <QString>
 
 namespace PhosphorTiles {
-class AlgorithmRegistry;
+class ITileAlgorithmRegistry;
 class TilingAlgorithm;
 } // namespace PhosphorTiles
 
@@ -25,26 +25,24 @@ namespace PhosphorTiles {
 /// @p algorithmId is the registry id for @p algorithm — embedded into the
 /// returned preview as `"autotile:<id>"`.
 ///
-/// @p registry    — registry consulted for `previewParams()` (the
-///                  user-configured master-count / split-ratio / per-algorithm
-///                  saved settings). Pass @c nullptr to fall back to
-///                  @c AlgorithmRegistry::instance() for backwards compatibility.
+/// @p registry — tile-algorithm registry consulted for
+///               @c previewParams() (the user-configured master-count /
+///               split-ratio / per-algorithm saved settings). Must be
+///               non-null; composition roots inject the registry they
+///               own.
 ///
 /// Provided as a free function so consumers that already hold a
 /// TilingAlgorithm* can build a preview without going through
 /// AutotileLayoutSource (mirrors PhosphorZones::previewFromLayout).
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
-previewFromAlgorithm(const QString& algorithmId, PhosphorTiles::TilingAlgorithm* algorithm,
-                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
-                     PhosphorTiles::AlgorithmRegistry* registry = nullptr);
+previewFromAlgorithm(const QString& algorithmId, PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
+                     PhosphorTiles::ITileAlgorithmRegistry* registry);
 
 /// Convenience overload that reverse-looks-up the algorithm id via the
-/// supplied registry (or @c AlgorithmRegistry::instance() when @p registry
-/// is null). Prefer the id-taking form on hot paths — the reverse lookup
-/// is O(N) per call and emits a qCWarning.
+/// supplied registry. Prefer the id-taking form on hot paths — the
+/// reverse lookup is O(N) per call and emits a qCWarning.
 PHOSPHORTILES_EXPORT PhosphorLayout::LayoutPreview
-previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm,
-                     int windowCount = PhosphorLayout::DefaultPreviewWindowCount,
-                     PhosphorTiles::AlgorithmRegistry* registry = nullptr);
+previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
+                     PhosphorTiles::ITileAlgorithmRegistry* registry);
 
 } // namespace PhosphorTiles

@@ -50,7 +50,7 @@ void Daemon::initializeAutotile()
             // Defer OSD display (same rationale as autotileApplied handler above).
             if (m_modeTracker && m_modeTracker->isAnyScreenAutotile() && m_settings
                 && m_settings->showOsdOnLayoutSwitch() && m_overlayService) {
-                auto* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
+                auto* algo = m_algorithmRegistry.get()->algorithm(algorithmId);
                 QString displayName = algo ? algo->name() : algorithmId;
                 QString screenId;
                 if (m_autotileEngine) {

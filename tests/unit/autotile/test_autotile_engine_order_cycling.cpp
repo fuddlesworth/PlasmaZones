@@ -5,6 +5,7 @@
 #include <QCoreApplication>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -54,7 +55,7 @@ private Q_SLOTS:
 
     void testOrderPreserved_acrossCycle()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         const QStringList originalOrder = {
             QStringLiteral("win-A"),
@@ -98,7 +99,7 @@ private Q_SLOTS:
 
     void testCapture_emptyScreen_returnsEmpty()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
 
         engine.setAutotileScreens({screen});
@@ -114,7 +115,7 @@ private Q_SLOTS:
 
     void testSeed_emptyOrder_isNoOp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
 
         // setInitialWindowOrder with empty list should not crash or create state
@@ -130,7 +131,7 @@ private Q_SLOTS:
 
     void testMultiScreen_cycleOne_preservesOther()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         const QStringList order1 = {QStringLiteral("win-1"), QStringLiteral("win-2")};
@@ -165,7 +166,7 @@ private Q_SLOTS:
 
     void testSeed_ignoredWhenWindowsExist()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         const QStringList existingOrder = {QStringLiteral("win-X"), QStringLiteral("win-Y")};
         const QStringList seedOrder = {QStringLiteral("win-Y"), QStringLiteral("win-X")};
@@ -185,7 +186,7 @@ private Q_SLOTS:
 
     void testTiledWindowOrder_unknownScreen_returnsEmpty()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         QVERIFY(engine.tiledWindowOrder(QStringLiteral("nonexistent")).isEmpty());
     }

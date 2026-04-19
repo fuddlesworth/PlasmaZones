@@ -9,6 +9,7 @@
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 
 namespace PlasmaZones {
 
@@ -42,18 +43,18 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
         });
     }
 
-    // Autotile entries enter the unified list via PhosphorTiles::AlgorithmRegistry,
-    // not LayoutManager — without this subscription a hot-loaded user script (or
-    // any built-in registration churn) leaves m_cachedLayouts stale, and Meta+1‥9
-    // continues to cycle the pre-load list until something else fires
-    // layoutsChanged. Mirror SettingsController's existing pattern.
-    if (auto* registry = PhosphorTiles::AlgorithmRegistry::instance()) {
-        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
-            m_cacheValid = false;
-        });
-        connect(registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool) {
-            m_cacheValid = false;
-        });
+    // Autotile entries enter the unified list via the engine's tile-algorithm
+    // registry, not LayoutManager — without this subscription a hot-loaded
+    // user script (or any built-in registration churn) leaves m_cachedLayouts
+    // stale, and Meta+1‥9 continues to cycle the pre-load list until something
+    // else fires layoutsChanged. Subscribe to the unified
+    // ILayoutSourceRegistry::contentsChanged signal — covers both
+    // algorithm-set mutations and preview-params changes.
+    if (m_autotileEngine && m_autotileEngine->algorithmRegistry()) {
+        connect(m_autotileEngine->algorithmRegistry(), &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this,
+                [this]() {
+                    m_cacheValid = false;
+                });
     }
 
     syncFromExternalState();
@@ -67,8 +68,9 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
         // and mode-based filtering (manual-only vs autotile-only)
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-            m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-            m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
+            m_layoutManager, m_autotileEngine ? m_autotileEngine->algorithmRegistry() : nullptr, m_currentScreenName,
+            m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts, m_includeAutotileLayouts,
+            Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 

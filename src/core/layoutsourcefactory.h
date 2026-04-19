@@ -28,6 +28,7 @@ class ZonesLayoutSource;
 
 namespace PhosphorTiles {
 class AutotileLayoutSource;
+class ITileAlgorithmRegistry;
 }
 
 namespace PlasmaZones {
@@ -60,16 +61,19 @@ struct PLASMAZONES_EXPORT LayoutSourceBundle
     std::unique_ptr<PhosphorLayout::CompositeLayoutSource> composite;
 };
 
-/// Build the standard {zones → autotile} composite over @p registry.
+/// Build the standard {zones → autotile} composite.
 ///
-/// @p registry is the manual-layout registry (typically a LayoutManager);
-/// caller owns it and must keep it alive for the bundle's lifetime.
+/// @p zoneRegistry is the manual-layout registry (typically a
+/// LayoutManager); caller owns it and must keep it alive for the
+/// bundle's lifetime. Both the zones source and the autotile source
+/// self-wire change notification via the unified
+/// ILayoutSourceRegistry::contentsChanged signal — no caller-side
+/// connect is required.
 ///
-/// The autotile source binds to @c AlgorithmRegistry::instance()
-/// automatically. Caller is responsible for wiring the registry's
-/// "layouts changed" signal to @c bundle.zones->notifyContentsChanged()
-/// if reactive refresh is desired (the bundle can't do this itself
-/// without knowing the concrete registry type).
-PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* registry);
+/// @p algorithmRegistry is the tile-algorithm registry the autotile
+/// source binds to. There is no process-global fallback — composition
+/// roots own their own AlgorithmRegistry instance and pass it here.
+PLASMAZONES_EXPORT LayoutSourceBundle makeLayoutSourceBundle(PhosphorZones::IZoneLayoutRegistry* zoneRegistry,
+                                                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry);
 
 } // namespace PlasmaZones

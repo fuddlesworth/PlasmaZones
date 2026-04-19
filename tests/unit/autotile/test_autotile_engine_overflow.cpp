@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -24,12 +25,12 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        PhosphorTiles::AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     void testOverflow_excessWindowsAutoFloated()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -55,7 +56,7 @@ private Q_SLOTS:
 
     void testOverflow_emitsFloatingSignal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -89,7 +90,7 @@ private Q_SLOTS:
 
     void testOverflow_unfloatWhenRoomAvailable()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -118,7 +119,7 @@ private Q_SLOTS:
 
     void testOverflow_userFloatRemovesOverflowTracking()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -147,7 +148,7 @@ private Q_SLOTS:
 
     void testOverflow_screenRemovalCleansOverflow()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -172,7 +173,7 @@ private Q_SLOTS:
 
     void testOverflow_crossScreenMigration()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
         engine.config()->maxWindows = 10;
@@ -199,7 +200,7 @@ private Q_SLOTS:
 
     void testOverflow_backfillPriority()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -228,7 +229,7 @@ private Q_SLOTS:
 
     void testOverflow_multipleUnfloat()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -266,7 +267,7 @@ private Q_SLOTS:
 
     void testOverflow_userFloatClearsTracking()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -295,7 +296,7 @@ private Q_SLOTS:
 
     void testOverflow_reentrantRetile()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -319,7 +320,7 @@ private Q_SLOTS:
 
     void testOverflow_multiScreenRemoval()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
         engine.config()->maxWindows = 10;
@@ -352,7 +353,7 @@ private Q_SLOTS:
 
     void testOverflow_perScreenMaxWindows()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 
@@ -380,7 +381,7 @@ private Q_SLOTS:
 
     void testOverflow_toggleFloatClearsTracking()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
         engine.config()->maxWindows = 10;
 

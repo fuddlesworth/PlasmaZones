@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
@@ -44,7 +45,7 @@ private Q_SLOTS:
 
     void testConstruction_defaultValues()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         QVERIFY(!engine.isEnabled());
         QCOMPARE(engine.algorithm(), PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId());
@@ -57,13 +58,13 @@ private Q_SLOTS:
 
     void testEnabled_initiallyFalse()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(!engine.isEnabled());
     }
 
     void testEnabled_setTrue()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
 
         QSet<QString> screens{QStringLiteral("HDMI-1")};
@@ -76,7 +77,7 @@ private Q_SLOTS:
 
     void testEnabled_noChangeNoSignal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
 
         engine.setAutotileScreens({});
@@ -87,7 +88,7 @@ private Q_SLOTS:
 
     void testEnabled_toggleBackAndForth()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSignalSpy spy(&engine, &AutotileEngine::enabledChanged);
 
         QSet<QString> screens{QStringLiteral("HDMI-1")};
@@ -105,13 +106,13 @@ private Q_SLOTS:
 
     void testAlgorithm_defaultIsBsp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QCOMPARE(engine.algorithm(), QLatin1String("bsp"));
     }
 
     void testAlgorithm_setValid()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
 
         engine.setAlgorithm(QLatin1String("columns"));
@@ -123,7 +124,7 @@ private Q_SLOTS:
 
     void testAlgorithm_setInvalidFallsBackToDefault()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         engine.setAlgorithm(QLatin1String("master-stack"));
         QCOMPARE(engine.algorithm(), QLatin1String("master-stack"));
@@ -137,7 +138,7 @@ private Q_SLOTS:
 
     void testAlgorithm_sameValueNoSignal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSignalSpy spy(&engine, &AutotileEngine::algorithmChanged);
 
         engine.setAlgorithm(engine.algorithm());
@@ -147,7 +148,7 @@ private Q_SLOTS:
 
     void testAlgorithm_currentAlgorithmNotNull()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(engine.currentAlgorithm() != nullptr);
     }
 
@@ -157,7 +158,7 @@ private Q_SLOTS:
 
     void testStateForScreen_createNew()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         PhosphorTiles::TilingState* state = engine.stateForScreen(QStringLiteral("TestScreen"));
 
@@ -167,7 +168,7 @@ private Q_SLOTS:
 
     void testStateForScreen_returnsSameInstance()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         PhosphorTiles::TilingState* state1 = engine.stateForScreen(QStringLiteral("TestScreen"));
         PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("TestScreen"));
@@ -177,7 +178,7 @@ private Q_SLOTS:
 
     void testStateForScreen_differentScreensDifferentStates()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         PhosphorTiles::TilingState* state1 = engine.stateForScreen(QStringLiteral("Screen1"));
         PhosphorTiles::TilingState* state2 = engine.stateForScreen(QStringLiteral("Screen2"));
@@ -189,7 +190,7 @@ private Q_SLOTS:
 
     void testStateForScreen_inheritsConfigDefaults()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         AutotileConfig* config = engine.config();
         config->masterCount = 2;
         config->splitRatio = 0.7;
@@ -210,13 +211,13 @@ private Q_SLOTS:
 
     void testConfig_notNull()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(engine.config() != nullptr);
     }
 
     void testConfig_modifiable()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         AutotileConfig* config = engine.config();
 
         config->innerGap = 20;
@@ -291,13 +292,13 @@ private Q_SLOTS:
 
     void testIsWindowTiled_untrackedReturnsFalse()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(!engine.isWindowTiled(QStringLiteral("never-opened")));
     }
 
     void testIsWindowTiled_trackedAndFloatingReturnsFalse()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         const QString windowId = QStringLiteral("win-1");
         engine.setAutotileScreens({screen});
@@ -324,7 +325,7 @@ private Q_SLOTS:
 
     void testRetile_disabledEngineNoOp()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QVERIFY(!engine.isEnabled());
 
         engine.retile();
@@ -337,7 +338,7 @@ private Q_SLOTS:
 
     void testWindowLifecycle()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screenName = QStringLiteral("TestScreen");
         const QString windowId = QStringLiteral("win-lifecycle-1");

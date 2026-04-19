@@ -7,6 +7,7 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorTiles/AutotileLayoutSource.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 
@@ -54,12 +55,14 @@ QString cacheKey(const QString& algorithmId, int windowCount)
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
                                                    PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::AlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     PhosphorLayout::LayoutPreview preview;
     if (!algorithm || algorithmId.isEmpty()) {
         return preview;
     }
+    Q_ASSERT_X(registry, "previewFromAlgorithm",
+               "registry must be non-null — composition roots own an AlgorithmRegistry and inject it");
 
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 
@@ -67,14 +70,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     // previews reflect the user's saved master-count / split-ratio / max-windows
     // tuning. Active algorithm gets the global configured values; other
     // algorithms fall back to their per-algorithm saved entry, then to the
-    // algorithm's own defaults. Fall back to AlgorithmRegistry::instance()
-    // when no registry is provided.
+    // algorithm's own defaults.
     int masterCount = PhosphorTiles::AutotileDefaults::DefaultMasterCount;
     qreal splitRatio = algorithm->defaultSplitRatio();
     int effectiveCount = windowCount;
-    if (!registry) {
-        registry = PhosphorTiles::AlgorithmRegistry::instance();
-    }
     if (registry) {
         const auto& params = registry->previewParams();
         const bool isActive = !params.algorithmId.isEmpty() && registry->algorithm(params.algorithmId) == algorithm;
@@ -142,7 +141,7 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
 }
 
 PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorithm* algorithm, int windowCount,
-                                                   PhosphorTiles::AlgorithmRegistry* registry)
+                                                   PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     if (!algorithm) {
         return {};
@@ -162,31 +161,25 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(PhosphorTiles::TilingAlgorith
 
 // ─── AutotileLayoutSource ───────────────────────────────────────────────────
 
-AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::AlgorithmRegistry* registry, QObject* parent)
+AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry* registry, QObject* parent)
     : PhosphorLayout::ILayoutSource(parent)
-    , m_registry(registry ? registry : PhosphorTiles::AlgorithmRegistry::instance())
+    , m_registry(registry)
 {
+    Q_ASSERT_X(m_registry, "AutotileLayoutSource",
+               "registry must be non-null — composition roots own an AlgorithmRegistry and inject it");
     if (m_registry) {
         // Seed the algorithm-count cache — insertCacheEntry() relies on it
         // for its FIFO cap, and the first invalidation signal may not fire
         // until long after the first availableLayouts() call.
         m_algorithmCountCache = m_registry->availableAlgorithms().size();
-        // Every invalidation path must emit contentsChanged — wire all three
-        // registry signals to the same slot so the emit is owned by a single
-        // function (invalidateCache) instead of duplicated in each lambda.
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
-            invalidateCache();
-        });
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::algorithmUnregistered, this,
-                [this](const QString&, bool /*replacing*/) {
-                    invalidateCache();
-                });
-        // User-tuned master-count / split-ratio updates must invalidate the
-        // preview cache — otherwise the next availableLayouts() returns
-        // geometry rendered against the old state.
-        connect(m_registry, &PhosphorTiles::AlgorithmRegistry::previewParamsChanged, this, [this]() {
-            invalidateCache();
-        });
+        // Subscribe to the unified ILayoutSourceRegistry::contentsChanged
+        // signal — AlgorithmRegistry already bridges its three specific
+        // mutation signals (algorithmRegistered / algorithmUnregistered /
+        // previewParamsChanged) into that single emission, so the cache
+        // invalidates exactly once per registry change regardless of
+        // which mutation caused it.
+        connect(m_registry, &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this,
+                &AutotileLayoutSource::invalidateCache);
     }
 }
 

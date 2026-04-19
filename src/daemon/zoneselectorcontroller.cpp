@@ -99,10 +99,16 @@ QVariantList ZoneSelectorController::layouts() const
         aspectRatio = Utils::screenAspectRatio(m_screen);
     }
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, screenId, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-        m_includeAutotileLayouts, aspectRatio, m_settings && m_settings->filterLayoutsByAspectRatio(),
+        m_layoutManager, m_algorithmRegistry, screenId, m_currentVirtualDesktop, m_currentActivity,
+        m_includeManualLayouts, m_includeAutotileLayouts, aspectRatio,
+        m_settings && m_settings->filterLayoutsByAspectRatio(),
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
     return PlasmaZones::toVariantList(entries);
+}
+
+void ZoneSelectorController::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    m_algorithmRegistry = registry;
 }
 
 void ZoneSelectorController::setActiveLayoutId(const QString& layoutId)

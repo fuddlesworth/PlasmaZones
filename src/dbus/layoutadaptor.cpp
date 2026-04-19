@@ -12,6 +12,7 @@
 #include "../common/layoutpreviewserialize.h"
 #include "../core/unifiedlayoutlist.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/AutotilePreviewRender.h>
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "../core/virtualdesktopmanager.h"
@@ -247,7 +248,7 @@ QStringList LayoutAdaptor::getLayoutList()
     QStringList result;
 
     const auto entries = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-        m_layoutManager, /*includeAutotile=*/true,
+        m_layoutManager, m_algorithmRegistry, /*includeAutotile=*/true,
         PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, /*includeManual=*/true, /*includeAutotile=*/true));
     for (const auto& entry : entries) {
         QJsonObject json = PlasmaZones::toJson(entry);
@@ -283,8 +284,7 @@ QString LayoutAdaptor::getLayout(const QString& id)
     // Handle autotile algorithm preview layouts
     if (PhosphorLayout::LayoutId::isAutotile(id)) {
         QString algoId = PhosphorLayout::LayoutId::extractAlgorithmId(id);
-        auto* registry = PhosphorTiles::AlgorithmRegistry::instance();
-        auto* algo = registry ? registry->algorithm(algoId) : nullptr;
+        auto* algo = m_algorithmRegistry ? m_algorithmRegistry->algorithm(algoId) : nullptr;
         if (!algo) {
             qCWarning(lcDbusLayout) << "Autotile algorithm not found:" << algoId;
             return QString();
@@ -292,7 +292,8 @@ QString LayoutAdaptor::getLayout(const QString& id)
         // previewFromAlgorithm applies configured params (active-algorithm
         // maxWindows, master-count, split-ratio) when the caller passes a
         // non-positive windowCount, so no adapter helper is needed here.
-        PhosphorLayout::LayoutPreview preview = PhosphorTiles::previewFromAlgorithm(algoId, algo, -1);
+        PhosphorLayout::LayoutPreview preview =
+            PhosphorTiles::previewFromAlgorithm(algoId, algo, -1, m_algorithmRegistry);
         QJsonObject json = PlasmaZones::toJson(preview);
         // Apply stored per-algorithm overrides (gaps, visibility, shader)
         QJsonObject overrides = m_layoutManager->loadAutotileOverrides(algoId);
@@ -613,6 +614,11 @@ QStringList LayoutAdaptor::getVirtualDesktopNames()
 void LayoutAdaptor::setSettings(ISettings* settings)
 {
     m_settings = settings;
+}
+
+void LayoutAdaptor::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    m_algorithmRegistry = registry;
 }
 
 void LayoutAdaptor::setLayoutSource(PhosphorLayout::ILayoutSource* source)

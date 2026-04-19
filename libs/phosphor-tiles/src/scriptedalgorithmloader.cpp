@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
-#include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 #include "tileslogging.h"
 #include <QCoreApplication>
@@ -18,10 +18,13 @@ namespace PhosphorTiles {
 // Single file-scope constant shared by loadFromDirectory() and reWatchFiles()
 static constexpr int MaxWatchedFilesPerDir = 100;
 
-ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, QObject* parent)
+ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, ITileAlgorithmRegistry* registry,
+                                                 QObject* parent)
     : QObject(parent)
     , m_subdirectory(subdirectory)
+    , m_registry(registry)
 {
+    Q_ASSERT(m_registry);
     // Lazy user directory creation — moved ensureUserDirectoryExists()
     // to scanAndRegister() so it is only called when actually needed.
     setupFileWatcher();
@@ -29,17 +32,14 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, QO
 
 ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
 {
-    // Guard: during static destruction, AlgorithmRegistry (a Meyer's singleton)
-    // may already be destroyed. QCoreApplication being null is a reliable proxy
-    // for "we are in static destruction" — skip cleanup to avoid dangling pointer.
-    // Registry deletes its owned algorithms unconditionally for leak prevention;
-    // the loader only manages registration state, which is meaningless without
-    // QCoreApplication.
-    if (!QCoreApplication::instance())
+    // Guard: during static destruction the injected registry may already
+    // be destroyed. QCoreApplication being null is a reliable proxy for
+    // "we are in static destruction" — skip cleanup to avoid calling into
+    // a half-torn-down registry.
+    if (!QCoreApplication::instance() || !m_registry)
         return;
-    auto* registry = AlgorithmRegistry::instance();
     for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
-        registry->unregisterAlgorithm(it.key());
+        m_registry->unregisterAlgorithm(it.key());
     }
 }
 
@@ -125,7 +125,7 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
     // Lazily create user directory on first scan
     ensureUserDirectoryExists();
 
-    auto* registry = AlgorithmRegistry::instance();
+    auto* registry = m_registry;
 
     // Track which script IDs we register in this scan
     QSet<QString> newScriptIds;
@@ -213,7 +213,7 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
 
         // registerAlgorithm() handles replacement internally (removes old,
         // takes ownership of new) — no need to unregister first.
-        auto* registry = AlgorithmRegistry::instance();
+        auto* registry = m_registry;
         algo->setUserScript(isUserDir);
 
         // Warn when a script overrides an existing algorithm ID.

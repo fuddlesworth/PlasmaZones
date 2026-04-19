@@ -22,6 +22,10 @@ namespace PhosphorLayout {
 class ILayoutSource;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PhosphorZones {
 class Layout;
 }
@@ -53,6 +57,10 @@ public:
     void setVirtualDesktopManager(VirtualDesktopManager* vdm);
     void setActivityManager(ActivityManager* am);
     void setSettings(ISettings* settings);
+
+    /// Inject the daemon-owned tile-algorithm registry — required for
+    /// autotile entries in @ref getLayoutList and @ref getLayout.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
 
     /**
      * @brief Wire in the source-agnostic ILayoutSource bridge.
@@ -450,6 +458,7 @@ private:
     ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     ISettings* m_settings = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
     PhosphorLayout::ILayoutSource* m_layoutSource = nullptr;
 
     // Suppress screenLayoutChanged D-Bus signal during setAssignmentEntry —

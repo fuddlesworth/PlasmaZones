@@ -20,6 +20,7 @@
 #include "../core/layoutsourcefactory.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 
 #include <memory>
 
@@ -898,9 +899,11 @@ private:
     // gallery, layout-import preview thumbnails, etc.).
     //
     // The bundle aggregates manual layouts (over m_localLayoutManager) and
-    // autotile previews (over the AlgorithmRegistry singleton) behind a
-    // single ILayoutSource. Declaration order matters — the LayoutManager
-    // must outlive the bundle's zones source that borrows its catalog.
+    // autotile previews (over the editor-owned m_localAlgorithmRegistry)
+    // behind a single ILayoutSource. Declaration order matters — both
+    // registries must outlive the bundle (the zones source borrows the
+    // layout manager; the autotile source borrows the algorithm registry).
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     LayoutSourceBundle m_localSources;
 

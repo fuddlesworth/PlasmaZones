@@ -56,14 +56,16 @@ EditorController::EditorController(QObject* parent)
     , m_snappingService(new SnappingService(this))
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
+    , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get()))
+    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get(), m_localAlgorithmRegistry.get()))
 {
-    // Discover + register user-authored scripted algorithms in the shared
-    // AlgorithmRegistry singleton so standalone editor launches (daemon down)
+    // Discover + register user-authored scripted algorithms in the editor-
+    // owned AlgorithmRegistry so standalone editor launches (daemon down)
     // still surface them in layout pickers. The loader also sets up a
     // QFileSystemWatcher so hot-edits roll through automatically.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir), this);
+    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir),
+                                                                    m_localAlgorithmRegistry.get(), this);
     scriptLoader->scanAndRegister();
     connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &EditorController::reloadLocalLayouts);

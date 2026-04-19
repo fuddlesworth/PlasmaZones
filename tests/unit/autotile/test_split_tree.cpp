@@ -30,7 +30,7 @@ private:
 
     PhosphorTiles::TilingAlgorithm* dwindleMemory()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle-memory"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle-memory"));
     }
 
 private Q_SLOTS:

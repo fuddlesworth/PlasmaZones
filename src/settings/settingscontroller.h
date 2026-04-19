@@ -17,6 +17,7 @@
 #include "../core/enums.h"
 #include "../core/layoutmanager.h"
 #include "../core/layoutsourcefactory.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../core/modifierutils.h"
 
 #include <QHash>
@@ -892,8 +893,10 @@ private:
     // LayoutManager opens its own assignments backend + scans the standard
     // layouts directory; the bundle's composite aggregates manual + autotile
     // entries so consumers query a single ILayoutSource and never branch on
-    // id-prefix. Declaration order matters — m_localLayoutManager must
-    // outlive the bundle (its zones source borrows the manager).
+    // id-prefix. Declaration order matters — m_localAlgorithmRegistry +
+    // m_localLayoutManager must outlive the bundle (the zones source
+    // borrows the manager; the autotile source borrows the registry).
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<LayoutManager> m_localLayoutManager;
     LayoutSourceBundle m_localSources;
 

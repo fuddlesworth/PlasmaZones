@@ -6,6 +6,7 @@
 #include <QSignalSpy>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include "autotile/AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
@@ -44,7 +45,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -73,7 +74,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -106,7 +107,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterCount_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -133,7 +134,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterCount_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         const QString screen2 = QStringLiteral("Screen2");
@@ -159,7 +160,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterCount_doesNotGoBelowOne()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -182,7 +183,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -213,7 +214,7 @@ private Q_SLOTS:
 
     void testDecreaseMasterRatio_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -244,7 +245,7 @@ private Q_SLOTS:
 
     void testIncreaseMasterCount_withPerScreenOverride_updatesOverrideNotGlobal()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
 
         const QString screen1 = QStringLiteral("Screen1");
         engine.setAutotileScreens({screen1});
@@ -278,7 +279,7 @@ private Q_SLOTS:
 
     void testMonocle_tileRequestIncludesMonocleFlag()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -310,7 +311,7 @@ private Q_SLOTS:
 
     void testMonocle_nonMonocleTileRequestOmitsFlag()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screenName = QStringLiteral("TestScreen");
 
         QSet<QString> screens{screenName};
@@ -344,7 +345,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_preSeededInsertion()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -368,7 +369,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_ignoresWhenStateHasWindows()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -390,7 +391,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_unknownWindowsFallThrough()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -414,7 +415,7 @@ private Q_SLOTS:
     void testTiledWindowOrder_returnsOrderedList()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -432,7 +433,7 @@ private Q_SLOTS:
 
     void testTiledWindowOrder_emptyForUnknownScreen()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QStringList order = engine.tiledWindowOrder(QStringLiteral("nonexistent"));
         QVERIFY(order.isEmpty());
     }
@@ -440,7 +441,7 @@ private Q_SLOTS:
     void testRemoveWindow_cleansPendingInitialOrders()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 
@@ -465,7 +466,7 @@ private Q_SLOTS:
     void testSetInitialWindowOrder_guardChecksAllWindows()
     {
         const QString screenName = QStringLiteral("DP-1");
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QSet<QString> screens{screenName};
         engine.setAutotileScreens(screens);
 

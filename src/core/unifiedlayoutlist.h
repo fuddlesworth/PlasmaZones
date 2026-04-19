@@ -36,6 +36,10 @@ class ILayoutManager;
 class Layout;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PlasmaZones {
 
 class IOrderingSettings;
@@ -48,9 +52,14 @@ using ::PlasmaZones::IOrderingSettings;
 
 /**
  * @brief Build list of all available layouts (manual, and optionally autotile)
+ *
+ * @p algorithmRegistry must be non-null when @p includeAutotile is true —
+ * autotile entries are produced via a transient AutotileLayoutSource over
+ * this registry. May be nullptr otherwise.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, bool includeAutotile = false,
+buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
                        const QStringList& customOrder = {});
 
 /**
@@ -65,11 +74,14 @@ buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, bool includ
  * they are moved to the end of the list so the selector can show them in a
  * collapsed "Other" section. The `recommended` field in the returned entry
  * indicates whether the layout matches the current screen's aspect ratio.
+ *
+ * @p algorithmRegistry must be non-null when @p includeAutotile is true.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager, const QString& screenId, int virtualDesktop,
-                       const QString& activity, bool includeManual = true, bool includeAutotile = true,
-                       qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
+buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+                       PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
+                       int virtualDesktop, const QString& activity, bool includeManual = true,
+                       bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,
                        const QStringList& customOrder = {});
 
 /**

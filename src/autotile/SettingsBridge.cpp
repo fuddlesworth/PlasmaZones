@@ -5,6 +5,7 @@
 #include "AutotileEngine.h"
 #include <PhosphorTiles/AlgorithmPreviewParams.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "AutotileConfig.h"
 #include <PhosphorTiles/TilingState.h>
 #include "config/settings.h"
@@ -222,7 +223,9 @@ void SettingsBridge::syncFromSettings(Settings* settings)
     previewParams.masterCount = cfg->masterCount;
     previewParams.splitRatio = cfg->splitRatio;
     populatePreviewSavedSettings(previewParams, cfg->savedAlgorithmSettings);
-    PhosphorTiles::AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
+    if (auto* reg = m_engine->algorithmRegistry()) {
+        reg->setPreviewParams(previewParams);
+    }
 
     if (configChanged && m_engine->isEnabled()) {
         // Cancel any pending debounced retile — we are doing a full resync
@@ -342,7 +345,9 @@ void SettingsBridge::connectToSettings(Settings* settings)
         previewParams.masterCount = m_engine->config()->masterCount;
         previewParams.splitRatio = m_engine->config()->splitRatio;
         populatePreviewSavedSettings(previewParams, newSaved);
-        PhosphorTiles::AlgorithmRegistry::setConfiguredPreviewParams(previewParams);
+        if (auto* reg = m_engine->algorithmRegistry()) {
+            reg->setPreviewParams(previewParams);
+        }
     });
 
     CONNECT_SETTING_RETILE(autotileInnerGapChanged, innerGap, autotileInnerGap);

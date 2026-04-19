@@ -6,6 +6,7 @@
 #include "../cavaservice.h"
 #include <PhosphorRendering/ShaderCompiler.h>
 #include "../../core/logging.h"
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/shaderregistry.h"
@@ -162,6 +163,11 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
             observeLayoutForLiveEdits(manager->activeLayout());
         }
     }
+}
+
+void OverlayService::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
+{
+    m_algorithmRegistry = registry;
 }
 
 void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)

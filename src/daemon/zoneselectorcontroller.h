@@ -10,6 +10,10 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 #include <PhosphorZones/Layout.h>
 #include <QObject>
 #include <QPointer>
@@ -139,6 +143,10 @@ public:
     void setLayoutManager(LayoutManager* layoutManager);
     void setSettings(ISettings* settings);
 
+    /// Inject the daemon-owned tile-algorithm registry — required for
+    /// autotile layout entries to appear in @ref layoutPreviews.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
+
     // Screen management
     void setScreen(QScreen* screen);
     void setScreenId(const QString& screenId)
@@ -256,6 +264,7 @@ private:
     // References (concrete type for signal connections)
     QPointer<LayoutManager> m_layoutManager;
     QPointer<ISettings> m_settings;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     QPointer<QScreen> m_screen;
     QString m_screenId; // Virtual-aware screen ID (set explicitly or derived from m_screen)

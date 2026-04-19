@@ -63,6 +63,7 @@ class WindowRegistry;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
+class AlgorithmRegistry;
 class ScriptedAlgorithmLoader;
 }
 
@@ -405,6 +406,14 @@ private:
 
     // Unified layout management
     std::unique_ptr<UnifiedLayoutController> m_unifiedLayoutController;
+
+    // Daemon-owned tile-algorithm registry. Replaces the old
+    // AlgorithmRegistry::instance() singleton — per-process ownership is
+    // the only shape that works once PlasmaZones becomes a plugin-based
+    // compositor/WM/shell (plugins can't share process-global state
+    // safely). Declared before ScriptedAlgorithmLoader + AutotileEngine
+    // because both take a borrowed pointer to it in their constructor.
+    std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_algorithmRegistry;
 
     // Scripted algorithm loader (file watcher for user-defined JS algorithms)
     std::unique_ptr<PhosphorTiles::ScriptedAlgorithmLoader> m_scriptedAlgorithmLoader;

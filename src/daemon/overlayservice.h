@@ -35,6 +35,10 @@ namespace PhosphorZones {
 class Zone;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PlasmaZones {
 class CavaService;
 class WindowThumbnailService;
@@ -132,6 +136,12 @@ public:
 
     void setSettings(ISettings* settings);
     void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
+
+    /// Inject the daemon-owned tile-algorithm registry. Required when
+    /// autotile entries should appear in @ref visibleLayoutCount /
+    /// @ref layoutListForScreen output. Borrowed — caller owns it and
+    /// must keep it alive for the service's lifetime.
+    void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
     Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager;
@@ -378,6 +388,7 @@ private:
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
     PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QList<QPointer<PhosphorZones::Layout>> m_observedLayouts; ///< Layouts we watch for live edits
 

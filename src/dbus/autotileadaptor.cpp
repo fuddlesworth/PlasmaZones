@@ -4,6 +4,7 @@
 #include "autotileadaptor.h"
 
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include "autotile/AutotileEngine.h"
 #include <PhosphorTiles/TilingAlgorithm.h>
 
@@ -83,7 +84,7 @@ void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
     if (!ensureEngine("setAlgorithm")) {
         return;
     }
-    if (!PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId)) {
+    if (!m_engine->algorithmRegistry()->algorithm(algorithmId)) {
         qCWarning(lcDbusAutotile) << "setAlgorithm: unknown algorithm ID:" << algorithmId;
         return;
     }
@@ -354,12 +355,12 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
 
 QStringList AutotileAdaptor::availableAlgorithms()
 {
-    return PhosphorTiles::AlgorithmRegistry::instance()->availableAlgorithms();
+    return m_engine->algorithmRegistry()->availableAlgorithms();
 }
 
 AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
-    PhosphorTiles::TilingAlgorithm* algo = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_engine->algorithmRegistry()->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;
         return {};

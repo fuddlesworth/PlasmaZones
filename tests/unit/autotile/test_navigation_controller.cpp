@@ -54,7 +54,7 @@ private Q_SLOTS:
 
     void initTestCase()
     {
-        PhosphorTiles::AlgorithmRegistry::instance();
+        PlasmaZones::TestHelpers::testRegistry();
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -207,7 +207,7 @@ private Q_SLOTS:
 
     void testNavigation_increaseMasterRatio_updatesFocusedScreenOnly()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen1 = QStringLiteral("eDP-1");
         const QString screen2 = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen1, screen2});
@@ -243,7 +243,7 @@ private Q_SLOTS:
         // When no window has focus, focusNext/focusPrevious should still work
         // if there is a screen with tiled windows. Without a Phosphor::Screens::ScreenManager,
         // the fallback returns empty — no crash expected.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("eDP-1");
         engine.setAutotileScreens({screen});
 
@@ -266,7 +266,7 @@ private Q_SLOTS:
     {
         // When m_activeScreen is empty, resolveActiveScreen falls back to
         // the first autotile screen. Verify by checking feedback screen name.
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         const QString screen = QStringLiteral("HDMI-1");
         engine.setAutotileScreens({screen});
 

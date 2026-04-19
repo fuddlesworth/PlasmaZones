@@ -27,23 +27,23 @@ private:
 
     PhosphorTiles::TilingAlgorithm* wide()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("wide"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("wide"));
     }
     PhosphorTiles::TilingAlgorithm* masterStack()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("master-stack"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("master-stack"));
     }
     PhosphorTiles::TilingAlgorithm* dw()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("dwindle"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("dwindle"));
     }
     PhosphorTiles::TilingAlgorithm* threeCol()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("three-column"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("three-column"));
     }
     PhosphorTiles::TilingAlgorithm* grid()
     {
-        return PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("grid"));
+        return m_scriptSetup.registry()->algorithm(QLatin1String("grid"));
     }
 
 private Q_SLOTS:
@@ -65,7 +65,7 @@ private Q_SLOTS:
     void testCenteredMaster_zeroWindows()
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        QVERIFY(PhosphorTiles::AlgorithmRegistry::instance()
+        QVERIFY(m_scriptSetup.registry()
                     ->algorithm(QLatin1String("centered-master"))
                     ->calculateZones(makeParams(0, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                     .isEmpty());
@@ -150,7 +150,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         auto zones =
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("centered-master"))
                 ->calculateZones(makeParams(1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 1);
@@ -159,7 +159,7 @@ private Q_SLOTS:
 
     void testCenteredMaster_metadata()
     {
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         QVERIFY(cm->supportsMasterCount());
         QVERIFY(cm->supportsSplitRatio());
         QCOMPARE(cm->defaultMaxWindows(), 7);
@@ -169,7 +169,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         auto zones =
             cm->calculateZones(makeParams(2, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 2);
@@ -181,7 +181,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         auto zones =
             cm->calculateZones(makeParams(3, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -198,7 +198,7 @@ private Q_SLOTS:
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setMasterCount(1);
         state.setSplitRatio(0.55);
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         auto zones =
             cm->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
@@ -210,7 +210,7 @@ private Q_SLOTS:
     {
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setSplitRatio(0.55);
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         auto zones =
             cm->calculateZones(makeParams(3, m_screenGeometry, &state, 10, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 3);
@@ -238,7 +238,7 @@ private Q_SLOTS:
         PhosphorTiles::TilingState state(QStringLiteral("test"));
         state.setMasterCount(2);
         state.setSplitRatio(0.55);
-        auto* cm = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(QLatin1String("centered-master"));
+        auto* cm = m_scriptSetup.registry()->algorithm(QLatin1String("centered-master"));
         auto zones =
             cm->calculateZones(makeParams(4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
         QCOMPARE(zones.size(), 4);
@@ -274,27 +274,27 @@ private Q_SLOTS:
                 ->calculateZones(makeParams(-4, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
         QVERIFY(
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("columns"))
                 ->calculateZones(makeParams(-5, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
         QVERIFY(
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("bsp"))
                 ->calculateZones(makeParams(-10, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
         QVERIFY(
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("monocle"))
                 ->calculateZones(makeParams(-1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
         QVERIFY(
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("rows"))
                 ->calculateZones(makeParams(-7, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
         QVERIFY(
-            PhosphorTiles::AlgorithmRegistry::instance()
+            m_scriptSetup.registry()
                 ->algorithm(QLatin1String("centered-master"))
                 ->calculateZones(makeParams(-1, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)))
                 .isEmpty());
@@ -309,7 +309,7 @@ private Q_SLOTS:
             QLatin1String("bsp"),          QLatin1String("rows"),    QLatin1String("centered-master"),
         };
         for (const auto& id : algoIds) {
-            auto zones = PhosphorTiles::AlgorithmRegistry::instance()->algorithm(id)->calculateZones(
+            auto zones = m_scriptSetup.registry()->algorithm(id)->calculateZones(
                 makeParams(50, m_screenGeometry, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(0)));
             QCOMPARE(zones.size(), 50);
             for (const QRect& zone : zones) {
@@ -389,7 +389,7 @@ private Q_SLOTS:
     {
         QRect screen(0, 0, 100, 100);
         PhosphorTiles::TilingState state(QStringLiteral("test"));
-        auto zones = PhosphorTiles::AlgorithmRegistry::instance()
+        auto zones = m_scriptSetup.registry()
                          ->algorithm(QLatin1String("columns"))
                          ->calculateZones(makeParams(1, screen, &state, 0, ::PhosphorLayout::EdgeGaps::uniform(500)));
         QCOMPARE(zones.size(), 1);

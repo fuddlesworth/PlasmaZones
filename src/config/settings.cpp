@@ -1398,11 +1398,18 @@ QString Settings::defaultAutotileAlgorithm() const
 }
 void Settings::setDefaultAutotileAlgorithm(const QString& algorithm)
 {
+    // Settings does not hold a tile-algorithm registry — composition
+    // roots own one each. Built-in algorithm ids are accepted via the
+    // explicit allow-list below; any other id is taken at face value
+    // and validated by the engine (which has the registry) when the
+    // setting is consumed. Replaces an old AlgorithmRegistry::instance()
+    // hop that was incompatible with per-process registry ownership.
+    static const QSet<QString> kBuiltinIds = {QStringLiteral("bsp"), QStringLiteral("master-stack"),
+                                              QStringLiteral("columns")};
     QString validated = algorithm;
-    if (!algorithm.startsWith(QLatin1String("script:"))
-        && !PhosphorTiles::AlgorithmRegistry::instance()->algorithm(algorithm)) {
-        qCWarning(lcConfig) << "Unknown autotile algorithm:" << algorithm << "- using default";
-        validated = PhosphorTiles::AlgorithmRegistry::defaultAlgorithmId();
+    if (!algorithm.startsWith(QLatin1String("script:")) && !kBuiltinIds.contains(algorithm)) {
+        qCWarning(lcConfig) << "Unknown built-in autotile algorithm:" << algorithm
+                            << "- accepting (engine will revalidate against its registry)";
     }
     if (defaultAutotileAlgorithm() == validated) {
         return;

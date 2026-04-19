@@ -143,17 +143,25 @@ Daemon::Daemon(QObject* parent)
         m_zoneDetector->setAdjacentThreshold(m_settings->adjacentThreshold());
     });
 
+    // Construct the daemon-owned tile-algorithm registry up front so the
+    // layout-source bundle below can bind its autotile source to it. The
+    // registry was previously a process-global singleton; per-daemon
+    // ownership is the plugin-architecture-friendly shape (see
+    // project_plugin_based_compositor.md). Built-in algorithms register
+    // automatically in the constructor; scripted algorithms are loaded
+    // later by ScriptedAlgorithmLoader during init().
+    m_algorithmRegistry = std::make_unique<PhosphorTiles::AlgorithmRegistry>(this);
+
     // Build the layout sources here (rather than later in init()) because they
     // are thin wrappers — no I/O, no signal hookup — and consumers can ask for
     // layoutSource() any time after Daemon is constructed.  Population happens
     // lazily on first availableLayouts() call: the layout manager has loaded
-    // from disk by then, and the algorithm registry is populated by the
-    // PhosphorTiles::ScriptedAlgorithmLoader during init().
-    m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get());
-    // ZonesLayoutSource self-wires to the registry's
-    // ILayoutSourceRegistry::contentsChanged signal; no manual bridge is
-    // required here. Autotile side likewise self-wires to
-    // AlgorithmRegistry.
+    // from disk by then, and the algorithm registry is populated by
+    // ScriptedAlgorithmLoader during init().
+    m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get(), m_algorithmRegistry.get());
+    // ZonesLayoutSource and AutotileLayoutSource both self-wire to their
+    // registry's ILayoutSourceRegistry::contentsChanged signal — no
+    // manual bridge required here.
 }
 
 Daemon::~Daemon()
@@ -229,6 +237,7 @@ bool Daemon::init()
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
+
     // Load layouts (defaultLayout() reads settings internally)
     m_layoutManager->loadLayouts();
     m_layoutManager->loadAssignments();
@@ -245,6 +254,7 @@ bool Daemon::init()
     // Configure overlay service with settings, layout manager, and default layout
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
+    m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
@@ -316,7 +326,8 @@ bool Daemon::init()
         m_prevAutotileEnabled = autotileNow;
 
         // Capture old preview params before sync to detect tiling parameter changes
-        const auto prevPreviewParams = PhosphorTiles::AlgorithmRegistry::configuredPreviewParams();
+        const auto prevPreviewParams =
+            m_algorithmRegistry ? m_algorithmRegistry->previewParams() : PhosphorTiles::AlgorithmPreviewParams{};
 
         // Sync engine config (idempotent — skips retile if nothing changed)
         if (m_autotileEngine) {
@@ -325,7 +336,7 @@ bool Daemon::init()
 
         // If tiling preview parameters changed (maxWindows, masterCount, splitRatio),
         // notify layout list consumers to refetch with updated previews
-        if (PhosphorTiles::AlgorithmRegistry::configuredPreviewParams() != prevPreviewParams && m_layoutAdaptor) {
+        if (m_algorithmRegistry && m_algorithmRegistry->previewParams() != prevPreviewParams && m_layoutAdaptor) {
             m_layoutAdaptor->notifyLayoutListChanged();
         }
 
@@ -452,19 +463,21 @@ bool Daemon::init()
                 m_windowDragAdaptor->clearForCompositorReconnect();
             });
 
-    // Initialize autotile engine
+    // Initialize autotile engine. Tile-algorithm registry was created
+    // earlier so the engine + its sub-services pick up the same
+    // per-daemon registry every other consumer uses.
     m_autotileEngine = std::make_unique<AutotileEngine>(m_layoutManager.get(), m_windowTrackingAdaptor->service(),
-                                                        m_screenManager.get(), this);
+                                                        m_screenManager.get(), m_algorithmRegistry.get(), this);
     // Attach the shared window registry so the engine queries current class
     // instead of parsing canonical windowIds — fixes Emby-style mid-session
     // class mutations (discussion #271).
     m_autotileEngine->setWindowRegistry(m_windowRegistry.get());
 
     // Initialize scripted algorithm loader BEFORE syncFromSettings so that
-    // user-defined algorithms are registered in PhosphorTiles::AlgorithmRegistry before the
-    // engine resolves the configured algorithm ID.
-    m_scriptedAlgorithmLoader =
-        std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir));
+    // user-defined algorithms are registered in the daemon registry before
+    // the engine resolves the configured algorithm ID.
+    m_scriptedAlgorithmLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(
+        QString(ScriptedAlgorithmSubdir), m_algorithmRegistry.get());
     // When scripted algorithms change (hot-reload), notify layout list consumers
     connect(m_scriptedAlgorithmLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             [this]() {

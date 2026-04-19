@@ -19,6 +19,7 @@
 #include <dbus_types.h>
 
 #include "autotile/AutotileEngine.h"
+#include "../helpers/AutotileTestHelpers.h"
 #include <PhosphorScreens/Manager.h>
 #include "dbus/autotileadaptor.h"
 
@@ -48,7 +49,7 @@ private Q_SLOTS:
     // -------------------------------------------------------------------------
     void testNoScreenManager_passThrough()
     {
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, nullptr, &adaptorParent);
 
@@ -65,7 +66,7 @@ private Q_SLOTS:
         Phosphor::Screens::ScreenManager mgr;
         QVERIFY(!mgr.isPanelGeometryReady());
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
@@ -98,7 +99,7 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
@@ -125,7 +126,7 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
@@ -158,7 +159,7 @@ private Q_SLOTS:
     {
         Phosphor::Screens::ScreenManager mgr;
 
-        AutotileEngine engine(nullptr, nullptr, nullptr);
+        AutotileEngine engine(nullptr, nullptr, nullptr, PlasmaZones::TestHelpers::testRegistry());
         QObject adaptorParent;
         AutotileAdaptor adaptor(&engine, &mgr, &adaptorParent);
 
