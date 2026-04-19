@@ -120,6 +120,11 @@ private:
     // compositor sequence doesn't flood the log at paint rate. Written
     // from requestFrame() which is non-const; no `mutable` needed.
     bool m_loggedStaleOutput = false;
+    // Rate-limit: set once a zero-geometry addRepaintFull fallback fires.
+    // Output hotplug / DPMS-off legitimately produces empty geometry
+    // for a few frames; without the flag every animation tick on an
+    // affected output would debug-log through the fallback branch.
+    bool m_loggedEmptyGeometry = false;
 };
 
 } // namespace PlasmaZones

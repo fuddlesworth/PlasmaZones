@@ -54,13 +54,18 @@ PHOSPHORANIMATION_EXPORT std::shared_ptr<const Curve> defaultFallbackCurve();
 
 // Minimum `newDistance` for `PreserveVelocity` retarget on stateful curves.
 // Below this threshold the rescale `(velocity * oldDistance / newDistance)`
-// either produces a physically meaningless velocity (sub-pixel motion) or
+// either produces a physically meaningless velocity (sub-unit motion) or
 // risks overflow — callers retargeting to a distance smaller than this
-// auto-degrade to `PreservePosition` (velocity=0). 0.5 px matches the
-// visual threshold at which fractional-pixel motion becomes imperceptible
-// on typical displays and sits well clear of float-precision concerns for
-// the distance-magnitude metric used by `Interpolate<T>::distance`.
-inline constexpr qreal kRetargetDistanceEpsilon = 0.5;
+// auto-degrade to `PreservePosition` (velocity=0). The actual epsilon is
+// read from `Interpolate<T>::retargetEpsilon`, which is tuned per domain:
+//   - pixel types (QPointF/QSizeF/QRectF/QTransform): 0.5 px
+//   - scalar (qreal): 1e-6 (opacity/uniform-friendly)
+//   - QColor: 1e-4 (linear-RGB distance scale)
+// See each `Interpolate<T>` specialisation for the rationale. The old
+// namespace-scope `kRetargetDistanceEpsilon` was a pixel-centric constant
+// that quietly swallowed every opacity / colour retarget — per-type
+// constants close that hazard while keeping the gate physics-correct for
+// the pixel-scale snap path.
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // AnimatedValue<T>
@@ -172,6 +177,18 @@ public:
             qCWarning(lcAnimatedValue) << "start() rejected: null clock";
             return false;
         }
+        // NaN/Inf gate. A corrupt `from`/`to` (a settings reload that
+        // bypassed clamp, a computed geometry that divided by zero) would
+        // propagate non-finite values into `Interpolate<T>::lerp` and
+        // poison every downstream paint. `qFuzzyIsNull(distance)` does
+        // NOT reject this — distance on NaN inputs returns NaN, and the
+        // fuzzy-null comparison returns false. The finite gate has to
+        // be explicit at the entry point; per-type `isFinite` handles the
+        // componentwise check.
+        if (!Interpolate<T>::isFinite(from) || !Interpolate<T>::isFinite(to)) {
+            qCWarning(lcAnimatedValue) << "start() rejected: non-finite from/to";
+            return false;
+        }
 
         m_from = std::move(from);
         m_to = std::move(to);
@@ -235,6 +252,16 @@ public:
             qCWarning(lcAnimatedValue) << "retarget() rejected: no stored spec (never started)";
             return false;
         }
+        // NaN/Inf gate. Symmetric with `start()` — a corrupt retarget
+        // target (settings-reload races, degenerate layout math) must not
+        // poison `m_to` and propagate through the next `Interpolate<T>::
+        // lerp`. `m_current` is trusted because it was produced by a
+        // previous lerp from finite endpoints, but `newTo` comes from the
+        // caller and needs the same entry-point gate as `start()`.
+        if (!Interpolate<T>::isFinite(newTo)) {
+            qCWarning(lcAnimatedValue) << "retarget() rejected: non-finite newTo";
+            return false;
+        }
 
         const T newFrom = m_current;
 
@@ -271,22 +298,25 @@ public:
                     break;
                 }
             }
-            if (stateful && newDistance > kRetargetDistanceEpsilon) {
+            if (stateful && newDistance > Interpolate<T>::retargetEpsilon) {
                 // Map scalar normalised-velocity through the world:
                 //   worldRate [T-units/s] = state.velocity [1/s] * oldDistance [T-units]
                 //   newNormalisedVelocity [1/s] = worldRate / newDistance
                 // For vector T, distance() returns magnitude — direction
                 // is lost (documented limitation; see header intro).
                 //
-                // Epsilon gate (not just `> 0.0`): a sub-pixel `newDistance`
-                // would let `oldDistance / newDistance` explode on a normal
-                // drag-snap workflow (retarget to a zone edge a fraction of
-                // a pixel away from the current visual position). A runaway
+                // Per-type epsilon (`Interpolate<T>::retargetEpsilon`):
+                // a sub-threshold `newDistance` would let
+                // `oldDistance / newDistance` explode on a drag-snap or
+                // fade-retarget workflow that lands the new target
+                // arbitrarily close to the current visual value. A runaway
                 // `newVelocity` pumps the spring into oscillation or a
                 // force-complete clamp on the next tick. Below the epsilon
                 // the velocity-preserving rescale is not physically
                 // meaningful — degrade to PreservePosition (velocity=0)
-                // so the spring settles smoothly.
+                // so the spring settles smoothly. The threshold scales
+                // per type: 0.5 px for pixel-coordinate T, tighter for
+                // scalar / colour domains whose natural range is [0, 1]-ish.
                 newVelocity = (m_state.velocity * oldDistance) / newDistance;
             } else if (!stateful && !m_loggedStatelessDegrade) {
                 // One-shot per-instance. Logging every retarget on a

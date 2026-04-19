@@ -13,6 +13,7 @@
 #include <QTest>
 
 #include <chrono>
+#include <limits>
 #include <memory>
 
 using namespace std::chrono_literals;
@@ -344,17 +345,16 @@ private Q_SLOTS:
         QVERIFY(qAbs(newVelocity - expectedNewVelocity) < 1.0e-6);
     }
 
-    void testRetargetPreserveVelocitySubPixelNewDistanceDegrades()
+    void testRetargetPreserveVelocitySubEpsilonNewDistanceDegrades()
     {
-        // Regression: `newDistance > 0.0` gate alone let sub-pixel
-        // retarget distances pass — `(velocity * oldDistance) /
-        // newDistance` then exploded to astronomical rescaled
-        // velocities on a drag-snap workflow that landed the new
-        // target a fraction of a pixel from the current visual
-        // position. The fix raises the gate to `kRetargetDistanceEpsilon`
-        // (0.5 px) — below that, velocity degrades to 0 (the
-        // PreservePosition fallback) so the spring settles smoothly
-        // instead of oscillating or force-completing on a runaway rate.
+        // Regression: `newDistance > 0.0` gate alone let tiny retarget
+        // distances pass — `(velocity * oldDistance) / newDistance` then
+        // exploded to astronomical rescaled velocities on a drag-snap or
+        // fade-retarget workflow that landed the new target arbitrarily
+        // close to the current visual position. The fix raises the gate
+        // to `Interpolate<T>::retargetEpsilon` — per-type: 0.5 for pixel
+        // coordinates, 1e-6 for scalar — so the gate stays
+        // domain-appropriate regardless of what `AnimatedValue<T>` drives.
         TestClock clock;
         AnimatedValue<qreal> v;
         v.start(0.0, 100.0, makeSpec(&clock, std::make_shared<Spring>(Spring::snappy()), 500.0));
@@ -367,12 +367,93 @@ private Q_SLOTS:
         const qreal midValue = v.value();
         QVERIFY(v.velocity() > 0.0);
 
-        // Retarget to within 0.1 px of the current visual value —
-        // well below the 0.5 px epsilon. Velocity must degrade to 0
-        // rather than rescale by (oldDist / 0.1) ≈ 1000× which would
-        // produce a catastrophic new velocity.
-        v.retarget(midValue + 0.1, RetargetPolicy::PreserveVelocity);
+        // Retarget to within 1e-9 of the current visual value — well below
+        // the 1e-6 scalar epsilon. Velocity must degrade to 0 rather than
+        // rescale by (oldDist / 1e-9) ≈ 10^11× which would produce a
+        // catastrophic new velocity.
+        v.retarget(midValue + 1.0e-9, RetargetPolicy::PreserveVelocity);
         QCOMPARE(v.velocity(), 0.0);
+    }
+
+    // ─── Per-type epsilon: legitimate retargets survive ───
+
+    void testRetargetPreserveVelocityAboveScalarEpsilonCarriesVelocity()
+    {
+        // Coverage gap filled by per-type epsilon: the old pixel-centric
+        // 0.5 gate quietly swallowed every opacity/scalar retarget below
+        // half-a-unit — i.e. essentially every realistic fade retarget
+        // on a value in [0, 1]. `Interpolate<qreal>::retargetEpsilon =
+        // 1e-6` restores PreserveVelocity semantics for scalar domains.
+        // Use a Spring so there IS physical velocity to carry.
+        TestClock clock;
+        AnimatedValue<qreal> v;
+        // Opacity-scale animation: fade from 0 to 1 over 500 ms.
+        v.start(0.0, 1.0, makeSpec(&clock, std::make_shared<Spring>(Spring::snappy()), 500.0));
+
+        v.advance();
+        for (int i = 0; i < 5; ++i) {
+            clock.advanceMs(16.0);
+            v.advance();
+        }
+        const qreal midValue = v.value();
+        const qreal midVelocity = v.velocity();
+        QVERIFY2(midVelocity > 0.0, "spring must build velocity before retarget");
+
+        // Retarget to 0.3 — well above the 1e-6 scalar epsilon. The old
+        // pixel-centric 0.5 gate would have degraded this to velocity=0,
+        // silently breaking fade retargets. Under the per-type epsilon
+        // the rescale must carry a non-zero velocity onto the new segment.
+        const qreal newDistance = qAbs(0.3 - midValue);
+        const qreal oldDistance = 1.0 - 0.0;
+        const qreal expectedNewVelocity = midVelocity * oldDistance / newDistance;
+
+        v.retarget(0.3, RetargetPolicy::PreserveVelocity);
+        QCOMPARE(v.value(), midValue); // no visual jump
+        QVERIFY2(qAbs(v.velocity() - expectedNewVelocity) < 1.0e-6,
+                 "PreserveVelocity must carry velocity on a scalar retarget above the per-type epsilon");
+    }
+
+    // ─── NaN / Inf rejection on start + retarget ───
+
+    void testStartRejectsNonFiniteEndpoints()
+    {
+        // `AnimatedValue::start` must reject NaN / Inf on either endpoint
+        // before the spec is committed. A corrupt endpoint (settings
+        // reload that bypassed the clamp, degenerate layout math that
+        // produced +Inf) would otherwise propagate into `Interpolate<T>::
+        // lerp` and poison every downstream `value()` for the remainder
+        // of the animation.
+        TestClock clock;
+
+        AnimatedValue<qreal> a;
+        QVERIFY(!a.start(std::numeric_limits<qreal>::quiet_NaN(), 100.0, makeSpec(&clock, std::make_shared<Easing>())));
+        QVERIFY(!a.isAnimating());
+        QVERIFY(!a.isComplete());
+
+        AnimatedValue<qreal> b;
+        QVERIFY(!b.start(0.0, std::numeric_limits<qreal>::infinity(), makeSpec(&clock, std::make_shared<Easing>())));
+        QVERIFY(!b.isAnimating());
+    }
+
+    void testRetargetRejectsNonFiniteNewTo()
+    {
+        // Symmetric with `start()`'s gate — a live animation must refuse
+        // a non-finite retarget target and leave its current state
+        // untouched rather than overwrite `m_to` with NaN.
+        TestClock clock;
+        AnimatedValue<qreal> v;
+        v.start(0.0, 100.0, makeSpec(&clock, std::make_shared<Spring>(Spring::snappy()), 500.0));
+        v.advance();
+        clock.advanceMs(50.0);
+        v.advance();
+
+        const qreal beforeRetarget = v.value();
+        const qreal beforeTarget = v.to();
+
+        QVERIFY(!v.retarget(std::numeric_limits<qreal>::quiet_NaN(), RetargetPolicy::PreserveVelocity));
+        QCOMPARE(v.to(), beforeTarget); // target unchanged
+        QCOMPARE(v.value(), beforeRetarget); // value unchanged
+        QVERIFY(v.isAnimating()); // still running toward original target
     }
 
     // ─── Retarget — ResetVelocity ───

@@ -50,12 +50,20 @@ enum class StartResult {
     HandleInvalid, ///< `isHandleValid(handle)` returned false.
     PolicyRejected, ///< `SnapPolicy` rejected (below threshold or degenerate).
     /// Defensive fallback. `AnimatedValue::start()` rejected because
-    /// `from ≈ to` by `Interpolate<T>::distance`. Unreachable via the
-    /// standard path — `SnapPolicy::createSnapSpec` already filters the
-    /// degenerate cases before `AnimatedValue::start` sees them. Exists
-    /// only so the enum fully enumerates every possible failure from
-    /// the underlying primitive, mirroring
-    /// `RetargetResult::InternalError`.
+    /// `from ≈ to` by `Interpolate<T>::distance`, OR because the per-type
+    /// `isFinite` gate rejected a non-finite endpoint. Unreachable via the
+    /// standard snap path — `SnapPolicy::createSnapSpec` filters the
+    /// degenerate + non-finite cases before `AnimatedValue::start` sees
+    /// them — but non-snap consumers that bypass `SnapPolicy` and call
+    /// `AnimationController::startAnimation` directly can land here.
+    ///
+    /// Side effect: when an existing animation is in flight on the same
+    /// handle at the moment this outcome is produced, the controller
+    /// fires `onAnimationReplaced` on the displaced entry and erases it
+    /// — the started/terminating event counts stay balanced even though
+    /// no new animation is installed. Callers comparing an exact
+    /// `Accepted`/terminating count must account for this: `NoMotion`
+    /// with a pre-existing entry is a net `replaced` without a `started`.
     NoMotion,
 };
 

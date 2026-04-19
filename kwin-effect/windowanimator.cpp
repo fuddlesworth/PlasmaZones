@@ -135,11 +135,18 @@ void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,
                                          const PhosphorAnimation::AnimatedValue<QRectF>& displaced)
 {
     // An in-flight segment was displaced by a fresh startAnimation call.
-    // The new segment's onAnimationStarted will schedule its own repaint,
-    // but the displaced segment's overshoot bounds may sit outside the
-    // new start rect — issue an explicit damage request on the displaced
-    // segment's final sampled value so trailing pixels from the old path
-    // are correctly invalidated even if the new bounds don't cover them.
+    // Prior frames of the displaced path were each invalidated on their
+    // own paint cycle by the controller's per-tick `onRepaintNeeded`, so
+    // KWin's damage tracking already covers the full swept region up to
+    // the displacement boundary. The ONE frame that wasn't yet
+    // invalidated is the rectangle we were about to paint this tick —
+    // `displaced.value()` at the moment of displacement. The new
+    // segment's `onAnimationStarted` schedules a repaint on its own
+    // first-frame rect, which covers the NEW start position but not
+    // necessarily the LAST position of the displaced segment (their
+    // visual rects can differ when the displacement target sits far
+    // from the displaced `value()`). Issuing damage on `displaced.value()`
+    // fills that one-frame gap.
     if (window && !window->isDeleted()) {
         const QRectF bounds = displaced.value();
         if (bounds.isValid()) {

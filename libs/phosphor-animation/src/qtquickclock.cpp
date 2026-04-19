@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <thread>
 
 namespace PhosphorAnimation {
 
@@ -51,11 +52,26 @@ namespace PhosphorAnimation {
  * body read; the destructor sets it (release) then disconnects. Any
  * slot that passed the disconnect check before we set the flag will
  * re-read the flag on entry via acquire and return without touching
- * owner state. The owner's cached-timestamp field is itself atomic and
- * outlives the adapter (member-destruction order: `m_adapter` is
- * declared last on `QtQuickClock` so it destroys FIRST, before the
- * cache), so a slot that wins the race through the detached check but
- * is preempted before completing still writes to live memory.
+ * owner state.
+ *
+ * Join-on-destroy: the atomic flag alone leaves a small UAF window
+ * for a slot that passed the detached check *before* the destructor
+ * fired but was preempted between the check and the cache write. By
+ * the time the slot resumes, the destructor could have returned and
+ * `QtQuickClock`'s remaining fields (after `m_adapter` destruction)
+ * could have been torn down in the normal member-destruction order.
+ * `m_slotDepth` counts in-progress slots — entry increments, exit
+ * decrements, and the destructor spins until the count reaches zero
+ * *after* setting `m_detached` + disconnecting. This guarantees any
+ * slot that raced past the detached check has fully exited before
+ * the destructor returns; any slot that saw `detached == true` paid
+ * only an atomic acquire-load and returned without touching state.
+ *
+ * Deadlock constraint: the destructor MUST NOT run on the thread that
+ * fires the slot (the render thread). If it did, the spin would wait
+ * on a counter only this thread could decrement. For QtQuickClock the
+ * owner thread is typically the GUI thread, where lifecycle events
+ * fire; the render thread is distinct.
  */
 class QtQuickClock::SignalAdapter : public QObject
 {
@@ -66,6 +82,15 @@ public:
 private:
     QtQuickClock* m_owner;
     std::atomic<bool> m_detached{false};
+    // In-progress slot body count. Render-thread slot entries increment
+    // (after the detached check passes) and exits decrement; the
+    // destructor spins on this after setting `m_detached` so a
+    // preempted slot finishes before owner state is torn down. Int
+    // because the slot is reentrancy-free (one signal per window,
+    // serialised by Qt) and the count never exceeds 1 in practice —
+    // but the counter idiom is portable and matches the refcount
+    // pattern used elsewhere in PhosphorAnimation.
+    std::atomic<int> m_slotDepth{0};
     QMetaObject::Connection m_conn;
 };
 
@@ -98,6 +123,17 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
             if (m_detached.load(std::memory_order_acquire)) {
                 return;
             }
+            // Join-on-destroy: increment the in-progress counter *after*
+            // the detached check so the destructor's spin-wait reaches
+            // zero the moment the last non-detached slot exits. Re-read
+            // the detached flag under the counter — if the destructor
+            // published `detached` between the earlier check and this
+            // increment, we back out without touching owner state.
+            m_slotDepth.fetch_add(1, std::memory_order_acquire);
+            if (m_detached.load(std::memory_order_acquire)) {
+                m_slotDepth.fetch_sub(1, std::memory_order_release);
+                return;
+            }
             const auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
             // Monotonicity floor across the fallback→cache handoff:
             // GUI-thread `now()` reads on the fallback path also CAS-
@@ -118,6 +154,10 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
             // directly, so every consumer of this clock sees the same
             // vsync-aligned reading for the rest of the frame.
             m_owner->m_renderLoopActive.store(true, std::memory_order_release);
+            // Release-decrement pairs with the destructor's acquire-load
+            // of the depth counter; publishes every write above
+            // happens-before the join-wait observing zero.
+            m_slotDepth.fetch_sub(1, std::memory_order_release);
         },
         Qt::DirectConnection);
 }
@@ -137,12 +177,32 @@ QtQuickClock::SignalAdapter::~SignalAdapter()
     // alone would prevent owner-state mutation, skipping the dispatch
     // entirely saves the render thread a mutex-less no-op call.
     QObject::disconnect(m_conn);
-    // No mutex owned — nothing to destroy that a slot thread could be
-    // contending on. The owner's `m_nowCache` / `m_renderLoopActive`
-    // outlive this adapter (QtQuickClock destroys `m_adapter` before
-    // the cache fields, in reverse declaration order), so any slot
-    // that was past the detached check when we arrived here writes to
-    // still-live memory and then exits harmlessly.
+    // Join-on-destroy: spin until every in-progress slot body has
+    // exited. A slot that observed `detached == false` between the
+    // detached-flag store above and its increment below already
+    // back-paths out of the work section (see the under-counter
+    // re-check in the slot body); this wait covers the narrower
+    // window of a slot that decided to proceed BEFORE we published
+    // `detached` and is now racing toward owner-state writes. The
+    // destructor blocks here (on the GUI / owner thread) until the
+    // render thread finishes that one slot. Deadlock-safe only if
+    // the destructor is NOT running on the thread that fires the
+    // slot (the render thread) — QtQuickClock's documented
+    // ownership model makes this a GUI-thread-only destruction.
+    //
+    // The worst-case wait is one `beforeRendering` slot body, which
+    // is a few atomic operations + a steady_clock read — tens of
+    // nanoseconds. `std::this_thread::yield()` is a polite backoff
+    // that lets the OS scheduler hand the CPU to the render thread
+    // if the two share a core.
+    while (m_slotDepth.load(std::memory_order_acquire) > 0) {
+        std::this_thread::yield();
+    }
+    // After the join, no slot can be running and no future slot will
+    // dispatch (both the detached flag and the disconnect ensure
+    // that). Owner state is safe to tear down in the subsequent
+    // member destructors — the earlier "outlives via declaration
+    // order" argument now carries no race weight.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

@@ -106,9 +106,21 @@ void CompositorClock::requestFrame()
         // correctness trumps damage efficiency on a transient edge.
         const QRect geo = m_output->geometry();
         if (geo.isEmpty()) {
+            if (!m_loggedEmptyGeometry) {
+                // One-shot debug. Hotplug / DPMS-off legitimately hold
+                // the geometry at 0×0 for several frames; every
+                // `requestFrame()` during that window would otherwise
+                // debug-log at paint rate.
+                qCDebug(lcEffect) << "CompositorClock: output geometry empty — falling back to addRepaintFull";
+                m_loggedEmptyGeometry = true;
+            }
             KWin::effects->addRepaintFull();
             return;
         }
+        // Successful targeted repaint — reset the empty-geometry latch so
+        // a subsequent hotplug cycle logs the first empty-frame again
+        // rather than being silently suppressed.
+        m_loggedEmptyGeometry = false;
         KWin::effects->addRepaint(geo);
         return;
     }

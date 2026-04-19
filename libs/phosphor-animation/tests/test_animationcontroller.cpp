@@ -1278,6 +1278,61 @@ private Q_SLOTS:
         QCOMPARE(c.animationFor(1)->velocity(), 0.0);
     }
 
+    /// In-flight animations must keep the `RetargetPolicy` captured on
+    /// their `MotionSpec` at start time — a subsequent
+    /// `setRetargetPolicy(newPolicy)` on the controller affects only
+    /// future `startAnimation` calls, never animations already running.
+    /// Matches the config-reload immutability contract that
+    /// `setProfile` also honours (see Phase 3 decision K). Without this
+    /// guarantee, a settings-UI update mid-animation would mutate the
+    /// physical semantics of a currently-ticking animation — the
+    /// architectural equivalent of swapping the curve out from under
+    /// a Spring mid-flight.
+    void testInFlightRetargetPolicyImmuneToControllerPolicySwap()
+    {
+        TestClock clock;
+        MockController c;
+        c.setClock(&clock);
+        c.setRetargetPolicy(RetargetPolicy::ResetVelocity);
+
+        Profile profile;
+        profile.curve = std::make_shared<Spring>(Spring::snappy());
+        profile.duration = 500.0;
+        c.setProfile(profile);
+
+        // Start with ResetVelocity stamped onto the spec.
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(1000, 0, 100, 100)));
+        QCOMPARE(c.animationFor(1)->spec().retargetPolicy, RetargetPolicy::ResetVelocity);
+
+        // Swap the controller's default. The NEW value applies to
+        // subsequent `startAnimation` calls only.
+        c.setRetargetPolicy(RetargetPolicy::PreserveVelocity);
+        QCOMPARE(c.retargetPolicy(), RetargetPolicy::PreserveVelocity);
+
+        // In-flight spec must retain its captured ResetVelocity.
+        QCOMPARE(c.animationFor(1)->spec().retargetPolicy, RetargetPolicy::ResetVelocity);
+
+        // Drive spring velocity, then exercise the two-argument retarget
+        // which reads the per-animation stamped policy. ResetVelocity
+        // must still zero the velocity despite the controller-level
+        // policy having flipped to PreserveVelocity.
+        c.advanceAnimations();
+        for (int i = 0; i < 5; ++i) {
+            clock.advanceMs(16.0);
+            c.advanceAnimations();
+        }
+        QVERIFY2(c.animationFor(1)->velocity() > 0.0, "spring must build velocity before retarget");
+
+        QVERIFY(c.retarget(1, QRectF(2000, 0, 100, 100)));
+        QCOMPARE(c.animationFor(1)->velocity(), 0.0);
+
+        // Now start a SECOND animation after the policy swap — its spec
+        // must capture the NEW PreserveVelocity default, proving the
+        // swap reached future starts.
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(1000, 0, 100, 100)));
+        QCOMPARE(c.animationFor(2)->spec().retargetPolicy, RetargetPolicy::PreserveVelocity);
+    }
+
     // ─── Regression: C1 UAF via in-place move-assign on displace ───
 
     /// When `startAnimation` is called on a handle that already has an

@@ -72,12 +72,25 @@ namespace PhosphorAnimation {
  * emitting thread; Qt's implicit `~QObject` disconnect does not
  * *join* already-running slot bodies. Destroying the clock on the
  * GUI thread while the render thread was mid-slot would otherwise
- * write to a freed cache. The adapter mitigates this internally —
- * explicit disconnect first, mutex-drained slot body, guard flag for
- * any emission that slips through. Consumers do not need to
- * externally synchronise destruction, but tearing down a clock while
- * the render thread is still active is still wasteful (the drain
- * blocks the GUI thread on a render-thread slot). Prefer destroying
+ * write to a freed cache. The adapter mitigates this internally via
+ * a three-stage teardown: set `detached`, disconnect the signal,
+ * then spin-wait until every in-progress slot body has exited. The
+ * join makes destruction strictly synchronous with respect to the
+ * render-thread slot — consumers do not need to externally
+ * synchronise destruction and are not exposed to the narrow
+ * atomic-ordering UAF the flag-only pattern permitted.
+ *
+ * The join imposes one constraint: the destructor MUST NOT run on
+ * the render thread that fires the slot. A self-join would
+ * deadlock. `QtQuickClock`'s ownership model makes this trivially
+ * satisfied — clocks are owned by GUI-thread objects (compositor
+ * effects, QtQuick items driving custom animations) and destroyed
+ * on that thread. The spin is typically zero-iterations and at
+ * worst waits for one slot body's microsecond-scale duration.
+ *
+ * Tearing down a clock while the render thread is still active is
+ * legal but wasteful — the destructor blocks the owning thread on
+ * the render thread's next scheduling window. Prefer destroying
  * clocks after the scene graph has been torn down.
  */
 class PHOSPHORANIMATION_EXPORT QtQuickClock final : public IMotionClock

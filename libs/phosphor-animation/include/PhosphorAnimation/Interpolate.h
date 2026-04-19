@@ -92,6 +92,18 @@ struct Interpolate<qreal>
     {
         return qAbs(to - from);
     }
+    /// Per-type retarget epsilon. Scalar values are dimensionless; pick a
+    /// small absolute floor that catches the velocity-explosion risk for
+    /// any reasonable domain (opacity in [0, 1], shader uniforms in
+    /// [0, N]) without swallowing legitimate small retargets on
+    /// opacity-scale animations. 1e-6 is ~100× tighter than QColor's
+    /// linear-RGB metric and ~500000× tighter than the pixel threshold;
+    /// both extremes stay clear of the gate under normal use.
+    static constexpr qreal retargetEpsilon = 1.0e-6;
+    static bool isFinite(qreal v)
+    {
+        return std::isfinite(v);
+    }
 };
 
 template<>
@@ -104,6 +116,14 @@ struct Interpolate<QPointF>
     static qreal distance(const QPointF& from, const QPointF& to)
     {
         return QLineF(from, to).length();
+    }
+    /// Pixel-scale: below 0.5 px the motion is sub-pixel and the velocity
+    /// rescale `(oldDist / newDist)` would blow up on sub-pixel retarget
+    /// deltas during drag-snap workflows.
+    static constexpr qreal retargetEpsilon = 0.5;
+    static bool isFinite(const QPointF& p)
+    {
+        return std::isfinite(p.x()) && std::isfinite(p.y());
     }
 };
 
@@ -120,6 +140,12 @@ struct Interpolate<QSizeF>
         const qreal dw = to.width() - from.width();
         const qreal dh = to.height() - from.height();
         return std::sqrt(dw * dw + dh * dh);
+    }
+    /// Pixel-scale — same rationale as `Interpolate<QPointF>`.
+    static constexpr qreal retargetEpsilon = 0.5;
+    static bool isFinite(const QSizeF& s)
+    {
+        return std::isfinite(s.width()) && std::isfinite(s.height());
     }
 };
 
@@ -154,6 +180,13 @@ struct Interpolate<QRectF>
         const qreal dp = Interpolate<QPointF>::distance(from.topLeft(), to.topLeft());
         const qreal ds = Interpolate<QSizeF>::distance(from.size(), to.size());
         return std::sqrt(dp * dp + ds * ds);
+    }
+    /// Pixel-scale — QRectF's 4-D norm is dominated by position/size in
+    /// pixels; the same 0.5 px threshold as point/size is appropriate.
+    static constexpr qreal retargetEpsilon = 0.5;
+    static bool isFinite(const QRectF& r)
+    {
+        return std::isfinite(r.x()) && std::isfinite(r.y()) && std::isfinite(r.width()) && std::isfinite(r.height());
     }
 };
 
@@ -317,6 +350,16 @@ struct Interpolate<QColor>
     static qreal distance(const QColor& from, const QColor& to)
     {
         return detail::colorDistance(from, to);
+    }
+    /// Linear-RGB L2 distance is in `[0, 2]` (each of R, G, B, A contributes
+    /// up to 1). 1e-4 catches the velocity-explosion risk on retargets that
+    /// land within a barely-perceptible colour shift without swallowing
+    /// normal fades.
+    static constexpr qreal retargetEpsilon = 1.0e-4;
+    static bool isFinite(const QColor& c)
+    {
+        return std::isfinite(c.redF()) && std::isfinite(c.greenF()) && std::isfinite(c.blueF())
+            && std::isfinite(c.alphaF());
     }
 };
 
@@ -525,6 +568,17 @@ struct Interpolate<QTransform>
         const qreal dtx = to.dx() - from.dx();
         const qreal dty = to.dy() - from.dy();
         return std::sqrt(d11 * d11 + d12 * d12 + d21 * d21 + d22 * d22 + dtx * dtx + dty * dty);
+    }
+    /// Frobenius norm is pixel-dominated for the common pure-translate
+    /// case; the same 0.5 px threshold as the other pixel types applies.
+    /// Mixed translate/rotate/scale retargets already auto-degrade to
+    /// `PreservePosition` in `AnimatedValue<QTransform>::retarget`
+    /// regardless of this gate.
+    static constexpr qreal retargetEpsilon = 0.5;
+    static bool isFinite(const QTransform& t)
+    {
+        return std::isfinite(t.m11()) && std::isfinite(t.m12()) && std::isfinite(t.m21()) && std::isfinite(t.m22())
+            && std::isfinite(t.dx()) && std::isfinite(t.dy());
     }
 };
 
