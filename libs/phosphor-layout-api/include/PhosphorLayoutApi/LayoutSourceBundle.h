@@ -90,7 +90,15 @@ public:
     ///
     /// Single-shot per bundle: calling @c buildFromRegistered a second
     /// time triggers a Q_ASSERT in debug builds and is a no-op in
-    /// release. Caller that needs a rebuild must reset the bundle.
+    /// release. The bundle has no in-place reset — a caller that needs
+    /// a rebuild (e.g. a future runtime plugin loader wanting to pick
+    /// up newly-dlopen'd providers) must move-assign a fresh instance
+    /// and re-wire every borrowed-pointer consumer that held
+    /// @c composite() or @c source(name). This is why the
+    /// @c @@todo(plugin-compositor) marker in
+    /// @c LayoutSourceProviderRegistry.h flags a redesign as the path
+    /// forward for dynamic plugin loading rather than an incremental
+    /// API addition.
     void buildFromRegistered(const FactoryContext& ctx);
 
     /// The unified composite over every registered source. Null until
@@ -103,6 +111,12 @@ public:
     /// Borrowed access to the source produced by the factory whose
     /// @c name() matches @p name. Returns null when no such factory
     /// has been registered or when @c build() has not run yet.
+    ///
+    /// Names are unique within a bundle: @c build() enforces
+    /// first-registration-wins and skips any duplicate-name factory
+    /// (see the warning in @c LayoutSourceBundle::build). Callers may
+    /// therefore treat the returned pointer as the single source for
+    /// @p name — no "first match" disclaimer is needed.
     ///
     /// Primary use case is the autotile-style fast path: composition
     /// roots that want to reuse a long-lived source's preview cache

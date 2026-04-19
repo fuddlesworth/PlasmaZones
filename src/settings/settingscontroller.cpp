@@ -4,6 +4,7 @@
 #include "settingscontroller.h"
 
 #include "../common/layoutpreviewserialize.h"
+#include "../common/screenidresolver.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
@@ -132,24 +133,9 @@ SettingsController::~SettingsController()
     m_algorithmWatchers.clear();
 }
 
-namespace {
-// Install the library-level screen-id resolver once per process so
-// Layout::fromJson() normalises legacy connector names ("DP-2") to
-// EDID-based IDs ("LG:Model:Serial") during load. Uses Phosphor::Screens::ScreenIdentity::idForName
-// which walks QGuiApplication::screens().
-void ensureScreenIdResolver()
-{
-    static const bool installed = [] {
-        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
-                return name;
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
-        });
-        return true;
-    }();
-    (void)installed;
-}
-} // namespace
+// ensureScreenIdResolver() now lives in src/common/screenidresolver.{h,cpp}
+// so daemon/editor/settings share the same install-once helper instead of
+// maintaining three parallel copies.
 
 SettingsController::SettingsController(QObject* parent)
     : QObject(parent)
@@ -231,17 +217,23 @@ SettingsController::SettingsController(QObject* parent)
     // a separate process and binds to its own per-process registry
     // (m_localAlgorithmRegistry) so picker-side previews stay live even
     // when the daemon is down.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir),
-                                                                    m_localAlgorithmRegistry.get(), this);
-    scriptLoader->scanAndRegister();
+    //
+    // Owned by unique_ptr (not parented to `this`) so reverse member-
+    // destruction tears the loader down BEFORE m_localAlgorithmRegistry.
+    // Parenting to `this` would defer destruction to ~QObject, which runs
+    // AFTER the registry's unique_ptr has already been reset — a UAF in
+    // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
+    m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
+                                                                              m_localAlgorithmRegistry.get());
+    m_scriptLoader->scanAndRegister();
 
     // When scripted algorithms change (hot-reload), notify UI consumers.
     // Emit both signals: availableAlgorithmsChanged for algorithm-specific
     // listeners, and layoutsChanged so LayoutComboBox rebuilds its model
     // (the layouts list includes autotile entries from the registry).
-    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::availableAlgorithmsChanged);
-    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &SettingsController::layoutsChanged);
 
     // Listen for external settings changes from the daemon

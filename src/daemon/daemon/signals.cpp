@@ -383,9 +383,13 @@ void Daemon::initializeAutotile()
 
 void Daemon::initializeUnifiedController()
 {
-    // Initialize unified layout controller (manual layouts only)
-    m_unifiedLayoutController = std::make_unique<UnifiedLayoutController>(
-        m_layoutManager.get(), m_settings.get(), m_screenManager.get(), m_autotileEngine.get(), this);
+    // Initialize unified layout controller (manual layouts only).
+    // Registry injected explicitly (not reached via engine->algorithmRegistry()):
+    // keeps DI contract visible at the call site and lets unit tests stub the
+    // engine without losing algorithm enumeration.
+    m_unifiedLayoutController =
+        std::make_unique<UnifiedLayoutController>(m_layoutManager.get(), m_settings.get(), m_screenManager.get(),
+                                                  m_algorithmRegistry.get(), m_autotileEngine.get(), this);
 
     // Share the daemon's bundle-owned autotile source with the controller
     // so its internal layout cache's autotile half is populated from the

@@ -315,10 +315,17 @@ void AlgorithmRegistry::registerBuiltInAlgorithms()
         }
     }
 
-    // Sort the local copy by priority (lower = first) for deterministic
-    // registration order.
+    // Sort the local copy by priority (lower = first); tie-break on id for
+    // deterministic registration order across translation units. Static-init
+    // order across TUs is implementation-defined, so shared-priority
+    // AlgorithmRegistrar instances would otherwise produce platform-
+    // dependent registration order (and, with it, availableAlgorithms()
+    // iteration and defaultAlgorithm() fallback selection).
     std::sort(snapshot.begin(), snapshot.end(), [](const auto& a, const auto& b) {
-        return a.priority < b.priority;
+        if (a.priority != b.priority) {
+            return a.priority < b.priority;
+        }
+        return a.id < b.id;
     });
 
     for (const auto& reg : snapshot) {

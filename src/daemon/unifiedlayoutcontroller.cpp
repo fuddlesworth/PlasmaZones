@@ -8,6 +8,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
+#include <PhosphorLayoutApi/ILayoutSource.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 
@@ -15,11 +16,13 @@ namespace PlasmaZones {
 
 UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
                                                  Phosphor::Screens::ScreenManager* screenManager,
+                                                 PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                                  AutotileEngine* autotileEngine, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
     , m_screenManager(screenManager)
+    , m_algorithmRegistry(algorithmRegistry)
     , m_autotileEngine(autotileEngine)
 {
     if (m_layoutManager) {
@@ -43,18 +46,23 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
         });
     }
 
-    // Autotile entries enter the unified list via the engine's tile-algorithm
-    // registry, not LayoutManager — without this subscription a hot-loaded
-    // user script (or any built-in registration churn) leaves m_cachedLayouts
-    // stale, and Meta+1‥9 continues to cycle the pre-load list until something
-    // else fires layoutsChanged. Subscribe to the unified
-    // ILayoutSourceRegistry::contentsChanged signal — covers both
-    // algorithm-set mutations and preview-params changes.
-    if (m_autotileEngine && m_autotileEngine->algorithmRegistry()) {
-        connect(m_autotileEngine->algorithmRegistry(), &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this,
-                [this]() {
-                    m_cacheValid = false;
-                });
+    // Autotile entries enter the unified list via the tile-algorithm registry,
+    // not LayoutManager. Cache invalidation comes through the long-lived
+    // autotile source wired in setAutotileLayoutSource — it self-bridges the
+    // registry's contentsChanged into its own, so subscribing there covers
+    // algorithm-set mutations and preview-params changes without
+    // double-firing (the PR #343 senior review flagged this double-subscribe
+    // as redundant).
+    //
+    // Seed the fallback subscription to the registry now: composition roots
+    // that never call setAutotileLayoutSource still get cache invalidation,
+    // and callers that do inject a bundle source will swap this connection
+    // to the source inside setAutotileLayoutSource().
+    if (m_algorithmRegistry) {
+        m_autotileSourceConnection =
+            connect(m_algorithmRegistry, &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this, [this]() {
+                m_cacheValid = false;
+            });
     }
 
     syncFromExternalState();
@@ -64,7 +72,32 @@ UnifiedLayoutController::~UnifiedLayoutController() = default;
 
 void UnifiedLayoutController::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
 {
+    if (m_autotileLayoutSource == source) {
+        return;
+    }
+    // Disconnect any prior subscription before swapping. Idempotent on a
+    // default-constructed QMetaObject::Connection (returns false cleanly).
+    QObject::disconnect(m_autotileSourceConnection);
     m_autotileLayoutSource = source;
+    if (m_autotileLayoutSource) {
+        // Subscribe to the source's contentsChanged so cache invalidation
+        // routes through the single notifier the source already bridges
+        // from the registry. Previously we subscribed to the registry
+        // directly AND the source self-bridged registry → source
+        // contentsChanged, firing our invalidation twice per mutation.
+        m_autotileSourceConnection =
+            connect(m_autotileLayoutSource, &PhosphorLayout::ILayoutSource::contentsChanged, this, [this]() {
+                m_cacheValid = false;
+            });
+    } else if (m_algorithmRegistry) {
+        // Fallback path: no long-lived source, subscribe to the registry
+        // directly so hot-loaded user scripts and preview-params changes
+        // still invalidate the cache.
+        m_autotileSourceConnection =
+            connect(m_algorithmRegistry, &PhosphorTiles::ITileAlgorithmRegistry::contentsChanged, this, [this]() {
+                m_cacheValid = false;
+            });
+    }
     m_cacheValid = false;
 }
 
@@ -72,10 +105,12 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
 {
     if (!m_cacheValid) {
         // Use filtered overload to respect visibility settings (hiddenFromSelector, allowed lists)
-        // and mode-based filtering (manual-only vs autotile-only)
+        // and mode-based filtering (manual-only vs autotile-only).
+        // Registry comes directly from our injected pointer rather than the
+        // Law-of-Demeter reach-through engine->algorithmRegistry().
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
-            m_layoutManager, m_autotileEngine ? m_autotileEngine->algorithmRegistry() : nullptr, m_currentScreenName,
-            m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts, m_includeAutotileLayouts,
+            m_layoutManager, m_algorithmRegistry, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity,
+            m_includeManualLayouts, m_includeAutotileLayouts,
             Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts),

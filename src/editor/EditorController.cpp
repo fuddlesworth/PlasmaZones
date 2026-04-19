@@ -11,6 +11,7 @@
 #include "undo/commands/UpdateLayoutNameCommand.h"
 #include "undo/commands/ChangeSelectionCommand.h"
 #include "helpers/ZoneSerialization.h"
+#include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
@@ -30,26 +31,9 @@
 #include <QGuiApplication>
 #include <PhosphorScreens/ScreenIdentity.h>
 
-namespace PlasmaZones {
+#include "../common/screenidresolver.h"
 
-namespace {
-// Install the library-level screen-id resolver once per process so
-// Layout::fromJson() can normalise legacy connector names ("DP-2") to
-// EDID-based IDs ("LG:Model:Serial") during load. Uses QGuiApplication's
-// screen list via Phosphor::Screens::ScreenIdentity::idForName.
-void ensureScreenIdResolver()
-{
-    static const bool installed = [] {
-        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
-                return name;
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
-        });
-        return true;
-    }();
-    (void)installed;
-}
-} // namespace
+namespace PlasmaZones {
 
 EditorController::EditorController(QObject* parent)
     : QObject(parent)
@@ -83,10 +67,16 @@ EditorController::EditorController(QObject* parent)
     // owned AlgorithmRegistry so standalone editor launches (daemon down)
     // still surface them in layout pickers. The loader also sets up a
     // QFileSystemWatcher so hot-edits roll through automatically.
-    auto* scriptLoader = new PhosphorTiles::ScriptedAlgorithmLoader(QString(ScriptedAlgorithmSubdir),
-                                                                    m_localAlgorithmRegistry.get(), this);
-    scriptLoader->scanAndRegister();
-    connect(scriptLoader, &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
+    //
+    // Owned by unique_ptr (not parented to `this`) so reverse member-
+    // destruction tears the loader down BEFORE m_localAlgorithmRegistry.
+    // Parenting to `this` would defer destruction to ~QObject, which runs
+    // AFTER the registry's unique_ptr has already been reset — a UAF in
+    // ~ScriptedAlgorithmLoader's unregisterAlgorithm loop.
+    m_scriptLoader = std::make_unique<PhosphorTiles::ScriptedAlgorithmLoader>(QString(ScriptedAlgorithmSubdir),
+                                                                              m_localAlgorithmRegistry.get());
+    m_scriptLoader->scanAndRegister();
+    connect(m_scriptLoader.get(), &PhosphorTiles::ScriptedAlgorithmLoader::algorithmsChanged, this,
             &EditorController::reloadLocalLayouts);
 
     // Populate the daemon-independent layout source from disk on startup

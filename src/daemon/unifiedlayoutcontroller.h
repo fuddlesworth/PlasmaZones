@@ -17,6 +17,10 @@ namespace PhosphorLayout {
 class ILayoutSource;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PhosphorZones {
 class Layout;
 }
@@ -51,8 +55,19 @@ class UnifiedLayoutController : public QObject
     Q_PROPERTY(QString currentLayoutId READ currentLayoutId)
 
 public:
+    /**
+     * @brief Construct a UnifiedLayoutController.
+     *
+     * @param algorithmRegistry Injected tile-algorithm registry. Borrowed —
+     *        composition root owns lifetime, must outlive the controller.
+     *        Passed explicitly rather than pulled via
+     *        @c autotileEngine->algorithmRegistry() so the DI contract is
+     *        visible at the constructor signature and the controller
+     *        keeps working in unit tests that stub the engine.
+     */
     explicit UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
                                      Phosphor::Screens::ScreenManager* screenManager,
+                                     PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                      AutotileEngine* autotileEngine = nullptr, QObject* parent = nullptr);
     ~UnifiedLayoutController() override;
 
@@ -177,11 +192,12 @@ public:
      * caller owns it and must keep it alive for the controller's lifetime.
      *
      * @note Expected to be called at most once per controller, right after
-     * construction. The controller does NOT subscribe to the source's
-     * own signals — cache invalidation is driven by the registry's
-     * @c contentsChanged subscription wired in the ctor. If the source
-     * pointer ever needs replacing (multi-bundle composition root), add
-     * connect/disconnect bookkeeping here first.
+     * construction. The controller subscribes to the source's own
+     * @c contentsChanged here so cache invalidation routes through the
+     * single notifier the source already bridges from the registry.
+     * When the source pointer is replaced (currently unused, but a
+     * future multi-bundle composition root might), the previous
+     * subscription is disconnected first.
      */
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
@@ -217,8 +233,10 @@ private:
     QPointer<LayoutManager> m_layoutManager;
     QPointer<Settings> m_settings;
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
     QPointer<AutotileEngine> m_autotileEngine;
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)
+    QMetaObject::Connection m_autotileSourceConnection; ///< contentsChanged subscription on m_autotileLayoutSource
 
     QString m_currentLayoutId;
     QString m_currentScreenName;

@@ -61,9 +61,19 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     if (!algorithm || algorithmId.isEmpty()) {
         return preview;
     }
-    // Null registry is tolerated (matches ZonesLayoutSource's discipline):
-    // the preview-params seeding loop below already guards on `if (registry)`,
-    // and callers that pass null just get defaults.
+    // PR #343 killed the AlgorithmRegistry singleton specifically so every
+    // preview computation goes through an explicit, injected registry.
+    // Q_ASSERT_X in debug catches silent null-registry calls that would
+    // render with built-in defaults instead of the user's live preview
+    // params; release builds fall back to defaults (non-fatal parity with
+    // the previous behaviour) but a warn lets us see it in logs.
+    Q_ASSERT_X(registry, "previewFromAlgorithm",
+               "null ITileAlgorithmRegistry — preview will render with built-in defaults rather than user's saved "
+               "master-count / split-ratio / maxWindows tuning");
+    if (!registry) {
+        qCWarning(PhosphorTiles::lcTilesLib) << "previewFromAlgorithm: null registry for algorithm" << algorithmId
+                                             << "— falling back to built-in defaults";
+    }
 
     const QRect canvas(0, 0, PreviewCanvasSize, PreviewCanvasSize);
 

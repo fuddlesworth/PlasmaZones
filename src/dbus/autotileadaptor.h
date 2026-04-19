@@ -17,6 +17,10 @@ namespace Phosphor::Screens {
 class ScreenManager;
 }
 
+namespace PhosphorTiles {
+class ITileAlgorithmRegistry;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
@@ -62,10 +66,18 @@ public:
      * @brief Construct an AutotileAdaptor
      *
      * @param engine The AutotileEngine to expose via D-Bus
+     * @param screenManager Screen manager (for panel-geometry deferral)
+     * @param algorithmRegistry Injected tile-algorithm registry. Borrowed —
+     *        composition root owns lifetime, must outlive the adaptor.
+     *        Used for algorithm validation/enumeration on the D-Bus surface.
+     *        The adaptor stores this directly rather than reaching back
+     *        through @c engine->algorithmRegistry() so the DI contract is
+     *        visible at the constructor signature and a future per-engine
+     *        registry divergence doesn't silently re-route D-Bus queries.
      * @param parent Parent QObject (typically the daemon)
      */
     explicit AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::ScreenManager* screenManager,
-                             QObject* parent = nullptr);
+                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileAdaptor() override = default;
 
     /**
@@ -397,6 +409,7 @@ private:
 
     AutotileEngine* m_engine = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
+    PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives adaptor
 
     // Window-opened events received before the first panel D-Bus query completed.
     // Processing them immediately would compute zones against the unreserved screen rect

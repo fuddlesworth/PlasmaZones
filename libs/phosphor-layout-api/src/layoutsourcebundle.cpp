@@ -42,6 +42,15 @@ LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) no
         m_sources = std::move(other.m_sources);
         m_sourceNames = std::move(other.m_sourceNames);
         m_composite = std::move(other.m_composite);
+        // Post-condition: std::move on unique_ptr leaves `other` empty and
+        // std::vector's move leaves its storage empty. Assert in debug so a
+        // future observer / iterator added to this class that walks a moved-
+        // from bundle trips the invariant immediately rather than producing
+        // a subtle UAF.
+        Q_ASSERT(!other.m_composite);
+        Q_ASSERT(other.m_sources.empty());
+        Q_ASSERT(other.m_factories.empty());
+        Q_ASSERT(other.m_sourceNames.empty());
     }
     return *this;
 }
@@ -86,17 +95,22 @@ void LayoutSourceBundle::build()
     for (auto& factory : m_factories) {
         const QString name = factory->name();
         // Duplicate-name detection: source(name) walks m_sourceNames and
-        // returns the first match, so a collision silently routes
+        // returns the first match, so a collision would silently route
         // composition-root setAutotileLayoutSource (and similar) at the
-        // wrong source. Warn loudly here — a future plugin-loading cycle
-        // (XDG path duplication, dlopen + static init re-run) is the
-        // realistic trigger. Still register both so the composite carries
-        // the entries; the warning is the actionable signal.
+        // wrong source. availableLayouts() on the composite would also
+        // return duplicate previews. Fail-safe policy: first-registration
+        // wins, later duplicates warn and skip. Matches
+        // FactoryContext::set's first-wins discipline and
+        // AlgorithmRegistry's system-script dedup. Realistic trigger is a
+        // future plugin-loading cycle (XDG path duplication, dlopen +
+        // static-init re-run) — the warning identifies the offending
+        // provider by name for diagnostics.
         if (std::find(m_sourceNames.begin(), m_sourceNames.end(), name) != m_sourceNames.end()) {
             qWarning(
-                "LayoutSourceBundle::build: duplicate factory name '%s' — source(name) lookups will only return "
-                "the first match",
+                "LayoutSourceBundle::build: duplicate factory name '%s' — skipping later registration (first "
+                "wins)",
                 qUtf8Printable(name));
+            continue;
         }
         auto source = factory->create();
         if (!source) {
@@ -132,16 +146,19 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
         return;
     }
 
-    // Sort by priority (lower first); stable_sort preserves registration
-    // order for ties so the composite walks sources in a deterministic,
-    // source-id-prefix-friendly order.
+    // Sort by priority (lower first); tie-break on name (lexicographic) for
+    // stable ordering across translation units. Static-init order across
+    // TUs is implementation-defined, so any registrars sharing a priority
+    // would otherwise produce platform- / toolchain-dependent composite
+    // iteration. Tie-breaking on name makes the output deterministic
+    // regardless of which TU's registrar ran first.
     //
     // Snapshot the pending list into a local copy before sorting so
     // concurrent bundles on different threads don't race on the process-
     // global list's underlying storage. The list is append-only at
     // static-init time (so its contents are stable once main() runs),
-    // but std::stable_sort mutates the container — two bundles building
-    // in parallel would otherwise trip over each other's sort swaps.
+    // but std::sort mutates the container — two bundles building in
+    // parallel would otherwise trip over each other's sort swaps.
     std::vector<PendingLayoutSourceProvider> providers;
     {
         const auto& pending = pendingLayoutSourceProviders();
@@ -150,8 +167,11 @@ void LayoutSourceBundle::buildFromRegistered(const FactoryContext& ctx)
             providers.push_back(p);
         }
     }
-    std::stable_sort(providers.begin(), providers.end(), [](const auto& a, const auto& b) {
-        return a.priority < b.priority;
+    std::sort(providers.begin(), providers.end(), [](const auto& a, const auto& b) {
+        if (a.priority != b.priority) {
+            return a.priority < b.priority;
+        }
+        return a.name < b.name;
     });
     for (const auto& provider : providers) {
         if (!provider.builder) {

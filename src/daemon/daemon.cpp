@@ -58,6 +58,7 @@
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
 #include <PhosphorScreens/ScreenIdentity.h>
+#include "../common/screenidresolver.h"
 
 namespace PlasmaZones {
 
@@ -67,29 +68,6 @@ namespace {
 // follow-up panel geometry requery after the debounced update completes).
 constexpr int GEOMETRY_UPDATE_DEBOUNCE_MS = 400;
 } // anonymous namespace
-
-namespace {
-// Install the library-level screen-id resolver before any layouts load so
-// fromJson() can normalise legacy connector names ("DP-2") to the daemon's
-// EDID-based IDs ("LG:Model:Serial") during load. Installed on first Daemon
-// construction (a static local ensures it runs exactly once).
-struct InstallScreenIdResolver
-{
-    InstallScreenIdResolver()
-    {
-        PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
-                return name;
-            return Phosphor::Screens::ScreenIdentity::idForName(name);
-        });
-    }
-};
-void ensureScreenIdResolver()
-{
-    static InstallScreenIdResolver s_installer;
-    (void)s_installer;
-}
-} // namespace
 
 Daemon::Daemon(QObject* parent)
     : QObject(parent)
@@ -633,7 +611,8 @@ bool Daemon::init()
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
-    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), this);
+    m_autotileAdaptor =
+        new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations
     new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),

@@ -19,11 +19,14 @@
 namespace PlasmaZones {
 
 AutotileAdaptor::AutotileAdaptor(AutotileEngine* engine, Phosphor::Screens::ScreenManager* screenManager,
-                                 QObject* parent)
+                                 PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_engine(engine)
     , m_screenManager(screenManager)
+    , m_algorithmRegistry(algorithmRegistry)
 {
+    Q_ASSERT_X(m_algorithmRegistry, "AutotileAdaptor",
+               "null ITileAlgorithmRegistry — setAlgorithm / availableAlgorithms / algorithmInfo will crash");
     // Note: We use manual signal connections (below) instead of setAutoRelaySignals(true)
     // to avoid duplicate D-Bus signal emissions when engine signals are forwarded.
 
@@ -84,7 +87,7 @@ void AutotileAdaptor::setAlgorithm(const QString& algorithmId)
     if (!ensureEngine("setAlgorithm")) {
         return;
     }
-    if (!m_engine->algorithmRegistry()->algorithm(algorithmId)) {
+    if (!m_algorithmRegistry->algorithm(algorithmId)) {
         qCWarning(lcDbusAutotile) << "setAlgorithm: unknown algorithm ID:" << algorithmId;
         return;
     }
@@ -355,12 +358,12 @@ void AutotileAdaptor::notifyWindowFocused(const QString& windowId, const QString
 
 QStringList AutotileAdaptor::availableAlgorithms()
 {
-    return m_engine->algorithmRegistry()->availableAlgorithms();
+    return m_algorithmRegistry->availableAlgorithms();
 }
 
 AlgorithmInfoEntry AutotileAdaptor::algorithmInfo(const QString& algorithmId)
 {
-    PhosphorTiles::TilingAlgorithm* algo = m_engine->algorithmRegistry()->algorithm(algorithmId);
+    PhosphorTiles::TilingAlgorithm* algo = m_algorithmRegistry->algorithm(algorithmId);
     if (!algo) {
         qCWarning(lcDbusAutotile) << "Unknown algorithm:" << algorithmId;
         return {};
