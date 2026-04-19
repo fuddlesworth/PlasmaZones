@@ -158,10 +158,18 @@ Daemon::Daemon(QObject* parent)
     // lazily on first availableLayouts() call: the layout manager has loaded
     // from disk by then, and the algorithm registry is populated by
     // ScriptedAlgorithmLoader during init().
-    m_layoutSources = makeLayoutSourceBundle(m_layoutManager.get(), m_algorithmRegistry.get());
-    // ZonesLayoutSource and AutotileLayoutSource both self-wire to their
-    // registry's ILayoutSourceRegistry::contentsChanged signal — no
-    // manual bridge required here.
+    //
+    // Factory-registry pattern: each provider library ships its own
+    // ILayoutSourceFactory; the daemon registers one per surfaced
+    // family. Adding a new family (the planned scrolling engine) is a
+    // single addFactory() line below — no edits to the bundle, no
+    // edits to phosphor-layout-api. ZonesLayoutSource and
+    // AutotileLayoutSource both self-wire to their registry's
+    // ILayoutSourceRegistry::contentsChanged signal, so no manual
+    // bridging is required after build().
+    m_layoutSources.addFactory(std::make_unique<PhosphorZones::ZonesLayoutSourceFactory>(m_layoutManager.get()));
+    m_layoutSources.addFactory(std::make_unique<PhosphorTiles::AutotileLayoutSourceFactory>(m_algorithmRegistry.get()));
+    m_layoutSources.build();
 }
 
 Daemon::~Daemon()
@@ -393,7 +401,7 @@ bool Daemon::init()
         new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
-    m_layoutAdaptor->setLayoutSource(m_layoutSources.composite.get());
+    m_layoutAdaptor->setLayoutSource(m_layoutSources.composite());
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);

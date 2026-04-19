@@ -16,8 +16,10 @@
 #include "../core/constants.h"
 #include "../core/enums.h"
 #include "../core/layoutmanager.h"
-#include "../core/layoutsourcefactory.h"
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
+#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 #include "../core/modifierutils.h"
 
 #include <QHash>
@@ -898,7 +900,7 @@ private:
     // borrows the manager; the autotile source borrows the registry).
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    LayoutSourceBundle m_localSources;
+    PhosphorLayout::LayoutSourceBundle m_localSources;
 
     /// Recompute zone geometry for every manual layout in
     /// @c m_localLayoutManager against the primary screen so

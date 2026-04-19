@@ -13,7 +13,9 @@
 #include <memory>
 
 #include "shortcutmanager.h"
-#include "../core/layoutsourcefactory.h"
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
+#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
+#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 #include "../core/types.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/Swapper.h>
@@ -365,7 +367,7 @@ private:
     // The bundle owns all three objects so destruction is deterministic
     // (composite first, then the child sources it borrows from). See
     // layoutsourcefactory.h for the construction contract.
-    LayoutSourceBundle m_layoutSources;
+    PhosphorLayout::LayoutSourceBundle m_layoutSources;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;

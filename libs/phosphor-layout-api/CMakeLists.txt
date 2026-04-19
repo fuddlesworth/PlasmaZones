@@ -49,13 +49,17 @@ set(phosphorlayoutapi_public_HDRS
     include/PhosphorLayoutApi/LayoutId.h
     include/PhosphorLayoutApi/LayoutPreview.h
     include/PhosphorLayoutApi/ILayoutSource.h
+    include/PhosphorLayoutApi/ILayoutSourceFactory.h
     include/PhosphorLayoutApi/ILayoutSourceRegistry.h
+    include/PhosphorLayoutApi/LayoutSourceBundle.h
 )
 
 set(phosphorlayoutapi_SRCS
     src/compositelayoutsource.cpp
     src/ilayoutsource.cpp
+    src/ilayoutsourcefactory.cpp
     src/ilayoutsourceregistry.cpp
+    src/layoutsourcebundle.cpp
 )
 
 add_library(PhosphorLayoutApi SHARED

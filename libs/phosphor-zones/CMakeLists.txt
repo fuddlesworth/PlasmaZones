@@ -65,6 +65,7 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/IZoneLayoutRegistry.h
     include/PhosphorZones/IQuickLayouts.h
     include/PhosphorZones/ZonesLayoutSource.h
+    include/PhosphorZones/ZonesLayoutSourceFactory.h
 )
 
 set(phosphorzones_SRCS
@@ -76,6 +77,7 @@ set(phosphorzones_SRCS
     src/zonehighlighter.cpp
     src/layoututils.cpp
     src/zoneslayoutsource.cpp
+    src/zoneslayoutsourcefactory.cpp
     src/zoneslogging.h
     src/zoneslogging.cpp
     src/interfaces.cpp

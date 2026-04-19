@@ -58,8 +58,16 @@ EditorController::EditorController(QObject* parent)
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
     , m_localLayoutManager(std::make_unique<LayoutManager>(nullptr))
-    , m_localSources(makeLayoutSourceBundle(m_localLayoutManager.get(), m_localAlgorithmRegistry.get()))
 {
+    // Factory-registry pattern: register one factory per surfaced
+    // layout-source family. Adding a new family (the planned scrolling
+    // engine) is a single addFactory() line — no edits to the bundle
+    // or to phosphor-layout-api.
+    m_localSources.addFactory(std::make_unique<PhosphorZones::ZonesLayoutSourceFactory>(m_localLayoutManager.get()));
+    m_localSources.addFactory(
+        std::make_unique<PhosphorTiles::AutotileLayoutSourceFactory>(m_localAlgorithmRegistry.get()));
+    m_localSources.build();
+
     // Discover + register user-authored scripted algorithms in the editor-
     // owned AlgorithmRegistry so standalone editor launches (daemon down)
     // still surface them in layout pickers. The loader also sets up a
@@ -233,10 +241,10 @@ QVariantList EditorController::zones() const
 QVariantList EditorController::localLayoutPreviews() const
 {
     QVariantList list;
-    if (!m_localSources.composite) {
+    if (!m_localSources.composite()) {
         return list;
     }
-    const auto previews = m_localSources.composite->availableLayouts();
+    const auto previews = m_localSources.composite()->availableLayouts();
     list.reserve(previews.size());
     for (const auto& preview : previews) {
         list.append(toVariantMap(preview));
@@ -246,10 +254,10 @@ QVariantList EditorController::localLayoutPreviews() const
 
 QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCount)
 {
-    if (id.isEmpty() || !m_localSources.composite) {
+    if (id.isEmpty() || !m_localSources.composite()) {
         return {};
     }
-    const auto preview = m_localSources.composite->previewAt(id, windowCount);
+    const auto preview = m_localSources.composite()->previewAt(id, windowCount);
     if (preview.id.isEmpty()) {
         return {};
     }

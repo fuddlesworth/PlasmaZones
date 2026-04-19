@@ -17,10 +17,12 @@
 #include "../config/configbackends.h"
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
-#include "../core/layoutsourcefactory.h"
 #include "../core/logging.h"
 #include "undo/UndoController.h"
+#include <PhosphorLayoutApi/LayoutSourceBundle.h>
 #include <PhosphorTiles/AlgorithmRegistry.h>
+#include <PhosphorTiles/AutotileLayoutSourceFactory.h>
+#include <PhosphorZones/ZonesLayoutSourceFactory.h>
 
 #include <memory>
 
@@ -905,7 +907,7 @@ private:
     // layout manager; the autotile source borrows the algorithm registry).
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
     std::unique_ptr<LayoutManager> m_localLayoutManager;
-    LayoutSourceBundle m_localSources;
+    PhosphorLayout::LayoutSourceBundle m_localSources;
 
     /// Debounces D-Bus layout-mutation bursts (layoutCreated / layoutDeleted /
     /// layoutChanged / layoutListChanged / layoutPropertyChanged) into a
