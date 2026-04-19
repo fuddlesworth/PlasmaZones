@@ -177,10 +177,13 @@ public:
      *     (degenerate target, sub-threshold motion).
      *
      * Re-calling for a handle that already has an in-flight motion
-     * overwrites it and fires @ref onAnimationStarted again. Adapters
-     * that want smooth retarget-with-velocity-preservation should call
-     * @ref retarget instead, which explicitly preserves the visible
-     * value across the boundary.
+     * replaces it: the displaced animation fires
+     * @ref onAnimationReplaced and is dropped without firing
+     * @ref onAnimationComplete (it was not naturally completed), then
+     * @ref onAnimationStarted fires for the new segment. Adapters that
+     * want visual continuity across the boundary should call
+     * @ref retarget instead; `startAnimation`'s replace semantics jump
+     * visually from the in-flight value to the new `oldFrame`.
      *
      * Otherwise the animation is stored, @ref onAnimationStarted is
      * fired, and the function returns `true`.
@@ -197,9 +200,10 @@ public:
             return false;
         }
 
-        const auto spec = SnapPolicy::createSnapSpec(
-            oldFrame, newFrame, SnapPolicy::SnapParams{m_profile.effectiveDuration(), m_profile.curve, m_minDistance},
-            m_clock);
+        SnapPolicy::SnapParams params;
+        params.profile = m_profile;
+        params.minDistance = m_minDistance;
+        const auto spec = SnapPolicy::createSnapSpec(oldFrame, newFrame, params, m_clock);
         if (!spec) {
             return false;
         }
@@ -209,10 +213,22 @@ public:
             return false;
         }
 
+        // Displace + notify: a naïve insert_or_assign would silently
+        // drop the prior animation, leaving consumers that count
+        // started-vs-complete events with a stranded "started". Fire
+        // onAnimationReplaced on the displaced instance so the event
+        // accounting stays balanced (one started ⇒ exactly one
+        // terminating event: complete OR replaced OR removed).
+        if (auto existing = m_animations.find(handle); existing != m_animations.end()) {
+            AnimatedValue<QRectF> displaced = std::move(existing->second);
+            m_animations.erase(existing);
+            onAnimationReplaced(handle, displaced);
+        }
+
         // unordered_map's operator[] requires default-constructible value
         // and copy-assigns — AnimatedValue<T> is move-only, so use
-        // insert-or-assign (C++17) which accepts rvalue value.
-        auto [it, inserted] = m_animations.insert_or_assign(handle, std::move(anim));
+        // emplace (C++17) which accepts rvalue value.
+        auto [it, inserted] = m_animations.emplace(handle, std::move(anim));
         onAnimationStarted(handle, it->second);
         return true;
     }
@@ -229,6 +245,11 @@ public:
      * world-space rate of change across the retarget boundary.
      * On a stateless curve (Easing) it degrades to `PreservePosition`
      * with a debug log (no physical velocity exists to preserve).
+     *
+     * Fires @ref onAnimationRetargeted on success so adapters that
+     * latch per-segment state (damage annotation, telemetry) can
+     * observe the new segment without conflating it with a fresh
+     * `startAnimation` call.
      */
     bool retarget(Handle handle, const QRectF& newFrame, RetargetPolicy policy = RetargetPolicy::PreserveVelocity)
     {
@@ -236,7 +257,18 @@ public:
         if (it == m_animations.end()) {
             return false;
         }
-        return it->second.retarget(newFrame, policy);
+        const bool accepted = it->second.retarget(newFrame, policy);
+        // Re-lookup: AnimatedValue::retarget fires onValueChanged /
+        // onComplete on its degenerate-retarget-to-same-point path,
+        // and a user callback could mutate m_animations in ways that
+        // rehash and invalidate `it`. Look up afresh for the hook.
+        if (accepted) {
+            it = m_animations.find(handle);
+            if (it != m_animations.end()) {
+                onAnimationRetargeted(handle, it->second);
+            }
+        }
+        return accepted;
     }
 
     void removeAnimation(Handle handle)
@@ -319,7 +351,10 @@ public:
             return;
         }
 
-        QVarLengthArray<Handle, 16> handles;
+        // Inline 64: covers layout-switch / workspace-switch bulk starts
+        // without falling through to heap allocation. 16 (the original
+        // Phase 2 figure) was tight for multi-window snap bursts.
+        QVarLengthArray<Handle, 64> handles;
         handles.reserve(m_animations.size());
         for (const auto& [handle, _] : m_animations) {
             handles.append(handle);
@@ -336,6 +371,20 @@ public:
             }
 
             it->second.advance();
+
+            // Re-lookup `it`: AnimatedValue::advance fires
+            // onValueChanged / onComplete from MotionSpec, and a
+            // user-supplied callback can re-enter the controller and
+            // mutate m_animations. If the mutation triggers an
+            // unordered_map rehash (insert on a new bucket crossing
+            // the load-factor threshold), every outstanding iterator
+            // including `it` is invalidated. A fresh find() is O(1)
+            // average and cheap — pay it rather than rely on callers
+            // to honour the no-reentry contract.
+            it = m_animations.find(handle);
+            if (it == m_animations.end()) {
+                continue; // hook removed this handle
+            }
 
             if (it->second.isComplete()) {
                 const QMarginsF padding = expandedPadding(handle, it->second);
@@ -373,6 +422,33 @@ protected:
     // ─────── Subclass hooks ───────
 
     virtual void onAnimationStarted(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/)
+    {
+    }
+
+    /**
+     * @brief Fired when @ref startAnimation displaces an in-flight
+     *        animation on the same handle.
+     *
+     * Semantically distinct from @ref onAnimationComplete — the
+     * displaced animation did not reach its target. Consumers that
+     * count lifecycle events observe exactly one terminating event per
+     * started animation: complete, replaced, or explicit
+     * @ref removeAnimation. Default no-op.
+     */
+    virtual void onAnimationReplaced(Handle /*handle*/, const AnimatedValue<QRectF>& /*displaced*/)
+    {
+    }
+
+    /**
+     * @brief Fired when @ref retarget redirects an in-flight animation.
+     *
+     * Distinct from @ref onAnimationStarted so adapters can tell a
+     * fresh-start boundary (no prior visual state) from a mid-flight
+     * redirect (visual continuity preserved). Default no-op — override
+     * to splice in per-segment bookkeeping without double-counting
+     * starts.
+     */
+    virtual void onAnimationRetargeted(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/)
     {
     }
 

@@ -18,11 +18,10 @@ namespace PhosphorAnimation {
  * clock's `now()` reader runs on whichever thread the consumer calls
  * from (typically also the render thread for Qt Quick animations).
  *
- * Thread safety: writes and reads to `m_now` in `QtQuickClock` happen
- * from the same (render) thread in normal QML consumers; the field is
- * not atomic because atomic ns-precision clocks would pessimise the
- * common case. Consumers that genuinely need cross-thread access can
- * serialise externally (same posture as `CompositorClock`).
+ * Thread safety: the cached timestamp is held as `std::atomic` on
+ * `QtQuickClock` with relaxed ordering. Same-thread use incurs only
+ * aligned-load/store cost on x86_64; cross-thread use (GUI-thread
+ * reader) avoids formal data-race UB.
  */
 class QtQuickClock::SignalAdapter : public QObject
 {
@@ -51,7 +50,8 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
     QObject::connect(
         window, &QQuickWindow::beforeRendering, this,
         [this]() {
-            m_owner->m_nowCache = std::chrono::steady_clock::now().time_since_epoch();
+            const auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
+            m_owner->m_nowCache.store(ns, std::memory_order_relaxed);
         },
         Qt::DirectConnection);
 }
@@ -70,7 +70,7 @@ QtQuickClock::~QtQuickClock() = default;
 
 std::chrono::nanoseconds QtQuickClock::now() const
 {
-    return m_nowCache;
+    return std::chrono::nanoseconds{m_nowCache.load(std::memory_order_relaxed)};
 }
 
 qreal QtQuickClock::refreshRate() const

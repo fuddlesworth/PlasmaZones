@@ -152,9 +152,14 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
     // Phase 3: the motion clock drives every AnimatedValue inside the
-    // controller. Single-output / degenerate mode for now — the effect
-    // hands KWin's per-frame presentTime in via updatePresentTime().
-    // Multi-output (per-KWin::Output) instances are a future refinement.
+    // controller. CURRENT STATE: single process-wide clock (nullptr
+    // output). The library supports per-KWin::Output clocks for mixed-
+    // refresh-rate phase isolation (see IMotionClock docs) — wiring
+    // that here requires tracking Output add/remove lifecycle and
+    // routing animations to the clock matching each window's current
+    // output. Deferred until a follow-up; for now all animations share
+    // one clock that falls back to addRepaintFull() in requestFrame(),
+    // matching pre-Phase-3 repaint coarseness.
     , m_motionClock(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_dragTracker(std::make_unique<DragTracker>(this))

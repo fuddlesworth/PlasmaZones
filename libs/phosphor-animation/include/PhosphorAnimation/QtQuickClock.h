@@ -8,6 +8,7 @@
 
 #include <QPointer>
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 
@@ -53,6 +54,17 @@ namespace PhosphorAnimation {
  * `std::chrono::steady_clock` is monotonic by contract, so the clamp
  * `CompositorClock` applies for KWin's (rarely) regressing presentTime
  * is unnecessary here.
+ *
+ * ## Cross-thread read safety
+ *
+ * The `beforeRendering` slot fires on the Qt Quick render thread; any
+ * consumer calling `now()` from a different thread (e.g., a QML scene
+ * animation driven from the GUI thread) would otherwise race on a
+ * plain 64-bit field. The cached timestamp is held as
+ * `std::atomic<int64_t>` with `memory_order_relaxed` load/store so the
+ * cross-thread read is well-defined even though the common case (both
+ * reader and writer on the render thread) pays only the cost of a
+ * plain aligned load/store on x86_64.
  */
 class PHOSPHORANIMATION_EXPORT QtQuickClock final : public IMotionClock
 {
@@ -80,8 +92,11 @@ private:
     // Cached timestamp captured in the `beforeRendering` slot so
     // `now()` returns the vsync-aligned reading for the frame being
     // rendered. Written from the render thread by the SignalAdapter;
-    // read from the same thread by AnimatedValue::advance().
-    std::chrono::nanoseconds m_nowCache{0};
+    // may be read from the GUI thread (QML animation drivers that
+    // don't honour the render-thread-only contract). Stored as
+    // atomic<int64_t> with relaxed ordering — we only need tearing
+    // safety, not happens-before.
+    std::atomic<std::chrono::nanoseconds::rep> m_nowCache{0};
     QPointer<QQuickWindow> m_window;
     std::unique_ptr<SignalAdapter> m_adapter;
 };

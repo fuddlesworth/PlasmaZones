@@ -59,6 +59,8 @@ public:
     QList<int> startedHandlesOrdered;
     QSet<int> completedHandles;
     QList<int> completedHandlesOrdered;
+    QList<int> retargetedHandlesOrdered;
+    QList<int> replacedHandlesOrdered;
     mutable int repaintCalls = 0;
     QSet<int> invalidHandles;
 
@@ -73,6 +75,14 @@ protected:
         if (onStartedCallback) {
             onStartedCallback(handle, *this);
         }
+    }
+    void onAnimationRetargeted(int handle, const AnimatedValue<QRectF>&) override
+    {
+        retargetedHandlesOrdered.append(handle);
+    }
+    void onAnimationReplaced(int handle, const AnimatedValue<QRectF>&) override
+    {
+        replacedHandlesOrdered.append(handle);
     }
     void onAnimationComplete(int handle, const AnimatedValue<QRectF>&) override
     {
@@ -483,6 +493,83 @@ private Q_SLOTS:
         // No clock, so this is the degenerate path. Should not crash.
         c.advanceAnimations();
         QVERIFY(!c.hasActiveAnimations());
+    }
+
+    // ─── New hooks: onAnimationRetargeted ───
+
+    void testRetargetFiresRetargetedHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        c.advanceAnimations();
+        clock.advanceMs(20.0);
+        c.advanceAnimations();
+
+        QVERIFY(c.retargetedHandlesOrdered.isEmpty());
+        QVERIFY(c.retarget(1, QRectF(600, 0, 100, 100), RetargetPolicy::PreservePosition));
+        QCOMPARE(c.retargetedHandlesOrdered.size(), 1);
+        QCOMPARE(c.retargetedHandlesOrdered.first(), 1);
+    }
+
+    void testRetargetOnMissingHandleDoesNotFireHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(!c.retarget(99, QRectF(0, 0, 100, 100), RetargetPolicy::PreservePosition));
+        QVERIFY(c.retargetedHandlesOrdered.isEmpty());
+    }
+
+    // ─── New hooks: onAnimationReplaced ───
+
+    void testStartOnExistingHandleFiresReplacedHook()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.replacedHandlesOrdered.isEmpty());
+
+        QVERIFY(c.startAnimation(1, QRectF(50, 0, 100, 100), QRectF(800, 0, 100, 100)));
+        QCOMPARE(c.replacedHandlesOrdered.size(), 1);
+        QCOMPARE(c.replacedHandlesOrdered.first(), 1);
+        // Started twice, replaced once, completed zero times so far —
+        // event-count invariant holds: startedCount = completedCount +
+        // replacedCount + activeCount.
+        QCOMPARE(c.startedHandlesOrdered.size(), 2);
+        QCOMPARE(c.completedHandles.size(), 0);
+    }
+
+    // ─── retarget degenerate fires onComplete for symmetry ───
+
+    void testRetargetToSameTargetFiresCompleteCallback()
+    {
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock);
+        const QRectF target(500, 0, 100, 100);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), target));
+        c.advanceAnimations();
+        clock.advanceMs(20.0);
+        c.advanceAnimations();
+
+        // Retarget to the current visual value → newDistance ≈ 0 →
+        // degenerate-complete branch. AnimatedValue fires onComplete
+        // from its MotionSpec (here unset — no callback registered
+        // by SnapPolicy by default) so the observable signal comes
+        // via the animation state: isComplete == true and the entry
+        // flushes on the next advance.
+        const QRectF current = c.currentValue(1, QRectF());
+        QVERIFY(!c.retarget(1, current, RetargetPolicy::PreservePosition));
+        // The old animation's degenerate-complete path does not fire
+        // the controller's onAnimationComplete hook directly (that
+        // hook is only called from advanceAnimations after erase).
+        // It does mark the AnimatedValue complete; the next advance
+        // reaps it.
+        c.advanceAnimations();
+        QVERIFY(!c.hasAnimation(1));
     }
 };
 

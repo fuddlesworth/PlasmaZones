@@ -4,16 +4,15 @@
 #pragma once
 
 #include <PhosphorAnimation/MotionSpec.h>
+#include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
 #include <QRectF>
 
-#include <memory>
 #include <optional>
 
 namespace PhosphorAnimation {
 
-class Curve;
 class IMotionClock;
 
 /**
@@ -35,15 +34,12 @@ namespace SnapPolicy {
 /// Parameters for the snap gate.
 struct PHOSPHORANIMATION_EXPORT SnapParams
 {
-    /// Animation duration in milliseconds. Stored as the Profile's
-    /// `duration` override — for stateful curves (Spring) duration acts
-    /// as a hard cap; for stateless curves it drives the parametric t.
-    qreal duration = 150.0;
-
-    /// Curve applied to the animation. `nullptr` = inherit from Profile
-    /// defaults (AnimatedValue falls back to OutCubic bezier if no
-    /// curve is resolvable).
-    std::shared_ptr<const Curve> curve;
+    /// The full Profile to stamp into the animation's MotionSpec.
+    /// Carries curve, duration, sequenceMode, staggerInterval, and any
+    /// future orchestration fields. The spec's profile inherits
+    /// verbatim — unset optionals resolve via `Profile::effective*()`
+    /// at animation-time, not here.
+    Profile profile;
 
     /// Skip threshold in pixels. A position delta below
     /// `max(1, minDistance)` with no size change is skipped as not
@@ -61,8 +57,8 @@ struct PHOSPHORANIMATION_EXPORT SnapParams
  *     is unchanged (the animation would not be visible).
  *
  * Otherwise returns a `MotionSpec<QRectF>` populated with:
- *   - `profile.curve` = @p params.curve
- *   - `profile.duration` = @p params.duration
+ *   - `profile` = @p params.profile (full copy — curve, duration,
+ *     sequence mode, etc. all propagate)
  *   - `clock` = @p clock
  *   - default `retargetPolicy = PreserveVelocity`
  *   - callbacks left unset (caller wires onValueChanged / onComplete)

@@ -262,14 +262,16 @@ inline QColor lerpColorOkLab(const QColor& from, const QColor& to, qreal t)
 
 inline qreal colorDistance(const QColor& from, const QColor& to)
 {
-    // L2 norm in sRGB space — used only by the retarget velocity-
-    // rescale path. Perceptual accuracy is not required here because
-    // the ratio is what matters; sRGB vs linear vs OkLab shift the
-    // absolute value but not the ratio (approximately).
-    const qreal dR = to.redF() - from.redF();
-    const qreal dG = to.greenF() - from.greenF();
-    const qreal dB = to.blueF() - from.blueF();
-    const qreal dA = to.alphaF() - from.alphaF();
+    // L2 norm in linear-RGB space — matches the space the default
+    // Interpolate<QColor>::lerp operates in, so the velocity rescale
+    // at retarget uses a metric consistent with the progression itself.
+    // sRGB-space distance would have worked "approximately" (the ratio
+    // is what drives the rescale) but picking the same space as the
+    // lerp keeps the math principled.
+    const qreal dR = srgbToLinear(to.redF()) - srgbToLinear(from.redF());
+    const qreal dG = srgbToLinear(to.greenF()) - srgbToLinear(from.greenF());
+    const qreal dB = srgbToLinear(to.blueF()) - srgbToLinear(from.blueF());
+    const qreal dA = to.alphaF() - from.alphaF(); // alpha is gamma-independent
     return std::sqrt(dR * dR + dG * dG + dB * dB + dA * dA);
 }
 
@@ -363,6 +365,17 @@ inline QTransform recomposeTransform(const DecomposedTransform& d)
 
 inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qreal t)
 {
+    // Short-circuit at segment endpoints: decompose/recompose is lossy
+    // (~1 ulp per matrix element) so lerp(A, B, 0) would otherwise not
+    // bit-exact-equal A. Every other Interpolate<T> specialisation is
+    // exact at the endpoints — preserve that invariant here.
+    if (t <= 0.0) {
+        return from;
+    }
+    if (t >= 1.0) {
+        return to;
+    }
+
     const DecomposedTransform df = decomposeTransform(from);
     const DecomposedTransform dt = decomposeTransform(to);
 
@@ -399,9 +412,16 @@ struct Interpolate<QTransform>
     }
     static qreal distance(const QTransform& from, const QTransform& to)
     {
-        // Frobenius norm of the matrix difference — includes translation,
-        // linear part, and the two perspective-row invariants (which are
-        // zero for affines but cheap to include).
+        // Frobenius norm of the matrix difference — includes translation
+        // (pixel units) and the linear part (unitless / radian-ish). The
+        // metric mixes units by construction: a unit-translate and a
+        // unit-scale both contribute 1² to the total. This is adequate
+        // for retarget velocity rescale on pure-translate transforms
+        // (which is the overwhelmingly common case — window snap, scroll
+        // offsets) but produces a physically meaningless scale for
+        // mixed translate+rotate+scale retargets at speed. Such uses
+        // should prefer PreservePosition / ResetVelocity retarget
+        // policies until a unit-aware metric is designed.
         const qreal d11 = to.m11() - from.m11();
         const qreal d12 = to.m12() - from.m12();
         const qreal d21 = to.m21() - from.m21();
@@ -546,6 +566,7 @@ public:
         m_state.duration = 1.0; // normalised; real time comes from clock dt
         m_startTime.reset();
         m_lastTickTime.reset();
+        m_loggedStatelessDegrade = false;
 
         // Degenerate: start == target with no motion. Snap to target,
         // mark complete, fire no callbacks (start() is the contract
@@ -604,9 +625,13 @@ public:
                 // For vector T, distance() returns magnitude — direction
                 // is lost (documented limitation; see header intro).
                 newVelocity = (m_state.velocity * oldDistance) / newDistance;
-            } else if (!stateful) {
+            } else if (!stateful && !m_loggedStatelessDegrade) {
+                // One-shot per-instance. Logging every retarget on a
+                // stateless curve would flood logs under drag-snap
+                // workflows (one retarget per cursor frame).
                 qCDebug(lcAnimatedValue) << "PreserveVelocity degrading to PreservePosition on stateless curve"
                                          << (curve ? curve->typeId() : QStringLiteral("null"));
+                m_loggedStatelessDegrade = true;
             }
             break;
         case RetargetPolicy::ResetVelocity:
@@ -633,12 +658,23 @@ public:
 
         if (qFuzzyIsNull(newDistance)) {
             // Re-targeting to the same point we're already at —
-            // complete-in-place, no motion.
+            // complete-in-place, no motion. Fire completion callbacks
+            // so consumers that count started/complete pairs see a
+            // matching complete for the retarget segment. (start()'s
+            // degenerate path intentionally stays silent because it
+            // never "started" a motion; retarget always replaces an
+            // active segment, so symmetry matters here.)
             m_current = m_to;
             m_state.value = 1.0;
             m_state.velocity = 0.0;
             m_isAnimating = false;
             m_isComplete = true;
+            if (m_spec.onValueChanged) {
+                m_spec.onValueChanged(m_current);
+            }
+            if (m_isComplete && m_spec.onComplete) {
+                m_spec.onComplete();
+            }
             return false;
         }
 
@@ -672,11 +708,16 @@ public:
     /**
      * @brief Force the animation to its target value immediately.
      *
-     * Snaps `value()` to target, marks complete, and fires
-     * `onComplete` exactly once. Used by consumers that want to
-     * collapse an in-flight animation (e.g., window minimize that
-     * interrupts an in-flight snap — the final geometry is what
-     * matters, not the interpolation).
+     * Snaps `value()` to target, marks complete, and fires both
+     * `onValueChanged(target)` (once, with the final value) and
+     * `onComplete` (exactly once). Intermediate per-tick
+     * `onValueChanged` ticks are skipped — consumers that accumulate
+     * per-tick state should treat `finish()` as a terminal jump, not
+     * a continued progression.
+     *
+     * Used by consumers that want to collapse an in-flight animation
+     * (e.g., window minimize that interrupts an in-flight snap — the
+     * final geometry is what matters, not the interpolation).
      */
     void finish()
     {
@@ -691,7 +732,11 @@ public:
         if (m_spec.onValueChanged) {
             m_spec.onValueChanged(m_current);
         }
-        if (m_spec.onComplete) {
+        // Re-entrancy guard: if onValueChanged restarted this AnimatedValue
+        // via move-assignment (controller clobber), m_isComplete would
+        // now be false for the new segment — firing onComplete on the new
+        // spec would signal completion of an animation that just began.
+        if (m_isComplete && m_spec.onComplete) {
             m_spec.onComplete();
         }
     }
@@ -732,7 +777,11 @@ public:
             if (m_spec.onValueChanged) {
                 m_spec.onValueChanged(m_current);
             }
-            m_spec.clock->requestFrame();
+            // Callback may have re-entered — re-read m_spec.clock
+            // rather than caching pre-callback.
+            if (m_spec.clock) {
+                m_spec.clock->requestFrame();
+            }
             return;
         }
 
@@ -749,8 +798,6 @@ public:
         }
 
         const auto curve = effectiveCurve();
-        const qreal durationMs = m_spec.profile.effectiveDuration();
-        const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
 
         bool complete = false;
 
@@ -772,7 +819,12 @@ public:
                 complete = true;
             }
         } else {
-            // Parametric progression: t = elapsed / duration.
+            // Parametric progression: t = elapsed / duration. elapsedMs
+            // + duration are only consulted on the stateless branch;
+            // keep the computation local to avoid per-tick work on the
+            // stateful path.
+            const qreal durationMs = m_spec.profile.effectiveDuration();
+            const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
             if (durationMs <= 0.0 || elapsedMs >= durationMs) {
                 // Terminal frame: snap to exactly 1.0 regardless of
                 // curve shape (matches Phase 2's updateProgress
@@ -796,7 +848,16 @@ public:
             if (m_spec.onValueChanged) {
                 m_spec.onValueChanged(m_current);
             }
-            if (m_spec.onComplete) {
+            // Re-entrancy guard: if onValueChanged restarted this
+            // AnimatedValue in-place (user callback re-enters the
+            // owning controller and triggers insert_or_assign on the
+            // same handle), m_isComplete would have been reset to
+            // false by the new spec's start(). Firing the NEW spec's
+            // onComplete at that point would signal completion for an
+            // animation that just began. Skip when that happens —
+            // the old animation's onComplete is effectively replaced
+            // by the new animation's lifecycle.
+            if (m_isComplete && m_spec.onComplete) {
                 m_spec.onComplete();
             }
             // No clock->requestFrame() here — completion means no
@@ -807,7 +868,12 @@ public:
             if (m_spec.onValueChanged) {
                 m_spec.onValueChanged(m_current);
             }
-            m_spec.clock->requestFrame();
+            // Callback may have re-entered and swapped m_spec — re-read
+            // m_spec.clock rather than caching it pre-callback, so we
+            // request the NEXT frame on whichever driver is now live.
+            if (m_spec.clock) {
+                m_spec.clock->requestFrame();
+            }
         }
     }
 
@@ -1030,6 +1096,10 @@ private:
     std::optional<std::chrono::nanoseconds> m_lastTickTime;
     bool m_isAnimating = false;
     bool m_isComplete = false;
+    // Rate-limit: set once we've logged the PreserveVelocity→
+    // PreservePosition degrade on a stateless curve, to avoid flooding
+    // logs when a consumer retargets every frame (drag-snap).
+    bool m_loggedStatelessDegrade = false;
 };
 
 } // namespace PhosphorAnimation

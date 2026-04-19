@@ -3,7 +3,6 @@
 
 #include <PhosphorAnimation/SnapPolicy.h>
 
-#include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/IMotionClock.h>
 
 #include <QLineF>
@@ -34,8 +33,7 @@ std::optional<MotionSpec<QRectF>> createSnapSpec(const QRectF& oldFrame, const Q
     }
 
     MotionSpec<QRectF> spec;
-    spec.profile.curve = params.curve;
-    spec.profile.duration = params.duration;
+    spec.profile = params.profile; // full copy — every field propagates
     spec.clock = clock;
     spec.retargetPolicy = RetargetPolicy::PreserveVelocity;
     return spec;
