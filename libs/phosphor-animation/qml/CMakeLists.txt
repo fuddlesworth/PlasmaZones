@@ -37,6 +37,8 @@ qt_add_qml_module(PhosphorAnimationQml
         phosphoranimatedsize.cpp
         phosphoranimatedrect.cpp
         phosphoranimatedcolor.cpp
+        phosphorprofileregistry.cpp
+        phosphormotionanimation.cpp
         ../include/PhosphorAnimation/qml/PhosphorEasing.h
         ../include/PhosphorAnimation/qml/PhosphorSpring.h
         ../include/PhosphorAnimation/qml/PhosphorCurve.h
@@ -48,6 +50,8 @@ qt_add_qml_module(PhosphorAnimationQml
         ../include/PhosphorAnimation/qml/PhosphorAnimatedSize.h
         ../include/PhosphorAnimation/qml/PhosphorAnimatedRect.h
         ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
+        ../include/PhosphorAnimation/qml/PhosphorProfileRegistry.h
+        ../include/PhosphorAnimation/qml/PhosphorMotionAnimation.h
     OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml/org/phosphor/animation
 )
 
@@ -112,5 +116,7 @@ install(FILES
         ../include/PhosphorAnimation/qml/PhosphorAnimatedSize.h
         ../include/PhosphorAnimation/qml/PhosphorAnimatedRect.h
         ../include/PhosphorAnimation/qml/PhosphorAnimatedColor.h
+        ../include/PhosphorAnimation/qml/PhosphorProfileRegistry.h
+        ../include/PhosphorAnimation/qml/PhosphorMotionAnimation.h
     DESTINATION ${KDE_INSTALL_INCLUDEDIR}/PhosphorAnimation/qml
 )
