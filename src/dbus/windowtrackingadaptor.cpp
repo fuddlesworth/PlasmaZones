@@ -11,24 +11,25 @@
 #include "../core/interfaces.h"
 #include "../core/layoutmanager.h"
 #include <PhosphorZones/Layout.h>
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/types.h"
 #include "../core/windowregistry.h"
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTimer>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
 WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
-                                             ISettings* settings, VirtualDesktopManager* virtualDesktopManager,
-                                             QObject* parent)
+                                             Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                             VirtualDesktopManager* virtualDesktopManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
@@ -40,7 +41,8 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
     Q_ASSERT(settings);
 
     // Create business logic service
-    m_service = new WindowTrackingService(layoutManager, zoneDetector, settings, virtualDesktopManager, this);
+    m_service =
+        new WindowTrackingService(layoutManager, zoneDetector, screenManager, settings, virtualDesktopManager, this);
 
     // Snap-mode navigation target resolver moved to SnapEngine in Phase 5E.
     // SnapEngine::ensureTargetResolver() lazy-constructs the resolver on
@@ -128,22 +130,24 @@ WindowTrackingAdaptor::WindowTrackingAdaptor(LayoutManager* layoutManager, Phosp
         onLayoutChanged();
     });
 
-    // Deferred: ScreenManager may not be initialized yet during adaptor construction.
-    // If ScreenManager is still unavailable after the first event loop iteration,
+    // Deferred: Phosphor::Screens::ScreenManager may not be initialized yet during adaptor construction.
+    // If Phosphor::Screens::ScreenManager is still unavailable after the first event loop iteration,
     // virtual screen signals won't be connected until the next daemon restart or
     // screen change. Window restoration will still work via onLayoutChanged() ->
     // tryEmitPendingRestoresAvailable(), which emits immediately when
-    // isPanelGeometryReady() returns false (no ScreenManager instance).
+    // (m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady()) returns false (no
+    // Phosphor::Screens::ScreenManager instance).
     QTimer::singleShot(0, this, [this]() {
-        auto* screenMgr = ScreenManager::instance();
+        auto* screenMgr = m_service->screenManager();
         if (!screenMgr) {
-            qCWarning(lcDbusWindow)
-                << "ScreenManager instance not available - window restoration may use incorrect geometry";
+            qCWarning(lcDbusWindow) << "Phosphor::Screens::ScreenManager instance not available - window restoration "
+                                       "may use incorrect geometry";
             return;
         }
-        connect(screenMgr, &ScreenManager::panelGeometryReady, this, &WindowTrackingAdaptor::onPanelGeometryReady);
+        connect(screenMgr, &Phosphor::Screens::ScreenManager::panelGeometryReady, this,
+                &WindowTrackingAdaptor::onPanelGeometryReady);
         // If panel geometry is already ready, trigger the check now
-        if (ScreenManager::isPanelGeometryReady()) {
+        if ((m_service->screenManager() && m_service->screenManager()->isPanelGeometryReady())) {
             onPanelGeometryReady();
         }
     });
@@ -355,9 +359,10 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
     // Only re-resolve via geometry when the physical screens actually differ,
     // which avoids the zone-center ambiguity when a zone straddles a VS boundary.
     QString resolvedNewScreen = newScreenId;
-    if (!VirtualScreenId::isVirtual(newScreenId) && VirtualScreenId::isVirtual(storedScreen)) {
-        QString storedPhysical = VirtualScreenId::extractPhysicalId(storedScreen);
-        if (Utils::screensMatch(storedPhysical, newScreenId)) {
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(newScreenId)
+        && PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+        QString storedPhysical = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
+        if (Phosphor::Screens::ScreenIdentity::screensMatch(storedPhysical, newScreenId)) {
             // Physical parent matches — the window is still on the same monitor,
             // so the stored virtual screen ID is still valid.
             resolvedNewScreen = storedScreen;
@@ -371,7 +376,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
             // the window correctly unsnaps regardless.
             QRect zoneGeo = m_service->zoneGeometry(currentZoneId, storedScreen);
             if (zoneGeo.isValid()) {
-                QString vsId = Utils::effectiveScreenIdAt(zoneGeo.center());
+                QString vsId = Utils::effectiveScreenIdAt(m_service->screenManager(), zoneGeo.center());
                 if (!vsId.isEmpty()) {
                     resolvedNewScreen = vsId;
                 }
@@ -379,7 +384,7 @@ void WindowTrackingAdaptor::windowScreenChanged(const QString& windowId, const Q
         }
     }
 
-    if (Utils::screensMatch(storedScreen, resolvedNewScreen)) {
+    if (Phosphor::Screens::ScreenIdentity::screensMatch(storedScreen, resolvedNewScreen)) {
         qCDebug(lcDbusWindow) << "windowScreenChanged:" << windowId << "moved to assigned screen, keeping snap";
         return;
     }
@@ -506,19 +511,19 @@ void WindowTrackingAdaptor::cursorScreenChanged(const QString& screenId)
     // haven't loaded yet.  Resolve to the correct virtual screen using the
     // focused window's daemon-tracked screen assignment as the best hint.
     QString resolvedId = screenId;
-    if (!VirtualScreenId::isVirtual(screenId)) {
-        auto* mgr = ScreenManager::instance();
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        auto* mgr = m_service->screenManager();
         if (mgr && mgr->hasVirtualScreens(screenId)) {
             // Use focused window's tracked screen as hint
             if (m_service && !m_lastActiveWindowId.isEmpty()) {
                 const QString trackedScreen = m_service->screenAssignments().value(m_lastActiveWindowId);
-                if (VirtualScreenId::isVirtual(trackedScreen)
-                    && VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                    && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen) == screenId) {
                     resolvedId = trackedScreen;
                 }
             }
             // If no window hint, fall back to first virtual screen
-            if (!VirtualScreenId::isVirtual(resolvedId)) {
+            if (!PhosphorIdentity::VirtualScreenId::isVirtual(resolvedId)) {
                 QStringList vsIds = mgr->virtualScreenIdsFor(screenId);
                 if (!vsIds.isEmpty()) {
                     resolvedId = vsIds.first();
@@ -559,10 +564,11 @@ void WindowTrackingAdaptor::windowActivated(const QString& windowId, const QStri
     // effect reports, since the effect may send a physical ID before VS configs load.
     QString resolvedScreen = screenId;
     if (!screenId.isEmpty()) {
-        if (!VirtualScreenId::isVirtual(screenId) && m_service) {
+        if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId) && m_service) {
             const QString trackedScreen = m_service->screenAssignments().value(windowId);
-            if (VirtualScreenId::isVirtual(trackedScreen)
-                && VirtualScreenId::extractPhysicalId(trackedScreen) == VirtualScreenId::extractPhysicalId(screenId)) {
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(trackedScreen)
+                && PhosphorIdentity::VirtualScreenId::extractPhysicalId(trackedScreen)
+                    == PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId)) {
                 resolvedScreen = trackedScreen;
             }
         }

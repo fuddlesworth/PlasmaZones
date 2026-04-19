@@ -241,7 +241,7 @@ private Q_SLOTS:
     void testNavigation_tiledWindowsForFocusedScreen_fallbackToPrimary()
     {
         // When no window has focus, focusNext/focusPrevious should still work
-        // if there is a screen with tiled windows. Without a ScreenManager,
+        // if there is a screen with tiled windows. Without a Phosphor::Screens::ScreenManager,
         // the fallback returns empty — no crash expected.
         AutotileEngine engine(nullptr, nullptr, nullptr);
         const QString screen = QStringLiteral("eDP-1");
@@ -254,7 +254,7 @@ private Q_SLOTS:
 
         QSignalSpy focusSpy(&engine, &AutotileEngine::focusWindowRequested);
 
-        // Without ScreenManager, the primary screen fallback in
+        // Without Phosphor::Screens::ScreenManager, the primary screen fallback in
         // tiledWindowsForFocusedScreen returns empty. No crash expected.
         engine.focusNext();
 

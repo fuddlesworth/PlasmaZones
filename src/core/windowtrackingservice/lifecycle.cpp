@@ -9,10 +9,10 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
-#include "../screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../virtualdesktopmanager.h"
 #include "../utils.h"
-#include "../virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../logging.h"
 #include <QScreen>
 #include <QUuid>
@@ -84,7 +84,7 @@ QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds
     int bestIdx = 0;
     int bestDist = INT_MAX;
     for (int i = 0; i < vsIds.size(); ++i) {
-        const int idx = VirtualScreenId::extractIndex(vsIds[i]);
+        const int idx = PhosphorIdentity::VirtualScreenId::extractIndex(vsIds[i]);
         const int dist = qAbs(idx - oldIndex);
         if (dist < bestDist) {
             bestDist = dist;
@@ -94,12 +94,13 @@ QString WindowTrackingService::findNearestVirtualScreen(const QStringList& vsIds
     return vsIds[bestIdx];
 }
 
-// Takes an explicit ScreenManager* parameter rather than using ScreenManager::instance()
+// Takes an explicit Phosphor::Screens::ScreenManager* parameter rather than using m_screenManager
 // because this method is called during daemon startup (Daemon::start) before the
 // singleton instance may be fully initialized, and the caller already holds a valid
-// ScreenManager pointer from its own member (m_screenManager.get()).
+// Phosphor::Screens::ScreenManager pointer from its own member (m_screenManager.get()).
 void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& physicalScreenId,
-                                                              const QStringList& virtualScreenIds, ScreenManager* mgr)
+                                                              const QStringList& virtualScreenIds,
+                                                              Phosphor::Screens::ScreenManager* mgr)
 {
     if (virtualScreenIds.isEmpty() || !mgr) {
         return;
@@ -110,7 +111,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
                                         [&](const ResnapEntry& e) {
                                             return e.screenId == physicalScreenId
-                                                || e.screenId.startsWith(physicalScreenId + VirtualScreenId::Separator);
+                                                || e.screenId.startsWith(
+                                                    physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator);
                                         }),
                          m_resnapBuffer.end());
 
@@ -157,8 +159,9 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // (e.g. a zone at (0,0,1,1) on the right-half VS maps to the physical center
         // instead of the right-half center). Use index-based proximity instead:
         // find the new VS with the nearest index to the old one.
-        if (VirtualScreenId::isVirtual(oldScreenId)) {
-            return findNearestVirtualScreen(virtualScreenIds, VirtualScreenId::extractIndex(oldScreenId));
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(oldScreenId)) {
+            return findNearestVirtualScreen(virtualScreenIds,
+                                            PhosphorIdentity::VirtualScreenId::extractIndex(oldScreenId));
         }
 
         // Fall back to the physical screen's layout and center-point mapping.
@@ -194,7 +197,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
     bool anyStateMigrated = false;
     // Match both the physical screen ID and any existing virtual screen IDs on it,
     // so re-configuration (VS config changed) re-migrates windows from old virtual IDs to new ones.
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
     for (auto it = m_windowScreenAssignments.begin(); it != m_windowScreenAssignments.end(); ++it) {
         if (it.value() != physicalScreenId && !it.value().startsWith(prefix)) {
             continue;
@@ -208,7 +211,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
         // Note: zone assignments are NOT validated here because per-VS layouts may
         // share zone UUIDs. Stale zone assignments are cleaned up by onLayoutChanged()
         // when the layout is applied to the virtual screen.
-        if (VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
             continue;
         }
 
@@ -226,7 +229,7 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
 
         // If the stored screen is already a valid virtual screen ID in the current config, skip it.
         // Re-migrating would recompute via resolveVirtualScreen with stale zone coords.
-        if (VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(it.value()) && virtualScreenIds.contains(it.value())) {
             continue;
         }
 
@@ -246,7 +249,8 @@ void WindowTrackingService::migrateScreenAssignmentsToVirtual(const QString& phy
             if (entry.screenId != physicalScreenId && !entry.screenId.startsWith(prefix)) {
                 continue;
             }
-            if (VirtualScreenId::isVirtual(entry.screenId) && virtualScreenIds.contains(entry.screenId)) {
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(entry.screenId)
+                && virtualScreenIds.contains(entry.screenId)) {
                 continue;
             }
             entry.screenId = resolveVirtualScreen(entry.zoneIds, entry.screenId);
@@ -303,7 +307,7 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
 {
     // Only clear resnap entries for this physical screen — preserve entries for
     // other screens so concurrent layout + VS config changes don't lose resnap data.
-    const QString prefix = physicalScreenId + VirtualScreenId::Separator;
+    const QString prefix = physicalScreenId + PhosphorIdentity::VirtualScreenId::Separator;
     m_resnapBuffer.erase(std::remove_if(m_resnapBuffer.begin(), m_resnapBuffer.end(),
                                         [&](const ResnapEntry& e) {
                                             return e.screenId == physicalScreenId || e.screenId.startsWith(prefix);
@@ -339,16 +343,16 @@ void WindowTrackingService::migrateScreenAssignmentsFromVirtual(const QString& p
     }
 
     // B2: Migrate m_lastUsedScreenId if it references a virtual screen on this physical screen
-    if (VirtualScreenId::isVirtual(m_lastUsedScreenId)
-        && VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(m_lastUsedScreenId)
+        && PhosphorIdentity::VirtualScreenId::extractPhysicalId(m_lastUsedScreenId) == physicalScreenId) {
         m_lastUsedScreenId = physicalScreenId;
         validateLastUsedZone(physicalScreenId);
     }
 
     // B3: Migrate pre-tile geometry connectorName fields
     for (auto it = m_preTileGeometries.begin(); it != m_preTileGeometries.end(); ++it) {
-        if (VirtualScreenId::isVirtual(it->connectorName)
-            && VirtualScreenId::extractPhysicalId(it->connectorName) == physicalScreenId) {
+        if (PhosphorIdentity::VirtualScreenId::isVirtual(it->connectorName)
+            && PhosphorIdentity::VirtualScreenId::extractPhysicalId(it->connectorName) == physicalScreenId) {
             it->connectorName = physicalScreenId;
         }
     }
@@ -808,7 +812,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
     // Check virtual screens first (covers both virtual and non-subdivided physical screens).
     // Use area-overlap semantics (not center-point containment) so windows on virtual
     // screen boundaries are handled consistently with the physical-screen fallback path.
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         for (const QString& id : ids) {
@@ -824,7 +828,7 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
         return false;
     }
 
-    // Fallback: physical screens only (no ScreenManager available)
+    // Fallback: physical screens only (no Phosphor::Screens::ScreenManager available)
     for (QScreen* screen : Utils::allScreens()) {
         QRect intersection = geometry.intersected(screen->geometry());
         if (intersection.width() >= MinVisibleWidth && intersection.height() >= MinVisibleHeight) {
@@ -836,8 +840,8 @@ bool WindowTrackingService::isGeometryOnScreen(const QRect& geometry) const
 
 QRect WindowTrackingService::adjustGeometryToScreen(const QRect& geometry) const
 {
-    // Try virtual/effective screens first via ScreenManager
-    auto* mgr = ScreenManager::instance();
+    // Try virtual/effective screens first via Phosphor::Screens::ScreenManager
+    auto* mgr = m_screenManager;
     if (mgr) {
         const QStringList ids = mgr->effectiveScreenIds();
         const QPoint center = geometry.center();
@@ -892,11 +896,11 @@ void WindowTrackingService::validateLastUsedZone(const QString& targetScreen)
 
 QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId) const
 {
-    if (!VirtualScreenId::isVirtual(screenId)) {
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return screenId;
     }
 
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = m_screenManager;
     if (!smgr) {
         return screenId;
     }
@@ -909,13 +913,13 @@ QString WindowTrackingService::resolveEffectiveScreenId(const QString& screenId)
     // The stored virtual screen no longer exists. Try to find another virtual screen
     // on the same physical monitor, so the window stays in the virtual-screen domain
     // (screensMatch() returns false for physical-vs-virtual comparisons).
-    QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
     const QStringList vsIds = smgr->virtualScreenIdsFor(physId);
     if (!vsIds.isEmpty()) {
         // Find the virtual screen with the nearest index to the old one,
         // so windows migrate to the geometrically closest region rather
         // than always landing on the first virtual screen.
-        QString nearest = findNearestVirtualScreen(vsIds, VirtualScreenId::extractIndex(screenId));
+        QString nearest = findNearestVirtualScreen(vsIds, PhosphorIdentity::VirtualScreenId::extractIndex(screenId));
         qCInfo(lcCore) << "Virtual screen" << screenId << "no longer exists, falling back to" << nearest
                        << "on same physical monitor" << physId;
         return nearest;

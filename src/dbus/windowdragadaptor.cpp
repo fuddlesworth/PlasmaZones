@@ -15,14 +15,15 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/zoneselectorlayout.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../core/constants.h"
 #include "../config/settings.h"
 #include "../autotile/AutotileEngine.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -34,12 +35,13 @@ namespace PlasmaZones {
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                                     LayoutManager* layoutManager, ISettings* settings,
-                                     WindowTrackingAdaptor* windowTracking, QObject* parent)
+                                     LayoutManager* layoutManager, Phosphor::Screens::ScreenManager* screenManager,
+                                     ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
     , m_layoutManager(layoutManager)
+    , m_screenManager(screenManager)
     , m_settings(settings)
     , m_windowTracking(windowTracking)
 {
@@ -82,21 +84,22 @@ QScreen* WindowDragAdaptor::screenAtPoint(int x, int y) const
 
 QString WindowDragAdaptor::effectiveScreenIdAt(int x, int y) const
 {
-    return Utils::effectiveScreenIdAt(QPoint(x, y));
+    return Utils::effectiveScreenIdAt(m_screenManager, QPoint(x, y));
 }
 
 WindowDragAdaptor::ScreenResolution WindowDragAdaptor::resolveScreenAt(const QPointF& globalPos) const
 {
     ScreenResolution result;
     result.screenId = effectiveScreenIdAt(qRound(globalPos.x()), qRound(globalPos.y()));
-    result.physicalId = VirtualScreenId::extractPhysicalId(result.screenId);
-    result.qscreen = ScreenManager::resolvePhysicalScreen(result.physicalId);
+    result.physicalId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(result.screenId);
+    result.qscreen = m_screenManager ? m_screenManager->physicalQScreenFor(result.physicalId)
+                                     : Phosphor::Screens::ScreenIdentity::findByIdOrName(result.physicalId);
     if (!result.qscreen) {
         result.qscreen = screenAtPoint(qRound(globalPos.x()), qRound(globalPos.y()));
         if (result.qscreen) {
-            result.physicalId = Utils::screenIdentifier(result.qscreen);
+            result.physicalId = Phosphor::Screens::ScreenIdentity::identifierFor(result.qscreen);
             // Try virtual screen resolution before falling back to physical ID
-            auto* mgr = ScreenManager::instance();
+            auto* mgr = m_screenManager;
             if (mgr && mgr->hasVirtualScreens(result.physicalId)) {
                 QString vsId = mgr->effectiveScreenAt(QPoint(qRound(globalPos.x()), qRound(globalPos.y())));
                 result.screenId = vsId.isEmpty() ? result.physicalId : vsId;
@@ -191,10 +194,11 @@ QRectF WindowDragAdaptor::computeCombinedZoneGeometry(const QVector<PhosphorZone
     if (zones.isEmpty()) {
         return QRectF();
     }
-    QRectF combined = GeometryUtils::getZoneGeometryForScreenF(zones.first(), screen, screenId, layout, m_settings);
+    QRectF combined =
+        GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones.first(), screen, screenId, layout, m_settings);
     for (int i = 1; i < zones.size(); ++i) {
-        combined =
-            combined.united(GeometryUtils::getZoneGeometryForScreenF(zones[i], screen, screenId, layout, m_settings));
+        combined = combined.united(
+            GeometryUtils::getZoneGeometryForScreenF(m_screenManager, zones[i], screen, screenId, layout, m_settings));
     }
     return combined;
 }
@@ -369,7 +373,8 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     }
 
     // Use virtual-aware screen ID for config lookups (falls back to physical ID)
-    const QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    const QString effectiveId =
+        screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
 
     // Use per-screen resolved config (per-screen override > global default)
     const ZoneSelectorConfig config = m_settings->resolvedZoneSelectorConfig(effectiveId);
@@ -377,7 +382,7 @@ bool WindowDragAdaptor::isNearTriggerEdge(QScreen* screen, int cursorX, int curs
     const auto position = static_cast<ZoneSelectorPosition>(config.position);
 
     // Use virtual screen geometry when available
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = m_screenManager;
     QRect vsGeom = smgr ? smgr->screenGeometry(effectiveId) : QRect();
     const QRect screenGeom = vsGeom.isValid() ? vsGeom : screen->geometry();
 
@@ -558,7 +563,7 @@ void WindowDragAdaptor::tryStorePreSnapGeometry(const QString& windowId, bool wa
         if (screenId.isEmpty()) {
             QScreen* screen = Utils::findScreenAtPosition(originalGeometry.center());
             if (screen) {
-                screenId = Utils::screenIdentifier(screen);
+                screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             }
         }
         m_windowTracking->storePreTileGeometry(windowId, originalGeometry.x(), originalGeometry.y(),

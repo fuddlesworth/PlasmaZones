@@ -24,6 +24,7 @@
 #include <QUuid>
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../autotile/AutotileConfig.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -677,8 +678,8 @@ QStringList Settings::disabledMonitors() const
     QStringList entries = parseCommaList(
         m_store->read<QString>(ConfigDefaults::snappingBehaviorDisplayGroup(), ConfigDefaults::disabledMonitorsKey()));
     for (auto& name : entries) {
-        if (Utils::isConnectorName(name)) {
-            const QString resolved = Utils::screenIdForName(name);
+        if (Phosphor::Screens::ScreenIdentity::isConnectorName(name)) {
+            const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(name);
             if (resolved != name) {
                 name = resolved;
             }
@@ -715,13 +716,13 @@ bool Settings::isMonitorDisabled(const QString& screenIdOrName) const
     }
     // Backward compat: resolve between connector name and screen id so
     // stored entries still match across the two representations.
-    if (Utils::isConnectorName(screenIdOrName)) {
-        const QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName && entries.contains(resolved)) {
             return true;
         }
     } else {
-        const QString connector = Utils::screenNameForId(screenIdOrName);
+        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
         if (!connector.isEmpty() && entries.contains(connector)) {
             return true;
         }
@@ -759,13 +760,13 @@ bool Settings::isDesktopDisabled(const QString& screenIdOrName, int desktop) con
     }
     const QStringList entries = disabledDesktops();
     QStringList namesToCheck = {screenIdOrName};
-    if (Utils::isConnectorName(screenIdOrName)) {
-        const QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName) {
             namesToCheck.append(resolved);
         }
     } else {
-        const QString connector = Utils::screenNameForId(screenIdOrName);
+        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
         if (!connector.isEmpty() && connector != screenIdOrName) {
             namesToCheck.append(connector);
         }
@@ -809,13 +810,13 @@ bool Settings::isActivityDisabled(const QString& screenIdOrName, const QString& 
     }
     const QStringList entries = disabledActivities();
     QStringList namesToCheck = {screenIdOrName};
-    if (Utils::isConnectorName(screenIdOrName)) {
-        const QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName) {
             namesToCheck.append(resolved);
         }
     } else {
-        const QString connector = Utils::screenNameForId(screenIdOrName);
+        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
         if (!connector.isEmpty() && connector != screenIdOrName) {
             namesToCheck.append(connector);
         }
@@ -1626,13 +1627,13 @@ bool Settings::isContextLocked(const QString& screenIdOrName, int virtualDesktop
 {
     const QStringList locked = lockedScreens();
     QStringList namesToCheck = {screenIdOrName};
-    if (Utils::isConnectorName(screenIdOrName)) {
-        const QString resolved = Utils::screenIdForName(screenIdOrName);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenIdOrName)) {
+        const QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenIdOrName);
         if (resolved != screenIdOrName) {
             namesToCheck.append(resolved);
         }
     } else {
-        const QString connector = Utils::screenNameForId(screenIdOrName);
+        const QString connector = Phosphor::Screens::ScreenIdentity::nameForId(screenIdOrName);
         if (!connector.isEmpty() && connector != screenIdOrName) {
             namesToCheck.append(connector);
         }

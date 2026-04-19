@@ -20,8 +20,9 @@ add_library(plasmazones_compositor_common STATIC
     snap_assist_filter.h
     trigger_parser.cpp
     trigger_parser.h
-    screen_id.cpp
-    screen_id.h
+    # screen_id.{h,cpp} moved to libs/phosphor-identity (PhosphorIdentity::ScreenId).
+    # Consumers include <PhosphorIdentity/ScreenId.h> directly — no forwarding shim.
+    #
     # window_id moved to libs/phosphor-identity. Consumers include
     # <PhosphorIdentity/WindowId.h> directly — no forwarding shim.
     #

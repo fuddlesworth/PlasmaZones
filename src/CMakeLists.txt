@@ -57,8 +57,8 @@ set(plasmazones_core_SRCS
     core/geometryutils/overlaps.cpp
     core/geometryutils.h
     core/spatialadjacency.h
-    core/virtualscreenswapper.cpp
-    core/virtualscreenswapper.h
+    # virtualscreenswapper.{h,cpp} lifted to libs/phosphor-screens/Swapper.h —
+    # callers include <PhosphorScreens/Swapper.h> directly.
     core/screenmoderouter.cpp
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
@@ -85,12 +85,10 @@ set(plasmazones_core_SRCS
     # layersurface + shaderregistry/params moved to PhosphorShell
     core/single_instance_service.cpp
     core/single_instance_service.h
-    core/screen_resolver.cpp
-    core/screen_resolver.h
-    core/screenmanager.cpp
-    core/screenmanager/panels.cpp
-    core/screenmanager/virtualscreens.cpp
-    core/screenmanager.h
+    # screen_resolver.{h,cpp} and screenmanager.{h,cpp} + screenmanager/
+    # lifted to libs/phosphor-screens. Daemon consumers take
+    # Phosphor::Screens::ScreenManager* via constructor injection —
+    # no service-locator intermediary.
     core/virtualdesktopmanager.cpp
     core/virtualdesktopmanager.h
     core/activitymanager.cpp
@@ -107,6 +105,8 @@ set(plasmazones_core_SRCS
     config/configdefaults.cpp
     config/configbackends.h
     config/configbackends.cpp
+    config/settingsconfigstore.cpp
+    config/settingsconfigstore.h
     config/perscreenresolver.h
     config/perscreenresolver.cpp
     config/settingsschema.h
@@ -225,6 +225,7 @@ target_link_libraries(plasmazones_core
         PhosphorConfig::PhosphorConfig
         PhosphorIdentity::PhosphorIdentity
         PhosphorLayoutApi::PhosphorLayoutApi
+        PhosphorScreens::PhosphorScreens
         PhosphorShell::PhosphorShell
         PhosphorTiles::PhosphorTiles
         PhosphorZones::PhosphorZones

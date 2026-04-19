@@ -411,7 +411,7 @@ void AutotileHandler::slotWindowFrameGeometryChanged(KWin::EffectWindow* w, cons
         if (!isDraggedWindow) {
             const QString newScreenId = m_effect->getWindowScreenId(w);
             const QString oldScreenId = m_notifiedWindowScreens.value(windowId);
-            if (VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+            if (PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
                 // Virtual screen changed on the same physical monitor — delegate to
                 // the same handler used by outputChanged. The re-entrancy guard
                 // inside handleWindowOutputChanged prevents infinite loops from

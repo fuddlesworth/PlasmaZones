@@ -26,6 +26,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -96,8 +97,8 @@ bool OverlayService::useShaderForScreen(QScreen* screen) const
     }
     // Resolve to virtual screen ID when the physical screen has subdivisions,
     // so shader-type checks use the correct per-virtual-screen layout.
-    const QString physId = Utils::screenIdentifier(screen);
-    auto* mgr = ScreenManager::instance();
+    const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+    auto* mgr = m_screenManager;
     if (mgr && mgr->hasVirtualScreens(physId)) {
         // Check all virtual screens — if any uses a shader, return true.
         // This is used by initializeOverlay which creates per-virtual-screen windows.
@@ -288,7 +289,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
 
     QScreen* screen = nullptr;
     if (!screenId.isEmpty()) {
-        screen = resolveTargetScreen(screenId);
+        screen = resolveTargetScreen(m_screenManager, screenId);
     }
     if (!screen) {
         screen = Utils::findScreenAtPosition(x, y);
@@ -460,7 +461,7 @@ void OverlayService::createShaderPreviewWindow(QScreen* screen, const QString& s
 
     // Unique-per-instance scope to avoid compositor-side rate limiting when the
     // editor rapidly opens/closes the Shader Settings dialog.
-    const QString scopeId = screenId.isEmpty() ? Utils::screenIdentifier(screen) : screenId;
+    const QString scopeId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(screen) : screenId;
     const auto role = PzRoles::ShaderPreview.withScopePrefix(
         QStringLiteral("plasmazones-shader-preview-%1-%2").arg(scopeId).arg(++m_scopeGeneration));
 

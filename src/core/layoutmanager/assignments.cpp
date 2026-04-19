@@ -8,10 +8,11 @@
 #include "../constants.h"
 #include "../logging.h"
 #include "../utils.h"
-#include "../virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include <QFile>
 #include <QJsonDocument>
 #include <optional>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -58,8 +59,8 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
 
     // 4. Connector name fallback: if screenId looks like a connector name (no colons),
     // try resolving to a screen ID and looking up again.
-    if (Utils::isConnectorName(screenId)) {
-        QString resolved = Utils::screenIdForName(screenId);
+    if (Phosphor::Screens::ScreenIdentity::isConnectorName(screenId)) {
+        QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenId);
         if (resolved != screenId) {
             return walkCascade(assignments, resolved, virtualDesktop, activity, std::forward<Visitor>(visitor));
         }
@@ -77,8 +78,8 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
     // not apply this guard, so callers that need mode isolation (e.g. AutotileEngine
     // checking whether a VS is in autotile mode) must treat an inherited Autotile entry
     // as "no explicit VS assignment" and use hasExplicitAssignment() to distinguish.
-    if (VirtualScreenId::isVirtual(screenId)) {
-        const QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
+        const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
         auto result = walkCascade(assignments, physId, virtualDesktop, activity, std::forward<Visitor>(visitor));
         if (result)
             return result;

@@ -23,7 +23,6 @@
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/ZoneDetector.h>
 #include "../core/windowregistry.h"
-#include "../core/screenmanager.h"
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
 #include "../core/constants.h"
@@ -31,7 +30,10 @@
 #include "../core/logging.h"
 #include "../core/screenmoderouter.h"
 #include "../core/utils.h"
-#include "../core/virtualscreenswapper.h"
+#include "../config/configdefaults.h"
+#include "../config/settingsconfigstore.h"
+#include <PhosphorScreens/Swapper.h>
+#include <PhosphorScreens/PlasmaPanelSource.h>
 #include "../core/shaderregistry.h"
 #include "../config/settings.h"
 #include "../config/configmigration.h"
@@ -53,6 +55,7 @@
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include "../snap/SnapEngine.h"
 #include "../snap/snapnavigationadapter.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -73,9 +76,9 @@ struct InstallScreenIdResolver
     InstallScreenIdResolver()
     {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Utils::isConnectorName(name))
+            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
                 return name;
-            return Utils::screenIdForName(name);
+            return Phosphor::Screens::ScreenIdentity::idForName(name);
         });
     }
 };
@@ -87,7 +90,7 @@ void ensureScreenIdResolver()
 } // namespace
 
 Daemon::Daemon(QObject* parent)
-    : QObject((ensureScreenIdResolver(), parent))
+    : QObject(parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
@@ -96,12 +99,34 @@ Daemon::Daemon(QObject* parent)
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
     , m_windowRegistry(std::make_unique<WindowRegistry>(nullptr))
-    , m_overlayService(std::make_unique<OverlayService>(nullptr))
-    , m_screenManager(std::make_unique<ScreenManager>(nullptr))
+    , m_panelSource(std::make_unique<Phosphor::Screens::PlasmaPanelSource>())
+    , m_virtualScreenStore(std::make_unique<SettingsConfigStore>(m_settings.get()))
+    , m_screenManager(std::make_unique<Phosphor::Screens::ScreenManager>(
+          Phosphor::Screens::ScreenManager::Config{
+              /*panelSource=*/m_panelSource.get(),
+              /*configStore=*/m_virtualScreenStore.get(),
+              /*useGeometrySensors=*/true,
+              // Align the lib's cap with the daemon's source-of-truth (Settings
+              // uses ConfigDefaults::maxVirtualScreensPerPhysical() when
+              // validating writes). A lower cap here would silently reject
+              // configs Settings accepted, leaving Settings ↔ Phosphor::Screens::ScreenManager
+              // divergent.
+              /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
+          },
+          nullptr))
+    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
 {
+    // Install the layout screen-id resolver before any Daemon-owned machinery
+    // starts loading layouts. First-call ensures the once-only install runs
+    // exactly once across all Daemon constructions in the process; subsequent
+    // Daemons share the already-installed resolver. Moved out of the
+    // `QObject((ensureScreenIdResolver(), parent))` comma-operator trick
+    // because that idiom reads as an accidental typo.
+    ensureScreenIdResolver();
+
     // Configure geometry update debounce timer
     // This prevents cascading recalculations when multiple geometry changes occur rapidly.
     // Use a longer debounce so KDE panel edit mode exit and other transient
@@ -213,7 +238,8 @@ bool Daemon::init()
     // have correct normalized coordinates for preview rendering (KCM, OSD, selector).
     if (QScreen* primary = Utils::primaryScreen()) {
         for (PhosphorZones::Layout* layout : m_layoutManager->layouts()) {
-            LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+            LayoutComputeService::recalculateSync(
+                layout, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
         }
     }
 
@@ -236,12 +262,12 @@ bool Daemon::init()
             // Recalculate zone geometries asynchronously using primary screen geometry.
             // Active layout is global; recalculating per-screen overwrites each
             // iteration (last-wins bug). The overlay computes per-screen geometry
-            // on the fly via GeometryUtils::getZoneGeometryWithGaps().
+            // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
             QScreen* primary = Utils::primaryScreen();
             if (primary) {
-                QString screenId = Utils::screenIdentifier(primary);
-                m_layoutComputeService->requestRecalculate(layout, screenId,
-                                                           GeometryUtils::effectiveScreenGeometry(layout, primary));
+                QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
+                m_layoutComputeService->requestRecalculate(
+                    layout, screenId, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
             }
         }
         m_zoneDetector->setLayout(layout);
@@ -265,8 +291,9 @@ bool Daemon::init()
                 // Only recalculate for the specific screen
                 QScreen* screen = m_screenManager->screenByName(screenId);
                 if (screen) {
-                    m_layoutComputeService->requestRecalculate(layout, screenId,
-                                                               GeometryUtils::effectiveScreenGeometry(layout, screen));
+                    m_layoutComputeService->requestRecalculate(
+                        layout, screenId,
+                        GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, screen));
                 }
                 // Note: We don't change zone detector or overlay here since
                 // they work with the active layout, not per-screen layouts
@@ -352,7 +379,8 @@ bool Daemon::init()
     // Initialize domain-specific D-Bus adaptors
     // Each adaptor has its own D-Bus interface
     // D-Bus adaptors use raw new; Qt parent-child manages their lifetime.
-    m_layoutAdaptor = new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), this);
+    m_layoutAdaptor =
+        new LayoutAdaptor(m_layoutManager.get(), m_virtualDesktopManager.get(), m_screenManager.get(), this);
     m_layoutAdaptor->setActivityManager(m_activityManager.get());
     m_layoutAdaptor->setSettings(m_settings.get());
     m_layoutAdaptor->setLayoutSource(m_layoutSources.composite.get());
@@ -370,16 +398,17 @@ bool Daemon::init()
     auto* compositorBridge = new CompositorBridgeAdaptor(this);
 
     // Overlay adaptor - overlay visibility and highlighting
-    m_overlayAdaptor =
-        new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
+    m_overlayAdaptor = new OverlayAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
+                                          m_screenManager.get(), m_settings.get(), this);
 
     // PhosphorZones::Zone detection adaptor - zone detection queries
-    m_zoneDetectionAdaptor =
-        new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(), m_settings.get(), this);
+    m_zoneDetectionAdaptor = new ZoneDetectionAdaptor(m_zoneDetector.get(), m_layoutManager.get(),
+                                                      m_screenManager.get(), m_settings.get(), this);
 
     // Window tracking adaptor - window-zone assignments
-    m_windowTrackingAdaptor = new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_settings.get(),
-                                                        m_virtualDesktopManager.get(), this);
+    m_windowTrackingAdaptor =
+        new WindowTrackingAdaptor(m_layoutManager.get(), m_zoneDetector.get(), m_screenManager.get(), m_settings.get(),
+                                  m_virtualDesktopManager.get(), this);
     m_windowTrackingAdaptor->setZoneDetectionAdaptor(m_zoneDetectionAdaptor);
     m_windowTrackingAdaptor->setWindowRegistry(m_windowRegistry.get());
 
@@ -390,16 +419,17 @@ bool Daemon::init()
     connect(&m_reapplyGeometriesTimer, &QTimer::timeout, m_windowTrackingAdaptor,
             &WindowTrackingAdaptor::requestReapplyWindowGeometries);
 
-    m_screenAdaptor = new ScreenAdaptor(this);
-    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source
-    // of truth); the daemon's Settings → ScreenManager observer wiring then
-    // refreshes ScreenManager's cache and fires the downstream signal chain.
-    m_screenAdaptor->setSettings(m_settings.get());
+    // ScreenAdaptor::setVirtualScreenConfig writes to Settings (the source of
+    // truth) via the IConfigStore — the daemon's single SettingsConfigStore
+    // instance, shared with m_screenManager (as its Config::configStore) and
+    // m_virtualScreenSwapper. One store per process, one change-signal
+    // channel, no parallel Settings observer.
+    m_screenAdaptor = new ScreenAdaptor(m_screenManager.get(), m_virtualScreenStore.get(), this);
 
     // Window drag adaptor - handles drag events from KWin script
     // All drag logic (modifiers, zones, snapping) handled here
     m_windowDragAdaptor = new WindowDragAdaptor(m_overlayService.get(), m_zoneDetector.get(), m_layoutManager.get(),
-                                                m_settings.get(), m_windowTrackingAdaptor, this);
+                                                m_screenManager.get(), m_settings.get(), m_windowTrackingAdaptor, this);
 
     // PhosphorZones::Zone selector methods are called directly from WindowDragAdaptor; QDBusAbstractAdaptor
     // signals are for D-Bus, not Qt connections.
@@ -499,12 +529,10 @@ bool Daemon::init()
     m_snapNavigationAdapter = std::make_unique<SnapNavigationAdapter>(m_snapEngine.get());
     m_screenModeRouter->setNavigationAdapters(m_snapNavigationAdapter.get(), m_autotileNavigationAdapter.get());
 
-    // Stateless façade for VS swap/rotate. Held here so navigation handlers
-    // and any future consumer share one instance instead of constructing
-    // throwaway swappers per call. Constructed unconditionally during init
-    // so downstream handlers (handleSwapVirtualScreen / handleRotateVirtualScreens)
-    // can assume the pointer is non-null for the remainder of the daemon's lifetime.
-    m_virtualScreenSwapper = std::make_unique<VirtualScreenSwapper>(m_settings.get());
+    // m_virtualScreenStore is constructed in the initializer list (it's a
+    // Config arg for m_screenManager). The swapper is constructed here
+    // because navigation handlers don't run before init() returns anyway.
+    m_virtualScreenSwapper = std::make_unique<Phosphor::Screens::VirtualScreenSwapper>(m_virtualScreenStore.get());
     Q_ASSERT(m_virtualScreenSwapper);
 
     // Wire autotile persistence through WTA's KConfig layer (same delegate pattern as SnapEngine).
@@ -566,7 +594,7 @@ bool Daemon::init()
     // Create engine D-Bus adaptors — each engine has a dedicated adaptor that
     // connects signals in its constructor (unified pattern for both engines)
     m_snapAdaptor = new SnapAdaptor(m_snapEngine.get(), m_windowTrackingAdaptor, this);
-    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), this);
+    m_autotileAdaptor = new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), this);
 
     // Control adaptor - high-level convenience API for third-party integrations
     new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),

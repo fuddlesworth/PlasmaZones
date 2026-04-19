@@ -1,31 +1,36 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Virtual screen configuration, geometry, and lookup methods.
-// Part of ScreenManager — split from screenmanager.cpp for SRP.
+// Part of ScreenManager — split for SRP.
 
-#include "../screenmanager.h"
-#include "../virtualscreen.h"
-#include "../utils.h"
-#include "../logging.h"
+#include "PhosphorScreens/Manager.h"
+
+#include "PhosphorScreens/ScreenIdentity.h"
+#include "PhosphorScreens/VirtualScreen.h"
+#include "screenslogging.h"
+
+#include <PhosphorIdentity/VirtualScreenId.h>
+
+#include <QGuiApplication>
 #include <QScreen>
 #include <QSet>
+
 #include <algorithm>
 #include <limits>
 
-namespace PlasmaZones {
+namespace Phosphor::Screens {
 
 namespace {
 /// Minimum usable dimension (pixels) for a virtual screen available area.
-/// If panel intersection leaves less than this, fall back to full virtual geometry.
+/// If panel intersection leaves less than this, fall back to full virtual
+/// geometry.
 constexpr int MinUsableScreenDimension = 100;
 
 /// Squared edge distance from a point to a rectangle (0 if inside).
-/// Uses qint64 to avoid overflow when squaring large pixel distances.
-/// Uses exclusive-right semantics (x + width, y + height) to match
-/// VirtualScreenDef::absoluteGeometry() which constructs QRects from
-/// (left, top, width, height). This avoids dist=0 ties at boundary
-/// pixels between adjacent virtual screens.
+/// qint64 to avoid overflow when squaring large pixel distances.
+/// Exclusive-right semantics match VirtualScreenDef::absoluteGeometry()
+/// — avoids dist=0 ties at boundary pixels between adjacent VSs.
 qint64 edgeDistance(const QRect& rect, const QPoint& point)
 {
     const qint64 dx = qMax(
@@ -37,19 +42,19 @@ qint64 edgeDistance(const QRect& rect, const QPoint& point)
     return dx * dx + dy * dy;
 }
 
-/// Exclusive-right containment check: a point at x+width or y+height
-/// belongs to the next virtual screen, not this one. QRect::contains()
-/// is inclusive-right and would create boundary ambiguity.
+/// Exclusive-right containment: a point at x+width or y+height belongs
+/// to the next virtual screen, not this one.
 bool containsExclusive(const QRect& r, const QPoint& p)
 {
     return p.x() >= r.x() && p.x() < r.x() + r.width() && p.y() >= r.y() && p.y() < r.y() + r.height();
 }
-} // anonymous namespace
+} // namespace
 
 bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, const VirtualScreenConfig& config)
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (physicalScreenId.isEmpty()) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: empty physicalScreenId";
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: empty physicalScreenId";
         return false;
     }
 
@@ -65,29 +70,22 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
     }
 
     QString error;
-    // ScreenManager doesn't enforce a max-screens cap here — that's a policy
-    // decision owned by Settings (the source of truth) and ScreenAdaptor (the
-    // D-Bus boundary). ScreenManager just enforces structural/geometric
-    // invariants so its cache can't hold internally inconsistent state.
-    if (!VirtualScreenConfig::isValid(config, physicalScreenId, /*maxScreensPerPhysical=*/0, &error)) {
-        qCWarning(lcScreen) << "setVirtualScreenConfig: rejected invalid config —" << error;
+    if (!VirtualScreenConfig::isValid(config, physicalScreenId, m_cfg.maxVirtualScreensPerPhysical, &error)) {
+        qCWarning(lcPhosphorScreens) << "setVirtualScreenConfig: rejected invalid config —" << error;
         return false;
     }
 
     const VirtualScreenConfig oldConfig = m_virtualConfigs.value(physicalScreenId);
-    if (oldConfig == config) {
+    // approxEqual (not operator==) so a JSON-roundtripped config that
+    // picked up tiny float deltas on load compares equal to the in-memory
+    // source we wrote. Exact operator== here would re-emit the change
+    // chain every reload. This is a change-detection skip-gate; the
+    // tolerance is never observed by downstream state.
+    if (oldConfig.approxEqual(config)) {
         return true;
     }
 
-    // Detect "regions-only" changes where the VS ID set is unchanged — same
-    // ids, same count, same indices, same display names. This lets downstream
-    // handlers take a lightweight path that only updates geometry without
-    // re-running mode resolution, orphan cleanup, window migration, etc.
-    //
-    // The check is structured as "every non-region field on every def is
-    // identical (matched by id) — only the rect differs". We hash old defs
-    // by id so the match is order-independent, since callers may reorder
-    // the screens vector when committing region edits.
+    // Detect "regions-only" changes — same VS IDs, just different rects.
     bool regionsOnly = false;
     if (oldConfig.screens.size() == config.screens.size() && oldConfig.screens.size() >= 2) {
         regionsOnly = true;
@@ -99,14 +97,15 @@ bool ScreenManager::setVirtualScreenConfig(const QString& physicalScreenId, cons
         for (const auto& newDef : config.screens) {
             auto it = oldById.constFind(newDef.id);
             if (it == oldById.constEnd()) {
-                regionsOnly = false; // VS ID set changed.
+                regionsOnly = false;
                 break;
             }
             const VirtualScreenDef* oldDef = it.value();
-            // displayName / index / physicalScreenId changes are topology-
-            // adjacent: the OSD label changes, mode resolution may need to
-            // re-run on rename, and downstream listeners that hash on these
-            // fields must be told. Treat them as full changes.
+            // displayName deliberately participates in topology detection:
+            // OSD labels and any downstream consumer that caches by
+            // display name need the full virtualScreensChanged fan-out,
+            // not the cheap regions-only one (see
+            // testSignal_displayNameOnly_firesVirtualScreensChanged).
             if (oldDef->displayName != newDef.displayName || oldDef->index != newDef.index
                 || oldDef->physicalScreenId != newDef.physicalScreenId) {
                 regionsOnly = false;
@@ -133,14 +132,6 @@ VirtualScreenConfig ScreenManager::virtualScreenConfig(const QString& physicalSc
 
 void ScreenManager::refreshVirtualConfigs(const QHash<QString, VirtualScreenConfig>& configs)
 {
-    // Compute the delta in two ordered passes so the downstream signal fan-out
-    // is deterministic across runs:
-    //   1. Removals first (entries in cache but absent from `configs`),
-    //   2. Then additions/changes (entries in `configs`).
-    // Both passes iterate sorted physical IDs so observers see a stable order
-    // when multiple physical screens change in one refresh. Without sorting,
-    // QHash iteration order is unspecified and downstream cross-screen state
-    // (window migrations, autotile updates) can race subtly between runs.
     QStringList toRemove;
     QStringList toApply;
     for (auto it = m_virtualConfigs.constBegin(); it != m_virtualConfigs.constEnd(); ++it) {
@@ -154,37 +145,63 @@ void ScreenManager::refreshVirtualConfigs(const QHash<QString, VirtualScreenConf
     std::sort(toRemove.begin(), toRemove.end());
     std::sort(toApply.begin(), toApply.end());
 
-    // Pass 1: tear down removed entries. setVirtualScreenConfig with an empty
-    // config short-circuits if there's nothing to remove, so this is idempotent.
     for (const QString& physId : std::as_const(toRemove)) {
         VirtualScreenConfig empty;
         empty.physicalScreenId = physId;
-        setVirtualScreenConfig(physId, empty);
+        if (!setVirtualScreenConfig(physId, empty)) {
+            // Removal should never fail (setVirtualScreenConfig's empty-config
+            // path is unconditional), but log if the contract ever shifts so
+            // silent manager/store divergence doesn't mask it.
+            qCWarning(lcPhosphorScreens) << "refreshVirtualConfigs: removal rejected for" << physId;
+        }
     }
-
-    // Pass 2: apply additions and updates. setVirtualScreenConfig early-returns
-    // when the new config is bit-identical to the current one, so unchanged
-    // entries are no-ops and don't fire the virtualScreensChanged signal.
     for (const QString& physId : std::as_const(toApply)) {
-        setVirtualScreenConfig(physId, configs.value(physId));
+        if (!setVirtualScreenConfig(physId, configs.value(physId))) {
+            // Store accepted this payload but the manager (which shares the
+            // same isValid() predicate by contract) rejected it. That's a
+            // real divergence — warn loudly so it's debuggable instead of
+            // looking like a phantom "store says VSs exist but manager
+            // doesn't report them" bug at the daemon layer.
+            qCWarning(lcPhosphorScreens)
+                << "refreshVirtualConfigs: manager rejected config for" << physId
+                << "— manager cache now diverges from the IConfigStore (check admission rules / cap parity)";
+        }
     }
 }
 
 QStringList ScreenManager::effectiveScreenIds() const
 {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
     if (!m_effectiveScreenIdsDirty) {
         return m_cachedEffectiveScreenIds;
     }
 
     QStringList result;
-
     for (auto* screen : m_trackedScreens) {
-        QString physId = Utils::screenIdentifier(screen);
-        // Skip configs whose physical screen can no longer be resolved — they are
-        // stale entries left over from a screen removal that has not yet been pruned.
-        if (!Utils::findScreenByIdOrName(physId)) {
+        QString physId = ScreenIdentity::identifierFor(screen);
+        if (!ScreenIdentity::findByIdOrName(physId)) {
+            // Identifier round-trip fails — QScreen* exists in our tracked
+            // list but its identifier doesn't resolve back to any currently-
+            // connected screen. Either a hotplug race (screen removal in
+            // flight — transient, bounded by the screenRemoved path clearing
+            // the caches) OR persisted-ID drift that will keep failing until
+            // the store is rewritten. Warn-once per physId per session so
+            // the drift case is visible without spamming the transient one.
+            if (!m_warnedEffectiveIdMisses.contains(physId)) {
+                m_warnedEffectiveIdMisses.insert(physId);
+                qCWarning(lcPhosphorScreens)
+                    << "effectiveScreenIds: skipping tracked screen" << (screen ? screen->name() : QString())
+                    << "— identifier" << physId
+                    << "does not resolve back to a live QScreen (persisted-ID drift suspected)";
+            } else {
+                qCDebug(lcPhosphorScreens) << "effectiveScreenIds: still-unresolved identifier" << physId;
+            }
             continue;
         }
+        // Screen resolved — clear any stale warn-once entry so a transient
+        // hotplug race that recovers doesn't permanently suppress a later,
+        // legitimately-new miss.
+        m_warnedEffectiveIdMisses.remove(physId);
         auto it = m_virtualConfigs.constFind(physId);
         if (it != m_virtualConfigs.constEnd() && it->hasSubdivisions()) {
             for (const auto& vs : it->screens) {
@@ -210,78 +227,61 @@ QStringList ScreenManager::virtualScreenIdsFor(const QString& physicalScreenId) 
         }
         return ids;
     }
-
     return {physicalScreenId};
 }
 
 QRect ScreenManager::screenGeometry(const QString& screenId) const
 {
-    if (VirtualScreenId::isVirtual(screenId)) {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         if (!m_virtualGeometryCache.contains(screenId)) {
-            QString physId = VirtualScreenId::extractPhysicalId(screenId);
+            QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
             rebuildVirtualGeometryCache(physId);
         }
         QRect cached = m_virtualGeometryCache.value(screenId);
         if (cached.isValid()) {
             return cached;
         }
-        // Virtual screen ID is not in the cache — the VS config was removed or
-        // never existed. Return invalid QRect rather than falling through to
-        // physical screen lookup, which would strip "/vs:N" and return the full
-        // physical geometry. Callers do not expect a virtual screen ID to
-        // silently resolve to a different (larger) geometry.
-        qCWarning(lcScreen) << "screenGeometry: virtual screen" << screenId
-                            << "not found in cache, returning invalid geometry";
+        qCWarning(lcPhosphorScreens) << "screenGeometry: virtual screen" << screenId
+                                     << "not found in cache, returning invalid geometry";
         return QRect();
     }
-
-    // Physical screen — try tracked screens first, then fallback
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = ScreenIdentity::findByIdOrName(screenId);
     return screen ? screen->geometry() : QRect();
 }
 
 QRect ScreenManager::screenAvailableGeometry(const QString& screenId) const
 {
-    if (VirtualScreenId::isVirtual(screenId)) {
+    PS_SCREEN_MANAGER_ASSERT_GUI_THREAD();
+    if (PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         QRect vsGeom = screenGeometry(screenId);
         if (!vsGeom.isValid()) {
             return QRect();
         }
-
-        // Get the physical screen's available geometry and intersect.
-        // NOTE: This duplicates the physical screen lookup already done inside
-        // screenGeometry(). Acceptable cost since QScreen* lookup is cheap
-        // (linear scan of a small list) and extracting it from screenGeometry
-        // would require an invasive signature change or internal overload.
-        QString physId = VirtualScreenId::extractPhysicalId(screenId);
-        QScreen* screen = Utils::findScreenByIdOrName(physId);
+        QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+        QScreen* screen = ScreenIdentity::findByIdOrName(physId);
         if (!screen) {
             return vsGeom;
         }
-
         QRect physAvail = actualAvailableGeometry(screen);
         QRect result = vsGeom.intersected(physAvail);
-        // If panel consumes most of the virtual screen, fall back to full virtual geometry
-        // to avoid zero/unusable available areas
         if (!result.isValid() || result.width() < MinUsableScreenDimension
             || result.height() < MinUsableScreenDimension) {
-            qCWarning(lcScreen) << "screenAvailableGeometry: panel leaves insufficient space in virtual screen"
-                                << screenId << "- intersection:" << result << "- using full virtual geometry";
+            qCWarning(lcPhosphorScreens) << "screenAvailableGeometry: panel leaves insufficient space in virtual screen"
+                                         << screenId << "- intersection:" << result << "- using full virtual geometry";
             return vsGeom;
         }
         return result;
     }
 
-    // Physical screen
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = ScreenIdentity::findByIdOrName(screenId);
     return screen ? actualAvailableGeometry(screen) : QRect();
 }
 
 QScreen* ScreenManager::physicalQScreenFor(const QString& screenId) const
 {
-    QString physId = VirtualScreenId::extractPhysicalId(screenId);
-
-    return Utils::findScreenByIdOrName(physId);
+    QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
+    return ScreenIdentity::findByIdOrName(physId);
 }
 
 bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
@@ -290,56 +290,27 @@ bool ScreenManager::hasVirtualScreens(const QString& physicalScreenId) const
     return it != m_virtualConfigs.constEnd() && it->hasSubdivisions();
 }
 
-/// Convenience alias for virtualScreenIdsFor().
-/// Both exist because effectiveIdsForPhysical reads more naturally at call
-/// sites that treat virtual and physical screens interchangeably, while
-/// virtualScreenIdsFor is clearer in virtual-screen-specific code paths.
-QStringList ScreenManager::effectiveIdsForPhysical(const QString& physicalScreenId) const
-{
-    return virtualScreenIdsFor(physicalScreenId);
-}
-
-QStringList ScreenManager::effectiveScreenIdsWithFallback()
-{
-    auto* mgr = instance();
-    if (mgr) {
-        QStringList ids = mgr->effectiveScreenIds();
-        if (!ids.isEmpty()) {
-            return ids;
-        }
-    }
-    QStringList result;
-    for (const auto* screen : Utils::allScreens()) {
-        result.append(Utils::screenIdentifier(screen));
-    }
-    return result;
-}
-
 VirtualScreenDef::PhysicalEdges ScreenManager::physicalEdgesFor(const QString& screenId) const
 {
-    // Physical screens: all edges are at the physical boundary
-    if (!VirtualScreenId::isVirtual(screenId)) {
+    if (!PhosphorIdentity::VirtualScreenId::isVirtual(screenId)) {
         return {true, true, true, true};
     }
-
-    QString physId = VirtualScreenId::extractPhysicalId(screenId);
+    QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenId);
     auto it = m_virtualConfigs.constFind(physId);
     if (it == m_virtualConfigs.constEnd()) {
         return {true, true, true, true};
     }
-
     for (const auto& vs : it->screens) {
         if (vs.id == screenId) {
             return vs.physicalEdges();
         }
     }
-
     return {true, true, true, true};
 }
 
 QString ScreenManager::virtualScreenAt(const QPoint& globalPos, const QString& physicalScreenId) const
 {
-    QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
+    QScreen* screen = ScreenIdentity::findByIdOrName(physicalScreenId);
     return virtualScreenAtWithScreen(globalPos, physicalScreenId, screen);
 }
 
@@ -350,7 +321,6 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
     if (it == m_virtualConfigs.constEnd() || !screen) {
         return {};
     }
-
     QRect physGeom = screen->geometry();
     for (const auto& vs : it->screens) {
         QRect absGeom = vs.absoluteGeometry(physGeom);
@@ -358,8 +328,6 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
             return vs.id;
         }
     }
-
-    // Point falls in gap between virtual screens — find nearest by edge distance
     QString nearestId;
     qint64 minDist = std::numeric_limits<qint64>::max();
     for (const auto& vs : it->screens) {
@@ -370,30 +338,30 @@ QString ScreenManager::virtualScreenAtWithScreen(const QPoint& globalPos, const 
             nearestId = vs.id;
         }
     }
-
     return nearestId;
 }
 
 QString ScreenManager::effectiveScreenAt(const QPoint& globalPos) const
 {
     for (auto* screen : m_trackedScreens) {
-        // Use inclusive containment for physical screens (matches Qt's QRect semantics).
-        // Virtual screen sub-containment uses containsExclusive to avoid boundary ambiguity.
-        if (!screen->geometry().contains(globalPos)) {
+        // Exclusive-right containment (shared helper) to match VS lookup
+        // semantics — a point on the boundary between two adjacent physical
+        // screens belongs to the screen whose origin is that pixel, never
+        // both. QRect::contains() is inclusive on all four edges, which
+        // would pick the first screen in iteration order and hide layout
+        // bugs where two screens share an edge.
+        if (!containsExclusive(screen->geometry(), globalPos)) {
             continue;
         }
-
-        QString physId = Utils::screenIdentifier(screen);
+        QString physId = ScreenIdentity::identifierFor(screen);
         if (hasVirtualScreens(physId)) {
             QString vsId = virtualScreenAtWithScreen(globalPos, physId, screen);
             if (!vsId.isEmpty()) {
                 return vsId;
             }
         }
-
         return physId;
     }
-
     return {};
 }
 
@@ -403,13 +371,9 @@ void ScreenManager::invalidateVirtualGeometryCache(const QString& physicalScreen
         m_virtualGeometryCache.clear();
         return;
     }
-
-    // Remove all cached entries belonging to this physical screen.
-    // Use extractPhysicalId() for exact matching instead of prefix matching,
-    // which would false-match if one physical screen ID is a prefix of another.
     auto it = m_virtualGeometryCache.begin();
     while (it != m_virtualGeometryCache.end()) {
-        if (VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId) {
+        if (PhosphorIdentity::VirtualScreenId::extractPhysicalId(it.key()) == physicalScreenId) {
             it = m_virtualGeometryCache.erase(it);
         } else {
             ++it;
@@ -423,21 +387,15 @@ void ScreenManager::rebuildVirtualGeometryCache(const QString& physicalScreenId)
     if (it == m_virtualConfigs.constEnd()) {
         return;
     }
-
-    QScreen* screen = Utils::findScreenByIdOrName(physicalScreenId);
+    QScreen* screen = ScreenIdentity::findByIdOrName(physicalScreenId);
     if (!screen) {
         return;
     }
-
-    // Clear stale entries for this physical screen before inserting new ones.
-    // Without this, renamed or removed virtual screen defs would leave ghost
-    // entries in the cache after a config change.
     invalidateVirtualGeometryCache(physicalScreenId);
-
     QRect physGeom = screen->geometry();
     for (const auto& vs : it->screens) {
         m_virtualGeometryCache.insert(vs.id, vs.absoluteGeometry(physGeom));
     }
 }
 
-} // namespace PlasmaZones
+} // namespace Phosphor::Screens

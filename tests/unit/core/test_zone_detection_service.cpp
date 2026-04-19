@@ -103,8 +103,8 @@ private Q_SLOTS:
         QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(
-            new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
+        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
+            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);
@@ -135,8 +135,8 @@ private Q_SLOTS:
         QScopedPointer<LayoutManager> layoutManager(new LayoutManager(nullptr));
         QScopedPointer<StubSettings> settings(new StubSettings(nullptr));
         QScopedPointer<StubZoneDetectorSvc> detector(new StubZoneDetectorSvc(nullptr));
-        QScopedPointer<WindowTrackingService> service(
-            new WindowTrackingService(layoutManager.data(), detector.data(), settings.data(), nullptr, nullptr));
+        QScopedPointer<WindowTrackingService> service(new WindowTrackingService(
+            layoutManager.data(), detector.data(), nullptr, settings.data(), nullptr, nullptr));
 
         auto* layout = new PhosphorZones::Layout(QStringLiteral("Test"), layoutManager.data());
         auto* z1 = new PhosphorZones::Zone(layout);

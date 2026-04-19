@@ -15,7 +15,13 @@
 #include "shortcutmanager.h"
 #include "../core/layoutsourcefactory.h"
 #include "../core/types.h"
+#include <PhosphorScreens/Manager.h>
+#include <PhosphorScreens/Swapper.h>
 #include "../autotile/AutotileEngine.h"
+
+namespace Phosphor::Screens {
+class PlasmaPanelSource;
+}
 
 #include <PhosphorConfig/IBackend.h>
 
@@ -31,7 +37,6 @@ class LayoutManager;
 class LayoutComputeService;
 class Settings;
 class OverlayService;
-class ScreenManager;
 class VirtualDesktopManager;
 class ActivityManager;
 class ShortcutManager;
@@ -50,8 +55,8 @@ class AutotileEngine;
 class IEngineLifecycle;
 class AutotileNavigationAdapter;
 class ScreenModeRouter;
+class SettingsConfigStore;
 class SnapNavigationAdapter;
-class VirtualScreenSwapper;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
@@ -117,7 +122,7 @@ public:
     {
         return m_overlayService.get();
     }
-    ScreenManager* screenManager() const
+    Phosphor::Screens::ScreenManager* screenManager() const
     {
         return m_screenManager.get();
     }
@@ -304,9 +309,9 @@ private:
     void updateAutotileScreens();
 
     /**
-     * @brief Respond to a ScreenManager VS cache change for a physical screen
+     * @brief Respond to a Phosphor::Screens::ScreenManager VS cache change for a physical screen
      *
-     * Wired to ScreenManager::virtualScreensChanged. Performs the post-change
+     * Wired to Phosphor::Screens::ScreenManager::virtualScreensChanged. Performs the post-change
      * fan-out: clears stale resnap buffer, migrates window assignments to the
      * new VS IDs (when subdivisions exist), prunes stale autotile orders,
      * refreshes the autotile screen set, recalculates affected zone
@@ -367,8 +372,19 @@ private:
     // Populated by the kwin-effect bridge. Consumers query appIdFor() etc.
     // instead of parsing composite windowId strings.
     std::unique_ptr<WindowRegistry> m_windowRegistry;
+    /// Plasma D-Bus panel-offset source. Declared before m_screenManager
+    /// because the manager holds a non-owning IPanelSource* into it.
+    std::unique_ptr<Phosphor::Screens::PlasmaPanelSource> m_panelSource;
+    /// Settings-backed IConfigStore for VS topology. Shared by
+    /// m_screenManager (Config::configStore) and m_virtualScreenSwapper
+    /// (constructor arg). Declared before both so destruction order
+    /// runs swapper → screen-manager → store.
+    std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
+    std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    /// OverlayService takes ScreenManager* via constructor injection — must
+    /// be declared AFTER m_screenManager so the initializer-list construction
+    /// order matches.
     std::unique_ptr<OverlayService> m_overlayService;
-    std::unique_ptr<ScreenManager> m_screenManager;
     std::unique_ptr<VirtualDesktopManager> m_virtualDesktopManager;
     std::unique_ptr<ActivityManager> m_activityManager;
     std::unique_ptr<ShortcutManager> m_shortcutManager;
@@ -410,10 +426,10 @@ private:
     /// and AutotileEngine owns the autotile ones.
     std::unique_ptr<AutotileNavigationAdapter> m_autotileNavigationAdapter;
     std::unique_ptr<SnapNavigationAdapter> m_snapNavigationAdapter;
-    /// Stateless façade over m_settings for VS swap/rotate. Held as a
-    /// member rather than reconstructed per-call so navigation handlers
-    /// don't need to know about its dependencies.
-    std::unique_ptr<VirtualScreenSwapper> m_virtualScreenSwapper;
+    /// Stateless façade over m_virtualScreenStore for VS swap/rotate.
+    /// Held as a member rather than reconstructed per-call so navigation
+    /// handlers don't need to know about its dependencies.
+    std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
 

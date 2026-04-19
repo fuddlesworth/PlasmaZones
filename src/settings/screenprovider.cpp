@@ -10,7 +10,8 @@
 #include "../../src/config/settings.h"
 #include "../../src/core/constants.h"
 #include "../../src/core/utils.h"
-#include "../../src/core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -36,11 +37,12 @@ QList<ScreenInfo> fetchScreens()
             ScreenInfo info;
             info.name = screenName;
             // Compare physical parent for virtual screens (primary is always a physical ID)
-            QString physName = VirtualScreenId::extractPhysicalId(screenName);
+            QString physName = PhosphorIdentity::VirtualScreenId::extractPhysicalId(screenName);
             // For virtual screens, only the first child (vs:0) is considered primary
             // to avoid showing multiple "Primary" badges in the monitor selector.
-            if (VirtualScreenId::isVirtual(screenName)) {
-                info.isPrimary = (physName == primaryScreenName && VirtualScreenId::extractIndex(screenName) == 0);
+            if (PhosphorIdentity::VirtualScreenId::isVirtual(screenName)) {
+                info.isPrimary =
+                    (physName == primaryScreenName && PhosphorIdentity::VirtualScreenId::extractIndex(screenName) == 0);
             } else {
                 info.isPrimary = (physName == primaryScreenName);
             }
@@ -71,7 +73,7 @@ QList<ScreenInfo> fetchScreens()
                         info.connectorName = jsonObj[::PhosphorZones::ZoneJsonKeys::Name].toString();
                     if (jsonObj.value(JsonKeys::IsVirtualScreen).toBool()) {
                         info.isVirtualScreen = true;
-                        info.virtualIndex = VirtualScreenId::extractIndex(screenName);
+                        info.virtualIndex = PhosphorIdentity::VirtualScreenId::extractIndex(screenName);
                         info.virtualDisplayName = jsonObj.value(JsonKeys::VirtualDisplayName).toString();
                     }
                 } else {
@@ -97,7 +99,7 @@ QList<ScreenInfo> fetchScreens()
             info.width = screen->geometry().width();
             info.height = screen->geometry().height();
             info.connectorName = screen->name();
-            info.screenId = Utils::screenIdentifier(screen);
+            info.screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
             result.append(info);
         }
     }
@@ -179,7 +181,7 @@ void setMonitorDisabledFor(Settings* settings, const QString& screenName, bool d
     if (!settings || screenName.isEmpty())
         return;
 
-    QString id = Utils::screenIdForName(screenName);
+    QString id = Phosphor::Screens::ScreenIdentity::idForName(screenName);
     QStringList list = settings->disabledMonitors();
 
     if (disabled) {

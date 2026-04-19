@@ -9,7 +9,7 @@
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../../core/geometryutils.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include "../../core/zoneselectorlayout.h"
 #include "../config/configdefaults.h"
@@ -22,16 +22,16 @@ namespace PlasmaZones {
 
 namespace {
 
-void updateZoneSelectorComputedProperties(QQuickWindow* window, QScreen* screen, const QString& virtualScreenId,
-                                          const ZoneSelectorConfig& config, ISettings* settings,
-                                          const ZoneSelectorLayout& layout)
+void updateZoneSelectorComputedProperties(Phosphor::Screens::ScreenManager* mgr, QQuickWindow* window, QScreen* screen,
+                                          const QString& virtualScreenId, const ZoneSelectorConfig& config,
+                                          ISettings* settings, const ZoneSelectorLayout& layout)
 {
     if (!window || !screen) {
         return;
     }
 
     // Use virtual screen geometry if available, falling back to physical
-    const QRect screenGeom = resolveScreenGeometry(virtualScreenId);
+    const QRect screenGeom = resolveScreenGeometry(mgr, virtualScreenId);
     const int screenWidth = screenGeom.width();
     const int indicatorWidth = layout.indicatorWidth;
 
@@ -127,7 +127,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     }
 
     // Update screen properties (in case screen geometry changed)
-    const QRect screenGeom = resolveScreenGeometry(screenId);
+    const QRect screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     qreal aspectRatio =
         (screenGeom.height() > 0) ? static_cast<qreal>(screenGeom.width()) / screenGeom.height() : (16.0 / 9.0);
     aspectRatio = qBound(0.5, aspectRatio, 4.0);
@@ -193,7 +193,7 @@ void OverlayService::updateZoneSelectorWindow(const QString& screenId)
     applyZoneSelectorLayout(window, layout);
 
     // Update computed properties that depend on layout and settings
-    updateZoneSelectorComputedProperties(window, screen, screenId, config, m_settings, layout);
+    updateZoneSelectorComputedProperties(m_screenManager, window, screen, screenId, config, m_settings, layout);
 
     // Positioning is entirely QML-internal: ZoneSelectorWindow.qml's
     // selectorPosition state anchors the inner container to the requested

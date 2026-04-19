@@ -30,14 +30,15 @@
 #include <PhosphorZones/Layout.h>
 #include "../../core/layoutmanager.h"
 #include "../../core/logging.h"
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include "../../core/virtualdesktopmanager.h"
-#include "../../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../../core/windowtrackingservice.h"
 #include "../../dbus/snapnavigationtargets.h"
 #include "../../dbus/windowtrackingadaptor.h"
-#include "shared/virtualscreenid.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -63,16 +64,16 @@ QString resolveNavScreen(const WindowTrackingAdaptor* wta, const QString& window
         if (!zoneId.isEmpty()) {
             const QString storedScreen = service->screenAssignments().value(windowId);
             if (!storedScreen.isEmpty()) {
-                if (VirtualScreenId::isVirtual(storedScreen)) {
-                    const QString physId = VirtualScreenId::extractPhysicalId(storedScreen);
-                    QScreen* physScreen = Utils::findScreenByIdOrName(physId);
+                if (PhosphorIdentity::VirtualScreenId::isVirtual(storedScreen)) {
+                    const QString physId = PhosphorIdentity::VirtualScreenId::extractPhysicalId(storedScreen);
+                    QScreen* physScreen = Phosphor::Screens::ScreenIdentity::findByIdOrName(physId);
                     if (physScreen) {
-                        auto* mgr = ScreenManager::instance();
+                        auto* mgr = service ? service->screenManager() : nullptr;
                         if (mgr && mgr->effectiveScreenIds().contains(storedScreen)) {
                             return storedScreen;
                         }
                     }
-                } else if (Utils::findScreenByIdOrName(storedScreen)) {
+                } else if (Phosphor::Screens::ScreenIdentity::findByIdOrName(storedScreen)) {
                     return storedScreen;
                 }
             }

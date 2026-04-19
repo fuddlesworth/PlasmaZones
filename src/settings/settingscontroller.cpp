@@ -33,7 +33,7 @@ static void sortMergedLayoutList(QVariantList& list)
 #include "../core/layoutworker/layoutcomputeservice.h"
 #include "../core/logging.h"
 #include "../core/utils.h"
-#include "../core/virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "dbusutils.h"
 
 #include <PhosphorZones/Layout.h>
@@ -74,6 +74,7 @@ static void sortMergedLayoutList(QVariantList& list)
 
 #include <algorithm>
 #include <memory>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -97,17 +98,18 @@ QString findUniqueAlgorithmPath(const QString& dir, const QString& baseName)
     }
     return QString();
 }
-/// Convert a QVariantMap (from QML virtual screen editor) to a VirtualScreenDef.
+/// Convert a QVariantMap (from QML virtual screen editor) to a Phosphor::Screens::VirtualScreenDef.
 /// Used by both the save path (staging → KConfig) and the D-Bus apply path.
-VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map, const QString& physicalScreenId, int index)
+Phosphor::Screens::VirtualScreenDef variantMapToVirtualScreenDef(const QVariantMap& map,
+                                                                 const QString& physicalScreenId, int index)
 {
-    VirtualScreenDef def;
+    Phosphor::Screens::VirtualScreenDef def;
     def.physicalScreenId = physicalScreenId;
     def.index = index;
     def.displayName = map.value(QStringLiteral("displayName")).toString();
     def.region = QRectF(map.value(QStringLiteral("x")).toDouble(), map.value(QStringLiteral("y")).toDouble(),
                         map.value(QStringLiteral("width")).toDouble(), map.value(QStringLiteral("height")).toDouble());
-    def.id = VirtualScreenId::make(physicalScreenId, index);
+    def.id = PhosphorIdentity::VirtualScreenId::make(physicalScreenId, index);
     return def;
 }
 } // anonymous namespace
@@ -128,15 +130,15 @@ SettingsController::~SettingsController()
 namespace {
 // Install the library-level screen-id resolver once per process so
 // Layout::fromJson() normalises legacy connector names ("DP-2") to
-// EDID-based IDs ("LG:Model:Serial") during load. Uses Utils::screenIdForName
+// EDID-based IDs ("LG:Model:Serial") during load. Uses Phosphor::Screens::ScreenIdentity::idForName
 // which walks QGuiApplication::screens().
 void ensureScreenIdResolver()
 {
     static const bool installed = [] {
         PhosphorZones::Layout::setScreenIdResolver([](const QString& name) -> QString {
-            if (name.isEmpty() || !Utils::isConnectorName(name))
+            if (name.isEmpty() || !Phosphor::Screens::ScreenIdentity::isConnectorName(name))
                 return name;
-            return Utils::screenIdForName(name);
+            return Phosphor::Screens::ScreenIdentity::idForName(name);
         });
         return true;
     }();
@@ -543,11 +545,12 @@ void SettingsController::save()
     // so they are written to KConfig on disk, then flush to daemon via D-Bus.
     if (!m_stagedVirtualScreenConfigs.isEmpty()) {
         for (auto it = m_stagedVirtualScreenConfigs.constBegin(); it != m_stagedVirtualScreenConfigs.constEnd(); ++it) {
-            VirtualScreenConfig vsConfig;
+            Phosphor::Screens::VirtualScreenConfig vsConfig;
             vsConfig.physicalScreenId = it.key();
             if (!it.value().isEmpty()) {
                 for (int i = 0; i < it.value().size(); ++i) {
-                    VirtualScreenDef def = variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
+                    Phosphor::Screens::VirtualScreenDef def =
+                        variantMapToVirtualScreenDef(it.value()[i].toMap(), it.key(), i);
                     if (!def.isValid()) {
                         qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << it.key() << "index" << i
                                             << "region:" << def.region;
@@ -831,7 +834,10 @@ void SettingsController::recalcLocalLayouts()
         if (!layout) {
             continue;
         }
-        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(layout, primary));
+        // Settings app is a separate process without a daemon ScreenManager — pass
+        // nullptr and accept the Qt-availableGeometry fallback (this preview code
+        // path doesn't need VS-aware sub-regions).
+        LayoutComputeService::recalculateSync(layout, GeometryUtils::effectiveScreenGeometry(nullptr, layout, primary));
     }
 }
 
@@ -928,7 +934,7 @@ void SettingsController::duplicateLayout(const QString& layoutId)
 QVariantMap SettingsController::physicalScreenResolution(const QString& screenId) const
 {
     QVariantMap result;
-    QScreen* screen = Utils::findScreenByIdOrName(screenId);
+    QScreen* screen = Phosphor::Screens::ScreenIdentity::findByIdOrName(screenId);
     if (screen) {
         result[QStringLiteral("width")] = screen->geometry().width();
         result[QStringLiteral("height")] = screen->geometry().height();
@@ -1047,7 +1053,7 @@ QString SettingsController::assignmentCacheKey(const QString& screen, int deskto
 {
     // Resolve connector names to EDID-based screen IDs so cache keys
     // match regardless of whether the caller passes "DP-3" or the full ID
-    QString resolved = Utils::screenIdForName(screen);
+    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screen);
     return resolved + QChar(0x1F) + QString::number(desktop) + QChar(0x1F) + activity;
 }
 
@@ -1058,7 +1064,7 @@ SettingsController::StagedAssignment& SettingsController::stagedEntry(const QStr
     auto it = m_stagedAssignments.find(key);
     if (it == m_stagedAssignments.end()) {
         StagedAssignment entry;
-        entry.screenId = Utils::screenIdForName(screen);
+        entry.screenId = Phosphor::Screens::ScreenIdentity::idForName(screen);
         entry.virtualDesktop = desktop;
         entry.activityId = activity;
         it = m_stagedAssignments.insert(key, entry);
@@ -1633,7 +1639,7 @@ static QString lockKey(const QString& screenName, int mode)
 {
     // Resolve connector names (e.g., "DP-3") to EDID-based screen IDs
     // to match the daemon's lock key format
-    QString resolved = Utils::screenIdForName(screenName);
+    QString resolved = Phosphor::Screens::ScreenIdentity::idForName(screenName);
     return QString::number(mode) + QStringLiteral(":") + resolved;
 }
 
@@ -3494,7 +3500,7 @@ void SettingsController::applyVirtualScreenConfig(const QString& physicalScreenI
 
     QJsonArray screensArr;
     for (int i = 0; i < screens.size(); ++i) {
-        VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
+        Phosphor::Screens::VirtualScreenDef def = variantMapToVirtualScreenDef(screens[i].toMap(), physicalScreenId, i);
         if (!def.isValid()) {
             qCWarning(lcConfig) << "Skipping invalid virtual screen def for" << physicalScreenId << "index" << i
                                 << "region:" << def.region;

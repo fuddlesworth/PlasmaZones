@@ -10,14 +10,15 @@
 #include <PhosphorZones/Zone.h>
 #include "../layoutmanager.h"
 #include "../virtualdesktopmanager.h"
-#include "../virtualscreen.h"
+#include <PhosphorScreens/VirtualScreen.h>
 #include "../utils.h"
-#include "../screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../logging.h"
 #include <QGuiApplication>
 #include <QScreen>
 #include <QSet>
 #include <QUuid>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -55,9 +56,10 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
         // Determine which screen to resolve the zone on
         QString effectiveScreen = match.targetScreen.isEmpty() ? resolvedScreen : match.targetScreen;
 
-        // Validate that the target screen exists. Use ScreenManager::resolvePhysicalScreen
+        // Validate that the target screen exists. Use Phosphor::Screens::ScreenManager::resolvePhysicalScreen
         // which properly handles virtual screen IDs (resolving to backing QScreen*).
-        QScreen* screen = ScreenManager::resolvePhysicalScreen(effectiveScreen);
+        QScreen* screen = (m_screenManager ? m_screenManager->physicalQScreenFor(effectiveScreen)
+                                           : Utils::findScreenAtPosition(QPoint(0, 0)));
         if (!screen) {
             qCInfo(lcCore) << "App rule: screen" << effectiveScreen << "not found for" << windowClass
                            << (match.targetScreen.isEmpty() ? "(current screen)" : "(target screen)") << ", skipping";
@@ -121,18 +123,18 @@ SnapResult WindowTrackingService::calculateSnapToAppRule(const QString& windowId
     // Build a unified list of screen IDs from either effective screens (includes
     // virtual screens) or physical screens as fallback, then use a single loop.
     QStringList screenIds;
-    auto* smgr = ScreenManager::instance();
+    auto* smgr = m_screenManager;
     if (smgr) {
         screenIds = smgr->effectiveScreenIds();
     } else {
         const auto screens = Utils::allScreens();
         for (auto* s : screens) {
-            screenIds.append(Utils::screenIdentifier(s));
+            screenIds.append(Phosphor::Screens::ScreenIdentity::identifierFor(s));
         }
     }
 
     for (const QString& screenId : std::as_const(screenIds)) {
-        if (Utils::screensMatch(screenId, windowScreenName)) {
+        if (Phosphor::Screens::ScreenIdentity::screensMatch(screenId, windowScreenName)) {
             continue;
         }
 
@@ -194,7 +196,7 @@ SnapResult WindowTrackingService::calculateSnapToLastZone(const QString& windowI
 
     // Don't cross-screen snap
     if (!windowScreenId.isEmpty() && !effectiveScreenId.isEmpty()
-        && !Utils::screensMatch(windowScreenId, effectiveScreenId)) {
+        && !Phosphor::Screens::ScreenIdentity::screensMatch(windowScreenId, effectiveScreenId)) {
         return SnapResult::noSnap();
     }
 
@@ -324,7 +326,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
     // Use stored screen from the pending restore entry, falling back to the caller's
     // screenId. If both are empty, resolveEffectiveScreenId returns it unchanged and
     // downstream resolveZoneGeometry falls back to the primary screen via
-    // ScreenManager::resolvePhysicalScreen.
+    // Phosphor::Screens::ScreenManager::resolvePhysicalScreen.
     QString savedScreen = entry.screenId.isEmpty() ? screenId : entry.screenId;
 
     // E7: Validate virtual screen still exists — configuration may have changed since save.
@@ -586,7 +588,7 @@ WindowGeometryList WindowTrackingService::applyBatchAssignments(const QVector<Zo
         return geometries;
     }
 
-    auto* mgr = ScreenManager::instance();
+    auto* mgr = m_screenManager;
 
     for (const auto& entry : entries) {
         if (entry.targetZoneId == QLatin1String("__restore__")) {
@@ -605,13 +607,13 @@ WindowGeometryList WindowTrackingService::applyBatchAssignments(const QVector<Zo
             screenId = mgr->effectiveScreenAt(center);
         }
         if (screenId.isEmpty()) {
-            // Physical fallback for early startup when ScreenManager
+            // Physical fallback for early startup when Phosphor::Screens::ScreenManager
             // isn't initialised yet. effectiveScreenAt above handles
             // VS-aware resolution, so this pass only needs to cover
-            // the "ScreenManager::instance() == nullptr" edge case.
+            // the "m_screenManager == nullptr" edge case.
             for (QScreen* screen : QGuiApplication::screens()) {
                 if (screen->geometry().contains(center)) {
-                    screenId = Utils::screenIdentifier(screen);
+                    screenId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
                     break;
                 }
             }

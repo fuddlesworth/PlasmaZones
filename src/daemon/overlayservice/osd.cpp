@@ -6,7 +6,7 @@
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/LayoutUtils.h>
-#include "../../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../../core/utils.h"
 #include <QQuickWindow>
 #include <QScreen>
@@ -17,6 +17,7 @@
 #include <PhosphorLayer/ILayerShellTransport.h>
 #include <PhosphorLayer/Surface.h>
 #include "pz_roles.h"
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -95,7 +96,7 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
                                             const QString& screenId)
 {
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* physScreen = resolveTargetScreen(screenId);
+    QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for layout OSD";
         return false;
@@ -104,12 +105,12 @@ bool OverlayService::prepareLayoutOsdWindow(QQuickWindow*& window, PhosphorLayer
     outPhysScreen = physScreen;
 
     // Use virtual screen geometry if applicable, otherwise physical
-    screenGeom = resolveScreenGeometry(screenId);
+    screenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!screenGeom.isValid()) {
         screenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     if (!(m_screenStates.contains(effectiveId) && m_screenStates[effectiveId].layoutOsdWindow)) {
         createLayoutOsdWindow(effectiveId, physScreen);
@@ -290,9 +291,9 @@ void OverlayService::ensureOsdScreenAddedConnected()
         return;
     }
     connect(qGuiApp, &QGuiApplication::screenAdded, this, [this](QScreen* screen) {
-        auto* mgr2 = ScreenManager::instance();
-        const QString physId = Utils::screenIdentifier(screen);
-        const QStringList ids = mgr2 ? mgr2->effectiveIdsForPhysical(physId) : QStringList{physId};
+        auto* mgr2 = m_screenManager;
+        const QString physId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        const QStringList ids = mgr2 ? mgr2->virtualScreenIdsFor(physId) : QStringList{physId};
         if (m_layoutOsdWarmed) {
             for (const QString& sid : ids) {
                 if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
@@ -313,11 +314,12 @@ void OverlayService::ensureOsdScreenAddedConnected()
 
 void OverlayService::warmUpLayoutOsd()
 {
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].layoutOsdWindow)) {
-            QScreen* physScreen = ScreenManager::resolvePhysicalScreen(sid);
+            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
+                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
             if (physScreen) {
                 createLayoutOsdWindow(sid, physScreen);
             }
@@ -331,11 +333,12 @@ void OverlayService::warmUpLayoutOsd()
 
 void OverlayService::warmUpNavigationOsd()
 {
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = (m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList());
 
     for (const QString& sid : effectiveIds) {
         if (!(m_screenStates.contains(sid) && m_screenStates[sid].navigationOsdWindow)) {
-            QScreen* physScreen = ScreenManager::resolvePhysicalScreen(sid);
+            QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(sid)
+                                                   : Utils::findScreenAtPosition(QPoint(0, 0)));
             if (physScreen) {
                 createNavigationOsdWindow(sid, physScreen);
             }
@@ -412,19 +415,19 @@ void OverlayService::showNavigationOsd(bool success, const QString& action, cons
     m_lastNavigationTime.restart();
 
     // Resolve target screen using shared helper (handles virtual IDs, fallback chain)
-    QScreen* physScreen = resolveTargetScreen(screenId);
+    QScreen* physScreen = resolveTargetScreen(m_screenManager, screenId);
     if (!physScreen) {
         qCWarning(lcOverlay) << "No screen available for navigation OSD";
         return;
     }
 
     // Use virtual screen geometry if applicable, otherwise physical
-    QRect navScreenGeom = resolveScreenGeometry(screenId);
+    QRect navScreenGeom = resolveScreenGeometry(m_screenManager, screenId);
     if (!navScreenGeom.isValid()) {
         navScreenGeom = physScreen->geometry();
     }
 
-    QString effectiveId = screenId.isEmpty() ? Utils::screenIdentifier(physScreen) : screenId;
+    QString effectiveId = screenId.isEmpty() ? Phosphor::Screens::ScreenIdentity::identifierFor(physScreen) : screenId;
 
     // Resolve per-screen layout (not the global m_layout which may belong to another screen)
     // Float, algorithm, rotate, and autotile-only actions don't need layout/zones

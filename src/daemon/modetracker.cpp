@@ -8,14 +8,16 @@
 #include "../core/constants.h"
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 
 namespace PlasmaZones {
 
-ModeTracker::ModeTracker(Settings* settings, LayoutManager* layoutManager, QObject* parent)
+ModeTracker::ModeTracker(Settings* settings, LayoutManager* layoutManager,
+                         Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
     , m_layoutManager(layoutManager)
+    , m_screenManager(screenManager)
 {
 }
 
@@ -50,7 +52,7 @@ bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) cons
     // Use caller-supplied values when provided; fall back to stored context.
     const int effectiveDesktop = (desktop >= 0) ? desktop : m_desktop;
     const QString& effectiveActivity = activity.isEmpty() ? m_activity : activity;
-    const QStringList effectiveIds = ScreenManager::effectiveScreenIdsWithFallback();
+    const QStringList effectiveIds = m_screenManager ? m_screenManager->effectiveScreenIds() : QStringList();
     for (const QString& screenId : effectiveIds) {
         const QString assignmentId =
             m_layoutManager->assignmentIdForScreen(screenId, effectiveDesktop, effectiveActivity);

@@ -9,7 +9,7 @@
 
 #include <dbus_helpers.h>
 #include <dbus_types.h>
-#include <screen_id.h>
+#include <PhosphorIdentity/ScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
 
 #include <algorithm>
@@ -867,7 +867,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
         // (The autotile handler has its own detection in slotWindowFrameGeometryChanged;
         // this covers snapping-mode windows which autotile doesn't track.)
         //
-        // VS crossing detection uses VirtualScreenId::isVirtualScreenCrossing()
+        // VS crossing detection uses PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing()
         // (shared/virtualscreenid.h) — the same predicate used by autotilehandler/tiling.cpp.
         connect(safeW, &KWin::EffectWindow::windowFrameGeometryChanged, this, [this, safeW]() {
             if (!safeW || safeW->isDeleted() || m_virtualScreenDefs.isEmpty() || !m_virtualScreensReady) {
@@ -875,7 +875,7 @@ void PlasmaZonesEffect::setupWindowConnections(KWin::EffectWindow* w)
             }
             const QString newScreenId = getWindowScreenId(safeW);
             const QString oldScreenId = m_trackedScreenPerWindow.value(safeW);
-            if (!VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
+            if (!PhosphorIdentity::VirtualScreenId::isVirtualScreenCrossing(oldScreenId, newScreenId)) {
                 return;
             }
             m_trackedScreenPerWindow[safeW] = newScreenId;
@@ -2008,7 +2008,7 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         return *it;
     }
 
-    // Build a screen ID that exactly matches the daemon's Utils::screenIdentifier().
+    // Build a screen ID that exactly matches the daemon's Phosphor::Screens::ScreenIdentity::identifierFor().
     // Uses shared ScreenIdUtils (compositor-common) for hex normalization and sysfs EDID
     // fallback, ensuring byte-identical output across daemon and compositor processes.
     //
@@ -2021,16 +2021,16 @@ QString PlasmaZonesEffect::outputScreenId(const KWin::LogicalOutput* output) con
         }
     }
 
-    const QString baseId =
-        ScreenIdUtils::buildScreenBaseId(output->manufacturer(), output->model(), serialNumber, connectorName);
+    const QString baseId = PhosphorIdentity::ScreenId::buildScreenBaseId(output->manufacturer(), output->model(),
+                                                                         serialNumber, connectorName);
 
     // Disambiguate identical monitors: if another screen produces the same base ID,
     // append "/ConnectorName" to make each unique. Mirrors daemon's screenIdentifier().
     bool hasDuplicate = false;
     for (QScreen* screen : QGuiApplication::screens()) {
         if (screen->name() != connectorName
-            && ScreenIdUtils::buildScreenBaseId(screen->manufacturer(), screen->model(), screen->serialNumber(),
-                                                screen->name())
+            && PhosphorIdentity::ScreenId::buildScreenBaseId(screen->manufacturer(), screen->model(),
+                                                             screen->serialNumber(), screen->name())
                 == baseId) {
             hasDuplicate = true;
             break;

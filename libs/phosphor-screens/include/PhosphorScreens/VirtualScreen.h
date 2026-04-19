@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "plasmazones_export.h"
+#include <PhosphorIdentity/VirtualScreenId.h>
+
 #include <QHash>
 #include <QRect>
 #include <QRectF>
@@ -14,18 +15,16 @@
 #include <algorithm>
 #include <utility>
 
-#include "shared/virtualscreenid.h"
-
-namespace PlasmaZones {
+namespace Phosphor::Screens {
 
 /**
- * @brief Definition of a single virtual screen within a physical screen
+ * @brief Definition of a single virtual screen within a physical screen.
  *
  * A virtual screen represents a rectangular sub-region of a physical monitor.
- * Each virtual screen gets its own screen ID, layout assignments, autotile state,
- * overlay windows, and all other per-screen functionality.
+ * Each virtual screen gets its own screen ID, layout assignments, autotile
+ * state, overlay windows, and all other per-screen functionality.
  */
-struct PLASMAZONES_EXPORT VirtualScreenDef
+struct VirtualScreenDef
 {
     QString id; ///< Full ID: "physicalId/vs:N"
     QString physicalScreenId; ///< Owning physical screen's stable EDID ID
@@ -37,19 +36,21 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     /// Used by isValid() and physicalEdges() to handle serialization precision loss.
     static constexpr qreal Tolerance = 1e-3;
 
-    /// Compute absolute geometry from the physical screen's geometry
-    /// Uses edge-consistent rounding to avoid 1px gaps/overlaps between adjacent screens
+    /// Compute absolute geometry from the physical screen's geometry.
+    /// Uses edge-consistent rounding to avoid 1px gaps/overlaps between
+    /// adjacent screens.
     QRect absoluteGeometry(const QRect& physicalGeometry) const
     {
         int left = physicalGeometry.x() + qRound(region.x() * physicalGeometry.width());
         int top = physicalGeometry.y() + qRound(region.y() * physicalGeometry.height());
         int right = physicalGeometry.x() + qRound((region.x() + region.width()) * physicalGeometry.width());
         int bottom = physicalGeometry.y() + qRound((region.y() + region.height()) * physicalGeometry.height());
-        // Clamp to physical screen bounds to prevent tolerance overshoot
+        // Clamp to physical screen bounds to prevent tolerance overshoot.
         right = qMin(right, physicalGeometry.x() + physicalGeometry.width());
         bottom = qMin(bottom, physicalGeometry.y() + physicalGeometry.height());
-        // Prevent degenerate geometry when tolerance overshoot pushes left/top past right/bottom.
-        // Apply BEFORE floor clamp so the floor clamp has the final word on minimum origin.
+        // Prevent degenerate geometry when tolerance overshoot pushes left/top
+        // past right/bottom. Apply BEFORE the floor clamp so the floor clamp
+        // has the final word on minimum origin.
         left = qMin(left, right - 1);
         top = qMin(top, bottom - 1);
         left = qMax(left, physicalGeometry.x());
@@ -59,17 +60,20 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
         return QRect(left, top, w, h);
     }
 
-    /// Tolerance-aware equality for change detection (skip-if-unchanged guards).
-    /// Uses Tolerance for region comparison to avoid spurious change signals
-    /// when a config round-trips through JSON serialization.
-    ///
-    /// NOTE: the fuzzy region compare is deliberately non-transitive
-    /// (a==b ∧ b==c does NOT imply a==c when region deltas chain across
-    /// the tolerance window). Safe for change detection, but do NOT use
-    /// VirtualScreenDef as a QHash/std::set key — hashed containers rely
-    /// on transitivity. Equal-to-hash keys should be computed off the
-    /// `id` field, which is exact.
-    bool operator==(const VirtualScreenDef& other) const
+    /// Exact bitwise equality across every field. Safe for hashed
+    /// containers (transitive) and for tests that need deterministic
+    /// round-trip asserts. Change-detection sites that want to swallow
+    /// JSON-serialisation precision noise should use @ref approxEqual
+    /// explicitly — making the default operator fuzzy used to hide a
+    /// non-transitivity trap from every consumer (`a==b ∧ b==c` did
+    /// not imply `a==c` once region deltas chained across the
+    /// tolerance window).
+    bool operator==(const VirtualScreenDef&) const = default;
+
+    /// Tolerance-aware comparison for change-detection paths that round
+    /// through JSON. Non-transitive by construction — do NOT use as a
+    /// hashed-container equality predicate; use @ref operator== there.
+    bool approxEqual(const VirtualScreenDef& other) const
     {
         return id == other.id && physicalScreenId == other.physicalScreenId && displayName == other.displayName
             && index == other.index && qAbs(region.x() - other.region.x()) < Tolerance
@@ -86,20 +90,15 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
     /// obtain pixel coordinates rather than consuming region directly.
     bool isValid() const
     {
-        return VirtualScreenId::isVirtual(id) && !physicalScreenId.isEmpty() && index >= 0 && region.x() >= -Tolerance
-            && region.y() >= -Tolerance && region.width() > 0 && region.height() > 0
+        return PhosphorIdentity::VirtualScreenId::isVirtual(id) && !physicalScreenId.isEmpty() && index >= 0
+            && region.x() >= -Tolerance && region.y() >= -Tolerance && region.width() > 0 && region.height() > 0
             && region.x() + region.width() <= 1.0 + Tolerance && region.y() + region.height() <= 1.0 + Tolerance;
     }
 
-    bool operator!=(const VirtualScreenDef& other) const
-    {
-        return !(*this == other);
-    }
-
-    /// Check which edges of this virtual screen are at the physical screen boundary
-    /// (vs internal edges shared with another virtual screen).
-    /// An edge at the physical boundary should get outer gaps;
-    /// an internal edge should get inner gap (like zone padding) to avoid double gaps.
+    /// Check which edges of this virtual screen are at the physical screen
+    /// boundary (vs internal edges shared with another virtual screen).
+    /// An edge at the physical boundary should get outer gaps; an internal
+    /// edge should get inner gap (like zone padding) to avoid double gaps.
     struct PhysicalEdges
     {
         bool left = true;
@@ -115,12 +114,13 @@ struct PLASMAZONES_EXPORT VirtualScreenDef
 };
 
 /**
- * @brief Configuration for how a physical screen is subdivided into virtual screens
+ * @brief Configuration for how a physical screen is subdivided into virtual
+ *        screens.
  *
  * When screens is empty, the physical screen has no subdivisions and acts as
  * a single implicit virtual screen (backward-compatible default).
  */
-struct PLASMAZONES_EXPORT VirtualScreenConfig
+struct VirtualScreenConfig
 {
     QString physicalScreenId;
     QVector<VirtualScreenDef> screens;
@@ -134,7 +134,34 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
         return screens.isEmpty();
     }
 
+    /// Exact vector equality: order-sensitive (QVector::operator==) and
+    /// delegates to @ref VirtualScreenDef::operator== (also exact). Two
+    /// configs with the same VS defs in different array orders compare
+    /// as NOT equal, even though they describe identical topology. The
+    /// `regionsOnly` detection in ScreenManager::setVirtualScreenConfig
+    /// is the order-insensitive path that catches reordered-but-identical
+    /// configs and routes them through the cheaper regions-only signal.
+    /// For tolerance-aware comparison (JSON round-trip change detection)
+    /// use @ref approxEqual.
     bool operator==(const VirtualScreenConfig&) const = default;
+
+    /// Tolerance-aware equivalent of @ref operator==: compares defs
+    /// pairwise using @ref VirtualScreenDef::approxEqual. Order-sensitive
+    /// (mirroring operator== semantics) — callers that need
+    /// order-insensitive equivalence should do their own by-ID pairing.
+    /// Non-transitive by construction; not safe as a hashed-container key.
+    bool approxEqual(const VirtualScreenConfig& other) const
+    {
+        if (physicalScreenId != other.physicalScreenId || screens.size() != other.screens.size()) {
+            return false;
+        }
+        for (int i = 0; i < screens.size(); ++i) {
+            if (!screens[i].approxEqual(other.screens[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /// Validate geometric and structural invariants for this config.
     /// Returns true if the config is acceptable to apply (including the
@@ -189,7 +216,7 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
                 return fail(QStringLiteral("def.physicalScreenId '%1' does not match config '%2' for def '%3'")
                                 .arg(def.physicalScreenId, cfg.physicalScreenId, def.id));
             }
-            const QString expectedId = VirtualScreenId::make(cfg.physicalScreenId, def.index);
+            const QString expectedId = PhosphorIdentity::VirtualScreenId::make(cfg.physicalScreenId, def.index);
             if (def.id != expectedId) {
                 return fail(QStringLiteral("def.id '%1' does not match expected '%2' for index %3")
                                 .arg(def.id, expectedId)
@@ -327,4 +354,4 @@ struct PLASMAZONES_EXPORT VirtualScreenConfig
     }
 };
 
-} // namespace PlasmaZones
+} // namespace Phosphor::Screens

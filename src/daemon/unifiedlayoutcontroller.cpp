@@ -13,10 +13,12 @@
 namespace PlasmaZones {
 
 UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
+                                                 Phosphor::Screens::ScreenManager* screenManager,
                                                  AutotileEngine* autotileEngine, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
     , m_settings(settings)
+    , m_screenManager(screenManager)
     , m_autotileEngine(autotileEngine)
 {
     if (m_layoutManager) {
@@ -66,7 +68,7 @@ QVector<PhosphorLayout::LayoutPreview> UnifiedLayoutController::layouts() const
         // and mode-based filtering (manual-only vs autotile-only)
         m_cachedLayouts = PhosphorZones::LayoutUtils::buildUnifiedLayoutList(
             m_layoutManager, m_currentScreenName, m_currentVirtualDesktop, m_currentActivity, m_includeManualLayouts,
-            m_includeAutotileLayouts, Utils::screenAspectRatio(m_currentScreenName),
+            m_includeAutotileLayouts, Utils::screenAspectRatio(m_screenManager, m_currentScreenName),
             m_settings && m_settings->filterLayoutsByAspectRatio(),
             PhosphorZones::LayoutUtils::buildCustomOrder(m_settings, m_includeManualLayouts, m_includeAutotileLayouts));
 

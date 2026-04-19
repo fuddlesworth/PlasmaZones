@@ -1,40 +1,49 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
 #include <QLatin1String>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorIdentity {
 
-/// Virtual screen ID format utilities
-///
-/// Shared between the KWin effect and the daemon. This header is intentionally
-/// header-only and depends only on Qt types so both targets can include it
-/// without pulling in each other's headers.
+/**
+ * @brief Virtual-screen ID format utilities.
+ *
+ * Stable cross-process format for the IDs that identify a sub-region of a
+ * physical monitor when the user has subdivided it: `"<physicalId>/vs:<index>"`.
+ *
+ * Same role as @ref WindowId for window identity — a single source of truth
+ * for the wire-format string. Daemon, KWin effect, KCM, and any future
+ * compositor plugin must spell it the same way; this header is the place to
+ * change that spelling if it ever needs to change.
+ *
+ * Header-only and `inline` throughout: no link cost, safe to include
+ * everywhere identity strings are handled.
+ */
 namespace VirtualScreenId {
 
-/// Separator between physical screen ID and virtual index
+/// Separator between physical screen ID and virtual index.
 inline constexpr QLatin1String Separator{"/vs:"};
 
-/// Check if a screen ID is a virtual screen ID (contains "/vs:")
+/// Check if a screen ID is a virtual screen ID (contains "/vs:").
 inline bool isVirtual(const QString& screenId)
 {
     int pos = screenId.indexOf(Separator);
     return pos > 0; // Must have non-empty physical ID before separator
 }
 
-/// Extract the physical screen ID from a virtual screen ID
-/// Returns the original ID if not a virtual screen ID
+/// Extract the physical screen ID from a virtual screen ID.
+/// Returns the original ID if not a virtual screen ID.
 inline QString extractPhysicalId(const QString& screenId)
 {
     int sep = screenId.indexOf(Separator);
     return (sep > 0) ? screenId.left(sep) : screenId;
 }
 
-/// Extract the virtual screen index from a virtual screen ID
-/// Returns -1 if not a virtual screen ID
+/// Extract the virtual screen index from a virtual screen ID.
+/// Returns -1 if not a virtual screen ID.
 inline int extractIndex(const QString& screenId)
 {
     int sep = screenId.indexOf(Separator);
@@ -46,8 +55,8 @@ inline int extractIndex(const QString& screenId)
     return (ok && index >= 0) ? index : -1;
 }
 
-/// Construct a virtual screen ID from physical ID and index
-/// @pre index must be >= 0; negative indices return an empty string
+/// Construct a virtual screen ID from physical ID and index.
+/// @pre index must be >= 0; negative indices return an empty string.
 inline QString make(const QString& physicalScreenId, int index)
 {
     if (physicalScreenId.isEmpty() || index < 0) {
@@ -63,17 +72,17 @@ inline bool samePhysical(const QString& idA, const QString& idB)
     return extractPhysicalId(idA) == extractPhysicalId(idB);
 }
 
-/// Detect a virtual-screen crossing: the screen IDs differ, but both
-/// belong to the same physical monitor.  Returns false when both IDs
-/// are plain physical IDs (outputChanged handles those) or when they
-/// belong to different physical monitors.
+/// Detect a virtual-screen crossing: the screen IDs differ, but both belong
+/// to the same physical monitor. Returns false when both IDs are plain
+/// physical IDs (outputChanged handles those) or when they belong to
+/// different physical monitors.
 inline bool isVirtualScreenCrossing(const QString& oldScreenId, const QString& newScreenId)
 {
     if (oldScreenId.isEmpty() || newScreenId.isEmpty() || oldScreenId == newScreenId) {
         return false;
     }
-    // At least one side must be a virtual ID — two plain physical IDs
-    // that differ are a physical monitor change, not a VS crossing.
+    // At least one side must be a virtual ID — two plain physical IDs that
+    // differ are a physical monitor change, not a VS crossing.
     if (!isVirtual(oldScreenId) && !isVirtual(newScreenId)) {
         return false;
     }
@@ -82,4 +91,4 @@ inline bool isVirtualScreenCrossing(const QString& oldScreenId, const QString& n
 
 } // namespace VirtualScreenId
 
-} // namespace PlasmaZones
+} // namespace PhosphorIdentity

@@ -125,7 +125,7 @@ private Q_SLOTS:
         m_registry = new WindowRegistry(nullptr);
 
         m_parent = new QObject(nullptr);
-        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, m_settings, nullptr, m_parent);
+        m_wta = new WindowTrackingAdaptor(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, m_parent);
         m_wta->setWindowRegistry(m_registry);
 
         m_testLayout = createTestLayout(3, m_layoutManager);

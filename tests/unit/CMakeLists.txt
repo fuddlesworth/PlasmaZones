@@ -217,7 +217,7 @@ pz_add_test(test_layoutmanager_cycling core/test_layoutmanager_cycling.cpp)
 pz_add_test(test_layoutmanager_assignment core/test_layoutmanager_assignment.cpp)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# core/ — Virtual Screen Tests (ID utilities, data model, ScreenManager)
+# core/ — Virtual Screen Tests (ID utilities, data model, Phosphor::Screens::ScreenManager)
 # ═══════════════════════════════════════════════════════════════════════════════
 pz_add_test(test_virtual_screen core/test_virtual_screen.cpp)
 pz_add_test(test_virtual_screen_manager core/test_virtual_screen_manager.cpp)
@@ -339,7 +339,7 @@ add_test(NAME test_dbus_adaptor_routing COMMAND test_dbus_adaptor_routing)
 
 # Panel-ready gate for AutotileAdaptor windowOpened queue. Regression guard
 # for the stale-VS-geometry race: entries arriving before the first panel
-# D-Bus query must be deferred until ScreenManager::panelGeometryReady fires.
+# D-Bus query must be deferred until Phosphor::Screens::ScreenManager::panelGeometryReady fires.
 add_executable(test_autotile_adaptor_panel_gate dbus/test_autotile_adaptor_panel_gate.cpp)
 target_link_libraries(test_autotile_adaptor_panel_gate PRIVATE Qt6::Test Qt6::Core Qt6::DBus
                                                                  plasmazones_core)

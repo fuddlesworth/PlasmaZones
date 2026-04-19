@@ -19,7 +19,7 @@
 #include "../core/layoutmanager.h"
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
-#include "../core/screenmanager.h"
+#include <PhosphorScreens/Manager.h>
 #include "../core/utils.h"
 
 #include <PhosphorLayoutApi/AlgorithmMetadata.h>
@@ -30,6 +30,7 @@
 #include <QJsonArray>
 #include <QScreen>
 #include <QThread>
+#include <PhosphorScreens/ScreenIdentity.h>
 
 namespace PlasmaZones {
 
@@ -54,10 +55,12 @@ LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, QObject* parent)
     initCoalesceTimer();
 }
 
-LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm, QObject* parent)
+LayoutAdaptor::LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
+                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
     , m_virtualDesktopManager(vdm)
+    , m_screenManager(screenManager)
 {
     Q_ASSERT(manager);
     if (!m_layoutManager) {
@@ -431,7 +434,7 @@ void LayoutAdaptor::setActiveLayout(const QString& id)
 
 void LayoutAdaptor::applyQuickLayout(int number, const QString& screenId)
 {
-    m_layoutManager->applyQuickLayout(number, Utils::screenIdForName(screenId));
+    m_layoutManager->applyQuickLayout(number, Phosphor::Screens::ScreenIdentity::idForName(screenId));
 }
 
 QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
@@ -451,8 +454,8 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
     // Auto-detect aspect ratio class from the primary screen (virtual-screen-aware)
     QScreen* screen = Utils::primaryScreen();
     if (screen) {
-        const QString primaryId = Utils::screenIdentifier(screen);
-        auto* mgr = ScreenManager::instance();
+        const QString primaryId = Phosphor::Screens::ScreenIdentity::identifierFor(screen);
+        auto* mgr = m_screenManager;
         QRect geo =
             (mgr && mgr->screenGeometry(primaryId).isValid()) ? mgr->screenGeometry(primaryId) : screen->geometry();
         layout->setAspectRatioClass(PhosphorLayout::ScreenClassification::classify(geo.width(), geo.height()));

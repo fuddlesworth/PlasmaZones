@@ -19,7 +19,7 @@
     {                                                                                                                  \
         if (!m_autotileEngine || !m_autotileEngine->isEnabled())                                                       \
             return;                                                                                                    \
-        const QString screenId = resolveShortcutScreenId(m_windowTrackingAdaptor);                                     \
+        const QString screenId = resolveShortcutScreenId(m_screenManager.get(), m_windowTrackingAdaptor);              \
         if (screenId.isEmpty() || !m_screenModeRouter || !m_screenModeRouter->isAutotileMode(screenId))                \
             return;                                                                                                    \
         if (isContextDisabled(m_settings.get(), screenId, currentDesktop(), currentActivity()))                        \

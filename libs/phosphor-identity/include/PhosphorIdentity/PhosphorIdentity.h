@@ -5,4 +5,6 @@
 
 /// Umbrella include for PhosphorIdentity.
 
+#include <PhosphorIdentity/ScreenId.h>
+#include <PhosphorIdentity/VirtualScreenId.h>
 #include <PhosphorIdentity/WindowId.h>
