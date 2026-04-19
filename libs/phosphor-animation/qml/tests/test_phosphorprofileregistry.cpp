@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include <PhosphorAnimation/Profile.h>
-#include <PhosphorAnimation/qml/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 #include <QObject>
 #include <QSignalSpy>

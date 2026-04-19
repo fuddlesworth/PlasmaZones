@@ -92,6 +92,9 @@ set(phosphoranimation_SRCS
     src/animatedvalue.cpp
     src/snappolicy.cpp
     src/staggertimer.cpp
+    src/phosphorprofileregistry.cpp
+    src/curveloader.cpp
+    src/profileloader.cpp
 )
 
 set(phosphoranimation_public_HDRS
@@ -111,6 +114,9 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/SnapPolicy.h
     include/PhosphorAnimation/AnimationController.h
     include/PhosphorAnimation/StaggerTimer.h
+    include/PhosphorAnimation/PhosphorProfileRegistry.h
+    include/PhosphorAnimation/CurveLoader.h
+    include/PhosphorAnimation/ProfileLoader.h
 )
 
 add_library(PhosphorAnimation SHARED

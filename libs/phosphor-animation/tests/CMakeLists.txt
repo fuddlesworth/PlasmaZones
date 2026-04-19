@@ -50,6 +50,8 @@ pa_add_test(pa_test_animatedvalue_geometry test_animatedvalue_geometry.cpp)
 pa_add_test(pa_test_animatedvalue_color test_animatedvalue_color.cpp)
 pa_add_test(pa_test_animatedvalue_transform test_animatedvalue_transform.cpp)
 pa_add_test(pa_test_staggertimer test_staggertimer.cpp)
+pa_add_test(pa_test_curveloader test_curveloader.cpp)
+pa_add_test(pa_test_profileloader test_profileloader.cpp)
 
 # QtQuickClock test is gated on the same CMake flag that gates the
 # class itself — the test links Qt6::Quick which isn't available

@@ -6,7 +6,7 @@
 #include <PhosphorAnimation/AnimatedValue.h>
 #include <PhosphorAnimation/Curve.h>
 #include <PhosphorAnimation/Interpolate.h>
-#include <PhosphorAnimation/qml/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 #include <QColor>
 #include <QEasingCurve>

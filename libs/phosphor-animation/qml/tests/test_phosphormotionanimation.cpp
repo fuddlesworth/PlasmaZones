@@ -7,7 +7,7 @@
 #include <PhosphorAnimation/qml/PhosphorCurve.h>
 #include <PhosphorAnimation/qml/PhosphorMotionAnimation.h>
 #include <PhosphorAnimation/qml/PhosphorProfile.h>
-#include <PhosphorAnimation/qml/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 
 #include <QColor>
 #include <QPointF>

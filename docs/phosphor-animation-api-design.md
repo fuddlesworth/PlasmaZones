@@ -1194,6 +1194,17 @@ This mirrors the existing `LayoutManager::loadLayouts` pattern
 the layout / shader / whatsnew data pipelines and is the project
 convention.
 
+**Placement refinement (sub-commit 5):** `CurveLoader` /
+`ProfileLoader` and `PhosphorProfileRegistry` ship in the core library
+(`include/PhosphorAnimation/`), NOT under `qml/`. Reason: both surfaces
+are Qt Core only — `QFileSystemWatcher` + `QJsonDocument` + the
+existing `CurveRegistry` / `Profile::fromJson` machinery, no Qt Quick
+dependency. A headless consumer (future Wayfire C++ plugin, D-Bus-only
+service that registers profiles from config) should be able to populate
+the registry without pulling `Qt6::Quick` / `Qt6::Qml` transitively.
+`PhosphorProfileRegistry` was initially landed under `qml/` in
+sub-commit 4 and relocated to core in sub-commit 5 for this reason.
+
 **V. Curve authoring scope — tune existing types, no new curve classes.**
 
 User-authored curve JSON files reference an existing `typeId`

@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/phosphoranimation_export.h>
 #include <PhosphorAnimation/qml/PhosphorProfile.h>
