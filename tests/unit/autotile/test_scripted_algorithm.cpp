@@ -9,6 +9,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "core/constants.h"
 #include "config/configdefaults.h"
 
@@ -567,7 +568,11 @@ private Q_SLOTS:
                                            "// @description Tests watchdog\n"
                                            "function calculateZones(params) { while(true) {} return []; }\n"));
 
-        PhosphorTiles::ScriptedAlgorithm algo(path);
+        // Watchdog is per-instance now and shared_ptr so the algo can
+        // outlive the test-local handle if needed (the registry's
+        // deleteLater path doesn't apply here since we don't register).
+        auto watchdog = std::make_shared<PhosphorTiles::ScriptedAlgorithmWatchdog>();
+        PhosphorTiles::ScriptedAlgorithm algo(path, watchdog);
         QVERIFY(algo.isValid());
 
         QElapsedTimer timer;
@@ -858,7 +863,10 @@ private Q_SLOTS:
             "}\n");
         QString path = writeTempScript(dir, QStringLiteral("eval-loop.js"), script);
 
-        PhosphorTiles::ScriptedAlgorithm algo(path);
+        // Watchdog is per-instance now — see testCalculateZones_infiniteLoopWatchdog
+        // for the shared_ptr rationale.
+        auto watchdog = std::make_shared<PhosphorTiles::ScriptedAlgorithmWatchdog>();
+        PhosphorTiles::ScriptedAlgorithm algo(path, watchdog);
         QVERIFY(algo.isValid());
 
         PhosphorTiles::TilingState state(QStringLiteral("test"));

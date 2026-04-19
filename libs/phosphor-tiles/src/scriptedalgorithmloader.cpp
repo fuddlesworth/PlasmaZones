@@ -4,6 +4,7 @@
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "tileslogging.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -23,6 +24,7 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     : QObject(parent)
     , m_subdirectory(subdirectory)
     , m_registry(registry)
+    , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
 {
     Q_ASSERT(m_registry);
     // Lazy user directory creation — moved ensureUserDirectoryExists()
@@ -36,6 +38,14 @@ ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
     // be destroyed. QCoreApplication being null is a reliable proxy for
     // "we are in static destruction" — skip cleanup to avoid calling into
     // a half-torn-down registry.
+    //
+    // Order: this destructor body calls unregisterAlgorithm() per script,
+    // which uses deleteLater() — so algorithm dtors run on a later
+    // event-loop pass, AFTER this loader's members destruct. The
+    // shared_ptr<watchdog> design lets the deferred-delete algorithm
+    // keep the watchdog alive until ~ScriptedAlgorithm finally fires;
+    // the thread joins when the last shared_ptr (loader's or a
+    // deferred algo's) is released. No member-ordering trick required.
     if (!QCoreApplication::instance() || !m_registry)
         return;
     for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
@@ -199,8 +209,11 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         }
         // Create with nullptr parent so the registry takes full ownership
         // via setParent(this) in registerAlgorithm(). If the algo is invalid,
-        // we delete it explicitly below.
-        auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
+        // we delete it explicitly below. Pass the watchdog as shared_ptr
+        // so the algorithm keeps it alive across deferred-delete teardown
+        // (registry uses deleteLater(); algorithm dtor can run after the
+        // loader is gone — see ScriptedAlgorithm.h for the contract).
+        auto* algo = new ScriptedAlgorithm(fullPath, m_watchdog, nullptr);
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;

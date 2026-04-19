@@ -1,19 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "scriptedalgorithmwatchdog.h"
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 
 #include "tileslogging.h"
 
 namespace PhosphorTiles {
-
-ScriptedAlgorithmWatchdog& ScriptedAlgorithmWatchdog::instance()
-{
-    static ScriptedAlgorithmWatchdog inst;
-    return inst;
-}
 
 ScriptedAlgorithmWatchdog::ScriptedAlgorithmWatchdog()
 {

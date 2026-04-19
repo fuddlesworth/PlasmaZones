@@ -10,9 +10,12 @@
 #include <QString>
 #include <QTimer>
 
+#include <memory>
+
 namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
+class ScriptedAlgorithmWatchdog;
 
 /**
  * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
@@ -95,6 +98,17 @@ private:
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     ITileAlgorithmRegistry* m_registry = nullptr; ///< Borrowed; owner outlives loader
+    /// Per-loader watchdog. Held via shared_ptr because the registry's
+    /// unregisterAlgorithm uses deleteLater() — the algorithm's dtor
+    /// (which calls m_watchdog->unregister(this)) can run on a later
+    /// event-loop pass, after this loader is already gone. Each
+    /// algorithm shares ownership of the watchdog so the thread is
+    /// joined only when the very last user releases its strong
+    /// reference (typically here in ~Loader, occasionally in a
+    /// deferred-delete ~ScriptedAlgorithm). Per-loader instead of a
+    /// process-wide singleton means each composition root (daemon,
+    /// editor, settings) gets its own supervisor thread.
+    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;
     /// Second follow-up rescan that fires @ref FollowupRescanMs after the

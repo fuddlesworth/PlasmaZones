@@ -134,7 +134,6 @@ struct FixtureService
 /// every bundle rebuild. Using a file-scope instance prevents dangling
 /// captures when a test method returns.
 FixtureService g_fixtureServiceA{11};
-FixtureService g_fixtureServiceB{22};
 
 /// Service type that NO test ever registers — the "this composition
 /// root doesn't host this engine" signal path.
@@ -230,7 +229,7 @@ private Q_SLOTS:
     void testFactoryContext_duplicateSetReturnsFalse()
     {
         FixtureService svc1{1};
-        FixtureService svc2{2};
+        [[maybe_unused]] FixtureService svc2{2};
         PhosphorLayout::FactoryContext ctx;
         QVERIFY(ctx.set<FixtureService>(&svc1));
         // Duplicate registration: asserts in debug, returns false in

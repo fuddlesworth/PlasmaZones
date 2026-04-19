@@ -11,11 +11,14 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <type_traits>
 
 class QJSEngine;
 
 namespace PhosphorTiles {
+
+class ScriptedAlgorithmWatchdog;
 
 // Note: ScriptedAlgorithm is NOT thread-safe despite the base class const contract.
 // All calls must occur on the main thread. QJSEngine is inherently single-threaded.
@@ -82,9 +85,27 @@ public:
     /**
      * @brief Construct a ScriptedAlgorithm from a JavaScript file
      * @param filePath Absolute path to the .js script file
+     * @param watchdog Shared ownership of the watchdog that monitors this
+     *        algorithm's guarded JS calls. The algorithm holds a strong
+     *        reference so the watchdog cannot disappear while the
+     *        algorithm is still alive — required because the registry
+     *        destroys algorithms via `deleteLater()`, which can defer
+     *        the @c ~ScriptedAlgorithm dtor past the loader's own
+     *        destructor (and past the loader's owning shared_ptr being
+     *        released). The watchdog thread joins when the LAST strong
+     *        reference is released — typically the loader's, occasionally
+     *        a deferred-delete algorithm's. Replaces the prior
+     *        @c ScriptedAlgorithmWatchdog::instance() process-wide
+     *        singleton.
+     *        @c nullptr disables the JS-timeout safety net entirely —
+     *        used by headless unit tests that exercise metadata parsing
+     *        and short, well-behaved scripts where a runaway-guard would
+     *        only add a thread-creation cost. Production code paths
+     *        (the loader) always pass a non-null watchdog.
      * @param parent Parent QObject
      */
-    explicit ScriptedAlgorithm(const QString& filePath, QObject* parent = nullptr);
+    explicit ScriptedAlgorithm(const QString& filePath, std::shared_ptr<ScriptedAlgorithmWatchdog> watchdog = nullptr,
+                               QObject* parent = nullptr);
     ~ScriptedAlgorithm() override;
 
     /**
@@ -227,6 +248,13 @@ private:
 
     // Owned via QObject parent; mutable because calculateZones() is const but JS evaluation mutates engine state
     mutable QJSEngine* m_engine = nullptr;
+    /// Shared ownership with the loader. The registry destroys algorithms
+    /// via deleteLater(), which can defer the algorithm's dtor past the
+    /// loader's own dtor (and past the loader's strong reference being
+    /// released). Holding a shared_ptr here keeps the watchdog thread
+    /// alive until the very last algorithm using it is gone, which is
+    /// what makes m_watchdog->unregister(this) in our dtor safe.
+    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;

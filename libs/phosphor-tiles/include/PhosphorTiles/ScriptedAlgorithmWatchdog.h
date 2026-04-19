@@ -3,8 +3,7 @@
 
 #pragma once
 
-// Internal header — not part of the PhosphorTiles public API. Lives under src/
-// so it cannot be included by out-of-tree consumers.
+#include <phosphortiles_export.h>
 
 #include <chrono>
 #include <condition_variable>
@@ -18,13 +17,23 @@ namespace PhosphorTiles {
 class ScriptedAlgorithm;
 
 /**
- * @brief Process-wide shared watchdog for scripted algorithms
+ * @brief Per-loader watchdog for scripted algorithms
  *
- * A single OS thread services every live @ref ScriptedAlgorithm instance by
- * tracking the earliest deadline across all armed algorithms and interrupting
- * the one whose deadline expires first. Replaces the previous "one
- * std::thread per algorithm" model, which did not scale and wasted one thread
- * per registered script even while idle.
+ * A single OS thread services every live @ref ScriptedAlgorithm instance
+ * registered with this watchdog by tracking the earliest deadline across
+ * all armed algorithms and interrupting the one whose deadline expires
+ * first. Replaces the previous "one std::thread per algorithm" model
+ * (which did not scale and wasted one thread per registered script even
+ * while idle) and the previous `instance()` Meyer's singleton (which
+ * meant every process shared one watchdog regardless of plugin
+ * topology).
+ *
+ * Ownership: @ref ScriptedAlgorithmLoader owns one watchdog via
+ * unique_ptr and passes a borrowed pointer to every
+ * @ref ScriptedAlgorithm it constructs. The watchdog must outlive every
+ * algorithm it tracks — the loader's destructor unregisters its scripts
+ * (which destroys the algorithm instances) before the loader's
+ * unique_ptr<watchdog> member is destroyed in reverse-declaration order.
  *
  * Usage (from @ref ScriptedAlgorithm::guardedCall):
  *  1. @ref arm(this, timeoutMs) before invoking the guarded JS callable.
@@ -33,14 +42,13 @@ class ScriptedAlgorithm;
  *     eventual @ref ScriptedAlgorithm::interruptEngine call is suppressed.
  *
  * Thread-safety: all public methods are thread-safe. The watchdog thread
- * lives for the life of the process (joined in the singleton's destructor
- * on shutdown).
+ * lives for the lifetime of the watchdog instance (joined in destructor).
  */
-class ScriptedAlgorithmWatchdog
+class PHOSPHORTILES_EXPORT ScriptedAlgorithmWatchdog
 {
 public:
-    /// Return the process-wide singleton. Starts the watchdog thread on first call.
-    static ScriptedAlgorithmWatchdog& instance();
+    ScriptedAlgorithmWatchdog();
+    ~ScriptedAlgorithmWatchdog();
 
     /**
      * @brief Arm the watchdog for @p algo with a timeout of @p timeoutMs ms
@@ -67,16 +75,13 @@ public:
      */
     void unregister(ScriptedAlgorithm* algo);
 
-    // Non-copyable, non-movable — owned as a Meyer's singleton
+    // Non-copyable, non-movable — owned as a unique_ptr by ScriptedAlgorithmLoader
     ScriptedAlgorithmWatchdog(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog& operator=(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog(ScriptedAlgorithmWatchdog&&) = delete;
     ScriptedAlgorithmWatchdog& operator=(ScriptedAlgorithmWatchdog&&) = delete;
 
 private:
-    ScriptedAlgorithmWatchdog();
-    ~ScriptedAlgorithmWatchdog();
-
     struct Entry
     {
         std::chrono::steady_clock::time_point deadline;
