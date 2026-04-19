@@ -23,6 +23,8 @@ namespace Phosphor::Screens {
 class PlasmaPanelSource;
 }
 
+#include <PhosphorAnimation/CurveLoader.h>
+#include <PhosphorAnimation/ProfileLoader.h>
 #include <PhosphorConfig/IBackend.h>
 
 namespace PhosphorZones {
@@ -162,6 +164,35 @@ private:
      */
     void showLayoutOsdForAlgorithm(const QString& algorithmId, const QString& displayName, const QString& screenId);
     void clearHighlight();
+
+    /**
+     * @brief Bridge Settings::animationProfile into `PhosphorProfileRegistry`
+     *        so QML `PhosphorMotionAnimation { profile: "<path>" }` resolves
+     *        to the user's active animation settings and live-updates on edit.
+     *
+     * Phase 4 sub-commit 7. Scans the XDG `plasmazones/curves` and
+     * `plasmazones/profiles` directories for user-authored definitions
+     * (per decision U's consumer-namespace pattern) and installs
+     * live-reload watchers. Registers the daemon's active animation
+     * Profile under every well-known `ProfilePaths` shell path that
+     * maps to PlasmaZones's single-Profile settings surface so QML
+     * consumers can reference specific paths (`zone.highlight`,
+     * `osd.show`, etc.) without the daemon carrying per-event
+     * sub-profiles — future sub-commits can diverge paths when
+     * per-event customisation is actually exposed to users.
+     *
+     * Reconnects to `Settings::animationProfileChanged` for live
+     * updates; each emit re-registers the active Profile against the
+     * same path set, firing `PhosphorProfileRegistry::profileChanged`
+     * on each — bound `PhosphorMotionAnimation` consumers re-resolve
+     * transparently.
+     */
+    void setupAnimationProfiles();
+    /// Push the current `Settings::animationProfile()` into the registry
+    /// under the shell's well-known paths. Called from
+    /// `setupAnimationProfiles()` at startup and on every
+    /// `animationProfileChanged` signal.
+    void publishActiveAnimationProfile();
 
     // ═══════════════════════════════════════════════════════════════════════════
     // Navigation handlers — single code path per operation (DRY/SOLID)
@@ -432,6 +463,15 @@ private:
     std::unique_ptr<Phosphor::Screens::VirtualScreenSwapper> m_virtualScreenSwapper;
     SnapAdaptor* m_snapAdaptor = nullptr;
     AutotileAdaptor* m_autotileAdaptor = nullptr;
+
+    /// Phase 4 sub-commit 7: user-authored curve / profile scanners.
+    /// Scan `plasmazones/curves` and `plasmazones/profiles` from XDG
+    /// data dirs and register discovered entries with `CurveRegistry`
+    /// / `PhosphorProfileRegistry` with live-reload enabled. Owned by
+    /// the daemon for process lifetime; QFileSystemWatcher survives
+    /// as long as the loader.
+    std::unique_ptr<PhosphorAnimation::CurveLoader> m_curveLoader;
+    std::unique_ptr<PhosphorAnimation::ProfileLoader> m_profileLoader;
 
     // Desktop/activity resolution helpers (DRY — used by multiple handlers)
     int currentDesktop() const;

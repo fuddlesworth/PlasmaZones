@@ -29,8 +29,14 @@
 # Phase status:
 #   Phase 2  AnimationController base + WindowAnimator split      ✓ landed
 #   Phase 3  IMotionClock + AnimatedValue<T> unified runtime       ✓ landed
-#   Phase 4  QML module (phosphor-animation-qml)                   — in progress
-#            sub-commit 2: Q_GADGET scaffolding + ClockManager     ✓ landed
+#   Phase 4  QML module + loaders + settings migration             ✓ landed
+#            sub-commit 2: Q_GADGET scaffolding + ClockManager     ✓
+#            sub-commit 3: per-T PhosphorAnimatedValue wrappers    ✓
+#            sub-commit 4: PhosphorMotionAnimation + registry      ✓
+#            sub-commit 5: CurveLoader + ProfileLoader             ✓
+#            sub-commit 6: Settings → Profile JSON blob migration  ✓
+#            sub-commit 7: daemon ProfileRegistry wiring           ✓
+#            (in-tree QML call-site migration deferred — housekeeping)
 #   Phase 5  phosphor-animation-layer sub-target (ISurfaceAnimator) — planned
 #   Phase 6  Shader-backed animation pipeline                      — planned
 

@@ -6,12 +6,18 @@
 #include <QGuiApplication>
 #include <QFutureWatcher>
 #include <QPointer>
+#include <QStandardPaths>
 #include <QtConcurrent>
 #include <QScreen>
 #include <QDBusConnection>
 #include <QDBusError>
 #include <QFile>
 #include <QThread>
+
+#include <PhosphorAnimation/CurveRegistry.h>
+#include <PhosphorAnimation/PhosphorProfileRegistry.h>
+#include <PhosphorAnimation/Profile.h>
+#include <PhosphorAnimation/ProfilePaths.h>
 
 #include "overlayservice.h"
 #include "modetracker.h"
@@ -155,6 +161,95 @@ Daemon::Daemon(QObject* parent)
     // removed / renamed. Autotile side self-wires to AlgorithmRegistry.
     connect(m_layoutManager.get(), &LayoutManager::layoutsChanged, m_layoutSources.zones.get(),
             &PhosphorZones::ZonesLayoutSource::notifyContentsChanged);
+
+    // Phase 4 sub-commit 7: wire Settings::animationProfile into
+    // PhosphorProfileRegistry so QML `PhosphorMotionAnimation { profile: … }`
+    // resolves to the user's active animation settings and live-updates
+    // on edit. Also populates the registry from user-authored JSON files
+    // under the plasmazones/ XDG namespace (per decision U's consumer-
+    // agnostic loader pattern).
+    setupAnimationProfiles();
+}
+
+void Daemon::setupAnimationProfiles()
+{
+    using namespace PhosphorAnimation;
+
+    // User-authored curve + profile packs. Consumer namespace is
+    // `plasmazones/` per the LayoutManager precedent — library-level
+    // CurveLoader / ProfileLoader are agnostic (decision U); the daemon
+    // picks PlasmaZones's namespace here.
+    //
+    // `locateAll` returns system dirs first, user dir last for the
+    // WritableLocation-inclusive set. `CurveLoader::loadFromDirectories`
+    // iterates in caller-supplied order and lets later entries override
+    // earlier on name collision — we reverse to achieve the standard
+    // "system first, user wins last" shape (decision X). Matches
+    // LayoutManager::loadLayouts (src/core/layoutmanager/persistence.cpp:29-34).
+    QStringList curveDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/curves"), QStandardPaths::LocateDirectory);
+    std::reverse(curveDirs.begin(), curveDirs.end());
+    QStringList profileDirs = QStandardPaths::locateAll(
+        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/profiles"), QStandardPaths::LocateDirectory);
+    std::reverse(profileDirs.begin(), profileDirs.end());
+
+    // Library-level curve pack (if any ships) loads first so it's
+    // visible for user-authored overrides. Today the library ships no
+    // bundled curves — the call is a no-op that stays wired for future
+    // curve-pack additions without a code change here.
+    m_curveLoader = std::make_unique<CurveLoader>(nullptr);
+    m_curveLoader->loadLibraryBuiltins(CurveRegistry::instance());
+    if (!curveDirs.isEmpty()) {
+        m_curveLoader->loadFromDirectories(curveDirs, CurveRegistry::instance(), LiveReload::On);
+    }
+
+    m_profileLoader = std::make_unique<ProfileLoader>(nullptr);
+    m_profileLoader->loadLibraryBuiltins(PhosphorProfileRegistry::instance());
+    if (!profileDirs.isEmpty()) {
+        m_profileLoader->loadFromDirectories(profileDirs, PhosphorProfileRegistry::instance(), LiveReload::On);
+    }
+
+    // Publish the user's settings-backed Profile last so it overrides
+    // any on-disk preset file that happens to collide on a well-known
+    // path name (the user's active tuning is authoritative). Re-publishes
+    // whenever the settings Profile is rewritten via the Phase-4
+    // per-field projections or a future setAnimationProfile call.
+    publishActiveAnimationProfile();
+    connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
+        publishActiveAnimationProfile();
+    });
+}
+
+void Daemon::publishActiveAnimationProfile()
+{
+    using namespace PhosphorAnimation;
+
+    // PlasmaZones currently exposes ONE global animation profile to
+    // users (duration / curve / minDistance / sequenceMode / stagger).
+    // Register it under every well-known shell path that conceptually
+    // maps to "the user's animation feel" — zone highlights, OSD
+    // show/hide, snap enter, layout switch. A future phase can split
+    // these into distinct settings-backed profiles when users ask for
+    // per-event customisation; until then, one Profile → many paths is
+    // the honest mapping.
+    //
+    // Every registerProfile emits profileChanged(path); bound
+    // PhosphorMotionAnimation / PhosphorAnimatedValue consumers
+    // re-resolve and pick up the new curve / duration on their next
+    // tick without a daemon restart.
+    const Profile active = m_settings->animationProfile();
+    auto& reg = PhosphorProfileRegistry::instance();
+    reg.registerProfile(ProfilePaths::Global, active);
+    reg.registerProfile(ProfilePaths::Zone, active);
+    reg.registerProfile(ProfilePaths::ZoneHighlight, active);
+    reg.registerProfile(ProfilePaths::ZoneSnapIn, active);
+    reg.registerProfile(ProfilePaths::ZoneSnapOut, active);
+    reg.registerProfile(ProfilePaths::ZoneSnapResize, active);
+    reg.registerProfile(ProfilePaths::ZoneLayoutSwitchIn, active);
+    reg.registerProfile(ProfilePaths::ZoneLayoutSwitchOut, active);
+    reg.registerProfile(ProfilePaths::Osd, active);
+    reg.registerProfile(ProfilePaths::OsdShow, active);
+    reg.registerProfile(ProfilePaths::OsdHide, active);
 }
 
 Daemon::~Daemon()

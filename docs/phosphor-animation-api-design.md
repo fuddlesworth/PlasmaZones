@@ -1357,28 +1357,48 @@ Q_SIGNALS:
 
 #### Sub-commit plan
 
-1. **Architecture pass** (this commit) — decisions L–Y ratified in
-   the design doc.
+1. **Architecture pass** — decisions L–Y ratified in the design doc.
 2. **QML plugin scaffolding** — `org.phosphor.animation` module,
    `qt6_add_qml_module()` target, `PhosphorEasing` + `PhosphorSpring`
    + `PhosphorCurve` + `PhosphorProfile` Q_GADGETs, `QtQuickClockManager`
    singleton. No migrations. Plumbing-only commit.
-3. **`PhosphorAnimatedValue<T>` wrappers** — five per-T Q_GADGETs,
-   `ColorSpace` runtime property on the color variant, unit tests.
-4. **`PhosphorMotionAnimation`** — `QAbstractAnimation` subclass,
-   QVariant `profile` property accepting path string or value,
-   registry live-resolution wiring.
-5. **`PhosphorProfileRegistry` + `CurveLoader` + `ProfileLoader`** —
-   consumer-agnostic loaders, XDG discovery helper for PlasmaZones
-   daemon to call from its own namespace, live-reload opt-in,
-   user-wins collision policy.
-6. **Settings migration** — replace per-field persistence with
-   `Profile` JSON blobs, keep `EasingSettings.qml` curve editor
-   surface but route writes through `Profile`, drop old config keys.
-7. **QML call-site migration** — 19 QML files move from hardcoded
-   `Easing.*` / fixed `duration:` to profile-bound
-   `PhosphorMotionAnimation`. ProfilePath constants minted in
-   `ProfilePaths.h` as each site lands.
+3. **`PhosphorAnimatedValue<T>` wrappers** — five per-T Q_OBJECTs
+   (decision O refined from Q_GADGET — `AnimatedValue<T>` is move-only
+   and QML reactive bindings need NOTIFY signals), `ColorSpace` runtime
+   property on the color variant, unit tests.
+4. **`PhosphorMotionAnimation` + `PhosphorProfileRegistry` skeleton** —
+   `QVariantAnimation` subclass (Behavior-compatible), QVariant
+   `profile` property accepting path string or value, registry
+   live-resolution wiring.
+5. **`CurveLoader` + `ProfileLoader`** — consumer-agnostic loaders,
+   XDG discovery helper for PlasmaZones daemon to call from its own
+   namespace, live-reload opt-in, user-wins collision policy.
+   `PhosphorProfileRegistry` relocated from qml/ to core for headless-
+   consumer support.
+6. **Settings migration** — on-disk format replaces per-field keys
+   with a single `Profile` JSON blob, per-field `ISettings` accessors
+   preserved as projections. `EasingSettings.qml` unchanged (continues
+   to write through per-field setters which compose into the blob).
+7. **Daemon wiring** — `Daemon::setupAnimationProfiles()` registers
+   the user's active `Settings::animationProfile()` under every
+   well-known `ProfilePaths` shell path, live-republishes on
+   `animationProfileChanged`. Daemon owns `CurveLoader` +
+   `ProfileLoader` scanning `plasmazones/curves` and `plasmazones/profiles`
+   with live-reload on.
+
+   **Deferred:** migration of the in-tree QML call-sites
+   (`src/ui/*.qml`, `src/settings/qml/*.qml`, `src/editor/qml/*.qml`)
+   from hardcoded `Easing.OutCubic` / `duration: 200` to
+   `PhosphorMotionAnimation { profile: … }`. The Phase-4
+   architectural surface is complete at sub-commit 7's daemon-wiring
+   step — external QML consumers (Quickshell shells, Wayfire plugins,
+   third-party editors) can already bind `PhosphorMotionAnimation`
+   against PlasmaZones's registry paths and observe live settings
+   updates. Migrating the in-tree call-sites is pure UI polish that
+   does not interact with the phosphor-animation library's
+   architecture; scheduling it as a housekeeping follow-up keeps the
+   sub-commit scope focused on the phase's stated goal (library +
+   daemon integration).
 
 #### Success criteria
 
