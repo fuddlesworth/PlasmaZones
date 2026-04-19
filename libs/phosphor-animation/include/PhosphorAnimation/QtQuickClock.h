@@ -112,7 +112,14 @@ private:
     // atomic<int64_t>; the writer uses release and the reader uses
     // acquire so a cross-thread reader sees a well-published value
     // rather than just a tear-free one.
-    std::atomic<std::chrono::nanoseconds::rep> m_nowCache{0};
+    //
+    // `mutable` because the logically-const `now()` reader CAS-seeds
+    // the cache on the pre-handoff fallback path to guarantee
+    // monotonicity across the fallback→cache transition. Updating an
+    // internal cache from a const observer is the canonical mutable
+    // use case; the logical const contract ("now() returns the current
+    // time") is unaffected.
+    mutable std::atomic<std::chrono::nanoseconds::rep> m_nowCache{0};
     // Set the first time `beforeRendering` fires — the render loop
     // has become responsible for advancing `m_nowCache`. Until then
     // `now()` falls back to reading `steady_clock` directly so an

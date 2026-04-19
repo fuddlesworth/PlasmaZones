@@ -69,6 +69,13 @@ public:
 protected:
     void onAnimationStarted(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
     void onAnimationComplete(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationReplaced(KWin::EffectWindow* window,
+                             const PhosphorAnimation::AnimatedValue<QRectF>& displaced) override;
+    void onAnimationRetargeted(KWin::EffectWindow* window,
+                               const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
+    void onAnimationAbandoned(KWin::EffectWindow* window,
+                              const PhosphorAnimation::AnimatedValue<QRectF>& anim) override;
     void onRepaintNeeded(KWin::EffectWindow* window, const QRectF& bounds) const override;
     bool isHandleValid(KWin::EffectWindow* window) const override;
     QMarginsF expandedPadding(KWin::EffectWindow* window,

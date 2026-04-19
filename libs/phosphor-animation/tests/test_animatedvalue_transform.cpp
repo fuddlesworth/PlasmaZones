@@ -242,6 +242,37 @@ private Q_SLOTS:
         // Long-way midpoint would be rotate(180°): m11 ≈ -1, m12 ≈ 0.
         QVERIFY(mid.m11() > 0.9); // positive ≈ 1 confirms short-way
     }
+
+    // ─── Near-singular endpoint gate (Interpolate.h determinant threshold) ───
+
+    void testNearSingularEndpointRoutesThroughComponentWiseLerp()
+    {
+        // A matrix with |det| below the near-singular threshold (1e-6)
+        // cannot be polar-decomposed reliably — the rotation extraction
+        // collapses and the slerp path would produce a visible jump.
+        // The fix in Interpolate.h routes such endpoints through the
+        // component-wise fallback. We verify by interpolating from a
+        // near-singular start to identity and checking that the mid-
+        // point is the plain component-wise average — not a polar
+        // reconstruction that would reinstate a rotated frame.
+        TestClock clock;
+        AnimatedValue<QTransform> v;
+        // |det| = 1e-8 (well below 1e-6 gate)
+        QTransform nearSingular(1e-4, 0.0, 0.0, 1e-4, 0.0, 0.0);
+        QVERIFY(qAbs(nearSingular.m11() * nearSingular.m22() - nearSingular.m12() * nearSingular.m21()) < 1e-6);
+        v.start(nearSingular, QTransform(), makeSpec(&clock));
+
+        const QTransform mid = sampleAtProgress(v, clock, 0.5);
+        // Component-wise midpoint: (1e-4 + 1) / 2 ≈ 0.50005 on the
+        // diagonal, exact 0 on off-diagonal. The critical property is
+        // that NO entry jumps to an unrelated value — a broken polar
+        // decomposition would insert a phantom rotation producing
+        // off-diagonal terms well away from zero.
+        QVERIFY(qAbs(mid.m11() - (1.0 + 1e-4) * 0.5) < 1e-3);
+        QVERIFY(qAbs(mid.m22() - (1.0 + 1e-4) * 0.5) < 1e-3);
+        QVERIFY(qAbs(mid.m12()) < 1e-3);
+        QVERIFY(qAbs(mid.m21()) < 1e-3);
+    }
 };
 
 QTEST_MAIN(TestAnimatedValueTransform)

@@ -15,7 +15,9 @@
 #include <QTest>
 
 #include <chrono>
+#include <cmath>
 #include <functional>
+#include <limits>
 #include <memory>
 
 using namespace std::chrono_literals;
@@ -238,6 +240,63 @@ private Q_SLOTS:
         MockController c;
         c.setDuration(-50.0);
         QCOMPARE(c.duration(), 0.0);
+    }
+
+    void testSetDurationRejectsNaN()
+    {
+        // `qBound(0.0, NaN, max)` returns NaN under libstdc++ — the
+        // middle operand short-circuits the comparisons that `qBound`'s
+        // `qMax(qMin(...))` lowering relies on. A corrupt settings
+        // reload landing NaN in `Profile::duration` would otherwise
+        // divide `elapsedMs / NaN` in `AnimatedValue`'s stateless
+        // progression and poison every downstream paint.
+        //
+        // `clampProfile` gates non-finite inputs first and resets
+        // `profile.duration` to `std::nullopt`, so `duration()` falls
+        // back to `Profile::DefaultDuration`.
+        MockController c;
+        c.setDuration(std::nan(""));
+        QCOMPARE(c.duration(), Profile::DefaultDuration);
+
+        // Same for positive infinity.
+        c.setDuration(std::numeric_limits<qreal>::infinity());
+        QCOMPARE(c.duration(), Profile::DefaultDuration);
+    }
+
+    void testSetProfileRejectsNaNDuration()
+    {
+        // Same rejection as `setDuration(NaN)` but via the
+        // `setProfile()` entry point — the shared `clampProfile` helper
+        // runs on both paths so the gate is centralised.
+        MockController c;
+        Profile p;
+        p.duration = std::nan("");
+        c.setProfile(p);
+        QCOMPARE(c.duration(), Profile::DefaultDuration);
+    }
+
+    void testZeroDurationMotionCompletesImmediately()
+    {
+        // A legitimate `duration = 0.0` means "no animation, jump to
+        // target on the first real tick". `AnimatedValue`'s stateless
+        // branch short-circuits to terminal-frame snap when
+        // `durationMs <= 0.0`. Exercise the controller-level end-to-end
+        // so the contract holds through the full lifecycle (one
+        // `onAnimationStarted`, one `onAnimationComplete`, no leftover
+        // entry). First `advanceAnimations` latches startTime only;
+        // second advance runs the stateless branch and completes.
+        TestClock clock;
+        MockController c;
+        configureLinearEasing(c, clock, 0.0);
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        QCOMPARE(c.startedHandlesOrdered.size(), 1);
+        // Latch startTime.
+        c.advanceAnimations();
+        // Progression tick — `durationMs <= 0.0` gates to terminal.
+        clock.advanceMs(1.0);
+        c.advanceAnimations();
+        QCOMPARE(c.completedHandlesOrdered.size(), 1);
+        QVERIFY(!c.hasAnimation(1));
     }
 
     // ─── startAnimation gating ───

@@ -63,12 +63,16 @@ private Q_SLOTS:
     void testRequestFrameCallsUpdate()
     {
         // QQuickWindow::update() posts a scheduled paint. We can't
-        // observe it directly in headless tests, but requestFrame()
-        // must not crash when invoked on a real window.
+        // observe the posted event directly in headless tests, but
+        // `requestFrame()` must (a) not crash on a real window and
+        // (b) remain a no-op on a null window. Exercise both — the
+        // `QVERIFY(true)` sentinel previously used here was tautological.
         QQuickWindow window;
         QtQuickClock clock(&window);
-        clock.requestFrame();
-        QVERIFY(true);
+        clock.requestFrame(); // must not crash with a real window
+        QtQuickClock nullClock(nullptr);
+        nullClock.requestFrame(); // must not crash with a null window
+        QCOMPARE(nullClock.now(), std::chrono::nanoseconds{0});
     }
 
     // ─── Polymorphic dispatch ───

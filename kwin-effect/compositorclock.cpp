@@ -24,20 +24,28 @@ CompositorClock::CompositorClock(KWin::LogicalOutput* output)
 
 CompositorClock::~CompositorClock() = default;
 
-// Shared main-thread contract assertion. CompositorClock's state
-// (m_latestPresentTime, m_output's QPointer dispatch) is read and
-// written without synchronization; every access must come from the
-// compositor thread. The assertion is a debug-only check — cheap to
-// keep in production builds (no-op) and invaluable for catching
-// future drift during testing. See updatePresentTime's contract
-// comment for the full rationale.
-#define PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD()                                                               \
-    Q_ASSERT(QCoreApplication::instance() == nullptr                                                                   \
-             || QThread::currentThread() == QCoreApplication::instance()->thread())
+namespace {
+
+/// Shared main-thread contract check. `CompositorClock`'s state
+/// (m_latestPresentTime, m_output's QPointer dispatch) is read and
+/// written without synchronisation; every access must come from the
+/// compositor thread. Kept as an inline free function rather than a
+/// macro — gives a real symbol in stack traces, avoids
+/// macro-pollution, and nothing about `Q_ASSERT`'s compile-out
+/// behaviour changes (an empty-body inline is optimised away in
+/// release builds). Every call site is one line (`assertMainThread();`),
+/// matching the former macro's ergonomics.
+inline void assertMainThread()
+{
+    Q_ASSERT(QCoreApplication::instance() == nullptr
+             || QThread::currentThread() == QCoreApplication::instance()->thread());
+}
+
+} // namespace
 
 std::chrono::nanoseconds CompositorClock::now() const
 {
-    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+    assertMainThread();
     if (!m_wasBound) {
         // Fallback clock: self-driven from std::chrono::steady_clock so
         // it advances monotonically with wall time rather than with paint
@@ -55,7 +63,7 @@ std::chrono::nanoseconds CompositorClock::now() const
 
 qreal CompositorClock::refreshRate() const
 {
-    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+    assertMainThread();
     if (!m_output) {
         return 0.0;
     }
@@ -76,7 +84,7 @@ void CompositorClock::requestFrame()
     // one spot so a future refactor that promotes `CompositorClock` to
     // cross-thread use can drop it from a single call site after
     // properly synchronising the underlying state.
-    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+    assertMainThread();
     if (!KWin::effects) {
         // Test or teardown path — nothing to ask for another frame from.
         return;
@@ -87,7 +95,21 @@ void CompositorClock::requestFrame()
         // the drop-in point; today `addRepaint(QRect)` is the closest
         // per-output signal we have, and the output's geometry scopes
         // it.
-        KWin::effects->addRepaint(m_output->geometry());
+        //
+        // Zero-area guard: during hotplug (output attaching, DPMS off,
+        // disabled virtual-screen) `geometry()` can legitimately be
+        // empty, which collapses `addRepaint(QRect())` to a no-op.
+        // Animations on that output would freeze silently until an
+        // unrelated paint event wakes the compositor. Fall back to
+        // `addRepaintFull()` so motion keeps ticking — slightly wasteful
+        // (repaints everything, not just our scope) but motion-
+        // correctness trumps damage efficiency on a transient edge.
+        const QRect geo = m_output->geometry();
+        if (geo.isEmpty()) {
+            KWin::effects->addRepaintFull();
+            return;
+        }
+        KWin::effects->addRepaint(geo);
         return;
     }
     if (m_wasBound && !m_loggedStaleOutput) {
@@ -113,7 +135,7 @@ void CompositorClock::updatePresentTime(std::chrono::milliseconds presentTime)
     // satisfies this; the assertion catches future drift cheaply.
     // Same assertion is applied on now() / refreshRate() via the
     // shared macro above.
-    PLASMAZONES_COMPOSITORCLOCK_ASSERT_MAIN_THREAD();
+    assertMainThread();
 
     if (!m_wasBound) {
         // Fallback clock self-drives from steady_clock in now(); ignore

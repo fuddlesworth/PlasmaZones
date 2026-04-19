@@ -131,6 +131,59 @@ void WindowAnimator::onAnimationComplete(KWin::EffectWindow* window,
                       << "target:" << anim.to();
 }
 
+void WindowAnimator::onAnimationReplaced(KWin::EffectWindow* window,
+                                         const PhosphorAnimation::AnimatedValue<QRectF>& displaced)
+{
+    // An in-flight segment was displaced by a fresh startAnimation call.
+    // The new segment's onAnimationStarted will schedule its own repaint,
+    // but the displaced segment's overshoot bounds may sit outside the
+    // new start rect — issue an explicit damage request on the displaced
+    // segment's final sampled value so trailing pixels from the old path
+    // are correctly invalidated even if the new bounds don't cover them.
+    if (window && !window->isDeleted()) {
+        const QRectF bounds = displaced.value();
+        if (bounds.isValid()) {
+            KWin::effects->addRepaint(bounds.toAlignedRect());
+        }
+    }
+    qCDebug(lcEffect) << "Window snap animation replaced:" << static_cast<const void*>(window)
+                      << "displaced-from:" << displaced.from() << "displaced-to:" << displaced.to();
+}
+
+void WindowAnimator::onAnimationRetargeted(KWin::EffectWindow* window,
+                                           const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    // Non-terminal — the same handle keeps ticking toward a new target.
+    // The controller unions pre+post retarget bounds in the terminal
+    // onRepaintNeeded, but a mid-flight telemetry anchor is still
+    // useful for diagnosing drag-snap retarget chains.
+    qCDebug(lcEffect) << "Window snap animation retargeted:" << static_cast<const void*>(window)
+                      << "new-from:" << anim.from() << "new-to:" << anim.to();
+}
+
+void WindowAnimator::onAnimationReaped(KWin::EffectWindow* window, const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    // Clock teardown on output removal — the containing LogicalOutput
+    // is already gone, so there's nothing to schedule a repaint on.
+    // Reach for a diagnostic log and let the controller's own reap
+    // path handle the map erase. Window may already be deleted if the
+    // output going away also destroyed its attached windows.
+    qCDebug(lcEffect) << "Window snap animation reaped (output teardown):" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
+}
+
+void WindowAnimator::onAnimationAbandoned(KWin::EffectWindow* window,
+                                          const PhosphorAnimation::AnimatedValue<QRectF>& anim)
+{
+    // Window destroyed mid-flight — isHandleValid flipped false during
+    // the tick and the controller erased the entry defensively. The
+    // EffectWindow is no longer safe to deref (hence the base-class
+    // guard); nothing to repaint (the window's pixels are gone). Log
+    // the target for diagnostics only.
+    qCDebug(lcEffect) << "Window snap animation abandoned (handle invalidated):" << static_cast<const void*>(window)
+                      << "target:" << anim.to();
+}
+
 void WindowAnimator::onRepaintNeeded(KWin::EffectWindow*, const QRectF& bounds) const
 {
     if (bounds.isValid()) {

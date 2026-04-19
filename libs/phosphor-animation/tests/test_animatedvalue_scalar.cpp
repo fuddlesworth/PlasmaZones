@@ -344,6 +344,37 @@ private Q_SLOTS:
         QVERIFY(qAbs(newVelocity - expectedNewVelocity) < 1.0e-6);
     }
 
+    void testRetargetPreserveVelocitySubPixelNewDistanceDegrades()
+    {
+        // Regression: `newDistance > 0.0` gate alone let sub-pixel
+        // retarget distances pass — `(velocity * oldDistance) /
+        // newDistance` then exploded to astronomical rescaled
+        // velocities on a drag-snap workflow that landed the new
+        // target a fraction of a pixel from the current visual
+        // position. The fix raises the gate to `kRetargetDistanceEpsilon`
+        // (0.5 px) — below that, velocity degrades to 0 (the
+        // PreservePosition fallback) so the spring settles smoothly
+        // instead of oscillating or force-completing on a runaway rate.
+        TestClock clock;
+        AnimatedValue<qreal> v;
+        v.start(0.0, 100.0, makeSpec(&clock, std::make_shared<Spring>(Spring::snappy()), 500.0));
+
+        v.advance();
+        for (int i = 0; i < 5; ++i) {
+            clock.advanceMs(16.0);
+            v.advance();
+        }
+        const qreal midValue = v.value();
+        QVERIFY(v.velocity() > 0.0);
+
+        // Retarget to within 0.1 px of the current visual value —
+        // well below the 0.5 px epsilon. Velocity must degrade to 0
+        // rather than rescale by (oldDist / 0.1) ≈ 1000× which would
+        // produce a catastrophic new velocity.
+        v.retarget(midValue + 0.1, RetargetPolicy::PreserveVelocity);
+        QCOMPARE(v.velocity(), 0.0);
+    }
+
     // ─── Retarget — ResetVelocity ───
 
     void testRetargetResetVelocityZeroesRate()

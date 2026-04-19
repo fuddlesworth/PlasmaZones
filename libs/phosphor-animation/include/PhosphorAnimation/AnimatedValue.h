@@ -52,6 +52,16 @@ Q_DECLARE_EXPORTED_LOGGING_CATEGORY(lcAnimatedValue, PHOSPHORANIMATION_EXPORT)
 // invariant in Profile::withDefaults.
 PHOSPHORANIMATION_EXPORT std::shared_ptr<const Curve> defaultFallbackCurve();
 
+// Minimum `newDistance` for `PreserveVelocity` retarget on stateful curves.
+// Below this threshold the rescale `(velocity * oldDistance / newDistance)`
+// either produces a physically meaningless velocity (sub-pixel motion) or
+// risks overflow — callers retargeting to a distance smaller than this
+// auto-degrade to `PreservePosition` (velocity=0). 0.5 px matches the
+// visual threshold at which fractional-pixel motion becomes imperceptible
+// on typical displays and sits well clear of float-precision concerns for
+// the distance-magnitude metric used by `Interpolate<T>::distance`.
+inline constexpr qreal kRetargetDistanceEpsilon = 0.5;
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // AnimatedValue<T>
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -261,12 +271,22 @@ public:
                     break;
                 }
             }
-            if (stateful && newDistance > 0.0) {
+            if (stateful && newDistance > kRetargetDistanceEpsilon) {
                 // Map scalar normalised-velocity through the world:
                 //   worldRate [T-units/s] = state.velocity [1/s] * oldDistance [T-units]
                 //   newNormalisedVelocity [1/s] = worldRate / newDistance
                 // For vector T, distance() returns magnitude — direction
                 // is lost (documented limitation; see header intro).
+                //
+                // Epsilon gate (not just `> 0.0`): a sub-pixel `newDistance`
+                // would let `oldDistance / newDistance` explode on a normal
+                // drag-snap workflow (retarget to a zone edge a fraction of
+                // a pixel away from the current visual position). A runaway
+                // `newVelocity` pumps the spring into oscillation or a
+                // force-complete clamp on the next tick. Below the epsilon
+                // the velocity-preserving rescale is not physically
+                // meaningful — degrade to PreservePosition (velocity=0)
+                // so the spring settles smoothly.
                 newVelocity = (m_state.velocity * oldDistance) / newDistance;
             } else if (!stateful && !m_loggedStatelessDegrade) {
                 // One-shot per-instance. Logging every retarget on a
@@ -646,7 +666,15 @@ public:
             // stateful path.
             const qreal durationMs = m_spec.profile.effectiveDuration();
             const qreal elapsedMs = std::chrono::duration<qreal, std::milli>(elapsed).count();
-            if (durationMs <= 0.0 || elapsedMs >= durationMs) {
+            // `std::isfinite` gate covers NaN/Inf: a corrupt Profile that
+            // landed a non-finite duration (settings reload wrote NaN
+            // before the central clamp caught it, or a future code path
+            // computes duration from user input without guarding) would
+            // otherwise divide `elapsedMs / NaN` → NaN → poison
+            // `state.value` and every subsequent paint. Treat non-finite
+            // and non-positive durations identically — terminal-frame
+            // snap to exactly 1.0.
+            if (!std::isfinite(durationMs) || durationMs <= 0.0 || elapsedMs >= durationMs) {
                 // Terminal frame: snap to exactly 1.0 regardless of
                 // curve shape (matches Phase 2's updateProgress
                 // terminal-frame clamp; Spring-like parametric curves
@@ -801,9 +829,11 @@ public:
         // would be contained within the damage rect that `hiSize`
         // produces. `sweptSize()` exposes both (lo, hi) for consumers
         // doing explicit layout math; damage tracking only needs hi.
-        const auto [_lo, hiSize] = sweptSizeImpl();
-        (void)_lo;
-        return QRectF(anchor, hiSize);
+        // Only the `hi` bound is needed for the damage rect; the `lo`
+        // bound is part of `sweptSizeImpl`'s pair return for callers
+        // of `sweptSize()`. Pick out the second element directly so
+        // no unused-binding discard is needed.
+        return QRectF(anchor, sweptSizeImpl().second);
     }
 
     /**

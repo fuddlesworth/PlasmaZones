@@ -444,20 +444,32 @@ inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qr
     // cannot produce a meaningful interpolation and the caller should
     // split the animation into separate segments (to → identity →
     // reflected-to) if they need continuous motion.
+    //
+    // Near-singular endpoint gate: a matrix whose 2x2 linear part has
+    // |det| below `kNearSingularDet` decomposes unreliably — `sx` goes
+    // to sub-epsilon, the rotation extraction (`atan2(-m21, m11)`)
+    // silently resolves to 0 because the guard at `decomposeTransform`
+    // suppresses meaningful angles below `sx > 1e-9`, and the slerp
+    // path then interpolates across the wrong angular delta producing
+    // a visible jump. Route near-singular endpoints through the same
+    // component-wise path as the reflection branch — the intermediate
+    // isn't rigid, but every visual frame is well-defined and the
+    // caller is warned (via the fallback's lossy-ness) that the motion
+    // is degenerate by construction.
+    constexpr qreal kNearSingularDet = 1.0e-6;
     const qreal detFrom = from.m11() * from.m22() - from.m12() * from.m21();
     const qreal detTo = to.m11() * to.m22() - to.m12() * to.m21();
-    if (detFrom * detTo < 0.0) {
-        // Component-wise lerp via the canonical scalar form — avoids
-        // duplicating the `a + (b - a) * t` pattern per matrix entry
-        // (any future numerically-stable lerp change in
-        // Interpolate<qreal>::lerp reaches every specialisation from
-        // this one call site).
-        const auto lerpScalar = [t](qreal a, qreal b) {
-            return Interpolate<qreal>::lerp(a, b, t);
-        };
-        return QTransform(lerpScalar(from.m11(), to.m11()), lerpScalar(from.m12(), to.m12()),
-                          lerpScalar(from.m21(), to.m21()), lerpScalar(from.m22(), to.m22()),
-                          lerpScalar(from.dx(), to.dx()), lerpScalar(from.dy(), to.dy()));
+    const bool reflection = detFrom * detTo < 0.0;
+    const bool nearSingular = std::abs(detFrom) < kNearSingularDet || std::abs(detTo) < kNearSingularDet;
+    if (reflection || nearSingular) {
+        // Component-wise lerp via `Interpolate<qreal>::lerp` — the
+        // canonical numerically-stable scalar form (any future change
+        // to `Interpolate<qreal>::lerp` reaches every matrix entry
+        // from this one call site without the lambda indirection).
+        using S = Interpolate<qreal>;
+        return QTransform(S::lerp(from.m11(), to.m11(), t), S::lerp(from.m12(), to.m12(), t),
+                          S::lerp(from.m21(), to.m21(), t), S::lerp(from.m22(), to.m22(), t),
+                          S::lerp(from.dx(), to.dx(), t), S::lerp(from.dy(), to.dy(), t));
     }
 
     const DecomposedTransform df = decomposeTransform(from);

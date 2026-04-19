@@ -9,7 +9,8 @@
 #include <QScreen>
 #include <QThread>
 
-#include <mutex>
+#include <algorithm>
+#include <atomic>
 
 namespace PhosphorAnimation {
 
@@ -22,29 +23,39 @@ namespace PhosphorAnimation {
  * clock's `now()` reader runs on whichever thread the consumer calls
  * from (typically also the render thread for Qt Quick animations).
  *
+ * Only functor-based `QObject::connect` is used — no string-based
+ * signals/slots, so Q_OBJECT is not required. Future maintainers
+ * adding signals or properties must add Q_OBJECT and a
+ * `#include "qtquickclock.moc"` trailer for moc generation.
+ *
  * ## Thread-safety of the cached timestamp
  *
  * The cached timestamp is held as `std::atomic` on `QtQuickClock` with
- * relaxed ordering. Same-thread use incurs only aligned-load/store
- * cost on x86_64; cross-thread use (GUI-thread reader) avoids formal
- * data-race UB.
+ * release/acquire ordering. Same-thread use incurs only aligned-load/
+ * store cost on x86_64; cross-thread use (GUI-thread reader, render-
+ * thread writer) is well-defined and publishes writes happens-before
+ * the reader's acquire.
  *
  * ## Teardown race mitigation
  *
  * `Qt::DirectConnection` slots run on whichever thread emits the
- * signal (render thread for `beforeRendering`). `~QObject` atomically
- * disconnects future emissions but does not join already-executing
- * slot bodies. Without mitigation, destroying the clock on the GUI
- * thread while the render thread is mid-slot would write to a
- * freed `m_nowCache`. The adapter guards against this with a mutex:
+ * signal (render thread for `beforeRendering`). `QObject::disconnect`
+ * atomically marks the connection inactive for FUTURE emissions but
+ * does NOT join already-executing slot bodies nor block in-progress
+ * Qt-internal dispatches that resolved the functor pointer before the
+ * disconnect call landed. Destroying the adapter's owned mutex while
+ * a slot thread is still contending for it would be UB — so the
+ * adapter deliberately does NOT own a mutex.
  *
- * - Slot: acquires `m_mutex` for the duration of the write; early-
- *   returns if `m_detached` is set.
- * - Destructor: explicitly `QObject::disconnect(m_conn)` first so no
- *   NEW slot dispatches can occur, then acquires `m_mutex` (drains
- *   any in-flight slot), flips `m_detached`, and releases. Any
- *   already-running slot completes before the mutex is destructed
- *   with the adapter.
+ * Instead: an `std::atomic<bool> m_detached` flag gates every slot
+ * body read; the destructor sets it (release) then disconnects. Any
+ * slot that passed the disconnect check before we set the flag will
+ * re-read the flag on entry via acquire and return without touching
+ * owner state. The owner's cached-timestamp field is itself atomic and
+ * outlives the adapter (member-destruction order: `m_adapter` is
+ * declared last on `QtQuickClock` so it destroys FIRST, before the
+ * cache), so a slot that wins the race through the detached check but
+ * is preempted before completing still writes to live memory.
  */
 class QtQuickClock::SignalAdapter : public QObject
 {
@@ -54,8 +65,7 @@ public:
 
 private:
     QtQuickClock* m_owner;
-    std::mutex m_mutex;
-    bool m_detached = false;
+    std::atomic<bool> m_detached{false};
     QMetaObject::Connection m_conn;
 };
 
@@ -75,18 +85,34 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
     // AnimatedValue::advance() via the consumer's render-thread hook.
     //
     // The connection is stored so ~SignalAdapter can explicitly
-    // disconnect BEFORE draining via m_mutex — Qt's implicit
-    // disconnect in ~QObject races with in-flight slot bodies on
-    // direct connections.
+    // disconnect, but the teardown mitigation relies on the atomic
+    // `m_detached` flag, not the disconnect alone — see class-doc.
     m_conn = QObject::connect(
         window, &QQuickWindow::beforeRendering, this,
         [this]() {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            if (m_detached) {
+            // Acquire on every slot entry — `~SignalAdapter` publishes
+            // `m_detached=true` with release, so an entry observing
+            // `true` is guaranteed to observe every memory write that
+            // happened-before the destructor (even though here we just
+            // need the flag bit itself).
+            if (m_detached.load(std::memory_order_acquire)) {
                 return;
             }
             const auto ns = std::chrono::steady_clock::now().time_since_epoch().count();
-            m_owner->m_nowCache.store(ns, std::memory_order_release);
+            // Monotonicity floor across the fallback→cache handoff:
+            // GUI-thread `now()` reads on the fallback path also CAS-
+            // seed the cache with their reading. The writer takes
+            // `max(prev, ns)` so a slightly-earlier render-thread
+            // capture (cross-core TSC skew on pathological systems)
+            // cannot publish a value below what a GUI-thread reader
+            // already observed. Under normal monotonic-steady_clock
+            // semantics this is a no-op — `ns` is always ≥ `prev`.
+            auto prev = m_owner->m_nowCache.load(std::memory_order_acquire);
+            while (ns > prev
+                   && !m_owner->m_nowCache.compare_exchange_weak(prev, ns, std::memory_order_release,
+                                                                 std::memory_order_acquire)) {
+                // CAS retry — `prev` updated with the latest seen value.
+            }
             // Latch once on first fire — `now()` flips from the
             // steady_clock freshness fallback to reading the cache
             // directly, so every consumer of this clock sees the same
@@ -98,16 +124,25 @@ QtQuickClock::SignalAdapter::SignalAdapter(QtQuickClock* owner, QQuickWindow* wi
 
 QtQuickClock::SignalAdapter::~SignalAdapter()
 {
-    // Disconnect first so no new slot dispatches occur while we drain.
-    // `QObject::disconnect` is thread-safe and returns after the
-    // connection is marked as inactive for future emissions.
+    // Publish the detach flag FIRST (release). Any slot body that enters
+    // after this point (whether before or after the disconnect returns)
+    // will acquire-load `true` and early-return without touching owner
+    // state. Ordering matters: the disconnect below is not a barrier for
+    // already-dispatched emissions, so the detached flag is the only
+    // thing that stops a mid-dispatch slot.
+    m_detached.store(true, std::memory_order_release);
+    // Disconnect FUTURE emissions — Qt marks the connection inactive,
+    // so `beforeRendering` fired after this point will not dispatch our
+    // functor. This is belt-and-suspenders: even if the detached flag
+    // alone would prevent owner-state mutation, skipping the dispatch
+    // entirely saves the render thread a mutex-less no-op call.
     QObject::disconnect(m_conn);
-    // Acquire the mutex to wait out any in-flight slot body. Once we
-    // hold the lock, no slot is executing; set m_detached as
-    // belt-and-suspenders against any spurious future dispatch that
-    // slips past the disconnect (shouldn't happen but cheap to guard).
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_detached = true;
+    // No mutex owned — nothing to destroy that a slot thread could be
+    // contending on. The owner's `m_nowCache` / `m_renderLoopActive`
+    // outlive this adapter (QtQuickClock destroys `m_adapter` before
+    // the cache fields, in reverse declaration order), so any slot
+    // that was past the detached check when we arrived here writes to
+    // still-live memory and then exits harmlessly.
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -150,7 +185,21 @@ std::chrono::nanoseconds QtQuickClock::now() const
     if (m_renderLoopActive.load(std::memory_order_acquire)) {
         return std::chrono::nanoseconds{m_nowCache.load(std::memory_order_acquire)};
     }
-    return std::chrono::steady_clock::now().time_since_epoch();
+    // Pre-handoff fallback: read steady_clock directly, but also CAS-
+    // seed the cache with this reading. The eventual render-thread
+    // writer takes `max(prev, captured)` so the first post-flip cache
+    // value can never be below any fallback reading a GUI consumer
+    // already observed. This closes the monotonicity hole that would
+    // otherwise open if cross-core TSC skew lets the render thread
+    // capture a slightly-earlier steady_clock value than the GUI
+    // thread's most recent fallback read.
+    const auto reading = std::chrono::steady_clock::now().time_since_epoch().count();
+    auto prev = m_nowCache.load(std::memory_order_acquire);
+    while (reading > prev
+           && !m_nowCache.compare_exchange_weak(prev, reading, std::memory_order_release, std::memory_order_acquire)) {
+        // CAS retry — `prev` updated with the latest seen value.
+    }
+    return std::chrono::nanoseconds{reading};
 }
 
 qreal QtQuickClock::refreshRate() const

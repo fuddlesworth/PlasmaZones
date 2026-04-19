@@ -7,6 +7,8 @@
 
 #include <QLineF>
 
+#include <cmath>
+
 namespace PhosphorAnimation {
 namespace SnapPolicy {
 
@@ -14,6 +16,16 @@ std::optional<MotionSpec<QRectF>> createSnapSpec(const QRectF& oldFrame, const Q
                                                  const SnapParams& params, IMotionClock* clock)
 {
     if (!clock) {
+        return std::nullopt;
+    }
+    // Finite-dimension gate: a corrupt target (NaN/Inf from a settings
+    // reload that bypassed clamp, or a computed layout-bounds rect that
+    // divided by zero) would propagate non-finite values into
+    // `AnimatedValue::start` and poison every downstream paint. The
+    // `<= 0.0` check below does NOT reject NaN (NaN comparisons return
+    // false); make the finite-ness gate explicit.
+    if (!std::isfinite(newFrame.width()) || !std::isfinite(newFrame.height()) || !std::isfinite(newFrame.x())
+        || !std::isfinite(newFrame.y())) {
         return std::nullopt;
     }
     if (newFrame.width() <= 0.0 || newFrame.height() <= 0.0) {

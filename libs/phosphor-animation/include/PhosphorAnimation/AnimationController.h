@@ -16,6 +16,7 @@
 #include <QRectF>
 #include <QVarLengthArray>
 
+#include <cmath>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -1046,7 +1047,20 @@ private:
     static void clampProfile(Profile& profile)
     {
         if (profile.duration) {
-            profile.duration = qBound(qreal(0.0), *profile.duration, kMaxDurationMs);
+            // `std::isfinite` gate first: `qBound(0.0, NaN, max)` returns
+            // NaN under libstdc++ (the middle operand short-circuits the
+            // comparisons the min/max lowering depends on). A non-finite
+            // duration must be rejected here rather than propagated into
+            // `AnimatedValue`'s stateless progression where it would
+            // poison `state.value`. Reset to `std::nullopt` so the
+            // effective-duration fallback (`Profile::DefaultDuration`)
+            // applies — matches how every other "unset" profile field
+            // behaves.
+            if (!std::isfinite(*profile.duration)) {
+                profile.duration.reset();
+            } else {
+                profile.duration = qBound(qreal(0.0), *profile.duration, kMaxDurationMs);
+            }
         }
         if (profile.minDistance) {
             profile.minDistance = qBound(0, *profile.minDistance, kMaxMinDistancePx);
