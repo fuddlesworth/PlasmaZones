@@ -354,13 +354,13 @@ speculative legacy-object fallback: the library is brand new and has no
 prior persisted format, so per CLAUDE.md's "no ad-hoc migration code"
 rule, reads and writes share the same shape.
 
-### `WindowMotion.h` — per-window snap animation state (🗑 retired in Phase 3)
+### `WindowMotion.h` — (🗑 deleted in Phase 3 sub-commit 3)
 
-> **Phase 3 status:** this struct is deleted in Phase 3. Its fields
-> become internal state of `AnimatedValue<QRectF>` and the snap-
-> animation path shifts to `SnapPolicy::createSnapSpec` →
-> `AnimatedValue<QRectF>::start()`. The description below documents
-> the Phase-2 shipped API.
+> **Status:** removed. Fields became internal state of
+> `AnimatedValue<QRectF>`; the snap-animation path flows through
+> `SnapPolicy::createSnapSpec` → `AnimatedValue<QRectF>::start()`.
+> The description below documents the Phase-2 shipped API for
+> historical reference only; the header and tests no longer exist.
 
 
 ```cpp
@@ -402,15 +402,15 @@ on the last frame. Stateful step-based progression + velocity-preserving
 retarget are a Phase 3 concern (`AnimatedValue<T>` holds `CurveState`
 alongside the clock; see Open Question 3 below).
 
-### `AnimationMath.h` (🗑 retired in Phase 3)
+### `AnimationMath.h` (🗑 deleted in Phase 3 sub-commit 3)
 
-> **Phase 3 status:** `createSnapMotion` moves to
+> **Status:** removed. `createSnapMotion` was replaced by
 > `SnapPolicy::createSnapSpec` (returns `std::optional<MotionSpec<QRectF>>`
-> instead of `std::optional<WindowMotion>`); `repaintBounds` is
+> instead of `std::optional<WindowMotion>`); `repaintBounds` was
 > absorbed into `AnimatedValue<QRectF>::bounds()` and the
-> `Curve::overshoots()` polymorphism. This namespace is deleted
-> once Phase 3 ships. The description below documents the Phase-2
-> shipped API.
+> `Curve::overshoots()` polymorphism. The description below documents
+> the Phase-2 shipped API for historical reference only; the header
+> and tests no longer exist.
 
 
 ```cpp

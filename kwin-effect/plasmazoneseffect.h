@@ -56,6 +56,7 @@ class KWinCompositorBridge;
 class NavigationHandler;
 class ScreenChangeHandler;
 class SnapAssistHandler;
+class CompositorClock;
 class WindowAnimator;
 class DragTracker;
 
@@ -450,6 +451,10 @@ private:
     std::unique_ptr<NavigationHandler> m_navigationHandler;
     std::unique_ptr<ScreenChangeHandler> m_screenChangeHandler;
     std::unique_ptr<SnapAssistHandler> m_snapAssistHandler;
+    // The clock must outlive m_windowAnimator — the animator holds a
+    // non-owning pointer into it. Declared before the animator so the
+    // destructor runs in reverse order (animator first, clock second).
+    std::unique_ptr<CompositorClock> m_motionClock;
     std::unique_ptr<WindowAnimator> m_windowAnimator;
     std::unique_ptr<DragTracker> m_dragTracker;
     std::unique_ptr<ICompositorBridge> m_compositorBridge;

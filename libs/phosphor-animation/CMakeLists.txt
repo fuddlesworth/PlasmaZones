@@ -63,9 +63,8 @@ set(phosphoranimation_SRCS
     src/profile.cpp
     src/profilepaths.cpp
     src/profiletree.cpp
-    src/windowmotion.cpp
-    src/animationmath.cpp
     src/animatedvalue.cpp
+    src/snappolicy.cpp
     src/staggertimer.cpp
 )
 
@@ -82,8 +81,7 @@ set(phosphoranimation_public_HDRS
     include/PhosphorAnimation/Profile.h
     include/PhosphorAnimation/ProfilePaths.h
     include/PhosphorAnimation/ProfileTree.h
-    include/PhosphorAnimation/WindowMotion.h
-    include/PhosphorAnimation/AnimationMath.h
+    include/PhosphorAnimation/SnapPolicy.h
     include/PhosphorAnimation/AnimationController.h
     include/PhosphorAnimation/StaggerTimer.h
 )

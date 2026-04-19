@@ -42,6 +42,7 @@
 #include <scene/borderoutline.h>
 
 #include "autotilehandler.h"
+#include "compositorclock.h"
 #include "kwin_compositor_bridge.h"
 #include "screenchangehandler.h"
 #include "snapassisthandler.h"
@@ -150,11 +151,21 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     , m_navigationHandler(std::make_unique<NavigationHandler>(this))
     , m_screenChangeHandler(std::make_unique<ScreenChangeHandler>(this))
     , m_snapAssistHandler(std::make_unique<SnapAssistHandler>(this))
+    // Phase 3: the motion clock drives every AnimatedValue inside the
+    // controller. Single-output / degenerate mode for now — the effect
+    // hands KWin's per-frame presentTime in via updatePresentTime().
+    // Multi-output (per-KWin::Output) instances are a future refinement.
+    , m_motionClock(std::make_unique<CompositorClock>(nullptr))
     , m_windowAnimator(std::make_unique<WindowAnimator>())
     , m_dragTracker(std::make_unique<DragTracker>(this))
     , m_compositorBridge(std::make_unique<KWinCompositorBridge>(this))
 {
     PlasmaZones::registerDBusTypes();
+
+    // Wire the motion clock into the animator. The clock is fed per-
+    // frame in prePaintScreen; the animator reads from it inside every
+    // AnimatedValue<QRectF>::advance() call.
+    m_windowAnimator->setClock(m_motionClock.get());
 
     // Frame-geometry shadow flush timer. Debounces per-window
     // windowFrameGeometryChanged signals and pushes the latest geometry to
@@ -3299,33 +3310,31 @@ void PlasmaZonesEffect::applySnapGeometry(KWin::EffectWindow* window, const QRec
     // the window visually from its old position/size to the new one using
     // translate + scale in paintWindow(). This follows the standard KDE
     // effect pattern — effects are visual overlays, never per-frame moveResize.
-    QPointF animStartPos;
-    QSizeF animStartSize;
     if (!skipAnimation && !allowDuringDrag && m_windowAnimator->isEnabled()) {
-        if (m_windowAnimator->hasAnimation(window)) {
-            if (m_windowAnimator->isAnimatingToTarget(window, geo)) {
-                return; // Already animating to this target
-            }
-            // Capture current visual state before changing anything (mid-flight redirect).
-            // The fallback (old frame) is unreachable under the hasAnimation() gate
-            // above, but pass it explicitly so a stray call outside the gate still
-            // yields a meaningful start state instead of the origin.
-            animStartPos = m_windowAnimator->currentVisualPosition(window, oldFrame.topLeft());
-            animStartSize = m_windowAnimator->currentVisualSize(window, oldFrame.size());
-            m_windowAnimator->removeAnimation(window);
-        } else {
-            animStartPos = oldFrame.topLeft();
-            animStartSize = oldFrame.size();
-        }
+        const QRectF targetFrame(geo);
 
-        // Apply final geometry immediately — client starts re-rendering at new size
+        // Apply final geometry immediately — client starts re-rendering at new size.
+        // Do this before touching the animator so the controller's
+        // downstream bounds / padding queries see the updated
+        // expandedGeometry for this frame.
         KWin::Window* kw = window->window();
         if (kw) {
-            kw->moveResize(QRectF(geo));
+            kw->moveResize(targetFrame);
         }
 
-        // Start animation from old visual state to new geometry
-        m_windowAnimator->startAnimation(window, animStartPos, animStartSize, geo);
+        if (m_windowAnimator->hasAnimation(window)) {
+            if (m_windowAnimator->isAnimatingToTarget(window, targetFrame)) {
+                return; // Already animating to this target
+            }
+            // Mid-flight redirect: retarget with PreserveVelocity
+            // carries the world-space rate of change across the
+            // segment boundary on stateful curves (Spring) and falls
+            // back to position-continuous on stateless curves
+            // (Easing). Either way the visual value does not jump.
+            m_windowAnimator->retarget(window, targetFrame, PhosphorAnimation::RetargetPolicy::PreserveVelocity);
+        } else {
+            m_windowAnimator->startAnimation(window, QRectF(oldFrame), targetFrame);
+        }
 
         repaintSnapRegions(window, oldFrame, geo);
         return;
@@ -3732,8 +3741,12 @@ void PlasmaZonesEffect::updateAllBorders()
 
 void PlasmaZonesEffect::prePaintScreen(KWin::ScreenPrePaintData& data, std::chrono::milliseconds presentTime)
 {
-    // Update animation progress from presentTime and clean up completed ones
-    m_windowAnimator->advanceAnimations(presentTime);
+    // Feed the motion clock first so every AnimatedValue inside
+    // advanceAnimations() reads the same vsync-aligned reading. Then
+    // step the animations — the controller pulls `dt` from the clock
+    // internally (Phase 3 clock model; no more presentTime parameter).
+    m_motionClock->updatePresentTime(presentTime);
+    m_windowAnimator->advanceAnimations();
 
     if (m_windowAnimator->hasActiveAnimations()) {
         // Windows have translation transforms that move them outside their
