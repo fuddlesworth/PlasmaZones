@@ -390,7 +390,7 @@ void Daemon::initializeUnifiedController()
     // Share the daemon's bundle-owned autotile source with the controller
     // so its internal layout cache's autotile half is populated from the
     // bundle's preview cache instead of rebuilt from scratch per call.
-    m_unifiedLayoutController->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
+    m_unifiedLayoutController->setAutotileLayoutSource(m_autotileLayoutSource);
 
     // Set initial desktop/activity context for visibility-filtered cycling
     m_layoutManager->setCurrentVirtualDesktop(m_virtualDesktopManager->currentDesktop());

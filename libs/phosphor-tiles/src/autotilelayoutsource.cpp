@@ -122,8 +122,10 @@ PhosphorLayout::LayoutPreview previewFromAlgorithm(const QString& algorithmId,
     preview.algorithm = buildMetadata(algorithm);
     // Built-in C++ algorithms and system-installed scripts are system
     // entries; user scripts are not. Consumers should not recompute this
-    // — they treat LayoutPreview::isSystem as authoritative.
-    preview.isSystem = !preview.algorithm->isScripted || !preview.algorithm->isUserScript;
+    // — they treat LayoutPreview::isSystem as authoritative. Parenthesised
+    // form so the !(scripted ∧ user-script) intent is unambiguous and a
+    // future flag flip can't quietly invert the expression.
+    preview.isSystem = !(preview.algorithm->isScripted && preview.algorithm->isUserScript);
 
     preview.zones.reserve(rects.size());
     preview.zoneNumbers.reserve(rects.size());
@@ -176,10 +178,6 @@ AutotileLayoutSource::AutotileLayoutSource(PhosphorTiles::ITileAlgorithmRegistry
     Q_ASSERT_X(m_registry, "AutotileLayoutSource",
                "constructed with null ITileAlgorithmRegistry — factory registrar should have returned nullptr instead");
     if (m_registry) {
-        // Seed the algorithm-count cache — insertCacheEntry() relies on it
-        // for its FIFO cap, and the first invalidation signal may not fire
-        // until long after the first availableLayouts() call.
-        m_algorithmCountCache = m_registry->availableAlgorithms().size();
         // Subscribe to the unified ILayoutSourceRegistry::contentsChanged
         // signal — AlgorithmRegistry already bridges its three specific
         // mutation signals (algorithmRegistered / algorithmUnregistered /
@@ -197,12 +195,6 @@ void AutotileLayoutSource::invalidateCache()
 {
     m_cache.clear();
     m_cacheOrder.clear();
-    // Refresh the cached algorithm count at the same time — the registry's
-    // algorithm set is exactly what just changed, and this is the only path
-    // where the count can drift. availableAlgorithms() allocates a fresh
-    // QStringList so we pay the cost here (on change) rather than on every
-    // insertCacheEntry().
-    m_algorithmCountCache = m_registry ? m_registry->availableAlgorithms().size() : 0;
     // All invalidation paths converge here, so emitting once guarantees no
     // listener misses a rebuild regardless of which signal fired.
     Q_EMIT contentsChanged();
@@ -214,7 +206,14 @@ void AutotileLayoutSource::insertCacheEntry(const QString& key, const PhosphorLa
     // the layout-picker UI (one preview per algorithm × a handful of
     // windowCount values) while preventing unbounded growth if a caller
     // probes previewAt() with a wide range of window counts.
-    const int cap = qMax(10, m_algorithmCountCache * 10);
+    //
+    // Read the count live from the registry rather than caching: QStringList
+    // is implicitly shared (COW), so availableAlgorithms() is a cheap
+    // reference bump + .size() lookup. Caching opened a window where the
+    // cap was wrong if the source was constructed against an empty registry
+    // and saw inserts before the first contentsChanged fired.
+    const int algoCount = m_registry ? m_registry->availableAlgorithms().size() : 0;
+    const int cap = qMax(10, algoCount * 10);
 
     // Re-insert semantics: if the key is already present (e.g. a caller
     // re-queries after eviction or deliberately overrides), drop the old

@@ -154,6 +154,11 @@ public:
     /// Inject the daemon's bundle-owned autotile layout source. Optional —
     /// when set, layout enumeration reuses its preview cache across calls
     /// instead of constructing a transient source per call.
+    ///
+    /// @note Expected to be called at most once after construction. The
+    /// controller does not subscribe to the source's own signals — match
+    /// the "set-once" discipline used by every other
+    /// setAutotileLayoutSource call site.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     // Screen management

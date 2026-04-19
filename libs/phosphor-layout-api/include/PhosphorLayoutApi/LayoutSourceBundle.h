@@ -62,9 +62,14 @@ public:
     void addFactory(std::unique_ptr<ILayoutSourceFactory> factory);
 
     /// Materialise sources from every registered factory and wire the
-    /// composite. Idempotent — calling @c build() after a successful
-    /// build is a no-op. Each factory's @c create() is invoked exactly
-    /// once.
+    /// composite. Single-shot: calling @c build() after a successful
+    /// build triggers a Q_ASSERT in debug builds and is a no-op in
+    /// release. Each factory's @c create() is invoked exactly once.
+    /// Matches the lifecycle discipline on @c addFactory and
+    /// @c buildFromRegistered — any second-call into a built bundle is
+    /// a programmer error. Duplicate factory names are detected here
+    /// and logged at @c qWarning so consumer-side @c source(name)
+    /// lookups don't silently target the wrong source.
     void build();
 
     /// Auto-discovery convenience: drain every provider registered
@@ -97,9 +102,16 @@ public:
 
     /// Borrowed access to the source produced by the factory whose
     /// @c name() matches @p name. Returns null when no such factory
-    /// has been registered or when @c build() has not run yet. Mainly
-    /// used by composition roots that need to wire engine-specific
-    /// signals through to the source.
+    /// has been registered or when @c build() has not run yet.
+    ///
+    /// Primary use case is the autotile-style fast path: composition
+    /// roots that want to reuse a long-lived source's preview cache
+    /// across calls hand the named pointer to consumers (see
+    /// @c LayoutAdaptor::setAutotileLayoutSource etc.). The
+    /// @c composite() pointer is the canonical ILayoutSource for
+    /// every other call site — only reach for @c source(name) when a
+    /// specific provider's cache discipline materially differs from
+    /// the composite's.
     ILayoutSource* source(const QString& name) const;
 
 private:

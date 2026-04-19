@@ -46,10 +46,12 @@ public:
     /// @c ctx.get<IZoneLayoutRegistry>() would silently miss.
     ///
     /// Duplicate registrations are a programmer error: asserts in debug,
-    /// warns + overwrites in release. Silent last-write-wins would let
-    /// a typo in one composition root hand provider builders a different
-    /// registry than the rest of the root is wired against, with no
-    /// diagnostic — matches the single-shot discipline on
+    /// warns + ignores in release (first registration wins). Silent
+    /// last-write-wins would let a typo in one composition root hand
+    /// provider builders a different registry than the rest of the root is
+    /// wired against, with no diagnostic. First-wins is the fail-safe
+    /// release fallback — the original (presumably correct) registration
+    /// stays authoritative; matches the single-shot discipline on
     /// @c LayoutSourceBundle::buildFromRegistered.
     template<typename T>
     void set(std::type_identity_t<T*> service)
@@ -59,7 +61,9 @@ public:
         Q_ASSERT_X(!duplicate, "FactoryContext::set",
                    "service key already registered; duplicate set<T>() is a programmer error");
         if (duplicate) {
-            qWarning("FactoryContext::set: overwriting existing service for type '%s'", key.name());
+            qWarning("FactoryContext::set: ignoring duplicate registration for type '%s' (first registration kept)",
+                     key.name());
+            return;
         }
         m_services[key] = static_cast<void*>(service);
     }
@@ -97,7 +101,7 @@ struct PHOSPHORLAYOUTAPI_EXPORT PendingLayoutSourceProvider
 ///
 /// Populated at static-init time by
 /// @c LayoutSourceProviderRegistrar instances in each provider
-/// library. Drained-but-not-cleared by
+/// library. Snapshotted (copied locally, never mutated) by
 /// @c LayoutSourceBundle::buildFromRegistered, so multiple bundles
 /// (daemon, editor, settings) each iterate the same list and create
 /// their own factory instances. A free function (rather than nested
@@ -154,5 +158,28 @@ public:
     LayoutSourceProviderRegistrar(QString name, int priority,
                                   std::function<std::unique_ptr<ILayoutSourceFactory>(const FactoryContext&)> builder);
 };
+
+/// Standard provider builder: pull @p Registry from @p ctx, return a
+/// new @p Factory bound to it, or nullptr if the composition root
+/// didn't surface that registry.
+///
+/// Lets the per-provider factory .cpp boil down to a one-liner:
+/// @code
+/// PhosphorLayout::LayoutSourceProviderRegistrar registrar(
+///     QStringLiteral("autotile"), /*priority=*/100,
+///     &PhosphorLayout::makeProviderFactory<ITileAlgorithmRegistry, AutotileLayoutSourceFactory>);
+/// @endcode
+/// Forces every provider into the same null-bail-out discipline so a
+/// future engine can't accidentally crash the bundle by skipping the
+/// guard.
+template<typename Registry, typename Factory>
+inline std::unique_ptr<ILayoutSourceFactory> makeProviderFactory(const FactoryContext& ctx)
+{
+    auto* registry = ctx.get<Registry>();
+    if (!registry) {
+        return nullptr;
+    }
+    return std::make_unique<Factory>(registry);
+}
 
 } // namespace PhosphorLayout

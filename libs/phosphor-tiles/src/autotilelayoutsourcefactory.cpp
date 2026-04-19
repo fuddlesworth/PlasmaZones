@@ -29,22 +29,18 @@ std::unique_ptr<PhosphorLayout::ILayoutSource> AutotileLayoutSourceFactory::crea
 namespace {
 // Static-init self-registration. Composition roots that call
 // LayoutSourceBundle::buildFromRegistered(ctx) pick this up
-// automatically — no per-root addFactory line. Returns nullptr when
-// the composition root didn't surface an ITileAlgorithmRegistry,
-// which is the "this composition root doesn't host the autotile
-// engine" signal.
+// automatically — no per-root addFactory line. The shared
+// makeProviderFactory<> helper enforces the standard null-bail-out
+// discipline: if the FactoryContext doesn't carry an
+// ITileAlgorithmRegistry, the builder returns nullptr and the bundle
+// silently skips this provider (the "this composition root doesn't
+// host the autotile engine" signal).
 //
 // Priority 100 — autotile entries follow manual zone entries in the
 // composite's iteration order (zones registers at priority 0).
 PhosphorLayout::LayoutSourceProviderRegistrar
     registrar(QStringLiteral("autotile"), /*priority=*/100,
-              [](const PhosphorLayout::FactoryContext& ctx) -> std::unique_ptr<PhosphorLayout::ILayoutSourceFactory> {
-                  auto* registry = ctx.get<ITileAlgorithmRegistry>();
-                  if (!registry) {
-                      return nullptr;
-                  }
-                  return std::make_unique<AutotileLayoutSourceFactory>(registry);
-              });
+              &PhosphorLayout::makeProviderFactory<ITileAlgorithmRegistry, AutotileLayoutSourceFactory>);
 } // anonymous namespace
 
 } // namespace PhosphorTiles

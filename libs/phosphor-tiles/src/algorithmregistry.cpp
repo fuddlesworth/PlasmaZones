@@ -126,6 +126,17 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
         return;
     }
 
+    // Reserved namespace: "autotile:" is the prefix LayoutId uses to
+    // wrap algorithm ids into composite LayoutPreview ids. An algorithm
+    // self-naming with that prefix would round-trip as
+    // "autotile:autotile:foo" — extractAlgorithmId still works, but the
+    // doubled prefix is a foot-gun for anyone parsing ids by hand.
+    if (id.startsWith(QLatin1String("autotile:"))) {
+        qCWarning(PhosphorTiles::lcTilesLib)
+            << "AlgorithmRegistry: refusing algorithm id with reserved 'autotile:' prefix" << id;
+        delete algorithm;
+        return;
+    }
     // IDs flow into LayoutPreview::id ("autotile:<id>"), JSON keys, D-Bus
     // method arguments, and QML model roles. Reject characters that would
     // break any downstream parser before they reach those boundaries.

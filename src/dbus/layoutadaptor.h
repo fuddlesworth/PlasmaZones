@@ -68,6 +68,11 @@ public:
     /// @ref setLayoutSource handles the composite used by the
     /// @c getLayoutPreview* D-Bus surface separately; this setter threads
     /// the autotile-specific source to the @c buildUnifiedLayoutList path.
+    ///
+    /// @note Expected to be called at most once after construction. The
+    /// adaptor does not subscribe to the source's own signals — match the
+    /// "set-once" discipline used by every other setAutotileLayoutSource
+    /// call site (UnifiedLayoutController, OverlayService, …).
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 
     /**

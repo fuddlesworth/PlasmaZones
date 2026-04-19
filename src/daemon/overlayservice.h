@@ -152,6 +152,12 @@ public:
     /// cache across calls instead of constructing a transient source per
     /// call (which throws away the cache). Borrowed — caller owns it and
     /// must keep it alive for the service's lifetime.
+    ///
+    /// @note Expected to be called at most once. The service does not
+    /// subscribe to the source's own signals — replacing the pointer
+    /// later would not require a disconnect today, but matching the
+    /// "set-once after construction" discipline used by every other
+    /// setAutotileLayoutSource call site keeps the contract uniform.
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
     Phosphor::Screens::ScreenManager* screenManager() const
     {

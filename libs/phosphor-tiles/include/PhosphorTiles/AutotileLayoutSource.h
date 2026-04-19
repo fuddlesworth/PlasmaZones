@@ -80,12 +80,6 @@ private:
     mutable QHash<QString, PhosphorLayout::LayoutPreview> m_cache;
     /// FIFO eviction order — keys appended on insert, head evicted on overflow.
     mutable QStringList m_cacheOrder;
-    /// Cached `availableAlgorithms().size()` — refreshed on every
-    /// registry-change signal via invalidateCache(). Without the cache,
-    /// each insertCacheEntry() re-queries the registry (returning a fresh
-    /// QStringList) just to compute the FIFO cap; for picker UIs that
-    /// churn the cache repeatedly that adds up.
-    mutable int m_algorithmCountCache = 0;
 };
 
 } // namespace PhosphorTiles

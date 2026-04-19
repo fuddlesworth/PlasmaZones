@@ -389,6 +389,14 @@ private:
     // (composite first, then the child sources it borrows from). See
     // layoutsourcefactory.h for the construction contract.
     PhosphorLayout::LayoutSourceBundle m_layoutSources;
+    /// Cached pointer to the bundle's autotile source — populated once
+    /// after buildFromRegistered in the ctor, then handed to every
+    /// consumer that wants the long-lived preview-cache fast path
+    /// (overlay service, layout adaptor, unified controller). Avoids
+    /// repeating m_layoutSources.source(QStringLiteral("autotile"))
+    /// at every wiring site (DRY) and removes the temptation to typo
+    /// the literal. Borrowed; lifetime tied to m_layoutSources.
+    PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr;
     std::unique_ptr<LayoutComputeService> m_layoutComputeService;
     std::unique_ptr<Settings> m_settings;
     std::unique_ptr<PhosphorZones::ZoneDetector> m_zoneDetector;

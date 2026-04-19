@@ -67,7 +67,16 @@ void LayoutSourceBundle::addFactory(std::unique_ptr<ILayoutSourceFactory> factor
 
 void LayoutSourceBundle::build()
 {
+    // Single-shot: every factory's create() runs exactly once. A second
+    // build() would either re-instantiate sources (if we let it through)
+    // or silently skip work the caller might be expecting (the previous
+    // behaviour). Assert in debug; no-op in release with a warn so a
+    // misbehaving caller is observable. Matches the lifecycle discipline
+    // on addFactory and buildFromRegistered.
+    Q_ASSERT_X(!m_composite, "LayoutSourceBundle::build",
+               "build() is single-shot per bundle; second call is a programmer error");
     if (m_composite) {
+        qWarning("LayoutSourceBundle::build: ignoring second call (bundle already built)");
         return;
     }
     m_sources.reserve(m_factories.size());
@@ -75,6 +84,20 @@ void LayoutSourceBundle::build()
     QList<ILayoutSource*> raw;
     raw.reserve(static_cast<int>(m_factories.size()));
     for (auto& factory : m_factories) {
+        const QString name = factory->name();
+        // Duplicate-name detection: source(name) walks m_sourceNames and
+        // returns the first match, so a collision silently routes
+        // composition-root setAutotileLayoutSource (and similar) at the
+        // wrong source. Warn loudly here — a future plugin-loading cycle
+        // (XDG path duplication, dlopen + static init re-run) is the
+        // realistic trigger. Still register both so the composite carries
+        // the entries; the warning is the actionable signal.
+        if (std::find(m_sourceNames.begin(), m_sourceNames.end(), name) != m_sourceNames.end()) {
+            qWarning(
+                "LayoutSourceBundle::build: duplicate factory name '%s' — source(name) lookups will only return "
+                "the first match",
+                qUtf8Printable(name));
+        }
         auto source = factory->create();
         if (!source) {
             // A factory returning null is a programmer error (the contract
@@ -83,11 +106,10 @@ void LayoutSourceBundle::build()
             // doing so would leave m_sourceNames / m_sources out of
             // index-sync and feed a null into the composite. We already
             // know the bad factory by name; log and move on.
-            qWarning("LayoutSourceBundle::build: factory '%s' returned null — skipping",
-                     qUtf8Printable(factory->name()));
+            qWarning("LayoutSourceBundle::build: factory '%s' returned null — skipping", qUtf8Printable(name));
             continue;
         }
-        m_sourceNames.push_back(factory->name());
+        m_sourceNames.push_back(name);
         m_sources.push_back(std::move(source));
         raw.append(m_sources.back().get());
     }

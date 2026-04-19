@@ -175,6 +175,13 @@ public:
      * Optional — when set, @ref layouts reuses its preview cache across
      * calls instead of constructing a transient source per call. Borrowed —
      * caller owns it and must keep it alive for the controller's lifetime.
+     *
+     * @note Expected to be called at most once per controller, right after
+     * construction. The controller does NOT subscribe to the source's
+     * own signals — cache invalidation is driven by the registry's
+     * @c contentsChanged subscription wired in the ctor. If the source
+     * pointer ever needs replacing (multi-bundle composition root), add
+     * connect/disconnect bookkeeping here first.
      */
     void setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source);
 

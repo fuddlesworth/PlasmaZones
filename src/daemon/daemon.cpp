@@ -178,6 +178,10 @@ Daemon::Daemon(QObject* parent)
     factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_layoutManager.get());
     factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_algorithmRegistry.get());
     m_layoutSources.buildFromRegistered(factoryCtx);
+    // Cache the bundle's autotile source once so the four init() wiring
+    // sites that need it don't each re-call source(QStringLiteral("autotile"))
+    // (one literal typo away from silently breaking preview-cache reuse).
+    m_autotileLayoutSource = m_layoutSources.source(QStringLiteral("autotile"));
 }
 
 Daemon::~Daemon()
@@ -271,7 +275,7 @@ bool Daemon::init()
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
     m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
-    m_overlayService->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
+    m_overlayService->setAutotileLayoutSource(m_autotileLayoutSource);
     if (auto* defLayout = m_layoutManager->defaultLayout()) {
         m_overlayService->setLayout(defLayout);
         m_zoneDetector->setLayout(defLayout);
@@ -416,7 +420,7 @@ bool Daemon::init()
     // D-Bus calls. The full composite above drives the
     // getLayoutPreview* methods; this separate pointer targets only the
     // autotile enumeration slot — see LayoutAdaptor::setAutotileLayoutSource.
-    m_layoutAdaptor->setAutotileLayoutSource(m_layoutSources.source(QStringLiteral("autotile")));
+    m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
