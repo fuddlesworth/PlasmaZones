@@ -102,24 +102,28 @@ enum class RetargetResult {
  *
  * ## Virtual hooks (unchanged from Phase 2)
  *
- * - @ref onAnimationStarted   — fired when @ref startAnimation accepts.
- * - @ref onAnimationComplete  — fired when an animation completes.
- * - @ref onAnimationReplaced  — in-flight animation displaced by a new start.
+ * - @ref onAnimationStarted    — fired when @ref startAnimation accepts.
+ * - @ref onAnimationComplete   — fired when an animation completes.
+ * - @ref onAnimationReplaced   — in-flight animation displaced by a new start.
  * - @ref onAnimationRetargeted — in-flight animation redirected (non-terminal).
- * - @ref onAnimationReaped    — batch-reaped via @ref reapAnimationsForClock.
- * - @ref onRepaintNeeded      — fired with a bounds rect for damage.
- * - @ref isHandleValid        — reject stale handles.
- * - @ref expandedPadding      — compositor-specific shadow / decoration margin.
+ * - @ref onAnimationReaped     — batch-reaped via @ref reapAnimationsForClock.
+ * - @ref onAnimationAbandoned  — dropped mid-tick when `isHandleValid` flips false.
+ * - @ref onRepaintNeeded       — fired with a bounds rect for damage.
+ * - @ref isHandleValid         — reject stale handles.
+ * - @ref expandedPadding       — compositor-specific shadow / decoration margin.
  *
  * ## Lifecycle events
  *
  * Every accepted `startAnimation` produces exactly one terminating
  * event on the controller's hooks:
- *   - @ref onAnimationComplete  — natural termination.
- *   - @ref onAnimationReplaced  — displaced by a second
+ *   - @ref onAnimationComplete   — natural termination.
+ *   - @ref onAnimationReplaced   — displaced by a second
  *     `startAnimation` on the same handle before the first completed.
- *   - @ref onAnimationReaped    — dropped by
+ *   - @ref onAnimationReaped     — dropped by
  *     @ref reapAnimationsForClock (output teardown).
+ *   - @ref onAnimationAbandoned  — controller-initiated reap inside
+ *     @ref advanceAnimations when @ref isHandleValid flips to false
+ *     (window destroyed mid-flight, handle invalidated externally).
  *   - silent removal via @ref removeAnimation / @ref clear — the
  *     caller already has the context; no hook fires.
  * `onAnimationRetargeted` is NOT a terminating event — the same
@@ -492,6 +496,13 @@ public:
         // inconsistent". The animation entry is left in place untouched;
         // a subsequent removeAnimation + startAnimation from the caller
         // restores a known good state.
+        //
+        // Q_ASSERT in debug builds so future regressions that make this
+        // branch reachable through the controller surface fail loudly.
+        // Release builds still return InternalError so production
+        // callers can recover gracefully rather than crashing.
+        Q_ASSERT_X(false, "AnimationController::retargetWithResult",
+                   "AnimatedValue rejected retarget without marking complete — spec was never installed");
         return RetargetResult::InternalError;
     }
 
@@ -570,17 +581,34 @@ public:
         if (!clock) {
             return 0;
         }
-        int reaped = 0;
-        for (auto it = m_animations.begin(); it != m_animations.end();) {
-            if (it->second.spec().clock == clock) {
-                AnimatedValue<QRectF> reapedAnim = std::move(it->second);
-                const Handle handle = it->first;
-                it = m_animations.erase(it);
-                onAnimationReaped(handle, reapedAnim);
-                ++reaped;
-            } else {
-                ++it;
+        // Snapshot handles matching the target clock before iterating.
+        // Same rationale as `advanceAnimations`: the hook may re-enter
+        // the controller and `startAnimation(newHandle)` can trigger an
+        // unordered_map rehash that invalidates every outstanding
+        // iterator. Snapshot-then-find keeps the outer loop stable.
+        QVarLengthArray<Handle, kMaxInlineHandlesPerTick> handles;
+        for (const auto& [handle, anim] : m_animations) {
+            if (anim.spec().clock == clock) {
+                handles.append(handle);
             }
+        }
+        int reaped = 0;
+        for (Handle handle : handles) {
+            auto it = m_animations.find(handle);
+            if (it == m_animations.end()) {
+                continue; // removed by a prior hook this reap
+            }
+            // Re-check the clock binding — a re-entrant retarget/start
+            // could have re-bound this handle to a different clock
+            // since we snapshotted. Only reap handles that still
+            // belong to the target clock.
+            if (it->second.spec().clock != clock) {
+                continue;
+            }
+            AnimatedValue<QRectF> reapedAnim = std::move(it->second);
+            m_animations.erase(it);
+            onAnimationReaped(handle, reapedAnim);
+            ++reaped;
         }
         return reaped;
     }
@@ -687,7 +715,16 @@ public:
                 continue; // removed by a prior hook this tick
             }
             if (!isHandleValid(handle)) {
+                // Controller-initiated reap: fire onAnimationAbandoned
+                // so subclasses counting lifecycle events (telemetry,
+                // damage-region accumulators) can balance against the
+                // original `onAnimationStarted`. Move the entry out
+                // before erasing so the hook receives a stable
+                // locally-moved reference and re-entrant startAnimation
+                // on the same handle rebinds cleanly.
+                AnimatedValue<QRectF> abandoned = std::move(it->second);
                 m_animations.erase(it);
+                onAnimationAbandoned(handle, abandoned);
                 continue;
             }
 
@@ -704,12 +741,8 @@ public:
             // falls through to "keep captured" for the same reason.
             if (IMotionClock* resolved = clockForHandle(handle)) {
                 IMotionClock* current = it->second.spec().clock;
-                if (resolved != current && current) {
-                    const void* currentEpoch = current->epochIdentity();
-                    const void* resolvedEpoch = resolved->epochIdentity();
-                    if (currentEpoch && currentEpoch == resolvedEpoch) {
-                        it->second.rebindClock(resolved);
-                    }
+                if (resolved != current && IMotionClock::epochCompatible(current, resolved)) {
+                    it->second.rebindClock(resolved);
                 }
             }
 
@@ -836,6 +869,26 @@ protected:
      * contract above.
      */
     virtual void onAnimationReaped(Handle /*handle*/, const AnimatedValue<QRectF>& /*reaped*/)
+    {
+    }
+
+    /**
+     * @brief Fired when `advanceAnimations` drops an animation because
+     *        `isHandleValid(handle)` returned false mid-flight.
+     *
+     * Distinct from @ref onAnimationComplete (the animation did not
+     * reach its target), @ref onAnimationReplaced (no new segment is
+     * taking its place), and @ref onAnimationReaped (output teardown,
+     * not handle invalidation). Consumers that maintain started-vs-
+     * terminated event-count invariants override this to balance the
+     * books when a window / scene item is destroyed mid-animation.
+     * Adapters that only care about user-visible completion can leave
+     * the default no-op.
+     *
+     * The @p anim reference is scoped to the call — see the lifetime
+     * contract above.
+     */
+    virtual void onAnimationAbandoned(Handle /*handle*/, const AnimatedValue<QRectF>& /*anim*/)
     {
     }
 

@@ -363,6 +363,15 @@ inline DecomposedTransform decomposeTransform(const QTransform& t)
     //
     // Extract sx and θ from the first column (m11, m21), then
     // un-rotate the second column to split shear × sy from sy.
+    //
+    // Reflection handling: a matrix with negative determinant
+    // (e.g. `QTransform::fromScale(-1, 1)`) is captured as
+    // `sy` negative — the sy extraction below produces the correct
+    // sign. The decomposition round-trips endpoint values faithfully.
+    // However, *interpolation* between a positive-det and negative-det
+    // transform is inherently discontinuous (see `lerpTransform`'s
+    // reflection comment) — the polar path is used only when both
+    // endpoints share determinant sign.
     d.sx = std::sqrt(m11 * m11 + m21 * m21);
     d.rotation = d.sx > 1.0e-9 ? std::atan2(-m21, m11) : 0.0;
 
@@ -419,6 +428,30 @@ inline QTransform lerpTransform(const QTransform& from, const QTransform& to, qr
     }
     if (t >= 1.0) {
         return to;
+    }
+
+    // Reflection (determinant sign change) limitation:
+    //
+    // Polar decomposition into rotation + scale + shear cannot smoothly
+    // interpolate between endpoints whose 2x2 linear parts have
+    // determinants of opposite sign — any such interpolation MUST pass
+    // through a singular matrix at some t, because det is continuous
+    // along a smooth path. When we detect that case, fall back to a
+    // component-wise lerp. Component-wise also produces non-rigid
+    // intermediates (same failure mode that polar exists to avoid on
+    // pure rotations), but for reflection endpoints there is no
+    // rigid-body smooth path by construction — the library simply
+    // cannot produce a meaningful interpolation and the caller should
+    // split the animation into separate segments (to → identity →
+    // reflected-to) if they need continuous motion. Component-wise
+    // lerp is the most predictable fallback (linear in each entry,
+    // matches what a naïve caller would write by hand).
+    const qreal detFrom = from.m11() * from.m22() - from.m12() * from.m21();
+    const qreal detTo = to.m11() * to.m22() - to.m12() * to.m21();
+    if (detFrom * detTo < 0.0) {
+        return QTransform(from.m11() + (to.m11() - from.m11()) * t, from.m12() + (to.m12() - from.m12()) * t,
+                          from.m21() + (to.m21() - from.m21()) * t, from.m22() + (to.m22() - from.m22()) * t,
+                          from.dx() + (to.dx() - from.dx()) * t, from.dy() + (to.dy() - from.dy()) * t);
     }
 
     const DecomposedTransform df = decomposeTransform(from);

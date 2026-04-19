@@ -71,6 +71,7 @@ public:
     QList<int> retargetedHandlesOrdered;
     QList<int> replacedHandlesOrdered;
     QList<int> reapedHandlesOrdered;
+    QList<int> abandonedHandlesOrdered;
     mutable int repaintCalls = 0;
     QSet<int> invalidHandles;
 
@@ -105,6 +106,10 @@ protected:
     void onAnimationReaped(int handle, const AnimatedValue<QRectF>&) override
     {
         reapedHandlesOrdered.append(handle);
+    }
+    void onAnimationAbandoned(int handle, const AnimatedValue<QRectF>&) override
+    {
+        abandonedHandlesOrdered.append(handle);
     }
     void onRepaintNeeded(int, const QRectF&) const override
     {
@@ -334,8 +339,14 @@ private Q_SLOTS:
         QVERIFY(c.repaintCalls >= 1);
     }
 
-    void testInvalidHandlesArePrunedSilently()
+    void testInvalidHandlesArePrunedViaAbandonedHook()
     {
+        // Handles that flip invalid mid-flight are reaped by
+        // `advanceAnimations` via `onAnimationAbandoned` — the fourth
+        // terminating event (distinct from complete / replaced /
+        // clock-reaped). The hook balances started-vs-terminated
+        // event counts for subclasses that track lifecycle invariants
+        // when a window / scene item is destroyed mid-animation.
         TestClock clock;
         MockController c;
         configureLinearEasing(c, clock);
@@ -346,7 +357,13 @@ private Q_SLOTS:
         c.advanceAnimations();
         QVERIFY(!c.hasAnimation(1));
         QVERIFY(c.hasAnimation(2));
+        // Abandoned — NOT completed.
         QVERIFY(!c.completedHandles.contains(1));
+        QVERIFY(c.abandonedHandlesOrdered.contains(1));
+        QVERIFY(!c.abandonedHandlesOrdered.contains(2));
+        // Event-count invariant: one terminating event per accepted
+        // start on this handle (the abandoned one).
+        QCOMPARE(c.abandonedHandlesOrdered.count(1), 1);
     }
 
     // ─── State queries ───
@@ -1483,6 +1500,97 @@ private Q_SLOTS:
         c.advanceAnimations();
         QVERIFY(!c.hasAnimation(1)); // reaped on completion
         QVERIFY(c.completedHandles.contains(1));
+    }
+
+    // ─── Reap snapshot survives rehash-triggering insert ───
+
+    /// `reapAnimationsForClock` previously iterated the map with a live
+    /// iterator and mutated it via `erase` + fired the reap hook. A
+    /// re-entrant `startAnimation(newHandle)` inside the hook can
+    /// insert into the map and — crossing the load-factor threshold —
+    /// trigger a rehash. Before the snapshot-pattern fix, the outer
+    /// iterator was invalidated by the rehash and subsequent loop
+    /// iterations were UB. Stage enough animations on the target
+    /// clock that the re-entrant insert is guaranteed to cross the
+    /// rehash threshold.
+    void testReapManyAnimationsSurvivesRehashingInsert()
+    {
+        TestClock clockA;
+        TestClock clockB;
+
+        ReapReentrantController c;
+        configureLinearEasing(c, clockB, 100.0);
+        c.clockForOne = &clockA;
+
+        // Populate many handles on the target clock. 32 is comfortably
+        // above typical unordered_map initial bucket counts (libstdc++
+        // starts at 1 / libc++ starts at a small prime), so the
+        // load-factor threshold is crossed at least once as the map
+        // grows — and the re-entrant insert below pushes past another
+        // threshold during the reap.
+        //
+        // The base controller routes handles 1 and 2 to `clockForOne`
+        // (clockA); to put more handles on clockA we override via the
+        // hook's callback which captures the controller — but simpler:
+        // just use the existing routing (handles 1 and 2) and add many
+        // extras on the default clock to inflate map size.
+        QVERIFY(c.startAnimation(1, QRectF(0, 0, 100, 100), QRectF(300, 0, 100, 100)));
+        QVERIFY(c.startAnimation(2, QRectF(0, 0, 100, 100), QRectF(500, 0, 100, 100)));
+        for (int h = 10; h < 50; ++h) {
+            QVERIFY(c.startAnimation(h, QRectF(0, 0, 100, 100), QRectF(200 + h, 0, 100, 100)));
+        }
+
+        // Hook inserts many new handles during the reap. Every insert
+        // may rehash; the snapshot-then-find loop must stay stable.
+        int nextNewHandle = 1000;
+        c.onReapedCallback = [&](int /*reapedHandle*/, ReapReentrantController& self) {
+            // Insert a batch of new animations per reap event. If the
+            // reap loop uses a live iterator and any insert rehashes,
+            // the next iteration's deref is UB.
+            for (int k = 0; k < 8; ++k) {
+                self.startAnimation(nextNewHandle++, QRectF(0, 0, 100, 100), QRectF(100, 0, 100, 100));
+            }
+        };
+
+        const int reaped = c.reapAnimationsForClock(&clockA);
+        QCOMPARE(reaped, 2); // handles 1 and 2 were on clockA
+        QVERIFY(c.reapedHandlesOrdered.contains(1));
+        QVERIFY(c.reapedHandlesOrdered.contains(2));
+        // All original non-target-clock handles still alive.
+        for (int h = 10; h < 50; ++h) {
+            QVERIFY(c.hasAnimation(h));
+        }
+        // All re-entrantly-inserted handles survive (2 reaps × 8 inserts = 16).
+        for (int h = 1000; h < 1016; ++h) {
+            QVERIFY(c.hasAnimation(h));
+        }
+    }
+
+    // ─── Transform reflection (determinant sign change) falls back
+    //      to component-wise lerp rather than producing singular
+    //      matrices via polar decomposition ───
+
+    void testTransformReflectionFallsBackToComponentWiseLerp()
+    {
+        // Polar decomposition cannot smoothly interpolate through a
+        // determinant sign change. `Interpolate<QTransform>::lerp`
+        // detects the case and falls back to component-wise lerp,
+        // which is well-defined but non-rigid — the caller is expected
+        // to split reflection animations into sub-segments.
+        const QTransform from; // identity — det = +1
+        QTransform to = QTransform::fromScale(-1.0, 1.0); // det = -1
+
+        const QTransform mid = PhosphorAnimation::Interpolate<QTransform>::lerp(from, to, 0.5);
+        // Component-wise midpoint: m11 = (1 + -1)/2 = 0 (not the
+        // singular result of polar, which would pass through a
+        // degenerate matrix with different semantics).
+        QVERIFY(qAbs(mid.m11() - 0.0) < 1.0e-9);
+        QVERIFY(qAbs(mid.m22() - 1.0) < 1.0e-9);
+        // Endpoints remain exact.
+        const QTransform atZero = PhosphorAnimation::Interpolate<QTransform>::lerp(from, to, 0.0);
+        const QTransform atOne = PhosphorAnimation::Interpolate<QTransform>::lerp(from, to, 1.0);
+        QCOMPARE(atZero.m11(), from.m11());
+        QCOMPARE(atOne.m11(), to.m11());
     }
 };
 

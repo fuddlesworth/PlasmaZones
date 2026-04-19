@@ -52,14 +52,29 @@ enum class RetargetPolicy {
     /// rather than a redirection of an existing impulse (e.g., a
     /// workspace-switch animation interrupted by a click that should
     /// start from rest toward the click target).
+    ///
+    /// Intent: "the impulse that drove the old segment is finished;
+    /// reset physics state before heading toward the new target."
+    /// The controller explicitly demands zero velocity on the new
+    /// segment regardless of curve family.
     ResetVelocity,
 
-    /// Preserve position only; velocity treatment is the curve's choice.
-    /// For stateful curves this zeroes velocity (equivalent to
-    /// `ResetVelocity`); for stateless curves this is the natural
-    /// retarget behaviour. Exists so consumers can state the minimal
-    /// continuity guarantee they require without over-constraining the
-    /// curve's velocity semantics.
+    /// Preserve position only; velocity treatment is delegated to the
+    /// curve's natural retarget behaviour. For stateful curves (Spring)
+    /// this zeroes velocity — identical observed behaviour to
+    /// `ResetVelocity` in the current implementation — but the intent
+    /// differs: the caller is stating "I don't care what the velocity
+    /// does, just don't visually jump" rather than actively requesting
+    /// a reset. For stateless curves (Easing) this is always the
+    /// natural retarget behaviour (there is no physical velocity to
+    /// preserve or discard).
+    ///
+    /// Prefer this over `ResetVelocity` when you need a minimal
+    /// continuity guarantee; prefer `ResetVelocity` when the caller's
+    /// domain model explicitly demands a velocity reset (e.g., a
+    /// stateful gesture ending). A future curve family could meaningfully
+    /// diverge the two (e.g., a curve that preserves *direction* under
+    /// `PreservePosition` but zeroes *magnitude* under `ResetVelocity`).
     PreservePosition,
 };
 

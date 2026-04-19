@@ -174,6 +174,31 @@ public:
      */
     static const void* steadyClockEpoch();
 
+    /**
+     * @brief Are @p a and @p b safe to use as source/target for a
+     *        `AnimatedValue::rebindClock` rebase?
+     *
+     * True iff both are non-null AND both report the same non-null
+     * `epochIdentity()`. Centralises the test so every call site
+     * (`AnimatedValue::rebindClock`, `AnimationController::
+     * advanceAnimations`, future consumers routing migrations) reads
+     * the same predicate and cannot drift.
+     *
+     * A null `epochIdentity()` is the default for third-party clocks
+     * backed by a non-steady source (wall-clock, domain-specific
+     * counters) — the rebase arithmetic is meaningless across such
+     * clocks and must be refused.
+     */
+    static bool epochCompatible(const IMotionClock* a, const IMotionClock* b)
+    {
+        if (!a || !b) {
+            return false;
+        }
+        const void* epochA = a->epochIdentity();
+        const void* epochB = b->epochIdentity();
+        return epochA && epochA == epochB;
+    }
+
 protected:
     // Protected default-ctor keeps derived classes constructible while
     // preventing `IMotionClock` instances from being stack-allocated by

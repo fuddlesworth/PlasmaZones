@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <PhosphorAnimation/AnimatedValue.h>
+#include <PhosphorAnimation/Interpolate.h> // kRectSizeEpsilonPx
 #include <PhosphorAnimation/MotionSpec.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/RetargetPolicy.h>

@@ -406,13 +406,12 @@ public:
         // path already guards this as well; this check is the
         // belt-and-suspenders for direct callers.
         if (m_startTime && m_spec.clock) {
-            const void* oldEpoch = m_spec.clock->epochIdentity();
-            const void* newEpoch = newClock->epochIdentity();
-            if (!oldEpoch || !newEpoch || oldEpoch != newEpoch) {
+            if (!IMotionClock::epochCompatible(m_spec.clock, newClock)) {
                 if (!m_loggedEpochMismatch) {
-                    qCWarning(lcAnimatedValue) << "rebindClock refused: epoch identity mismatch "
-                                               << "(old=" << oldEpoch << ", new=" << newEpoch
-                                               << ") — rebase would corrupt progress. Keeping captured clock.";
+                    qCWarning(lcAnimatedValue)
+                        << "rebindClock refused: epoch identity mismatch "
+                        << "(old=" << m_spec.clock->epochIdentity() << ", new=" << newClock->epochIdentity()
+                        << ") — rebase would corrupt progress. Keeping captured clock.";
                     m_loggedEpochMismatch = true;
                 }
                 return;

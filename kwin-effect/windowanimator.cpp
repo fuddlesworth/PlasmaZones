@@ -68,14 +68,25 @@ void WindowAnimator::applyTransform(KWin::EffectWindow* window, KWin::WindowPain
     if (anim->hasSizeChange()) {
         const QSizeF desiredSize = current.size();
         const QSizeF actualSize = window->frameGeometry().size();
-        constexpr qreal MinDim = 1.0;
-        // [0.01, 100] is wide enough that a 4K window snapping to a
-        // 100 px thumbnail (40× scale) renders without distortion. The
-        // qMax(actualSize, MinDim) already prevents division
-        // explosion, so this clamp only catches genuinely degenerate
-        // input — keep it generous.
-        const qreal sx = qBound(0.01, desiredSize.width() / qMax(actualSize.width(), MinDim), 100.0);
-        const qreal sy = qBound(0.01, desiredSize.height() / qMax(actualSize.height(), MinDim), 100.0);
+        // Minimum-dimension floor: prevents division-by-zero when
+        // frameGeometry().size() is degenerate (newly-created window,
+        // mid-move transient). 1.0 px is the smallest float we can
+        // divide by without numerical blow-up at typical display sizes.
+        constexpr qreal kMinActualDim = 1.0;
+        // Visual-scale bounds: the factor `desiredSize / actualSize`
+        // applied to the GL texture sampler. Upper bound 100× covers
+        // a 4K (3840 px) window snapping to a 100 px thumbnail
+        // (≈40×) with headroom; lower bound 0.01 covers the inverse
+        // (thumbnail snapping to full-screen starts at 0.025 ≈ 1/40).
+        // Both bounds are display-artefact guards, not physical
+        // limits — a pathological settings UI writing e.g. a zero-
+        // size target shouldn't produce NaN textures.
+        constexpr qreal kMinScaleFactor = 0.01;
+        constexpr qreal kMaxScaleFactor = 100.0;
+        const qreal sx =
+            qBound(kMinScaleFactor, desiredSize.width() / qMax(actualSize.width(), kMinActualDim), kMaxScaleFactor);
+        const qreal sy =
+            qBound(kMinScaleFactor, desiredSize.height() / qMax(actualSize.height(), kMinActualDim), kMaxScaleFactor);
         data.setXScale(data.xScale() * sx);
         data.setYScale(data.yScale() * sy);
     }

@@ -111,6 +111,14 @@ QtQuickClock::QtQuickClock(QQuickWindow* window)
     : m_window(window)
     , m_adapter(std::make_unique<SignalAdapter>(this, window))
 {
+    // Prime the cache with a real steady_clock reading so any `now()`
+    // consumer that runs before the first `beforeRendering` slot fires
+    // sees a monotonic timestamp in the same epoch the slot will later
+    // continue from. Without this, the first advance() on an
+    // AnimatedValue bound to a freshly-constructed clock latches
+    // m_startTime = 0ns; the NEXT advance (post-beforeRendering) would
+    // see elapsed = seconds-since-boot and skip directly to completion.
+    m_nowCache.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_relaxed);
 }
 
 QtQuickClock::~QtQuickClock() = default;
