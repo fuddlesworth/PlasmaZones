@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * Zone Selector - Slides in from top when dragging window near screen edge
@@ -206,8 +207,8 @@ Rectangle {
         border.width: constants.thickBorderWidth
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: constants.animationDuration
+            PhosphorMotionAnimation {
+                profile: "zone.highlight"
             }
 
         }
@@ -229,8 +230,8 @@ Rectangle {
         visible: opacity > 0
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: constants.animationDuration
+            PhosphorMotionAnimation {
+                profile: "zone.highlight"
             }
 
         }
@@ -357,16 +358,15 @@ Rectangle {
 
     // Smooth slide animation
     Behavior on y {
-        NumberAnimation {
-            duration: selectorState === "expanded" ? constants.expandedAnimationDuration : constants.animationDuration
-            easing.type: Easing.OutQuad
+        PhosphorMotionAnimation {
+            profile: "zone.highlight"
         }
 
     }
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: constants.animationDuration
+        PhosphorMotionAnimation {
+            profile: "zone.highlight"
         }
 
     }

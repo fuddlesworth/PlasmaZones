@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Visual monitor selector with KCM display settings-style icons.
@@ -165,15 +166,15 @@ ColumnLayout {
                 }
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
 
                 Behavior on border.color {
-                    ColorAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -270,15 +271,15 @@ ColumnLayout {
                     }
 
                     Behavior on color {
-                        ColorAnimation {
-                            duration: Kirigami.Units.shortDuration
+                        PhosphorMotionAnimation {
+                            profile: "global"
                         }
 
                     }
 
                     Behavior on border.color {
-                        ColorAnimation {
-                            duration: Kirigami.Units.shortDuration
+                        PhosphorMotionAnimation {
+                            profile: "global"
                         }
 
                     }

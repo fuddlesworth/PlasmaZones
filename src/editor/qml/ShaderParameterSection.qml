@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls as QQC
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * Collapsible section for shader parameters.
@@ -60,9 +61,8 @@ ColumnLayout {
                 rotation: root.expanded ? 90 : 0
 
                 Behavior on rotation {
-                    NumberAnimation {
-                        duration: Kirigami.Units.longDuration
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -185,9 +185,8 @@ ColumnLayout {
             opacity: root.expanded ? 1 : 0
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: Kirigami.Units.longDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -195,9 +194,8 @@ ColumnLayout {
         }
 
         Behavior on implicitHeight {
-            NumberAnimation {
-                duration: Kirigami.Units.longDuration
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

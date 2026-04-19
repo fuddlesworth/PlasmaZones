@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * Snap Assist Overlay - Aero Snap style window picker
@@ -157,15 +158,15 @@ Window {
                             border.width: candidateCard.hovered ? 2 : 1
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 150
+                                PhosphorMotionAnimation {
+                                    profile: "zone.highlight"
                                 }
 
                             }
 
                             Behavior on border.color {
-                                ColorAnimation {
-                                    duration: 150
+                                PhosphorMotionAnimation {
+                                    profile: "zone.highlight"
                                 }
 
                             }

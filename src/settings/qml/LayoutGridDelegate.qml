@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -319,15 +320,15 @@ Item {
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: Kirigami.Units.shortDuration
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: Kirigami.Units.shortDuration
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
@@ -339,17 +340,15 @@ Item {
             yScale: root.isHovered ? 1.02 : 1
 
             Behavior on xScale {
-                NumberAnimation {
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on yScale {
-                NumberAnimation {
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }

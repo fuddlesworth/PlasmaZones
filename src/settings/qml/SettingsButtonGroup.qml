@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Custom exclusive button group with accent-colored active state.
@@ -70,8 +71,8 @@ Row {
                 opacity: optionDelegate.isActive ? 1 : 0.5
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: 150
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -93,15 +94,15 @@ Row {
             }
 
             Behavior on color {
-                ColorAnimation {
-                    duration: 150
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: 150
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }

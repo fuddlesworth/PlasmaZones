@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared layout card for rendering a single layout in grid/list views.
@@ -135,15 +136,15 @@ Item {
         border.width: root.stateBorderWidth
 
         Behavior on color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: root.animationDuration
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
@@ -198,24 +199,22 @@ Item {
             border.width: root.showCardBackground ? 0 : root.stateBorderWidth
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -239,17 +238,15 @@ Item {
             opacity: root.isActive ? 1 : 0
 
             Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -283,26 +280,22 @@ Item {
             }
 
             Behavior on width {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on height {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: style.badgeOvershoot
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.shortAnimationDuration
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -390,17 +383,15 @@ Item {
             width: Math.min(implicitWidth, root.previewWidth - Kirigami.Units.gridUnit)
 
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }

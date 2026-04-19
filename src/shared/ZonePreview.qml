@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Shared zone preview component for rendering layout zones
@@ -214,8 +215,8 @@ Item {
                 }
 
                 Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.animationDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -235,38 +236,36 @@ Item {
 
             // Animations
             Behavior on color {
-                ColorAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: root.animationDuration
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on scale {
-                NumberAnimation {
-                    duration: root.animationDuration
-                    easing.type: Easing.OutBack
-                    easing.overshoot: 1.2
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on border.width {
-                NumberAnimation {
-                    duration: root.animationDuration / 2
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }

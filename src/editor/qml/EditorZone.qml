@@ -6,6 +6,7 @@ import QtQuick.Controls
 import QtQuick.Window
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Editable zone component with drag and resize handles
@@ -493,8 +494,8 @@ Item {
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 100
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }

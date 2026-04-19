@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 Flickable {
@@ -220,9 +221,8 @@ Flickable {
                                         opacity: delegateHover.hovered ? 0.7 : 0.3
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "global"
                                             }
 
                                         }
@@ -257,17 +257,15 @@ Flickable {
                                         }
 
                                         Behavior on border.color {
-                                            ColorAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "global"
                                             }
 
                                         }
 
                                         Behavior on border.width {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "global"
                                             }
 
                                         }
@@ -330,9 +328,8 @@ Flickable {
                                         Accessible.name: i18n("Move %1 up", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "global"
                                             }
 
                                         }
@@ -352,9 +349,8 @@ Flickable {
                                         Accessible.name: i18n("Move %1 down", delegateRoot.model.displayName)
 
                                         Behavior on opacity {
-                                            NumberAnimation {
-                                                duration: Kirigami.Units.shortDuration
-                                                easing.type: Easing.OutCubic
+                                            PhosphorMotionAnimation {
+                                                profile: "global"
                                             }
 
                                         }
@@ -364,17 +360,15 @@ Flickable {
                                 }
 
                                 Behavior on color {
-                                    ColorAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "global"
                                     }
 
                                 }
 
                                 Behavior on border.width {
-                                    NumberAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "global"
                                     }
 
                                 }
@@ -384,9 +378,8 @@ Flickable {
                                     y: delegateHover.hovered && !delegateContent.isDragging ? -1 : 0
 
                                     Behavior on y {
-                                        NumberAnimation {
-                                            duration: Kirigami.Units.shortDuration
-                                            easing.type: Easing.OutCubic
+                                        PhosphorMotionAnimation {
+                                            profile: "global"
                                         }
 
                                     }
@@ -394,9 +387,8 @@ Flickable {
                                 }
 
                                 Behavior on scale {
-                                    NumberAnimation {
-                                        duration: Kirigami.Units.shortDuration
-                                        easing.type: Easing.OutCubic
+                                    PhosphorMotionAnimation {
+                                        profile: "global"
                                     }
 
                                 }

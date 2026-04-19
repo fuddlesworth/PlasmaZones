@@ -27,6 +27,20 @@ set_property(DIRECTORY APPEND PROPERTY COMPILE_OPTIONS "-Wno-missing-include-dir
 qt_add_qml_module(PhosphorAnimationQml
     URI org.phosphor.animation
     VERSION 1.0
+    # STATIC so in-tree consumers (plasmazonesd, plasmazones-settings,
+    # plasmazones-editor, plasmazones_shared_qml) link the module
+    # directly and every QQmlEngine in the process picks up the
+    # registration without QML_IMPORT_PATH plumbing. Mirrors the
+    # `org.plasmazones.common` pattern in src/shared/CMakeLists.txt —
+    # qrc-loaded overlay QML in the daemon resolves the module the
+    # moment the plugin's library is linked.
+    #
+    # External consumers (Quickshell, Wayfire plugins, third-party
+    # editors) build from source and link the same STATIC target —
+    # a parallel shared-plugin path could be added later via a
+    # second qt_add_qml_module target if out-of-tree install paths
+    # become a distinct requirement.
+    STATIC
     SOURCES
         phosphoranimation_qml_plugin.cpp
         phosphorcurve.cpp

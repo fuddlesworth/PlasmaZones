@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 Item {
     id: root
@@ -39,9 +40,8 @@ Item {
             x: root.checked ? parent.width - width - pad : pad
 
             Behavior on x {
-                NumberAnimation {
-                    duration: 250
-                    easing.type: Easing.OutBack
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -49,8 +49,8 @@ Item {
         }
 
         Behavior on color {
-            ColorAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

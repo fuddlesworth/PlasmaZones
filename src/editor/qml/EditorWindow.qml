@@ -7,6 +7,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /// Main editor window for zone layout editing
 Window {
@@ -347,9 +348,8 @@ Window {
         onFullscreenToggled: editorWindow.toggleFullscreenMode()
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
@@ -735,8 +735,8 @@ Window {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

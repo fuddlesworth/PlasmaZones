@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 Kirigami.Dialog {
     id: root
@@ -137,9 +138,8 @@ Kirigami.Dialog {
             }
 
             Behavior on border.color {
-                ColorAnimation {
-                    duration: Kirigami.Units.shortDuration
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -148,9 +148,8 @@ Kirigami.Dialog {
                 y: cardHover.hovered ? -1 : 0
 
                 Behavior on y {
-                    NumberAnimation {
-                        duration: Kirigami.Units.shortDuration
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }

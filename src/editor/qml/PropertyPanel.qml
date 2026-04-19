@@ -9,6 +9,7 @@ import QtQuick.Templates as T
 import QtQuick.Window
 import "ThemeHelpers.js" as Theme
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Properties panel component for zone editing
@@ -362,15 +363,15 @@ Rectangle {
                         border.width: zoneNameField.hasError ? 2 : 1
 
                         Behavior on border.color {
-                            ColorAnimation {
-                                duration: 100
+                            PhosphorMotionAnimation {
+                                profile: "global"
                             }
 
                         }
 
                         Behavior on border.width {
-                            NumberAnimation {
-                                duration: 100
+                            PhosphorMotionAnimation {
+                                profile: "global"
                             }
 
                         }
@@ -929,17 +930,15 @@ Rectangle {
     }
 
     Behavior on opacity {
-        NumberAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            profile: "global"
         }
 
     }
 
     Behavior on Layout.preferredWidth {
-        NumberAnimation {
-            duration: Theme.animDuration
-            easing.type: Theme.animEasing
+        PhosphorMotionAnimation {
+            profile: "global"
         }
 
     }

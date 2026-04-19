@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 ApplicationWindow {
     id: window
@@ -683,8 +684,8 @@ ApplicationWindow {
                             }
 
                             Behavior on color {
-                                ColorAnimation {
-                                    duration: 120
+                                PhosphorMotionAnimation {
+                                    profile: "global"
                                 }
 
                             }
@@ -711,8 +712,8 @@ ApplicationWindow {
                                 }
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "global"
                                     }
 
                                 }
@@ -743,8 +744,8 @@ ApplicationWindow {
                                 visible: !window.sidebarCompact
 
                                 Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 120
+                                    PhosphorMotionAnimation {
+                                        profile: "global"
                                     }
 
                                 }
@@ -938,17 +939,15 @@ ApplicationWindow {
             }
 
             Behavior on Layout.preferredWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.InOutQuad
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -1552,8 +1551,8 @@ ApplicationWindow {
                 color: settingsController.needsSave ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.15)
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: 300
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -1630,9 +1629,8 @@ ApplicationWindow {
                 }
 
                 Behavior on implicitHeight {
-                    NumberAnimation {
-                        duration: 250
-                        easing.type: Easing.OutCubic
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -1836,8 +1834,8 @@ ApplicationWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: 200
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Notification system for the layout editor
@@ -63,9 +64,8 @@ Item {
 
         // Smooth transition when success banner fades and error slides up
         Behavior on y {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Styled settings card with hover effects and optional collapse.
@@ -175,9 +176,8 @@ Item {
                         opacity: 0.5
 
                         Behavior on rotation {
-                            NumberAnimation {
-                                duration: 200
-                                easing.type: Easing.OutCubic
+                            PhosphorMotionAnimation {
+                                profile: "global"
                             }
 
                         }
@@ -272,9 +272,8 @@ Item {
             }
 
             Behavior on opacity {
-                NumberAnimation {
-                    duration: 200
-                    easing.type: Easing.OutCubic
+                PhosphorMotionAnimation {
+                    profile: "global"
                 }
 
             }
@@ -282,9 +281,8 @@ Item {
         }
 
         Behavior on border.color {
-            ColorAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }
@@ -296,9 +294,8 @@ Item {
         y: hoverHandler.hovered && root.enabled ? -1 : 0
 
         Behavior on y {
-            NumberAnimation {
-                duration: 200
-                easing.type: Easing.OutCubic
+            PhosphorMotionAnimation {
+                profile: "global"
             }
 
         }

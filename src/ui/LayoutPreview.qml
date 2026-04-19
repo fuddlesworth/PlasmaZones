@@ -4,6 +4,7 @@
 import QtQuick
 import QtQuick.Controls
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 import org.plasmazones.common as QFZCommon
 
 /**
@@ -184,8 +185,8 @@ Rectangle {
         }
 
         Behavior on opacity {
-            NumberAnimation {
-                duration: constants.animationDuration
+            PhosphorMotionAnimation {
+                profile: "zone.highlight"
             }
 
         }
@@ -250,24 +251,23 @@ Rectangle {
 
     // Color animation
     Behavior on color {
-        ColorAnimation {
-            duration: constants.animationDuration
+        PhosphorMotionAnimation {
+            profile: "zone.highlight"
         }
 
     }
 
     // Border animation
     Behavior on border.width {
-        NumberAnimation {
-            duration: constants.animationDuration / 2
+        PhosphorMotionAnimation {
+            profile: "zone.highlight"
         }
 
     }
 
     Behavior on scale {
-        NumberAnimation {
-            duration: constants.animationDuration
-            easing.type: Easing.OutBack
+        PhosphorMotionAnimation {
+            profile: "zone.highlight"
         }
 
     }

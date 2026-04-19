@@ -5,6 +5,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
+import org.phosphor.animation
 
 /**
  * @brief Visual preview of virtual screen subdivisions with draggable dividers.
@@ -135,15 +136,15 @@ Rectangle {
                 color: colDragArea.containsMouse || colDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
 
                 Behavior on width {
-                    NumberAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
@@ -246,15 +247,15 @@ Rectangle {
                 color: rowDragArea.containsMouse || rowDragArea.pressed ? Kirigami.Theme.highlightColor : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.5)
 
                 Behavior on height {
-                    NumberAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
 
                 Behavior on color {
-                    ColorAnimation {
-                        duration: Kirigami.Units.shortDuration
+                    PhosphorMotionAnimation {
+                        profile: "global"
                     }
 
                 }
