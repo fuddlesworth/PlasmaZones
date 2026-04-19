@@ -61,13 +61,16 @@ void ScreenManager::start()
     // effectiveScreenIds() from that handler must observe a coherent tracked-
     // screen set, not the empty pre-populate state. The configStore path has
     // the same invariant for virtualScreensChanged.
+    //
+    // Geometry sensors are deliberately created AFTER panelSource->start()
+    // below — createGeometrySensor kicks a requestRequery on the panel
+    // source, which is a no-op if the source isn't running yet. Running it
+    // post-start means the kick actually lands, instead of being silently
+    // swallowed by PlasmaPanelSource::issueQuery's !m_running guard.
     for (auto* screen : QGuiApplication::screens()) {
         if (!m_trackedScreens.contains(screen)) {
             connectScreenSignals(screen);
             m_trackedScreens.append(screen);
-            if (m_cfg.useGeometrySensors) {
-                createGeometrySensor(screen);
-            }
         }
     }
 
@@ -97,6 +100,15 @@ void ScreenManager::start()
         connect(m_cfg.configStore, &IConfigStore::changed, this, &ScreenManager::onConfigStoreChanged);
         // Initial cache population.
         refreshVirtualConfigs(m_cfg.configStore->loadAll());
+    }
+
+    // Geometry sensors last — the panel source is live now so the per-screen
+    // requestRequery() kick inside createGeometrySensor actually lands. See
+    // the ordering rationale on the tracked-screens loop above.
+    if (m_cfg.useGeometrySensors) {
+        for (auto* screen : std::as_const(m_trackedScreens)) {
+            createGeometrySensor(screen);
+        }
     }
 }
 
@@ -136,9 +148,20 @@ void ScreenManager::stop()
     // screenGeometry(vsId) call doesn't return pre-stop IDs or regions.
     // m_virtualConfigs stays — the IConfigStore is authoritative and
     // clearing it would drop legitimate pending state between stop/start
-    // cycles. m_panelGeometryReadyEmitted stays for the same reason (a
-    // restart shouldn't re-fire the one-shot unless the panel source
-    // actually re-transitions to ready).
+    // cycles.
+    //
+    // m_panelGeometryReadyEmitted is a process-lifetime latch: once set to
+    // true it stays that way across stop()/start() cycles for the life of
+    // the object. This is deliberate and matches how consumers use the
+    // `panelGeometryReady` signal — they subscribe once at startup, wait
+    // for the first emission, then treat the answer as "panels have been
+    // observed at least once in this session". The daemon is a single-shot
+    // process so the latch is effectively permanent there; the behaviour
+    // also keeps test determinism predictable (testPanelGeometryReadyFires
+    // OnceEvenAcrossRestart in test_manager_lifecycle.cpp pins it). Long-
+    // lived embeddings that truly need re-ready semantics should create a
+    // fresh ScreenManager instead of cycling stop/start — cheap, no hidden
+    // global state.
     m_cachedEffectiveScreenIds.clear();
     m_effectiveScreenIdsDirty = true;
     m_virtualGeometryCache.clear();

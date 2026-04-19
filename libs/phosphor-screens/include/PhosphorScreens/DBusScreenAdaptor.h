@@ -107,6 +107,15 @@ protected:
 private:
     void handleScreenGeometryChanged(QScreen* screen, const QString& physId);
     void handleScreenRemoved(QScreen* removedScreen, QScreen* targetScreen, const QString& cachedId);
+    /// Re-key the adaptor's per-screen caches from @p oldId to @p newId and
+    /// surface the flip over D-Bus as a retract-of-old + announce-of-new pair.
+    /// Called from @ref ScreenManager::screenIdentifierChanged — wired in
+    /// @ref connectScreenManagerSignals. Without this propagation, D-Bus
+    /// consumers tracking the screen by identifier would silently hold a
+    /// dead ID after same-model hotplug disambiguation flips, and the
+    /// adaptor's own @c m_cachedEffectiveIdsPerScreen entry at the old key
+    /// would leak until the next screen-removal cleaned it up opportunistically.
+    void handleScreenIdentifierChanged(const QString& oldId, const QString& newId);
     bool emitForEffectiveScreens(const QString& physId, const std::function<void(const QString&)>& emitFn);
     void invalidateScreenInfoCache();
     void connectScreenManagerSignals(ScreenManager* mgr);

@@ -178,6 +178,104 @@ private Q_SLOTS:
         QVERIFY(store.get(physId).isEmpty());
     }
 
+    void testIdentifierDriftRetractsOldAnnouncesNew()
+    {
+        // Same-model hotplug disambiguation flips a physical screen's
+        // identifier (bare ↔ "/CONNECTOR" form). ScreenManager re-keys its
+        // own cache and emits screenIdentifierChanged; the adaptor must
+        // surface that to D-Bus consumers as a retract-of-old + announce-
+        // of-new pair so observers tracking the screen by id can retarget.
+        // Regression guard for the pre-fix state where this signal was
+        // never wired and the stale id silently leaked.
+        const QString physId = physIdForPrimary();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+
+        InMemoryConfigStore store;
+        NoOpPanelSource panelSrc;
+        ScreenManager mgr(ScreenManagerConfig{&panelSrc, &store, /*useGeometrySensors=*/false,
+                                              /*maxVirtualScreensPerPhysical=*/8});
+        mgr.start();
+
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
+
+        const QString oldId = QStringLiteral("Dell:U2722D:115107");
+        const QString newId = QStringLiteral("Dell:U2722D:115107/HDMI-1");
+
+        QSignalSpy addedSpy(&adaptor, SIGNAL(screenAdded(QString)));
+        QSignalSpy removedSpy(&adaptor, SIGNAL(screenRemoved(QString)));
+
+        // Drive the signal through the metaobject system — Q_SIGNALS can't
+        // be emitted from outside the class, but invokeMethod dispatches via
+        // the metaobject vtable which is how Qt itself fires signals
+        // internally. This exercises the real signal-slot pipeline end-to-
+        // end rather than calling the private handler directly.
+        QVERIFY(
+            QMetaObject::invokeMethod(&mgr, "screenIdentifierChanged", Q_ARG(QString, oldId), Q_ARG(QString, newId)));
+
+        QCOMPARE(removedSpy.count(), 1);
+        QCOMPARE(removedSpy.at(0).at(0).toString(), oldId);
+        QCOMPARE(addedSpy.count(), 1);
+        QCOMPARE(addedSpy.at(0).at(0).toString(), newId);
+    }
+
+    void testIdentifierDriftPropagatesVirtualChildren()
+    {
+        // Physical screen with VS subdivisions: the retract/announce fan-out
+        // must enumerate per-VS ids, not the bare physical id, so consumers
+        // tracking individual virtual screens observe the flip atomically.
+        const QString physId = physIdForPrimary();
+        if (physId.isEmpty()) {
+            QSKIP("no primary screen available under offscreen QPA");
+        }
+
+        InMemoryConfigStore store;
+        NoOpPanelSource panelSrc;
+        ScreenManager mgr(ScreenManagerConfig{&panelSrc, &store, /*useGeometrySensors=*/false,
+                                              /*maxVirtualScreensPerPhysical=*/8});
+        mgr.start();
+
+        // Seed VS config under an "old" id. Real drift would re-key the
+        // config in-place, so we simulate the post-drift state by saving
+        // directly under the new id before the signal fires. The adaptor
+        // queries `virtualScreenIdsFor(newId)` in the handler — that's
+        // what matters for the announce path.
+        const QString oldId = QStringLiteral("Dell:U2722D:115107");
+        const QString newId = QStringLiteral("Dell:U2722D:115107/HDMI-1");
+
+        VirtualScreenConfig cfg;
+        cfg.physicalScreenId = newId;
+        cfg.screens.append(makeDef(newId, 0, QRectF(0.0, 0.0, 0.5, 1.0)));
+        cfg.screens.append(makeDef(newId, 1, QRectF(0.5, 0.0, 0.5, 1.0)));
+        QVERIFY(store.save(newId, cfg));
+
+        AdaptorHost host;
+        DBusScreenAdaptor adaptor(&mgr, &store, &host);
+
+        QSignalSpy addedSpy(&adaptor, SIGNAL(screenAdded(QString)));
+        QSignalSpy removedSpy(&adaptor, SIGNAL(screenRemoved(QString)));
+        QSignalSpy vsSpy(&adaptor, SIGNAL(virtualScreensChanged(QString)));
+
+        QVERIFY(
+            QMetaObject::invokeMethod(&mgr, "screenIdentifierChanged", Q_ARG(QString, oldId), Q_ARG(QString, newId)));
+
+        // Retract under the old id: no cached VS list for @p oldId (nothing
+        // was ever seeded at that key in this test), so the bare-physical
+        // fallback path emits screenRemoved(oldId) exactly once.
+        QCOMPARE(removedSpy.count(), 1);
+        QCOMPARE(removedSpy.at(0).at(0).toString(), oldId);
+
+        // Announce under new id: one screenAdded per VS child, plus the
+        // virtualScreensChanged topology hint.
+        QCOMPARE(addedSpy.count(), 2);
+        QCOMPARE(addedSpy.at(0).at(0).toString(), PhosphorIdentity::VirtualScreenId::make(newId, 0));
+        QCOMPARE(addedSpy.at(1).at(0).toString(), PhosphorIdentity::VirtualScreenId::make(newId, 1));
+        QCOMPARE(vsSpy.count(), 1);
+        QCOMPARE(vsSpy.at(0).at(0).toString(), newId);
+    }
+
     void testRejectionTokensAreStable()
     {
         // D-Bus callers parse these tokens to distinguish failure modes;

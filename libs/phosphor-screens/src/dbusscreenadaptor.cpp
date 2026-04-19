@@ -224,6 +224,13 @@ void DBusScreenAdaptor::connectScreenManagerSignals(ScreenManager* mgr)
     };
     connect(mgr, &ScreenManager::virtualScreensChanged, this, refreshAndEmit);
     connect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, refreshAndEmit);
+    // Same-model hotplug disambiguation flips (bare ↔ "/CONNECTOR" form)
+    // rotate a physical screen's identifier. The manager re-keys its own
+    // cache and emits this signal; we need to migrate our own per-physId
+    // caches AND tell D-Bus consumers the id changed so they can retarget.
+    // Without this wiring the adaptor's m_cachedEffectiveIdsPerScreen
+    // leaked under the stale key and KCM-style consumers kept a dead id.
+    connect(mgr, &ScreenManager::screenIdentifierChanged, this, &DBusScreenAdaptor::handleScreenIdentifierChanged);
 }
 
 void DBusScreenAdaptor::disconnectScreenManagerSignals(ScreenManager* mgr)
@@ -237,6 +244,56 @@ void DBusScreenAdaptor::disconnectScreenManagerSignals(ScreenManager* mgr)
     // ScreenManager::stop()'s own disconnect discipline.
     disconnect(mgr, &ScreenManager::virtualScreensChanged, this, nullptr);
     disconnect(mgr, &ScreenManager::virtualScreenRegionsChanged, this, nullptr);
+    disconnect(mgr, &ScreenManager::screenIdentifierChanged, this, nullptr);
+}
+
+void DBusScreenAdaptor::handleScreenIdentifierChanged(const QString& oldId, const QString& newId)
+{
+    // Drop cached JSON blobs wholesale — any entry keyed on a stale id (or
+    // on a VS id whose physical parent flipped) is now serving wrong data.
+    // Regenerating on next read is cheaper than narrow-sweeping the cache.
+    invalidateScreenInfoCache();
+
+    // Migrate the VS-per-physical cache. Take the old entries first so the
+    // retraction fan-out below sees the VS ids we previously announced; the
+    // new entries are sourced from the manager, which has already re-keyed
+    // its own internal m_virtualConfigs by the time this signal fires.
+    const QStringList oldVsIds = m_cachedEffectiveIdsPerScreen.take(oldId);
+
+    QStringList newVsIds;
+    if (m_screenManager && m_screenManager->hasVirtualScreens(newId)) {
+        newVsIds = m_screenManager->virtualScreenIdsFor(newId);
+        m_cachedEffectiveIdsPerScreen[newId] = newVsIds;
+    }
+
+    // Retract under old id. Prefer the cached VS list (matches exactly what
+    // we announced at add-time); fall back to the bare physical id when the
+    // screen had no subdivision — oldVsIds is empty in that case.
+    if (!oldVsIds.isEmpty()) {
+        for (const QString& id : oldVsIds) {
+            Q_EMIT screenRemoved(id);
+        }
+    } else {
+        Q_EMIT screenRemoved(oldId);
+    }
+
+    // Announce under new id, mirroring the retract shape so consumers can
+    // pair the events one-for-one.
+    if (!newVsIds.isEmpty()) {
+        for (const QString& id : newVsIds) {
+            Q_EMIT screenAdded(id);
+        }
+        Q_EMIT virtualScreensChanged(newId);
+    } else {
+        Q_EMIT screenAdded(newId);
+    }
+
+    // Rebase the deferred-effective-ids baseline so the QTimer::singleShot
+    // re-check in the screenAdded lambda doesn't spuriously trip on our own
+    // retract+announce mutation.
+    if (m_screenManager) {
+        m_lastEmittedEffectiveIds = m_screenManager->effectiveScreenIds();
+    }
 }
 
 void DBusScreenAdaptor::handleScreenGeometryChanged(QScreen* /*screen*/, const QString& physId)

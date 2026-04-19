@@ -655,9 +655,14 @@ UnfloatResult WindowTrackingService::resolveUnfloatGeometry(const QString& windo
     if (!restoreScreen.isEmpty()) {
         // Validate virtual screen still exists — configuration may have changed since float
         restoreScreen = resolveEffectiveScreenId(restoreScreen);
-        // Check if the physical screen still exists
-        QScreen* physScreen = (m_screenManager ? m_screenManager->physicalQScreenFor(restoreScreen)
-                                               : Utils::findScreenAtPosition(QPoint(0, 0)));
+        // Check if the physical screen still exists. When no ScreenManager is
+        // wired (unit-test construction path), fall back to the library's
+        // ID-aware lookup so the predicate still answers "does this restore
+        // screen exist?" rather than "is the primary screen alive?" — the
+        // prior fallback of findScreenAtPosition(0,0) returned the primary
+        // regardless of @p restoreScreen and silently mis-answered.
+        QScreen* physScreen = m_screenManager ? m_screenManager->physicalQScreenFor(restoreScreen)
+                                              : Phosphor::Screens::ScreenIdentity::findByIdOrName(restoreScreen);
         if (!physScreen) {
             restoreScreen.clear();
         }

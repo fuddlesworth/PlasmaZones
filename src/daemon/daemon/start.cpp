@@ -47,8 +47,15 @@ void Daemon::connectScreenSignals()
     // Start screen manager
     m_screenManager->start();
 
-    // Warn about identical monitors producing duplicate screen IDs
+    // Warn about identical monitors producing duplicate screen IDs — both at
+    // startup for the already-connected set and on every subsequent hotplug.
+    // The startup call covers the common case; wiring it to screenAdded
+    // catches users plugging a second identical monitor mid-session, where
+    // the disambiguation "/CONNECTOR" suffix kicks in for the first time.
     Utils::warnDuplicateScreenIds();
+    connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenAdded, this, [](QScreen*) {
+        Utils::warnDuplicateScreenIds();
+    });
 
     // Settings → Phosphor::Screens::ScreenManager refresh flows exclusively through the
     // IConfigStore contract: SettingsConfigStore forwards
@@ -77,10 +84,23 @@ void Daemon::connectScreenSignals()
     // construct a manager without Settings don't crash.
     connect(m_screenManager.get(), &Phosphor::Screens::ScreenManager::screenIdentifierChanged, this,
             [this](const QString& oldId, const QString& newId) {
-                if (m_settings) {
-                    m_settings->renameVirtualScreenConfig(oldId, newId);
-                    m_settings->save();
+                if (!m_settings) {
+                    return;
                 }
+                // Block the store's changed() fan-out while we rename: the
+                // ScreenManager has ALREADY re-keyed its in-memory cache in
+                // propagateIdentifierDrift, so letting renameVirtualScreenConfig's
+                // virtualScreenConfigsChanged emission ride the direct connect
+                // through SettingsConfigStore → IConfigStore::changed →
+                // onConfigStoreChanged → refreshVirtualConfigs would fire a
+                // full loadAll() round-trip whose diff is already empty. Block
+                // the relay for the duration of the rename only; unblock after
+                // save() so any genuine later writers still propagate.
+                {
+                    QSignalBlocker blocker(m_virtualScreenStore.get());
+                    m_settings->renameVirtualScreenConfig(oldId, newId);
+                }
+                m_settings->save();
             });
 
     // Connect screen manager signals
