@@ -50,29 +50,29 @@ AlgorithmRegistry::AlgorithmRegistry(QObject* parent)
                          &AlgorithmRegistry::cleanup);
     }
 
-    // Bridge the three finer-grained mutation signals into the unified
-    // ILayoutSourceRegistry::contentsChanged notifier. Any ILayoutSource
-    // that self-wires contentsChanged (AutotileLayoutSource does) picks
-    // up registry changes through this single connection instead of
-    // hooking each specific signal. Consumers that need discrimination
-    // still connect to the specific signals directly.
+    // contentsChanged is emitted EXPLICITLY from the mutation methods
+    // (registerAlgorithm, unregisterAlgorithm, setPreviewParams) rather
+    // than bridged from the three finer-grained mutation signals.
     //
-    // A replacement pair emits algorithmUnregistered(id, replacing=true)
-    // then algorithmRegistered(id) — a single logical mutation. Suppress
-    // the contentsChanged bridge on the unregister half of the pair so
-    // the replacement emits contentsChanged exactly once (the matching
-    // registered signal fires it). Halves preview-cache rebuilds on
-    // scripted-algorithm hot reload, where every replaced script used
-    // to trigger two full rebuilds in every subscriber.
-    connect(this, &ITileAlgorithmRegistry::algorithmRegistered, this, [this](const QString&) {
-        Q_EMIT contentsChanged();
-    });
-    connect(this, &ITileAlgorithmRegistry::algorithmUnregistered, this, [this](const QString&, bool replacing) {
-        if (!replacing) {
-            Q_EMIT contentsChanged();
-        }
-    });
-    connect(this, &ITileAlgorithmRegistry::previewParamsChanged, this, &ITileAlgorithmRegistry::contentsChanged);
+    // The previous signal-bridging design worked correctly on the happy
+    // path but had two sharp edges:
+    //
+    //  1. Replacement pairs fire algorithmUnregistered(id, replacing=true)
+    //     then algorithmRegistered(id). A "suppress on replacing=true"
+    //     bridge collapsed those into one contentsChanged emit — but only
+    //     if both emits completed. A handler of algorithmUnregistered
+    //     that threw (or otherwise unwound the stack) would skip the
+    //     matching algorithmRegistered emit, leaving every consumer's
+    //     preview cache permanently stale for that id.
+    //  2. The flag-based suppression forced anyone reading the registry
+    //     code to walk three connect() calls to reconstruct the actual
+    //     emission sequence.
+    //
+    // Emitting contentsChanged directly at the end of each mutation
+    // method gives exactly one emit per logical mutation, preserves the
+    // observable order (specific signal → contentsChanged), and removes
+    // the throw-between-emit hazard. Consumers that need discrimination
+    // still connect to the specific signals directly.
 }
 
 AlgorithmRegistry::~AlgorithmRegistry()
@@ -191,6 +191,11 @@ void AlgorithmRegistry::registerAlgorithm(const QString& id, TilingAlgorithm* al
     } else {
         Q_EMIT algorithmRegistered(id);
     }
+    // One unified notification at the end of the successful mutation.
+    // Replaces the former signal-bridge design — see the rationale in the
+    // constructor body. Fires exactly once per logical mutation regardless
+    // of whether this call was a replacement or a fresh add.
+    Q_EMIT contentsChanged();
 }
 
 TilingAlgorithm* AlgorithmRegistry::removeAlgorithmInternal(const QString& id)
@@ -215,6 +220,9 @@ bool AlgorithmRegistry::unregisterAlgorithm(const QString& id)
     // Emit before delete so signal handlers can safely reference the id
     // without risk of use-after-free on any cached algorithm pointers.
     Q_EMIT algorithmUnregistered(id, false);
+    // Explicit unified notification — replaces the former signal-bridge
+    // design (see constructor body).
+    Q_EMIT contentsChanged();
 
     safeDeleteAlgorithm(algorithm);
     return true;
@@ -340,6 +348,9 @@ void AlgorithmRegistry::setPreviewParams(const AlgorithmPreviewParams& params)
     }
     m_previewParams = params;
     Q_EMIT previewParamsChanged();
+    // Explicit unified notification — replaces the former signal-bridge
+    // design (see constructor body).
+    Q_EMIT contentsChanged();
 }
 
 const AlgorithmPreviewParams& AlgorithmRegistry::previewParams() const noexcept

@@ -5,6 +5,7 @@
 
 #include "../common/layoutpreviewserialize.h"
 #include "../common/screenidresolver.h"
+#include "../common/layoutbundlebuilder.h"
 
 #include <PhosphorLayoutApi/LayoutPreview.h>
 
@@ -152,14 +153,12 @@ SettingsController::SettingsController(QObject* parent)
 
     // Auto-discovery pattern: every linked provider library has
     // already registered a builder via static-init. The KCM just
-    // publishes the registries it owns into the FactoryContext and
-    // calls buildFromRegistered. Adding a new engine library doesn't
-    // require editing this file unless the engine demands a service
-    // the KCM doesn't already publish.
-    PhosphorLayout::FactoryContext factoryCtx;
-    factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_localLayoutManager.get());
-    factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_localAlgorithmRegistry.get());
-    m_localSources.buildFromRegistered(factoryCtx);
+    // publishes the registries it owns via the shared helper
+    // (buildStandardLayoutSourceBundle) so the context-wiring is the
+    // same across daemon/editor/settings. Adding a new engine library
+    // doesn't require editing this file unless the engine demands a
+    // service the KCM doesn't already publish.
+    buildStandardLayoutSourceBundle(m_localSources, m_localLayoutManager.get(), m_localAlgorithmRegistry.get());
 
     // Load the user's layouts immediately so localLayoutPreviews() returns
     // a populated list on first call (before any QML query has had a

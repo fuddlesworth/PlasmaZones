@@ -59,6 +59,7 @@
 #include "../snap/snapnavigationadapter.h"
 #include <PhosphorScreens/ScreenIdentity.h>
 #include "../common/screenidresolver.h"
+#include "../common/layoutbundlebuilder.h"
 
 namespace PlasmaZones {
 
@@ -145,17 +146,17 @@ Daemon::Daemon(QObject* parent)
     // Auto-discovery pattern: every provider library that links into
     // this process registers a builder in its static-init block. The
     // daemon just publishes the registries it owns into the
-    // FactoryContext and calls buildFromRegistered. Adding a new
-    // engine library (the planned scrolling engine) is purely a
-    // library-side change — daemon source only edits if the new
-    // engine demands a service the daemon doesn't already publish
-    // here. ZonesLayoutSource and AutotileLayoutSource both self-wire
-    // to their registry's ILayoutSourceRegistry::contentsChanged
-    // signal, so no manual bridging is required after build.
-    PhosphorLayout::FactoryContext factoryCtx;
-    factoryCtx.set<PhosphorZones::IZoneLayoutRegistry>(m_layoutManager.get());
-    factoryCtx.set<PhosphorTiles::ITileAlgorithmRegistry>(m_algorithmRegistry.get());
-    m_layoutSources.buildFromRegistered(factoryCtx);
+    // FactoryContext and calls buildFromRegistered (both steps are
+    // wrapped in buildStandardLayoutSourceBundle — shared with editor
+    // + settings so service additions touch one helper rather than
+    // three near-identical blocks). Adding a new engine library
+    // (the planned scrolling engine) is purely a library-side change
+    // — daemon source only edits if the new engine demands a service
+    // the daemon doesn't already publish here. ZonesLayoutSource and
+    // AutotileLayoutSource both self-wire to their registry's
+    // ILayoutSourceRegistry::contentsChanged signal, so no manual
+    // bridging is required after build.
+    buildStandardLayoutSourceBundle(m_layoutSources, m_layoutManager.get(), m_algorithmRegistry.get());
     // Cache the bundle's autotile source once so the four init() wiring
     // sites that need it don't each re-call source(QStringLiteral("autotile"))
     // (one literal typo away from silently breaking preview-cache reuse).

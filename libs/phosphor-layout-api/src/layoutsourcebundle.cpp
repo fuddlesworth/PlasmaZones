@@ -18,10 +18,18 @@ LayoutSourceBundle::LayoutSourceBundle() = default;
 // order would do this for us today, but a future reorder of the data
 // members would silently invert the order and cause use-after-free
 // during teardown.
+//
+// Use clearSourcesSilent() rather than clearSources() so the teardown
+// path does not fire a contentsChanged() signal into observers whose
+// own destructors may already have begun running. Composition roots
+// (daemon, editor, settings) rely on Qt's receiver-side auto-disconnect
+// for safety, but emitting a signal at destruction time is still a
+// surprise that a future subscriber could trip on by holding a queued
+// connection. The silent variant avoids that foot-gun class entirely.
 LayoutSourceBundle::~LayoutSourceBundle()
 {
     if (m_composite) {
-        m_composite->clearSources();
+        m_composite->clearSourcesSilent();
     }
 }
 
@@ -31,12 +39,15 @@ LayoutSourceBundle::LayoutSourceBundle(LayoutSourceBundle&&) noexcept = default;
 // defaulted move would walk the members in declaration order, leaving
 // the *old* LHS composite pointing into the *old* LHS sources for one
 // member-move step each. Drop the old composite's child pointers
-// first, then perform the moves.
+// first, then perform the moves. clearSourcesSilent() (not
+// clearSources()) is used for the same reason as in the destructor —
+// move-assign is a teardown of the old value and should not notify
+// observers.
 LayoutSourceBundle& LayoutSourceBundle::operator=(LayoutSourceBundle&& other) noexcept
 {
     if (this != &other) {
         if (m_composite) {
-            m_composite->clearSources();
+            m_composite->clearSourcesSilent();
         }
         m_factories = std::move(other.m_factories);
         m_sources = std::move(other.m_sources);

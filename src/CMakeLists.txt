@@ -80,6 +80,8 @@ set(plasmazones_core_SRCS
     common/layoutpreviewserialize.h
     common/screenidresolver.cpp
     common/screenidresolver.h
+    common/layoutbundlebuilder.cpp
+    common/layoutbundlebuilder.h
     core/supportreport.cpp
     core/supportreport.h
     # layersurface + shaderregistry/params moved to PhosphorShell

@@ -24,13 +24,25 @@ namespace PhosphorLayout {
 ///
 /// Composition roots populate one of these with every state object
 /// they own (typically the per-library `I*Registry` instances) keyed
-/// by the abstract interface type. Provider builders type-erase pull
-/// what they need by interface and ignore everything else.
+/// by the abstract interface type. Provider builders pull what they
+/// need by interface and ignore everything else; the type-erased
+/// @c get<T>() look-up is keyed on @c std::type_index so interfaces
+/// that the builder doesn't recognise are simply absent.
 ///
 /// The context stores **borrowed pointers** — the composition root
 /// owns the lifetime. Pointers must outlive every produced
 /// @c ILayoutSourceFactory (which in practice means outlive the
 /// owning @c LayoutSourceBundle).
+///
+/// Type-safety of the void* round-trip: @c set<T> stores
+/// @c static_cast<void*>(T*) under key @c type_index(typeid(T)). The
+/// matching @c get<T> returns @c static_cast<T*>(void*) under the
+/// same key. Because @c std::type_index is unique per T and set/get
+/// always use the same T, the pointer round-trips without multi-
+/// inheritance offset drift — every get<T> returns the same adjusted
+/// T* that set<T> stored. Callers who set under one interface and
+/// get under a different one (e.g. the base class) simply miss (the
+/// keys differ → nullptr), avoiding UB.
 class PHOSPHORLAYOUTAPI_EXPORT FactoryContext
 {
 public:
@@ -46,15 +58,21 @@ public:
     /// @c ctx.get<IZoneLayoutRegistry>() would silently miss.
     ///
     /// Duplicate registrations are a programmer error: asserts in debug,
-    /// warns + ignores in release (first registration wins). Silent
-    /// last-write-wins would let a typo in one composition root hand
-    /// provider builders a different registry than the rest of the root is
-    /// wired against, with no diagnostic. First-wins is the fail-safe
-    /// release fallback — the original (presumably correct) registration
-    /// stays authoritative; matches the single-shot discipline on
-    /// @c LayoutSourceBundle::buildFromRegistered.
+    /// warns + ignores + returns @c false in release (first registration
+    /// wins). Silent last-write-wins would let a typo in one composition
+    /// root hand provider builders a different registry than the rest of
+    /// the root is wired against, with no diagnostic. First-wins is the
+    /// fail-safe release fallback — the original (presumably correct)
+    /// registration stays authoritative; matches the single-shot
+    /// discipline on @c LayoutSourceBundle::buildFromRegistered.
+    ///
+    /// @return @c true on successful registration, @c false when a prior
+    ///         registration for @c T was already present. Callers that
+    ///         want hard-failure behaviour in release can wrap the call
+    ///         in their own assert; the default (discard-duplicate) is
+    ///         safe for composition roots that don't care.
     template<typename T>
-    void set(std::type_identity_t<T*> service)
+    bool set(std::type_identity_t<T*> service)
     {
         const auto key = std::type_index(typeid(T));
         const bool duplicate = m_services.find(key) != m_services.end();
@@ -63,9 +81,10 @@ public:
         if (duplicate) {
             qWarning("FactoryContext::set: ignoring duplicate registration for type '%s' (first registration kept)",
                      key.name());
-            return;
+            return false;
         }
         m_services[key] = static_cast<void*>(service);
+        return true;
     }
 
     /// Look up a previously-registered service. Returns nullptr when

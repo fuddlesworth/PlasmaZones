@@ -53,12 +53,22 @@ class PHOSPHORTILES_EXPORT AlgorithmRegistry : public ITileAlgorithmRegistry
 
 public:
     /**
-     * @brief Early cleanup of all registered algorithms
+     * @brief Early cleanup of all registered algorithms.
      *
-     * Connected to QCoreApplication::aboutToQuit() so that algorithm objects
-     * (especially ScriptedAlgorithm instances with QJSEngine internals) are
+     * @warning **Shutdown-only.** This method is wired to
+     * @c QCoreApplication::aboutToQuit so algorithm objects (especially
+     * @c ScriptedAlgorithm instances with @c QJSEngine internals) are
      * destroyed while Qt is still fully alive, avoiding crashes during
-     * teardown if an instance outlives QCoreApplication.
+     * teardown if an instance outlives @c QCoreApplication. It must NOT
+     * be called during normal runtime: its implementation drains the
+     * process-wide @c QEvent::DeferredDelete queue via
+     * @c QCoreApplication::sendPostedEvents(nullptr, ...), which forces
+     * deletion of every object app-wide that has a pending deleteLater()
+     * — not just those owned by this registry. That is safe on shutdown
+     * and actively dangerous at any other time.
+     *
+     * After this runs the registry holds no algorithms; further calls
+     * are idempotent no-ops.
      */
     void cleanup();
 
