@@ -45,7 +45,8 @@ namespace PhosphorAnimation {
  * The prefixed `"bezier:x1,y1,x2,y2"` form is also accepted on parse so
  * older configs and hand-written settings round-trip without silently
  * degrading to the OutCubic default. Both forms dispatch to the
- * `bezier` factory with identical semantics.
+ * `bezier` factory with identical semantics. The prefix is matched
+ * case-insensitively so `"Bezier:…"`, `"SPRING:…"`, etc. also resolve.
  *
  * ## Thread safety
  *

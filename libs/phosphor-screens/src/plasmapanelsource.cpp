@@ -313,16 +313,40 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 }
                 while (it.hasNext()) {
                     QRegularExpressionMatch match = it.next();
-                    const int plasmaIndex = match.captured(1).toInt();
+                    // All numeric captures are guarded with toInt(&ok):
+                    // the regex only accepts digits (with an optional
+                    // leading `-` on coordinates), but values outside
+                    // INT_MIN..INT_MAX still parse as digits and silently
+                    // coerce to 0 under the ok-less overload. A zero
+                    // plasmaGeom would then match any (0,0)-origin Qt
+                    // screen and attach the panel to the wrong output.
+                    bool ok = false;
+                    const int plasmaIndex = match.captured(1).toInt(&ok);
+                    if (!ok) {
+                        qCWarning(lcPhosphorScreens)
+                            << "Invalid Plasma panel index, skipping line:" << match.captured(0);
+                        continue;
+                    }
                     const QString location = match.captured(2);
                     const QString hiding = match.captured(3);
-                    int totalOffset = match.captured(4).toInt();
+                    const int totalOffset = match.captured(4).toInt(&ok);
+                    if (!ok) {
+                        qCWarning(lcPhosphorScreens)
+                            << "Invalid Plasma panel offset, skipping line:" << match.captured(0);
+                        continue;
+                    }
                     const bool floating = (match.captured(5) == QLatin1String("1"));
 
                     QString connectorName;
                     if (!match.captured(6).isEmpty()) {
-                        const QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
-                                               match.captured(8).toInt(), match.captured(9).toInt());
+                        bool gx = false, gy = false, gw = false, gh = false;
+                        const QRect plasmaGeom(match.captured(6).toInt(&gx), match.captured(7).toInt(&gy),
+                                               match.captured(8).toInt(&gw), match.captured(9).toInt(&gh));
+                        if (!(gx && gy && gw && gh)) {
+                            qCWarning(lcPhosphorScreens)
+                                << "Plasma panel geometry out of int range, skipping panel:" << match.captured(0);
+                            continue;
+                        }
                         for (auto* qs : qtScreens) {
                             if (qs->geometry() == plasmaGeom) {
                                 connectorName = qs->name();

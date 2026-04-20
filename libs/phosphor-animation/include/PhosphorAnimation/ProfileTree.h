@@ -158,6 +158,10 @@ public:
     /// @p registry is forwarded to every nested @ref Profile::fromJson
     /// call. Per-process registries replace the prior
     /// `CurveRegistry::instance()` singleton.
+    ///
+    /// @p registry is used synchronously for curve resolution — the
+    /// reference does not need to outlive the returned ProfileTree.
+    /// See @ref Profile::fromJson for the same contract.
     static ProfileTree fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     // ─────── Equality ───────

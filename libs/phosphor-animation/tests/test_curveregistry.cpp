@@ -60,6 +60,35 @@ private Q_SLOTS:
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
+    void testPrefixedBezierMatchesBare()
+    {
+        // The bare form is canonical; the prefixed form must produce a
+        // curve that evaluates identically. Previously only the bare form
+        // dispatched to the factory — this test prevents silent divergence
+        // if the prefix handling is ever changed.
+        CurveRegistry reg;
+        auto bare = reg.tryCreate(QStringLiteral("0.25,0.10,0.25,1.00"));
+        auto prefixed = reg.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(bare && prefixed);
+        QCOMPARE(bare->typeId(), prefixed->typeId());
+        for (double t : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+            QCOMPARE(bare->evaluate(t), prefixed->evaluate(t));
+        }
+    }
+
+    void testPrefixCaseInsensitive()
+    {
+        // Hand-written configs and older docs often use capitalised
+        // prefixes ("Bezier:…", "SPRING:…"). Factory typeIds are
+        // registered lower-case by convention, so parseSpec folds the
+        // prefix case before lookup — otherwise these specs silently
+        // degrade to the OutCubic default.
+        CurveRegistry reg;
+        QVERIFY(reg.tryCreate(QStringLiteral("Bezier:0.25,0.10,0.25,1.00")) != nullptr);
+        QVERIFY(reg.tryCreate(QStringLiteral("BEZIER:0.25,0.10,0.25,1.00")) != nullptr);
+        QVERIFY(reg.tryCreate(QStringLiteral("Spring:12.0,0.8")) != nullptr);
+    }
+
     void testCreateElastic()
     {
         auto curve = CurveRegistry{}.create(QStringLiteral("elastic-out:1.2,0.4"));

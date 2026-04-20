@@ -385,17 +385,26 @@ OverlayService::~OverlayService()
     // Drain deferred-delete events. One pass is not enough: ~Surface posts
     // window deleteLater, the window's destruction posts further deleteLater
     // for QML-owned children, and those children's dtors may post yet more.
-    // Alternate sendPostedEvents(DeferredDelete) + processEvents in a bounded
-    // loop. 8 passes was the empirically-observed maximum depth during worst-
-    // case teardown (shader overlay with nested QML components); doubled to
-    // 16 for safety margin so a deeper chain (e.g. someone adds a nested
-    // Repeater) does not silently leak deferred-deletes into engine teardown.
-    // Remaining passes are no-ops once the queue settles, so the extra
-    // iterations cost nothing.
-    constexpr int kDrainPasses = 16;
-    for (int i = 0; i < kDrainPasses; ++i) {
+    // Alternate sendPostedEvents(DeferredDelete) + processEvents until a full
+    // pass processes nothing — that's the point where the cascade has
+    // settled. kDrainCap only bounds pathological chains; in practice the
+    // loop exits after ~4–8 passes. 8 was the empirically-observed depth
+    // during shader-overlay teardown with nested QML components; we cap
+    // well above that so future QML-tree changes don't silently leak
+    // deferred-deletes into engine teardown. Hitting the cap logs a warning
+    // so the regression is loud.
+    constexpr int kDrainCap = 64;
+    QEventLoop drainLoop;
+    int passes = 0;
+    for (; passes < kDrainCap; ++passes) {
         QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        if (!drainLoop.processEvents(QEventLoop::ExcludeUserInputEvents)) {
+            break;
+        }
+    }
+    if (passes == kDrainCap) {
+        qCWarning(lcOverlay) << "deferred-delete drain hit safety cap" << kDrainCap
+                             << "— a QML teardown chain is deeper than expected";
     }
 
     // Now m_engine (unique_ptr) will be destroyed safely

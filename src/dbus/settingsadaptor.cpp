@@ -66,8 +66,10 @@ void SettingsAdaptor::detach()
     // Flush once here — Daemon::stop() also calls m_settings->save()
     // explicitly, so the pending-write isn't really at risk, but keeping
     // the flush makes detach() safe to call from any shutdown path, not
-    // just the daemon's happy-path.
-    if (m_settings && m_saveTimer && m_saveTimer->isActive()) {
+    // just the daemon's happy-path. m_saveTimer is constructed in the
+    // initializer list and never nulled, so no null-check is needed on
+    // it here (the dtor uses the same pattern).
+    if (m_settings && m_saveTimer->isActive()) {
         m_saveTimer->stop();
         m_settings->save();
     }

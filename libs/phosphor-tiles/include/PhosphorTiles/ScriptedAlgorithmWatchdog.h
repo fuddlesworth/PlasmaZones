@@ -78,6 +78,14 @@ public:
      *
      * Called by @ref ScriptedAlgorithm 's destructor so the watchdog thread
      * cannot dereference a freed instance.
+     *
+     * @invariant Every @ref ScriptedAlgorithm that registers here holds a
+     *   @c shared_ptr to this watchdog for its entire lifetime (see class
+     *   comment). The caller of `unregister` is therefore still one of the
+     *   owners when this method runs, so the watchdog instance is
+     *   guaranteed alive across the call. Do not "optimize" the
+     *   algorithm's watchdog reference to a raw or weak pointer — that
+     *   would invalidate this invariant.
      */
     void unregister(ScriptedAlgorithm* algo);
 

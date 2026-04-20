@@ -139,14 +139,12 @@ ParsedSpec parseSpec(const QString& spec)
             out.typeId = spec.trimmed();
         }
     } else {
-        const QString prefix = spec.left(colonIdx).trimmed();
-        // Accept both wire formats for cubic-bezier: the bare
-        // "x1,y1,x2,y2" form (canonical — emitted by toString()) AND the
-        // "bezier:x1,y1,x2,y2" prefixed form that older configs and
-        // hand-written settings often use. Previously only the bare form
-        // dispatched, so "bezier:..." silently fell through to the
-        // unknown-typeId fallback (default OutCubic + warning). Normalise
-        // here so both produce an identical parsed spec.
+        // Lower-case the prefix. Factory typeIds are registered
+        // lower-case by convention ("bezier", "spring", "elastic-in"…) —
+        // matching case-insensitively lets hand-written configs using
+        // "Bezier:..." or "SPRING:..." round-trip instead of silently
+        // falling through to the OutCubic default.
+        const QString prefix = spec.left(colonIdx).trimmed().toLower();
         out.typeId = prefix;
         out.params = spec.mid(colonIdx + 1).trimmed();
     }

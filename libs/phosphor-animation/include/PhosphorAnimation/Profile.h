@@ -172,6 +172,11 @@ public:
     /// supported. Per-process registries (replacing the prior
     /// `CurveRegistry::instance()` singleton) mean composition roots
     /// must thread their own registry to every fromJson call.
+    ///
+    /// @p registry is used synchronously — the reference does not need
+    /// to outlive the returned Profile. The Profile captures a
+    /// `shared_ptr` to the resolved curve, which owns its own backing
+    /// state independent of the registry.
     static Profile fromJson(const QJsonObject& obj, const CurveRegistry& registry);
 
     // ─────── Equality ───────

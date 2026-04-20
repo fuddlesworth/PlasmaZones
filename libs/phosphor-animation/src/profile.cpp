@@ -7,11 +7,32 @@
 
 #include <QJsonValue>
 #include <QLoggingCategory>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QSet>
 
 namespace PhosphorAnimation {
 
 namespace {
 Q_LOGGING_CATEGORY(lcProfile, "phosphoranimation.profile")
+
+// Rate-limit the "unknown sequenceMode" warning to one message per distinct
+// raw value per process. Profiles are re-deserialised on every config
+// reload; without this guard a malformed settings file (or a newer client
+// writing an unknown enumerator) produces N warnings per reload, spamming
+// long-lived daemons. We still want the warning on first sight so schema
+// drift is visible.
+bool shouldWarnUnknownSequenceMode(int raw)
+{
+    static QMutex mutex;
+    static QSet<int> seen;
+    QMutexLocker lock(&mutex);
+    if (seen.contains(raw)) {
+        return false;
+    }
+    seen.insert(raw);
+    return true;
+}
 }
 
 Profile Profile::withDefaults() const
@@ -86,9 +107,13 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
             // Log so schema drift doesn't silently paper over as "AllAtOnce"
             // — a newer client writing an unknown enumerator is something a
             // future-maintainer wants to see in logs, not discover via a
-            // mysterious animation-behaviour regression.
-            qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
-                                 << "— substituting DefaultSequenceMode (schema drift?)";
+            // mysterious animation-behaviour regression. Rate-limited to
+            // one message per distinct value per process (see
+            // shouldWarnUnknownSequenceMode).
+            if (shouldWarnUnknownSequenceMode(raw)) {
+                qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
+                                     << "— substituting DefaultSequenceMode (schema drift?)";
+            }
             p.sequenceMode = DefaultSequenceMode;
         }
     }
