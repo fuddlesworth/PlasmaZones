@@ -54,7 +54,7 @@ private Q_SLOTS:
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_settings = new CountingStubSettings(nullptr);
         m_parent = new QObject(nullptr);
-        m_adaptor = new SettingsAdaptor(m_settings, m_parent);
+        m_adaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
     }
 
     void cleanup()

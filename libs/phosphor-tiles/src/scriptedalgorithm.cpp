@@ -8,7 +8,7 @@
 #include <PhosphorTiles/SplitTree.h>
 #include <PhosphorTiles/TilingState.h>
 #include <PhosphorTiles/AutotileConstants.h>
-#include "scriptedalgorithmwatchdog.h"
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "tileslogging.h"
 #include <QCoreApplication>
 #include <QFile>
@@ -57,9 +57,11 @@ using namespace AutotileDefaults;
 // resolveJsOverride<T> / resolveJsOverrideClamped<T> are defined inline in
 // the header so the _hooks.cpp and _tree.cpp TUs can instantiate them.
 
-ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
+ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, std::shared_ptr<ScriptedAlgorithmWatchdog> watchdog,
+                                     QObject* parent)
     : TilingAlgorithm(parent)
     , m_engine(new QJSEngine(this))
+    , m_watchdog(std::move(watchdog))
 {
     // ScriptedAlgorithmJsBuiltins uses static lazy initialization (function-local
     // statics) that is thread-safe for first-call but not for concurrent QJSEngine
@@ -72,20 +74,24 @@ ScriptedAlgorithm::ScriptedAlgorithm(const QString& filePath, QObject* parent)
         return;
     }
 
-    // Watchdog is owned by the process-wide ScriptedAlgorithmWatchdog singleton.
-    // One OS thread services every live algorithm instance — see
-    // scriptedalgorithmwatchdog.h. arm()/disarm() happen per guardedCall().
+    // Watchdog is borrowed from the loader. arm()/disarm() happen per
+    // guardedCall(). m_watchdog == nullptr disables the safety net (used
+    // by direct-construction unit tests where adding a thread-creation
+    // cost per test case would dwarf the script's own execution time).
+    // Production paths (the loader) always pass a non-null watchdog.
 
     loadScript(filePath);
 }
 
 ScriptedAlgorithm::~ScriptedAlgorithm()
 {
-    // Remove ourselves from the shared watchdog's tracking map before
+    // Remove ourselves from the borrowed watchdog's tracking map before
     // destruction so the watchdog thread cannot interrupt an engine that is
     // about to disappear. unregister() takes the watchdog mutex, so it
     // serialises with an in-flight interrupt attempt.
-    ScriptedAlgorithmWatchdog::instance().unregister(this);
+    if (m_watchdog) {
+        m_watchdog->unregister(this);
+    }
 }
 
 void ScriptedAlgorithm::interruptEngine()
@@ -103,18 +109,19 @@ void ScriptedAlgorithm::interruptEngine()
 // Returns the QJSValue from fn(), or a synthetic error QJSValue on timeout.
 QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) const
 {
-    auto& watchdog = ScriptedAlgorithmWatchdog::instance();
-
     // Clear any stale interrupt from a previous race where the main thread
     // armed+evaluated+disarmed before the watchdog thread checked the deadline,
     // leaving a spurious interrupt flag set. Safe to clear here because the
     // watchdog is disarmed for this instance — no thread is about to set it.
     m_engine->setInterrupted(false);
 
-    // Arm the shared watchdog. After this call returns, the watchdog thread
-    // may interrupt our engine at any moment if the deadline passes before
-    // disarm() runs.
-    watchdog.arm(const_cast<ScriptedAlgorithm*>(this), ScriptWatchdogTimeoutMs);
+    // Arm the loader-owned watchdog. After this call returns, the watchdog
+    // thread may interrupt our engine at any moment if the deadline passes
+    // before disarm() runs. m_watchdog == nullptr (headless test fixtures)
+    // skips the safety net entirely; the JS code runs unsupervised.
+    if (m_watchdog) {
+        m_watchdog->arm(const_cast<ScriptedAlgorithm*>(this), ScriptWatchdogTimeoutMs);
+    }
 
     // Execute the guarded operation
     const QJSValue result = fn();
@@ -125,7 +132,9 @@ QJSValue ScriptedAlgorithm::guardedCall(const std::function<QJSValue()>& fn) con
     // the previous generation is therefore suppressed. After this returns the
     // only interrupt flag we could observe is one the watchdog already set
     // before disarm() took the mutex, so checking/clearing below is race-free.
-    watchdog.disarm(const_cast<ScriptedAlgorithm*>(this));
+    if (m_watchdog) {
+        m_watchdog->disarm(const_cast<ScriptedAlgorithm*>(this));
+    }
 
     const bool wasInterrupted = m_engine->isInterrupted();
     if (wasInterrupted) {

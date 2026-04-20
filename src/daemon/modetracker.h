@@ -4,7 +4,7 @@
 #pragma once
 
 #include "../core/constants.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <QObject>
 #include <QString>
 
@@ -15,7 +15,6 @@ class ScreenManager;
 namespace PlasmaZones {
 
 class Settings;
-class LayoutManager;
 
 /**
  * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
@@ -28,8 +27,8 @@ enum class TilingMode {
 /**
  * @brief Thin convenience wrapper over LayoutManager's per-context AssignmentEntry.
  *
- * All state queries delegate to LayoutManager::assignmentEntryForScreen().
- * Mutation methods write to AssignmentEntry directly. No global [ModeTracking]
+ * All state queries delegate to PhosphorZones::LayoutRegistry::assignmentEntryForScreen().
+ * Mutation methods write to PhosphorZones::AssignmentEntry directly. No global [ModeTracking]
  * KConfig group is used — per-context state lives in [Assignment:*] groups.
  *
  * Callers must set the current context (screen, desktop, activity) before
@@ -41,7 +40,7 @@ class ModeTracker : public QObject
     Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
 
 public:
-    explicit ModeTracker(Settings* settings, LayoutManager* layoutManager,
+    explicit ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
                          Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ModeTracker() override;
 
@@ -51,7 +50,7 @@ public:
     void setContext(const QString& screenId, int desktop, const QString& activity);
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // Current mode (reads from AssignmentEntry for current context)
+    // Current mode (reads from PhosphorZones::AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
     TilingMode currentMode() const;
@@ -77,7 +76,7 @@ public:
     bool isAnyScreenAutotile(int desktop = -1, const QString& activity = QString()) const;
 
     // ═══════════════════════════════════════════════════════════════════════════
-    // PhosphorZones::Layout tracking (reads from AssignmentEntry for current context)
+    // PhosphorZones::Layout tracking (reads from PhosphorZones::AssignmentEntry for current context)
     // ═══════════════════════════════════════════════════════════════════════════
 
     QString lastManualLayoutId() const;
@@ -99,7 +98,7 @@ Q_SIGNALS:
 
 private:
     Settings* m_settings = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QString m_screenId;
     int m_desktop = 0;

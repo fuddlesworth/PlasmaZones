@@ -28,7 +28,7 @@
 #include "core/constants.h"
 #include <PhosphorTiles/AutotileConstants.h>
 #include <PhosphorZones/Layout.h>
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorScreens/VirtualScreen.h>
@@ -47,7 +47,7 @@ constexpr int PendingOrderTimeoutMs = 10000;
 
 } // namespace
 
-AutotileEngine::AutotileEngine(LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+AutotileEngine::AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                                Phosphor::Screens::ScreenManager* screenManager,
                                PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent)
     : QObject(parent)
@@ -248,7 +248,7 @@ void AutotileEngine::connectSignals()
     // active layout. Retile is triggered by setAutotileScreens() and
     // onScreenGeometryChanged() instead.
     // if (m_layoutManager) {
-    //     connect(m_layoutManager, &LayoutManager::activeLayoutChanged,
+    //     connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged,
     //             this, &AutotileEngine::onLayoutChanged);
     // }
 }

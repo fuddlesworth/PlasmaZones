@@ -10,10 +10,14 @@
 
 #include <functional>
 
+namespace PhosphorZones {
+class LayoutRegistry;
+}
+
 namespace PlasmaZones {
 
 class ISettings;
-class LayoutManager;
+
 class WindowTrackingService;
 class ZoneDetectionAdaptor;
 
@@ -27,7 +31,7 @@ class ZoneDetectionAdaptor;
  *
  * Separation of concerns:
  * - This class is pure compute. It holds const* references to
- *   WindowTrackingService / LayoutManager / ZoneDetectionAdaptor and
+ *   WindowTrackingService / PhosphorZones::LayoutRegistry / ZoneDetectionAdaptor and
  *   reads from them. It does not mutate their state.
  * - It never touches D-Bus or Qt signals directly — navigation
  *   feedback (OSD data) is emitted through a std::function callback
@@ -66,7 +70,7 @@ public:
      * @param zoneDetector       adjacent/first-in-direction query helper (non-owning)
      * @param feedback           OSD feedback callback; may be empty (suppresses feedback)
      */
-    SnapNavigationTargetResolver(WindowTrackingService* service, LayoutManager* layoutManager,
+    SnapNavigationTargetResolver(WindowTrackingService* service, PhosphorZones::LayoutRegistry* layoutManager,
                                  ZoneDetectionAdaptor* zoneDetector, FeedbackFn feedback);
 
     /// Late setter for the zone detector — it is wired after adaptor
@@ -103,7 +107,7 @@ private:
     }
 
     WindowTrackingService* m_service = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     ZoneDetectionAdaptor* m_zoneDetector = nullptr;
     FeedbackFn m_feedback;
 };

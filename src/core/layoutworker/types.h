@@ -4,6 +4,9 @@
 #pragma once
 
 #include "../constants.h"
+
+#include <PhosphorZones/Zone.h>
+
 #include <QRectF>
 #include <QUuid>
 #include <QVector>

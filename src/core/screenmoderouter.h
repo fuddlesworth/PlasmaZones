@@ -3,18 +3,21 @@
 
 #pragma once
 
-#include "assignmententry.h"
+#include <PhosphorZones/AssignmentEntry.h>
 #include "plasmazones_export.h"
 
 #include <QString>
 #include <QStringList>
+
+namespace PhosphorZones {
+class LayoutRegistry;
+}
 
 namespace PlasmaZones {
 
 class AutotileEngine;
 class IEngineLifecycle;
 class INavigationActions;
-class LayoutManager;
 class SnapEngine;
 
 /**
@@ -46,7 +49,8 @@ public:
     /// required at construction time — the daemon's init order guarantees
     /// the engines exist before the router. There is no late-wiring path:
     /// passing nullptr for any dependency is a programming error.
-    ScreenModeRouter(LayoutManager* layoutManager, SnapEngine* snapEngine, AutotileEngine* autotileEngine);
+    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, SnapEngine* snapEngine,
+                     AutotileEngine* autotileEngine);
 
     /// Wire navigation action adapters. Must be called once at daemon startup
     /// after the adapters are constructed (which requires the engines and
@@ -60,7 +64,7 @@ public:
     /// Returns Snapping when the screen isn't recognised — safest
     /// default since snap-mode operations are generally idempotent
     /// against missing state.
-    AssignmentEntry::Mode modeFor(const QString& screenId) const;
+    PhosphorZones::AssignmentEntry::Mode modeFor(const QString& screenId) const;
 
     /// The engine that owns placement on @p screenId. Callers should treat
     /// the returned pointer as the only legitimate route into per-window
@@ -97,7 +101,7 @@ public:
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
 private:
-    LayoutManager* m_layoutManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
     SnapEngine* m_snapEngine;
     AutotileEngine* m_autotileEngine;
     INavigationActions* m_snapNavigator = nullptr;

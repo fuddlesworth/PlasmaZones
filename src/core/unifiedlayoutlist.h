@@ -36,8 +36,8 @@ class ILayoutSource;
 }
 
 namespace PhosphorZones {
-class ILayoutManager;
 class Layout;
+class LayoutRegistry;
 }
 
 namespace PhosphorTiles {
@@ -71,7 +71,7 @@ using ::PlasmaZones::IOrderingSettings;
  * is acceptable for code paths that don't yet hold a bundle reference.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, bool includeAutotile = false,
                        const QStringList& customOrder = {}, PhosphorLayout::ILayoutSource* autotileSource = nullptr);
 
@@ -92,7 +92,7 @@ buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
  * semantics — same fallback rules apply.
  */
 PLASMAZONES_EXPORT QVector<PhosphorLayout::LayoutPreview>
-buildUnifiedLayoutList(PhosphorZones::ILayoutManager* layoutManager,
+buildUnifiedLayoutList(PhosphorZones::LayoutRegistry* layoutManager,
                        PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, const QString& screenId,
                        int virtualDesktop, const QString& activity, bool includeManual = true,
                        bool includeAutotile = true, qreal screenAspectRatio = 0.0, bool filterByAspectRatio = false,

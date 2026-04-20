@@ -30,9 +30,11 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace PlasmaZones {
+namespace PhosphorZones {
+class LayoutRegistry;
+}
 
-class LayoutManager; // Concrete type needed for signal connections
+namespace PlasmaZones {
 class VirtualDesktopManager;
 class ActivityManager;
 class ISettings;
@@ -40,17 +42,17 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for layout management operations
  *
- * Provides D-Bus interface: org.plasmazones.LayoutManager
+ * Provides D-Bus interface: org.plasmazones.LayoutRegistry
  *  PhosphorZones::Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
 {
     Q_OBJECT
-    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.LayoutManager")
+    Q_CLASSINFO("D-Bus Interface", "org.plasmazones.LayoutRegistry")
 
 public:
-    explicit LayoutAdaptor(LayoutManager* manager, QObject* parent = nullptr);
-    explicit LayoutAdaptor(LayoutManager* manager, VirtualDesktopManager* vdm,
+    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent = nullptr);
+    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, VirtualDesktopManager* vdm,
                            Phosphor::Screens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
     ~LayoutAdaptor() override = default;
 
@@ -162,7 +164,7 @@ public Q_SLOTS:
     QString getTilingAlgorithmForScreenDesktop(const QString& screenId, int virtualDesktop);
     void setAllDesktopAssignments(const QVariantMap& assignments); // Batch set - key: "screen:desktop", value: layoutId
 
-    // Individual full-entry assignment (KCM sends complete AssignmentEntry per context)
+    // Individual full-entry assignment (KCM sends complete PhosphorZones::AssignmentEntry per context)
     void setAssignmentEntry(const QString& screenId, int virtualDesktop, const QString& activity, int mode,
                             const QString& snappingLayout, const QString& tilingAlgorithm);
 
@@ -372,8 +374,8 @@ Q_SIGNALS:
     void assignmentChangesApplied(const QStringList& changedScreenIds);
 
 private Q_SLOTS:
-    // String-based connection slots for LayoutManager signals
-    // (LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
+    // String-based connection slots for PhosphorZones::LayoutRegistry signals
+    // (PhosphorZones::LayoutRegistry redeclares signals for Q_PROPERTY, so we use string-based connections)
     void onActiveLayoutChanged(PhosphorZones::Layout* layout);
     void onLayoutsChanged();
     void onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout);
@@ -466,7 +468,7 @@ private:
      */
     void invalidateLayoutJsonCacheFor(const QUuid& uuid);
 
-    LayoutManager* m_layoutManager; // Concrete type for signal connections
+    PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;

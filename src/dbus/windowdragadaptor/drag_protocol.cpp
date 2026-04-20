@@ -13,7 +13,7 @@
 #include "../windowdragadaptor.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/settings_interfaces.h"
 #include "../../core/logging.h"
 #include "../../autotile/AutotileEngine.h"

@@ -591,11 +591,11 @@ qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Control.generateSupportRepor
 
 ## D-Bus API
 
-PlasmaZones exposes 10 D-Bus interfaces on `org.plasmazones` for scripting and integration — Autotile, Control, LayoutManager, Overlay, Screen, Settings, Shader, and more.
+PlasmaZones exposes 10 D-Bus interfaces on `org.plasmazones` for scripting and integration — Autotile, Control, LayoutRegistry, Overlay, Screen, Settings, Shader, and more.
 
 ```bash
 # Quick examples
-qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutManager.getLayoutList
+qdbus6 org.plasmazones /PlasmaZones org.plasmazones.LayoutRegistry.getLayoutList
 qdbus6 org.plasmazones /PlasmaZones org.plasmazones.Overlay.showOverlay
 ```
 

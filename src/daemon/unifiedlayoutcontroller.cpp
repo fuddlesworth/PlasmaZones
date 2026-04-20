@@ -5,7 +5,7 @@
 #include "../autotile/AutotileEngine.h"
 #include "../config/settings.h"
 #include "../core/constants.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "../core/utils.h"
 #include <PhosphorLayoutApi/ILayoutSource.h>
@@ -14,7 +14,7 @@
 
 namespace PlasmaZones {
 
-UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, Settings* settings,
+UnifiedLayoutController::UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
                                                  Phosphor::Screens::ScreenManager* screenManager,
                                                  PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                                  AutotileEngine* autotileEngine, QObject* parent)
@@ -26,18 +26,19 @@ UnifiedLayoutController::UnifiedLayoutController(LayoutManager* layoutManager, S
     , m_autotileEngine(autotileEngine)
 {
     if (m_layoutManager) {
-        connect(m_layoutManager, &LayoutManager::layoutsChanged, this, [this]() {
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, [this]() {
             m_cacheValid = false;
         });
 
-        connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
-            if (layout) {
-                QString newId = layout->id().toString();
-                if (m_currentLayoutId != newId) {
-                    setCurrentLayoutId(newId);
-                }
-            }
-        });
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+                [this](PhosphorZones::Layout* layout) {
+                    if (layout) {
+                        QString newId = layout->id().toString();
+                        if (m_currentLayoutId != newId) {
+                            setCurrentLayoutId(newId);
+                        }
+                    }
+                });
     }
 
     if (m_settings) {

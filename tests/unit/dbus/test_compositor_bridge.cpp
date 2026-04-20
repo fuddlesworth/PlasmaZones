@@ -22,7 +22,8 @@
 #include "dbus/compositorbridgeadaptor.h"
 #include "dbus/controladaptor.h"
 #include "dbus/windowtrackingadaptor.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -104,8 +105,9 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_bridgeAdaptor = new CompositorBridgeAdaptor(m_parent);
 
-        // For ControlAdaptor tests we need a WTA + LayoutManager
-        m_layoutManager = new LayoutManager(nullptr);
+        // For ControlAdaptor tests we need a WTA + PhosphorZones::LayoutRegistry
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsBridge(nullptr);
         m_zoneDetector = new StubZoneDetectorBridge(nullptr);
 
@@ -274,7 +276,7 @@ private:
     QObject* m_parent = nullptr;
     CompositorBridgeAdaptor* m_bridgeAdaptor = nullptr;
 
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsBridge* m_settings = nullptr;
     StubZoneDetectorBridge* m_zoneDetector = nullptr;
     QObject* m_wtaParent = nullptr;

@@ -11,7 +11,7 @@
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
@@ -35,8 +35,9 @@ namespace PlasmaZones {
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                                     LayoutManager* layoutManager, Phosphor::Screens::ScreenManager* screenManager,
-                                     ISettings* settings, WindowTrackingAdaptor* windowTracking, QObject* parent)
+                                     PhosphorZones::LayoutRegistry* layoutManager,
+                                     Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
+                                     WindowTrackingAdaptor* windowTracking, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_overlayService(overlay)
     , m_zoneDetector(detector)
@@ -62,11 +63,14 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
-    // Uses LayoutManager (concrete) because PhosphorZones::ILayoutManager is a pure interface without signals
-    connect(m_layoutManager, &LayoutManager::activeLayoutChanged, this, &WindowDragAdaptor::onLayoutChanged);
-    connect(m_layoutManager, &LayoutManager::layoutAssigned, this, [this](const QString&, int, PhosphorZones::Layout*) {
-        onLayoutChanged();
-    });
+    // Uses PhosphorZones::LayoutRegistry (concrete) because PhosphorZones::LayoutRegistry is a pure interface without
+    // signals
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+            &WindowDragAdaptor::onLayoutChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this,
+            [this](const QString&, int, PhosphorZones::Layout*) {
+                onLayoutChanged();
+            });
 
     // Escape shortcut to cancel overlay during drag: bound into the Registry
     // on drag start (see registerCancelOverlayShortcut) and released on end

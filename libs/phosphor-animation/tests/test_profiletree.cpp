@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include <PhosphorAnimation/CurveRegistry.h>
 #include <PhosphorAnimation/Easing.h>
 #include <PhosphorAnimation/Profile.h>
 #include <PhosphorAnimation/ProfilePaths.h>
@@ -229,7 +230,7 @@ private Q_SLOTS:
         original.setOverride(PP::ZoneSnapIn, overrideB);
 
         const QJsonObject encoded = original.toJson();
-        const ProfileTree restored = ProfileTree::fromJson(encoded);
+        const ProfileTree restored = ProfileTree::fromJson(encoded, PhosphorAnimation::CurveRegistry{});
 
         QCOMPARE(restored, original);
     }
@@ -242,7 +243,7 @@ private Q_SLOTS:
         original.setOverride(PP::Osd, Profile());
 
         const QStringList before = original.overriddenPaths();
-        const ProfileTree restored = ProfileTree::fromJson(original.toJson());
+        const ProfileTree restored = ProfileTree::fromJson(original.toJson(), PhosphorAnimation::CurveRegistry{});
         QCOMPARE(restored.overriddenPaths(), before);
     }
 
@@ -255,7 +256,7 @@ private Q_SLOTS:
         leaf.duration = Profile::DefaultDuration;
         original.setOverride(PP::WindowOpen, leaf);
 
-        const ProfileTree restored = ProfileTree::fromJson(original.toJson());
+        const ProfileTree restored = ProfileTree::fromJson(original.toJson(), PhosphorAnimation::CurveRegistry{});
         const Profile restoredLeaf = restored.directOverride(PP::WindowOpen);
         QVERIFY(restoredLeaf.duration.has_value());
         QCOMPARE(*restoredLeaf.duration, Profile::DefaultDuration);

@@ -310,10 +310,11 @@ include_directories("${CMAKE_BINARY_DIR}/generated")
 # following the same phosphor-<name> convention.
 add_subdirectory(libs/phosphor-identity)    # stable cross-process window identity (composite ids, app-id matching)
 add_subdirectory(libs/phosphor-layout-api)  # shared layout-preview contract (LayoutPreview, ILayoutSource)
-add_subdirectory(libs/phosphor-zones)       # manual zone-layout primitives (Zone, Layout, ZoneDetector)
+add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner — needed by phosphor-zones
+add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline — needed by phosphor-screens
+add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision — needed by phosphor-zones
+add_subdirectory(libs/phosphor-zones)       # zone primitives + LayoutManager (depends on phosphor-config IBackend, phosphor-screens ScreenIdentity)
 add_subdirectory(libs/phosphor-tiles)       # auto-tiling algorithm primitives (TilingAlgorithm, AlgorithmRegistry, SplitTree)
-add_subdirectory(libs/phosphor-config)      # schema-driven configuration + migration runner
-add_subdirectory(libs/phosphor-shell)       # layer-shell + shader pipeline
 add_subdirectory(libs/phosphor-rendering)   # GPU shader rendering via Qt RHI
 add_subdirectory(libs/phosphor-layer)       # wlr-layer-shell surface lifecycle management
 add_subdirectory(libs/phosphor-shortcuts)   # global shortcut backends + domain-free Registry
@@ -324,7 +325,6 @@ add_subdirectory(libs/phosphor-jsonloader) # generic JSON directory loader with 
 # PHOSPHOR_ANIMATION_QUICK as a transitive dependency.
 set(PHOSPHOR_ANIMATION_QML ON CACHE BOOL "Build org.phosphor.animation QML module")
 add_subdirectory(libs/phosphor-animation)   # motion-runtime primitives (curves, springs, profiles)
-add_subdirectory(libs/phosphor-screens)     # screen-topology + virtual-screen subdivision
 
 # Source directories
 add_subdirectory(src)
@@ -347,7 +347,7 @@ endif()
 install(FILES
     dbus/org.plasmazones.Autotile.xml
     dbus/org.plasmazones.EditorApp.xml
-    dbus/org.plasmazones.LayoutManager.xml
+    dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
     dbus/org.plasmazones.Settings.xml

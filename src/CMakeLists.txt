@@ -63,12 +63,10 @@ set(plasmazones_core_SRCS
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    # zone, layout, layoututils, zonedetector, zonehighlighter live in
-    # libs/phosphor-zones/ — consumers include <PhosphorZones/...> directly.
-    core/layoutmanager.cpp
-    core/layoutmanager/persistence.cpp
-    core/layoutmanager/assignments.cpp
-    core/layoutmanager.h
+    # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
+    # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
+    # consumers include <PhosphorZones/...> directly and construct the registry
+    # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
     core/layoutworker/layoutworker.cpp
     core/layoutworker/layoutworker.h
     core/layoutworker/layoutcomputeservice.cpp

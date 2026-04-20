@@ -37,7 +37,9 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+
+#include "config/configbackends.h"
 
 // ─── Fixture sources / factories ────────────────────────────────────────────
 
@@ -134,7 +136,6 @@ struct FixtureService
 /// every bundle rebuild. Using a file-scope instance prevents dangling
 /// captures when a test method returns.
 FixtureService g_fixtureServiceA{11};
-FixtureService g_fixtureServiceB{22};
 
 /// Service type that NO test ever registers — the "this composition
 /// root doesn't host this engine" signal path.
@@ -230,7 +231,7 @@ private Q_SLOTS:
     void testFactoryContext_duplicateSetReturnsFalse()
     {
         FixtureService svc1{1};
-        FixtureService svc2{2};
+        [[maybe_unused]] FixtureService svc2{2};
         PhosphorLayout::FactoryContext ctx;
         QVERIFY(ctx.set<FixtureService>(&svc1));
         // Duplicate registration: asserts in debug, returns false in
@@ -505,17 +506,18 @@ private Q_SLOTS:
 
     void testInvariant_layoutManagerSingleQObjectBase()
     {
-        PlasmaZones::LayoutManager mgr;
+        auto mgr = std::make_unique<PhosphorZones::LayoutRegistry>(PlasmaZones::createAssignmentsBackend(),
+                                                                   QStringLiteral("plasmazones/layouts"));
         // Direct concrete → QObject path.
-        QObject* directQObject = static_cast<QObject*>(&mgr);
+        QObject* directQObject = static_cast<QObject*>(mgr.get());
         // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.
         // Every step is non-virtual, single inheritance; the address must
         // not shift along the chain. A non-zero offset would mean
-        // LayoutManager picked up a second QObject base somewhere along
+        // PhosphorZones::LayoutRegistry picked up a second QObject base somewhere along
         // the way (e.g. a sibling interface accidentally re-derived from
         // QObject), which is exactly the multi-QObject hazard the static-
         // assert pair guards against at compile time.
-        auto* registry = static_cast<PhosphorZones::IZoneLayoutRegistry*>(&mgr);
+        auto* registry = static_cast<PhosphorZones::IZoneLayoutRegistry*>(mgr.get());
         QObject* viaRegistry = static_cast<QObject*>(registry);
         QCOMPARE(directQObject, viaRegistry);
         // And the next link in the chain.

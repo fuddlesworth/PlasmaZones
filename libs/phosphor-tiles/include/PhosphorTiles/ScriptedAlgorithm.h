@@ -11,11 +11,14 @@
 #include <algorithm>
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <type_traits>
 
 class QJSEngine;
 
 namespace PhosphorTiles {
+
+class ScriptedAlgorithmWatchdog;
 
 // Note: ScriptedAlgorithm is NOT thread-safe despite the base class const contract.
 // All calls must occur on the main thread. QJSEngine is inherently single-threaded.
@@ -78,13 +81,38 @@ class PHOSPHORTILES_EXPORT ScriptedAlgorithm : public TilingAlgorithm
 {
     Q_OBJECT
 
+    // The watchdog is the only caller of interruptEngine() — it dispatches
+    // the interrupt from its supervisor thread while holding the watchdog
+    // mutex. Exposing that entry point publicly would tempt unrelated
+    // code to call it from the main thread, which would interact badly
+    // with guardedCall()'s arm-evaluate-disarm invariant.
+    friend class ScriptedAlgorithmWatchdog;
+
 public:
     /**
      * @brief Construct a ScriptedAlgorithm from a JavaScript file
      * @param filePath Absolute path to the .js script file
+     * @param watchdog Shared ownership of the watchdog that monitors this
+     *        algorithm's guarded JS calls. The algorithm holds a strong
+     *        reference so the watchdog cannot disappear while the
+     *        algorithm is still alive — required because the registry
+     *        destroys algorithms via `deleteLater()`, which can defer
+     *        the @c ~ScriptedAlgorithm dtor past the loader's own
+     *        destructor (and past the loader's owning shared_ptr being
+     *        released). The watchdog thread joins when the LAST strong
+     *        reference is released — typically the loader's, occasionally
+     *        a deferred-delete algorithm's. Replaces the prior
+     *        @c ScriptedAlgorithmWatchdog::instance() process-wide
+     *        singleton.
+     *        @c nullptr disables the JS-timeout safety net entirely —
+     *        used by headless unit tests that exercise metadata parsing
+     *        and short, well-behaved scripts where a runaway-guard would
+     *        only add a thread-creation cost. Production code paths
+     *        (the loader) always pass a non-null watchdog.
      * @param parent Parent QObject
      */
-    explicit ScriptedAlgorithm(const QString& filePath, QObject* parent = nullptr);
+    explicit ScriptedAlgorithm(const QString& filePath, std::shared_ptr<ScriptedAlgorithmWatchdog> watchdog = nullptr,
+                               QObject* parent = nullptr);
     ~ScriptedAlgorithm() override;
 
     /**
@@ -209,24 +237,38 @@ private:
     /// Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;
 
-public:
     /**
-     * @brief Interrupt the underlying JS engine (called from the shared watchdog thread)
+     * @brief Interrupt the underlying JS engine (called from the watchdog thread)
      *
-     * Forwards to @c QJSEngine::setInterrupted(true). Public because the
-     * shared @ref ScriptedAlgorithmWatchdog singleton invokes it from a
-     * non-main thread when a guarded JS call exceeds its deadline. The
-     * underlying Qt call is documented thread-safe relative to the
-     * main-thread JS evaluation it targets.
+     * Forwards to @c QJSEngine::setInterrupted(true). Private — only the
+     * per-loader @ref ScriptedAlgorithmWatchdog (declared a friend above)
+     * may invoke it, and only from its supervisor thread while holding
+     * the watchdog mutex. The underlying Qt call is documented
+     * thread-safe relative to the main-thread JS evaluation it targets.
+     *
+     * CONTRACT: body MUST be safe to execute with the watchdog mutex
+     * held. No emitting Qt signals, no logging through sinks that can
+     * re-enter the watchdog, no calls into anything that acquires the
+     * watchdog mutex directly or indirectly. See the matching INVARIANT
+     * comment in @c scriptedalgorithmwatchdog.cpp::threadMain for why
+     * relaxing this would regress into either a deadlock or a UAF.
+     * Extend via a QueuedConnection bounce to the main thread if more
+     * work is needed.
      */
     void interruptEngine();
 
-private:
     /// Unified with AutotileDefaults::MaxRuntimeTreeDepth to prevent silent truncation
     static constexpr int MaxTreeConversionDepth = AutotileDefaults::MaxRuntimeTreeDepth;
 
     // Owned via QObject parent; mutable because calculateZones() is const but JS evaluation mutates engine state
     mutable QJSEngine* m_engine = nullptr;
+    /// Shared ownership with the loader. The registry destroys algorithms
+    /// via deleteLater(), which can defer the algorithm's dtor past the
+    /// loader's own dtor (and past the loader's strong reference being
+    /// released). Holding a shared_ptr here keeps the watchdog thread
+    /// alive until the very last algorithm using it is gone, which is
+    /// what makes m_watchdog->unregister(this) in our dtor safe.
+    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
     mutable QJSValue m_calculateZonesFn;
     QString m_filePath;
     QString m_scriptId;

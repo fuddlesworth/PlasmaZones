@@ -79,15 +79,6 @@ CurveRegistry::CurveRegistry()
 
 CurveRegistry::~CurveRegistry() = default;
 
-CurveRegistry& CurveRegistry::instance()
-{
-    // Meyers singleton — C++11 guarantees thread-safe initialization.
-    // Avoids Q_GLOBAL_STATIC's static-destruction ordering pitfalls for
-    // a library that may be unloaded before Qt's plugin-teardown.
-    static CurveRegistry sInstance;
-    return sInstance;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════════
 // Registration
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -148,13 +139,12 @@ ParsedSpec parseSpec(const QString& spec)
             out.typeId = spec.trimmed();
         }
     } else {
-        const QString prefix = spec.left(colonIdx).trimmed();
-        // Cubic-bezier has exactly one wire format — the bare 4-comma
-        // form. The "bezier:..." prefixed form is intentionally rejected
-        // here so the registry and Easing::fromString agree.
-        if (prefix == QLatin1String("bezier")) {
-            return out; // empty typeId → unknown
-        }
+        // Lower-case the prefix. Factory typeIds are registered
+        // lower-case by convention ("bezier", "spring", "elastic-in"…) —
+        // matching case-insensitively lets hand-written configs using
+        // "Bezier:..." or "SPRING:..." round-trip instead of silently
+        // falling through to the OutCubic default.
+        const QString prefix = spec.left(colonIdx).trimmed().toLower();
         out.typeId = prefix;
         out.params = spec.mid(colonIdx + 1).trimmed();
     }

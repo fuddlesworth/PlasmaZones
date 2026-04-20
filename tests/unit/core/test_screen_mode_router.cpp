@@ -22,7 +22,8 @@
 #include <QTest>
 
 #include "autotile/AutotileEngine.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include "snap/SnapEngine.h"
@@ -34,7 +35,7 @@ class TestScreenModeRouter : public QObject
     Q_OBJECT
 
 private:
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
     ScreenModeRouter* m_router = nullptr;
@@ -43,9 +44,10 @@ private Q_SLOTS:
 
     void init()
     {
-        // LayoutManager with no backend — every screen hits the default
+        // PhosphorZones::LayoutRegistry with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
 
         // SnapEngine with all-nullptr dependencies is a valid construction:
         // the router only invokes it via the IEngineLifecycle interface
@@ -83,7 +85,7 @@ private Q_SLOTS:
     {
         // No autotile assignments, no layout assignments — the cascade
         // falls through to the default Snapping branch.
-        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), AssignmentEntry::Snapping);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), PhosphorZones::AssignmentEntry::Snapping);
     }
 
     void modeFor_autotileScreen_returnsAutotile()
@@ -91,7 +93,7 @@ private Q_SLOTS:
         // Seeding the engine's live set is the fast-path branch: modeFor()
         // returns Autotile without consulting the layout cascade at all.
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
-        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), AssignmentEntry::Autotile);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-1")), PhosphorZones::AssignmentEntry::Autotile);
     }
 
     void modeFor_autotileOnlyTargetsNamedScreen()
@@ -99,14 +101,14 @@ private Q_SLOTS:
         m_autotileEngine->setAutotileScreens({QStringLiteral("DP-1")});
         // A different screen is unaffected — it still reports the default
         // Snapping fallback.
-        QCOMPARE(m_router->modeFor(QStringLiteral("DP-2")), AssignmentEntry::Snapping);
+        QCOMPARE(m_router->modeFor(QStringLiteral("DP-2")), PhosphorZones::AssignmentEntry::Snapping);
     }
 
     void modeFor_emptyScreenId_returnsSnapping()
     {
         // Defensive: an empty screen id should never trigger autotile mode.
         // The engine's set does not contain the empty string by default.
-        QCOMPARE(m_router->modeFor(QString()), AssignmentEntry::Snapping);
+        QCOMPARE(m_router->modeFor(QString()), PhosphorZones::AssignmentEntry::Snapping);
     }
 
     // ─── engineFor ────────────────────────────────────────────────────────
@@ -156,7 +158,7 @@ private Q_SLOTS:
     void modePredicates_areMutuallyExclusive()
     {
         // For any given screen, isSnapMode and isAutotileMode must disagree.
-        // Today AssignmentEntry::Mode is 2-valued so this is tautological;
+        // Today PhosphorZones::AssignmentEntry::Mode is 2-valued so this is tautological;
         // the test pins the invariant so if the enum gains a third state
         // (e.g. a "Disabled" mode) the predicate pair is forced to update
         // in lockstep.

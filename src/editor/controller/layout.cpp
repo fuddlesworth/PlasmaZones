@@ -359,12 +359,12 @@ void EditorController::loadLayout(const QString& layoutId)
         return;
     }
 
-    // Try the in-process LayoutManager first — opens the editor instantly
+    // Try the in-process PhosphorZones::LayoutRegistry first — opens the editor instantly
     // even when the daemon is starting up, daemon is down, or the user
     // launched the editor as a standalone tool. Falls back to D-Bus
     // (DBusLayoutService::loadLayout via m_layoutService) when the layout
     // isn't on disk yet (just-created in another process, etc.) or when
-    // the ID is an autotile algorithm preview that the local LayoutManager
+    // the ID is an autotile algorithm preview that the local PhosphorZones::LayoutRegistry
     // can't produce.
     QString jsonLayout;
     if (m_localLayoutManager) {
@@ -502,7 +502,7 @@ void EditorController::loadLayout(const QString& layoutId)
     m_availableActivities.clear();
     {
         QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                             QString(DBus::Interface::LayoutManager)};
+                             QString(DBus::Interface::LayoutRegistry)};
         if (iface.isValid()) {
             // Screen IDs (stable EDID-based identifiers)
             QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
@@ -868,7 +868,7 @@ void EditorController::importLayout(const QString& filePath)
     }
 
     QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+                                 QString::fromLatin1(DBus::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
@@ -917,7 +917,7 @@ void EditorController::exportLayout(const QString& filePath)
     }
 
     QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+                                 QString::fromLatin1(DBus::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");

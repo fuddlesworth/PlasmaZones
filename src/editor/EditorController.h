@@ -16,7 +16,7 @@
 #include <QVector>
 #include "../config/configbackends.h"
 #include "../core/constants.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "undo/UndoController.h"
 #include <PhosphorLayoutApi/LayoutSourceBundle.h>
@@ -309,7 +309,7 @@ public:
     // The editor runs as its own process. Today its layout-list / template /
     // import-preview QML still mostly fetches via D-Bus (DBusLayoutService),
     // requiring a running daemon. The methods below load the SAME on-disk
-    // layouts via an in-process LayoutManager + PhosphorZones::ZonesLayoutSource so QML
+    // layouts via an in-process PhosphorZones::LayoutRegistry + PhosphorZones::ZonesLayoutSource so QML
     // preview-rendering paths work even when the daemon isn't running.
     //
     // QVariantMap shape is the QML-facing projection produced by
@@ -498,7 +498,7 @@ public Q_SLOTS:
 
     // D-Bus subscriber slot — wired in the ctor to all of the daemon's
     // layout-mutation signals (layoutCreated/Deleted/Changed/ListChanged/
-    // PropertyChanged). Forces an in-process LayoutManager reload so
+    // PropertyChanged). Forces an in-process PhosphorZones::LayoutRegistry reload so
     // localLayoutPreviews() reflects the daemon's view regardless of
     // whether the QFileSystemWatcher saw the underlying file event.
     void reloadLocalLayouts();
@@ -918,7 +918,7 @@ private:
     //   3. ~m_localLayoutManager, ~m_localAlgorithmRegistry.
     // Do not reorder without revisiting every borrower's destructor.
     std::unique_ptr<PhosphorTiles::AlgorithmRegistry> m_localAlgorithmRegistry;
-    std::unique_ptr<LayoutManager> m_localLayoutManager;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> m_localLayoutManager;
     PhosphorLayout::LayoutSourceBundle m_localSources;
     /// Owned here (not parented to `this`) so destruction runs via the
     /// unique_ptr reset in reverse declaration order — BEFORE the
@@ -933,7 +933,7 @@ private:
     /// single reloadLocalLayouts() call. Mirrors the SettingsController
     /// m_layoutLoadTimer pattern so a typical editor save — which fires
     /// layoutChanged + layoutListChanged back-to-back — only hits the
-    /// LayoutManager once.
+    /// PhosphorZones::LayoutRegistry once.
     QTimer m_layoutReloadTimer;
 
     /// Recompute zone geometry for every manual layout against the

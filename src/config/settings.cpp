@@ -56,7 +56,7 @@ Settings::Settings(PhosphorConfig::IBackend* backend, QObject* parent)
     // file. Production entry points (daemon/main, settings/main, editor
     // controller) call ConfigMigration::ensureJsonConfig() exactly once at
     // startup, before instantiating the backend. The non-owning ctor is
-    // used when callers share one backend across Settings + LayoutManager
+    // used when callers share one backend across Settings + PhosphorZones::LayoutRegistry
     // + other components, so the migration responsibility lives with them.
     //
     // (The owning ctor below routes through migrateAndCreateOwnedBackend

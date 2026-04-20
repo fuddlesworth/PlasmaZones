@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
-// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 #pragma once
 
-#include "constants.h"
-#include "../config/configdefaults.h"
+#include <PhosphorLayoutApi/LayoutId.h>
+
+#include <QHash>
 #include <QString>
 
-namespace PlasmaZones {
+namespace PhosphorZones {
 
 /**
  * @brief Key for layout assignment (screen + desktop + activity)
@@ -24,16 +25,22 @@ struct LayoutAssignmentKey
     }
 
     /**
-     * @brief Parse an "Assignment:screenId[:Desktop:N][:Activity:uuid]" group name
+     * @brief Parse a "<prefix><screenId>[:Desktop:N][:Activity:uuid]" group name.
      *
      * Expects suffixes in canonical order: :Desktop:N before :Activity:uuid.
      * Group names are always constructed internally in this order.
-     * @return Key with populated fields; screenId is empty on parse failure
+     *
+     * @param groupName Full group name from the config backend.
+     * @param prefix    Schema-defined prefix (the lib's own wire format
+     *                  uses @c "Assignment:" — defined as a private
+     *                  constant in @c layoutregistry_persistence.cpp).
+     *                  Passing it explicitly keeps this header free of
+     *                  any cpp-side constant dependency.
+     * @return Key with populated fields; screenId is empty on parse failure.
      */
-    static LayoutAssignmentKey fromGroupName(const QString& groupName)
+    static LayoutAssignmentKey fromGroupName(const QString& groupName, const QString& prefix)
     {
         LayoutAssignmentKey result;
-        const QString prefix = ConfigDefaults::assignmentGroupPrefix();
         if (!groupName.startsWith(prefix))
             return result;
         QString remainder = groupName.mid(prefix.size());
@@ -88,9 +95,15 @@ struct AssignmentEntry
     QString activeLayoutId() const
     {
         if (mode == Autotile) {
-            // Return autotile prefix even with empty algorithm — signals "autotile mode,
-            // use default algorithm." Callers use PhosphorLayout::LayoutId::isAutotile() to detect mode
-            // and extractAlgorithmId() to get the algorithm (empty = use default).
+            // Autotile mode always produces a non-empty id so the cascade
+            // visitors in LayoutRegistry accept it (they reject on
+            // activeLayoutId().isEmpty()). For a mode-only entry (empty
+            // tilingAlgorithm — what the KCM writes for "autotile, use
+            // default algorithm"), makeAutotileId returns the bare
+            // prefix @c "autotile:"; downstream callers use
+            // @ref PhosphorLayout::LayoutId::isAutotile to detect mode
+            // and @ref PhosphorLayout::LayoutId::extractAlgorithmId to
+            // get the algorithm (empty = engine default).
             return PhosphorLayout::LayoutId::makeAutotileId(tilingAlgorithm);
         }
         return snappingLayout;
@@ -136,4 +149,4 @@ struct AssignmentEntry
     }
 };
 
-} // namespace PlasmaZones
+} // namespace PhosphorZones

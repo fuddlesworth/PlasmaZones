@@ -27,7 +27,8 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -130,7 +131,8 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = new LayoutManager(nullptr);
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsQueries(nullptr);
         m_zoneDetector = new StubZoneDetectorQueries(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
@@ -318,7 +320,7 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsQueries* m_settings = nullptr;
     StubZoneDetectorQueries* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;

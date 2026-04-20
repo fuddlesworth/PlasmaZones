@@ -6,13 +6,13 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include <PhosphorScreens/Manager.h>
 
 namespace PlasmaZones {
 
-ModeTracker::ModeTracker(Settings* settings, LayoutManager* layoutManager,
+ModeTracker::ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
                          Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
@@ -41,7 +41,7 @@ TilingMode ModeTracker::currentMode() const
         return TilingMode::Manual;
     }
     auto mode = m_layoutManager->modeForScreen(m_screenId, m_desktop, m_activity);
-    return (mode == AssignmentEntry::Autotile) ? TilingMode::Autotile : TilingMode::Manual;
+    return (mode == PhosphorZones::AssignmentEntry::Autotile) ? TilingMode::Autotile : TilingMode::Manual;
 }
 
 bool ModeTracker::isAnyScreenAutotile(int desktop, const QString& activity) const

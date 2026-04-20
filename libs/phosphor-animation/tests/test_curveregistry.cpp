@@ -23,7 +23,7 @@ private Q_SLOTS:
 
     void testBuiltInEasingTypes()
     {
-        auto& reg = CurveRegistry::instance();
+        CurveRegistry reg;
         QVERIFY(reg.has(QStringLiteral("bezier")));
         QVERIFY(reg.has(QStringLiteral("elastic-in")));
         QVERIFY(reg.has(QStringLiteral("elastic-out")));
@@ -35,7 +35,7 @@ private Q_SLOTS:
 
     void testBuiltInSpring()
     {
-        auto& reg = CurveRegistry::instance();
+        CurveRegistry reg;
         QVERIFY(reg.has(QStringLiteral("spring")));
     }
 
@@ -44,29 +44,61 @@ private Q_SLOTS:
     void testCreateBezierBareWireFormat()
     {
         // Bare "x1,y1,x2,y2" is the canonical cubic-bezier wire format.
-        auto curve = CurveRegistry::instance().create(QStringLiteral("0.33,1.00,0.68,1.00"));
+        auto curve = CurveRegistry{}.create(QStringLiteral("0.33,1.00,0.68,1.00"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
-    void testCreatePrefixedBezierFallsBackToDefault()
+    void testCreatePrefixedBezierAccepted()
     {
-        // The "bezier:..." prefixed form is intentionally NOT supported
-        // — there is exactly one wire format per curve type. Falls back
-        // to default bezier via create()'s unknown-typeId path.
-        QVERIFY(CurveRegistry::instance().tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00")) == nullptr);
+        // Both the bare "x1,y1,x2,y2" and the prefixed "bezier:x1,y1,x2,y2"
+        // forms round-trip. toString() emits the bare canonical form;
+        // fromString accepts the prefix for legacy configs and hand-written
+        // settings so they don't silently degrade to the OutCubic default.
+        auto curve = CurveRegistry{}.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
+    }
+
+    void testPrefixedBezierMatchesBare()
+    {
+        // The bare form is canonical; the prefixed form must produce a
+        // curve that evaluates identically. Previously only the bare form
+        // dispatched to the factory — this test prevents silent divergence
+        // if the prefix handling is ever changed.
+        CurveRegistry reg;
+        auto bare = reg.tryCreate(QStringLiteral("0.25,0.10,0.25,1.00"));
+        auto prefixed = reg.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(bare && prefixed);
+        QCOMPARE(bare->typeId(), prefixed->typeId());
+        for (double t : {0.0, 0.25, 0.5, 0.75, 1.0}) {
+            QCOMPARE(bare->evaluate(t), prefixed->evaluate(t));
+        }
+    }
+
+    void testPrefixCaseInsensitive()
+    {
+        // Hand-written configs and older docs often use capitalised
+        // prefixes ("Bezier:…", "SPRING:…"). Factory typeIds are
+        // registered lower-case by convention, so parseSpec folds the
+        // prefix case before lookup — otherwise these specs silently
+        // degrade to the OutCubic default.
+        CurveRegistry reg;
+        QVERIFY(reg.tryCreate(QStringLiteral("Bezier:0.25,0.10,0.25,1.00")) != nullptr);
+        QVERIFY(reg.tryCreate(QStringLiteral("BEZIER:0.25,0.10,0.25,1.00")) != nullptr);
+        QVERIFY(reg.tryCreate(QStringLiteral("Spring:12.0,0.8")) != nullptr);
     }
 
     void testCreateElastic()
     {
-        auto curve = CurveRegistry::instance().create(QStringLiteral("elastic-out:1.2,0.4"));
+        auto curve = CurveRegistry{}.create(QStringLiteral("elastic-out:1.2,0.4"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("elastic-out"));
     }
 
     void testCreateSpring()
     {
-        auto curve = CurveRegistry::instance().create(QStringLiteral("spring:12.0,0.8"));
+        auto curve = CurveRegistry{}.create(QStringLiteral("spring:12.0,0.8"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("spring"));
         QVERIFY(curve->isStateful());
@@ -81,7 +113,7 @@ private Q_SLOTS:
         // a visible regression from the pre-registry OutCubic default.
         // create() guarantees a non-null curve so consumers don't need
         // parallel null-guards.
-        auto curve = CurveRegistry::instance().create(QString());
+        auto curve = CurveRegistry{}.create(QString());
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
 
@@ -95,7 +127,7 @@ private Q_SLOTS:
     {
         // Unknown typeId falls through to a default bezier instead of
         // returning null — callers get a valid curve to work with.
-        auto curve = CurveRegistry::instance().create(QStringLiteral("not-a-real-curve:1,2,3"));
+        auto curve = CurveRegistry{}.create(QStringLiteral("not-a-real-curve:1,2,3"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
@@ -104,7 +136,7 @@ private Q_SLOTS:
 
     void testTryCreateEmptyReturnsNull()
     {
-        QVERIFY(CurveRegistry::instance().tryCreate(QString()) == nullptr);
+        QVERIFY(CurveRegistry{}.tryCreate(QString()) == nullptr);
     }
 
     void testTryCreateUnknownReturnsNull()
@@ -112,12 +144,12 @@ private Q_SLOTS:
         // tryCreate does NOT substitute a default — callers that want the
         // fallback behavior can use create(); those that want to detect
         // bad input use tryCreate.
-        QVERIFY(CurveRegistry::instance().tryCreate(QStringLiteral("not-a-real-curve:1,2,3")) == nullptr);
+        QVERIFY(CurveRegistry{}.tryCreate(QStringLiteral("not-a-real-curve:1,2,3")) == nullptr);
     }
 
     void testTryCreateValidReturnsCurve()
     {
-        auto curve = CurveRegistry::instance().tryCreate(QStringLiteral("spring:12.0,0.8"));
+        auto curve = CurveRegistry{}.tryCreate(QStringLiteral("spring:12.0,0.8"));
         QVERIFY(curve != nullptr);
         QCOMPARE(curve->typeId(), QStringLiteral("spring"));
     }
@@ -126,7 +158,7 @@ private Q_SLOTS:
 
     void testRegisterAndUnregisterCustom()
     {
-        auto& reg = CurveRegistry::instance();
+        CurveRegistry reg;
         const QString id = QStringLiteral("test-custom-linear");
 
         QVERIFY(!reg.has(id));
@@ -156,7 +188,7 @@ private Q_SLOTS:
 
     void testRegisterEmptyRejected()
     {
-        auto& reg = CurveRegistry::instance();
+        CurveRegistry reg;
         const bool result = reg.registerFactory(QString(), [](const QString&, const QString&) {
             return std::make_shared<Easing>();
         });
@@ -165,7 +197,7 @@ private Q_SLOTS:
 
     void testKnownTypesContainsBuiltIns()
     {
-        const QStringList types = CurveRegistry::instance().knownTypes();
+        const QStringList types = CurveRegistry{}.knownTypes();
         QVERIFY(types.contains(QStringLiteral("bezier")));
         QVERIFY(types.contains(QStringLiteral("spring")));
         QVERIFY(types.contains(QStringLiteral("elastic-out")));

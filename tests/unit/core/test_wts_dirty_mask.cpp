@@ -32,7 +32,8 @@
 #include <QRect>
 
 #include <PhosphorZones/Layout.h>
-#include "core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/virtualdesktopmanager.h"
 #include "core/windowtrackingservice.h"
 #include <PhosphorZones/Zone.h>
@@ -52,7 +53,8 @@ private Q_SLOTS:
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
         m_parent = new QObject(nullptr);
-        m_layoutManager = new LayoutManager(m_parent);
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"), m_parent);
         m_virtualDesktopManager = new VirtualDesktopManager(m_layoutManager, m_parent);
         m_settings = new StubSettings(m_parent);
         m_zoneDetector = new StubZoneDetector(m_parent);
@@ -97,7 +99,8 @@ private Q_SLOTS:
         // tests in this class.
         auto guard = std::make_unique<IsolatedConfigGuard>();
         QObject freshParent;
-        auto* freshLayoutManager = new LayoutManager(&freshParent);
+        auto* freshLayoutManager = new PhosphorZones::LayoutRegistry(
+            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts"), &freshParent);
         auto* freshVirtualDesktopManager = new VirtualDesktopManager(freshLayoutManager, &freshParent);
         auto* freshSettings = new StubSettings(&freshParent);
         auto* freshZoneDetector = new StubZoneDetector(&freshParent);
@@ -313,7 +316,7 @@ private Q_SLOTS:
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
     QObject* m_parent = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     StubSettings* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
