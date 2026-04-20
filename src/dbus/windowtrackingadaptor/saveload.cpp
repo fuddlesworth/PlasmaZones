@@ -7,7 +7,7 @@
 #include "../../config/configbackends.h"
 #include "../../core/interfaces.h"
 #include <PhosphorScreens/VirtualScreen.h>
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
@@ -318,7 +318,7 @@ void WindowTrackingAdaptor::saveStateOnShutdown()
     saveState();
 
     // Block all subsequent saves. During Qt object destruction after stop(),
-    // LayoutManager destruction can trigger activeLayoutChanged → onLayoutChanged()
+    // PhosphorZones::LayoutRegistry destruction can trigger activeLayoutChanged → onLayoutChanged()
     // which purges zone assignments and calls scheduleSaveState(). Without this
     // guard, the debounced save fires with empty state and overwrites the correct
     // shutdown save above — causing window snap state to be lost across restarts.
@@ -742,7 +742,7 @@ void WindowTrackingAdaptor::loadState()
 void WindowTrackingAdaptor::scheduleSaveState()
 {
     // After saveStateOnShutdown(), block all saves. During Qt object destruction,
-    // LayoutManager teardown can trigger onLayoutChanged() → scheduleSaveState()
+    // PhosphorZones::LayoutRegistry teardown can trigger onLayoutChanged() → scheduleSaveState()
     // with purged (empty) state, overwriting the correct shutdown save.
     if (m_shutdownSaveGuard) {
         return;

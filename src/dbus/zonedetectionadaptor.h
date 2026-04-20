@@ -14,8 +14,8 @@ class ScreenManager;
 }
 
 namespace PhosphorZones {
-class ILayoutManager;
 class IZoneDetector;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
@@ -36,7 +36,7 @@ class PLASMAZONES_EXPORT ZoneDetectionAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.ZoneDetection")
 
 public:
-    explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::ILayoutManager* layoutManager,
+    explicit ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector, PhosphorZones::LayoutRegistry* layoutManager,
                                   Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                   QObject* parent = nullptr);
     ~ZoneDetectionAdaptor() override = default;
@@ -109,7 +109,7 @@ Q_SIGNALS:
 
 private:
     PhosphorZones::IZoneDetector* m_zoneDetector; // Interface type (DIP)
-    PhosphorZones::ILayoutManager* m_layoutManager; // Interface type (DIP)
+    PhosphorZones::LayoutRegistry* m_layoutManager; // Interface type (DIP)
     Phosphor::Screens::ScreenManager* m_screenManager; // For VS-aware geometry / id resolution
     ISettings* m_settings; // For zonePadding setting
 };

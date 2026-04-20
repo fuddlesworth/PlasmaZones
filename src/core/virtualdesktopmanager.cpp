@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "virtualdesktopmanager.h"
-#include "layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "logging.h"
 #include "utils.h"
 #include <QDBusConnection>
@@ -18,7 +18,7 @@
 
 namespace PlasmaZones {
 
-VirtualDesktopManager::VirtualDesktopManager(LayoutManager* layoutManager, QObject* parent)
+VirtualDesktopManager::VirtualDesktopManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
     : QObject(parent)
     , m_layoutManager(layoutManager)
 {

@@ -68,6 +68,7 @@ set(phosphortiles_public_HDRS
     include/PhosphorTiles/ScriptedAlgorithmJsBuiltins.h
     include/PhosphorTiles/ScriptedAlgorithmLoader.h
     include/PhosphorTiles/ScriptedAlgorithmSandbox.h
+    include/PhosphorTiles/ScriptedAlgorithmWatchdog.h
     include/PhosphorTiles/AutotileLayoutSource.h
     include/PhosphorTiles/AutotileLayoutSourceFactory.h
     include/PhosphorTiles/AutotilePreviewRender.h
@@ -91,7 +92,6 @@ set(phosphortiles_SRCS
     src/scriptedalgorithmjsbuiltins.cpp
     src/scriptedalgorithmloader.cpp
     src/scriptedalgorithmsandbox.cpp
-    src/scriptedalgorithmwatchdog.h
     src/scriptedalgorithmwatchdog.cpp
     src/tileslogging.h
     src/tileslogging.cpp

@@ -14,6 +14,7 @@
 
 namespace PhosphorZones {
 class Zone;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
@@ -21,7 +22,7 @@ namespace PlasmaZones {
 class WindowTrackingAdaptor;
 class LayoutAdaptor;
 class AutotileEngine;
-class LayoutManager;
+
 // Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
 } // namespace PlasmaZones
 namespace Phosphor::Screens {
@@ -44,10 +45,19 @@ class PLASMAZONES_EXPORT ControlAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.Control")
 
 public:
-    explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                            AutotileEngine* autotileEngine, Phosphor::Screens::ScreenManager* screenManager,
-                            QObject* parent = nullptr);
+    explicit ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor,
+                            PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
+                            Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
+
+    /// Null every borrowed pointer. Called from Daemon::stop() before the
+    /// unique_ptr members that own these objects run their destructors
+    /// (the adaptor is Qt-parented to the daemon, so ~QObject — which
+    /// destroys us — would otherwise run AFTER those unique_ptrs, leaving
+    /// every m_* member dangling). Each public slot guards on null so the
+    /// adaptor degrades to a no-op instead of UAF when a queued D-Bus
+    /// call lands post-detach.
+    void detach();
 
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +99,7 @@ public Q_SLOTS:
 private:
     WindowTrackingAdaptor* m_wta;
     LayoutAdaptor* m_layoutAdaptor;
-    LayoutManager* m_layoutManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
     AutotileEngine* m_autotileEngine;
     Phosphor::Screens::ScreenManager* m_screenManager;
     QPointer<QFutureWatcher<QString>> m_reportWatcher;

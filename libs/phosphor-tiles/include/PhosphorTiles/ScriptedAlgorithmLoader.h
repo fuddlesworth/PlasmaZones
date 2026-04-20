@@ -4,15 +4,19 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+#include <QByteArray>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
 #include <QString>
 #include <QTimer>
 
+#include <memory>
+
 namespace PhosphorTiles {
 
 class ITileAlgorithmRegistry;
+class ScriptedAlgorithmWatchdog;
 
 /**
  * @brief Discovers, loads, and hot-reloads ScriptedAlgorithm instances
@@ -95,6 +99,17 @@ private:
 
     QString m_subdirectory; ///< XDG-relative path (e.g. "plasmazones/algorithms")
     ITileAlgorithmRegistry* m_registry = nullptr; ///< Borrowed; owner outlives loader
+    /// Per-loader watchdog. Held via shared_ptr because the registry's
+    /// unregisterAlgorithm uses deleteLater() — the algorithm's dtor
+    /// (which calls m_watchdog->unregister(this)) can run on a later
+    /// event-loop pass, after this loader is already gone. Each
+    /// algorithm shares ownership of the watchdog so the thread is
+    /// joined only when the very last user releases its strong
+    /// reference (typically here in ~Loader, occasionally in a
+    /// deferred-delete ~ScriptedAlgorithm). Per-loader instead of a
+    /// process-wide singleton means each composition root (daemon,
+    /// editor, settings) gets its own supervisor thread.
+    std::shared_ptr<ScriptedAlgorithmWatchdog> m_watchdog;
     QFileSystemWatcher* m_watcher = nullptr;
     QTimer* m_refreshTimer = nullptr;
     /// Second follow-up rescan that fires @ref FollowupRescanMs after the
@@ -103,6 +118,13 @@ private:
     /// the watch and reWatchFiles() re-adding it.
     QTimer* m_followupTimer = nullptr;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
+    /// Signature of the last registered script set — sorted (id, path,
+    /// size, mtime) digest. Used by scanAndRegister() to suppress
+    /// redundant algorithmsChanged() emissions on filesystem pokes that
+    /// touched no actual content (editor-save of an unrelated file in the
+    /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out
+    /// stays quiet when nothing actually changed.
+    QByteArray m_lastScriptSignature;
 
     static constexpr int RefreshDebounceMs = 500;
     static constexpr int FollowupRescanMs = 500;

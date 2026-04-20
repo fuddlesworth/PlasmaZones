@@ -1,6 +1,6 @@
 # Library Extraction Survey
 
-**Date:** 2026-04-18
+**Date:** 2026-04-18 (original); revised 2026-04-20 to fold in PR #343 + #345 outcomes.
 **Scope:** Candidate inventory for further `phosphor-*` library extractions, in service of the long-term compositor / WM / shell goal.
 **Status:** Strategic survey — not a migration plan. Each candidate is backed by a focused investigation (see "Investigation provenance" at the end).
 
@@ -8,9 +8,36 @@
 
 ## Context
 
-Significant decoupling work has already landed: `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
+Significant decoupling work has already landed: `phosphor-animation`, `phosphor-config`, `phosphor-identity`, `phosphor-layer`, `phosphor-layout-api`, `phosphor-rendering`, `phosphor-screens`, `phosphor-shell`, `phosphor-shortcuts`, `phosphor-tiles`, `phosphor-zones`. This document maps what remains in `src/` (and `kwin-effect/`) to potential additional libraries, ranks them by value × feasibility, and calls out what should **not** be extracted.
 
 The core strategic insight: the daemon has **zero** `KWin::` references in `src/`. Compositor-portability is an *extraction problem*, not an architecture problem.
+
+---
+
+## Progress since original survey (2026-04-18 → 2026-04-20)
+
+### Libraries extracted
+
+- **`phosphor-animation`** — `easingcurve`, `animation_math`, `stagger_timer` moved in from `compositor-common/`; `Profile` / `ProfileTree` / `CurveRegistry` / `Spring` added. Motion-runtime scope realized.
+- **`phosphor-screens`** — `screenmanager`, `virtualscreen`, `virtualscreenswapper`, `plasmapanelsource` moved in. Daemon keeps `ScreenModeRouter` (correctly out of scope per original survey). Sensor-authoritative + D-Bus-ratio availability reconciliation landed in `manager.cpp::calculateAvailableGeometry` (PR #345).
+- **`phosphor-zones`** grew the concrete **`LayoutRegistry`** (previously `LayoutManager` in `src/core/`) plus `AssignmentEntry` (PR #345 commit `d6f74fc7`). Reverses the original Tier 4 "don't extract LayoutManager" verdict — see the note below that entry for what changed.
+
+### Process-global singletons eliminated (PR #343 + #345)
+
+Every lib-level singleton except the two documented as structurally-process-global (`BakeCache`, `LayerShellIntegration`) is now per-process DI, owned by the composition root:
+
+| Singleton | Home lib | Replacement shape | PR |
+|---|---|---|---|
+| `AlgorithmRegistry::instance()` | `phosphor-tiles` | `unique_ptr` on Daemon, threaded through every consumer | #343 |
+| `ShaderRegistry::instance()` | `src/core` (PZ subclass over `PhosphorShell::ShaderRegistry`) | `unique_ptr` on Daemon, injected into `OverlayService` ctor + `SettingsAdaptor` + `ShaderAdaptor` | #345 |
+| `ScriptedAlgorithmWatchdog::instance()` | `phosphor-tiles` | `shared_ptr` per loader, shared with every `ScriptedAlgorithm` it constructs (required — registry uses `deleteLater`, algo dtor can outlive loader) | #345 |
+| `CurveRegistry::instance()` | `phosphor-animation` | Per-process value; `Profile::fromJson` / `ProfileTree::fromJson` take `const CurveRegistry&` | #345 |
+
+**Implication for future extractions:** any new library MUST follow the same shape — a concrete registry/service type the composition root owns, not a `static instance()` accessor. Plugin-based compositor topologies require this (plugins can't share process-global state safely).
+
+### Interface collapse in `phosphor-zones` (PR #345 `d6f74fc7`)
+
+`ILayoutManager`, `ILayoutAssignments`, `IQuickLayouts`, `IBuiltInLayouts`, `ILayoutPersistence` were deleted. The lib now exports `IZoneLayoutRegistry` (narrow provider contract) + concrete `LayoutRegistry` — mirrors `ITileAlgorithmRegistry` + `AlgorithmRegistry` in `phosphor-tiles`. This resolves the "interface-cast violation" obstacle that was listed under Tier 2 overlay.
 
 ---
 
@@ -52,9 +79,13 @@ Naming smell test: every clean `libs/phosphor-*` is named after its *domain* (co
 
 ## Tier 1 — Ready, high value
 
-### `phosphor-animation` (motion-runtime)
+### `phosphor-animation` (motion-runtime) — ✅ EXTRACTED
 
-**Status:** Ready. Not just an easing-math library — a full motion-runtime (easing + springs + clocks + animated values + window motion + stagger orchestration + QML integration as the ambition).
+**Status:** Landed. The three compositor-common files (`easingcurve`, `animation_math`, `stagger_timer`) moved in; `Profile`, `ProfileTree`, `Spring`, and `CurveRegistry` were added. `CurveRegistry` is per-process DI (PR #345) — `Profile::fromJson` / `ProfileTree::fromJson` take `const CurveRegistry&`, no process-global singleton. Wire-format accepts both bare `"x1,y1,x2,y2"` and prefixed `"bezier:..."` cubic-bezier forms, case-insensitively. The motion-runtime ambitions (window motion bridge, `IMotionClock`, QML value types) remain future work; the original notes below are retained for that next phase.
+
+---
+
+#### Original Tier 1 analysis (now historical):
 
 **File inventory:**
 - Moves from `compositor-common/`: `easingcurve.{h,cpp}`, `animation_math.{h,cpp}`, `stagger_timer.{h,cpp}`, (`debounced_action.h` optional).
@@ -130,24 +161,16 @@ Naming smell test: every clean `libs/phosphor-*` is named after its *domain* (co
 
 ---
 
-### `phosphor-screens`
+### `phosphor-screens` — ✅ EXTRACTED
 
-**Status:** 4/5 feasibility. ~2.0k LOC after the ScreenModeRouter carve-out.
+**Status:** Landed. `ScreenManager`, `VirtualScreen`, `VirtualScreenSwapper`, `PlasmaPanelSource`, `ScreenIdentity` all live in `libs/phosphor-screens/`. `ScreenModeRouter` correctly kept in daemon (snap/autotile dispatch policy, not screen management) as predicted.
 
-**Scope:**
-- In: `src/core/screenmanager.{h,cpp}` + `screenmanager/{panels,virtualscreens}.cpp` (963 LOC), `screen_resolver.{h,cpp}` (111 LOC), `virtualscreen.h` (330 LOC), `virtualscreenswapper.{h,cpp}` (296 LOC), `src/dbus/screenadaptor.{h,cpp}` (655 LOC).
-- **Out: `screenmoderouter.{h,cpp}`** — this is snap/autotile dispatch policy (routes nav actions to `SnapEngine` vs `AutotileEngine`). Not screen management. Keep in daemon.
+**Follow-up work in PR #345:**
+- `calculateAvailableGeometry` rewritten to treat the layer-shell sensor as authoritative for *reserved total* and D-Bus panel offsets as authoritative only for *which edge* — fixes a Plasma 6 bug where `floating=true` on reserving panels collapsed offsets to zero and produced zones anchored under the top panel.
+- Plasma panel JS coerces numerics to int (fractional-scaling Wayland outputs were producing float coordinates the regex silently dropped). Regex accepts negative screen origins for multi-monitor arrangements.
+- All `toInt()` parses on the panel wire format are now `&ok`-guarded so out-of-range values skip the panel rather than coercing to 0 and attaching to a (0,0)-origin screen.
 
-**Domain independence:**
-- Zero KF6 headers. Qt-only + PhosphorShell layer-shell sensor windows.
-- Zero snap/autotile imports in `ScreenManager`. Snap/autotile are unidirectional consumers.
-- Virtual-screen model is self-contained: `VirtualScreenDef` + `VirtualScreenConfig` with validation, swap, rotate, JSON-round-trip tolerance.
-
-**Intentional couplings (document, don't remove):**
-- KDE Plasma D-Bus (`org.kde.plasmashell`) for panel geometry — necessary for Plasma compatibility; pure Qt fallback works on other desktops.
-- PhosphorShell layer-shell sensors for available-geometry detection — Wayland-specific optimization.
-
-**Settings ownership note:** Virtual-screen configs live in Settings (source of truth); `ScreenManager` caches via `refreshVirtualConfigs()`. `VirtualScreenSwapper` mutates Settings; daemon propagates via observer. Two-way sync must be wired as part of extraction.
+**Settings ownership note (still applies):** Virtual-screen configs live in Settings (source of truth); `ScreenManager` caches via `refreshVirtualConfigs()`. `VirtualScreenSwapper` mutates Settings; daemon propagates via observer. The two-way sync was wired as part of extraction via `SettingsConfigStore` → `IConfigStore`.
 
 ---
 
@@ -197,9 +220,9 @@ namespace PhosphorWindows {
 1. **PhosphorLayer becomes a transitive public dep.** All 7 surfaces use `PhosphorLayer::Surface` / `SurfaceFactory` / `Role` / `Anchors` / `ITransportHandle` directly. No insulation layer. Acceptable for a shell-adjacent library; document as public.
 2. **Per-instance QQmlEngine.** OverlayService owns `unique_ptr<QQmlEngine>` with shared context properties. Refactor-intensive to share across instances.
 3. **Vulkan keep-alive surface.** Persistent 1×1 background window prevents Qt from tearing down Vulkan globals. Must outlive all user overlays; complicates library lifecycle contract.
-4. **Interface-cast violation.** `settings.cpp:101-122` casts `ILayoutManager*` → `LayoutManager*` to access signals (interface lacks them). Fix by extending interface with signal declarations.
+4. ~~**Interface-cast violation.**~~ ✅ Resolved in PR #345 (`d6f74fc7`). `ILayoutManager` et al. were deleted; `phosphor-zones` exports `IZoneLayoutRegistry` + concrete `LayoutRegistry` directly, and OverlayService now borrows the concrete type — no downcast needed.
 5. **CavaService hardwired.** Audio visualization initialized in constructor; no feature-gate. Extract to optional plugin via constructor injection.
-6. **ShaderRegistry singleton.** Referenced as global in multiple TUs. Narrow via DI for testability.
+6. ~~**ShaderRegistry singleton.**~~ ✅ Resolved in PR #345 (`dd126553`). Per-daemon `unique_ptr` threaded through `OverlayService` / `SettingsAdaptor` / `ShaderAdaptor` constructors; `detach()` wired in `Daemon::stop()` for clean teardown of the three raw-Qt-parented adaptors that borrow it.
 
 **QML coupling:** `src/ui/*.qml` loaded via `resources.qrc`; all run in shared `QQmlEngine` with `ZoneShaderItem` from `src/daemon/rendering/`.
 
@@ -207,19 +230,9 @@ namespace PhosphorWindows {
 
 ## Tier 3 — Housekeeping
 
-### `layoutsourcefactory.{h,cpp}` → `phosphor-layout-api`
+### `layoutsourcefactory.{h,cpp}` → `phosphor-layout-api` — ✅ EXTRACTED
 
-**Status:** Small (65 lines + `LayoutSourceBundle` struct), but high-reuse-value.
-
-**Rationale:** Assembles the standard composite (`ZonesLayoutSource + AutotileLayoutSource → CompositeLayoutSource`) with a lifetime-order-safe destruction struct. Daemon, settings, and editor all wire this identically — moving it to the API layer removes three copies of the same footgun-avoidance pattern.
-
-**Scope increment to `phosphor-layout-api`:**
-```cpp
-namespace PhosphorLayoutApi {
-    struct LayoutSourceBundle { /* hand-written move-assign, reverse teardown */ };
-    LayoutSourceBundle makeLayoutSourceBundle(ILayoutRegistry* registry);
-}
-```
+**Status:** Done. `LayoutSourceBundle.h` lives in `libs/phosphor-layout-api/include/PhosphorLayoutApi/`, and `ILayoutSourceFactory` + the factory-registry pattern moved to the same package. Daemon / editor / settings now call `buildStandardLayoutSourceBundle` once rather than open-coding the composite.
 
 ### `compositor-common/` dissolution
 
@@ -247,6 +260,16 @@ Not screen management — it's snap/autotile dispatch policy. Stays in daemon.
 
 ### `LayoutManager` / `LayoutFactory`
 
+> **⚠️ Verdict reversed in PR #345 (commits `44169c36`, `fd2a658f`, `d6f74fc7`).**
+>
+> `LayoutManager` was moved into `phosphor-zones` and renamed to `LayoutRegistry`. The "five narrow interfaces" concern was resolved by deleting four of them (`ILayoutAssignments`, `IQuickLayouts`, `IBuiltInLayouts`, `ILayoutPersistence`, `ILayoutManager`) and keeping only `IZoneLayoutRegistry` — mirrors `phosphor-tiles`' `ITileAlgorithmRegistry` + `AlgorithmRegistry` shape. PZ-specific config-schema knowledge (previously reached via `ConfigDefaults::*`) is gone: the lib now takes a `unique_ptr<PhosphorConfig::IBackend>` + XDG layout-subdirectory string in its constructor, and exposes `setDefaultLayoutIdProvider(std::function<QString()>)` for the default-layout lookup callback. Wire-format constants (`"Assignment:"`, `"QuickLayouts"`) are lib-private — they ARE the serialization format, inherited for free by any future plugin compositor that links the lib. Third-party consumers construct it with whatever schema strings + backend they own.
+>
+> `LayoutFactory` stays in `src/core/` — still daemon-internal.
+
+---
+
+#### Original Tier 4 rationale (now historical):
+
 `LayoutManager` implements five narrow phosphor-zones interfaces + daemon-specific signals + config backend + screen cycling + autotile override storage. Extraction is a net LOC increase. The existing `phosphor-layout-api` / `phosphor-zones` / `phosphor-tiles` split is already clean.
 
 `LayoutFactory` is 72 lines — extract only if editor/settings independently consume it.
@@ -265,18 +288,18 @@ Applied to new candidates: `phosphor-animation`, `phosphor-overlay`, `phosphor-s
 
 ## Recommended sequence (when work begins)
 
-1. **`phosphor-animation`** — lowest risk, highest near-term polish payoff, unblocks QML theme-binding work later.
-2. **`phosphor-screens`** — clean, well-scoped, foundational for any compositor integration.
-3. **Compositor-plugin SDK formalization** — the strategic endgame enabler.
+1. ~~**`phosphor-animation`**~~ ✅ Done (PR #345 finished the singleton-kill; the motion-runtime thick-scope work — `IMotionClock`, `AnimatedValue<T>`, QML value types — is still future work).
+2. ~~**`phosphor-screens`**~~ ✅ Done (extracted; availability calculation hardened in PR #345).
+3. **Compositor-plugin SDK formalization** — the strategic endgame enabler. Now unblocked: every lib-level singleton that would have blocked per-plugin ownership is gone.
 4. **`phosphor-windows`** — largest surface, most coupling; last.
 
 **Parallel cleanup** (can run independently):
 - Resolve `dbus_helpers.h` logging ownership → unblocks the D-Bus triple extraction.
 - Decide `debounced_action.h` (drop or park).
-- Move `layoutsourcefactory.{h,cpp}` to `phosphor-layout-api`.
-- Fix `overlayservice/settings.cpp:122` `LayoutManager*` cast by extending `ILayoutManager`.
+- ~~Move `layoutsourcefactory.{h,cpp}` to `phosphor-layout-api`.~~ ✅ Done (`LayoutSourceBundle` + `ILayoutSourceFactory` live in `phosphor-layout-api`).
+- ~~Fix `overlayservice/settings.cpp:122` `LayoutManager*` cast by extending `ILayoutManager`.~~ ✅ Resolved in PR #345 (`ILayoutManager` deleted; OverlayService uses concrete `PhosphorZones::LayoutRegistry` directly).
 
-**Overlay** sits outside this sequence. Its extraction depends on whether PhosphorLayer-as-public-API is acceptable for a `phosphor-overlay` library.
+**Overlay** sits outside this sequence. Its extraction depends on whether PhosphorLayer-as-public-API is acceptable for a `phosphor-overlay` library. Two of its six obstacles (interface-cast violation, ShaderRegistry singleton) are now resolved — remaining four still apply.
 
 ---
 

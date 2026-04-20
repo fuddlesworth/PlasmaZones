@@ -40,15 +40,28 @@ namespace PhosphorAnimation {
  *
  * ## Cubic-bezier wire format
  *
- * The bare `"x1,y1,x2,y2"` string (four comma-separated numbers, no
- * colon) is the cubic-bezier wire format and dispatches to the
- * `bezier` factory. There is no parallel `"bezier:..."` form.
+ * The canonical wire format is the bare `"x1,y1,x2,y2"` string (four
+ * comma-separated numbers, no colon) — this is what `toString()` emits.
+ * The prefixed `"bezier:x1,y1,x2,y2"` form is also accepted on parse so
+ * older configs and hand-written settings round-trip without silently
+ * degrading to the OutCubic default. Both forms dispatch to the
+ * `bezier` factory with identical semantics. The prefix is matched
+ * case-insensitively so `"Bezier:…"`, `"SPRING:…"`, etc. also resolve.
  *
  * ## Thread safety
  *
  * All methods are thread-safe. Internal `QMutex` guards the factory map.
  * Factory functions themselves must be reentrant (the common
  * `Easing::fromString` / `Spring::fromString` helpers are).
+ *
+ * ## Ownership
+ *
+ * Per-process instance, owned by the composition root. PlasmaZones
+ * daemon, KCM, editor, and the KWin effect each construct one
+ * `CurveRegistry` and pass it to every `Profile::fromJson` /
+ * `ProfileTree::fromJson` call. The previous process-wide singleton
+ * (`instance()`) was removed in the singleton-sweep #2 refactor —
+ * see project_plugin_based_compositor.md for the rationale.
  */
 class PHOSPHORANIMATION_EXPORT CurveRegistry
 {
@@ -60,8 +73,8 @@ public:
     /// fall back to a default curve.
     using Factory = std::function<std::shared_ptr<const Curve>(const QString& typeId, const QString& params)>;
 
-    /// Access the process-wide registry singleton.
-    static CurveRegistry& instance();
+    CurveRegistry();
+    ~CurveRegistry();
 
     /**
      * @brief Register a factory for @p typeId.
@@ -108,16 +121,14 @@ public:
     /// True if @p typeId has a registered factory.
     bool has(const QString& typeId) const;
 
-    // Not copyable / movable — singleton.
+    // Not copyable / movable — owned by composition root via member or
+    // unique_ptr. Move would invalidate the QMutex inside Impl.
     CurveRegistry(const CurveRegistry&) = delete;
     CurveRegistry& operator=(const CurveRegistry&) = delete;
     CurveRegistry(CurveRegistry&&) = delete;
     CurveRegistry& operator=(CurveRegistry&&) = delete;
 
 private:
-    CurveRegistry();
-    ~CurveRegistry();
-
     class Impl;
     std::unique_ptr<Impl> m_impl;
 };

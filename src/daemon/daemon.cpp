@@ -17,7 +17,8 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -76,7 +77,8 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    , m_layoutManager(std::make_unique<LayoutManager>(nullptr))
+    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+                                                                      QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
@@ -96,7 +98,8 @@ Daemon::Daemon(QObject* parent)
               /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
           },
           nullptr))
-    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), nullptr))
+    , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
+    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
@@ -178,12 +181,12 @@ bool Daemon::init()
     // sequential but still off the main thread.
     m_shaderBakePool.setMaxThreadCount(1);
 
-    // Initialize shader registry singleton (must be done early, before D-Bus adaptors)
-    // The registry checks for Qt6::ShaderTools availability at compile time
-    // and for qsb tool availability at runtime
-    auto* shaderRegistry = new ShaderRegistry(this);
+    // Warm cached shader bakes on every registry refresh so overlay paints
+    // never block the GUI thread waiting for qsb. m_shaderRegistry itself
+    // is constructed in the ctor init list (before m_overlayService, which
+    // borrows it).
     auto scheduleWarmForShader =
-        [this, registryPtr = QPointer<ShaderRegistry>(shaderRegistry)](const ShaderRegistry::ShaderInfo& info) {
+        [this, registryPtr = QPointer<ShaderRegistry>(m_shaderRegistry.get())](const ShaderRegistry::ShaderInfo& info) {
             if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
                 return;
             }
@@ -222,18 +225,25 @@ bool Daemon::init()
                     return warmShaderBakeCacheForPaths(vertPath, fragPath, includePaths);
                 }));
         };
-    connect(shaderRegistry, &ShaderRegistry::shadersChanged, this, [scheduleWarmForShader]() {
-        const QList<ShaderRegistry::ShaderInfo> shaders = ShaderRegistry::instance()->availableShaders();
+    connect(m_shaderRegistry.get(), &ShaderRegistry::shadersChanged, this, [this, scheduleWarmForShader]() {
+        const QList<ShaderRegistry::ShaderInfo> shaders = m_shaderRegistry->availableShaders();
         for (const ShaderRegistry::ShaderInfo& info : shaders) {
             scheduleWarmForShader(info);
         }
     });
     // Warm cache once for shaders already loaded by ShaderRegistry ctor
-    for (const ShaderRegistry::ShaderInfo& info : shaderRegistry->availableShaders()) {
+    for (const ShaderRegistry::ShaderInfo& info : m_shaderRegistry->availableShaders()) {
         scheduleWarmForShader(info);
     }
 
-    m_layoutManager->setSettings(m_settings.get());
+    // PhosphorZones::LayoutRegistry now takes a free-function provider rather than an
+    // ISettings pointer — keeps the lib-side class out of project-side
+    // interface knowledge. Settings is owned by `this` (daemon) and
+    // outlives the layout manager (declared earlier in daemon.h), so
+    // the captured pointer is safe.
+    m_layoutManager->setDefaultLayoutIdProvider([this]() {
+        return m_settings->defaultLayoutId();
+    });
     // Wire the compute service to the layout manager so tracked layouts
     // are evicted on removal (bounds m_trackedLayouts over time).
     m_layoutComputeService->setLayoutManager(m_layoutManager.get());
@@ -251,7 +261,9 @@ bool Daemon::init()
         }
     }
 
-    // Configure overlay service with settings, layout manager, and default layout
+    // Configure overlay service with settings, layout manager, and default
+    // layout. ShaderRegistry is wired via the ctor, so every overlay path
+    // that needs it sees a non-null registry from the first call onward.
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
     m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
@@ -267,27 +279,29 @@ bool Daemon::init()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    connect(m_layoutManager.get(), &LayoutManager::activeLayoutChanged, this, [this](PhosphorZones::Layout* layout) {
-        if (layout) {
-            // Recalculate zone geometries asynchronously using primary screen geometry.
-            // Active layout is global; recalculating per-screen overwrites each
-            // iteration (last-wins bug). The overlay computes per-screen geometry
-            // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
-            QScreen* primary = Utils::primaryScreen();
-            if (primary) {
-                QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
-                m_layoutComputeService->requestRecalculate(
-                    layout, screenId, GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
-            }
-        }
-        m_zoneDetector->setLayout(layout);
-        m_overlayService->updateLayout(layout);
-    });
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
+            [this](PhosphorZones::Layout* layout) {
+                if (layout) {
+                    // Recalculate zone geometries asynchronously using primary screen geometry.
+                    // Active layout is global; recalculating per-screen overwrites each
+                    // iteration (last-wins bug). The overlay computes per-screen geometry
+                    // on the fly via GeometryUtils::getZoneGeometryWithGaps(m_screenManager.get(), ).
+                    QScreen* primary = Utils::primaryScreen();
+                    if (primary) {
+                        QString screenId = Phosphor::Screens::ScreenIdentity::identifierFor(primary);
+                        m_layoutComputeService->requestRecalculate(
+                            layout, screenId,
+                            GeometryUtils::effectiveScreenGeometry(m_screenManager.get(), layout, primary));
+                    }
+                }
+                m_zoneDetector->setLayout(layout);
+                m_overlayService->updateLayout(layout);
+            });
 
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
-    connect(m_layoutManager.get(), &LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                 if (!layout) {
                     return;
@@ -403,10 +417,12 @@ bool Daemon::init()
     m_layoutAdaptor->setAutotileLayoutSource(m_autotileLayoutSource);
     // Invalidate D-Bus getActiveLayout() cache when the default layout changes in settings
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
-    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), this);
+    m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), this);
 
-    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
-    new ShaderAdaptor(ShaderRegistry::instance(), this);
+    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring.
+    // Held as a member so stop() can detach() it before the unique_ptr member
+    // that owns m_shaderRegistry runs its destructor.
+    m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Captured as a local so we can wire its bridgeRegistered signal to
@@ -616,9 +632,11 @@ bool Daemon::init()
     m_autotileAdaptor =
         new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 
-    // Control adaptor - high-level convenience API for third-party integrations
-    new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),
-                       m_screenManager.get(), this);
+    // Control adaptor - high-level convenience API for third-party integrations.
+    // Held as a member so stop() can detach() it before the unique_ptr members
+    // it borrows are destroyed.
+    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(),
+                                          m_autotileEngine.get(), m_screenManager.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all
@@ -878,6 +896,55 @@ void Daemon::stop()
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.unregisterObject(QString(DBus::ObjectPath));
     bus.unregisterService(QString(DBus::ServiceName));
+
+    // Sever the remaining raw-pointer adaptors from the unique_ptr members
+    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
+    // members have already run their destructors, so without detach the
+    // adaptors would see dangling pointers during the destruction window —
+    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
+    // Settings object. Each adaptor's detach() is null-safe + idempotent.
+    //
+    // WHY ONLY THESE THREE: SettingsAdaptor has the confirmed dtor-UAF
+    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
+    // non-trivial signal wiring + cached state that benefits from
+    // explicit teardown for the same "queued D-Bus call lands during
+    // destruction window" defense-in-depth.
+    //
+    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
+    // ScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
+    // ship `= default` destructors (verified — see their class headers),
+    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
+    // (invoked above) blocks new method dispatch to them before we begin
+    // tearing down, and Qt's sender-destruction auto-disconnect cleans
+    // up signal wiring when the borrowed sender (m_layoutManager, etc.)
+    // is destroyed during member destruction. Adding detach() to those
+    // eight would require null-guarding every slot body (they currently
+    // rely on the "borrowed pointer is always valid" invariant), which
+    // is a larger refactor than the defense-in-depth buys. If a future
+    // adaptor grows a dtor body that derefs a borrowed member, add
+    // detach() to it AND wire the call here — same pattern as these three.
+    if (m_settingsAdaptor) {
+        m_settingsAdaptor->detach();
+    }
+    if (m_shaderAdaptor) {
+        m_shaderAdaptor->detach();
+    }
+    if (m_controlAdaptor) {
+        m_controlAdaptor->detach();
+    }
+
+    // Drop the default-layout-id provider before member destruction. The
+    // lambda installed in init() captures `this` and reads m_settings,
+    // which is declared AFTER m_layoutManager and therefore destroyed
+    // FIRST in reverse-order member teardown. No normal destruction path
+    // calls defaultLayout() today, but clearing the capture makes that
+    // latent ordering invariant unnecessary — future refactors that
+    // trigger defaultLayout() from inside ~LayoutRegistry (e.g. signal
+    // fan-out during qDeleteAll(m_layouts)) stay safe.
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+    }
 
     m_running = false;
 }

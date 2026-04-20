@@ -8,7 +8,7 @@
 #include "../interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include "../layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../virtualdesktopmanager.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../utils.h"
@@ -350,7 +350,7 @@ SnapResult WindowTrackingService::calculateRestoreFromSession(const QString& win
             modeDesktop = m_virtualDesktopManager->currentDesktop();
         }
         if (m_layoutManager->modeForScreen(savedScreen, modeDesktop, m_layoutManager->currentActivity())
-            != AssignmentEntry::Mode::Snapping) {
+            != PhosphorZones::AssignmentEntry::Mode::Snapping) {
             qCDebug(lcCore) << "sessionRestore:" << appId << "saved screen" << savedScreen
                             << "is now in autotile mode — deferring to autotile engine";
             return SnapResult::noSnap();

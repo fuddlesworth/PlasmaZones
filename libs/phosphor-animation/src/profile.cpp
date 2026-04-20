@@ -6,8 +6,34 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 
 #include <QJsonValue>
+#include <QLoggingCategory>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QSet>
 
 namespace PhosphorAnimation {
+
+namespace {
+Q_LOGGING_CATEGORY(lcProfile, "phosphoranimation.profile")
+
+// Rate-limit the "unknown sequenceMode" warning to one message per distinct
+// raw value per process. Profiles are re-deserialised on every config
+// reload; without this guard a malformed settings file (or a newer client
+// writing an unknown enumerator) produces N warnings per reload, spamming
+// long-lived daemons. We still want the warning on first sight so schema
+// drift is visible.
+bool shouldWarnUnknownSequenceMode(int raw)
+{
+    static QMutex mutex;
+    static QSet<int> seen;
+    QMutexLocker lock(&mutex);
+    if (seen.contains(raw)) {
+        return false;
+    }
+    seen.insert(raw);
+    return true;
+}
+}
 
 Profile Profile::withDefaults() const
 {
@@ -51,14 +77,14 @@ QJsonObject Profile::toJson() const
     return obj;
 }
 
-Profile Profile::fromJson(const QJsonObject& obj)
+Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
 {
     Profile p;
 
     if (obj.contains(QLatin1String("curve"))) {
         const QString spec = obj.value(QLatin1String("curve")).toString();
         if (!spec.isEmpty()) {
-            p.curve = CurveRegistry::instance().create(spec);
+            p.curve = registry.create(spec);
         }
     }
 
@@ -75,8 +101,21 @@ Profile Profile::fromJson(const QJsonObject& obj)
         // written by a newer client — those would silently land on
         // AllAtOnce, not on a behaviorally-similar mode. If new modes
         // are added, bump the schema and route through migration code.
-        p.sequenceMode =
-            (raw == static_cast<int>(SequenceMode::Cascade)) ? SequenceMode::Cascade : SequenceMode::AllAtOnce;
+        if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
+            p.sequenceMode = static_cast<SequenceMode>(raw);
+        } else {
+            // Log so schema drift doesn't silently paper over as "AllAtOnce"
+            // — a newer client writing an unknown enumerator is something a
+            // future-maintainer wants to see in logs, not discover via a
+            // mysterious animation-behaviour regression. Rate-limited to
+            // one message per distinct value per process (see
+            // shouldWarnUnknownSequenceMode).
+            if (shouldWarnUnknownSequenceMode(raw)) {
+                qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
+                                     << "— substituting DefaultSequenceMode (schema drift?)";
+            }
+            p.sequenceMode = DefaultSequenceMode;
+        }
     }
     if (obj.contains(QLatin1String("staggerInterval"))) {
         p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(DefaultStaggerInterval);

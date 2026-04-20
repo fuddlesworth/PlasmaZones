@@ -1,19 +1,13 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "scriptedalgorithmwatchdog.h"
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 
 #include <PhosphorTiles/ScriptedAlgorithm.h>
 
 #include "tileslogging.h"
 
 namespace PhosphorTiles {
-
-ScriptedAlgorithmWatchdog& ScriptedAlgorithmWatchdog::instance()
-{
-    static ScriptedAlgorithmWatchdog inst;
-    return inst;
-}
 
 ScriptedAlgorithmWatchdog::ScriptedAlgorithmWatchdog()
 {
@@ -147,10 +141,27 @@ void ScriptedAlgorithmWatchdog::threadMain()
 
         // Timeout expired and the entry still has the generation we captured:
         // fire the interrupt. Keep holding the mutex while calling
-        // interruptEngine() — ScriptedAlgorithm's destructor calls unregister()
-        // on this same mutex, so while we hold it the instance cannot be
-        // destroyed from under us. QJSEngine::setInterrupted is documented
-        // thread-safe relative to the target engine's evaluation thread.
+        // interruptEngine() — ~ScriptedAlgorithm calls unregister() on this
+        // same mutex, so while we hold it the algorithm instance (and the
+        // m_engine pointer interruptEngine derefs) cannot be destroyed from
+        // under us. QJSEngine::setInterrupted is documented thread-safe
+        // relative to the target engine's evaluation thread.
+        //
+        // INVARIANT: ScriptedAlgorithm::interruptEngine() is declared
+        // private (this class is a friend) precisely to pin this lock
+        // discipline. Its body MUST be safe to execute while m_mutex is
+        // held — meaning: no emitting signals, no logging to sinks that
+        // could re-enter a watchdog method, no calls that acquire
+        // m_mutex directly or indirectly. Today the body is a single
+        // QJSEngine::setInterrupted(true) call. Breaking this invariant
+        // produces either (a) deadlock with ~ScriptedAlgorithm, or
+        // (b) lost interrupts if the invariant is "fixed" by dropping
+        // the lock (the released window opens a UAF: unregister +
+        // m_engine destruction race the still-in-flight
+        // interruptEngine). If interruptEngine ever needs to do more
+        // than flip setInterrupted, the correct refactor is to bounce
+        // the work onto the main thread via QMetaObject::invokeMethod
+        // with a QueuedConnection — not to relax this lock.
         auto it = m_entries.find(nextAlgo);
         if (it != m_entries.end() && it->second.generation == nextGeneration) {
             // Push the deadline out so this entry does not repeatedly fire

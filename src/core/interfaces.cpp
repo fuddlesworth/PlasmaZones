@@ -10,7 +10,7 @@ namespace PlasmaZones {
 // translation unit. Prevents ODR violations across shared-library
 // boundaries.
 //
-// PhosphorZones::ILayoutManager + PhosphorZones::IZoneDetector destructors live in
+// PhosphorZones::LayoutRegistry + PhosphorZones::IZoneDetector destructors live in
 // libs/phosphor-zones/src/interfaces.cpp — those interfaces moved with
 // the zones extraction.
 

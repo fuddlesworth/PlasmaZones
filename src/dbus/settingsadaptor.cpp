@@ -16,9 +16,10 @@
 
 namespace PlasmaZones {
 
-SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
+SettingsAdaptor::SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_settings(settings)
+    , m_shaderRegistry(shaderRegistry)
     , m_saveTimer(new QTimer(this))
 {
     Q_ASSERT(settings);
@@ -36,25 +37,60 @@ SettingsAdaptor::SettingsAdaptor(ISettings* settings, QObject* parent)
     connect(m_settings, &ISettings::settingsChanged, this, &SettingsAdaptor::settingsChanged);
 
     // Drop shader caches whenever the registry reloads from disk. The
-    // registry is a singleton, but may not yet exist in unit tests that
-    // instantiate SettingsAdaptor without a daemon — guard the connect.
+    // registry is per-process and injected via constructor; unit tests
+    // that don't pass one get nullptr and skip this connection.
     // ShaderRegistry::refresh() is always invoked from the main thread
     // (D-Bus refreshShaders slot) so a direct connection is safe; if
     // that invariant ever changes, switch to Qt::QueuedConnection here.
-    if (auto* registry = ShaderRegistry::instance()) {
-        connect(registry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
+    if (m_shaderRegistry) {
+        connect(m_shaderRegistry, &ShaderRegistry::shadersChanged, this, &SettingsAdaptor::invalidateShaderCaches);
     }
 }
 
 SettingsAdaptor::~SettingsAdaptor()
 {
-    // Flush any pending debounced saves before destruction
-    // This ensures settings are not lost on shutdown
-    if (m_saveTimer->isActive()) {
+    // Flush any pending debounced saves before destruction so config
+    // changes aren't lost on shutdown. Skipped when m_settings has already
+    // been cleared via detach() — the owning Daemon performs the save
+    // itself in stop(), and our borrowed pointer would dangle by the time
+    // ~QObject destroys us (the owning unique_ptr has already run).
+    if (m_settings && m_saveTimer->isActive()) {
         m_saveTimer->stop();
         m_settings->save();
         qCInfo(lcDbusSettings) << "Flushed pending save on destruction";
     }
+}
+
+void SettingsAdaptor::detach()
+{
+    // Flush once here — Daemon::stop() also calls m_settings->save()
+    // explicitly, so the pending-write isn't really at risk, but keeping
+    // the flush makes detach() safe to call from any shutdown path, not
+    // just the daemon's happy-path. m_saveTimer is constructed in the
+    // initializer list and never nulled, so no null-check is needed on
+    // it here (the dtor uses the same pattern).
+    if (m_settings && m_saveTimer->isActive()) {
+        m_saveTimer->stop();
+        m_settings->save();
+    }
+    if (m_settings) {
+        disconnect(m_settings, nullptr, this, nullptr);
+    }
+    if (m_shaderRegistry) {
+        disconnect(m_shaderRegistry, nullptr, this, nullptr);
+    }
+    // Clear the registries before nulling m_settings so a queued D-Bus
+    // call that slipped past unregisterObject() lands on an empty-getter
+    // hash (returning an empty QVariant) instead of the registered
+    // lambdas, which close over `this` and would deref a null m_settings.
+    m_getters.clear();
+    m_setters.clear();
+    m_cachedAvailableShaders.clear();
+    m_cachedAvailableShadersValid = false;
+    m_cachedShaderInfo.clear();
+    m_cachedShaderDefaults.clear();
+    m_settings = nullptr;
+    m_shaderRegistry = nullptr;
 }
 
 void SettingsAdaptor::scheduleSave()
@@ -602,16 +638,25 @@ void SettingsAdaptor::initializeRegistry()
 
 void SettingsAdaptor::reloadSettings()
 {
+    if (!m_settings) {
+        return;
+    }
     m_settings->load();
 }
 
 void SettingsAdaptor::saveSettings()
 {
+    if (!m_settings) {
+        return;
+    }
     m_settings->save();
 }
 
 void SettingsAdaptor::resetToDefaults()
 {
+    if (!m_settings) {
+        return;
+    }
     m_settings->reset();
 }
 
@@ -751,6 +796,9 @@ bool SettingsAdaptor::setSettings(const QVariantMap& settings)
 {
     if (settings.isEmpty()) {
         qCWarning(lcDbusSettings) << "setSettings: empty map";
+        return false;
+    }
+    if (!m_settings) {
         return false;
     }
 
@@ -896,6 +944,9 @@ std::optional<PerScreenDispatch> dispatchFor(ISettings* settings, const QString&
 void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString& category, const QString& key,
                                           const QDBusVariant& value)
 {
+    if (!m_settings) {
+        return;
+    }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "setPerScreenSetting: unknown category" << category;
@@ -907,6 +958,9 @@ void SettingsAdaptor::setPerScreenSetting(const QString& screenId, const QString
 
 void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QString& category)
 {
+    if (!m_settings) {
+        return;
+    }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "clearPerScreenSettings: unknown category" << category;
@@ -918,6 +972,9 @@ void SettingsAdaptor::clearPerScreenSettings(const QString& screenId, const QStr
 
 QVariantMap SettingsAdaptor::getPerScreenSettings(const QString& screenId, const QString& category)
 {
+    if (!m_settings) {
+        return {};
+    }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
         qCWarning(lcDbusSettings) << "getPerScreenSettings: unknown category" << category;
@@ -932,6 +989,9 @@ bool SettingsAdaptor::setPerScreenSettings(const QString& screenId, const QStrin
         // Empty map is a valid no-op — treat like setSettings batch and
         // return true so callers don't need to guard for it.
         return true;
+    }
+    if (!m_settings) {
+        return false;
     }
     auto dispatch = dispatchFor(m_settings, category);
     if (!dispatch) {
@@ -964,7 +1024,7 @@ QVariantList SettingsAdaptor::availableShaders()
     if (m_cachedAvailableShadersValid) {
         return m_cachedAvailableShaders;
     }
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (!registry) {
         return QVariantList();
     }
@@ -979,7 +1039,7 @@ QVariantMap SettingsAdaptor::shaderInfo(const QString& shaderId)
     if (it != m_cachedShaderInfo.constEnd()) {
         return it.value();
     }
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (!registry) {
         return QVariantMap();
     }
@@ -994,7 +1054,7 @@ QVariantMap SettingsAdaptor::defaultShaderParams(const QString& shaderId)
     if (it != m_cachedShaderDefaults.constEnd()) {
         return it.value();
     }
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (!registry) {
         return QVariantMap();
     }
@@ -1013,31 +1073,31 @@ void SettingsAdaptor::invalidateShaderCaches()
 
 QVariantMap SettingsAdaptor::translateShaderParams(const QString& shaderId, const QVariantMap& params)
 {
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     return registry ? registry->translateParamsToUniforms(shaderId, params) : QVariantMap();
 }
 
 bool SettingsAdaptor::shadersEnabled()
 {
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     return registry ? registry->shadersEnabled() : false;
 }
 
 bool SettingsAdaptor::userShadersEnabled()
 {
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     return registry ? registry->userShadersEnabled() : false;
 }
 
 QString SettingsAdaptor::userShaderDirectory()
 {
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     return registry ? registry->userShaderDirectory() : QString();
 }
 
 void SettingsAdaptor::openUserShaderDirectory()
 {
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (registry) {
         registry->openUserShaderDirectory();
     }
@@ -1046,11 +1106,11 @@ void SettingsAdaptor::openUserShaderDirectory()
 void SettingsAdaptor::refreshShaders()
 {
     // Drop our memoized view before asking the registry to reload — if
-    // the ShaderRegistry::shadersChanged signal isn't connected (e.g. the
-    // singleton was created after this adaptor), we still guarantee the
+    // the shadersChanged signal isn't connected (e.g. the registry was
+    // never injected in this composition root), we still guarantee the
     // next D-Bus query hits the fresh registry.
     invalidateShaderCaches();
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (registry) {
         registry->refresh();
     }

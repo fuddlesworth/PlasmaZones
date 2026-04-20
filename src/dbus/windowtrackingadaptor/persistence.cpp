@@ -4,7 +4,7 @@
 #include "../windowtrackingadaptor.h"
 #include "internal.h"
 #include "../../core/interfaces.h"
-#include "../../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"

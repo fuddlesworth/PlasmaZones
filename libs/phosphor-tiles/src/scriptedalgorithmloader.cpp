@@ -4,8 +4,11 @@
 #include <PhosphorTiles/ScriptedAlgorithmLoader.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorTiles/ScriptedAlgorithm.h>
+#include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "tileslogging.h"
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -23,8 +26,17 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     : QObject(parent)
     , m_subdirectory(subdirectory)
     , m_registry(registry)
+    , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
 {
     Q_ASSERT(m_registry);
+    // The subdirectory is appended to XDG data roots (system + user),
+    // so it must be relative and free of traversal segments. Developer
+    // error — assert rather than silently scan an unexpected path.
+    // Empty subdirectory is explicitly supported as "loader disabled".
+    Q_ASSERT_X(!m_subdirectory.startsWith(QLatin1Char('/')), "ScriptedAlgorithmLoader",
+               "subdirectory must be a relative XDG path, not absolute");
+    Q_ASSERT_X(!m_subdirectory.contains(QLatin1String("..")), "ScriptedAlgorithmLoader",
+               "subdirectory must not contain '..' traversal");
     // Lazy user directory creation — moved ensureUserDirectoryExists()
     // to scanAndRegister() so it is only called when actually needed.
     setupFileWatcher();
@@ -36,6 +48,14 @@ ScriptedAlgorithmLoader::~ScriptedAlgorithmLoader()
     // be destroyed. QCoreApplication being null is a reliable proxy for
     // "we are in static destruction" — skip cleanup to avoid calling into
     // a half-torn-down registry.
+    //
+    // Order: this destructor body calls unregisterAlgorithm() per script,
+    // which uses deleteLater() — so algorithm dtors run on a later
+    // event-loop pass, AFTER this loader's members destruct. The
+    // shared_ptr<watchdog> design lets the deferred-delete algorithm
+    // keep the watchdog alive until ~ScriptedAlgorithm finally fires;
+    // the thread joins when the last shared_ptr (loader's or a
+    // deferred algo's) is released. No member-ordering trick required.
     if (!QCoreApplication::instance() || !m_registry)
         return;
     for (auto it = m_scriptIdToPath.constBegin(); it != m_scriptIdToPath.constEnd(); ++it) {
@@ -178,10 +198,36 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
 
     qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size()
                                       << "changed=" << changed;
-    // Always emit — the signal is cheap (listeners just refresh their model)
-    // and content-only edits (same IDs/paths but different script body) would
-    // otherwise be missed by the old change-detection logic.
-    Q_EMIT algorithmsChanged();
+
+    // Emit only when the registered script set — id, path, size, mtime —
+    // actually differs from the last scan. Catches content-only edits
+    // (same IDs/paths, different body) that the `changed` flag above
+    // misses, while suppressing redundant emissions from no-op filesystem
+    // pokes (editor-save of an unrelated file in the watched dir, bare
+    // stat events, etc.). Downstream listeners (layout adaptor → D-Bus →
+    // every subscribed client) get one notification per real change
+    // instead of one per inotify wake.
+    QCryptographicHash hasher(QCryptographicHash::Sha1);
+    QList<QString> sortedIds = m_scriptIdToPath.keys();
+    std::sort(sortedIds.begin(), sortedIds.end());
+    for (const QString& id : std::as_const(sortedIds)) {
+        const QString& path = m_scriptIdToPath.value(id);
+        QFileInfo info(path);
+        hasher.addData(id.toUtf8());
+        hasher.addData("|", 1);
+        hasher.addData(path.toUtf8());
+        hasher.addData("|", 1);
+        hasher.addData(QByteArray::number(info.size()));
+        hasher.addData("|", 1);
+        hasher.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
+        hasher.addData("\n", 1);
+    }
+    const QByteArray signature = hasher.result();
+    if (signature != m_lastScriptSignature) {
+        m_lastScriptSignature = signature;
+        Q_EMIT algorithmsChanged();
+        return true;
+    }
     return changed;
 }
 
@@ -199,8 +245,11 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         }
         // Create with nullptr parent so the registry takes full ownership
         // via setParent(this) in registerAlgorithm(). If the algo is invalid,
-        // we delete it explicitly below.
-        auto* algo = new ScriptedAlgorithm(fullPath, nullptr);
+        // we delete it explicitly below. Pass the watchdog as shared_ptr
+        // so the algorithm keeps it alive across deferred-delete teardown
+        // (registry uses deleteLater(); algorithm dtor can run after the
+        // loader is gone — see ScriptedAlgorithm.h for the contract).
+        auto* algo = new ScriptedAlgorithm(fullPath, m_watchdog, nullptr);
         if (!algo->isValid()) {
             qCWarning(PhosphorTiles::lcTilesLib) << "Invalid scripted algorithm, skipping:" << fullPath;
             delete algo;
@@ -216,25 +265,26 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         auto* registry = m_registry;
         algo->setUserScript(isUserDir);
 
-        // Warn when a script overrides an existing algorithm ID.
-        // For system scripts with duplicate @builtinId, skip registration
-        // to prevent silent replacement of a bundled algorithm.
-        if (registry->hasAlgorithm(scriptId)) {
+        // Duplicate detection is scoped to THIS scan. m_scriptIdToPath was
+        // cleared at the top of scanAndRegister, so a hit here means an
+        // earlier loadFromDirectory call in the same scan already
+        // registered this id. The registry itself still holds entries from
+        // previous scans — using registry->hasAlgorithm would incorrectly
+        // classify every system-script content edit as a duplicate on
+        // every rescan and skip re-registration, silently disabling hot-
+        // reload for system scripts.
+        //
+        // For user-dir overrides of a bundled script: warn and fall
+        // through to registerAlgorithm, which replaces cleanly.
+        // For cross-system-dir duplicates (same id in two XDG roots):
+        // first registration wins, skip the rest.
+        if (m_scriptIdToPath.contains(scriptId)) {
             if (isUserDir) {
                 qCWarning(PhosphorTiles::lcTilesLib)
                     << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
             } else {
                 qCWarning(PhosphorTiles::lcTilesLib) << "Duplicate system script for algorithm:" << scriptId
                                                      << "from=" << fullPath << "— skipping (first registration wins)";
-                // Defensive: ensure scriptId is tracked so the stale-removal pass
-                // in scanAndRegister() does not unregister it. In normal operation
-                // the first directory scan already populated m_scriptIdToPath, so
-                // this guard is a no-op — it only fires if a future code path
-                // clears the map between individual directory scans within a single
-                // refresh cycle.
-                if (!m_scriptIdToPath.contains(scriptId)) {
-                    m_scriptIdToPath[scriptId] = fullPath;
-                }
                 delete algo;
                 continue;
             }

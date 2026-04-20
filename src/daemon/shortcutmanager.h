@@ -18,10 +18,13 @@ class IBackend;
 class Registry;
 } // namespace Phosphor::Shortcuts
 
+namespace PhosphorZones {
+class LayoutRegistry;
+}
+
 namespace PlasmaZones {
 
 class Settings;
-class LayoutManager;
 
 /**
  * @brief Navigation direction for keyboard navigation
@@ -47,7 +50,8 @@ class ShortcutManager : public QObject, public Phosphor::Shortcuts::Integration:
     Q_OBJECT
 
 public:
-    explicit ShortcutManager(Settings* settings, LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
+                             QObject* parent = nullptr);
     ~ShortcutManager() override;
 
     void registerShortcuts();
@@ -140,7 +144,7 @@ private:
     void drainPendingAdhocOps();
 
     Settings* m_settings = nullptr;
-    LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
 
     std::unique_ptr<Phosphor::Shortcuts::IBackend> m_backend;
     std::unique_ptr<Phosphor::Shortcuts::Registry> m_registry;

@@ -5,6 +5,7 @@
 
 #include "screenslogging.h"
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
@@ -15,6 +16,7 @@
 #include <QGuiApplication>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QThread>
 
 namespace Phosphor::Screens {
 
@@ -31,6 +33,15 @@ constexpr auto kPlasmaShellInterface = "org.kde.PlasmaShell";
 /// the next line's `PANEL:` prefix into an optional capture.
 const QString& panelScript()
 {
+    // Numeric fields are integer-coerced in JS via `Math.round` / `| 0` before
+    // concatenation. `screenGeometry()` returns QRectF and `panel.geometry` +
+    // `screen.y` can carry sub-pixel offsets on fractional-scaling Wayland
+    // outputs (common on 3200×1800-class laptop panels). Without coercion an
+    // `offset` of 41.666… would emit "41.666..." and the C++ regex below
+    // would fail to match the whole line — we'd silently lose every panel
+    // on that screen, leaving `m_offsets` empty and `calculateAvailable-
+    // Geometry` with `availY=0` even though the sensor correctly reports
+    // a shrunken usable size.
     static const QString s = QStringLiteral(R"(
         panels().forEach(function(p,i){
             var floating = p.floating ? 1 : 0;
@@ -40,20 +51,20 @@ const QString& panelScript()
             var pg = p.geometry;
             // Offset defaults to the panel's thickness — overridden below
             // for each edge once we have both panel and screen rects.
-            var offset = Math.abs(p.height);
+            var offset = Math.round(Math.abs(p.height));
             if (pg && sg) {
                 if (loc === "top") {
-                    offset = (pg.y + pg.height) - sg.y;
+                    offset = Math.round((pg.y + pg.height) - sg.y);
                 } else if (loc === "bottom") {
-                    offset = (sg.y + sg.height) - pg.y;
+                    offset = Math.round((sg.y + sg.height) - pg.y);
                 } else if (loc === "left") {
-                    offset = (pg.x + pg.width) - sg.x;
+                    offset = Math.round((pg.x + pg.width) - sg.x);
                 } else if (loc === "right") {
-                    offset = (sg.x + sg.width) - pg.x;
+                    offset = Math.round((sg.x + sg.width) - pg.x);
                 }
             }
-            var sgStr = sg ? (sg.x + "," + sg.y + "," + sg.width + "," + sg.height) : "";
-            print("PANEL:" + p.screen + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
+            var sgStr = sg ? ((sg.x|0) + "," + (sg.y|0) + "," + (sg.width|0) + "," + (sg.height|0)) : "";
+            print("PANEL:" + (p.screen|0) + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
         });
     )");
     return s;
@@ -157,6 +168,18 @@ void PlasmaPanelSource::requestRequery(int delayMs)
 
 void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 {
+    // Thread confinement — m_running / m_queryPending / m_requeryQueued /
+    // m_offsets / m_activeWatcher are all touched from this method and
+    // from the QDBusPendingCallWatcher::finished slot below. Both paths
+    // are expected on the main thread (issueQuery is only called from
+    // start(), the service-watcher slot, the requery QTimer, the
+    // finished slot's drain loop, and direct requestRequery callers —
+    // all main-thread). Assert it once at entry so a future off-thread
+    // caller (e.g. a plugin wiring up a worker-thread requery) trips
+    // immediately rather than producing a silent data race that
+    // corrupts m_offsets under concurrent reads from Qt widget code.
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+
     // Belt-and-braces: even with the stop() disconnect, a queued-but-
     // not-yet-dispatched slot invocation could still reach here. Bail
     // so we don't spin up a fresh D-Bus call or mutate m_offsets post-stop.
@@ -258,32 +281,82 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 //   1: plasma screen index
                 //   2: location (top/bottom/left/right)
                 //   3: hiding mode (none/autohide/dodgewindows/windowsgobelow)
-                //   4: totalOffset (reserved edge in px)
+                //   4: totalOffset (reserved edge in px; always ≥0)
                 //   5: floating flag (0 or 1)
-                //   6-9: plasma screen geometry (x,y,w,h)
+                //   6-9: plasma screen geometry (x,y,w,h). x/y allow a leading
+                //        `-` because Qt screens arranged left-of / above the
+                //        primary have negative origins — without it the whole
+                //        line fails to match and the panel is silently dropped.
                 //
                 // End-of-line anchor (`(?=\n|$)`) so a line whose geometry
                 // segment is empty (sg === null in the JS) cannot greedy-match
                 // digits from the NEXT line's PANEL: prefix into the optional
                 // geometry group. Multiline-enabled so `$` respects intra-reply
                 // newlines.
-                static const QRegularExpression panelRegex(QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+):(\\d+)"
-                                                                          "(?::(\\d+),(\\d+),(\\d+),(\\d+))?(?=\\n|$)"),
-                                                           QRegularExpression::MultilineOption);
+                static const QRegularExpression panelRegex(
+                    QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+):(\\d+)"
+                                   "(?::(-?\\d+),(-?\\d+),(\\d+),(\\d+))?(?=\\n|$)"),
+                    QRegularExpression::MultilineOption);
                 const auto qtScreens = QGuiApplication::screens();
                 auto it = panelRegex.globalMatch(output);
+                // Guard against a silent format drift: if plasmashell wrote
+                // `PANEL:` lines but none match our regex, the JS numeric
+                // output has shifted under us (e.g. fractional scaling
+                // leaking through coercion). Warn with the raw reply —
+                // otherwise every screen with panels looks "clean" at
+                // availability-calculation time and zones anchor to y=0
+                // under the top panel.
+                if (!it.hasNext() && output.contains(QLatin1String("PANEL:"))) {
+                    qCWarning(lcPhosphorScreens)
+                        << "queryKdePlasmaPanels: output contained PANEL: lines but none matched regex — raw reply:"
+                        << output;
+                }
                 while (it.hasNext()) {
                     QRegularExpressionMatch match = it.next();
-                    const int plasmaIndex = match.captured(1).toInt();
+                    // All numeric captures are guarded with toInt(&ok):
+                    // the regex only accepts digits (with an optional
+                    // leading `-` on coordinates), but values outside
+                    // INT_MIN..INT_MAX still parse as digits and silently
+                    // coerce to 0 under the ok-less overload. A zero
+                    // plasmaGeom would then match any (0,0)-origin Qt
+                    // screen and attach the panel to the wrong output.
+                    bool ok = false;
+                    const int plasmaIndex = match.captured(1).toInt(&ok);
+                    if (!ok) {
+                        qCWarning(lcPhosphorScreens)
+                            << "Invalid Plasma panel index, skipping line:" << match.captured(0);
+                        continue;
+                    }
                     const QString location = match.captured(2);
                     const QString hiding = match.captured(3);
-                    int totalOffset = match.captured(4).toInt();
-                    const bool floating = (match.captured(5) == QLatin1String("1"));
+                    const int totalOffset = match.captured(4).toInt(&ok);
+                    if (!ok) {
+                        qCWarning(lcPhosphorScreens)
+                            << "Invalid Plasma panel offset, skipping line:" << match.captured(0);
+                        continue;
+                    }
+                    // match.captured(5) is the `floating` flag. In Plasma 6 the
+                    // scripting API's `floating` property reports visual style
+                    // (rounded-corner inset dock) — it does NOT imply
+                    // exclusiveZone==0, and panels with `floating=true` routinely
+                    // reserve space. We intentionally ignore it here; the
+                    // layer-shell sensor in ScreenManager is the authoritative
+                    // source for "what area is actually reserved" — see
+                    // ScreenManager::calculateAvailableGeometry. Kept in the
+                    // regex to match the JS wire format without diverging the
+                    // two; drop from both in lockstep if the flag is ever
+                    // repurposed.
 
                     QString connectorName;
                     if (!match.captured(6).isEmpty()) {
-                        const QRect plasmaGeom(match.captured(6).toInt(), match.captured(7).toInt(),
-                                               match.captured(8).toInt(), match.captured(9).toInt());
+                        bool gx = false, gy = false, gw = false, gh = false;
+                        const QRect plasmaGeom(match.captured(6).toInt(&gx), match.captured(7).toInt(&gy),
+                                               match.captured(8).toInt(&gw), match.captured(9).toInt(&gh));
+                        if (!(gx && gy && gw && gh)) {
+                            qCWarning(lcPhosphorScreens)
+                                << "Plasma panel geometry out of int range, skipping panel:" << match.captured(0);
+                            continue;
+                        }
                         for (auto* qs : qtScreens) {
                             if (qs->geometry() == plasmaGeom) {
                                 connectorName = qs->name();
@@ -298,17 +371,13 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                         continue;
                     }
 
-                    const bool autoHides =
-                        (hiding == QLatin1String("autohide") || hiding == QLatin1String("dodgewindows")
-                         || hiding == QLatin1String("windowsgobelow"));
-                    // Floating panels sit with margins off the screen edge and
-                    // do not reserve exclusive area — windows can extend under
-                    // them. Treat them like auto-hide for availability accounting;
-                    // otherwise calculateAvailableGeometry's qMin(sensor, dbus)
-                    // branch would shrink the rect by the floating panel's height.
-                    if (autoHides || floating) {
-                        totalOffset = 0;
-                    }
+                    // Feed the raw per-edge thickness through regardless of
+                    // `hiding` mode. Panels with `hiding=="autohide"` only
+                    // reserve when expanded; the sensor accounts for that.
+                    // See the note above on the `floating` flag and the
+                    // sensor-authoritative reconciliation in
+                    // ScreenManager::calculateAvailableGeometry.
+                    Q_UNUSED(hiding);
 
                     Offsets& offsets = newOffsets[connectorName];
                     if (location == QLatin1String("top")) {

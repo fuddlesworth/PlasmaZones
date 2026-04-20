@@ -4,7 +4,7 @@
 #include "controladaptor.h"
 #include "windowtrackingadaptor.h"
 #include "layoutadaptor.h"
-#include "../core/layoutmanager.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/logging.h"
@@ -22,9 +22,9 @@
 
 namespace PlasmaZones {
 
-ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor, LayoutManager* layoutManager,
-                               AutotileEngine* autotileEngine, Phosphor::Screens::ScreenManager* screenManager,
-                               QObject* parent)
+ControlAdaptor::ControlAdaptor(WindowTrackingAdaptor* wta, LayoutAdaptor* layoutAdaptor,
+                               PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
+                               Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_wta(wta)
     , m_layoutAdaptor(layoutAdaptor)
@@ -39,6 +39,9 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
     if (windowId.isEmpty() || zoneNumber < 1 || zoneNumber > 9) {
         qCWarning(lcDbusWindow) << "snapWindowToZone: invalid args windowId=" << windowId
                                 << "zoneNumber=" << zoneNumber;
+        return;
+    }
+    if (!m_layoutManager) {
         return;
     }
 
@@ -138,6 +141,15 @@ QString ControlAdaptor::getFullState()
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
 
+void ControlAdaptor::detach()
+{
+    m_wta = nullptr;
+    m_layoutAdaptor = nullptr;
+    m_layoutManager = nullptr;
+    m_autotileEngine = nullptr;
+    m_screenManager = nullptr;
+}
+
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
 {
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
@@ -148,6 +160,16 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
         message.setDelayedReply(true);
         auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
                                               QStringLiteral("A support report is already being generated"));
+        QDBusConnection::sessionBus().send(error);
+        return {};
+    }
+
+    // Detach was called (shutdown in progress) — fail the report cleanly
+    // instead of feeding null pointers into collectSnapshot.
+    if (!m_screenManager || !m_layoutManager || !m_autotileEngine) {
+        message.setDelayedReply(true);
+        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
+                                              QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
         return {};
     }

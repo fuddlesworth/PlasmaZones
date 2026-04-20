@@ -68,4 +68,13 @@ void ShaderAdaptor::refreshShaders()
     }
 }
 
+void ShaderAdaptor::detach()
+{
+    if (!m_registry) {
+        return;
+    }
+    disconnect(m_registry, nullptr, this, nullptr);
+    m_registry = nullptr;
+}
+
 } // namespace PlasmaZones

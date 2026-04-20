@@ -531,7 +531,7 @@ PlasmaZonesEffect::PlasmaZonesEffect()
     // Connect to daemon's daemonReady signal — emitted at the end of Daemon::start()
     // after all initialization is complete and the daemon can process D-Bus messages.
     // This is the safe point to set m_daemonServiceRegistered and create QDBusInterfaces.
-    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+    QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutRegistry,
                                           QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
 
     // Watch for daemon D-Bus service registration and unregistration.
@@ -570,9 +570,9 @@ PlasmaZonesEffect::PlasmaZonesEffect()
         // name in match rules, so refresh for the new daemon instance.
         // Disconnect first to prevent duplicate match rules (Qt doesn't deduplicate),
         // which would cause slotDaemonReady to fire twice on the same signal.
-        QDBusConnection::sessionBus().disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+        QDBusConnection::sessionBus().disconnect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutRegistry,
                                                  QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
-        QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutManager,
+        QDBusConnection::sessionBus().connect(DBus::ServiceName, DBus::ObjectPath, DBus::Interface::LayoutRegistry,
                                               QStringLiteral("daemonReady"), this, SLOT(slotDaemonReady()));
     });
 
@@ -1798,7 +1798,7 @@ void PlasmaZonesEffect::loadCachedSettings()
         // Polymorphic curve parse — handles bare bezier, named easing,
         // and "spring:..." in one path so Spring can drive snap motion
         // end-to-end without a settings-side branch.
-        m_windowAnimator->setCurve(PhosphorAnimation::CurveRegistry::instance().create(v.toString()));
+        m_windowAnimator->setCurve(m_curveRegistry.create(v.toString()));
     });
     loadSettingAsync(QStringLiteral("animationMinDistance"), [this](const QVariant& v) {
         m_windowAnimator->setMinDistance(qBound(0, v.toInt(), 200));

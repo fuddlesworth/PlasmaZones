@@ -3,8 +3,7 @@
 
 #pragma once
 
-// Internal header — not part of the PhosphorTiles public API. Lives under src/
-// so it cannot be included by out-of-tree consumers.
+#include <phosphortiles_export.h>
 
 #include <chrono>
 #include <condition_variable>
@@ -18,13 +17,29 @@ namespace PhosphorTiles {
 class ScriptedAlgorithm;
 
 /**
- * @brief Process-wide shared watchdog for scripted algorithms
+ * @brief Per-loader watchdog for scripted algorithms
  *
- * A single OS thread services every live @ref ScriptedAlgorithm instance by
- * tracking the earliest deadline across all armed algorithms and interrupting
- * the one whose deadline expires first. Replaces the previous "one
- * std::thread per algorithm" model, which did not scale and wasted one thread
- * per registered script even while idle.
+ * A single OS thread services every live @ref ScriptedAlgorithm instance
+ * registered with this watchdog by tracking the earliest deadline across
+ * all armed algorithms and interrupting the one whose deadline expires
+ * first. Replaces the previous "one std::thread per algorithm" model
+ * (which did not scale and wasted one thread per registered script even
+ * while idle) and the previous `instance()` Meyer's singleton (which
+ * meant every process shared one watchdog regardless of plugin
+ * topology).
+ *
+ * Ownership: @ref ScriptedAlgorithmLoader holds the watchdog via
+ * @c std::shared_ptr and hands a @c shared_ptr copy to every
+ * @ref ScriptedAlgorithm it constructs. The shared-ownership shape is
+ * required because the registry destroys algorithms via
+ * @c QObject::deleteLater — an algorithm's destructor (which calls
+ * @ref unregister on this watchdog) can therefore run on a later event-
+ * loop pass, after the loader is already gone. The watchdog thread is
+ * joined in @c ~ScriptedAlgorithmWatchdog, which fires only when the
+ * very last @c shared_ptr (the loader's or a deferred-delete algo's) is
+ * released — so the "watchdog outlives every algorithm using it"
+ * invariant is maintained by reference counting rather than member-
+ * ordering.
  *
  * Usage (from @ref ScriptedAlgorithm::guardedCall):
  *  1. @ref arm(this, timeoutMs) before invoking the guarded JS callable.
@@ -33,14 +48,13 @@ class ScriptedAlgorithm;
  *     eventual @ref ScriptedAlgorithm::interruptEngine call is suppressed.
  *
  * Thread-safety: all public methods are thread-safe. The watchdog thread
- * lives for the life of the process (joined in the singleton's destructor
- * on shutdown).
+ * lives for the lifetime of the watchdog instance (joined in destructor).
  */
-class ScriptedAlgorithmWatchdog
+class PHOSPHORTILES_EXPORT ScriptedAlgorithmWatchdog
 {
 public:
-    /// Return the process-wide singleton. Starts the watchdog thread on first call.
-    static ScriptedAlgorithmWatchdog& instance();
+    ScriptedAlgorithmWatchdog();
+    ~ScriptedAlgorithmWatchdog();
 
     /**
      * @brief Arm the watchdog for @p algo with a timeout of @p timeoutMs ms
@@ -64,19 +78,26 @@ public:
      *
      * Called by @ref ScriptedAlgorithm 's destructor so the watchdog thread
      * cannot dereference a freed instance.
+     *
+     * @invariant Every @ref ScriptedAlgorithm that registers here holds a
+     *   @c shared_ptr to this watchdog for its entire lifetime (see class
+     *   comment). The caller of `unregister` is therefore still one of the
+     *   owners when this method runs, so the watchdog instance is
+     *   guaranteed alive across the call. Do not "optimize" the
+     *   algorithm's watchdog reference to a raw or weak pointer — that
+     *   would invalidate this invariant.
      */
     void unregister(ScriptedAlgorithm* algo);
 
-    // Non-copyable, non-movable — owned as a Meyer's singleton
+    // Non-copyable, non-movable — ownership is shared via std::shared_ptr
+    // (see class comment above for rationale). Move would invalidate the
+    // mutex / condvar / std::thread members.
     ScriptedAlgorithmWatchdog(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog& operator=(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog(ScriptedAlgorithmWatchdog&&) = delete;
     ScriptedAlgorithmWatchdog& operator=(ScriptedAlgorithmWatchdog&&) = delete;
 
 private:
-    ScriptedAlgorithmWatchdog();
-    ~ScriptedAlgorithmWatchdog();
-
     struct Entry
     {
         std::chrono::steady_clock::time_point deadline;

@@ -27,13 +27,13 @@ class PlasmaPanelSource;
 
 namespace PhosphorZones {
 class Layout;
+class LayoutRegistry;
 class ZoneDetector;
 }
 
 namespace PlasmaZones {
 
 enum class DisabledReason;
-class LayoutManager;
 class LayoutComputeService;
 class Settings;
 class OverlayService;
@@ -42,6 +42,8 @@ class ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
 class SettingsAdaptor;
+class ShaderAdaptor;
+class ControlAdaptor;
 class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
@@ -60,6 +62,7 @@ class SnapNavigationAdapter;
 class SnapAdaptor;
 class SnapEngine;
 class WindowRegistry;
+class ShaderRegistry;
 } // namespace PlasmaZones
 
 namespace PhosphorTiles {
@@ -91,7 +94,7 @@ public:
     void stop();
 
     // Component access
-    LayoutManager* layoutManager() const
+    PhosphorZones::LayoutRegistry* layoutManager() const
     {
         return m_layoutManager.get();
     }
@@ -361,7 +364,7 @@ private:
     void syncModeFromAssignments();
 
     std::unique_ptr<PhosphorConfig::IBackend> m_configBackend;
-    std::unique_ptr<LayoutManager> m_layoutManager;
+    std::unique_ptr<PhosphorZones::LayoutRegistry> m_layoutManager;
     // Daemon-owned tile-algorithm registry. Replaces the old
     // AlgorithmRegistry::instance() singleton — per-process ownership is
     // the only shape that works once PlasmaZones becomes a plugin-based
@@ -419,6 +422,15 @@ private:
     /// runs swapper → screen-manager → store.
     std::unique_ptr<SettingsConfigStore> m_virtualScreenStore;
     std::unique_ptr<Phosphor::Screens::ScreenManager> m_screenManager;
+    /// Per-daemon shader registry. Replaces the previous
+    /// ShaderRegistry::instance() singleton — per-process ownership is the
+    /// plugin-architecture-friendly shape (matches m_algorithmRegistry).
+    /// Declared BEFORE m_overlayService so the OverlayService can hold a
+    /// borrowed pointer to it; reverse-order destruction tears the service
+    /// down before the registry, guaranteeing no UAF on shadersChanged
+    /// disconnect during shutdown. Also declared before the D-Bus adaptors
+    /// (ShaderAdaptor, SettingsAdaptor) that borrow it.
+    std::unique_ptr<ShaderRegistry> m_shaderRegistry;
     /// OverlayService takes ScreenManager* via constructor injection — must
     /// be declared AFTER m_screenManager so the initializer-list construction
     /// order matches.
@@ -437,6 +449,13 @@ private:
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
+    // Held so stop() can invoke detach() before the unique_ptr members
+    // those adaptors borrow from are destroyed. ~QObject runs AFTER all
+    // unique_ptr member destructors, so without an explicit detach the
+    // adaptors would see dangling pointers for a destruction-ordering
+    // window (and any queued D-Bus call landing in that window would UAF).
+    ShaderAdaptor* m_shaderAdaptor = nullptr;
+    ControlAdaptor* m_controlAdaptor = nullptr;
 
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;

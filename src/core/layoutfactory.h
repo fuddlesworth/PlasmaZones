@@ -12,9 +12,11 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace PlasmaZones {
+namespace PhosphorZones {
+class LayoutRegistry;
+}
 
-class LayoutManager;
+namespace PlasmaZones {
 
 /**
  * @brief Factory for creating layouts by type name
@@ -30,7 +32,7 @@ class LayoutManager;
 class PLASMAZONES_EXPORT LayoutFactory
 {
 public:
-    using CreatorFunc = std::function<PhosphorZones::Layout*(LayoutManager*)>;
+    using CreatorFunc = std::function<PhosphorZones::Layout*(PhosphorZones::LayoutRegistry*)>;
 
     /**
      * @brief Create a layout of the specified type
@@ -46,7 +48,7 @@ public:
      * - "focus": Focus layout (centered main + surrounding zones)
      * - "custom" or unknown: Empty custom layout
      */
-    static PhosphorZones::Layout* create(const QString& type, LayoutManager* manager);
+    static PhosphorZones::Layout* create(const QString& type, PhosphorZones::LayoutRegistry* manager);
 
     /**
      * @brief Register a custom layout creator

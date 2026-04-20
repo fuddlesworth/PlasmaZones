@@ -49,13 +49,16 @@ inline QString extractAlgorithmId(const QString& id)
 
 inline QString makeAutotileId(const QString& algorithmId)
 {
-    if (algorithmId.isEmpty()) {
-        // Producing the bare prefix would round-trip through isAutotile(true)
-        // → extractAlgorithmId("") which downstream code can't act on. Surface
-        // the misuse loudly while staying graceful (empty return is testable).
-        qWarning("PhosphorLayout::LayoutId::makeAutotileId called with empty algorithmId");
-        return QString();
-    }
+    // Empty algorithmId is a legitimate caller intent: "autotile mode, let
+    // the engine pick the default algorithm". The KCM writes exactly this
+    // shape via LayoutAdaptor::setAssignmentEntry (mode=Autotile,
+    // tilingAlgorithm="") — see AssignmentEntry::activeLayoutId() and
+    // LayoutRegistry::setAssignmentEntryDirect's comment. Returning the
+    // bare prefix round-trips cleanly: isAutotile("autotile:") is true,
+    // extractAlgorithmId("autotile:") returns empty (LayoutId.h above
+    // handles id.size() <= prefix.size()), and the assignment cascade
+    // treats the entry as non-empty so modeForScreen correctly reports
+    // Autotile.
     return AutotilePrefix + algorithmId;
 }
 

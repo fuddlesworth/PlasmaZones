@@ -26,6 +26,7 @@ namespace PhosphorZones {
 class IZoneDetector;
 class Layout;
 class Zone;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
@@ -33,7 +34,7 @@ namespace PlasmaZones {
 class AutotileEngine;
 class ScreenModeRouter;
 class SnapNavigationTargetResolver;
-class LayoutManager; // Concrete type needed for signal connections
+
 class PersistenceWorker;
 class ISettings;
 class SnapEngine;
@@ -52,7 +53,8 @@ class PLASMAZONES_EXPORT WindowTrackingAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.WindowTracking")
 
 public:
-    explicit WindowTrackingAdaptor(LayoutManager* layoutManager, PhosphorZones::IZoneDetector* zoneDetector,
+    explicit WindowTrackingAdaptor(PhosphorZones::LayoutRegistry* layoutManager,
+                                   PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                    VirtualDesktopManager* virtualDesktopManager, QObject* parent = nullptr);
     ~WindowTrackingAdaptor() override;
@@ -1052,7 +1054,7 @@ private:
     // Dependencies (kept for signal connections and settings access)
     // ═══════════════════════════════════════════════════════════════════════════════
     ZoneDetectionAdaptor* m_zoneDetectionAdaptor = nullptr;
-    LayoutManager* m_layoutManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;
     std::unique_ptr<PhosphorConfig::IBackend> m_sessionBackend; // Session state (session.json)

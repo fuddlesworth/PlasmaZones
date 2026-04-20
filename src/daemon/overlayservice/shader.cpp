@@ -83,8 +83,7 @@ QImage buildLabelsImageForPreviewZones(const QVariantList& zones, const QSize& s
 bool OverlayService::canUseShaders() const
 {
 #ifdef PLASMAZONES_SHADERS_ENABLED
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shadersEnabled();
+    return m_shaderRegistry && m_shaderRegistry->shadersEnabled();
 #else
     return false;
 #endif
@@ -157,8 +156,7 @@ bool OverlayService::useShaderForScreen(const QString& screenId) const
         }
     }
 
-    auto* registry = ShaderRegistry::instance();
-    return registry && registry->shader(screenLayout->shaderId()).isValid();
+    return m_shaderRegistry && m_shaderRegistry->shader(screenLayout->shaderId()).isValid();
 }
 
 void OverlayService::startShaderAnimation()
@@ -302,7 +300,7 @@ void OverlayService::showShaderPreview(int x, int y, int width, int height, cons
         return;
     }
 
-    auto* registry = ShaderRegistry::instance();
+    auto* registry = m_shaderRegistry;
     if (!registry || !registry->shadersEnabled()) {
         qCDebug(lcOverlay) << "showShaderPreview: shaders not available";
         return;

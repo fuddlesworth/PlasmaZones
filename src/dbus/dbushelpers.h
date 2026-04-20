@@ -168,13 +168,13 @@ inline PhosphorZones::Zone* getZoneFromActiveLayout(PhosphorZones::IZoneLayoutRe
  * for hot-path zone lookups (use the IZoneLayoutRegistry by-id surface).
  */
 template<typename LogCategory>
-PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
+PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
                                          const QString& operation, LogCategory category)
 {
-    // Takes the full ILayoutManager here (rather than IZoneLayoutRegistry
+    // Takes the full LayoutRegistry here (rather than IZoneLayoutRegistry
     // alone) because the active-layout-first search walks the full
     // assignment + enumeration surface that callers already hold via
-    // the manager.
+    // the registry.
     auto uuidOpt = parseAndValidateUuid(zoneId, operation, category);
     if (!uuidOpt) {
         return nullptr;
@@ -213,7 +213,7 @@ PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, con
 /**
  * @brief Overload using default lcDbus category
  */
-inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::ILayoutManager* mgr, const QString& zoneId,
+inline PhosphorZones::Zone* findZoneInAnyLayout(PhosphorZones::LayoutRegistry* mgr, const QString& zoneId,
                                                 const QString& operation)
 {
     return findZoneInAnyLayout(mgr, zoneId, operation, lcDbus);

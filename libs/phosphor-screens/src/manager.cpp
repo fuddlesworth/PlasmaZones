@@ -263,17 +263,38 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
     }
 
     const QRect screenGeom = screen->geometry();
-    const QString connectorName = screen->name();
+    const QString screenKey = screen->name();
 
-    qCDebug(lcPhosphorScreens) << "calculateAvailableGeometry: screen=" << connectorName << "geometry=" << screenGeom;
+    qCDebug(lcPhosphorScreens) << "calculateAvailableGeometry: screen=" << screenKey << "geometry=" << screenGeom;
 
-    // Panel offsets via the injected source (zero offsets if no source).
+    // Two information sources with complementary authority:
+    //
+    //  1. Layer-shell sensor (AnchorAll, exclusiveZone=0). The compositor
+    //     sizes it to fill the region not claimed by other exclusive-zone
+    //     surfaces. Its *size* is authoritative — it reflects every panel
+    //     actually reserving space on this output (Plasma panels, non-Plasma
+    //     layer surfaces, auto-hide panels in their current state, etc.).
+    //     Its *position* is NOT authoritative here because our layer-shell
+    //     QPA plugin synthesizes QWindow::geometry() from anchors + the full
+    //     screen rect, not the compositor's actual placement (layer-shell
+    //     protocol has no server→client position event).
+    //
+    //  2. plasmashell D-Bus script eval. Tells us *which edge* each Plasma
+    //     panel lives on plus a per-edge thickness. The thickness is NOT
+    //     authoritative — Plasma 6 reports `floating=true` for panels that
+    //     nonetheless reserve exclusive space, and the scripting API's
+    //     `panel.geometry` is undefined in recent versions. This source
+    //     contributes directional ratios only.
+    //
+    // Reconciliation: the sensor tells us the total reserved in each axis;
+    // D-Bus ratios distribute that total across the two edges on that axis.
+    // Truly-floating or hidden-autohide panels self-correct — the sensor
+    // shows zero reservation, the scale factor collapses to zero, and their
+    // D-Bus offsets have no effect.
+
     IPanelSource::Offsets panel =
         m_cfg.panelSource ? m_cfg.panelSource->currentOffsets(screen) : IPanelSource::Offsets{};
-    const bool hasPanelData = !panel.isZero();
 
-    // Layer-shell sensor — real-time available SIZE from the compositor.
-    // Sensor position is unreliable on Wayland; only its size matters.
     QRect sensorGeom;
     bool hasSensorData = false;
     if (auto sensor = m_geometrySensors.value(screen); sensor && sensor->isVisible()) {
@@ -281,59 +302,81 @@ void ScreenManager::calculateAvailableGeometry(QScreen* screen)
         hasSensorData = sensorGeom.isValid() && sensorGeom.width() > 0 && sensorGeom.height() > 0;
     }
 
-    int availX = screenGeom.x() + panel.left;
-    int availY = screenGeom.y() + panel.top;
-    int finalWidth = 0;
-    int finalHeight = 0;
+    int effTop = 0;
+    int effBottom = 0;
+    int effLeft = 0;
+    int effRight = 0;
+    QString source;
 
-    const int dbusWidth = screenGeom.width() - panel.left - panel.right;
-    const int dbusHeight = screenGeom.height() - panel.top - panel.bottom;
+    if (hasSensorData) {
+        // Sensor authoritatively owns the total. Distribute per D-Bus ratios.
+        const int vertReserved = qMax(0, screenGeom.height() - sensorGeom.height());
+        const int horizReserved = qMax(0, screenGeom.width() - sensorGeom.width());
+        const int dbusVert = panel.top + panel.bottom;
+        const int dbusHoriz = panel.left + panel.right;
 
-    if (hasSensorData && hasPanelData) {
-        // Both sources — use the smaller size to handle floating panels
-        // (sensor full screen, D-Bus knows panel) AND panel-edit cases
-        // (sensor accurate, D-Bus stale).
-        finalWidth = qMin(sensorGeom.width(), dbusWidth);
-        finalHeight = qMin(sensorGeom.height(), dbusHeight);
-        if (qAbs(dbusHeight - sensorGeom.height()) > 5 || qAbs(dbusWidth - sensorGeom.width()) > 5) {
-            qCDebug(lcPhosphorScreens) << "D-Bus vs Sensor mismatch."
-                                       << "D-Bus:" << dbusWidth << "x" << dbusHeight << "Sensor:" << sensorGeom.width()
-                                       << "x" << sensorGeom.height() << "Using:" << finalWidth << "x" << finalHeight;
+        if (dbusVert > 0) {
+            // Split vertReserved in the ratio D-Bus claims for top:bottom.
+            effTop = qRound(panel.top * double(vertReserved) / dbusVert);
+            effBottom = vertReserved - effTop;
+        } else if (vertReserved > 0) {
+            // Sensor shows vertical reservation but D-Bus has no panels on
+            // the top/bottom edges (panel source stale, absent, or non-
+            // Plasma layer surfaces). We have the total but no direction
+            // — attribute to the bottom as a safe default (matches the
+            // single-dock common case). Zones will be slightly wrong for
+            // top-only-panel setups in this degenerate state; this path is
+            // transient unless panel detection is permanently broken.
+            effTop = 0;
+            effBottom = vertReserved;
         }
-    } else if (hasSensorData) {
-        const bool panelReady = m_cfg.panelSource && m_cfg.panelSource->ready();
-        if (panelReady && (sensorGeom.width() < screenGeom.width() || sensorGeom.height() < screenGeom.height())) {
-            qCDebug(lcPhosphorScreens) << "Sensor for" << connectorName << "reports" << sensorGeom.size()
-                                       << "but panel source found no panels on this screen."
-                                       << "Using full screen geometry instead.";
-            finalWidth = screenGeom.width();
-            finalHeight = screenGeom.height();
+        if (dbusHoriz > 0) {
+            effLeft = qRound(panel.left * double(horizReserved) / dbusHoriz);
+            effRight = horizReserved - effLeft;
+        } else if (horizReserved > 0) {
+            effLeft = 0;
+            effRight = horizReserved;
+        }
+
+        if (dbusVert > 0 || dbusHoriz > 0) {
+            source = QStringLiteral("sensor+D-Bus");
+            if (dbusVert > vertReserved || dbusHoriz > horizReserved) {
+                qCDebug(lcPhosphorScreens)
+                    << "D-Bus over-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
+                    << "sensor vert=" << vertReserved << "— scaling down (likely floating/autohide panels)";
+            } else if (dbusVert < vertReserved || dbusHoriz < horizReserved) {
+                qCDebug(lcPhosphorScreens)
+                    << "D-Bus under-reports reservation on" << screenKey << "— D-Bus vert=" << dbusVert
+                    << "sensor vert=" << vertReserved << "— non-Plasma layer surface suspected";
+            }
+        } else if (vertReserved > 0 || horizReserved > 0) {
+            source = QStringLiteral("sensor-only");
         } else {
-            finalWidth = sensorGeom.width();
-            finalHeight = sensorGeom.height();
+            source = QStringLiteral("sensor+no-panels");
         }
-    } else if (hasPanelData) {
-        finalWidth = dbusWidth;
-        finalHeight = dbusHeight;
+    } else if (!panel.isZero()) {
+        // No sensor yet. Trust D-Bus directly until the compositor configures
+        // the sensor (typically sub-frame).
+        effTop = panel.top;
+        effBottom = panel.bottom;
+        effLeft = panel.left;
+        effRight = panel.right;
+        source = QStringLiteral("D-Bus");
     } else {
-        availX = screenGeom.x();
-        availY = screenGeom.y();
-        finalWidth = screenGeom.width();
-        finalHeight = screenGeom.height();
+        source = QStringLiteral("fallback");
     }
 
-    const QRect availGeom(availX, availY, finalWidth, finalHeight);
-    const QString screenKey = screen->name();
-    const QRect oldGeom = m_availableGeometryCache.value(screenKey);
+    const QRect availGeom(screenGeom.x() + effLeft, screenGeom.y() + effTop, screenGeom.width() - effLeft - effRight,
+                          screenGeom.height() - effTop - effBottom);
 
+    const QRect oldGeom = m_availableGeometryCache.value(screenKey);
     if (availGeom == oldGeom) {
         return;
     }
 
-    const QString source = hasSensorData ? QStringLiteral("sensor")
-                                         : (hasPanelData ? QStringLiteral("D-Bus") : QStringLiteral("fallback"));
     qCInfo(lcPhosphorScreens) << "calculateAvailableGeometry: screen=" << screenKey << "screenGeom=" << screenGeom
-                              << "available=" << availGeom << "source=" << source;
+                              << "available=" << availGeom << "source=" << source << "effOffsets L=" << effLeft
+                              << "T=" << effTop << "R=" << effRight << "B=" << effBottom;
 
     m_availableGeometryCache.insert(screenKey, availGeom);
     Q_EMIT availableGeometryChanged(screen, availGeom);
