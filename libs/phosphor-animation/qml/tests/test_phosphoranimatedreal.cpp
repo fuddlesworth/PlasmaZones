@@ -55,28 +55,42 @@ private Q_SLOTS:
     }
 
     /// With a window, clock resolves and `start` succeeds on a
-    /// non-degenerate segment. from/to/value reflect the new endpoints.
+    /// non-degenerate segment. from/to/value reflect the new endpoints
+    /// and their change signals fire ONLY when the underlying value
+    /// actually moved (project rule: no unconditional emit).
     void testStartWithWindowSucceeds()
     {
         auto window = std::make_unique<QQuickWindow>();
         PhosphorAnimatedReal a;
         a.setWindow(window.get());
-        QSignalSpy fromSpy(&a, &PhosphorAnimatedReal::fromChanged);
-        QSignalSpy toSpy(&a, &PhosphorAnimatedReal::toChanged);
-        QSignalSpy animSpy(&a, &PhosphorAnimatedValueBase::animatingChanged);
 
         PhosphorProfile p;
         p.setDuration(100.0);
         a.setProfile(p);
 
-        const bool ok = a.start(0.0, 1.0);
+        // Default-constructed AnimatedValue has from=0.0, to=0.0.
+        // Pick endpoints that DIFFER from those defaults so the
+        // change signals have a reason to fire.
+        QSignalSpy fromSpy(&a, &PhosphorAnimatedReal::fromChanged);
+        QSignalSpy toSpy(&a, &PhosphorAnimatedReal::toChanged);
+        QSignalSpy animSpy(&a, &PhosphorAnimatedValueBase::animatingChanged);
+
+        const bool ok = a.start(0.25, 1.0);
         QVERIFY(ok);
-        QCOMPARE(a.from(), 0.0);
+        QCOMPARE(a.from(), 0.25);
         QCOMPARE(a.to(), 1.0);
         QVERIFY(a.isAnimating());
-        QVERIFY(fromSpy.count() >= 1);
-        QVERIFY(toSpy.count() >= 1);
-        QVERIFY(animSpy.count() >= 1);
+        QCOMPARE(fromSpy.count(), 1);
+        QCOMPARE(toSpy.count(), 1);
+        QCOMPARE(animSpy.count(), 1);
+
+        // Re-start with the SAME from value — fromChanged must NOT fire
+        // again (no-op emit would violate the check-before-emit rule).
+        QSignalSpy fromSpy2(&a, &PhosphorAnimatedReal::fromChanged);
+        a.cancel();
+        const bool ok2 = a.start(0.25, 2.0);
+        QVERIFY(ok2);
+        QCOMPARE(fromSpy2.count(), 0);
     }
 
     /// Degenerate start (from ≈ to) fails but still overwrites endpoints

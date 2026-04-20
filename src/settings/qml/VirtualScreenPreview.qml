@@ -137,14 +137,14 @@ Rectangle {
 
                 Behavior on width {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }
@@ -248,14 +248,14 @@ Rectangle {
 
                 Behavior on height {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }

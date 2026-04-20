@@ -85,7 +85,7 @@ ToolBar {
 
                         Behavior on color {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "panel.popup"
                             }
 
                         }
@@ -100,14 +100,14 @@ ToolBar {
 
                         Behavior on color {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "panel.popup"
                             }
 
                         }
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "panel.popup"
                             }
 
                         }
@@ -211,14 +211,14 @@ ToolBar {
 
                     Behavior on color {
                         PhosphorMotionAnimation {
-                            profile: "global"
+                            profile: "panel.popup"
                         }
 
                     }
 
                     Behavior on border.color {
                         PhosphorMotionAnimation {
-                            profile: "global"
+                            profile: "panel.popup"
                         }
 
                     }

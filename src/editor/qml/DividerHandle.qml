@@ -137,14 +137,14 @@ Rectangle {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "cursor.drag"
                     }
 
                 }
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "cursor.drag"
                     }
 
                 }
@@ -166,7 +166,7 @@ Rectangle {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "cursor.drag"
             }
 
         }
@@ -332,14 +332,14 @@ Rectangle {
 
     Behavior on color {
         PhosphorMotionAnimation {
-            profile: "global"
+            profile: "cursor.drag"
         }
 
     }
 
     Behavior on border.color {
         PhosphorMotionAnimation {
-            profile: "global"
+            profile: "cursor.drag"
         }
 
     }

@@ -117,10 +117,18 @@ protected:
 private:
     void connectSyncSignal();
     void disconnectSyncSignal();
+    void connectDestroyedSignal();
+    void disconnectDestroyedSignal();
+    void handleWindowDestroying();
 
     QPointer<QQuickWindow> m_window;
     PhosphorProfile m_profile;
     QMetaObject::Connection m_syncConnection;
+    /// Window-destroyed hook. Fires synchronously on the GUI thread
+    /// before the window is dropped — we cancel any in-flight animation
+    /// so its `MotionSpec::clock` raw pointer doesn't outlive the
+    /// clock that `QtQuickClockManager` evicts alongside the window.
+    QMetaObject::Connection m_destroyedConnection;
 };
 
 } // namespace PhosphorAnimation

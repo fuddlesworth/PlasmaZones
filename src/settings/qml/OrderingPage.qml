@@ -222,7 +222,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
-                                                profile: "global"
+                                                profile: "widget.reorder"
                                             }
 
                                         }
@@ -258,14 +258,14 @@ Flickable {
 
                                         Behavior on border.color {
                                             PhosphorMotionAnimation {
-                                                profile: "global"
+                                                profile: "widget.reorder"
                                             }
 
                                         }
 
                                         Behavior on border.width {
                                             PhosphorMotionAnimation {
-                                                profile: "global"
+                                                profile: "widget.reorder"
                                             }
 
                                         }
@@ -329,7 +329,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
-                                                profile: "global"
+                                                profile: "widget.reorder"
                                             }
 
                                         }
@@ -350,7 +350,7 @@ Flickable {
 
                                         Behavior on opacity {
                                             PhosphorMotionAnimation {
-                                                profile: "global"
+                                                profile: "widget.reorder"
                                             }
 
                                         }
@@ -361,14 +361,14 @@ Flickable {
 
                                 Behavior on color {
                                     PhosphorMotionAnimation {
-                                        profile: "global"
+                                        profile: "widget.reorder"
                                     }
 
                                 }
 
                                 Behavior on border.width {
                                     PhosphorMotionAnimation {
-                                        profile: "global"
+                                        profile: "widget.reorder"
                                     }
 
                                 }
@@ -379,7 +379,7 @@ Flickable {
 
                                     Behavior on y {
                                         PhosphorMotionAnimation {
-                                            profile: "global"
+                                            profile: "widget.reorder"
                                         }
 
                                     }
@@ -388,7 +388,7 @@ Flickable {
 
                                 Behavior on scale {
                                     PhosphorMotionAnimation {
-                                        profile: "global"
+                                        profile: "widget.reorder"
                                     }
 
                                 }

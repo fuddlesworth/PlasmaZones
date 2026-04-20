@@ -63,9 +63,27 @@ public:
     /// not affect the registered profile.
     std::optional<Profile> resolve(const QString& path) const;
 
-    /// Register or replace the profile at @p path. Fires
-    /// `profileChanged(path)` on commit so bound consumers re-resolve.
+    /// Register or replace the profile at @p path with a direct
+    /// (untagged) owner. Fires `profileChanged(path)` on commit so
+    /// bound consumers re-resolve.
+    ///
+    /// Paths registered via this overload are NOT wiped by
+    /// `reloadFromOwner` calls that use a different owner tag — they
+    /// remain in place until explicitly unregistered. This is the
+    /// fan-out path a shell daemon uses for settings-backed profiles.
     void registerProfile(const QString& path, const Profile& profile);
+
+    /// Register or replace the profile at @p path, stamped with an
+    /// owner tag. Used by loaders (or other partitioned publishers) so
+    /// a later `reloadFromOwner(sameTag, ...)` can replace/remove only
+    /// their own entries without disturbing entries owned by others.
+    ///
+    /// Last-writer-wins on the path itself — if an entry already
+    /// exists with a different owner tag, it is overwritten. Callers
+    /// that want user-claim-respecting semantics (e.g., a daemon
+    /// whose settings-backed profiles yield to user JSON files) must
+    /// check the existing entry's owner BEFORE re-registering.
+    void registerProfile(const QString& path, const Profile& profile, const QString& ownerTag);
 
     /// Remove @p path. Fires `profileChanged(path)` if the path
     /// existed — bound consumers re-resolve and see `std::nullopt`,
@@ -73,17 +91,53 @@ public:
     /// resolved profile (consumer-defined).
     void unregisterProfile(const QString& path);
 
+    /// Replace the subset of the registry owned by @p ownerTag with
+    /// @p profiles. Entries owned by OTHER tags (including the
+    /// empty/direct tag) are preserved untouched — this is the key
+    /// property that prevents a loader rescan from evicting a daemon's
+    /// settings-fanout profiles.
+    ///
+    /// Semantics per rescan:
+    ///   - paths in the old set (owner == @p ownerTag) but not in the
+    ///     new map are removed (user deleted their JSON file).
+    ///   - paths in the new map are (re-)registered with @p ownerTag;
+    ///     if the Profile value differs from the existing entry OR the
+    ///     owner tag differs, a `profileChanged(path)` fires.
+    ///   - if any change occurred, exactly one `profilesReloaded()`
+    ///     fires at the end — consumers listening to the bulk signal
+    ///     only see one event per rescan regardless of file count.
+    ///
+    /// An empty @p ownerTag is rejected (Q_ASSERT) — that would alias
+    /// with the direct-owner path and defeat the partitioning.
+    void reloadFromOwner(const QString& ownerTag, const QHash<QString, Profile>& profiles);
+
+    /// Remove every entry owned by @p ownerTag. Fires
+    /// `profilesReloaded()` if anything was removed.
+    void clearOwner(const QString& ownerTag);
+
     /// Wholesale replace the entire registry contents with @p profiles
-    /// and fire `profilesReloaded()` exactly once — provided the new
-    /// map actually differs from the current one (no-op + no signal
-    /// otherwise). Used by `ProfileLoader` after a directory rescan
-    /// to coalesce many per-path signals into a single reload event.
+    /// regardless of owner tags. Every existing entry is discarded;
+    /// every new entry is registered with the empty/direct owner.
+    /// Fires `profilesReloaded()` exactly once — provided the new
+    /// map actually differs from the current one.
+    ///
+    /// TEST-ONLY semantics: production consumers should use
+    /// `reloadFromOwner` so a bulk replacement by one publisher does
+    /// not evict entries owned by other publishers. Kept in the
+    /// public API so existing test suites and introspection tools
+    /// (that intentionally want a clean slate) still compile.
     void reloadAll(const QHash<QString, Profile>& profiles);
 
     /// Clear the registry. Fires `profilesReloaded()`. Test-only
     /// semantics — production consumers don't typically want to wipe
     /// every registered profile at once.
     void clear();
+
+    /// Current owner tag for @p path, or empty string if the path is
+    /// registered with the direct/default owner. Returns empty string
+    /// if the path is not registered. Intended for tests and
+    /// introspection.
+    QString ownerOf(const QString& path) const;
 
     /// Current path count. Thread-safe — takes the lock to read.
     int profileCount() const;
@@ -111,6 +165,11 @@ private:
 
     mutable std::mutex m_mutex;
     QHash<QString, Profile> m_profiles;
+    /// Owner tag per registered path. Empty string = direct/default
+    /// owner (the `registerProfile(path, profile)` overload). Non-empty
+    /// = loader or other partitioned publisher; subject to replacement
+    /// by `reloadFromOwner(tag, ...)` calls with the same tag.
+    QHash<QString, QString> m_owners;
 };
 
 } // namespace PhosphorAnimation

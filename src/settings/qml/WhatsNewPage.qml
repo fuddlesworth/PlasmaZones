@@ -139,7 +139,7 @@ Kirigami.Dialog {
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.fade"
                 }
 
             }
@@ -149,7 +149,7 @@ Kirigami.Dialog {
 
                 Behavior on y {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.fade"
                     }
 
                 }

@@ -65,7 +65,7 @@ Item {
         // Smooth transition when success banner fades and error slides up
         Behavior on y {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "osd.show"
             }
 
         }

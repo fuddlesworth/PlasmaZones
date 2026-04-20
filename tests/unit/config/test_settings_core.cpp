@@ -17,6 +17,7 @@
 #include <QSignalSpy>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <PhosphorAnimation/Profile.h>
 #include "config/configbackends.h"
 
 #include "../../../src/config/settings.h"
@@ -672,6 +673,136 @@ private Q_SLOTS:
         QCOMPARE(reloaded.showZoneNumbers(), false);
         QCOMPARE(reloaded.autotileEnabled(), true);
         QCOMPARE(reloaded.animationDuration(), 500);
+    }
+
+    // =========================================================================
+    // Animation Profile — PR-344 review follow-up
+    //
+    // The original PR added a Profile JSON-blob storage format but the
+    // tests only covered two fields (duration + sequenceMode). These
+    // tests close the gap: full round-trip of every Profile field,
+    // malformed-blob tolerance, missing-blob behaviour, and per-field
+    // signal discrimination.
+    // =========================================================================
+
+    /// Every Profile field (curve, duration, minDistance, sequenceMode,
+    /// staggerInterval) must round-trip through save → reload with the
+    /// original value intact.
+    void testAnimationProfile_allFieldsRoundTrip()
+    {
+        IsolatedConfigGuard guard;
+        // Curve is stored/round-tripped as its WIRE FORMAT (e.g., a
+        // cubic-bezier is serialised as "x1,y1,x2,y2"), not as the
+        // caller's input string. CurveRegistry::create parses both the
+        // wire format AND friendly names, but the on-disk form is
+        // always the wire string. Use a valid wire-format string here
+        // so the round-trip assertion is meaningful.
+        const QString curveWire = QStringLiteral("0.25,0.75,0.75,0.25");
+        {
+            Settings settings;
+            settings.setAnimationDuration(275);
+            settings.setAnimationEasingCurve(curveWire);
+            settings.setAnimationMinDistance(9);
+            settings.setAnimationSequenceMode(1);
+            settings.setAnimationStaggerInterval(42);
+            settings.save();
+        }
+
+        Settings reloaded;
+        QCOMPARE(reloaded.animationDuration(), 275);
+        QCOMPARE(reloaded.animationEasingCurve(), curveWire);
+        QCOMPARE(reloaded.animationMinDistance(), 9);
+        QCOMPARE(reloaded.animationSequenceMode(), 1);
+        QCOMPARE(reloaded.animationStaggerInterval(), 42);
+    }
+
+    /// A malformed Profile blob on disk must not crash the loader; the
+    /// getters must fall back to library defaults. Pre-PR-344 review:
+    /// no test exercised the malformed path.
+    void testAnimationProfile_malformedBlobFallsBackToDefaults()
+    {
+        IsolatedConfigGuard guard;
+        {
+            auto backend = PlasmaZones::createDefaultConfigBackend();
+            auto animations = backend->group(ConfigDefaults::animationsGroup());
+            animations->writeString(ConfigDefaults::animationProfileKey(),
+                                    QStringLiteral("{definitely not valid json"));
+            animations.reset();
+            backend->sync();
+        }
+
+        Settings settings;
+        // Effective* values kick in — library defaults per Profile.h.
+        QCOMPARE(settings.animationDuration(), qRound(PhosphorAnimation::Profile::DefaultDuration));
+        QCOMPARE(settings.animationMinDistance(), PhosphorAnimation::Profile::DefaultMinDistance);
+        QCOMPARE(settings.animationSequenceMode(), static_cast<int>(PhosphorAnimation::Profile::DefaultSequenceMode));
+        QCOMPARE(settings.animationStaggerInterval(), PhosphorAnimation::Profile::DefaultStaggerInterval);
+    }
+
+    /// An absent Profile blob on disk — the PhosphorConfig schema
+    /// substitutes the PROJECT-wide default built by
+    /// `ConfigDefaults::animationProfile()` (which composes per-field
+    /// defaults like `animationDuration() == 300` into a pre-serialised
+    /// blob). Contrast with the malformed-blob path above, which falls
+    /// through to LIBRARY defaults from `Profile::DefaultDuration`
+    /// because the schema hand-off happens before the JSON parse gate.
+    void testAnimationProfile_missingBlobUsesProjectDefault()
+    {
+        IsolatedConfigGuard guard;
+        // No blob written — schema's animationProfile() default kicks in.
+        Settings settings;
+        QCOMPARE(settings.animationDuration(), ConfigDefaults::animationDuration());
+        QCOMPARE(settings.animationMinDistance(), ConfigDefaults::animationMinDistance());
+    }
+
+    /// Setting the Profile blob to a byte-identical value is a no-op.
+    /// Guards against the signal-storm problem reported in the PR
+    /// review — a slider drag at 30 Hz writing the same value should
+    /// not fire 7 signals per tick.
+    void testAnimationProfile_sameBlobNoSignal()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setAnimationDuration(200);
+        QSignalSpy profileSpy(&settings, &Settings::animationProfileChanged);
+        QSignalSpy durationSpy(&settings, &Settings::animationDurationChanged);
+        QSignalSpy curveSpy(&settings, &Settings::animationEasingCurveChanged);
+        QSignalSpy settingsSpy(&settings, &Settings::settingsChanged);
+
+        settings.setAnimationDuration(200); // same value
+        QCOMPARE(profileSpy.count(), 0);
+        QCOMPARE(durationSpy.count(), 0);
+        QCOMPARE(curveSpy.count(), 0);
+        QCOMPARE(settingsSpy.count(), 0);
+    }
+
+    /// Per-field signal discrimination: changing ONLY duration must
+    /// fire animationDurationChanged but NOT the other four per-field
+    /// signals. Pre-PR-344 review: setAnimationProfile fired all 7
+    /// unconditionally.
+    void testAnimationProfile_perFieldSignalsDiscriminate()
+    {
+        IsolatedConfigGuard guard;
+        Settings settings;
+        settings.setAnimationDuration(200);
+        settings.setAnimationEasingCurve(QStringLiteral("easeOutCubic"));
+        settings.setAnimationMinDistance(5);
+        settings.setAnimationSequenceMode(0);
+        settings.setAnimationStaggerInterval(30);
+
+        QSignalSpy durationSpy(&settings, &Settings::animationDurationChanged);
+        QSignalSpy curveSpy(&settings, &Settings::animationEasingCurveChanged);
+        QSignalSpy minDistSpy(&settings, &Settings::animationMinDistanceChanged);
+        QSignalSpy seqModeSpy(&settings, &Settings::animationSequenceModeChanged);
+        QSignalSpy staggerSpy(&settings, &Settings::animationStaggerIntervalChanged);
+
+        // Change ONLY duration via the per-field setter.
+        settings.setAnimationDuration(400);
+        QCOMPARE(durationSpy.count(), 1);
+        QCOMPARE(curveSpy.count(), 0);
+        QCOMPARE(minDistSpy.count(), 0);
+        QCOMPARE(seqModeSpy.count(), 0);
+        QCOMPARE(staggerSpy.count(), 0);
     }
 };
 

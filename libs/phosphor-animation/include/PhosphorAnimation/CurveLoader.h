@@ -76,20 +76,29 @@ class PHOSPHORANIMATION_EXPORT CurveLoader : public QObject
     Q_OBJECT
 
 public:
-    explicit CurveLoader(QObject* parent = nullptr);
+    /// Construct a curve loader bound to @p registry for its entire
+    /// lifetime. The registry reference is captured up-front (rather
+    /// than per-load-call) so asynchronous watcher-triggered rescans
+    /// always target the same registry the caller set up — a per-call
+    /// registry pointer would let a later `loadFromDirectory` switch
+    /// the sink under a still-pending rescan.
+    explicit CurveLoader(CurveRegistry& registry, QObject* parent = nullptr);
     ~CurveLoader() override;
 
     /// Scan @p directory for `*.json` curve definitions and register
-    /// each into @p registry.
-    int loadFromDirectory(const QString& directory, CurveRegistry& registry, LiveReload liveReload = LiveReload::Off);
+    /// each into the construction-time registry.
+    int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
     /// Scan multiple directories in order.
-    int loadFromDirectories(const QStringList& directories, CurveRegistry& registry,
-                            LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 
     /// Load curves bundled at the library's install-relative
     /// `data/curves/`. Returns zero when no bundled curves ship.
-    int loadLibraryBuiltins(CurveRegistry& registry);
+    /// Accepts an explicit LiveReload policy — callers that want the
+    /// library pack to hot-reload (consumer shipping a curve pack as
+    /// part of a plugin) pass `LiveReload::On`. Defaults to `Off`
+    /// since the immutable library install tree is the common case.
+    int loadLibraryBuiltins(LiveReload liveReload = LiveReload::Off);
 
     /// Manual rescan request (cross-process D-Bus signal → this).
     void requestRescan();

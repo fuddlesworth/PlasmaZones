@@ -5,6 +5,7 @@
 
 #include <PhosphorAnimation/phosphoranimation_export.h>
 
+#include <QtCore/QMetaObject>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
 
@@ -134,6 +135,15 @@ private:
     {
         QPointer<QQuickWindow> window;
         std::unique_ptr<QtQuickClock> clock;
+        /// Connection to the window's `destroyed` signal — lets the
+        /// manager evict this entry eagerly when the window goes away,
+        /// rather than waiting for another `clockFor` call to detect
+        /// the stale QPointer. Without eager eviction, a raw pointer
+        /// value that Qt later recycles for a DIFFERENT window would
+        /// be served the old clock (the "ghost entry from address
+        /// reuse" hazard the class doc flagged as a future sub-commit
+        /// fix).
+        QMetaObject::Connection destroyedConnection;
     };
 
     mutable std::mutex m_mutex;

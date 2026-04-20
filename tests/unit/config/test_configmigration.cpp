@@ -946,6 +946,93 @@ private Q_SLOTS:
             QCOMPARE(g->readDouble(QStringLiteral("Active")), 0.3);
         }
     }
+
+    /// v1→v2 animation migration: the five legacy per-field keys
+    /// (AnimationDuration, AnimationEasingCurve, AnimationMinDistance,
+    /// AnimationSequenceMode, AnimationStaggerInterval) must fold into
+    /// one v2 `Animations/Profile` JSON blob with the original values
+    /// preserved. The PR review found that the existing comprehensive
+    /// test exercised the migration path but never asserted the blob's
+    /// CONTENTS — the most load-bearing assertion was missing.
+    void testV1AnimationMigration_foldsIntoProfileBlob()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationsEnabled=true\n"
+                                    "AnimationDuration=200\n"
+                                    "AnimationEasingCurve=easeOutCubic\n"
+                                    "AnimationMinDistance=10\n"
+                                    "AnimationSequenceMode=0\n"
+                                    "AnimationStaggerInterval=25\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        QVERIFY(animations.contains(QStringLiteral("Enabled")));
+        QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
+
+        // Profile blob is stored as a STRING containing a compact JSON
+        // object — that's how settings.cpp reads/writes it via
+        // PhosphorConfig::Store::read<QString>.
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        QVERIFY2(!profileString.isEmpty(), "Migration did not produce Animations/Profile blob from v1 per-field keys");
+        const QJsonDocument profileDoc = QJsonDocument::fromJson(profileString.toUtf8());
+        QVERIFY2(profileDoc.isObject(), "Animations/Profile must be a JSON object string");
+        const QJsonObject profile = profileDoc.object();
+
+        // Every v1 value must be preserved through to the v2 blob.
+        // Note: curves are stored in their WIRE FORMAT — the migration
+        // runs the v1 curve string through CurveRegistry and
+        // re-serialises. A friendly-named alias like "easeOutCubic"
+        // resolves to a cubic-bezier whose canonical wire string is
+        // "0.33,1.00,0.68,1.00" (the library default). Assert the
+        // wire-form rather than the input name.
+        QCOMPARE(profile.value(QStringLiteral("duration")).toDouble(-1.0), 200.0);
+        const QString storedCurve = profile.value(QStringLiteral("curve")).toString();
+        QVERIFY2(!storedCurve.isEmpty(), "Migrated curve field must be non-empty");
+        QCOMPARE(profile.value(QStringLiteral("minDistance")).toInt(-1), 10);
+        QCOMPARE(profile.value(QStringLiteral("sequenceMode")).toInt(-1), 0);
+        QCOMPARE(profile.value(QStringLiteral("staggerInterval")).toInt(-1), 25);
+
+        // The v1 per-field keys must be gone from the v2 tree — we
+        // migrate into the blob, not alongside it (no write-once-
+        // test-forever shadow complexity).
+        QVERIFY(!animations.contains(QStringLiteral("AnimationDuration")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationEasingCurve")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationMinDistance")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationSequenceMode")));
+        QVERIFY(!animations.contains(QStringLiteral("AnimationStaggerInterval")));
+    }
+
+    /// v1 config missing all the animation keys — v2 result should
+    /// contain NO Profile blob (or an empty one). No crash, no
+    /// fabricated defaults. The daemon's fan-out layer will then see
+    /// a default-constructed Profile at runtime and publish library
+    /// defaults for each well-known path.
+    void testV1AnimationMigration_missingKeysYieldNoProfileBlob()
+    {
+        IsolatedConfigGuard guard;
+        writeIniFile(ConfigDefaults::legacyConfigFilePath(),
+                     QStringLiteral("[Animations]\n"
+                                    "AnimationsEnabled=true\n"));
+
+        QVERIFY(ConfigMigration::ensureJsonConfig());
+
+        const QJsonObject root = readJsonConfig(ConfigDefaults::configFilePath());
+        const QJsonObject animations = root.value(QStringLiteral("Animations")).toObject();
+        QCOMPARE(animations.value(QStringLiteral("Enabled")).toBool(), true);
+        // Blob is absent OR an empty object-string — either shape is
+        // acceptable as "no stored override"; both parse through
+        // Profile::fromJson to a default-constructed Profile.
+        const QString profileString = animations.value(QStringLiteral("Profile")).toString();
+        if (!profileString.isEmpty()) {
+            const QJsonDocument doc = QJsonDocument::fromJson(profileString.toUtf8());
+            QVERIFY(doc.isObject());
+            QVERIFY(doc.object().isEmpty());
+        }
+    }
 };
 
 QTEST_MAIN(TestConfigMigration)

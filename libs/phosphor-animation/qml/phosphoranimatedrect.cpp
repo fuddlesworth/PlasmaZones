@@ -45,6 +45,13 @@ bool PhosphorAnimatedRect::startImpl(const QRectF& from, const QRectF& to, IMoti
     if (!clock) {
         return false;
     }
+    // Check-before-emit — see PhosphorAnimatedReal::startImpl comment.
+    const QRectF prevFrom = m_animatedValue.from();
+    const QRectF prevTo = m_animatedValue.to();
+    const QRectF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
+
     MotionSpec<QRectF> spec;
     spec.profile = profile().value();
     spec.clock = clock;
@@ -57,38 +64,63 @@ bool PhosphorAnimatedRect::startImpl(const QRectF& from, const QRectF& to, IMoti
     };
 
     const bool ok = m_animatedValue.start(from, to, std::move(spec));
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (m_animatedValue.to() != prevTo)
+        Q_EMIT toChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 bool PhosphorAnimatedRect::retarget(const QRectF& to)
 {
+    const QRectF prevFrom = m_animatedValue.from();
+    const QRectF prevTo = m_animatedValue.to();
+    const QRectF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     const bool ok = m_animatedValue.retarget(to);
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (m_animatedValue.to() != prevTo)
+        Q_EMIT toChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 void PhosphorAnimatedRect::cancel()
 {
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.cancel();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedRect::finish()
 {
+    const QRectF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.finish();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedRect::advance()

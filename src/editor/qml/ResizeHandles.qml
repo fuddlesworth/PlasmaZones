@@ -312,8 +312,6 @@ Item {
                     }
                 }
                 onPositionChanged: function(mouse) {
-                    // threshold
-
                     // State 2 = Resizing
                     if (!pressed || resizeHandles.root.operationState !== 2)
                         return ;
@@ -443,6 +441,8 @@ Item {
                     var modifierHeld = (mouse.modifiers & overrideModifier) !== 0;
                     var shouldSnap = hasValidDimensions && (modifierHeld ? !baseSnappingEnabled : baseSnappingEnabled);
                     if (shouldSnap) {
+                        // threshold
+
                         // Convert to relative coordinates for snapping
                         // Guard against division by zero or NaN
                         var relX = (newX >= 0 && isFinite(newX)) ? newX / actualW : 0;
@@ -656,7 +656,7 @@ Item {
             // Smooth fade in/out
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "cursor.drag"
                 }
 
             }
@@ -664,14 +664,14 @@ Item {
             // Smooth hover transitions
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "cursor.drag"
                 }
 
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "cursor.drag"
                 }
 
             }

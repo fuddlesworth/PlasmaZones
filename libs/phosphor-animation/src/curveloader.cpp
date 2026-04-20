@@ -38,7 +38,12 @@ public:
         std::shared_ptr<const Curve> curve;
     };
 
-    CurveRegistry* registry = nullptr;
+    explicit Sink(CurveRegistry& reg)
+        : registry(&reg)
+    {
+    }
+
+    CurveRegistry* registry; ///< pinned at ctor — no per-call mutation
     QHash<QString, CurveLoader::Entry> entries; ///< name → entry (for entries() introspection)
 
     std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
@@ -156,9 +161,9 @@ public:
     }
 };
 
-CurveLoader::CurveLoader(QObject* parent)
+CurveLoader::CurveLoader(CurveRegistry& registry, QObject* parent)
     : QObject(parent)
-    , m_sink(std::make_unique<Sink>())
+    , m_sink(std::make_unique<Sink>(registry))
     , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(m_sink.get()))
 {
     connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this, &CurveLoader::curvesChanged);
@@ -166,19 +171,17 @@ CurveLoader::CurveLoader(QObject* parent)
 
 CurveLoader::~CurveLoader() = default;
 
-int CurveLoader::loadFromDirectory(const QString& directory, CurveRegistry& registry, LiveReload liveReload)
+int CurveLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
 {
-    m_sink->registry = &registry;
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
-int CurveLoader::loadFromDirectories(const QStringList& directories, CurveRegistry& registry, LiveReload liveReload)
+int CurveLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
 {
-    m_sink->registry = &registry;
     return m_loader->loadFromDirectories(directories, liveReload);
 }
 
-int CurveLoader::loadLibraryBuiltins(CurveRegistry& registry)
+int CurveLoader::loadLibraryBuiltins(LiveReload liveReload)
 {
     // Discover the library's own bundled pack via QStandardPaths against
     // the phosphor-animation org/app. Today the library ships no built-in
@@ -194,7 +197,7 @@ int CurveLoader::loadLibraryBuiltins(CurveRegistry& registry)
     if (dirs.isEmpty()) {
         return 0;
     }
-    return loadFromDirectories(dirs, registry, LiveReload::Off);
+    return loadFromDirectories(dirs, liveReload);
 }
 
 void CurveLoader::requestRescan()

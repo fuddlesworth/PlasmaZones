@@ -179,27 +179,17 @@ Daemon::Daemon(QObject* parent)
     setupAnimationProfiles();
 }
 
-// Well-known profile paths PlasmaZones publishes from the single
-// settings-backed Profile. Kept as a file-scope array so `publishActive…`
-// iterates one source of truth; adding a new publication target is
-// a one-line entry here, and the daemon code stays the same.
+// Paths that follow the user's `Settings.animationProfile` slider
+// directly. Every other PhosphorAnimation path is served by the
+// per-path defaults in `ConfigDefaults::animationProfilesByPath()`
+// (and can still be user-overridden via JSON under
+// `~/.local/share/plasmazones/profiles/`).
 //
-// Paths correspond to `PhosphorAnimation::ProfilePaths::*` references
-// exposed to QML. User-authored JSON files at the same path names
-// override these via the profile loader (see publishActiveAnimationProfile
-// for the user-wins semantics).
-const QString* kWellKnownProfilePaths[] = {
+// Keeping this list in a file-scope array lets us add another
+// settings-backed path (e.g., a second slider for snap-specific
+// feel) without touching the publish loop.
+const QString* kSettingsDrivenProfilePaths[] = {
     &PhosphorAnimation::ProfilePaths::Global,
-    &PhosphorAnimation::ProfilePaths::Zone,
-    &PhosphorAnimation::ProfilePaths::ZoneHighlight,
-    &PhosphorAnimation::ProfilePaths::ZoneSnapIn,
-    &PhosphorAnimation::ProfilePaths::ZoneSnapOut,
-    &PhosphorAnimation::ProfilePaths::ZoneSnapResize,
-    &PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchIn,
-    &PhosphorAnimation::ProfilePaths::ZoneLayoutSwitchOut,
-    &PhosphorAnimation::ProfilePaths::Osd,
-    &PhosphorAnimation::ProfilePaths::OsdShow,
-    &PhosphorAnimation::ProfilePaths::OsdHide,
 };
 
 void Daemon::setupAnimationProfiles()
@@ -244,56 +234,69 @@ void Daemon::setupAnimationProfiles()
     // visible for user-authored overrides. Today the library ships no
     // bundled curves — the call is a no-op that stays wired for future
     // curve-pack additions without a code change here.
-    m_curveLoader = std::make_unique<CurveLoader>(nullptr);
-    m_curveLoader->loadLibraryBuiltins(CurveRegistry::instance());
-    m_curveLoader->loadFromDirectories(curveDirs, CurveRegistry::instance(), LiveReload::On);
+    //
+    // Registry reference is captured at loader construction — this
+    // prevents any later async rescan from landing on a different
+    // registry than the one the daemon initialized against.
+    m_curveLoader = std::make_unique<CurveLoader>(CurveRegistry::instance(), nullptr);
+    m_curveLoader->loadLibraryBuiltins();
+    m_curveLoader->loadFromDirectories(curveDirs, LiveReload::On);
 
-    m_profileLoader = std::make_unique<ProfileLoader>(nullptr);
-    m_profileLoader->loadLibraryBuiltins(PhosphorProfileRegistry::instance());
-    m_profileLoader->loadFromDirectories(profileDirs, PhosphorProfileRegistry::instance(), LiveReload::On);
+    // ProfileLoader is bound to PhosphorProfileRegistry with a
+    // PlasmaZones-specific owner tag. Entries it registers are tagged
+    // "plasmazones-user-profiles" in the registry's partitioned-ownership
+    // map, so a rescan replaces ONLY the user's JSON-backed profiles;
+    // the daemon's settings-fanned profiles registered below via
+    // `publishActiveAnimationProfile` are owned by the empty/direct
+    // tag and survive untouched.
+    m_profileLoader = std::make_unique<ProfileLoader>(PhosphorProfileRegistry::instance(),
+                                                      QStringLiteral("plasmazones-user-profiles"), nullptr);
+    m_profileLoader->loadLibraryBuiltins();
+    m_profileLoader->loadFromDirectories(profileDirs, LiveReload::On);
 
-    // Publish the settings-backed Profile AFTER the profile loader has
-    // registered any user-authored files. publishActiveAnimationProfile
-    // respects user claims (see its doc), so this ordering gives user
-    // files consistent precedence at startup.
+    // Connect BEFORE publishing so any signal Settings fires during
+    // construction/load (or any signal the ProfileLoader fires during
+    // its own initial scan) is not lost. The registry's value-changed
+    // guard makes the subsequent publishActiveAnimationProfile a no-op
+    // if the signal-driven path already published the same values.
     //
     // Re-publish on:
     //   - Settings edits (slider drag, per-field setter) — the aggregate
     //     animationProfileChanged signal fires.
     //   - ProfileLoader rescans — user added/removed a JSON file, which
     //     flips the hasProfile() check for some paths.
-    publishActiveAnimationProfile();
     connect(m_settings.get(), &Settings::animationProfileChanged, this, [this]() {
         publishActiveAnimationProfile();
     });
     connect(m_profileLoader.get(), &ProfileLoader::profilesChanged, this, [this]() {
         publishActiveAnimationProfile();
     });
+
+    // Initial publish AFTER connections are wired. Partitioned-ownership
+    // in the registry (see PhosphorProfileRegistry::reloadFromOwner)
+    // ensures the ProfileLoader's user-files entries are not wiped by
+    // this direct-owner publish, and vice versa — the two publishers
+    // live in disjoint path subsets by construction.
+    publishActiveAnimationProfile();
 }
 
 void Daemon::publishActiveAnimationProfile()
 {
     using namespace PhosphorAnimation;
 
-    // PlasmaZones currently exposes ONE settings-backed animation Profile
-    // (duration / curve / minDistance / sequenceMode / stagger). Fan it
-    // out under every well-known shell path that conceptually maps to
-    // "the user's animation feel" — zone highlights, OSD show/hide,
-    // snap enter, layout switch.
+    // Publish every daemon-owned profile path. Two sources:
+    //   - Settings.animationProfile drives `Global` (the user-visible
+    //     "animation feel" slider).
+    //   - Each entry in `kLibraryDefaultProfiles` drives its path with
+    //     a fixed library default, preserving the pre-PR-344 per-site
+    //     intent (OutBack overshoot on toggles + badges, slow linear
+    //     tint on needs-save, etc.).
     //
-    // User-wins semantics: if the user has dropped a JSON file under
-    // `plasmazones/profiles/` that registers one of our well-known
-    // paths, the profile loader's reloadAll populated it and the
-    // user's tuning is authoritative. We skip those paths here. On
-    // file-delete, the loader's next reloadAll removes the user
-    // entry and the profilesChanged hookup re-runs this function
-    // so the gap gets filled with the settings profile.
-    //
-    // We consult the ProfileLoader's tracked entries (not the
-    // registry's hasProfile) because the registry is the shared
-    // output state — a previous publish from THIS function would
-    // also show up as hasProfile==true, masking the "no user
-    // claim" case.
+    // User-wins: if the ProfileLoader has a user-authored JSON file at
+    // the same path, we skip it here — their owner-tagged entry in the
+    // registry beats the direct publish. On JSON delete, the loader
+    // emits profilesChanged, this function re-runs, and the path gets
+    // the library/settings default again.
     QSet<QString> userClaimedPaths;
     if (m_profileLoader) {
         for (const auto& e : m_profileLoader->entries()) {
@@ -301,16 +304,27 @@ void Daemon::publishActiveAnimationProfile()
         }
     }
 
-    // PhosphorProfileRegistry::registerProfile has an equality guard —
-    // iterating a static list on every settings edit is cheap (no-op
-    // re-registrations skip the signal).
-    const Profile active = m_settings->animationProfile();
     auto& reg = PhosphorProfileRegistry::instance();
-    for (const QString* path : kWellKnownProfilePaths) {
+
+    // Settings-driven paths — Global (and any aliases we add later).
+    const Profile settingsProfile = m_settings->animationProfile();
+    for (const QString* path : kSettingsDrivenProfilePaths) {
         if (userClaimedPaths.contains(*path)) {
             continue;
         }
-        reg.registerProfile(*path, active);
+        reg.registerProfile(*path, settingsProfile);
+    }
+
+    // Per-path defaults from the shell's config layer (NOT hardcoded
+    // here — the daemon is the wiring, not the policy). `registerProfile`
+    // has an equality guard so re-publishing identical values on every
+    // settingsChanged signal is a cheap no-op on the hot path.
+    const QHash<QString, Profile> pathDefaults = ConfigDefaults::animationProfilesByPath();
+    for (auto it = pathDefaults.constBegin(); it != pathDefaults.constEnd(); ++it) {
+        if (userClaimedPaths.contains(it.key())) {
+            continue;
+        }
+        reg.registerProfile(it.key(), it.value());
     }
 }
 

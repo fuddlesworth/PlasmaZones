@@ -177,7 +177,7 @@ Item {
 
                         Behavior on rotation {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "widget.hover"
                             }
 
                         }
@@ -273,7 +273,7 @@ Item {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
@@ -282,7 +282,7 @@ Item {
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }
@@ -295,7 +295,7 @@ Item {
 
         Behavior on y {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }

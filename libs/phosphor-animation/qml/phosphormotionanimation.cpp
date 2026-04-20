@@ -30,7 +30,23 @@ PhosphorMotionAnimation::PhosphorMotionAnimation(QObject* parent)
     // raw time ratio — we then apply our Phase-3 Curve inside
     // `interpolated()`. Without this override, every PhosphorCurve
     // would be *double-eased* (Qt's OutInQuad composed with ours).
-    setEasingCurve(QEasingCurve(QEasingCurve::Linear));
+    //
+    // Call through to the base setter here — our override below would
+    // accept Linear anyway, but the direct call avoids a first-frame
+    // log noise during construction.
+    QVariantAnimation::setEasingCurve(QEasingCurve(QEasingCurve::Linear));
+}
+
+void PhosphorMotionAnimation::setEasingCurve(const QEasingCurve& curve)
+{
+    if (curve.type() != QEasingCurve::Linear) {
+        qCWarning(lcMotion).nospace()
+            << "PhosphorMotionAnimation::setEasingCurve(" << curve.type()
+            << ") ignored — this class applies its own profile-supplied curve in interpolated(); "
+               "setting a non-Linear Qt easing would double-ease. Use `profile:` to change the curve.";
+        return;
+    }
+    QVariantAnimation::setEasingCurve(curve);
 }
 
 PhosphorMotionAnimation::~PhosphorMotionAnimation()
@@ -166,6 +182,17 @@ void PhosphorMotionAnimation::resolveFromVariant(const QVariant& p)
 
 void PhosphorMotionAnimation::rebindToRegistryPath(const QString& path)
 {
+    // Empty path: a common result of an unresolved QML binding
+    // (`profile: foo` where `foo` hasn't evaluated yet). Subscribing
+    // on the empty-string registry key would otherwise install a
+    // live-rebind hook that fires for every registry event with an
+    // empty `changedPath` — noise at best, silent cross-wiring at
+    // worst. Apply defaults and bail.
+    if (path.isEmpty()) {
+        applyResolvedProfile(Profile{});
+        return;
+    }
+
     m_boundPath = path;
 
     // Resolve now (may return nullopt if the path isn't registered yet

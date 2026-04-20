@@ -24,7 +24,14 @@ Q_LOGGING_CATEGORY(lcProfileLoader, "phosphoranimation.profileloader")
 class ProfileLoader::Sink : public PhosphorJsonLoader::IDirectoryLoaderSink
 {
 public:
-    PhosphorProfileRegistry* registry = nullptr;
+    Sink(PhosphorProfileRegistry& reg, QString owner)
+        : registry(&reg)
+        , ownerTag(std::move(owner))
+    {
+    }
+
+    PhosphorProfileRegistry* registry; ///< pinned at ctor
+    QString ownerTag; ///< stable per-instance tag for partitioned reload
     QHash<QString, ProfileLoader::Entry> entries; ///< path → entry
 
     std::optional<PhosphorJsonLoader::ParsedEntry> parseFile(const QString& filePath) override
@@ -69,16 +76,16 @@ public:
     void commitBatch(const QStringList& removedKeys,
                      const QList<PhosphorJsonLoader::ParsedEntry>& currentEntries) override
     {
-        if (!registry) {
-            qCWarning(lcProfileLoader) << "commitBatch: registry not set";
-            return;
-        }
+        Q_ASSERT(registry);
 
         // Build the full replacement map from the current-entries list
         // (the loader already applied user-wins-collision, so this
         // map is the authoritative post-scan shape). Missing entries
-        // correspond to the removedKeys list — reloadAll handles both
-        // additions and removals in one atomic swap.
+        // correspond to the removedKeys list — reloadFromOwner handles
+        // both additions and removals in one atomic swap, BUT crucially
+        // leaves entries owned by other sources (the daemon's
+        // settings-fanned profiles, another loader, etc.) untouched.
+        // Using reloadAll here would wipe those on every rescan.
         QHash<QString, Profile> map;
         map.reserve(currentEntries.size());
         for (const auto& p : currentEntries) {
@@ -90,10 +97,12 @@ public:
             map.insert(p.key, *profile);
         }
 
-        // Single reloadAll → one profilesReloaded signal regardless of
-        // how many files changed (decision W: coalesce multiple filesystem
-        // events into one consumer-visible batch).
-        registry->reloadAll(map);
+        // Single reloadFromOwner → one profilesReloaded signal regardless
+        // of how many files changed (decision W: coalesce multiple
+        // filesystem events into one consumer-visible batch). The
+        // partitioning ensures daemon-direct entries at other paths
+        // survive this rescan.
+        registry->reloadFromOwner(ownerTag, map);
 
         // Mirror the loader's tracked set in our own Entry map for
         // entries() introspection.
@@ -110,31 +119,47 @@ public:
     }
 };
 
-ProfileLoader::ProfileLoader(QObject* parent)
+namespace {
+/// Generate a unique-per-instance owner tag when the caller didn't
+/// specify one. The `%p` formatter yields a stable identifier for the
+/// process lifetime — enough to partition the registry without
+/// requiring the caller to invent a name.
+QString defaultOwnerTag(const void* self)
+{
+    return QStringLiteral("profileloader-0x%1").arg(reinterpret_cast<quintptr>(self), 0, 16);
+}
+} // namespace
+
+ProfileLoader::ProfileLoader(PhosphorProfileRegistry& registry, const QString& ownerTag, QObject* parent)
     : QObject(parent)
-    , m_sink(std::make_unique<Sink>())
+    , m_sink(std::make_unique<Sink>(registry, ownerTag.isEmpty() ? defaultOwnerTag(this) : ownerTag))
     , m_loader(std::make_unique<PhosphorJsonLoader::DirectoryLoader>(m_sink.get()))
 {
     connect(m_loader.get(), &PhosphorJsonLoader::DirectoryLoader::entriesChanged, this,
             &ProfileLoader::profilesChanged);
 }
 
-ProfileLoader::~ProfileLoader() = default;
-
-int ProfileLoader::loadFromDirectory(const QString& directory, PhosphorProfileRegistry& registry, LiveReload liveReload)
+ProfileLoader::~ProfileLoader()
 {
-    m_sink->registry = &registry;
+    // Clean up any registry entries we own so a process hosting multiple
+    // sequential loaders (tests, especially) doesn't accumulate ghosts
+    // from destroyed loaders.
+    if (m_sink && m_sink->registry) {
+        m_sink->registry->clearOwner(m_sink->ownerTag);
+    }
+}
+
+int ProfileLoader::loadFromDirectory(const QString& directory, LiveReload liveReload)
+{
     return m_loader->loadFromDirectory(directory, liveReload);
 }
 
-int ProfileLoader::loadFromDirectories(const QStringList& directories, PhosphorProfileRegistry& registry,
-                                       LiveReload liveReload)
+int ProfileLoader::loadFromDirectories(const QStringList& directories, LiveReload liveReload)
 {
-    m_sink->registry = &registry;
     return m_loader->loadFromDirectories(directories, liveReload);
 }
 
-int ProfileLoader::loadLibraryBuiltins(PhosphorProfileRegistry& registry)
+int ProfileLoader::loadLibraryBuiltins(LiveReload liveReload)
 {
     const QStringList dirs =
         QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, QStringLiteral("phosphor-animation/profiles"),
@@ -142,7 +167,12 @@ int ProfileLoader::loadLibraryBuiltins(PhosphorProfileRegistry& registry)
     if (dirs.isEmpty()) {
         return 0;
     }
-    return loadFromDirectories(dirs, registry, LiveReload::Off);
+    return loadFromDirectories(dirs, liveReload);
+}
+
+QString ProfileLoader::ownerTag() const
+{
+    return m_sink ? m_sink->ownerTag : QString();
 }
 
 void ProfileLoader::requestRescan()

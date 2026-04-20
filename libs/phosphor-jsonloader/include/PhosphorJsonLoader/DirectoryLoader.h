@@ -127,8 +127,17 @@ public:
     /// Count of entries currently tracked by the loader.
     int registeredCount() const;
 
-    /// Current entries (post last rescan). Intended for tests + debug.
+    /// Current entries (post last rescan), sorted by `key` for
+    /// deterministic order across platforms and Qt versions. Intended
+    /// for tests + debug.
     QList<Entry> entries() const;
+
+    /// Per-file size cap. Files larger than this are skipped with a
+    /// warning — guards the GUI thread against a pathological user JSON
+    /// (or a mis-mounted filesystem returning runaway sizes). 1 MiB is
+    /// far above any legitimate curve / profile / layout schema in this
+    /// library's ecosystem.
+    static constexpr qint64 kMaxFileBytes = 1 * 1024 * 1024;
 
 Q_SIGNALS:
     /**
@@ -148,12 +157,19 @@ private:
     void installWatcherIfNeeded();
     void attachWatcherForDir(const QString& directory);
     void onWatchedPathChanged();
+    void syncFileWatches();
 
     IDirectoryLoaderSink* m_sink = nullptr;
     QStringList m_directories; ///< scan order (earlier = lower priority)
     QHash<QString, Entry> m_entries; ///< key → tracked entry
     QFileSystemWatcher* m_watcher = nullptr;
     QSet<QString> m_watchedParents; ///< parents watched for dir-creation
+    /// Individual files currently in the watcher's file set. Needed
+    /// because editors that write in place (no atomic rename) do NOT
+    /// fire `directoryChanged`; only `fileChanged` catches them. Must
+    /// be re-armed every rescan — QFileSystemWatcher drops entries on
+    /// atomic-rename saves (most editors).
+    QSet<QString> m_watchedFiles;
     QTimer m_debounceTimer;
     bool m_liveReloadEnabled = false;
 };

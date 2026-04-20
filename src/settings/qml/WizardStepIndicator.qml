@@ -57,7 +57,7 @@ RowLayout {
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.progress"
                     }
 
                 }
@@ -71,7 +71,7 @@ RowLayout {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.progress"
                     }
 
                 }
@@ -89,7 +89,7 @@ RowLayout {
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.progress"
                     }
 
                 }

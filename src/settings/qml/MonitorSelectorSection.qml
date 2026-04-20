@@ -167,14 +167,14 @@ ColumnLayout {
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }
 
                 Behavior on border.color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.hover"
                     }
 
                 }
@@ -272,14 +272,14 @@ ColumnLayout {
 
                     Behavior on color {
                         PhosphorMotionAnimation {
-                            profile: "global"
+                            profile: "widget.hover"
                         }
 
                     }
 
                     Behavior on border.color {
                         PhosphorMotionAnimation {
-                            profile: "global"
+                            profile: "widget.hover"
                         }
 
                     }

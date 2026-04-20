@@ -59,7 +59,12 @@ Item {
     property bool fontItalic: false
     property bool fontUnderline: false
     property bool fontStrikeout: false
-    // Animation (defaults track Kirigami platform durations)
+    // DEPRECATED — vestigial Kirigami-duration passthroughs. Pre-PR-344
+    // QML animations referenced these to override Behavior durations
+    // per-instance; post-migration, durations come from the profile
+    // registry (see `PhosphorAnimation::ProfilePaths::Widget*`). Kept as
+    // no-op accepts so existing consumer QML (`AlgorithmPreview.qml`,
+    // `GeneralPage.qml`) does not fail to parse.
     property int animationDuration: Kirigami.Units.longDuration
     property int shortAnimationDuration: Kirigami.Units.shortDuration
     // Label
@@ -137,14 +142,14 @@ Item {
 
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }
@@ -200,21 +205,21 @@ Item {
 
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
 
             Behavior on border.width {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
@@ -239,14 +244,14 @@ Item {
 
             Behavior on width {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
@@ -281,21 +286,21 @@ Item {
 
             Behavior on width {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.badge"
                 }
 
             }
 
             Behavior on height {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.badge"
                 }
 
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.badge"
                 }
 
             }
@@ -384,14 +389,14 @@ Item {
 
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.fade"
                 }
 
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.fade"
                 }
 
             }

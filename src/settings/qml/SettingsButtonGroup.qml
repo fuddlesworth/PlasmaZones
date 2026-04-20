@@ -72,7 +72,7 @@ Row {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.press"
                     }
 
                 }
@@ -95,14 +95,14 @@ Row {
 
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.press"
                 }
 
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.press"
                 }
 
             }

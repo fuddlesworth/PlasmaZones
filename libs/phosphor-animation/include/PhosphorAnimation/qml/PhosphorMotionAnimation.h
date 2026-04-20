@@ -117,6 +117,23 @@ public:
     /// The new duration takes effect on the next `start()`.
     int duration() const override;
 
+    /// Shadow QVariantAnimation::setEasingCurve to REJECT anything
+    /// other than Linear. Phase-3 curves are applied by `interpolated()`
+    /// directly; Qt's easing must stay at Linear to avoid double-easing
+    /// (Qt's curve composed with ours). A consumer that writes
+    /// `easingCurve: Easing.OutQuad` on a PhosphorMotionAnimation
+    /// instance would otherwise silently re-introduce the double-easing
+    /// bug — this wrapper logs and ignores non-Linear writes.
+    ///
+    /// Note: `QVariantAnimation::setEasingCurve` is NOT virtual, so
+    /// this is a name-hiding override (static dispatch only). Callers
+    /// that go through the base class's pointer or the Q_PROPERTY
+    /// system may still bypass this guard; for those paths we catch
+    /// drift by re-asserting Linear in `interpolated()` paths via
+    /// the cached profile curve. Direct C++ `setEasingCurve` calls —
+    /// the common mistake — are caught here.
+    void setEasingCurve(const QEasingCurve& curve);
+
 Q_SIGNALS:
     void profileChanged();
 

@@ -27,17 +27,33 @@ std::optional<Profile> PhosphorProfileRegistry::resolve(const QString& path) con
 
 void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile)
 {
+    registerProfile(path, profile, QString());
+}
+
+void PhosphorProfileRegistry::registerProfile(const QString& path, const Profile& profile, const QString& ownerTag)
+{
     // Only emit when the stored value actually changes. Without this
     // guard, a consumer that re-registers on every settings tick (the
     // daemon's publishActiveAnimationProfile fan-out) would produce a
     // storm of profileChanged signals for every bound animation, each
     // forcing a re-resolve even when nothing semantically changed.
+    //
+    // The owner tag is ALSO compared — re-registering a byte-identical
+    // Profile under a different owner is a semantic change (it moves
+    // the entry in and out of a loader's replace set on later
+    // `reloadFromOwner` calls), so consumers need to see that.
     bool changed = false;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         auto it = m_profiles.find(path);
-        if (it == m_profiles.end() || !(*it == profile)) {
+        const QString existingOwner = m_owners.value(path);
+        if (it == m_profiles.end() || !(*it == profile) || existingOwner != ownerTag) {
             m_profiles.insert(path, profile);
+            if (ownerTag.isEmpty()) {
+                m_owners.remove(path);
+            } else {
+                m_owners.insert(path, ownerTag);
+            }
             changed = true;
         }
     }
@@ -56,23 +72,110 @@ void PhosphorProfileRegistry::unregisterProfile(const QString& path)
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         existed = (m_profiles.remove(path) > 0);
+        m_owners.remove(path);
     }
     if (existed) {
         Q_EMIT profileChanged(path);
     }
 }
 
+void PhosphorProfileRegistry::reloadFromOwner(const QString& ownerTag, const QHash<QString, Profile>& profiles)
+{
+    // An empty owner tag aliases with the direct-owner path and would
+    // let a loader silently wipe daemon-published entries on rescan —
+    // the exact bug this method exists to prevent. Fail loud so callers
+    // can't accidentally bypass the partitioning.
+    Q_ASSERT_X(!ownerTag.isEmpty(), "PhosphorProfileRegistry::reloadFromOwner",
+               "ownerTag must be non-empty; pass a stable per-publisher identifier");
+
+    // Two-phase: compute the diff under the lock (so the snapshot is
+    // consistent), then emit signals outside the lock.
+    QStringList pathsRemoved;
+    QStringList pathsChanged;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Paths previously owned by this tag but NOT in the new map —
+        // the user deleted their JSON file, so we must unregister.
+        for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
+            if (it.value() == ownerTag && !profiles.contains(it.key())) {
+                pathsRemoved.append(it.key());
+            }
+        }
+        for (const QString& path : std::as_const(pathsRemoved)) {
+            m_profiles.remove(path);
+            m_owners.remove(path);
+        }
+
+        // Paths in the new map — insert / replace, claiming ownership.
+        for (auto it = profiles.constBegin(); it != profiles.constEnd(); ++it) {
+            const QString& path = it.key();
+            const Profile& p = it.value();
+            auto existing = m_profiles.find(path);
+            const QString existingOwner = m_owners.value(path);
+            if (existing == m_profiles.end() || !(*existing == p) || existingOwner != ownerTag) {
+                m_profiles.insert(path, p);
+                m_owners.insert(path, ownerTag);
+                pathsChanged.append(path);
+            }
+        }
+    }
+
+    if (pathsRemoved.isEmpty() && pathsChanged.isEmpty()) {
+        return;
+    }
+
+    // Per-path signals first so consumers bound to a specific path
+    // see the targeted change before the bulk profilesReloaded.
+    for (const QString& path : std::as_const(pathsRemoved)) {
+        Q_EMIT profileChanged(path);
+    }
+    for (const QString& path : std::as_const(pathsChanged)) {
+        Q_EMIT profileChanged(path);
+    }
+    Q_EMIT profilesReloaded();
+}
+
+void PhosphorProfileRegistry::clearOwner(const QString& ownerTag)
+{
+    Q_ASSERT_X(!ownerTag.isEmpty(), "PhosphorProfileRegistry::clearOwner",
+               "ownerTag must be non-empty; use clear() for the test-only wholesale wipe");
+
+    QStringList removed;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (auto it = m_owners.constBegin(); it != m_owners.constEnd(); ++it) {
+            if (it.value() == ownerTag) {
+                removed.append(it.key());
+            }
+        }
+        for (const QString& path : std::as_const(removed)) {
+            m_profiles.remove(path);
+            m_owners.remove(path);
+        }
+    }
+    if (removed.isEmpty()) {
+        return;
+    }
+    for (const QString& path : std::as_const(removed)) {
+        Q_EMIT profileChanged(path);
+    }
+    Q_EMIT profilesReloaded();
+}
+
 void PhosphorProfileRegistry::reloadAll(const QHash<QString, Profile>& profiles)
 {
     // Same value-changed guard as registerProfile — avoid a spurious
-    // profilesReloaded emit when the loader rescans and finds the
-    // on-disk set byte-identical to what's already registered.
+    // profilesReloaded emit when a caller replaces the whole set with
+    // the byte-identical current content. Owners are all reset to the
+    // direct/empty tag — this is intentional "wipe + replace" semantics.
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_profiles == profiles) {
+        if (m_profiles == profiles && m_owners.isEmpty()) {
             return;
         }
         m_profiles = profiles;
+        m_owners.clear();
     }
     Q_EMIT profilesReloaded();
 }
@@ -82,8 +185,15 @@ void PhosphorProfileRegistry::clear()
     {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_profiles.clear();
+        m_owners.clear();
     }
     Q_EMIT profilesReloaded();
+}
+
+QString PhosphorProfileRegistry::ownerOf(const QString& path) const
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    return m_owners.value(path);
 }
 
 int PhosphorProfileRegistry::profileCount() const

@@ -20,10 +20,16 @@ PhosphorAnimatedColor::PhosphorAnimatedColor(QObject* parent)
 
 PhosphorAnimatedColor::~PhosphorAnimatedColor() = default;
 
-// Dispatch accessor reading from whichever space is active — both
-// AnimatedValue instances share endpoint / state on a best-effort
-// basis (writes go to one, the other is dormant). The active-space
-// getter keeps `value()` meaningful across space flips while idle.
+// Dispatch accessor reading from whichever space is active. NOTE: the
+// two AnimatedValue<QColor> instances are INDEPENDENT — writes to one
+// do not propagate to the other. Flipping `colorSpace` while idle
+// therefore yields the target-space instance's stale (or default-
+// constructed) `from/to/value` — NOT a translation of the source-space
+// state. `setColorSpace` refuses the flip mid-animation to avoid
+// visible chromatic-path jumps; callers who want continuity across
+// flips must either issue a fresh `start(currentValue, currentValue)`
+// on the new space after the flip, or live with the default-
+// constructed initial state in the newly-active space.
 QColor PhosphorAnimatedColor::from() const
 {
     return m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.from() : m_animatedValueLinear.from();
@@ -78,10 +84,15 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
     if (!clock) {
         return false;
     }
-    // Route through whichever space is active; emit our property-
-    // change signals from the spec callbacks. Spec is shape-identical
-    // across both color-space branches — build once, move into the
-    // start() call on the active AnimatedValue<T>.
+    // Check-before-emit via the dispatch accessors, so the compare
+    // operates on whichever AnimatedValue<QColor> is active. Mirrors
+    // PhosphorAnimatedReal::startImpl.
+    const QColor prevFrom = this->from();
+    const QColor prevTo = this->to();
+    const QColor prevValue = this->value();
+    const bool prevAnimating = isAnimating();
+    const bool prevComplete = isComplete();
+
     MotionSpec<QColor> spec;
     spec.profile = profile().value();
     spec.clock = clock;
@@ -96,47 +107,72 @@ bool PhosphorAnimatedColor::startImpl(const QColor& from, const QColor& to, IMot
     const bool ok = (m_activeSpace == ColorSpace::OkLab) ? m_animatedValueOkLab.start(from, to, std::move(spec))
                                                          : m_animatedValueLinear.start(from, to, std::move(spec));
 
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (this->from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (this->to() != prevTo)
+        Q_EMIT toChanged();
+    if (this->value() != prevValue)
+        Q_EMIT valueChanged();
+    if (isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 bool PhosphorAnimatedColor::retarget(const QColor& to)
 {
+    const QColor prevFrom = this->from();
+    const QColor prevTo = this->to();
+    const QColor prevValue = this->value();
+    const bool prevAnimating = isAnimating();
+    const bool prevComplete = isComplete();
     const bool ok =
         m_activeSpace == ColorSpace::OkLab ? m_animatedValueOkLab.retarget(to) : m_animatedValueLinear.retarget(to);
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (this->from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (this->to() != prevTo)
+        Q_EMIT toChanged();
+    if (this->value() != prevValue)
+        Q_EMIT valueChanged();
+    if (isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 void PhosphorAnimatedColor::cancel()
 {
+    const bool prevAnimating = isAnimating();
+    const bool prevComplete = isComplete();
     if (m_activeSpace == ColorSpace::OkLab) {
         m_animatedValueOkLab.cancel();
     } else {
         m_animatedValueLinear.cancel();
     }
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedColor::finish()
 {
+    const QColor prevValue = this->value();
+    const bool prevAnimating = isAnimating();
+    const bool prevComplete = isComplete();
     if (m_activeSpace == ColorSpace::OkLab) {
         m_animatedValueOkLab.finish();
     } else {
         m_animatedValueLinear.finish();
     }
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (this->value() != prevValue)
+        Q_EMIT valueChanged();
+    if (isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedColor::advance()

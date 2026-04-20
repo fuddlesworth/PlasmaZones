@@ -62,7 +62,7 @@ ColumnLayout {
 
                 Behavior on rotation {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.accordion"
                     }
 
                 }
@@ -186,7 +186,7 @@ ColumnLayout {
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.accordion"
                 }
 
             }
@@ -195,7 +195,7 @@ ColumnLayout {
 
         Behavior on implicitHeight {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.accordion"
             }
 
         }

@@ -61,21 +61,21 @@ AbstractButton {
 
         Behavior on border.width {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.press"
             }
 
         }
 
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.press"
             }
 
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.press"
             }
 
         }

@@ -35,23 +35,11 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
 
     if (auto it = m_entries.find(window); it != m_entries.end()) {
         // Stale-window check: the raw pointer matches a map key but
-        // the QPointer inside the entry has gone null (window was
-        // destroyed but the map entry wasn't evicted — the lazy
-        // teardown path). Evict and fall through to the construction
-        // branch, which will see the same (now stale) pointer and
-        // build a fresh QtQuickClock bound to it. The fresh clock's
-        // internal QPointer also tracks the stale window, so every
-        // subsequent `now()` / `requestFrame()` lands on the null
-        // branch inside the clock — safe but pointless. Real fix
-        // (not here): callers shouldn't route animations to a
-        // destroyed window. The manager's job is to not crash, not
-        // to resurrect the window.
-        //
-        // Evicting keeps the map bounded under address-reuse: if the
-        // same QQuickWindow* value is later reused for a *new* window
-        // (Qt can and does recycle addresses), a fresh lookup gets a
-        // fresh clock for the new window rather than the ghost of
-        // the old one.
+        // the QPointer inside the entry has gone null. With eager
+        // `destroyed`-signal eviction (below) this should be rare,
+        // but we still handle it defensively: the destroyed signal
+        // can race with a direct teardown where Qt tears down the
+        // QObject without emitting `destroyed` (process-exit path).
         if (!it->second.window) {
             m_entries.erase(it);
         } else {
@@ -64,7 +52,26 @@ IMotionClock* QtQuickClockManager::clockFor(QQuickWindow* window)
     // no further wiring needed here.
     auto clock = std::make_unique<QtQuickClock>(window);
     IMotionClock* rawClock = clock.get();
-    m_entries.emplace(window, Entry{QPointer<QQuickWindow>(window), std::move(clock)});
+
+    Entry entry{QPointer<QQuickWindow>(window), std::move(clock), {}};
+    // Eager eviction: when the window emits `destroyed`, drop the
+    // entry synchronously on the GUI thread. This prevents the
+    // address-reuse hazard (Qt recycling the QQuickWindow* for a
+    // fresh window) AND lets consumers assume that after `destroyed`,
+    // nobody is handing out a stale `IMotionClock*` to this window.
+    //
+    // DirectConnection because the signal fires from the QObject
+    // destructor on the GUI thread — there is no event loop to
+    // deliver a queued connection to, and we need the eviction to
+    // happen before other GUI-thread teardown hooks run.
+    entry.destroyedConnection = QObject::connect(
+        window, &QObject::destroyed, window,
+        [this, window](QObject*) {
+            releaseClockFor(window);
+        },
+        Qt::DirectConnection);
+
+    m_entries.emplace(window, std::move(entry));
     return rawClock;
 }
 
@@ -74,7 +81,16 @@ void QtQuickClockManager::releaseClockFor(QQuickWindow* window)
         return;
     }
     std::lock_guard<std::mutex> lock(m_mutex);
-    m_entries.erase(window);
+    if (auto it = m_entries.find(window); it != m_entries.end()) {
+        // Disconnect the destroyed hook before erasing — we may have
+        // been called FROM the destroyed signal (eager eviction) in
+        // which case the connection is already auto-disconnected by
+        // Qt, and the disconnect is a no-op. For the manual-release
+        // path (tests, explicit teardown), this prevents a stale
+        // lambda from firing later.
+        QObject::disconnect(it->second.destroyedConnection);
+        m_entries.erase(it);
+    }
 }
 
 int QtQuickClockManager::entryCount() const
@@ -86,6 +102,13 @@ int QtQuickClockManager::entryCount() const
 void QtQuickClockManager::clearForTest()
 {
     std::lock_guard<std::mutex> lock(m_mutex);
+    // Disconnect every entry's destroyed hook before erasing — a
+    // live connection outliving the entry would later fire into a
+    // releaseClockFor on an already-empty map. That's safe (no-op
+    // after lookup miss), but noisy and wrong-looking.
+    for (auto& [_, entry] : m_entries) {
+        QObject::disconnect(entry.destroyedConnection);
+    }
     m_entries.clear();
 }
 

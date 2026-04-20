@@ -321,14 +321,14 @@ Item {
 
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.hover"
             }
 
         }
@@ -341,14 +341,14 @@ Item {
 
             Behavior on xScale {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }
 
             Behavior on yScale {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.hover"
                 }
 
             }

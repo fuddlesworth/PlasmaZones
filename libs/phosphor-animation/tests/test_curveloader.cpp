@@ -41,8 +41,8 @@ private Q_SLOTS:
     /// Missing directory is a no-op, not a failure.
     void testMissingDirectoryIsNoOp()
     {
-        CurveLoader loader;
-        const int n = loader.loadFromDirectory(QStringLiteral("/does/not/exist"), CurveRegistry::instance());
+        CurveLoader loader(CurveRegistry::instance());
+        const int n = loader.loadFromDirectory(QStringLiteral("/does/not/exist"));
         QCOMPARE(n, 0);
         QCOMPARE(loader.registeredCount(), 0);
     }
@@ -60,8 +60,8 @@ private Q_SLOTS:
             "parameters": { "omega": 14.0, "zeta": 0.6 }
         })"));
 
-        CurveLoader loader;
-        const int n = loader.loadFromDirectory(dir.path(), CurveRegistry::instance());
+        CurveLoader loader(CurveRegistry::instance());
+        const int n = loader.loadFromDirectory(dir.path());
         QCOMPARE(n, 1);
 
         auto resolved = CurveRegistry::instance().create(QStringLiteral("my-spring"));
@@ -80,8 +80,8 @@ private Q_SLOTS:
             "parameters": { "omega": 14.0, "zeta": 0.6 }
         })"));
 
-        CurveLoader loader;
-        QCOMPARE(loader.loadFromDirectory(dir.path(), CurveRegistry::instance()), 0);
+        CurveLoader loader(CurveRegistry::instance());
+        QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
     /// Unknown typeId — skipped.
@@ -94,8 +94,8 @@ private Q_SLOTS:
             "parameters": {}
         })"));
 
-        CurveLoader loader;
-        QCOMPARE(loader.loadFromDirectory(dir.path(), CurveRegistry::instance()), 0);
+        CurveLoader loader(CurveRegistry::instance());
+        QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
     /// Malformed JSON — skipped.
@@ -104,8 +104,8 @@ private Q_SLOTS:
         QTemporaryDir dir;
         writeFile(dir.filePath(QStringLiteral("broken.json")), QStringLiteral("{\"name\": \"x\", typeId"));
 
-        CurveLoader loader;
-        QCOMPARE(loader.loadFromDirectory(dir.path(), CurveRegistry::instance()), 0);
+        CurveLoader loader(CurveRegistry::instance());
+        QCOMPARE(loader.loadFromDirectory(dir.path()), 0);
     }
 
     /// Two directories — later wins on name collision. systemSourcePath
@@ -127,8 +127,8 @@ private Q_SLOTS:
             "parameters": { "omega": 20.0, "zeta": 0.3 }
         })"));
 
-        CurveLoader loader;
-        loader.loadFromDirectories({systemDir.path(), userDir.path()}, CurveRegistry::instance());
+        CurveLoader loader(CurveRegistry::instance());
+        loader.loadFromDirectories({systemDir.path(), userDir.path()});
 
         const auto entries = loader.entries();
         QCOMPARE(entries.size(), 1);
@@ -149,8 +149,8 @@ private Q_SLOTS:
             "parameters": { "x1": 0.25, "y1": 0.75, "x2": 0.75, "y2": 0.25 }
         })"));
 
-        CurveLoader loader;
-        QCOMPARE(loader.loadFromDirectory(dir.path(), CurveRegistry::instance()), 1);
+        CurveLoader loader(CurveRegistry::instance());
+        QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
         auto c = CurveRegistry::instance().create(QStringLiteral("user-bezier"));
         QVERIFY(c);
         cleanupRegistry({QStringLiteral("user-bezier")});
@@ -166,8 +166,8 @@ private Q_SLOTS:
             "parameters": { "amplitude": 1.5, "period": 0.4 }
         })"));
 
-        CurveLoader loader;
-        QCOMPARE(loader.loadFromDirectory(dir.path(), CurveRegistry::instance()), 1);
+        CurveLoader loader(CurveRegistry::instance());
+        QCOMPARE(loader.loadFromDirectory(dir.path()), 1);
         cleanupRegistry({QStringLiteral("user-elastic")});
     }
 
@@ -182,8 +182,8 @@ private Q_SLOTS:
             "parameters": { "omega": 14.0, "zeta": 0.6 }
         })"));
 
-        CurveLoader loader;
-        loader.loadFromDirectory(dir.path(), CurveRegistry::instance());
+        CurveLoader loader(CurveRegistry::instance());
+        loader.loadFromDirectory(dir.path());
 
         QSignalSpy spy(&loader, &CurveLoader::curvesChanged);
         loader.requestRescan();

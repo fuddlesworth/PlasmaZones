@@ -27,8 +27,18 @@ struct ParsedEntry
 
     /// Set by the loader when this entry overrides an earlier-scanned
     /// one (user-wins-over-system on collision). Empty otherwise.
-    /// The shadowed entry's `sourcePath` is preserved here so the
-    /// consumer can restore it when the user copy is deleted.
+    ///
+    /// INTROSPECTION METADATA ONLY — restore-on-delete is implemented
+    /// by the rescan itself: when the user copy is removed, the next
+    /// rescan re-parses the system file fresh and commits it as the
+    /// authoritative entry, with `systemSourcePath` cleared. Sinks do
+    /// not (and should not) consult this field at commit time to
+    /// "restore" a system entry — there is nothing to restore, the
+    /// system file has always been on disk and always gets re-parsed.
+    ///
+    /// Kept so UI code (settings browsers, layout managers) can show
+    /// "your file shadows the system default at /path/to/system.json"
+    /// to users without re-walking the system directory.
     QString systemSourcePath;
 
     /// Sink-owned payload (the parsed curve / profile / etc.). The

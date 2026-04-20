@@ -650,17 +650,48 @@ void Settings::setAnimationProfile(const PhosphorAnimation::Profile& profile)
     if (before == after) {
         return;
     }
+
+    // Snapshot per-field effective values BEFORE the write so we can
+    // emit per-field signals only for fields that actually changed.
+    // Without this, a slider drag that only changes `duration` still
+    // wakes every QML binding observing `animationEasingCurve`,
+    // `animationMinDistance`, `animationSequenceMode`, and
+    // `animationStaggerInterval` — at ~30 Hz that's a lot of wasted
+    // re-evaluation. The project rule "only emit when value actually
+    // changed" applies at the per-field granularity here.
+    const QJsonDocument beforeDoc = QJsonDocument::fromJson(before.toUtf8());
+    const PhosphorAnimation::Profile prev =
+        beforeDoc.isObject() ? PhosphorAnimation::Profile::fromJson(beforeDoc.object()) : PhosphorAnimation::Profile{};
+    const int prevDuration = qRound(prev.effectiveDuration());
+    const QString prevCurveWire = prev.curve ? prev.curve->toString() : ConfigDefaults::animationEasingCurve();
+    const int prevMinDistance = prev.effectiveMinDistance();
+    const int prevSequenceMode = static_cast<int>(prev.effectiveSequenceMode());
+    const int prevStaggerInterval = prev.effectiveStaggerInterval();
+
     m_store->write(ConfigDefaults::animationsGroup(), ConfigDefaults::animationProfileKey(), after);
-    // Fire every per-field changed signal — the whole blob swapped,
-    // consumers bound to individual Q_PROPERTYs re-read their projection.
-    // Plus the aggregate animationProfileChanged for consumers who
-    // want to observe the Profile atomically.
+
+    // Aggregate first — consumers that want to observe the Profile
+    // atomically (the daemon's fan-out hook) get one signal per call.
     Q_EMIT animationProfileChanged();
-    Q_EMIT animationDurationChanged();
-    Q_EMIT animationEasingCurveChanged();
-    Q_EMIT animationMinDistanceChanged();
-    Q_EMIT animationSequenceModeChanged();
-    Q_EMIT animationStaggerIntervalChanged();
+
+    // Per-field: only emit when the effective value actually differs.
+    if (qRound(profile.effectiveDuration()) != prevDuration) {
+        Q_EMIT animationDurationChanged();
+    }
+    const QString newCurveWire = profile.curve ? profile.curve->toString() : ConfigDefaults::animationEasingCurve();
+    if (newCurveWire != prevCurveWire) {
+        Q_EMIT animationEasingCurveChanged();
+    }
+    if (profile.effectiveMinDistance() != prevMinDistance) {
+        Q_EMIT animationMinDistanceChanged();
+    }
+    if (static_cast<int>(profile.effectiveSequenceMode()) != prevSequenceMode) {
+        Q_EMIT animationSequenceModeChanged();
+    }
+    if (profile.effectiveStaggerInterval() != prevStaggerInterval) {
+        Q_EMIT animationStaggerIntervalChanged();
+    }
+
     Q_EMIT settingsChanged();
 }
 

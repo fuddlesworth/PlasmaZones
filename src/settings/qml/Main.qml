@@ -685,7 +685,7 @@ ApplicationWindow {
 
                             Behavior on color {
                                 PhosphorMotionAnimation {
-                                    profile: "global"
+                                    profile: "widget.tint"
                                 }
 
                             }
@@ -713,7 +713,7 @@ ApplicationWindow {
 
                                 Behavior on opacity {
                                     PhosphorMotionAnimation {
-                                        profile: "global"
+                                        profile: "widget.hover"
                                     }
 
                                 }
@@ -745,7 +745,7 @@ ApplicationWindow {
 
                                 Behavior on opacity {
                                     PhosphorMotionAnimation {
-                                        profile: "global"
+                                        profile: "widget.hover"
                                     }
 
                                 }
@@ -940,14 +940,14 @@ ApplicationWindow {
 
             Behavior on Layout.preferredWidth {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "panel.slideIn"
                 }
 
             }
 
             Behavior on Layout.minimumWidth {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "panel.slideIn"
                 }
 
             }
@@ -1552,7 +1552,7 @@ ApplicationWindow {
 
                 Behavior on color {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.tint"
                     }
 
                 }
@@ -1630,7 +1630,7 @@ ApplicationWindow {
 
                 Behavior on implicitHeight {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.dim"
                     }
 
                 }
@@ -1835,7 +1835,7 @@ ApplicationWindow {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "osd.show"
             }
 
         }

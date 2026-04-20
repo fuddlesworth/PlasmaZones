@@ -68,16 +68,31 @@ class PHOSPHORANIMATION_EXPORT ProfileLoader : public QObject
     Q_OBJECT
 
 public:
-    explicit ProfileLoader(QObject* parent = nullptr);
+    /// Construct a profile loader bound to @p registry for its entire
+    /// lifetime. Entries committed by this loader are tagged with
+    /// @p ownerTag in the registry's partitioned-ownership map — a
+    /// later `reloadFromOwner(sameTag, ...)` replaces/removes ONLY
+    /// this loader's entries, leaving daemon-fanned settings profiles
+    /// and other loaders' entries untouched.
+    ///
+    /// If @p ownerTag is empty, a unique per-instance tag is generated
+    /// ("profileloader-%1" with the object address) so two loaders
+    /// built from the same consumer don't accidentally share a tag.
+    /// Callers that want a stable human-readable tag (e.g. for tests
+    /// or cross-process debugging) pass an explicit value.
+    explicit ProfileLoader(PhosphorProfileRegistry& registry, const QString& ownerTag = {}, QObject* parent = nullptr);
     ~ProfileLoader() override;
 
-    int loadFromDirectory(const QString& directory, PhosphorProfileRegistry& registry,
-                          LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectory(const QString& directory, LiveReload liveReload = LiveReload::Off);
 
-    int loadFromDirectories(const QStringList& directories, PhosphorProfileRegistry& registry,
-                            LiveReload liveReload = LiveReload::Off);
+    int loadFromDirectories(const QStringList& directories, LiveReload liveReload = LiveReload::Off);
 
-    int loadLibraryBuiltins(PhosphorProfileRegistry& registry);
+    /// See `CurveLoader::loadLibraryBuiltins` — same semantics.
+    int loadLibraryBuiltins(LiveReload liveReload = LiveReload::Off);
+
+    /// Owner tag used for every registered entry. Exposed for tests
+    /// and introspection; in production, derive nothing from this.
+    QString ownerTag() const;
 
     void requestRescan();
 

@@ -41,7 +41,7 @@ Item {
 
             Behavior on x {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.toggle"
                 }
 
             }
@@ -50,7 +50,7 @@ Item {
 
         Behavior on color {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.toggle"
             }
 
         }

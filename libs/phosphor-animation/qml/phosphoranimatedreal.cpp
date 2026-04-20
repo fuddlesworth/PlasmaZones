@@ -45,6 +45,18 @@ bool PhosphorAnimatedReal::startImpl(qreal from, qreal to, IMotionClock* clock)
     if (!clock) {
         return false;
     }
+    // Snapshot pre-call state so we emit only the signals whose
+    // underlying value actually changed (project rule: "Only emit
+    // signals when value actually changes"). Pre-PR-344 every one of
+    // these emitted unconditionally on every start() / retarget() /
+    // cancel() / finish(), forcing QML binding re-eval up to 5× per
+    // call even for no-op state flips.
+    const qreal prevFrom = m_animatedValue.from();
+    const qreal prevTo = m_animatedValue.to();
+    const qreal prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
+
     MotionSpec<qreal> spec;
     spec.profile = profile().value();
     spec.clock = clock;
@@ -57,42 +69,81 @@ bool PhosphorAnimatedReal::startImpl(qreal from, qreal to, IMotionClock* clock)
     };
 
     const bool ok = m_animatedValue.start(from, to, std::move(spec));
-    // Emit fromChanged/toChanged unconditionally on start-call so QML
-    // bindings resync even when the new segment collapses degenerate
-    // (from ≈ to) and `start` returns false — the endpoint values
-    // still got overwritten.
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+
+    if (m_animatedValue.from() != prevFrom) {
+        Q_EMIT fromChanged();
+    }
+    if (m_animatedValue.to() != prevTo) {
+        Q_EMIT toChanged();
+    }
+    if (m_animatedValue.value() != prevValue) {
+        Q_EMIT valueChanged();
+    }
+    if (m_animatedValue.isAnimating() != prevAnimating) {
+        Q_EMIT animatingChanged();
+    }
+    if (m_animatedValue.isComplete() != prevComplete) {
+        Q_EMIT completeChanged();
+    }
     return ok;
 }
 
 bool PhosphorAnimatedReal::retarget(qreal to)
 {
+    const qreal prevFrom = m_animatedValue.from();
+    const qreal prevTo = m_animatedValue.to();
+    const qreal prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
+
     const bool ok = m_animatedValue.retarget(to);
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+
+    if (m_animatedValue.from() != prevFrom) {
+        Q_EMIT fromChanged();
+    }
+    if (m_animatedValue.to() != prevTo) {
+        Q_EMIT toChanged();
+    }
+    if (m_animatedValue.value() != prevValue) {
+        Q_EMIT valueChanged();
+    }
+    if (m_animatedValue.isAnimating() != prevAnimating) {
+        Q_EMIT animatingChanged();
+    }
+    if (m_animatedValue.isComplete() != prevComplete) {
+        Q_EMIT completeChanged();
+    }
     return ok;
 }
 
 void PhosphorAnimatedReal::cancel()
 {
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.cancel();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating) {
+        Q_EMIT animatingChanged();
+    }
+    if (m_animatedValue.isComplete() != prevComplete) {
+        Q_EMIT completeChanged();
+    }
 }
 
 void PhosphorAnimatedReal::finish()
 {
+    const qreal prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.finish();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.value() != prevValue) {
+        Q_EMIT valueChanged();
+    }
+    if (m_animatedValue.isAnimating() != prevAnimating) {
+        Q_EMIT animatingChanged();
+    }
+    if (m_animatedValue.isComplete() != prevComplete) {
+        Q_EMIT completeChanged();
+    }
 }
 
 void PhosphorAnimatedReal::advance()

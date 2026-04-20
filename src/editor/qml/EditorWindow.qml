@@ -349,7 +349,7 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.fade"
             }
 
         }
@@ -736,7 +736,7 @@ Window {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "global"
+                profile: "widget.fade"
             }
 
         }

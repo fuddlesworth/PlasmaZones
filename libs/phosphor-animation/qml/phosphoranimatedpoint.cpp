@@ -45,6 +45,13 @@ bool PhosphorAnimatedPoint::startImpl(const QPointF& from, const QPointF& to, IM
     if (!clock) {
         return false;
     }
+    // Check-before-emit — see PhosphorAnimatedReal::startImpl comment.
+    const QPointF prevFrom = m_animatedValue.from();
+    const QPointF prevTo = m_animatedValue.to();
+    const QPointF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
+
     MotionSpec<QPointF> spec;
     spec.profile = profile().value();
     spec.clock = clock;
@@ -57,38 +64,63 @@ bool PhosphorAnimatedPoint::startImpl(const QPointF& from, const QPointF& to, IM
     };
 
     const bool ok = m_animatedValue.start(from, to, std::move(spec));
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (m_animatedValue.to() != prevTo)
+        Q_EMIT toChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 bool PhosphorAnimatedPoint::retarget(const QPointF& to)
 {
+    const QPointF prevFrom = m_animatedValue.from();
+    const QPointF prevTo = m_animatedValue.to();
+    const QPointF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     const bool ok = m_animatedValue.retarget(to);
-    Q_EMIT fromChanged();
-    Q_EMIT toChanged();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.from() != prevFrom)
+        Q_EMIT fromChanged();
+    if (m_animatedValue.to() != prevTo)
+        Q_EMIT toChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
     return ok;
 }
 
 void PhosphorAnimatedPoint::cancel()
 {
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.cancel();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedPoint::finish()
 {
+    const QPointF prevValue = m_animatedValue.value();
+    const bool prevAnimating = m_animatedValue.isAnimating();
+    const bool prevComplete = m_animatedValue.isComplete();
     m_animatedValue.finish();
-    Q_EMIT valueChanged();
-    Q_EMIT animatingChanged();
-    Q_EMIT completeChanged();
+    if (m_animatedValue.value() != prevValue)
+        Q_EMIT valueChanged();
+    if (m_animatedValue.isAnimating() != prevAnimating)
+        Q_EMIT animatingChanged();
+    if (m_animatedValue.isComplete() != prevComplete)
+        Q_EMIT completeChanged();
 }
 
 void PhosphorAnimatedPoint::advance()

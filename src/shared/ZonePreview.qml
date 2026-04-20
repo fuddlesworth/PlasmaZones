@@ -58,7 +58,11 @@ Item {
     /// raw geometry is rendered as-is. Set from algorithm metadata
     /// (@producesOverlappingZones) rather than auto-detected at runtime.
     property bool producesOverlappingZones: false
-    /// Animation duration in milliseconds
+    /// DEPRECATED — vestigial post-PR-344. Was Animation duration in ms
+    /// per Behavior; durations now come from the profile registry (see
+    /// `PhosphorAnimation::ProfilePaths::Widget*` and `zone.highlight`).
+    /// Kept as a no-op accept so `LayoutCard.qml` and `AlgorithmPreview.qml`
+    /// binding sites don't break.
     property int animationDuration: 150
     /// Whether zone click/hover signals are enabled (disable for thumbnail use)
     property bool interactive: false
@@ -216,7 +220,7 @@ Item {
 
                 Behavior on opacity {
                     PhosphorMotionAnimation {
-                        profile: "global"
+                        profile: "widget.fade"
                     }
 
                 }
@@ -237,35 +241,39 @@ Item {
             // Animations
             Behavior on color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "zone.highlight"
                 }
 
             }
 
             Behavior on opacity {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "zone.highlight"
                 }
 
             }
 
             Behavior on scale {
+                // OutBack overshoot for the scale-up pop — the badge
+                // profile preserves the pre-PR-344 zone-preview "pop"
+                // feel that was otherwise lost in the single-profile
+                // migration.
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "widget.badge"
                 }
 
             }
 
             Behavior on border.color {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "zone.highlight"
                 }
 
             }
 
             Behavior on border.width {
                 PhosphorMotionAnimation {
-                    profile: "global"
+                    profile: "zone.highlight"
                 }
 
             }

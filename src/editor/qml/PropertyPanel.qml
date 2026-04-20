@@ -364,14 +364,14 @@ Rectangle {
 
                         Behavior on border.color {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "panel.slideIn"
                             }
 
                         }
 
                         Behavior on border.width {
                             PhosphorMotionAnimation {
-                                profile: "global"
+                                profile: "panel.slideIn"
                             }
 
                         }
@@ -931,14 +931,14 @@ Rectangle {
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            profile: "global"
+            profile: "panel.slideIn"
         }
 
     }
 
     Behavior on Layout.preferredWidth {
         PhosphorMotionAnimation {
-            profile: "global"
+            profile: "panel.slideIn"
         }
 
     }

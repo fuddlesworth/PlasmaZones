@@ -208,7 +208,7 @@ Rectangle {
 
         Behavior on border.color {
             PhosphorMotionAnimation {
-                profile: "zone.highlight"
+                profile: "panel.popup"
             }
 
         }
@@ -231,7 +231,7 @@ Rectangle {
 
         Behavior on opacity {
             PhosphorMotionAnimation {
-                profile: "zone.highlight"
+                profile: "panel.popup"
             }
 
         }
@@ -359,14 +359,14 @@ Rectangle {
     // Smooth slide animation
     Behavior on y {
         PhosphorMotionAnimation {
-            profile: "zone.highlight"
+            profile: "panel.popup"
         }
 
     }
 
     Behavior on opacity {
         PhosphorMotionAnimation {
-            profile: "zone.highlight"
+            profile: "panel.popup"
         }
 
     }

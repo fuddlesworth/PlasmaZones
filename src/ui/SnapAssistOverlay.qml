@@ -159,14 +159,14 @@ Window {
 
                             Behavior on color {
                                 PhosphorMotionAnimation {
-                                    profile: "zone.highlight"
+                                    profile: "zone.snapIn"
                                 }
 
                             }
 
                             Behavior on border.color {
                                 PhosphorMotionAnimation {
-                                    profile: "zone.highlight"
+                                    profile: "zone.snapIn"
                                 }
 
                             }

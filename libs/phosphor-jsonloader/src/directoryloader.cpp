@@ -7,11 +7,45 @@
 #include <QFileInfo>
 #include <QFileSystemWatcher>
 #include <QLoggingCategory>
+#include <QStandardPaths>
+
+#include <algorithm>
 
 namespace PhosphorJsonLoader {
 
 namespace {
 Q_LOGGING_CATEGORY(lcLoader, "phosphorjsonloader.directoryloader")
+
+/// Paths we refuse to install a `QFileSystemWatcher` on. If the "nearest
+/// existing ancestor" climb from `attachWatcherForDir` lands on one of
+/// these, we decline the watch and wait for the target tree to be created
+/// before arming anything. Watching `$HOME` turns every file operation in
+/// the user's home directory into a full rescan of all configured dirs;
+/// watching `/` is nonsensical.
+bool isForbiddenWatchRoot(const QString& path)
+{
+    const QString cleaned = QDir::cleanPath(path);
+    if (cleaned.isEmpty() || cleaned == QDir::rootPath()) {
+        return true;
+    }
+    const QString home = QDir::cleanPath(QDir::homePath());
+    if (cleaned == home) {
+        return true;
+    }
+    // Also refuse to watch the GenericDataLocation / ConfigLocation
+    // roots themselves — a rescan fires for every unrelated app writing
+    // into those shared trees (GTK recently-used files, KDE session
+    // state, etc.), which is effectively equivalent to watching $HOME.
+    const QString genericData = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation));
+    if (!genericData.isEmpty() && cleaned == genericData) {
+        return true;
+    }
+    const QString configLoc = QDir::cleanPath(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation));
+    if (!configLoc.isEmpty() && cleaned == configLoc) {
+        return true;
+    }
+    return false;
+}
 } // namespace
 
 DirectoryLoader::DirectoryLoader(IDirectoryLoaderSink* sink, QObject* parent)
@@ -79,7 +113,11 @@ int DirectoryLoader::registeredCount() const
 
 QList<DirectoryLoader::Entry> DirectoryLoader::entries() const
 {
-    return m_entries.values();
+    QList<Entry> sorted = m_entries.values();
+    std::sort(sorted.begin(), sorted.end(), [](const Entry& a, const Entry& b) {
+        return a.key < b.key;
+    });
+    return sorted;
 }
 
 void DirectoryLoader::rescanAll()
@@ -107,9 +145,30 @@ void DirectoryLoader::rescanAll()
             qCDebug(lcLoader) << "rescan: directory does not exist (yet?)" << directory;
             continue;
         }
-        const QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files);
+        // Sort within each directory so duplicate-name resolution is
+        // deterministic across platforms (ext4/btrfs/APFS differ on
+        // entryList ordering).
+        QStringList files = dir.entryList({QStringLiteral("*.json")}, QDir::Files, QDir::Name);
+
+        // Track keys already seen within THIS directory so we can warn
+        // on intra-directory collisions (across directories is legitimate
+        // user-wins-over-system layering, which we handle below).
+        QSet<QString> keysInThisDir;
+
         for (const QString& file : files) {
             const QString fullPath = dir.absoluteFilePath(file);
+
+            // DoS / foot-gun guard: untrusted same-user files should not
+            // be able to stall the GUI thread with a 2 GB blob. Stat
+            // first; skip + warn on oversize. Sinks that want a lower
+            // cap enforce their own on top of this.
+            const QFileInfo fileInfo(fullPath);
+            if (fileInfo.size() > kMaxFileBytes) {
+                qCWarning(lcLoader) << "Skipping oversized file" << fullPath << "(" << fileInfo.size() << "bytes, cap"
+                                    << kMaxFileBytes << ")";
+                continue;
+            }
+
             auto parsed = m_sink->parseFile(fullPath);
             if (!parsed) {
                 continue;
@@ -121,11 +180,24 @@ void DirectoryLoader::rescanAll()
                 continue;
             }
 
-            // user-wins: record the previous source as the shadowed
-            // system path on the new entry, then overwrite. The
-            // previous parsed entry is dropped (it's still in
-            // freshParsed list earlier in the iteration — compact
-            // below).
+            // Intra-directory duplicate: two files in the SAME dir with
+            // the same key. Filesystem enumeration is alphabetic (we
+            // sort above), so the first-seen file wins deterministically.
+            // Warn so the user can clean up.
+            if (keysInThisDir.contains(key)) {
+                qCWarning(lcLoader) << "Duplicate key" << key << "within directory" << directory << "— ignoring"
+                                    << fullPath << "(alphabetically-first file won)";
+                continue;
+            }
+            keysInThisDir.insert(key);
+
+            // Cross-directory: user-wins layering. Record the previous
+            // source as the shadowed system path on the new entry, then
+            // overwrite. The shadowed `ParsedEntry` in `freshParsed` is
+            // replaced in-place below. When the user copy is later
+            // deleted, the next rescan re-parses the system file fresh
+            // (no need to consult `systemSourcePath` at commit time —
+            // the field is introspection metadata, not a restore hook).
             if (auto existing = fresh.find(key); existing != fresh.end()) {
                 parsed->systemSourcePath = existing->sourcePath;
             }
@@ -173,7 +245,57 @@ void DirectoryLoader::rescanAll()
     // on every bound consumer).
     m_sink->commitBatch(removedKeys, freshParsed);
 
+    // Arm per-file watches AFTER commit so the watch set exactly
+    // matches the current tracked set. QFileSystemWatcher auto-drops
+    // entries on atomic-rename saves (most editors), so we re-sync on
+    // every rescan — the add/remove diff makes this cheap.
+    if (m_liveReloadEnabled) {
+        syncFileWatches();
+    }
+
     Q_EMIT entriesChanged();
+}
+
+void DirectoryLoader::syncFileWatches()
+{
+    if (!m_watcher) {
+        return;
+    }
+
+    // Desired file-watch set = every currently-tracked source path.
+    QSet<QString> desired;
+    desired.reserve(m_entries.size());
+    for (const auto& entry : std::as_const(m_entries)) {
+        desired.insert(entry.sourcePath);
+    }
+
+    // Drop watches for files no longer tracked (deleted between rescans).
+    for (auto it = m_watchedFiles.begin(); it != m_watchedFiles.end();) {
+        if (!desired.contains(*it)) {
+            m_watcher->removePath(*it);
+            it = m_watchedFiles.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Re-add every desired path. `addPath` no-ops (returns false) if
+    // the path is already watched, but after a save-via-atomic-rename
+    // Qt silently drops the old inode from the watch set — the user's
+    // new inode must be explicitly re-added. Cheapest correct shape is
+    // "always try to add; trust QFSW to dedupe the no-op case".
+    for (const QString& path : desired) {
+        if (m_watcher->addPath(path)) {
+            m_watchedFiles.insert(path);
+        } else if (!m_watchedFiles.contains(path)) {
+            // addPath returned false AND we didn't already have it —
+            // means QFSW couldn't watch this file (permissions, inotify
+            // quota hit, path vanished between stat and addPath). Log
+            // once at debug so it shows up under lcLoader if the user
+            // is troubleshooting.
+            qCDebug(lcLoader) << "syncFileWatches: failed to add file watch for" << path;
+        }
+    }
 }
 
 void DirectoryLoader::installWatcherIfNeeded()
@@ -233,6 +355,15 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
         // ancestor as a proxy — when the ancestor changes (typically
         // because the target dir was just created), we rescan and
         // attachWatcherForDir promotes to a direct watch.
+        //
+        // Crucially: refuse to climb onto `$HOME`, root, or
+        // GenericData/ConfigLocation roots. A pristine install where
+        // `~/.local/share/plasmazones` does not exist would otherwise
+        // end up watching `$HOME`, making every file operation in the
+        // user's home trigger a full rescan. If the immediate
+        // parent(s) don't exist, we silently skip the watch until the
+        // tree materialises — consumers should call `requestRescan()`
+        // after creating the directory structure.
         QString ancestor = info.absolutePath();
         while (!ancestor.isEmpty() && !QDir(ancestor).exists()) {
             const QString next = QFileInfo(ancestor).absolutePath();
@@ -241,7 +372,15 @@ void DirectoryLoader::attachWatcherForDir(const QString& directory)
             }
             ancestor = next;
         }
-        if (!ancestor.isEmpty() && QDir(ancestor).exists() && !m_watchedParents.contains(ancestor)) {
+        if (ancestor.isEmpty() || !QDir(ancestor).exists()) {
+            return;
+        }
+        if (isForbiddenWatchRoot(ancestor)) {
+            qCDebug(lcLoader) << "Refusing to watch forbidden ancestor" << ancestor << "for target" << directory
+                              << "— call requestRescan() after creating the directory tree.";
+            return;
+        }
+        if (!m_watchedParents.contains(ancestor)) {
             if (!m_watcher->directories().contains(ancestor)) {
                 m_watcher->addPath(ancestor);
             }
