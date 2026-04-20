@@ -7,6 +7,8 @@
 #include <PhosphorTiles/ScriptedAlgorithmWatchdog.h>
 #include "tileslogging.h"
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -27,6 +29,14 @@ ScriptedAlgorithmLoader::ScriptedAlgorithmLoader(const QString& subdirectory, IT
     , m_watchdog(std::make_shared<ScriptedAlgorithmWatchdog>())
 {
     Q_ASSERT(m_registry);
+    // The subdirectory is appended to XDG data roots (system + user),
+    // so it must be relative and free of traversal segments. Developer
+    // error — assert rather than silently scan an unexpected path.
+    // Empty subdirectory is explicitly supported as "loader disabled".
+    Q_ASSERT_X(!m_subdirectory.startsWith(QLatin1Char('/')), "ScriptedAlgorithmLoader",
+               "subdirectory must be a relative XDG path, not absolute");
+    Q_ASSERT_X(!m_subdirectory.contains(QLatin1String("..")), "ScriptedAlgorithmLoader",
+               "subdirectory must not contain '..' traversal");
     // Lazy user directory creation — moved ensureUserDirectoryExists()
     // to scanAndRegister() so it is only called when actually needed.
     setupFileWatcher();
@@ -188,10 +198,36 @@ bool ScriptedAlgorithmLoader::scanAndRegister()
 
     qCInfo(PhosphorTiles::lcTilesLib) << "Scripted algorithms loaded:" << m_scriptIdToPath.size()
                                       << "changed=" << changed;
-    // Always emit — the signal is cheap (listeners just refresh their model)
-    // and content-only edits (same IDs/paths but different script body) would
-    // otherwise be missed by the old change-detection logic.
-    Q_EMIT algorithmsChanged();
+
+    // Emit only when the registered script set — id, path, size, mtime —
+    // actually differs from the last scan. Catches content-only edits
+    // (same IDs/paths, different body) that the `changed` flag above
+    // misses, while suppressing redundant emissions from no-op filesystem
+    // pokes (editor-save of an unrelated file in the watched dir, bare
+    // stat events, etc.). Downstream listeners (layout adaptor → D-Bus →
+    // every subscribed client) get one notification per real change
+    // instead of one per inotify wake.
+    QCryptographicHash hasher(QCryptographicHash::Sha1);
+    QList<QString> sortedIds = m_scriptIdToPath.keys();
+    std::sort(sortedIds.begin(), sortedIds.end());
+    for (const QString& id : std::as_const(sortedIds)) {
+        const QString& path = m_scriptIdToPath.value(id);
+        QFileInfo info(path);
+        hasher.addData(id.toUtf8());
+        hasher.addData("|", 1);
+        hasher.addData(path.toUtf8());
+        hasher.addData("|", 1);
+        hasher.addData(QByteArray::number(info.size()));
+        hasher.addData("|", 1);
+        hasher.addData(QByteArray::number(info.lastModified().toMSecsSinceEpoch()));
+        hasher.addData("\n", 1);
+    }
+    const QByteArray signature = hasher.result();
+    if (signature != m_lastScriptSignature) {
+        m_lastScriptSignature = signature;
+        Q_EMIT algorithmsChanged();
+        return true;
+    }
     return changed;
 }
 

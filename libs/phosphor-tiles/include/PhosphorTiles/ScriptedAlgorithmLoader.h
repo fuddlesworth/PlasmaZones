@@ -4,6 +4,7 @@
 #pragma once
 
 #include <phosphortiles_export.h>
+#include <QByteArray>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
@@ -117,6 +118,13 @@ private:
     /// the watch and reWatchFiles() re-adding it.
     QTimer* m_followupTimer = nullptr;
     QHash<QString, QString> m_scriptIdToPath; ///< script ID -> file path
+    /// Signature of the last registered script set — sorted (id, path,
+    /// size, mtime) digest. Used by scanAndRegister() to suppress
+    /// redundant algorithmsChanged() emissions on filesystem pokes that
+    /// touched no actual content (editor-save of an unrelated file in the
+    /// watched dir, lstat-only events, etc.), so downstream D-Bus fan-out
+    /// stays quiet when nothing actually changed.
+    QByteArray m_lastScriptSignature;
 
     static constexpr int RefreshDebounceMs = 500;
     static constexpr int FollowupRescanMs = 500;

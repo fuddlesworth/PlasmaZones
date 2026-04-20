@@ -81,6 +81,13 @@ class PHOSPHORTILES_EXPORT ScriptedAlgorithm : public TilingAlgorithm
 {
     Q_OBJECT
 
+    // The watchdog is the only caller of interruptEngine() — it dispatches
+    // the interrupt from its supervisor thread while holding the watchdog
+    // mutex. Exposing that entry point publicly would tempt unrelated
+    // code to call it from the main thread, which would interact badly
+    // with guardedCall()'s arm-evaluate-disarm invariant.
+    friend class ScriptedAlgorithmWatchdog;
+
 public:
     /**
      * @brief Construct a ScriptedAlgorithm from a JavaScript file
@@ -230,19 +237,17 @@ private:
     /// Arms watchdog, calls fn(), disarms, checks for timeout. Returns error on timeout.
     QJSValue guardedCall(const std::function<QJSValue()>& fn) const;
 
-public:
     /**
-     * @brief Interrupt the underlying JS engine (called from the shared watchdog thread)
+     * @brief Interrupt the underlying JS engine (called from the watchdog thread)
      *
-     * Forwards to @c QJSEngine::setInterrupted(true). Public because the
-     * shared @ref ScriptedAlgorithmWatchdog singleton invokes it from a
-     * non-main thread when a guarded JS call exceeds its deadline. The
-     * underlying Qt call is documented thread-safe relative to the
-     * main-thread JS evaluation it targets.
+     * Forwards to @c QJSEngine::setInterrupted(true). Private — only the
+     * per-loader @ref ScriptedAlgorithmWatchdog (declared a friend above)
+     * may invoke it, and only from its supervisor thread while holding
+     * the watchdog mutex. The underlying Qt call is documented
+     * thread-safe relative to the main-thread JS evaluation it targets.
      */
     void interruptEngine();
 
-private:
     /// Unified with AutotileDefaults::MaxRuntimeTreeDepth to prevent silent truncation
     static constexpr int MaxTreeConversionDepth = AutotileDefaults::MaxRuntimeTreeDepth;
 
