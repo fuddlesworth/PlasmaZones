@@ -31,6 +31,15 @@ constexpr auto kPlasmaShellInterface = "org.kde.PlasmaShell";
 /// the next line's `PANEL:` prefix into an optional capture.
 const QString& panelScript()
 {
+    // Numeric fields are integer-coerced in JS via `Math.round` / `| 0` before
+    // concatenation. `screenGeometry()` returns QRectF and `panel.geometry` +
+    // `screen.y` can carry sub-pixel offsets on fractional-scaling Wayland
+    // outputs (common on 3200×1800-class laptop panels). Without coercion an
+    // `offset` of 41.666… would emit "41.666..." and the C++ regex below
+    // would fail to match the whole line — we'd silently lose every panel
+    // on that screen, leaving `m_offsets` empty and `calculateAvailable-
+    // Geometry` with `availY=0` even though the sensor correctly reports
+    // a shrunken usable size.
     static const QString s = QStringLiteral(R"(
         panels().forEach(function(p,i){
             var floating = p.floating ? 1 : 0;
@@ -40,20 +49,20 @@ const QString& panelScript()
             var pg = p.geometry;
             // Offset defaults to the panel's thickness — overridden below
             // for each edge once we have both panel and screen rects.
-            var offset = Math.abs(p.height);
+            var offset = Math.round(Math.abs(p.height));
             if (pg && sg) {
                 if (loc === "top") {
-                    offset = (pg.y + pg.height) - sg.y;
+                    offset = Math.round((pg.y + pg.height) - sg.y);
                 } else if (loc === "bottom") {
-                    offset = (sg.y + sg.height) - pg.y;
+                    offset = Math.round((sg.y + sg.height) - pg.y);
                 } else if (loc === "left") {
-                    offset = (pg.x + pg.width) - sg.x;
+                    offset = Math.round((pg.x + pg.width) - sg.x);
                 } else if (loc === "right") {
-                    offset = (sg.x + sg.width) - pg.x;
+                    offset = Math.round((sg.x + sg.width) - pg.x);
                 }
             }
-            var sgStr = sg ? (sg.x + "," + sg.y + "," + sg.width + "," + sg.height) : "";
-            print("PANEL:" + p.screen + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
+            var sgStr = sg ? ((sg.x|0) + "," + (sg.y|0) + "," + (sg.width|0) + "," + (sg.height|0)) : "";
+            print("PANEL:" + (p.screen|0) + ":" + loc + ":" + hiding + ":" + offset + ":" + floating + ":" + sgStr + "\n");
         });
     )");
     return s;
@@ -258,20 +267,36 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                 //   1: plasma screen index
                 //   2: location (top/bottom/left/right)
                 //   3: hiding mode (none/autohide/dodgewindows/windowsgobelow)
-                //   4: totalOffset (reserved edge in px)
+                //   4: totalOffset (reserved edge in px; always ≥0)
                 //   5: floating flag (0 or 1)
-                //   6-9: plasma screen geometry (x,y,w,h)
+                //   6-9: plasma screen geometry (x,y,w,h). x/y allow a leading
+                //        `-` because Qt screens arranged left-of / above the
+                //        primary have negative origins — without it the whole
+                //        line fails to match and the panel is silently dropped.
                 //
                 // End-of-line anchor (`(?=\n|$)`) so a line whose geometry
                 // segment is empty (sg === null in the JS) cannot greedy-match
                 // digits from the NEXT line's PANEL: prefix into the optional
                 // geometry group. Multiline-enabled so `$` respects intra-reply
                 // newlines.
-                static const QRegularExpression panelRegex(QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+):(\\d+)"
-                                                                          "(?::(\\d+),(\\d+),(\\d+),(\\d+))?(?=\\n|$)"),
-                                                           QRegularExpression::MultilineOption);
+                static const QRegularExpression panelRegex(
+                    QStringLiteral("PANEL:(\\d+):(\\w+):(\\w+):(\\d+):(\\d+)"
+                                   "(?::(-?\\d+),(-?\\d+),(\\d+),(\\d+))?(?=\\n|$)"),
+                    QRegularExpression::MultilineOption);
                 const auto qtScreens = QGuiApplication::screens();
                 auto it = panelRegex.globalMatch(output);
+                // Guard against a silent format drift: if plasmashell wrote
+                // `PANEL:` lines but none match our regex, the JS numeric
+                // output has shifted under us (e.g. fractional scaling
+                // leaking through coercion). Warn with the raw reply —
+                // otherwise every screen with panels looks "clean" at
+                // availability-calculation time and zones anchor to y=0
+                // under the top panel.
+                if (!it.hasNext() && output.contains(QLatin1String("PANEL:"))) {
+                    qCWarning(lcPhosphorScreens)
+                        << "queryKdePlasmaPanels: output contained PANEL: lines but none matched regex — raw reply:"
+                        << output;
+                }
                 while (it.hasNext()) {
                     QRegularExpressionMatch match = it.next();
                     const int plasmaIndex = match.captured(1).toInt();
