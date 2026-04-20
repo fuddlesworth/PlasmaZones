@@ -3,7 +3,7 @@
 
 /**
  * @file test_layoutmanager_persistence.cpp
- * @brief Unit tests for PhosphorZones::LayoutManager save/load, remove, add/duplicate
+ * @brief Unit tests for PhosphorZones::LayoutRegistry save/load, remove, add/duplicate
  */
 
 #include <QTest>
@@ -17,8 +17,8 @@
 #include <memory>
 #include <vector>
 
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
@@ -41,10 +41,11 @@ private:
         return layout;
     }
 
-    PhosphorZones::LayoutManager* createManager(QObject* parent = nullptr)
+    PhosphorZones::LayoutRegistry* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = makePzLayoutManager(parent).release();
+        auto* mgr = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                      QStringLiteral("plasmazones/layouts"), parent);
         // Override layout dir to a path under the guard's temp dir to avoid
         // static-cache issues in PhosphorZones::Layout::isSystemLayout().
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
@@ -68,7 +69,7 @@ private Q_SLOTS:
 
     void testLayoutManager_saveLayout_onlyWritesDirtyLayouts()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("SaveTest"));
         mgr->addLayout(layout);
@@ -96,7 +97,7 @@ private Q_SLOTS:
 
     void testLayoutManager_removeLayout_deletesFile()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("ToDelete"));
         mgr->addLayout(layout);
@@ -105,7 +106,7 @@ private Q_SLOTS:
             + QStringLiteral(".json");
         QVERIFY(QFile::exists(filePath));
 
-        QSignalSpy removedSpy(mgr.data(), &PhosphorZones::LayoutManager::layoutRemoved);
+        QSignalSpy removedSpy(mgr.data(), &PhosphorZones::LayoutRegistry::layoutRemoved);
 
         mgr->removeLayout(layout);
 
@@ -116,7 +117,7 @@ private Q_SLOTS:
 
     void testLayoutManager_removeLayout_cleansAssignments()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Assigned"));
         mgr->addLayout(layout);
@@ -138,7 +139,7 @@ private Q_SLOTS:
 
     void testLayoutManager_addLayout_connectsModifiedToSave()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("AutoSave"));
         mgr->addLayout(layout);
@@ -159,7 +160,7 @@ private Q_SLOTS:
 
     void testLayoutManager_duplicateLayout_hasNewId()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* original = createTestLayout(QStringLiteral("Original"));
         mgr->addLayout(original);
@@ -173,7 +174,7 @@ private Q_SLOTS:
 
     void testLayoutManager_duplicateLayout_resetsVisibility()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* original = createTestLayout(QStringLiteral("Restricted"));
         original->setHiddenFromSelector(true);

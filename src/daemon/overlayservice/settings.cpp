@@ -8,7 +8,7 @@
 #include "../../core/logging.h"
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/shaderregistry.h"
 #include "../../core/utils.h"
 #include <QQuickWindow>
@@ -98,16 +98,16 @@ void OverlayService::setSettings(ISettings* settings)
     }
 }
 
-void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManager)
+void OverlayService::setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager)
 {
     // Disconnect from old layout manager if exists
     if (m_layoutManager) {
-        auto* oldManager = dynamic_cast<PhosphorZones::LayoutManager*>(m_layoutManager);
+        auto* oldManager = dynamic_cast<PhosphorZones::LayoutRegistry*>(m_layoutManager);
         if (oldManager) {
-            disconnect(oldManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutManager::layoutAssigned, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutManager::layoutAdded, this, nullptr);
-            disconnect(oldManager, &PhosphorZones::LayoutManager::layoutRemoved, this, nullptr);
+            disconnect(oldManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this, nullptr);
+            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this, nullptr);
+            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutAdded, this, nullptr);
+            disconnect(oldManager, &PhosphorZones::LayoutRegistry::layoutRemoved, this, nullptr);
         }
     }
     // Disconnect any per-PhosphorZones::Layout connections to active layouts the previous manager owned
@@ -120,19 +120,19 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
 
     m_layoutManager = layoutManager;
 
-    // Connect to layout change signals from the concrete PhosphorZones::LayoutManager
-    // PhosphorZones::ILayoutManager is a pure interface without signals, so we need to cast
+    // Connect to layout change signals from the concrete PhosphorZones::LayoutRegistry
+    // PhosphorZones::LayoutRegistry is a pure interface without signals, so we need to cast
     if (m_layoutManager) {
-        auto* manager = dynamic_cast<PhosphorZones::LayoutManager*>(m_layoutManager);
+        auto* manager = dynamic_cast<PhosphorZones::LayoutRegistry*>(m_layoutManager);
         if (manager) {
             // Update visible zone selector and overlay windows when layout changes.
             // Hidden windows are skipped — showZoneSelector()/show() refresh before showing.
-            connect(manager, &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+            connect(manager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                     [this](PhosphorZones::Layout* layout) {
                         observeLayoutForLiveEdits(layout);
                         refreshVisibleWindows();
                     });
-            connect(manager, &PhosphorZones::LayoutManager::layoutAssigned, this,
+            connect(manager, &PhosphorZones::LayoutRegistry::layoutAssigned, this,
                     [this](const QString& /*screenId*/, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                         observeLayoutForLiveEdits(layout);
                         refreshVisibleWindows();
@@ -140,7 +140,7 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
             // Observe newly-created layouts so edits reach the overlay before
             // the layout is ever activated/assigned (e.g. user creates a new
             // layout in the editor and immediately tweaks its shader).
-            connect(manager, &PhosphorZones::LayoutManager::layoutAdded, this, [this](PhosphorZones::Layout* layout) {
+            connect(manager, &PhosphorZones::LayoutRegistry::layoutAdded, this, [this](PhosphorZones::Layout* layout) {
                 observeLayoutForLiveEdits(layout);
             });
             // Drop per-layout connections + the m_observedLayouts entry when
@@ -148,7 +148,7 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
             // leave tombstone entries in m_observedLayouts that only get
             // compacted the next time observeLayoutForLiveEdits() runs —
             // unbounded growth during editor create/delete sessions.
-            connect(manager, &PhosphorZones::LayoutManager::layoutRemoved, this, &OverlayService::stopObservingLayout);
+            connect(manager, &PhosphorZones::LayoutRegistry::layoutRemoved, this, &OverlayService::stopObservingLayout);
 
             // Observe EVERY loaded layout, not just the globally-active one.
             // A per-screen-assigned layout loaded from disk at startup never
@@ -163,7 +163,7 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
             }
             // Redundant after the loop, but keeps the intent obvious in case
             // activeLayout() is ever loaded through a different path than
-            // PhosphorZones::LayoutManager::layouts().
+            // PhosphorZones::LayoutRegistry::layouts().
             observeLayoutForLiveEdits(manager->activeLayout());
         }
     }
@@ -172,11 +172,6 @@ void OverlayService::setLayoutManager(PhosphorZones::ILayoutManager* layoutManag
 void OverlayService::setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry)
 {
     m_algorithmRegistry = registry;
-}
-
-void OverlayService::setShaderRegistry(ShaderRegistry* registry)
-{
-    m_shaderRegistry = registry;
 }
 
 void OverlayService::setAutotileLayoutSource(PhosphorLayout::ILayoutSource* source)
@@ -203,7 +198,7 @@ void OverlayService::observeLayoutForLiveEdits(PhosphorZones::Layout* layout)
     // PhosphorZones::Layout::layoutModified fires whenever any Q_PROPERTY changes (shaderId,
     // shaderParams, zones, appearance, etc.). Without this hook the editor's
     // changes only reach the live overlay after a layout switch or daemon
-    // restart, since PhosphorZones::LayoutManager::activeLayoutChanged only fires on switch.
+    // restart, since PhosphorZones::LayoutRegistry::activeLayoutChanged only fires on switch.
     //
     // Route through a coalescing shim: zone-drag in the editor can fire
     // layoutModified dozens of times per second; refreshVisibleWindows is

@@ -9,19 +9,16 @@
 #include <QString>
 #include <QVector>
 
-namespace PlasmaZones {
-
-// Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
-} // namespace PlasmaZones
 namespace Phosphor::Screens {
 class ScreenManager;
 }
-namespace PlasmaZones {
-}
+
 namespace PhosphorZones {
-class LayoutManager;
+class LayoutRegistry;
 }
+
 namespace PlasmaZones {
+
 class AutotileEngine;
 
 /**
@@ -77,7 +74,7 @@ public:
      * @brief Collect a thread-safe snapshot from QObject pointers (main thread only)
      */
     static Snapshot collectSnapshot(Phosphor::Screens::ScreenManager* screenManager,
-                                    PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine);
+                                    PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine);
 
     /**
      * @brief Generate a report from a pre-collected snapshot (thread-safe)
@@ -97,13 +94,13 @@ public:
      * so the report reflects the persisted state (which is what matters for diagnostics).
      *
      * @param screenManager Phosphor::Screens::ScreenManager instance (nullable)
-     * @param layoutManager PhosphorZones::LayoutManager instance (nullable)
+     * @param layoutManager PhosphorZones::LayoutRegistry instance (nullable)
      * @param autotileEngine AutotileEngine instance (nullable)
      * @param sinceMinutes How many minutes of journal logs to include (default 30, capped at 120)
      * @return Markdown-formatted support report
      */
     static QString generate(Phosphor::Screens::ScreenManager* screenManager,
-                            PhosphorZones::LayoutManager* layoutManager, AutotileEngine* autotileEngine,
+                            PhosphorZones::LayoutRegistry* layoutManager, AutotileEngine* autotileEngine,
                             int sinceMinutes = 30);
 
     /**

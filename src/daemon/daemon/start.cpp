@@ -6,7 +6,7 @@
 #include "../overlayservice.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
@@ -183,8 +183,8 @@ void Daemon::connectDesktopActivity()
     // Connect virtual desktop changes to layout switching
     connect(m_virtualDesktopManager.get(), &VirtualDesktopManager::currentDesktopChanged, this, [this](int desktop) {
         // Update all components with current desktop for per-desktop layout lookup
-        // NOTE: PhosphorZones::LayoutManager is the single source of truth for desktop/activity.
-        // WindowDragAdaptor reads from PhosphorZones::LayoutManager directly via resolveLayoutForScreen().
+        // NOTE: PhosphorZones::LayoutRegistry is the single source of truth for desktop/activity.
+        // WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen().
         m_overlayService->setCurrentVirtualDesktop(desktop);
         m_layoutManager->setCurrentVirtualDesktop(desktop);
         if (m_unifiedLayoutController) {
@@ -259,7 +259,7 @@ void Daemon::connectDesktopActivity()
     });
 
     // Set initial virtual desktop on components that maintain their own copy
-    // (WindowDragAdaptor reads from PhosphorZones::LayoutManager directly via resolveLayoutForScreen())
+    // (WindowDragAdaptor reads from PhosphorZones::LayoutRegistry directly via resolveLayoutForScreen())
     const int initialDesktop = m_virtualDesktopManager->currentDesktop();
     m_overlayService->setCurrentVirtualDesktop(initialDesktop);
     m_layoutManager->setCurrentVirtualDesktop(initialDesktop);

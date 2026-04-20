@@ -4,7 +4,7 @@
 # PhosphorZones — manual zone-layout primitives.
 #
 # Passive data + geometry layer: Zone, Layout, ZoneDetector, ZoneHighlighter,
-# layout JSON serialization, and the IZoneDetector / ILayoutManager abstract
+# layout JSON serialization, and the IZoneDetector / ILayoutRegistry abstract
 # contracts. Implements PhosphorLayout::ILayoutSource so editor / settings
 # code can render layout previews without depending on the daemon.
 #
@@ -44,7 +44,7 @@ if(NOT TARGET PhosphorLayoutApi::PhosphorLayoutApi)
     find_package(PhosphorLayoutApi CONFIG REQUIRED)
 endif()
 
-# PhosphorConfig::IBackend is taken by reference in LayoutManager's public
+# PhosphorConfig::IBackend is taken by reference in LayoutRegistry's public
 # constructor so callers can wire any persistent-store backend they own.
 # PUBLIC because the type leaks through the header.
 if(NOT TARGET PhosphorConfig::PhosphorConfig)
@@ -52,7 +52,7 @@ if(NOT TARGET PhosphorConfig::PhosphorConfig)
 endif()
 
 # PhosphorScreens supplies ScreenIdentity (canonical id ↔ connector name)
-# and VirtualScreen helpers used by LayoutManager's assignment cascade.
+# and VirtualScreen helpers used by LayoutRegistry's assignment cascade.
 # PRIVATE because no public header leaks the type.
 if(NOT TARGET PhosphorScreens::PhosphorScreens)
     find_package(PhosphorScreens CONFIG REQUIRED)
@@ -72,16 +72,11 @@ set(phosphorzones_public_HDRS
     include/PhosphorZones/ZoneHighlighter.h
     include/PhosphorZones/LayoutUtils.h
     include/PhosphorZones/IZoneDetector.h
-    include/PhosphorZones/IBuiltInLayouts.h
-    include/PhosphorZones/ILayoutAssignments.h
-    include/PhosphorZones/ILayoutManager.h
-    include/PhosphorZones/ILayoutPersistence.h
     include/PhosphorZones/IZoneLayoutRegistry.h
-    include/PhosphorZones/IQuickLayouts.h
     include/PhosphorZones/ZonesLayoutSource.h
     include/PhosphorZones/ZonesLayoutSourceFactory.h
     include/PhosphorZones/AssignmentEntry.h
-    include/PhosphorZones/LayoutManager.h
+    include/PhosphorZones/LayoutRegistry.h
 )
 
 set(phosphorzones_SRCS
@@ -97,9 +92,9 @@ set(phosphorzones_SRCS
     src/zoneslogging.h
     src/zoneslogging.cpp
     src/interfaces.cpp
-    src/layoutmanager.cpp
-    src/layoutmanager_assignments.cpp
-    src/layoutmanager_persistence.cpp
+    src/layoutregistry.cpp
+    src/layoutregistry_assignments.cpp
+    src/layoutregistry_persistence.cpp
 )
 
 add_library(PhosphorZones SHARED
@@ -133,15 +128,15 @@ target_link_libraries(PhosphorZones
         Qt6::Core
         Qt6::Gui
         PhosphorLayoutApi::PhosphorLayoutApi
-        # LayoutManager's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
-        # — type must be visible to callers that include LayoutManager.h.
+        # LayoutRegistry's public ctor takes a unique_ptr<PhosphorConfig::IBackend>
+        # — type must be visible to callers that include LayoutRegistry.h.
         PhosphorConfig::PhosphorConfig
     PRIVATE
         # Layout::matchAppRule uses PhosphorIdentity::WindowId for
         # composite window-id parsing; PRIVATE because the dep doesn't
         # leak through any public PhosphorZones header.
         PhosphorIdentity::PhosphorIdentity
-        # LayoutManager impl uses ScreenIdentity / VirtualScreen for
+        # LayoutRegistry impl uses ScreenIdentity / VirtualScreen for
         # the assignment-cascade screen-id normalisation. PRIVATE — no
         # public header surfaces these types.
         PhosphorScreens::PhosphorScreens

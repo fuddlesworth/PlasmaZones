@@ -19,7 +19,7 @@
 namespace PlasmaZones {
 
 ZoneDetectionAdaptor::ZoneDetectionAdaptor(PhosphorZones::IZoneDetector* detector,
-                                           PhosphorZones::ILayoutManager* layoutManager,
+                                           PhosphorZones::LayoutRegistry* layoutManager,
                                            Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                            QObject* parent)
     : QDBusAbstractAdaptor(parent)

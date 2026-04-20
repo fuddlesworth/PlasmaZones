@@ -8,11 +8,11 @@
 #include "inavigationactions.h"
 #include "iwindowengine.h"
 
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
-ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutManager* layoutManager, SnapEngine* snapEngine,
+ScreenModeRouter::ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, SnapEngine* snapEngine,
                                    AutotileEngine* autotileEngine)
     : m_layoutManager(layoutManager)
     , m_snapEngine(snapEngine)

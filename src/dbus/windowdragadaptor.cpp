@@ -11,7 +11,7 @@
 #include <PhosphorShortcuts/IAdhocRegistrar.h>
 #include "windowtrackingadaptor.h"
 #include "../core/interfaces.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "../core/geometryutils.h"
@@ -35,7 +35,7 @@ namespace PlasmaZones {
 static constexpr auto kCancelOverlayId = QLatin1String("cancel_overlay_during_drag");
 
 WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZoneDetector* detector,
-                                     PhosphorZones::LayoutManager* layoutManager,
+                                     PhosphorZones::LayoutRegistry* layoutManager,
                                      Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                      WindowTrackingAdaptor* windowTracking, QObject* parent)
     : QDBusAbstractAdaptor(parent)
@@ -63,11 +63,11 @@ WindowDragAdaptor::WindowDragAdaptor(IOverlayService* overlay, PhosphorZones::IZ
     }
 
     // Connect to layout change signals to invalidate cached zone geometry mid-drag
-    // Uses PhosphorZones::LayoutManager (concrete) because PhosphorZones::ILayoutManager is a pure interface without
+    // Uses PhosphorZones::LayoutRegistry (concrete) because PhosphorZones::LayoutRegistry is a pure interface without
     // signals
-    connect(m_layoutManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
             &WindowDragAdaptor::onLayoutChanged);
-    connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString&, int, PhosphorZones::Layout*) {
                 onLayoutChanged();
             });

@@ -23,16 +23,13 @@ class ITileAlgorithmRegistry;
 
 namespace PhosphorZones {
 class Layout;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
 
 class AutotileEngine;
-}
-namespace PhosphorZones {
-class LayoutManager;
-}
-namespace PlasmaZones {
+
 class Settings;
 
 /**
@@ -69,7 +66,7 @@ public:
      *        visible at the constructor signature and the controller
      *        keeps working in unit tests that stub the engine.
      */
-    explicit UnifiedLayoutController(PhosphorZones::LayoutManager* layoutManager, Settings* settings,
+    explicit UnifiedLayoutController(PhosphorZones::LayoutRegistry* layoutManager, Settings* settings,
                                      Phosphor::Screens::ScreenManager* screenManager,
                                      PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry,
                                      AutotileEngine* autotileEngine = nullptr, QObject* parent = nullptr);
@@ -234,7 +231,7 @@ private:
      */
     int findCurrentIndex() const;
 
-    QPointer<PhosphorZones::LayoutManager> m_layoutManager;
+    QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<Settings> m_settings;
     QPointer<Phosphor::Screens::ScreenManager> m_screenManager;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller

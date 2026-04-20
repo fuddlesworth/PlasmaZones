@@ -22,8 +22,8 @@
 #include <QTest>
 
 #include "autotile/AutotileEngine.h"
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/screenmoderouter.h"
 #include "../helpers/AutotileTestHelpers.h"
 #include "snap/SnapEngine.h"
@@ -35,7 +35,7 @@ class TestScreenModeRouter : public QObject
     Q_OBJECT
 
 private:
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     SnapEngine* m_snapEngine = nullptr;
     AutotileEngine* m_autotileEngine = nullptr;
     ScreenModeRouter* m_router = nullptr;
@@ -44,9 +44,10 @@ private Q_SLOTS:
 
     void init()
     {
-        // PhosphorZones::LayoutManager with no backend — every screen hits the default
+        // PhosphorZones::LayoutRegistry with no backend — every screen hits the default
         // modeForScreen fallback (Snapping unless explicitly assigned).
-        m_layoutManager = makePzLayoutManager(nullptr).release();
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
 
         // SnapEngine with all-nullptr dependencies is a valid construction:
         // the router only invokes it via the IEngineLifecycle interface

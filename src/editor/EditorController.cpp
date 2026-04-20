@@ -3,7 +3,7 @@
 
 #include "EditorController.h"
 
-#include "../core/pzlayoutmanagerfactory.h"
+#include "../config/configbackends.h"
 #include "services/ILayoutService.h"
 #include "services/DBusLayoutService.h"
 #include "services/ZoneManager.h"
@@ -46,7 +46,8 @@ EditorController::EditorController(QObject* parent)
     , m_templateService(new TemplateService(this))
     , m_undoController(new UndoController(this))
     , m_localAlgorithmRegistry(std::make_unique<PhosphorTiles::AlgorithmRegistry>(nullptr))
-    , m_localLayoutManager(makePzLayoutManager(nullptr))
+    , m_localLayoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+                                                                           QStringLiteral("plasmazones/layouts")))
 {
     // Install the library-level screen-id resolver before any layout load
     // runs. First call initialises the static; subsequent constructions
@@ -93,12 +94,12 @@ EditorController::EditorController(QObject* parent)
     // ILayoutSource::contentsChanged, so slot ordering against
     // recalcLocalLayouts is not load-bearing here; consumers always query
     // availableLayouts() directly after an interactive edit.
-    connect(m_localLayoutManager.get(), &PhosphorZones::LayoutManager::layoutsChanged, this,
+    connect(m_localLayoutManager.get(), &PhosphorZones::LayoutRegistry::layoutsChanged, this,
             &EditorController::recalcLocalLayouts);
 
     // Populate the daemon-independent layout source from disk on startup
     // so localLayoutPreviews() returns a populated list immediately. The
-    // PhosphorZones::LayoutManager installs a QFileSystemWatcher so subsequent disk
+    // PhosphorZones::LayoutRegistry installs a QFileSystemWatcher so subsequent disk
     // changes (daemon writes, settings creates, hand edits) auto-reload.
     m_localLayoutManager->loadLayouts();
     // Recompute zone geometry for fixed-geometry layouts so ZonesLayoutSource
@@ -281,7 +282,7 @@ QVariantMap EditorController::localLayoutPreview(const QString& id, int windowCo
 void EditorController::reloadLocalLayouts()
 {
     // Slot wired to the daemon's layout-mutation signals — see ctor for
-    // the connect block + rationale. Cheap on no-op (PhosphorZones::LayoutManager
+    // the connect block + rationale. Cheap on no-op (PhosphorZones::LayoutRegistry
     // diff-checks file mtimes / hashes internally).
     if (m_localLayoutManager) {
         m_localLayoutManager->loadLayouts();

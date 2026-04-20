@@ -335,7 +335,7 @@ QKeySequence parseSequence(const QString& raw, const QString& contextId)
 
 } // namespace
 
-ShortcutManager::ShortcutManager(Settings* settings, PhosphorZones::LayoutManager* layoutManager, QObject* parent)
+ShortcutManager::ShortcutManager(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
     , m_layoutManager(layoutManager)

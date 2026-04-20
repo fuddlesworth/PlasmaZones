@@ -37,9 +37,9 @@
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
 #include <PhosphorZones/IZoneLayoutRegistry.h>
 
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
-#include "core/pzlayoutmanagerfactory.h"
+#include "config/configbackends.h"
 
 // ─── Fixture sources / factories ────────────────────────────────────────────
 
@@ -506,15 +506,14 @@ private Q_SLOTS:
 
     void testInvariant_layoutManagerSingleQObjectBase()
     {
-        // Use the PZ-flavoured factory so the test doesn't have to know
-        // about LayoutManagerConfig's required schema strings.
-        auto mgr = PlasmaZones::makePzLayoutManager();
+        auto mgr = std::make_unique<PhosphorZones::LayoutRegistry>(PlasmaZones::createAssignmentsBackend(),
+                                                                   QStringLiteral("plasmazones/layouts"));
         // Direct concrete → QObject path.
         QObject* directQObject = static_cast<QObject*>(mgr.get());
         // Concrete → IZoneLayoutRegistry → ILayoutSourceRegistry → QObject.
         // Every step is non-virtual, single inheritance; the address must
         // not shift along the chain. A non-zero offset would mean
-        // PhosphorZones::LayoutManager picked up a second QObject base somewhere along
+        // PhosphorZones::LayoutRegistry picked up a second QObject base somewhere along
         // the way (e.g. a sibling interface accidentally re-derived from
         // QObject), which is exactly the multi-QObject hazard the static-
         // assert pair guards against at compile time.

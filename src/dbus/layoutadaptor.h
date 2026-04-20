@@ -30,12 +30,10 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace PlasmaZones {
-
-}
 namespace PhosphorZones {
-class LayoutManager;
+class LayoutRegistry;
 }
+
 namespace PlasmaZones {
 class VirtualDesktopManager;
 class ActivityManager;
@@ -44,7 +42,7 @@ class ISettings;
 /**
  * @brief D-Bus adaptor for layout management operations
  *
- * Provides D-Bus interface: org.plasmazones.PhosphorZones::LayoutManager
+ * Provides D-Bus interface: org.plasmazones.PhosphorZones::LayoutRegistry
  *  PhosphorZones::Layout CRUD and assignment operations
  */
 class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
@@ -53,8 +51,8 @@ class PLASMAZONES_EXPORT LayoutAdaptor : public QDBusAbstractAdaptor
     Q_CLASSINFO("D-Bus Interface", "org.plasmazones.LayoutManager")
 
 public:
-    explicit LayoutAdaptor(PhosphorZones::LayoutManager* manager, QObject* parent = nullptr);
-    explicit LayoutAdaptor(PhosphorZones::LayoutManager* manager, VirtualDesktopManager* vdm,
+    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent = nullptr);
+    explicit LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, VirtualDesktopManager* vdm,
                            Phosphor::Screens::ScreenManager* screenManager = nullptr, QObject* parent = nullptr);
     ~LayoutAdaptor() override = default;
 
@@ -376,8 +374,8 @@ Q_SIGNALS:
     void assignmentChangesApplied(const QStringList& changedScreenIds);
 
 private Q_SLOTS:
-    // String-based connection slots for PhosphorZones::LayoutManager signals
-    // (PhosphorZones::LayoutManager redeclares signals for Q_PROPERTY, so we use string-based connections)
+    // String-based connection slots for PhosphorZones::LayoutRegistry signals
+    // (PhosphorZones::LayoutRegistry redeclares signals for Q_PROPERTY, so we use string-based connections)
     void onActiveLayoutChanged(PhosphorZones::Layout* layout);
     void onLayoutsChanged();
     void onLayoutAssigned(const QString& screen, int virtualDesktop, PhosphorZones::Layout* layout);
@@ -470,7 +468,7 @@ private:
      */
     void invalidateLayoutJsonCacheFor(const QUuid& uuid);
 
-    PhosphorZones::LayoutManager* m_layoutManager; // Concrete type for signal connections
+    PhosphorZones::LayoutRegistry* m_layoutManager; // Concrete type for signal connections
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     ActivityManager* m_activityManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;

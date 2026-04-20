@@ -43,7 +43,7 @@ public:
      * @brief Construct with an external (non-owned) config backend
      *
      * Used by the daemon to share a single PhosphorConfig::IBackend across
-     * Settings, PhosphorZones::LayoutManager, and other components. Eliminates Qt's
+     * Settings, PhosphorZones::LayoutRegistry, and other components. Eliminates Qt's
      * QConfFile cache conflicts from multiple QSettings instances per file.
      *
      * CONTRACT: @p backend MUST be pointing at a config file that has

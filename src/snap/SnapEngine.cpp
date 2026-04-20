@@ -16,7 +16,7 @@ namespace PlasmaZones {
 // tests deliberately pass nullptr to construct an engine with minimal parents
 // for testing peripheral classes (adaptors, bridges) — every method that
 // dereferences a dependency guards it locally. Do not Q_ASSERT here.
-SnapEngine::SnapEngine(PhosphorZones::LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+SnapEngine::SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                        PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                        QObject* parent)
     : QObject(parent)

@@ -17,8 +17,8 @@
 #include "modetracker.h"
 #include "shortcutmanager.h"
 #include "rendering/zoneshadernoderhi.h"
-#include <PhosphorZones/LayoutManager.h>
-#include "../core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "../config/configbackends.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include <PhosphorTiles/AutotileLayoutSourceFactory.h>
 #include <PhosphorTiles/ITileAlgorithmRegistry.h>
@@ -77,7 +77,8 @@ Daemon::Daemon(QObject* parent)
     // Don't pass 'this' as parent for unique_ptr-managed objects.
     // unique_ptr owns lifetime; a Qt parent would double-free.
     , m_configBackend(createDefaultConfigBackend())
-    , m_layoutManager(makePzLayoutManager(nullptr))
+    , m_layoutManager(std::make_unique<PhosphorZones::LayoutRegistry>(createAssignmentsBackend(),
+                                                                      QStringLiteral("plasmazones/layouts")))
     , m_layoutComputeService(std::make_unique<LayoutComputeService>(nullptr))
     , m_settings(std::make_unique<Settings>(m_configBackend.get(), nullptr))
     , m_zoneDetector(std::make_unique<PhosphorZones::ZoneDetector>(nullptr))
@@ -97,7 +98,8 @@ Daemon::Daemon(QObject* parent)
               /*maxVirtualScreensPerPhysical=*/ConfigDefaults::maxVirtualScreensPerPhysical(),
           },
           nullptr))
-    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), nullptr))
+    , m_shaderRegistry(std::make_unique<ShaderRegistry>(nullptr))
+    , m_overlayService(std::make_unique<OverlayService>(m_screenManager.get(), m_shaderRegistry.get(), nullptr))
     , m_virtualDesktopManager(std::make_unique<VirtualDesktopManager>(m_layoutManager.get(), nullptr))
     , m_activityManager(std::make_unique<ActivityManager>(m_layoutManager.get(), nullptr))
     , m_shortcutManager(std::make_unique<ShortcutManager>(m_settings.get(), m_layoutManager.get(), nullptr))
@@ -179,14 +181,10 @@ bool Daemon::init()
     // sequential but still off the main thread.
     m_shaderBakePool.setMaxThreadCount(1);
 
-    // Initialize shader registry (must be done early, before D-Bus adaptors).
-    // Per-daemon ownership replaces the previous ShaderRegistry::instance()
-    // singleton — every consumer takes a borrowed pointer via constructor or
-    // setter injection. The registry checks for Qt6::ShaderTools availability
-    // at compile time and for qsb tool availability at runtime. Pass nullptr
-    // as Qt parent: the unique_ptr owns lifetime (matches m_algorithmRegistry
-    // and the rest of this ctor's convention).
-    m_shaderRegistry = std::make_unique<ShaderRegistry>(nullptr);
+    // Warm cached shader bakes on every registry refresh so overlay paints
+    // never block the GUI thread waiting for qsb. m_shaderRegistry itself
+    // is constructed in the ctor init list (before m_overlayService, which
+    // borrows it).
     auto scheduleWarmForShader =
         [this, registryPtr = QPointer<ShaderRegistry>(m_shaderRegistry.get())](const ShaderRegistry::ShaderInfo& info) {
             if (ShaderRegistry::isNoneShader(info.id) || !info.isValid()) {
@@ -238,7 +236,7 @@ bool Daemon::init()
         scheduleWarmForShader(info);
     }
 
-    // PhosphorZones::LayoutManager now takes a free-function provider rather than an
+    // PhosphorZones::LayoutRegistry now takes a free-function provider rather than an
     // ISettings pointer — keeps the lib-side class out of project-side
     // interface knowledge. Settings is owned by `this` (daemon) and
     // outlives the layout manager (declared earlier in daemon.h), so
@@ -263,12 +261,9 @@ bool Daemon::init()
         }
     }
 
-    // Configure overlay service with settings, layout manager, and default layout.
-    // setShaderRegistry MUST run before setSettings so the on-disk shader
-    // hot-reload connection in OverlayService::updateSettings sees a
-    // non-null registry; without it, edits to shader files won't propagate
-    // until the next daemon restart.
-    m_overlayService->setShaderRegistry(m_shaderRegistry.get());
+    // Configure overlay service with settings, layout manager, and default
+    // layout. ShaderRegistry is wired via the ctor, so every overlay path
+    // that needs it sees a non-null registry from the first call onward.
     m_overlayService->setSettings(m_settings.get());
     m_overlayService->setLayoutManager(m_layoutManager.get());
     m_overlayService->setAlgorithmRegistry(m_algorithmRegistry.get());
@@ -284,7 +279,7 @@ bool Daemon::init()
     // Connect layout changes to zone detector and overlay service
     // activeLayoutChanged fires when the global active layout changes; layoutAssigned
     // fires for per-screen assignments. We handle both but avoid redundant recalculations.
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
             [this](PhosphorZones::Layout* layout) {
                 if (layout) {
                     // Recalculate zone geometries asynchronously using primary screen geometry.
@@ -306,7 +301,7 @@ bool Daemon::init()
     // Connect per-screen layout assignments
     // Only update if this is a DIFFERENT layout than the active one
     // (to avoid double-processing when both signals fire for the same layout)
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                 if (!layout) {
                     return;

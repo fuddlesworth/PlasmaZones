@@ -6,8 +6,8 @@
 
 #include "snap/SnapEngine.h"
 #include "core/windowtrackingservice.h"
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
 
 using namespace PlasmaZones;
@@ -79,7 +79,7 @@ class TestSnapEngine : public QObject
     Q_OBJECT
 
 private:
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsSnap* m_settings = nullptr;
     StubZoneDetectorSnap* m_zoneDetector = nullptr;
     WindowTrackingService* m_wts = nullptr;
@@ -88,7 +88,8 @@ private Q_SLOTS:
 
     void init()
     {
-        m_layoutManager = makePzLayoutManager(nullptr).release();
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsSnap(nullptr);
         m_zoneDetector = new StubZoneDetectorSnap(nullptr);
         m_wts = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);

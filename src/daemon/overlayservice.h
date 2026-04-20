@@ -109,7 +109,14 @@ public:
         QScreen* navigationOsdPhysScreen = nullptr;
     };
 
-    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
+    /// @param screenManager Borrowed; must outlive this service.
+    /// @param shaderRegistry Borrowed; must outlive this service. Used by
+    ///                 every overlay path that resolves a shader by id.
+    ///                 Nullable — passing nullptr disables shader-based
+    ///                 overlays entirely (tests that don't exercise shaders).
+    /// @param parent Qt parent.
+    explicit OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+                            QObject* parent = nullptr);
     ~OverlayService() override;
 
     // IOverlayService interface
@@ -140,21 +147,13 @@ public:
     }
 
     void setSettings(ISettings* settings);
-    void setLayoutManager(PhosphorZones::ILayoutManager* layoutManager);
+    void setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager);
 
     /// Inject the daemon-owned tile-algorithm registry. Required when
     /// autotile entries should appear in @ref visibleLayoutCount /
     /// @ref layoutListForScreen output. Borrowed — caller owns it and
     /// must keep it alive for the service's lifetime.
     void setAlgorithmRegistry(PhosphorTiles::ITileAlgorithmRegistry* registry);
-
-    /// Inject the daemon-owned shader registry. Required for any overlay
-    /// path that resolves a shader by id (per-screen shader lookup,
-    /// fade-in/out shader selection, wallpaper sampling). Borrowed —
-    /// caller owns it and must keep it alive for the service's lifetime.
-    /// Replaces the prior ShaderRegistry::instance() singleton — see
-    /// project_plugin_based_compositor.md.
-    void setShaderRegistry(ShaderRegistry* registry);
 
     /// Inject the daemon's bundle-owned autotile layout source. Optional —
     /// when set, @ref buildUnifiedLayoutList reuses its internal preview
@@ -325,7 +324,7 @@ private:
     // without waiting for a layout switch or daemon restart.
     void observeLayoutForLiveEdits(PhosphorZones::Layout* layout);
 
-    // Stop observing a layout (e.g. because PhosphorZones::LayoutManager just removed it).
+    // Stop observing a layout (e.g. because PhosphorZones::LayoutRegistry just removed it).
     // Disconnects the per-layout layoutModified signal and erases the entry
     // from m_observedLayouts. Idempotent — calling for an unobserved layout
     // is a no-op.
@@ -413,7 +412,7 @@ private:
     QHash<QString, PerScreenOverlayState> m_screenStates;
     QPointer<PhosphorZones::Layout> m_layout;
     QPointer<ISettings> m_settings;
-    PhosphorZones::ILayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives service
     ShaderRegistry* m_shaderRegistry = nullptr; ///< Borrowed; outlives service
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives service (optional)

@@ -18,17 +18,14 @@
 
 namespace PhosphorZones {
 class IZoneDetector;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
 
 class AutotileEngine;
 class ISettings;
-}
-namespace PhosphorZones {
-class LayoutManager;
-}
-namespace PlasmaZones {
+
 class SnapNavigationTargetResolver;
 class VirtualDesktopManager;
 class WindowTrackingAdaptor;
@@ -54,7 +51,7 @@ class PLASMAZONES_EXPORT SnapEngine : public QObject, public IEngineLifecycle
     Q_OBJECT
 
 public:
-    explicit SnapEngine(PhosphorZones::LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+    explicit SnapEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                         PhosphorZones::IZoneDetector* zoneDetector, ISettings* settings, VirtualDesktopManager* vdm,
                         QObject* parent = nullptr);
     ~SnapEngine() override;
@@ -330,7 +327,7 @@ Q_SIGNALS:
     void activateWindowRequested(const QString& windowId);
 
 private:
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
     PhosphorZones::IZoneDetector* m_zoneDetector = nullptr;
     ISettings* m_settings = nullptr;
@@ -348,7 +345,7 @@ private:
     // here in Phase 5E from WindowTrackingAdaptor. Constructed lazily on
     // first navigation call (so the construction order isn't constrained
     // by the fact that SnapEngine has to exist before a resolver that
-    // takes WTS + PhosphorZones::LayoutManager can be built).
+    // takes WTS + PhosphorZones::LayoutRegistry can be built).
     std::unique_ptr<SnapNavigationTargetResolver> m_targetResolver;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -364,7 +361,7 @@ private:
 
     /// Lazy-constructs m_targetResolver on first call. Returns nullptr if
     /// the service or layout manager is missing (unit tests with stub
-    /// deps, or shutdown race where WTS/PhosphorZones::LayoutManager are already gone).
+    /// deps, or shutdown race where WTS/PhosphorZones::LayoutRegistry are already gone).
     ///
     /// When @p action is non-empty and the resolver can't be built, emits
     /// navigationFeedback(false, action, "engine_unavailable", ...) so the

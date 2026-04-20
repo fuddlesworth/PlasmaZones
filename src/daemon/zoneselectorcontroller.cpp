@@ -178,7 +178,7 @@ void ZoneSelectorController::setSelectorGeometry(const QRectF& geometry)
     Q_EMIT selectorGeometryChanged(geometry);
 }
 
-void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutManager* layoutManager)
+void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager)
 {
     if (m_layoutManager == layoutManager) {
         return;
@@ -191,11 +191,11 @@ void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutManager* layo
 
     m_layoutManager = layoutManager;
 
-    // Connect new manager using PhosphorZones::LayoutManager (concrete) - PhosphorZones::ILayoutManager has no signals
+    // Connect new manager using PhosphorZones::LayoutRegistry (concrete) - PhosphorZones::LayoutRegistry has no signals
     if (m_layoutManager) {
-        connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutsChanged, this,
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this,
                 &ZoneSelectorController::onLayoutsChanged);
-        connect(m_layoutManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
                 [this](PhosphorZones::Layout* layout) {
                     // Use screen-specific layout if available, fall back to global active layout
                     // Pass current virtual desktop for per-desktop layout lookup
@@ -214,7 +214,7 @@ void ZoneSelectorController::setLayoutManager(PhosphorZones::LayoutManager* layo
         // Also respond to per-screen layout assignments
         // Only update when the popup is actually visible (during drag) to avoid
         // excessive updates during startup or layout switching when popup is hidden
-        connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutAssigned, this,
+        connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this,
                 [this](const QString& screenId, int /*virtualDesktop*/, PhosphorZones::Layout* layout) {
                     // Only update if:
                     // 1. We're currently dragging (popup may be visible)

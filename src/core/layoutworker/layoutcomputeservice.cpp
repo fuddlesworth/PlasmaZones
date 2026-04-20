@@ -4,7 +4,7 @@
 #include "layoutcomputeservice.h"
 #include "layoutworker.h"
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include "../logging.h"
 
@@ -42,7 +42,7 @@ LayoutComputeService::~LayoutComputeService()
     m_thread->wait(5000);
 }
 
-void LayoutComputeService::setLayoutManager(PhosphorZones::LayoutManager* manager)
+void LayoutComputeService::setLayoutManager(PhosphorZones::LayoutRegistry* manager)
 {
     m_layoutManager = manager;
     if (!manager) {
@@ -50,7 +50,7 @@ void LayoutComputeService::setLayoutManager(PhosphorZones::LayoutManager* manage
     }
     // Evict tracked entries when layouts disappear, so the hash doesn't
     // accumulate dangling QPointers over long-running sessions.
-    connect(manager, &PhosphorZones::LayoutManager::layoutRemoved, this, [this](PhosphorZones::Layout* layout) {
+    connect(manager, &PhosphorZones::LayoutRegistry::layoutRemoved, this, [this](PhosphorZones::Layout* layout) {
         if (layout) {
             onLayoutRemoved(layout->id());
         }

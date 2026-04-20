@@ -9,7 +9,7 @@
 #include <PhosphorZones/Layout.h>
 #include <PhosphorScreens/Manager.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../utils.h"
 #include "../logging.h"
 #include <QScreen>
@@ -143,7 +143,7 @@ void WindowTrackingService::populateResnapBufferForAllScreens(const QSet<QString
     // Build per-screen zone position maps: for each screen, resolve the CURRENT
     // layout and build zoneId → position mapping. This captures the OLD state
     // before the KCM's new assignments take effect on the daemon.
-    // (At this point, PhosphorZones::LayoutManager already has the new assignments from the KCM's
+    // (At this point, PhosphorZones::LayoutRegistry already has the new assignments from the KCM's
     // D-Bus calls, so resolveLayoutForScreen returns the NEW layout. But the
     // window zone assignments in WTS still reference zone IDs from the OLD layout.)
     //

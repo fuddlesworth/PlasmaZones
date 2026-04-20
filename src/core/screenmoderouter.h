@@ -9,16 +9,15 @@
 #include <QString>
 #include <QStringList>
 
+namespace PhosphorZones {
+class LayoutRegistry;
+}
+
 namespace PlasmaZones {
 
 class AutotileEngine;
 class IEngineLifecycle;
 class INavigationActions;
-}
-namespace PhosphorZones {
-class LayoutManager;
-}
-namespace PlasmaZones {
 class SnapEngine;
 
 /**
@@ -50,7 +49,7 @@ public:
     /// required at construction time — the daemon's init order guarantees
     /// the engines exist before the router. There is no late-wiring path:
     /// passing nullptr for any dependency is a programming error.
-    ScreenModeRouter(PhosphorZones::LayoutManager* layoutManager, SnapEngine* snapEngine,
+    ScreenModeRouter(PhosphorZones::LayoutRegistry* layoutManager, SnapEngine* snapEngine,
                      AutotileEngine* autotileEngine);
 
     /// Wire navigation action adapters. Must be called once at daemon startup
@@ -102,7 +101,7 @@ public:
     Partitioned partitionByMode(const QStringList& screenIds) const;
 
 private:
-    PhosphorZones::LayoutManager* m_layoutManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
     SnapEngine* m_snapEngine;
     AutotileEngine* m_autotileEngine;
     INavigationActions* m_snapNavigator = nullptr;

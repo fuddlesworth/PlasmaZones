@@ -17,7 +17,7 @@
 #include <PhosphorTiles/TilingAlgorithm.h>
 #include "../core/virtualdesktopmanager.h"
 #include "../core/activitymanager.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include "../core/shaderregistry.h"
 #include <PhosphorScreens/Manager.h>
@@ -39,7 +39,7 @@ namespace PlasmaZones {
 // Constructor and Signal Setup
 // ═══════════════════════════════════════════════════════════════════════════════
 
-LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutManager* manager, QObject* parent)
+LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
 {
@@ -49,7 +49,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutManager* manager, QObject* par
         // misconfiguration but skipping the connect() calls degrades the
         // crash to a non-functional D-Bus surface that returns empty data.
         qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutManager — D-Bus surface will be inert";
+            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
         initCoalesceTimer();
         return;
     }
@@ -57,7 +57,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutManager* manager, QObject* par
     initCoalesceTimer();
 }
 
-LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutManager* manager, VirtualDesktopManager* vdm,
+LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutRegistry* manager, VirtualDesktopManager* vdm,
                              Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QDBusAbstractAdaptor(parent)
     , m_layoutManager(manager)
@@ -67,7 +67,7 @@ LayoutAdaptor::LayoutAdaptor(PhosphorZones::LayoutManager* manager, VirtualDeskt
     Q_ASSERT(manager);
     if (!m_layoutManager) {
         qCCritical(lcDbusLayout)
-            << "LayoutAdaptor constructed with null PhosphorZones::LayoutManager — D-Bus surface will be inert";
+            << "LayoutAdaptor constructed with null PhosphorZones::LayoutRegistry — D-Bus surface will be inert";
         initCoalesceTimer();
         return;
     }
@@ -87,10 +87,10 @@ void LayoutAdaptor::initCoalesceTimer()
 
 void LayoutAdaptor::connectLayoutManagerSignals()
 {
-    connect(m_layoutManager, &PhosphorZones::LayoutManager::activeLayoutChanged, this,
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::activeLayoutChanged, this,
             &LayoutAdaptor::onActiveLayoutChanged);
-    connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutsChanged, this, &LayoutAdaptor::onLayoutsChanged);
-    connect(m_layoutManager, &PhosphorZones::LayoutManager::layoutAssigned, this, &LayoutAdaptor::onLayoutAssigned);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutsChanged, this, &LayoutAdaptor::onLayoutsChanged);
+    connect(m_layoutManager, &PhosphorZones::LayoutRegistry::layoutAssigned, this, &LayoutAdaptor::onLayoutAssigned);
 }
 
 void LayoutAdaptor::onActiveLayoutChanged(PhosphorZones::Layout* layout)
@@ -470,7 +470,7 @@ QString LayoutAdaptor::createLayout(const QString& name, const QString& type)
 
     qCInfo(lcDbusLayout) << "Created layout" << name << "of type" << type;
     // Addition-specific companion to layoutListChanged (emitted by the
-    // PhosphorZones::LayoutManager::layoutsChanged fan-out). Subscribers that only care
+    // PhosphorZones::LayoutRegistry::layoutsChanged fan-out). Subscribers that only care
     // about new layouts — e.g. the settings list auto-select path — can
     // react without diffing the full list.
     const QString newId = layout->id().toString();

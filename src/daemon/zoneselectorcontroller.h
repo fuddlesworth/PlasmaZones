@@ -4,7 +4,7 @@
 #pragma once
 
 #include "../core/interfaces.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace Phosphor::Screens {
 class ScreenManager;
@@ -144,7 +144,7 @@ public:
     void setSelectorGeometry(const QRectF& geometry);
 
     // PhosphorZones::Layout management (concrete type for signal connections)
-    void setLayoutManager(PhosphorZones::LayoutManager* layoutManager);
+    void setLayoutManager(PhosphorZones::LayoutRegistry* layoutManager);
     void setSettings(ISettings* settings);
 
     /// Inject the daemon-owned tile-algorithm registry — required for
@@ -276,7 +276,7 @@ private:
     QString m_hoveredLayoutId;
 
     // References (concrete type for signal connections)
-    QPointer<PhosphorZones::LayoutManager> m_layoutManager;
+    QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
     QPointer<ISettings> m_settings;
     PhosphorTiles::ITileAlgorithmRegistry* m_algorithmRegistry = nullptr; ///< Borrowed; outlives controller
     PhosphorLayout::ILayoutSource* m_autotileLayoutSource = nullptr; ///< Borrowed; outlives controller (optional)

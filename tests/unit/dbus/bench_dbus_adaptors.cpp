@@ -36,8 +36,8 @@
 #include "dbus/settingsadaptor.h"
 #include "dbus/layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include <PhosphorZones/Zone.h>
 #include "../helpers/StubSettings.h"
 #include "../helpers/IsolatedConfigGuard.h"
@@ -60,7 +60,8 @@ private Q_SLOTS:
         m_parent = new QObject(nullptr);
         m_settingsAdaptor = new SettingsAdaptor(m_settings, /*shaderRegistry=*/nullptr, m_parent);
 
-        m_layoutManager = makePzLayoutManager(m_parent).release();
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"), m_parent);
         auto* layout = new PhosphorZones::Layout(QStringLiteral("BenchLayout"));
         for (int i = 0; i < 4; ++i) {
             auto* zone = new PhosphorZones::Zone(QRectF(0.25 * i, 0.0, 0.25, 1.0));
@@ -211,7 +212,7 @@ private:
     QObject* m_parent = nullptr;
     StubSettings* m_settings = nullptr;
     SettingsAdaptor* m_settingsAdaptor = nullptr;
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     LayoutAdaptor* m_layoutAdaptor = nullptr;
     QString m_benchLayoutId;
 };

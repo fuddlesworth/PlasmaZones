@@ -8,7 +8,7 @@
 #include <PhosphorZones/Zone.h>
 #include "../../core/constants.h"
 #include <PhosphorZones/LayoutUtils.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/logging.h"
 #include "../../core/utils.h"
 #include <PhosphorTiles/AlgorithmRegistry.h>

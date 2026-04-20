@@ -27,6 +27,7 @@
 
 namespace PhosphorZones {
 class Layout;
+class LayoutRegistry;
 }
 
 namespace PlasmaZones {
@@ -80,11 +81,7 @@ struct PendingAutotileRestore
 constexpr int MaxPendingRestoresPerApp = 16;
 
 class AutotileConfig;
-}
-namespace PhosphorZones {
-class LayoutManager;
-}
-namespace PlasmaZones {
+
 class NavigationController;
 class PerScreenConfigResolver;
 // Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
@@ -127,7 +124,7 @@ class PLASMAZONES_EXPORT AutotileEngine : public QObject, public IEngineLifecycl
     friend class SettingsBridge;
 
 public:
-    explicit AutotileEngine(PhosphorZones::LayoutManager* layoutManager, WindowTrackingService* windowTracker,
+    explicit AutotileEngine(PhosphorZones::LayoutRegistry* layoutManager, WindowTrackingService* windowTracker,
                             Phosphor::Screens::ScreenManager* screenManager,
                             PhosphorTiles::ITileAlgorithmRegistry* algorithmRegistry, QObject* parent = nullptr);
     ~AutotileEngine() override;
@@ -1303,7 +1300,7 @@ private:
      */
     PhosphorTiles::TilingState* stateForWindow(const QString& windowId, QString* outScreenId = nullptr);
 
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     WindowTrackingService* m_windowTracker = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     WindowRegistry* m_windowRegistry = nullptr; ///< Shared registry for class lookups; not owned

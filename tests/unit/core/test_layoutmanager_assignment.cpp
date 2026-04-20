@@ -3,7 +3,7 @@
 
 /**
  * @file test_layoutmanager_assignment.cpp
- * @brief Unit tests for PhosphorZones::LayoutManager fallback cascade, default layout, quick slots
+ * @brief Unit tests for PhosphorZones::LayoutRegistry fallback cascade, default layout, quick slots
  */
 
 #include <QTest>
@@ -19,8 +19,7 @@
 #include <memory>
 #include <vector>
 
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
 #include "core/constants.h"
@@ -44,10 +43,11 @@ private:
         return layout;
     }
 
-    PhosphorZones::LayoutManager* createManager(QObject* parent = nullptr)
+    PhosphorZones::LayoutRegistry* createManager(QObject* parent = nullptr)
     {
         m_guards.emplace_back(std::make_unique<IsolatedConfigGuard>());
-        auto* mgr = makePzLayoutManager(parent).release();
+        auto* mgr = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                      QStringLiteral("plasmazones/layouts"), parent);
         QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
         QDir().mkpath(layoutDir);
         mgr->setLayoutDirectory(layoutDir);
@@ -69,7 +69,7 @@ private Q_SLOTS:
 
     void testLayoutManager_layoutForScreen_fallbackCascade()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* defaultLayout = createTestLayout(QStringLiteral("Default"));
         mgr->addLayout(defaultLayout);
@@ -98,7 +98,7 @@ private Q_SLOTS:
 
     void testLayoutManager_quickLayoutSlot_validRange_1to9()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Quick"));
         mgr->addLayout(layout);
@@ -127,7 +127,7 @@ private Q_SLOTS:
 
     void testLayoutManager_defaultLayout_settingsIdTakesPrecedence()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
         auto* settings = new StubSettings(mgr.data());
         mgr->setDefaultLayoutIdProvider([settings]() {
             return settings->defaultLayoutId();
@@ -147,7 +147,7 @@ private Q_SLOTS:
 
     void testLayoutManager_defaultLayout_fallbackToFirstLayout()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
         auto* settings = new StubSettings(mgr.data());
         mgr->setDefaultLayoutIdProvider([settings]() {
             return settings->defaultLayoutId();
@@ -169,7 +169,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_snappingAssignment_setsFields()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -185,7 +185,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_autotileAssignment_setsFields()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -206,7 +206,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_togglePreservesBothFields()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -233,7 +233,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_modeForScreen_delegates()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -247,7 +247,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_snappingLayoutForScreen_returnsField()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -261,7 +261,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_tilingAlgorithmForScreen_returnsField()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -276,7 +276,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_perDesktop_independentEntries()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
         mgr->addLayout(layoutA);
@@ -301,7 +301,7 @@ private Q_SLOTS:
 
     void testAssignmentEntry_clearAutotile_flipsToSnapping()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layout = createTestLayout(QStringLiteral("Manual"));
         mgr->addLayout(layout);
@@ -324,7 +324,7 @@ private Q_SLOTS:
 
     void testConfigRoundTrip_saveAndLoad_preservesAllFields()
     {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
 
         auto* layoutA = createTestLayout(QStringLiteral("LayoutA"));
         mgr->addLayout(layoutA);
@@ -353,7 +353,8 @@ private Q_SLOTS:
         mgr->saveAssignments();
 
         // Create a new manager and load — same config file sees the data
-        QScopedPointer<PhosphorZones::LayoutManager> mgr2(makePzLayoutManager(nullptr).release());
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr2(new PhosphorZones::LayoutRegistry(
+            PlasmaZones::createAssignmentsBackend(), QStringLiteral("plasmazones/layouts")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutA")));
         mgr2->addLayout(createTestLayout(QStringLiteral("LayoutB")));
         QString layoutDir2 = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts2");
@@ -380,107 +381,6 @@ private Q_SLOTS:
 
         // Verify quick layout slot
         QCOMPARE(mgr2->quickLayoutSlots().value(3), idA);
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // P6: Migration from old assignments.json with shadows
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testMigration_oldJsonWithShadows_mergesIntoAssignmentEntry()
-    {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
-
-        auto* layout = createTestLayout(QStringLiteral("Manual"));
-        mgr->addLayout(layout);
-        QString layoutId = layout->id().toString();
-
-        // Write old-format assignments.json
-        QString layoutDir = m_guards.back()->dataPath() + QStringLiteral("/plasmazones/layouts");
-        QString jsonPath = layoutDir + QStringLiteral("/assignments.json");
-
-        QJsonObject root;
-        QJsonArray assignments;
-        {
-            // Active: autotile:wide on DP-1, desktop 0
-            QJsonObject obj;
-            obj[JsonKeys::ScreenId] = QStringLiteral("DP-1");
-            obj[JsonKeys::Desktop] = 0;
-            obj[JsonKeys::LayoutId] = QStringLiteral("autotile:wide");
-            assignments.append(obj);
-        }
-        root[JsonKeys::Assignments] = assignments;
-
-        // Shadow: the snapping layout that was active before toggling to autotile
-        QJsonArray shadows;
-        {
-            QJsonObject shadow;
-            shadow[JsonKeys::ScreenId] = QStringLiteral("DP-1");
-            shadow[JsonKeys::Desktop] = 0;
-            shadow[JsonKeys::LayoutId] = layoutId;
-            shadows.append(shadow);
-        }
-        root[QStringLiteral("shadowedAssignments")] = shadows;
-
-        QFile file(jsonPath);
-        QVERIFY(file.open(QIODevice::WriteOnly));
-        file.write(QJsonDocument(root).toJson());
-        file.close();
-
-        // Load — should migrate
-        mgr->loadAssignments();
-
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
-        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
-        // Shadow should be merged into snappingLayout field
-        QCOMPARE(entry.snappingLayout, layoutId);
-
-        // Old file should be renamed to .migrated
-        QVERIFY(!QFile::exists(jsonPath));
-        QVERIFY(QFile::exists(jsonPath + QStringLiteral(".migrated")));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // P6: Migration from old [ModeTracking] config group
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testMigration_modeTrackingGroup_fillsMissingFields()
-    {
-        QScopedPointer<PhosphorZones::LayoutManager> mgr(createManager());
-
-        auto* layout = createTestLayout(QStringLiteral("Manual"));
-        mgr->addLayout(layout);
-        QString layoutId = layout->id().toString();
-
-        // Pre-populate config with an Assignment entry that has autotile but no snappingLayout
-        {
-            auto backend = PlasmaZones::createDefaultConfigBackend();
-            {
-                auto grp = backend->group(QStringLiteral("Assignment:DP-1"));
-                grp->writeInt(QStringLiteral("Mode"), 1); // Autotile
-                grp->writeString(QStringLiteral("TilingAlgorithm"), QStringLiteral("dwindle"));
-                // SnappingLayout intentionally empty
-            }
-            // Write old ModeTracking group with the manual layout ID
-            {
-                auto mt = backend->group(QStringLiteral("ModeTracking"));
-                mt->writeString(QStringLiteral("LastManualLayoutId"), layoutId);
-                mt->writeString(QStringLiteral("LastAutotileAlgorithm"), QStringLiteral("wide"));
-                mt->writeInt(QStringLiteral("LastTilingMode"), 1);
-            }
-            backend->sync();
-        }
-
-        mgr->loadAssignments();
-
-        auto entry = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
-        QCOMPARE(entry.mode, PhosphorZones::AssignmentEntry::Autotile);
-        QCOMPARE(entry.tilingAlgorithm, QStringLiteral("dwindle")); // Existing value preserved
-        QCOMPARE(entry.snappingLayout, layoutId); // Filled from ModeTracking
-
-        // ModeTracking group should be deleted
-        auto backend = PlasmaZones::createDefaultConfigBackend();
-        QVERIFY(!backend->groupList().contains(QStringLiteral("ModeTracking")));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -599,85 +499,6 @@ private Q_SLOTS:
         QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
         QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("wide"));
         QCOMPARE(entry2.snappingLayout, QStringLiteral("{some-uuid}")); // preserved
-    }
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    // P8: Runtime config.json → assignments.json migration
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    void testLoadAssignments_migratesFromConfigJson()
-    {
-        // createManager() pushes its own IsolatedConfigGuard, so config.json
-        // must be written AFTER the manager's guard is active to share the
-        // same XDG_CONFIG_HOME.
-        auto* mgr = createManager();
-
-        // Write Assignment:* and QuickLayouts groups to config.json (simulating
-        // a user who was already on v2 before the assignments split).
-        {
-            auto configBackend = PlasmaZones::createDefaultConfigBackend();
-            {
-                auto g = configBackend->group(QStringLiteral("Assignment:eDP-1"));
-                g->writeInt(QLatin1String("Mode"), 0);
-                g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{aaaa-bbbb}"));
-                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("dwindle"));
-            }
-            {
-                auto g = configBackend->group(QStringLiteral("Assignment:HDMI-A-1:Desktop:2"));
-                g->writeInt(QLatin1String("Mode"), 1);
-                g->writeString(QLatin1String("SnappingLayout"), QStringLiteral("{cccc-dddd}"));
-                g->writeString(QLatin1String("TilingAlgorithm"), QStringLiteral("bsp"));
-            }
-            {
-                auto g = configBackend->group(ConfigDefaults::quickLayoutsGroup());
-                g->writeString(QStringLiteral("1"), QStringLiteral("{quick-1}"));
-            }
-            configBackend->sync();
-        }
-
-        // Ensure assignments.json is still empty
-        {
-            auto assignBackend = PlasmaZones::createAssignmentsBackend();
-            QVERIFY(assignBackend->groupList().isEmpty());
-        }
-
-        // loadAssignments() should detect empty assignments.json and migrate
-        // from config.json.
-        mgr->loadAssignments();
-
-        // Verify assignments were loaded
-        auto entry1 = mgr->assignmentEntryForScreen(QStringLiteral("eDP-1"));
-        QCOMPARE(entry1.mode, PhosphorZones::AssignmentEntry::Snapping);
-        QCOMPARE(entry1.snappingLayout, QStringLiteral("{aaaa-bbbb}"));
-        QCOMPARE(entry1.tilingAlgorithm, QStringLiteral("dwindle"));
-
-        auto entry2 = mgr->assignmentEntryForScreen(QStringLiteral("HDMI-A-1"), 2);
-        QCOMPARE(entry2.mode, PhosphorZones::AssignmentEntry::Autotile);
-        QCOMPARE(entry2.tilingAlgorithm, QStringLiteral("bsp"));
-
-        // Quick layout slot should have migrated
-        QCOMPARE(mgr->quickLayoutSlots().value(1), QStringLiteral("{quick-1}"));
-
-        // Verify assignments.json was written (persisted by migration)
-        {
-            auto assignBackend = PlasmaZones::createAssignmentsBackend();
-            QStringList groups = assignBackend->groupList();
-            QVERIFY(groups.contains(QStringLiteral("Assignment:eDP-1")));
-            QVERIFY(groups.contains(QStringLiteral("Assignment:HDMI-A-1:Desktop:2")));
-        }
-
-        // Verify config.json no longer has the migrated groups
-        {
-            auto configBackend = PlasmaZones::createDefaultConfigBackend();
-            QStringList groups = configBackend->groupList();
-            for (const QString& g : groups) {
-                QVERIFY2(!g.startsWith(ConfigDefaults::assignmentGroupPrefix()),
-                         qPrintable(
-                             QStringLiteral("Assignment group '%1' should have been removed from config.json").arg(g)));
-            }
-            QVERIFY2(!groups.contains(ConfigDefaults::quickLayoutsGroup()),
-                     "QuickLayouts should have been removed from config.json");
-        }
     }
 };
 

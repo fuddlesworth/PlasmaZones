@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 fuddlesworth
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
-// Layout file I/O: loading, saving, importing, exporting.
-// Part of LayoutManager — split from layoutmanager.cpp for SRP.
+// Layout file I/O + assignment persistence.
+// Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include "zoneslogging.h"
 
@@ -19,34 +19,23 @@ namespace PhosphorZones {
 
 namespace {
 
-// Wire-format keys for the assignments.json file. Owned by this lib
-// because the file IS the LayoutManager's serialization format —
-// composition roots that swap backends still need the on-disk shape
-// to round-trip. PlasmaZones used to keep these in src/core/constants.h
-// alongside other PZ-specific JSON keys; lifting them in here is part
-// of the same "PZ-knowledge stays project-side" cleanup that moved the
-// schema-string ConfigDefaults reads behind LayoutManagerConfig.
-namespace JsonKeys {
-constexpr QLatin1String Assignments{"assignments"};
-constexpr QLatin1String ScreenId{"screenId"};
-constexpr QLatin1String Screen{"screen"}; ///< Legacy alias retained for backwards-compat reads
-constexpr QLatin1String Desktop{"desktop"};
-constexpr QLatin1String Activity{"activity"};
-constexpr QLatin1String LayoutId{"layoutId"};
-constexpr QLatin1String QuickShortcuts{"quickShortcuts"};
-} // namespace JsonKeys
+// Wire-format constants for the config backend group/key names.
+// Owned by this lib because they ARE the LayoutRegistry's serialization
+// format — any consumer of the lib shares them automatically.
+constexpr QLatin1String AssignmentGroupPrefix{"Assignment:"};
+constexpr QLatin1String QuickLayoutsGroup{"QuickLayouts"};
 
 } // namespace
 
-void LayoutManager::loadLayouts()
+void LayoutRegistry::loadLayouts()
 {
     ensureLayoutDirectory();
 
     // Load from ALL data locations (system directories first, then user)
     // locateAll() returns paths in priority order: user first, system last
     // We reverse to load system first, so user layouts can override
-    QStringList allDirs = QStandardPaths::locateAll(
-        QStandardPaths::GenericDataLocation, QStringLiteral("plasmazones/layouts"), QStandardPaths::LocateDirectory);
+    QStringList allDirs = QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, m_layoutSubdirectory,
+                                                    QStandardPaths::LocateDirectory);
 
     // Reverse order: load system layouts first, user layouts last (override)
     std::reverse(allDirs.begin(), allDirs.end());
@@ -78,7 +67,7 @@ void LayoutManager::loadLayouts()
     Q_EMIT layoutsChanged();
 }
 
-void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
+void LayoutRegistry::loadLayoutsFromDirectory(const QString& directory)
 {
     QDir dir(directory);
     if (!dir.exists()) {
@@ -185,7 +174,7 @@ void LayoutManager::loadLayoutsFromDirectory(const QString& directory)
     }
 }
 
-void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
+void LayoutRegistry::saveLayout(PhosphorZones::Layout* layout)
 {
     if (!layout || !layout->isDirty()) {
         return;
@@ -235,7 +224,7 @@ void LayoutManager::saveLayout(PhosphorZones::Layout* layout)
     layout->clearDirty();
 }
 
-void LayoutManager::saveLayouts()
+void LayoutRegistry::saveLayouts()
 {
     for (auto* layout : m_layouts) {
         saveLayout(layout);
@@ -245,10 +234,10 @@ void LayoutManager::saveLayouts()
     Q_EMIT layoutsSaved();
 }
 
-void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
+void LayoutRegistry::readAssignmentGroups(PhosphorConfig::IBackend* backend)
 {
     const QStringList allGroups = backend->groupList();
-    const QString& assignmentPrefix = m_config.assignmentGroupPrefix;
+    const QString& assignmentPrefix = AssignmentGroupPrefix;
 
     for (const QString& groupName : allGroups) {
         if (!groupName.startsWith(assignmentPrefix))
@@ -269,9 +258,9 @@ void LayoutManager::readAssignmentGroups(PhosphorConfig::IBackend* backend)
     }
 }
 
-void LayoutManager::readQuickLayouts(PhosphorConfig::IBackend* backend)
+void LayoutRegistry::readQuickLayouts(PhosphorConfig::IBackend* backend)
 {
-    auto quickGroup = backend->group(m_config.quickLayoutsGroup);
+    auto quickGroup = backend->group(QuickLayoutsGroup);
     for (int i = 1; i <= 9; ++i) {
         QString key = QString::number(i);
         if (quickGroup->hasKey(key)) {
@@ -282,241 +271,11 @@ void LayoutManager::readQuickLayouts(PhosphorConfig::IBackend* backend)
     }
 }
 
-void LayoutManager::loadAssignments()
+void LayoutRegistry::loadAssignments()
 {
     m_configBackend->reparseConfiguration();
-
-    // ── Primary path: read from [Assignment:*] groups ──────────────
     readAssignmentGroups(m_configBackend);
-    const bool foundGroups = !m_assignments.isEmpty();
-
-    // ── Quick layout shortcuts from [QuickLayouts] group ───────────────────
     readQuickLayouts(m_configBackend);
-
-    // ── Migration fallback: read from assignments.json (one-time) ──────────
-    if (!foundGroups) {
-        const QString filePath = m_layoutDirectory + QStringLiteral("/assignments.json");
-        QFile file(filePath);
-
-        if (file.exists() && file.open(QIODevice::ReadOnly)) {
-            const QByteArray data = file.readAll();
-            if (!data.isEmpty()) {
-                QJsonParseError parseError;
-                const auto doc = QJsonDocument::fromJson(data, &parseError);
-                if (parseError.error == QJsonParseError::NoError) {
-                    const auto root = doc.object();
-                    qCInfo(lcZonesLib) << "Migrating assignments from JSON to KConfig";
-
-                    // Load shadowed assignments from old format
-                    QHash<LayoutAssignmentKey, QString> oldShadows;
-                    const auto shadowArray = root[QStringLiteral("shadowedAssignments")].toArray();
-                    for (const auto& value : shadowArray) {
-                        if (!value.isObject())
-                            continue;
-                        const auto obj = value.toObject();
-                        QString sid = obj[JsonKeys::ScreenId].toString();
-                        if (sid.isEmpty())
-                            sid = obj[JsonKeys::Screen].toString();
-                        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
-                                                obj[JsonKeys::Activity].toString()};
-                        const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
-                        if (!layoutIdStr.isEmpty())
-                            oldShadows[key] = layoutIdStr;
-                    }
-
-                    // Load assignments
-                    const auto assignmentsArray = root[JsonKeys::Assignments].toArray();
-                    for (const auto& value : assignmentsArray) {
-                        if (!value.isObject())
-                            continue;
-                        const auto obj = value.toObject();
-                        QString sid = obj[JsonKeys::ScreenId].toString();
-                        if (sid.isEmpty())
-                            sid = obj[JsonKeys::Screen].toString();
-                        LayoutAssignmentKey key{sid, obj[JsonKeys::Desktop].toInt(),
-                                                obj[JsonKeys::Activity].toString()};
-
-                        AssignmentEntry entry;
-                        if (obj.contains(QStringLiteral("mode"))) {
-                            // Already in new explicit format
-                            int modeInt = obj[QStringLiteral("mode")].toInt();
-                            entry.mode = (modeInt == AssignmentEntry::Autotile) ? AssignmentEntry::Autotile
-                                                                                : AssignmentEntry::Snapping;
-                            entry.snappingLayout = obj[QStringLiteral("snappingLayout")].toString();
-                            entry.tilingAlgorithm = obj[QStringLiteral("tilingAlgorithm")].toString();
-                        } else {
-                            // Old single layoutId format
-                            const QString layoutIdStr = obj[JsonKeys::LayoutId].toString();
-                            QString normalizedId = layoutIdStr;
-                            if (!PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
-                                const QUuid uuid = QUuid::fromString(layoutIdStr);
-                                if (uuid.isNull())
-                                    continue;
-                                normalizedId = uuid.toString();
-                            }
-                            entry = AssignmentEntry::fromLayoutId(normalizedId);
-
-                            // Merge shadow into opposite field
-                            auto shadowIt = oldShadows.constFind(key);
-                            if (shadowIt != oldShadows.constEnd()) {
-                                if (entry.mode == AssignmentEntry::Autotile
-                                    && !PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
-                                    entry.snappingLayout = shadowIt.value();
-                                } else if (entry.mode == AssignmentEntry::Snapping
-                                           && PhosphorLayout::LayoutId::isAutotile(shadowIt.value())) {
-                                    entry.tilingAlgorithm =
-                                        PhosphorLayout::LayoutId::extractAlgorithmId(shadowIt.value());
-                                }
-                            }
-                        }
-
-                        if (entry.isValid())
-                            m_assignments[key] = entry;
-                    }
-
-                    // Load quick shortcuts from JSON (migration)
-                    if (m_quickLayoutShortcuts.isEmpty()) {
-                        const auto shortcutsObj = root[JsonKeys::QuickShortcuts].toObject();
-                        for (auto it = shortcutsObj.begin(); it != shortcutsObj.end(); ++it) {
-                            bool ok = false;
-                            const int number = it.key().toInt(&ok);
-                            if (!ok)
-                                continue;
-                            const QString layoutIdStr = it.value().toString();
-                            if (PhosphorLayout::LayoutId::isAutotile(layoutIdStr)) {
-                                m_quickLayoutShortcuts[number] = layoutIdStr;
-                            } else {
-                                const QUuid uuid = QUuid::fromString(layoutIdStr);
-                                if (!uuid.isNull())
-                                    m_quickLayoutShortcuts[number] = uuid.toString();
-                            }
-                        }
-                    }
-
-                    // Migrate activity-keyed per-desktop entries
-                    {
-                        QList<LayoutAssignmentKey> toRemove;
-                        QHash<LayoutAssignmentKey, AssignmentEntry> toAdd;
-                        for (auto it = m_assignments.constBegin(); it != m_assignments.constEnd(); ++it) {
-                            const LayoutAssignmentKey& key = it.key();
-                            if (key.virtualDesktop > 0 && !key.activity.isEmpty()) {
-                                LayoutAssignmentKey emptyActivityKey{key.screenId, key.virtualDesktop, QString()};
-                                if (!m_assignments.contains(emptyActivityKey) && !toAdd.contains(emptyActivityKey)) {
-                                    toAdd[emptyActivityKey] = it.value();
-                                }
-                                toRemove.append(key);
-                            }
-                        }
-                        for (const auto& key : toRemove)
-                            m_assignments.remove(key);
-                        for (auto it = toAdd.constBegin(); it != toAdd.constEnd(); ++it)
-                            m_assignments[it.key()] = it.value();
-                        if (!toRemove.isEmpty()) {
-                            qCInfo(lcZonesLib) << "Migrated" << toRemove.size()
-                                               << "activity-keyed per-desktop assignments to empty-activity";
-                        }
-                    }
-
-                    // Write migrated data immediately
-                    saveAssignments();
-                    qCInfo(lcZonesLib) << "Migration from assignments.json complete";
-
-                    // Rename old file so it isn't re-read on next startup
-                    file.close();
-                    QFile::rename(filePath, filePath + QStringLiteral(".migrated"));
-                }
-            }
-        }
-    }
-
-    // ── One-time migration: config.json → assignments.json ────────────────
-    // Prior to this split, Assignment:* and QuickLayouts groups lived in
-    // config.json alongside Settings-owned groups.  If assignments.json is
-    // still empty, check config.json for legacy groups and migrate them.
-    if (!foundGroups && m_quickLayoutShortcuts.isEmpty() && m_config.legacyMigrationBackendFactory) {
-        // Note: concurrent startup of daemon + settings app could race on this
-        // migration (both read config.json, both write assignments.json).  The
-        // atomic-write pattern means last-writer-wins, which is acceptable for
-        // a one-time migration that produces identical output from identical input.
-        //
-        // The legacy backend (project-supplied — PZ wires it to
-        // createDefaultConfigBackend) holds the older [Assignment:*] /
-        // [QuickLayouts] groups when the file split hasn't run yet.
-        // No factory configured = no migration — clean install or non-PZ.
-        auto configBackend = m_config.legacyMigrationBackendFactory();
-        readAssignmentGroups(configBackend.get());
-        readQuickLayouts(configBackend.get());
-
-        const bool migratedFromConfig = !m_assignments.isEmpty();
-        if (migratedFromConfig || !m_quickLayoutShortcuts.isEmpty()) {
-            // Write to assignments.json
-            saveAssignments();
-
-            // Delete migrated groups from config.json
-            const QString& assignPrefix = m_config.assignmentGroupPrefix;
-            for (const QString& groupName : configBackend->groupList()) {
-                if (groupName.startsWith(assignPrefix)) {
-                    configBackend->deleteGroup(groupName);
-                }
-            }
-            configBackend->deleteGroup(m_config.quickLayoutsGroup);
-            qCInfo(lcZonesLib) << "Migrated Assignment/QuickLayouts from config.json to assignments.json";
-        }
-
-        // Also clean up legacy groups from config.json while we have it open
-        {
-            auto modeGroup = configBackend->group(m_config.modeTrackingGroup);
-            if (modeGroup->hasKey(QLatin1String("LastManualLayoutId"))
-                || modeGroup->hasKey(QLatin1String("LastAutotileAlgorithm"))
-                || modeGroup->hasKey(QLatin1String("LastTilingMode"))) {
-                const QString lastManualId = modeGroup->readString(QLatin1String("LastManualLayoutId"));
-                const QString lastAlgorithm = modeGroup->readString(QLatin1String("LastAutotileAlgorithm"));
-                bool migrated = false;
-
-                for (auto it = m_assignments.begin(); it != m_assignments.end(); ++it) {
-                    if (it.key().virtualDesktop != 0 || !it.key().activity.isEmpty())
-                        continue;
-                    AssignmentEntry& entry = it.value();
-                    if (entry.snappingLayout.isEmpty() && !lastManualId.isEmpty()) {
-                        entry.snappingLayout = lastManualId;
-                        migrated = true;
-                    }
-                    if (entry.tilingAlgorithm.isEmpty() && !lastAlgorithm.isEmpty()) {
-                        entry.tilingAlgorithm = lastAlgorithm;
-                        migrated = true;
-                    }
-                }
-                modeGroup.reset();
-                configBackend->deleteGroup(m_config.modeTrackingGroup);
-                if (migrated) {
-                    saveAssignments();
-                    qCInfo(lcZonesLib) << "Migrated [ModeTracking] into base screen entries";
-                } else {
-                    qCInfo(lcZonesLib) << "Cleaned up obsolete [ModeTracking] group";
-                }
-            }
-        }
-
-        // Clean up obsolete TilingScreen/TilingActivity/TilingDesktop from config.json
-        {
-            bool cleaned = false;
-            const QStringList currentGroups = configBackend->groupList();
-            for (const QString& groupName : currentGroups) {
-                if (groupName.startsWith(QLatin1String("TilingScreen:"))
-                    || groupName.startsWith(QLatin1String("TilingActivity:"))
-                    || groupName.startsWith(QLatin1String("TilingDesktop:"))) {
-                    configBackend->deleteGroup(groupName);
-                    cleaned = true;
-                }
-            }
-            if (cleaned) {
-                qCInfo(lcZonesLib) << "Cleaned up obsolete TilingScreen/TilingActivity/TilingDesktop groups";
-            }
-        }
-
-        // Single sync for all config.json cleanup operations
-        configBackend->sync();
-    }
 
     qCInfo(lcZonesLib) << "Loaded assignments=" << m_assignments.size()
                        << "quickShortcuts=" << m_quickLayoutShortcuts.size();
@@ -530,11 +289,11 @@ void LayoutManager::loadAssignments()
     }
 }
 
-void LayoutManager::saveAssignments()
+void LayoutRegistry::saveAssignments()
 {
     // Delete old <prefix>* groups
     const QStringList allGroups = m_configBackend->groupList();
-    const QString& prefix = m_config.assignmentGroupPrefix;
+    const QString& prefix = AssignmentGroupPrefix;
     for (const QString& groupName : allGroups) {
         if (groupName.startsWith(prefix)) {
             m_configBackend->deleteGroup(groupName);
@@ -563,8 +322,8 @@ void LayoutManager::saveAssignments()
 
     // Write [QuickLayouts] group
     {
-        m_configBackend->deleteGroup(m_config.quickLayoutsGroup);
-        auto quickGroup = m_configBackend->group(m_config.quickLayoutsGroup);
+        m_configBackend->deleteGroup(QuickLayoutsGroup);
+        auto quickGroup = m_configBackend->group(QuickLayoutsGroup);
         for (auto it = m_quickLayoutShortcuts.constBegin(); it != m_quickLayoutShortcuts.constEnd(); ++it) {
             quickGroup->writeString(QString::number(it.key()), it.value());
         }
@@ -575,7 +334,7 @@ void LayoutManager::saveAssignments()
                        << "quickShortcuts=" << m_quickLayoutShortcuts.size();
 }
 
-void LayoutManager::importLayout(const QString& filePath)
+void LayoutRegistry::importLayout(const QString& filePath)
 {
     if (filePath.isEmpty()) {
         qCWarning(lcZonesLib) << "Cannot import layout: file path is empty";
@@ -632,7 +391,7 @@ void LayoutManager::importLayout(const QString& filePath)
     qCInfo(lcZonesLib) << "Imported layout:" << layout->name() << "from" << filePath;
 }
 
-void LayoutManager::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
+void LayoutRegistry::exportLayout(PhosphorZones::Layout* layout, const QString& filePath)
 {
     if (!layout) {
         qCWarning(lcZonesLib) << "Cannot export layout: layout is null";
@@ -665,7 +424,7 @@ void LayoutManager::exportLayout(PhosphorZones::Layout* layout, const QString& f
     qCInfo(lcZonesLib) << "Exported layout:" << layout->name() << "to" << filePath;
 }
 
-PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const QString& systemPath)
+PhosphorZones::Layout* LayoutRegistry::restoreSystemLayout(const QUuid& id, const QString& systemPath)
 {
     if (systemPath.isEmpty() || layoutById(id)) {
         return nullptr;
@@ -700,7 +459,7 @@ PhosphorZones::Layout* LayoutManager::restoreSystemLayout(const QUuid& id, const
     return layout;
 }
 
-void LayoutManager::ensureLayoutDirectory()
+void LayoutRegistry::ensureLayoutDirectory()
 {
     QDir dir(m_layoutDirectory);
     if (!dir.exists()) {
@@ -708,7 +467,7 @@ void LayoutManager::ensureLayoutDirectory()
     }
 }
 
-QString LayoutManager::layoutFilePath(const QUuid& id) const
+QString LayoutRegistry::layoutFilePath(const QUuid& id) const
 {
     // Strip braces only for filesystem path (avoid { } in filenames). Everywhere else we use default (with braces).
     return m_layoutDirectory + QStringLiteral("/") + id.toString(QUuid::WithoutBraces) + QStringLiteral(".json");

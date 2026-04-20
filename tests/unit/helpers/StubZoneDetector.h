@@ -80,7 +80,7 @@ private:
 /**
  * @brief Create a test layout with equally-spaced horizontal zones
  * @param zoneCount Number of zones to create
- * @param parent QObject parent (typically the PhosphorZones::LayoutManager)
+ * @param parent QObject parent (typically the PhosphorZones::LayoutRegistry)
  * @return Newly created PhosphorZones::Layout with zoneCount zones
  */
 inline PhosphorZones::Layout* createTestLayout(int zoneCount, QObject* parent)

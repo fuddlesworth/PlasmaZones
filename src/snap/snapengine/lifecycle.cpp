@@ -4,7 +4,7 @@
 #include "../SnapEngine.h"
 #include <PhosphorZones/AssignmentEntry.h>
 #include "core/interfaces.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "core/logging.h"
 #include "core/utils.h"
 #include "core/virtualdesktopmanager.h"

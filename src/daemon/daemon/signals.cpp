@@ -8,7 +8,7 @@
 #include "../modetracker.h"
 #include "../unifiedlayoutcontroller.h"
 #include "../shortcutmanager.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorScreens/Manager.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
@@ -441,7 +441,7 @@ void Daemon::connectLayoutSignals()
     // handle active layout themselves, and calling it here with QSignalBlocker
     // steals the activeLayoutChanged transition, leaving the resnap buffer
     // empty. Desktop switches sync active layout via syncModeFromAssignments().
-    connect(m_layoutManager.get(), &PhosphorZones::LayoutManager::layoutAssigned, this,
+    connect(m_layoutManager.get(), &PhosphorZones::LayoutRegistry::layoutAssigned, this,
             [this](const QString& screenId, int virtualDesktop, PhosphorZones::Layout* /*layout*/) {
                 updateAutotileScreens();
                 updateLayoutFilter();

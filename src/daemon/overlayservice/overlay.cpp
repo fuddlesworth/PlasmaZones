@@ -5,7 +5,7 @@
 #include "../overlayservice.h"
 #include "../../core/logging.h"
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include "../../core/geometryutils.h"
 #include "../../core/utils.h"

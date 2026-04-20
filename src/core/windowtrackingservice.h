@@ -22,12 +22,10 @@ class Layout;
 class Zone;
 }
 
-namespace PlasmaZones {
-
-}
 namespace PhosphorZones {
-class LayoutManager;
+class LayoutRegistry;
 }
+
 namespace PlasmaZones {
 class ISettings;
 // Phosphor::Screens::ScreenManager moved to libs/phosphor-screens (Phosphor::Screens::ScreenManager).
@@ -67,7 +65,7 @@ class PLASMAZONES_EXPORT WindowTrackingService : public QObject
     Q_OBJECT
 
 public:
-    explicit WindowTrackingService(PhosphorZones::LayoutManager* layoutManager,
+    explicit WindowTrackingService(PhosphorZones::LayoutRegistry* layoutManager,
                                    PhosphorZones::IZoneDetector* zoneDetector,
                                    Phosphor::Screens::ScreenManager* screenManager, ISettings* settings,
                                    VirtualDesktopManager* vdm, QObject* parent = nullptr);
@@ -1074,7 +1072,7 @@ public:
     /// Primary (and only) entry point for mutators — replaces direct
     /// scheduleSaveState(). Public because the adaptor also needs to
     /// mark dirty from outside, e.g. when the active-layout change is
-    /// observed via PhosphorZones::LayoutManager or when a failed async write needs
+    /// observed via PhosphorZones::LayoutRegistry or when a failed async write needs
     /// its bits re-marked for retry. Multiple calls are idempotent
     /// (OR semantics) and cheap (bit OR + one signal emission).
     void markDirty(DirtyMask fields);
@@ -1219,7 +1217,7 @@ public:
 
 private:
     // Dependencies
-    PhosphorZones::LayoutManager* m_layoutManager;
+    PhosphorZones::LayoutRegistry* m_layoutManager;
     PhosphorZones::IZoneDetector* m_zoneDetector;
     ISettings* m_settings;
     VirtualDesktopManager* m_virtualDesktopManager;

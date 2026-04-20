@@ -4,7 +4,7 @@
 #pragma once
 
 #include "../core/constants.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <QObject>
 #include <QString>
 
@@ -15,11 +15,6 @@ class ScreenManager;
 namespace PlasmaZones {
 
 class Settings;
-}
-namespace PhosphorZones {
-class LayoutManager;
-}
-namespace PlasmaZones {
 
 /**
  * @brief Tiling mode: manual zone layouts or automatic tiling algorithms
@@ -32,7 +27,7 @@ enum class TilingMode {
 /**
  * @brief Thin convenience wrapper over LayoutManager's per-context AssignmentEntry.
  *
- * All state queries delegate to PhosphorZones::LayoutManager::assignmentEntryForScreen().
+ * All state queries delegate to PhosphorZones::LayoutRegistry::assignmentEntryForScreen().
  * Mutation methods write to PhosphorZones::AssignmentEntry directly. No global [ModeTracking]
  * KConfig group is used — per-context state lives in [Assignment:*] groups.
  *
@@ -45,7 +40,7 @@ class ModeTracker : public QObject
     Q_PROPERTY(TilingMode currentMode READ currentMode NOTIFY currentModeChanged)
 
 public:
-    explicit ModeTracker(Settings* settings, PhosphorZones::LayoutManager* layoutManager,
+    explicit ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
                          Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ModeTracker() override;
 
@@ -103,7 +98,7 @@ Q_SIGNALS:
 
 private:
     Settings* m_settings = nullptr;
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     Phosphor::Screens::ScreenManager* m_screenManager = nullptr;
     QString m_screenId;
     int m_desktop = 0;

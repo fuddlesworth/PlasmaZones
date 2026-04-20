@@ -8,7 +8,7 @@
 #include "../../config/configdefaults.h"
 #include "../windowtrackingadaptor.h"
 #include "../../core/interfaces.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/layoutworker/layoutcomputeservice.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>

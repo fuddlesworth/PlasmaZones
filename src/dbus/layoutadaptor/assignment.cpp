@@ -3,7 +3,7 @@
 
 #include "../layoutadaptor.h"
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../../core/virtualdesktopmanager.h"
 #include "../../core/activitymanager.h"
 #include "../../core/logging.h"
@@ -40,7 +40,7 @@ int LayoutAdaptor::getCurrentVirtualDesktop()
 
 // Screen Assignments
 // NOTE: Individual assignment methods do not call saveAssignments() directly.
-// PhosphorZones::LayoutManager auto-persists in assignLayout(), assignLayoutById(),
+// PhosphorZones::LayoutRegistry auto-persists in assignLayout(), assignLayoutById(),
 // clearAssignment(), setAssignmentEntryDirect(), and the batch setAll*() methods.
 QString LayoutAdaptor::getLayoutForScreen(const QString& screenId)
 {
@@ -221,7 +221,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktop(const QString& screenId, int vir
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "(id:" << resolvedId
                          << ") on desktop" << virtualDesktop;
 
-    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutRegistry::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -481,7 +481,7 @@ void LayoutAdaptor::assignLayoutToScreenActivity(const QString& screenId, const 
 
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "for activity" << activityId;
 
-    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutRegistry::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 
@@ -574,7 +574,7 @@ void LayoutAdaptor::assignLayoutToScreenDesktopActivity(const QString& screenId,
     qCInfo(lcDbusLayout) << "Assigned layout" << layoutId << "to screen" << screenId << "desktop" << virtualDesktop
                          << "activity" << activityId;
 
-    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutManager::layoutAssigned signal
+    // PhosphorZones::Layout resolution is triggered by PhosphorZones::LayoutRegistry::layoutAssigned signal
     // → daemon's syncModeFromAssignments(). No direct updateActiveLayout() needed.
 }
 

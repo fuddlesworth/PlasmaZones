@@ -8,12 +8,10 @@
 #include <QString>
 #include <QStringList>
 
-namespace PlasmaZones {
-
-}
 namespace PhosphorZones {
-class LayoutManager;
+class LayoutRegistry;
 }
+
 namespace PlasmaZones {
 class VirtualDesktopManager;
 
@@ -31,7 +29,7 @@ class PLASMAZONES_EXPORT ActivityManager : public QObject
     Q_OBJECT
 
 public:
-    explicit ActivityManager(PhosphorZones::LayoutManager* layoutManager, QObject* parent = nullptr);
+    explicit ActivityManager(PhosphorZones::LayoutRegistry* layoutManager, QObject* parent = nullptr);
     ~ActivityManager() override;
 
     /**
@@ -109,7 +107,7 @@ private:
     void connectSignals();
     void disconnectSignals();
 
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     VirtualDesktopManager* m_virtualDesktopManager = nullptr;
     QObject* m_controller = nullptr; // KActivities::Controller*, stored as QObject* for optional dependency
     bool m_running = false;

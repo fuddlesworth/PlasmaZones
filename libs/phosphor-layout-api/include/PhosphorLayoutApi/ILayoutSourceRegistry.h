@@ -29,13 +29,10 @@ namespace PhosphorLayout {
 /// ones.
 ///
 /// Intentionally QObject-derived. The corresponding zones interface
-/// (@c PhosphorZones::ILayoutRegistry) inherits this type to pick up
-/// the signal, and concrete registries inherit through it rather than
-/// through @c QObject directly so there is still exactly one QObject
-/// base along every inheritance path — the multi-inheritance hazard
-/// described in @c PhosphorZones::ILayoutManager only shows up when a
-/// class ends up with two distinct QObject subobjects, which this
-/// single-root pattern prevents.
+/// (@c PhosphorZones::IZoneLayoutRegistry) inherits this type to pick
+/// up the signal, and concrete registries inherit through it rather
+/// than through @c QObject directly so there is still exactly one
+/// QObject base along every inheritance path.
 class PHOSPHORLAYOUTAPI_EXPORT ILayoutSourceRegistry : public QObject
 {
     Q_OBJECT

@@ -63,13 +63,10 @@ set(plasmazones_core_SRCS
     core/screenmoderouter.h
     core/dbusvariantutils.cpp
     core/dbusvariantutils.h
-    # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutManager,
+    # zone, layout, layoututils, zonedetector, zonehighlighter, LayoutRegistry,
     # AssignmentEntry, LayoutAssignmentKey live in libs/phosphor-zones/ —
-    # consumers include <PhosphorZones/...> directly. Only the PZ-flavoured
-    # factory @ref makePzLayoutManager stays here so PZ-specific
-    # config-schema knowledge doesn't leak into the lib.
-    core/pzlayoutmanagerfactory.cpp
-    core/pzlayoutmanagerfactory.h
+    # consumers include <PhosphorZones/...> directly and construct the registry
+    # with createAssignmentsBackend() + the "plasmazones/layouts" subdir inline.
     core/layoutworker/layoutworker.cpp
     core/layoutworker/layoutworker.h
     core/layoutworker/layoutcomputeservice.cpp

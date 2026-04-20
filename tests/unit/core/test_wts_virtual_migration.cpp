@@ -22,8 +22,8 @@
 #include <memory>
 
 #include "core/windowtrackingservice.h"
-#include <PhosphorZones/LayoutManager.h>
-#include "core/pzlayoutmanagerfactory.h"
+#include <PhosphorZones/LayoutRegistry.h>
+#include "config/configbackends.h"
 #include "core/interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
@@ -51,7 +51,8 @@ private Q_SLOTS:
     void init()
     {
         m_guard = std::make_unique<IsolatedConfigGuard>();
-        m_layoutManager = makePzLayoutManager(nullptr).release();
+        m_layoutManager = new PhosphorZones::LayoutRegistry(PlasmaZones::createAssignmentsBackend(),
+                                                            QStringLiteral("plasmazones/layouts"));
         m_settings = new StubSettingsMigration(nullptr);
         m_zoneDetector = new StubZoneDetector(nullptr);
         m_service = new WindowTrackingService(m_layoutManager, m_zoneDetector, nullptr, m_settings, nullptr, nullptr);
@@ -245,7 +246,7 @@ private Q_SLOTS:
         //
         // A full integration test would call Phosphor::Screens::ScreenManager::setVirtualScreenConfig
         // with a new boundary, but WTS's test fixture uses nullptr for
-        // Phosphor::Screens::ScreenManager (it only needs PhosphorZones::LayoutManager + PhosphorZones::ZoneDetector).
+        // Phosphor::Screens::ScreenManager (it only needs PhosphorZones::LayoutRegistry + PhosphorZones::ZoneDetector).
         // The boundary shift is a Phosphor::Screens::ScreenManager concern, not a WTS concern — WTS only cares about
         // the string screen ID.
         //
@@ -386,7 +387,7 @@ private Q_SLOTS:
 
 private:
     std::unique_ptr<IsolatedConfigGuard> m_guard;
-    PhosphorZones::LayoutManager* m_layoutManager = nullptr;
+    PhosphorZones::LayoutRegistry* m_layoutManager = nullptr;
     StubSettingsMigration* m_settings = nullptr;
     StubZoneDetector* m_zoneDetector = nullptr;
     WindowTrackingService* m_service = nullptr;

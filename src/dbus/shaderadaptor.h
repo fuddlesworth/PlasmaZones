@@ -21,7 +21,7 @@ class ShaderRegistry;
  * Exposes shader metadata, compilation lifecycle, and user shader directory
  * monitoring. All methods delegate to ShaderRegistry.
  *
- * Shader assignment remains at the PhosphorZones::Layout level (via PhosphorZones::LayoutManager interface).
+ * Shader assignment remains at the PhosphorZones::Layout level (via PhosphorZones::LayoutRegistry interface).
  * This interface provides shader discovery, parameter introspection, and
  * compilation feedback for the Shader Editor and other consumers.
  */

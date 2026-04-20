@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 //
 // Layout assignment management (per-screen, per-desktop, per-activity).
-// Part of LayoutManager — split from layoutmanager.cpp for SRP.
+// Part of LayoutRegistry — split from layoutregistry.cpp for SRP.
 
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 #include "zoneslogging.h"
 
@@ -91,8 +91,8 @@ auto walkCascade(const QHash<LayoutAssignmentKey, AssignmentEntry>& assignments,
 
 } // anonymous namespace
 
-void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
-                                 PhosphorZones::Layout* layout)
+void LayoutRegistry::assignLayout(const QString& screenId, int virtualDesktop, const QString& activity,
+                                  PhosphorZones::Layout* layout)
 {
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
@@ -121,8 +121,8 @@ void LayoutManager::assignLayout(const QString& screenId, int virtualDesktop, co
     saveAssignments();
 }
 
-void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
-                                     const QString& layoutId)
+void LayoutRegistry::assignLayoutById(const QString& screenId, int virtualDesktop, const QString& activity,
+                                      const QString& layoutId)
 {
     if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
         // Store autotile assignment — set mode to Autotile, preserve snappingLayout
@@ -138,8 +138,8 @@ void LayoutManager::assignLayoutById(const QString& screenId, int virtualDesktop
     }
 }
 
-void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
-                                             const AssignmentEntry& entry)
+void LayoutRegistry::setAssignmentEntryDirect(const QString& screenId, int virtualDesktop, const QString& activity,
+                                              const AssignmentEntry& entry)
 {
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
 
@@ -164,8 +164,8 @@ void LayoutManager::setAssignmentEntryDirect(const QString& screenId, int virtua
 // same fallback cascade, implemented once in walkCascade() above. Each method
 // supplies a visitor that decides whether to accept or cascade past each entry.
 
-PhosphorZones::Layout* LayoutManager::layoutForScreen(const QString& screenId, int virtualDesktop,
-                                                      const QString& activity) const
+PhosphorZones::Layout* LayoutRegistry::layoutForScreen(const QString& screenId, int virtualDesktop,
+                                                       const QString& activity) const
 {
     auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
                               [this](const AssignmentEntry& entry) -> std::optional<PhosphorZones::Layout*> {
@@ -179,32 +179,25 @@ PhosphorZones::Layout* LayoutManager::layoutForScreen(const QString& screenId, i
     if (result)
         return *result;
 
-    // No assignment: ask the project-supplied default-layout-id provider
-    // (e.g. PlasmaZones wires it to ISettings::defaultLayoutId), then
-    // fall back to the first registered layout (by defaultOrder).
-    if (m_defaultLayoutIdProvider) {
-        const QString configuredId = m_defaultLayoutIdProvider();
-        if (!configuredId.isEmpty()) {
-            if (PhosphorZones::Layout* L = layoutById(QUuid::fromString(configuredId))) {
-                return L;
-            }
-        }
-    }
-    return m_layouts.isEmpty() ? nullptr : m_layouts.first();
+    // No explicit assignment — defer to the registry-wide default
+    // resolution (provider callback first, then first layout by
+    // defaultOrder).
+    return defaultLayout();
 }
 
-void LayoutManager::clearAssignment(const QString& screenId, int virtualDesktop, const QString& activity)
+void LayoutRegistry::clearAssignment(const QString& screenId, int virtualDesktop, const QString& activity)
 {
     assignLayout(screenId, virtualDesktop, activity, nullptr);
 }
 
-bool LayoutManager::hasExplicitAssignment(const QString& screenId, int virtualDesktop, const QString& activity) const
+bool LayoutRegistry::hasExplicitAssignment(const QString& screenId, int virtualDesktop, const QString& activity) const
 {
     LayoutAssignmentKey key{screenId, virtualDesktop, activity};
     return m_assignments.contains(key);
 }
 
-QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtualDesktop, const QString& activity) const
+QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtualDesktop,
+                                              const QString& activity) const
 {
     auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
                               [](const AssignmentEntry& entry) -> std::optional<QString> {
@@ -214,8 +207,8 @@ QString LayoutManager::assignmentIdForScreen(const QString& screenId, int virtua
     return result.value_or(QString());
 }
 
-AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
-                                                        const QString& activity) const
+AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
+                                                         const QString& activity) const
 {
     auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
                               [](const AssignmentEntry& entry) -> std::optional<AssignmentEntry> {
@@ -226,25 +219,25 @@ AssignmentEntry LayoutManager::assignmentEntryForScreen(const QString& screenId,
     return result.value_or(AssignmentEntry{});
 }
 
-AssignmentEntry::Mode LayoutManager::modeForScreen(const QString& screenId, int virtualDesktop,
-                                                   const QString& activity) const
+AssignmentEntry::Mode LayoutRegistry::modeForScreen(const QString& screenId, int virtualDesktop,
+                                                    const QString& activity) const
 {
     return assignmentEntryForScreen(screenId, virtualDesktop, activity).mode;
 }
 
-QString LayoutManager::snappingLayoutForScreen(const QString& screenId, int virtualDesktop,
-                                               const QString& activity) const
+QString LayoutRegistry::snappingLayoutForScreen(const QString& screenId, int virtualDesktop,
+                                                const QString& activity) const
 {
     return assignmentEntryForScreen(screenId, virtualDesktop, activity).snappingLayout;
 }
 
-QString LayoutManager::tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop,
-                                                const QString& activity) const
+QString LayoutRegistry::tilingAlgorithmForScreen(const QString& screenId, int virtualDesktop,
+                                                 const QString& activity) const
 {
     return assignmentEntryForScreen(screenId, virtualDesktop, activity).tilingAlgorithm;
 }
 
-void LayoutManager::clearAutotileAssignments()
+void LayoutRegistry::clearAutotileAssignments()
 {
     // Collect autotile keys first, then modify in a second pass.
     QList<LayoutAssignmentKey> autotileKeys;
@@ -281,7 +274,7 @@ void LayoutManager::clearAutotileAssignments()
     }
 }
 
-void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assignments)
+void LayoutRegistry::setAllScreenAssignments(const QHash<QString, QString>& assignments)
 {
     // Snapshot existing base entries so fromLayoutId can preserve the "other" field
     // (e.g. batch-setting snapping layout preserves tilingAlgorithm)
@@ -331,7 +324,7 @@ void LayoutManager::setAllScreenAssignments(const QHash<QString, QString>& assig
     qCInfo(lcZonesLib) << "Batch set" << count << "screen assignments";
 }
 
-void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
+void LayoutRegistry::setAllDesktopAssignments(const QHash<QPair<QString, int>, QString>& assignments)
 {
     // Snapshot existing per-desktop entries so fromLayoutId can preserve the "other" field
     QHash<LayoutAssignmentKey, AssignmentEntry> oldDesktop;
@@ -381,7 +374,7 @@ void LayoutManager::setAllDesktopAssignments(const QHash<QPair<QString, int>, QS
     qCInfo(lcZonesLib) << "Batch set" << count << "desktop assignments";
 }
 
-void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
+void LayoutRegistry::setAllActivityAssignments(const QHash<QPair<QString, QString>, QString>& assignments)
 {
     // Snapshot existing per-activity entries so fromLayoutId can preserve the "other" field
     QHash<LayoutAssignmentKey, AssignmentEntry> oldActivity;
@@ -431,7 +424,7 @@ void LayoutManager::setAllActivityAssignments(const QHash<QPair<QString, QString
     qCInfo(lcZonesLib) << "Batch set" << count << "activity assignments";
 }
 
-QHash<QPair<QString, int>, QString> LayoutManager::desktopAssignments() const
+QHash<QPair<QString, int>, QString> LayoutRegistry::desktopAssignments() const
 {
     QHash<QPair<QString, int>, QString> result;
 
@@ -446,7 +439,7 @@ QHash<QPair<QString, int>, QString> LayoutManager::desktopAssignments() const
     return result;
 }
 
-QHash<QPair<QString, QString>, QString> LayoutManager::activityAssignments() const
+QHash<QPair<QString, QString>, QString> LayoutRegistry::activityAssignments() const
 {
     QHash<QPair<QString, QString>, QString> result;
 
@@ -463,7 +456,7 @@ QHash<QPair<QString, QString>, QString> LayoutManager::activityAssignments() con
 
 // Autotile layout overrides
 
-QJsonObject LayoutManager::loadAllAutotileOverrides() const
+QJsonObject LayoutRegistry::loadAllAutotileOverrides() const
 {
     QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
     if (!file.open(QIODevice::ReadOnly)) {
@@ -473,7 +466,7 @@ QJsonObject LayoutManager::loadAllAutotileOverrides() const
     return doc.isObject() ? doc.object() : QJsonObject();
 }
 
-void LayoutManager::saveAllAutotileOverrides(const QJsonObject& all)
+void LayoutRegistry::saveAllAutotileOverrides(const QJsonObject& all)
 {
     ensureLayoutDirectory();
     QFile file(m_layoutDirectory + QStringLiteral("/autotile-overrides.json"));
@@ -484,12 +477,12 @@ void LayoutManager::saveAllAutotileOverrides(const QJsonObject& all)
     file.write(QJsonDocument(all).toJson());
 }
 
-QJsonObject LayoutManager::loadAutotileOverrides(const QString& algorithmId) const
+QJsonObject LayoutRegistry::loadAutotileOverrides(const QString& algorithmId) const
 {
     return loadAllAutotileOverrides().value(algorithmId).toObject();
 }
 
-void LayoutManager::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
+void LayoutRegistry::saveAutotileOverrides(const QString& algorithmId, const QJsonObject& overrides)
 {
     QJsonObject all = loadAllAutotileOverrides();
     if (overrides.isEmpty()) {

@@ -15,12 +15,10 @@ namespace PhosphorZones {
 class Layout;
 }
 
-namespace PlasmaZones {
-
-}
 namespace PhosphorZones {
-class LayoutManager;
+class LayoutRegistry;
 }
+
 namespace PlasmaZones {
 class LayoutWorker;
 
@@ -48,11 +46,11 @@ public:
     ~LayoutComputeService() override;
 
     /**
-     * Optional: wire in the PhosphorZones::LayoutManager so tracked layouts are evicted
+     * Optional: wire in the PhosphorZones::LayoutRegistry so tracked layouts are evicted
      * when layouts are removed/destroyed. Without this m_trackedLayouts
      * would grow unbounded over a long process lifetime.
      */
-    void setLayoutManager(PhosphorZones::LayoutManager* manager);
+    void setLayoutManager(PhosphorZones::LayoutRegistry* manager);
 
     /**
      * Request async geometry computation for a layout on a given screen.
@@ -108,7 +106,7 @@ private:
     /// Per-screen generation counters for coalescing
     QHash<QString, uint64_t> m_screenGeneration;
 
-    QPointer<PhosphorZones::LayoutManager> m_layoutManager;
+    QPointer<PhosphorZones::LayoutRegistry> m_layoutManager;
 
     QThread* m_thread = nullptr;
     LayoutWorker* m_worker = nullptr;

@@ -8,7 +8,7 @@
 #include "../interfaces.h"
 #include <PhosphorZones/Layout.h>
 #include <PhosphorZones/Zone.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../virtualdesktopmanager.h"
 #include <PhosphorScreens/VirtualScreen.h>
 #include "../utils.h"

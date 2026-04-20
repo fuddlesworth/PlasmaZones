@@ -359,12 +359,12 @@ void EditorController::loadLayout(const QString& layoutId)
         return;
     }
 
-    // Try the in-process PhosphorZones::LayoutManager first — opens the editor instantly
+    // Try the in-process PhosphorZones::LayoutRegistry first — opens the editor instantly
     // even when the daemon is starting up, daemon is down, or the user
     // launched the editor as a standalone tool. Falls back to D-Bus
     // (DBusLayoutService::loadLayout via m_layoutService) when the layout
     // isn't on disk yet (just-created in another process, etc.) or when
-    // the ID is an autotile algorithm preview that the local PhosphorZones::LayoutManager
+    // the ID is an autotile algorithm preview that the local PhosphorZones::LayoutRegistry
     // can't produce.
     QString jsonLayout;
     if (m_localLayoutManager) {

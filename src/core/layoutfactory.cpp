@@ -4,7 +4,7 @@
 #include "layoutfactory.h"
 
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 
 namespace PlasmaZones {
 
@@ -26,32 +26,32 @@ void LayoutFactory::ensureDefaults()
     auto& c = creators();
 
     // Register built-in layout types
-    c[QStringLiteral("columns")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("columns")] = [](PhosphorZones::LayoutRegistry* manager) {
         return PhosphorZones::Layout::createColumnsLayout(3, manager);
     };
 
-    c[QStringLiteral("rows")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("rows")] = [](PhosphorZones::LayoutRegistry* manager) {
         return PhosphorZones::Layout::createRowsLayout(3, manager);
     };
 
-    c[QStringLiteral("grid")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("grid")] = [](PhosphorZones::LayoutRegistry* manager) {
         return PhosphorZones::Layout::createGridLayout(2, 2, manager);
     };
 
-    c[QStringLiteral("priority")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("priority")] = [](PhosphorZones::LayoutRegistry* manager) {
         return PhosphorZones::Layout::createPriorityGridLayout(manager);
     };
 
-    c[QStringLiteral("focus")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("focus")] = [](PhosphorZones::LayoutRegistry* manager) {
         return PhosphorZones::Layout::createFocusLayout(manager);
     };
 
-    c[QStringLiteral("custom")] = [](PhosphorZones::LayoutManager* manager) {
+    c[QStringLiteral("custom")] = [](PhosphorZones::LayoutRegistry* manager) {
         return new PhosphorZones::Layout(QString(), manager);
     };
 }
 
-PhosphorZones::Layout* LayoutFactory::create(const QString& type, PhosphorZones::LayoutManager* manager)
+PhosphorZones::Layout* LayoutFactory::create(const QString& type, PhosphorZones::LayoutRegistry* manager)
 {
     ensureDefaults();
 

@@ -7,7 +7,7 @@
 #include "windowthumbnailservice.h"
 
 #include <PhosphorZones/Layout.h>
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include <PhosphorZones/Zone.h>
 #include <PhosphorZones/LayoutUtils.h>
 #include "../common/layoutpreviewserialize.h"
@@ -115,13 +115,15 @@ void cleanupVirtualScreenStates(QHash<QString, OverlayService::PerScreenOverlayS
 
 } // namespace
 
-OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
+OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, ShaderRegistry* shaderRegistry,
+                               QObject* parent)
     : IOverlayService(parent)
     , m_engine(std::make_unique<QQmlEngine>()) // No parent - unique_ptr manages lifetime
     , m_screenProvider(std::make_unique<PhosphorLayer::DefaultScreenProvider>())
     , m_transport(std::make_unique<PhosphorLayer::PhosphorShellTransport>())
 {
     m_screenManager = screenManager;
+    m_shaderRegistry = shaderRegistry;
     // Set up i18n for QML (makes i18n() available in QML)
     auto* localizedContext = new PzLocalizedContext(m_engine.get());
     m_engine->rootContext()->setContextObject(localizedContext);
@@ -208,7 +210,7 @@ OverlayService::OverlayService(Phosphor::Screens::ScreenManager* screenManager, 
             }
 
             // Recreate zone selectors for the new virtual screen configuration.
-            // Defer to the next event loop pass to allow PhosphorZones::LayoutManager to process
+            // Defer to the next event loop pass to allow PhosphorZones::LayoutRegistry to process
             // assignment migrations for the new virtual screen IDs first, ensuring
             // the zone selector shows the correct layout list.
             if (hadZoneSelector) {

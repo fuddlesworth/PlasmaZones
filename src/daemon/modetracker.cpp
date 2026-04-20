@@ -6,13 +6,13 @@
 #include <PhosphorTiles/AlgorithmRegistry.h>
 #include "../config/settings.h"
 #include "../core/constants.h"
-#include <PhosphorZones/LayoutManager.h>
+#include <PhosphorZones/LayoutRegistry.h>
 #include "../core/logging.h"
 #include <PhosphorScreens/Manager.h>
 
 namespace PlasmaZones {
 
-ModeTracker::ModeTracker(Settings* settings, PhosphorZones::LayoutManager* layoutManager,
+ModeTracker::ModeTracker(Settings* settings, PhosphorZones::LayoutRegistry* layoutManager,
                          Phosphor::Screens::ScreenManager* screenManager, QObject* parent)
     : QObject(parent)
     , m_settings(settings)
