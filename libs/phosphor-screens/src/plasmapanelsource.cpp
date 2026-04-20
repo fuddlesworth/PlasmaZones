@@ -323,17 +323,21 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                         continue;
                     }
 
-                    const bool autoHides =
-                        (hiding == QLatin1String("autohide") || hiding == QLatin1String("dodgewindows")
-                         || hiding == QLatin1String("windowsgobelow"));
-                    // Floating panels sit with margins off the screen edge and
-                    // do not reserve exclusive area — windows can extend under
-                    // them. Treat them like auto-hide for availability accounting;
-                    // otherwise calculateAvailableGeometry's qMin(sensor, dbus)
-                    // branch would shrink the rect by the floating panel's height.
-                    if (autoHides || floating) {
-                        totalOffset = 0;
-                    }
+                    // Feed the raw per-edge thickness through regardless of
+                    // `hiding` mode or the `floating` flag. In Plasma 6 the
+                    // scripting API's `floating` property reports the visual
+                    // style (rounded-corner inset dock) — it does NOT imply
+                    // exclusiveZone==0. Panels with `floating=true` routinely
+                    // reserve space; panels with `hiding=="autohide"` only
+                    // reserve when expanded. The layer-shell sensor in
+                    // ScreenManager is the authoritative source for "what
+                    // area is actually reserved" — this D-Bus data just tells
+                    // it which edge each panel lives on. See
+                    // ScreenManager::calculateAvailableGeometry for the
+                    // sensor-authoritative, D-Bus-ratio-distributed
+                    // reconciliation.
+                    Q_UNUSED(hiding);
+                    Q_UNUSED(floating);
 
                     Offsets& offsets = newOffsets[connectorName];
                     if (location == QLatin1String("top")) {
