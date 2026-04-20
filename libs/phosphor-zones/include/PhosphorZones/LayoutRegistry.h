@@ -162,12 +162,12 @@ public:
                                         const QString& activity = QString()) const;
 
     /// Resolve layout for @p screenId using the current desktop/activity
-    /// context, falling back to @ref defaultLayout when no explicit
-    /// assignment matches.
+    /// context. @ref layoutForScreen already falls back to
+    /// @ref defaultLayout internally when no explicit assignment matches,
+    /// so this helper is a thin context-filling forwarder.
     Layout* resolveLayoutForScreen(const QString& screenId) const
     {
-        Layout* layout = layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
-        return layout ? layout : defaultLayout();
+        return layoutForScreen(screenId, m_currentVirtualDesktop, m_currentActivity);
     }
 
     Q_INVOKABLE void clearAssignment(const QString& screenId, int virtualDesktop = 0,

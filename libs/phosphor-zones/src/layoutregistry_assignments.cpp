@@ -210,9 +210,17 @@ QString LayoutRegistry::assignmentIdForScreen(const QString& screenId, int virtu
 AssignmentEntry LayoutRegistry::assignmentEntryForScreen(const QString& screenId, int virtualDesktop,
                                                          const QString& activity) const
 {
+    // Acceptance rule must match assignmentIdForScreen so the two cascade
+    // views of the same stored entry agree. `activeLayoutId()` returns
+    // `"autotile:<algo>"` for Autotile mode (non-empty even when the
+    // algorithm is blank — "use the default algorithm"), and the raw
+    // snappingLayout for Snapping mode. Rejecting only when both a mode
+    // and a content yield an empty identifier keeps mode-only Autotile
+    // entries — which the KCM stores via setAssignmentEntryDirect — from
+    // being silently skipped and replaced by a wider cascade entry.
     auto result = walkCascade(m_assignments, screenId, virtualDesktop, activity,
                               [](const AssignmentEntry& entry) -> std::optional<AssignmentEntry> {
-                                  if (entry.snappingLayout.isEmpty() && entry.tilingAlgorithm.isEmpty())
+                                  if (entry.activeLayoutId().isEmpty())
                                       return std::nullopt;
                                   return entry;
                               });

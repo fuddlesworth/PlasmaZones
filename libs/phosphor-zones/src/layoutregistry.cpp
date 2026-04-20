@@ -26,6 +26,15 @@ LayoutRegistry::LayoutRegistry(std::unique_ptr<PhosphorConfig::IBackend> backend
     Q_ASSERT_X(m_configBackend != nullptr, "LayoutRegistry",
                "backend is required — every persistence method dereferences it");
     Q_ASSERT_X(!m_layoutSubdirectory.isEmpty(), "LayoutRegistry", "layoutSubdirectory is required");
+    // The subdirectory is appended to XDG data roots, so it must be a
+    // relative path without traversal segments. An absolute path would
+    // ignore the XDG root entirely; ".." would escape the user-writable
+    // area. Reject both — this is a developer error (composition-root
+    // configuration), not user input, so assertion is the right signal.
+    Q_ASSERT_X(!m_layoutSubdirectory.startsWith(QLatin1Char('/')), "LayoutRegistry",
+               "layoutSubdirectory must be a relative XDG path, not absolute");
+    Q_ASSERT_X(!m_layoutSubdirectory.contains(QLatin1String("..")), "LayoutRegistry",
+               "layoutSubdirectory must not contain '..' traversal");
 
     m_layoutDirectory =
         QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + QLatin1Char('/') + m_layoutSubdirectory;
@@ -256,9 +265,20 @@ void LayoutRegistry::removeLayout(PhosphorZones::Layout* layout)
     // Delete layout file (using stored path)
     QFile::remove(filePath);
 
-    // Clear stale pointer before deletion
+    // Clear every pointer that could capture the about-to-deleteLater
+    // layout. m_previousLayout is obvious. m_activeLayout is the subtle
+    // one: the wasActive branches below call setActiveLayout(newLayout),
+    // whose prologue does `m_previousLayout = m_activeLayout ? m_activeLayout
+    // : layout` — so if we leave m_activeLayout pointing at `layout`, the
+    // dying pointer slides straight back into m_previousLayout and
+    // previousLayout() returns a freed object the next event-loop tick.
+    // Zeroing both here makes the subsequent setActiveLayout start from a
+    // clean slate (previous == new on first-run, same contract as ctor).
     if (m_previousLayout == layout) {
         m_previousLayout = nullptr;
+    }
+    if (wasActive) {
+        m_activeLayout = nullptr;
     }
 
     Q_EMIT layoutRemoved(layout);
@@ -364,42 +384,29 @@ void LayoutRegistry::applyQuickLayout(int number, const QString& screenId)
 {
     qCInfo(lcZonesLib) << "applyQuickLayout: number=" << number << "screen=" << screenId;
 
+    // Quick-slot shortcuts are explicit bindings. If the user cleared the
+    // slot (setQuickLayoutSlot(n, "")), pressing the shortcut must be a
+    // no-op — falling back to m_layouts.at(number-1) silently resurrects
+    // a layout the user deliberately unbound.
     auto layout = layoutForShortcut(number);
-    if (layout) {
-        qCDebug(lcZonesLib) << "Found layout for shortcut" << number << ":" << layout->name();
-        // Assign to current monitor + current virtual desktop with empty activity
-        // so D-Bus/KCM queries (which use empty activity) can find the entry.
-        if (!m_currentActivity.isEmpty()) {
-            clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
-        }
-        assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
-        // Update active layout pointer but suppress activeLayoutChanged to
-        // avoid resnap/recalculation on all screens. The per-screen assignment
-        // above handles the target screen via layoutAssigned.
-        {
-            const QSignalBlocker blocker(this);
-            setActiveLayout(layout);
-        }
-    } else {
-        // No layout assigned to this quick slot - try to use layout at index (number-1) as fallback
-        qCInfo(lcZonesLib) << "No layout assigned to quick slot" << number << "- using layout index" << (number - 1);
-        if (number >= 1 && number <= m_layouts.size()) {
-            layout = m_layouts.at(number - 1);
-            if (layout) {
-                qCInfo(lcZonesLib) << "Using fallback layout:" << layout->name();
-                if (!m_currentActivity.isEmpty()) {
-                    clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
-                }
-                assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
-                {
-                    const QSignalBlocker blocker(this);
-                    setActiveLayout(layout);
-                }
-            }
-        } else {
-            qCWarning(lcZonesLib) << "No layout available for quick slot" << number << "(have" << m_layouts.size()
-                                  << "layouts)";
-        }
+    if (!layout) {
+        qCInfo(lcZonesLib) << "Quick slot" << number << "is unset — no-op";
+        return;
+    }
+
+    qCDebug(lcZonesLib) << "Found layout for shortcut" << number << ":" << layout->name();
+    // Assign to current monitor + current virtual desktop with empty activity
+    // so D-Bus/KCM queries (which use empty activity) can find the entry.
+    if (!m_currentActivity.isEmpty()) {
+        clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
+    }
+    assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
+    // Update active layout pointer but suppress activeLayoutChanged to
+    // avoid resnap/recalculation on all screens. The per-screen assignment
+    // above handles the target screen via layoutAssigned.
+    {
+        const QSignalBlocker blocker(this);
+        setActiveLayout(layout);
     }
 }
 
