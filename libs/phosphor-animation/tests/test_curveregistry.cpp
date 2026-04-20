@@ -49,12 +49,15 @@ private Q_SLOTS:
         QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
-    void testCreatePrefixedBezierFallsBackToDefault()
+    void testCreatePrefixedBezierAccepted()
     {
-        // The "bezier:..." prefixed form is intentionally NOT supported
-        // — there is exactly one wire format per curve type. Falls back
-        // to default bezier via create()'s unknown-typeId path.
-        QVERIFY(CurveRegistry{}.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00")) == nullptr);
+        // Both the bare "x1,y1,x2,y2" and the prefixed "bezier:x1,y1,x2,y2"
+        // forms round-trip. toString() emits the bare canonical form;
+        // fromString accepts the prefix for legacy configs and hand-written
+        // settings so they don't silently degrade to the OutCubic default.
+        auto curve = CurveRegistry{}.tryCreate(QStringLiteral("bezier:0.25,0.10,0.25,1.00"));
+        QVERIFY(curve != nullptr);
+        QCOMPARE(curve->typeId(), QStringLiteral("bezier"));
     }
 
     void testCreateElastic()

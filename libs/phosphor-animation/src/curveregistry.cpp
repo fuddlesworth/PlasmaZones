@@ -140,12 +140,13 @@ ParsedSpec parseSpec(const QString& spec)
         }
     } else {
         const QString prefix = spec.left(colonIdx).trimmed();
-        // Cubic-bezier has exactly one wire format — the bare 4-comma
-        // form. The "bezier:..." prefixed form is intentionally rejected
-        // here so the registry and Easing::fromString agree.
-        if (prefix == QLatin1String("bezier")) {
-            return out; // empty typeId → unknown
-        }
+        // Accept both wire formats for cubic-bezier: the bare
+        // "x1,y1,x2,y2" form (canonical — emitted by toString()) AND the
+        // "bezier:x1,y1,x2,y2" prefixed form that older configs and
+        // hand-written settings often use. Previously only the bare form
+        // dispatched, so "bezier:..." silently fell through to the
+        // unknown-typeId fallback (default OutCubic + warning). Normalise
+        // here so both produce an identical parsed spec.
         out.typeId = prefix;
         out.params = spec.mid(colonIdx + 1).trimmed();
     }

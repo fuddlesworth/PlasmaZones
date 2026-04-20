@@ -6,8 +6,13 @@
 #include <PhosphorAnimation/CurveRegistry.h>
 
 #include <QJsonValue>
+#include <QLoggingCategory>
 
 namespace PhosphorAnimation {
+
+namespace {
+Q_LOGGING_CATEGORY(lcProfile, "phosphoranimation.profile")
+}
 
 Profile Profile::withDefaults() const
 {
@@ -75,8 +80,17 @@ Profile Profile::fromJson(const QJsonObject& obj, const CurveRegistry& registry)
         // written by a newer client — those would silently land on
         // AllAtOnce, not on a behaviorally-similar mode. If new modes
         // are added, bump the schema and route through migration code.
-        p.sequenceMode =
-            (raw == static_cast<int>(SequenceMode::Cascade)) ? SequenceMode::Cascade : SequenceMode::AllAtOnce;
+        if (raw == static_cast<int>(SequenceMode::AllAtOnce) || raw == static_cast<int>(SequenceMode::Cascade)) {
+            p.sequenceMode = static_cast<SequenceMode>(raw);
+        } else {
+            // Log so schema drift doesn't silently paper over as "AllAtOnce"
+            // — a newer client writing an unknown enumerator is something a
+            // future-maintainer wants to see in logs, not discover via a
+            // mysterious animation-behaviour regression.
+            qCWarning(lcProfile) << "Profile::fromJson: unknown sequenceMode" << raw
+                                 << "— substituting DefaultSequenceMode (schema drift?)";
+            p.sequenceMode = DefaultSequenceMode;
+        }
     }
     if (obj.contains(QLatin1String("staggerInterval"))) {
         p.staggerInterval = obj.value(QLatin1String("staggerInterval")).toInt(DefaultStaggerInterval);

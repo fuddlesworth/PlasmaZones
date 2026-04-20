@@ -40,9 +40,12 @@ namespace PhosphorAnimation {
  *
  * ## Cubic-bezier wire format
  *
- * The bare `"x1,y1,x2,y2"` string (four comma-separated numbers, no
- * colon) is the cubic-bezier wire format and dispatches to the
- * `bezier` factory. There is no parallel `"bezier:..."` form.
+ * The canonical wire format is the bare `"x1,y1,x2,y2"` string (four
+ * comma-separated numbers, no colon) — this is what `toString()` emits.
+ * The prefixed `"bezier:x1,y1,x2,y2"` form is also accepted on parse so
+ * older configs and hand-written settings round-trip without silently
+ * degrading to the OutCubic default. Both forms dispatch to the
+ * `bezier` factory with identical semantics.
  *
  * ## Thread safety
  *
