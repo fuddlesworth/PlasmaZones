@@ -418,9 +418,21 @@ void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
         // Clear the slot
         m_quickLayoutShortcuts.remove(number);
         qCInfo(lcZonesLib) << "Cleared quick layout slot" << number;
+    } else if (PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+        // Autotile IDs have no corresponding Layout* — accept as-is.
+        m_quickLayoutShortcuts[number] = layoutId;
+        qCInfo(lcZonesLib) << "Assigned autotile layout" << layoutId << "to quick slot" << number;
     } else {
-        // Verify layout exists (skip for autotile IDs — they don't have PhosphorZones::Layout*)
-        if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
+        // Reject non-UUID garbage up front so a bogus string doesn't
+        // silently slip past layoutById (which would just return null
+        // for a null-parsed UUID and surface as "non-existent layout"
+        // — technically correct but misleading about the real cause).
+        const QUuid parsed = QUuid::fromString(layoutId);
+        if (parsed.isNull()) {
+            qCWarning(lcZonesLib) << "Rejecting malformed layout id for quick slot:" << layoutId;
+            return;
+        }
+        if (!layoutById(parsed)) {
             qCWarning(lcZonesLib) << "Cannot assign non-existent layout to quick slot:" << layoutId;
             return;
         }
@@ -452,10 +464,19 @@ void LayoutRegistry::setAllQuickLayoutSlots(const QHash<int, QString>& slots)
             continue;
         }
 
-        // Verify layout exists (skip for autotile IDs)
-        if (!PhosphorLayout::LayoutId::isAutotile(layoutId) && !layoutById(QUuid::fromString(layoutId))) {
-            qCWarning(lcZonesLib) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
-            continue;
+        if (!PhosphorLayout::LayoutId::isAutotile(layoutId)) {
+            // See setQuickLayoutSlot for the two-step parse/lookup
+            // rationale — catches malformed UUID strings separately
+            // from lookup-miss for clearer diagnostics.
+            const QUuid parsed = QUuid::fromString(layoutId);
+            if (parsed.isNull()) {
+                qCWarning(lcZonesLib) << "Skipping malformed layout id for quick slot" << number << ":" << layoutId;
+                continue;
+            }
+            if (!layoutById(parsed)) {
+                qCWarning(lcZonesLib) << "Skipping non-existent layout for quick slot" << number << ":" << layoutId;
+                continue;
+            }
         }
 
         m_quickLayoutShortcuts[number] = layoutId;

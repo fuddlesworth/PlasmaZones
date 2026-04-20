@@ -335,7 +335,17 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                             << "Invalid Plasma panel offset, skipping line:" << match.captured(0);
                         continue;
                     }
-                    const bool floating = (match.captured(5) == QLatin1String("1"));
+                    // match.captured(5) is the `floating` flag. In Plasma 6 the
+                    // scripting API's `floating` property reports visual style
+                    // (rounded-corner inset dock) — it does NOT imply
+                    // exclusiveZone==0, and panels with `floating=true` routinely
+                    // reserve space. We intentionally ignore it here; the
+                    // layer-shell sensor in ScreenManager is the authoritative
+                    // source for "what area is actually reserved" — see
+                    // ScreenManager::calculateAvailableGeometry. Kept in the
+                    // regex to match the JS wire format without diverging the
+                    // two; drop from both in lockstep if the flag is ever
+                    // repurposed.
 
                     QString connectorName;
                     if (!match.captured(6).isEmpty()) {
@@ -362,20 +372,12 @@ void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
                     }
 
                     // Feed the raw per-edge thickness through regardless of
-                    // `hiding` mode or the `floating` flag. In Plasma 6 the
-                    // scripting API's `floating` property reports the visual
-                    // style (rounded-corner inset dock) — it does NOT imply
-                    // exclusiveZone==0. Panels with `floating=true` routinely
-                    // reserve space; panels with `hiding=="autohide"` only
-                    // reserve when expanded. The layer-shell sensor in
-                    // ScreenManager is the authoritative source for "what
-                    // area is actually reserved" — this D-Bus data just tells
-                    // it which edge each panel lives on. See
-                    // ScreenManager::calculateAvailableGeometry for the
-                    // sensor-authoritative, D-Bus-ratio-distributed
-                    // reconciliation.
+                    // `hiding` mode. Panels with `hiding=="autohide"` only
+                    // reserve when expanded; the sensor accounts for that.
+                    // See the note above on the `floating` flag and the
+                    // sensor-authoritative reconciliation in
+                    // ScreenManager::calculateAvailableGeometry.
                     Q_UNUSED(hiding);
-                    Q_UNUSED(floating);
 
                     Offsets& offsets = newOffsets[connectorName];
                     if (location == QLatin1String("top")) {

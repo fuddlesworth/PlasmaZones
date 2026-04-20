@@ -265,25 +265,26 @@ void ScriptedAlgorithmLoader::loadFromDirectory(const QString& dir, bool isUserD
         auto* registry = m_registry;
         algo->setUserScript(isUserDir);
 
-        // Warn when a script overrides an existing algorithm ID.
-        // For system scripts with duplicate @builtinId, skip registration
-        // to prevent silent replacement of a bundled algorithm.
-        if (registry->hasAlgorithm(scriptId)) {
+        // Duplicate detection is scoped to THIS scan. m_scriptIdToPath was
+        // cleared at the top of scanAndRegister, so a hit here means an
+        // earlier loadFromDirectory call in the same scan already
+        // registered this id. The registry itself still holds entries from
+        // previous scans — using registry->hasAlgorithm would incorrectly
+        // classify every system-script content edit as a duplicate on
+        // every rescan and skip re-registration, silently disabling hot-
+        // reload for system scripts.
+        //
+        // For user-dir overrides of a bundled script: warn and fall
+        // through to registerAlgorithm, which replaces cleanly.
+        // For cross-system-dir duplicates (same id in two XDG roots):
+        // first registration wins, skip the rest.
+        if (m_scriptIdToPath.contains(scriptId)) {
             if (isUserDir) {
                 qCWarning(PhosphorTiles::lcTilesLib)
                     << "User script overrides bundled algorithm:" << scriptId << "from=" << fullPath;
             } else {
                 qCWarning(PhosphorTiles::lcTilesLib) << "Duplicate system script for algorithm:" << scriptId
                                                      << "from=" << fullPath << "— skipping (first registration wins)";
-                // Defensive: ensure scriptId is tracked so the stale-removal pass
-                // in scanAndRegister() does not unregister it. In normal operation
-                // the first directory scan already populated m_scriptIdToPath, so
-                // this guard is a no-op — it only fires if a future code path
-                // clears the map between individual directory scans within a single
-                // refresh cycle.
-                if (!m_scriptIdToPath.contains(scriptId)) {
-                    m_scriptIdToPath[scriptId] = fullPath;
-                }
                 delete algo;
                 continue;
             }

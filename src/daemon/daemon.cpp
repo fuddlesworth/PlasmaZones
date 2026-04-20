@@ -934,6 +934,18 @@ void Daemon::stop()
         m_controlAdaptor->detach();
     }
 
+    // Drop the default-layout-id provider before member destruction. The
+    // lambda installed in init() captures `this` and reads m_settings,
+    // which is declared AFTER m_layoutManager and therefore destroyed
+    // FIRST in reverse-order member teardown. No normal destruction path
+    // calls defaultLayout() today, but clearing the capture makes that
+    // latent ordering invariant unnecessary — future refactors that
+    // trigger defaultLayout() from inside ~LayoutRegistry (e.g. signal
+    // fan-out during qDeleteAll(m_layouts)) stay safe.
+    if (m_layoutManager) {
+        m_layoutManager->setDefaultLayoutIdProvider({});
+    }
+
     m_running = false;
 }
 

@@ -1106,8 +1106,8 @@ void SettingsAdaptor::openUserShaderDirectory()
 void SettingsAdaptor::refreshShaders()
 {
     // Drop our memoized view before asking the registry to reload — if
-    // the ShaderRegistry::shadersChanged signal isn't connected (e.g. the
-    // singleton was created after this adaptor), we still guarantee the
+    // the shadersChanged signal isn't connected (e.g. the registry was
+    // never injected in this composition root), we still guarantee the
     // next D-Bus query hits the fresh registry.
     invalidateShaderCaches();
     auto* registry = m_shaderRegistry;
