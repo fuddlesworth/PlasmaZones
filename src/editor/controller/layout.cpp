@@ -502,7 +502,7 @@ void EditorController::loadLayout(const QString& layoutId)
     m_availableActivities.clear();
     {
         QDBusInterface iface{QString(DBus::ServiceName), QString(DBus::ObjectPath),
-                             QString(DBus::Interface::LayoutManager)};
+                             QString(DBus::Interface::LayoutRegistry)};
         if (iface.isValid()) {
             // Screen IDs (stable EDID-based identifiers)
             QDBusReply<QString> screensReply = iface.call(QStringLiteral("getAllScreenAssignments"));
@@ -868,7 +868,7 @@ void EditorController::importLayout(const QString& filePath)
     }
 
     QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+                                 QString::fromLatin1(DBus::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");
@@ -917,7 +917,7 @@ void EditorController::exportLayout(const QString& filePath)
     }
 
     QDBusInterface layoutManager(QString::fromLatin1(DBus::ServiceName), QString::fromLatin1(DBus::ObjectPath),
-                                 QString::fromLatin1(DBus::Interface::LayoutManager), QDBusConnection::sessionBus());
+                                 QString::fromLatin1(DBus::Interface::LayoutRegistry), QDBusConnection::sessionBus());
 
     if (!layoutManager.isValid()) {
         QString error = PzI18n::tr("Cannot connect to PlasmaZones daemon");

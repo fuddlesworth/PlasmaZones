@@ -133,7 +133,7 @@ EditorController::EditorController(QObject* parent)
     auto bus = QDBusConnection::sessionBus();
     const QString svc = QString::fromLatin1(DBus::ServiceName);
     const QString path = QString::fromLatin1(DBus::ObjectPath);
-    const QString iface = QString::fromLatin1(DBus::Interface::LayoutManager);
+    const QString iface = QString::fromLatin1(DBus::Interface::LayoutRegistry);
     for (const auto& sig :
          {QStringLiteral("layoutCreated"), QStringLiteral("layoutDeleted"), QStringLiteral("layoutChanged"),
           QStringLiteral("layoutListChanged"), QStringLiteral("layoutPropertyChanged")}) {

@@ -341,7 +341,7 @@ endif()
 install(FILES
     dbus/org.plasmazones.Autotile.xml
     dbus/org.plasmazones.EditorApp.xml
-    dbus/org.plasmazones.LayoutManager.xml
+    dbus/org.plasmazones.LayoutRegistry.xml
     dbus/org.plasmazones.Overlay.xml
     dbus/org.plasmazones.Screen.xml
     dbus/org.plasmazones.Settings.xml

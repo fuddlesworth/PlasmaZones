@@ -16,7 +16,7 @@ DBusLayoutService::DBusLayoutService(QObject* parent)
     : ILayoutService(parent)
     , m_serviceName(QString::fromLatin1(DBus::ServiceName))
     , m_objectPath(QString::fromLatin1(DBus::ObjectPath))
-    , m_interfaceName(QString::fromLatin1(DBus::Interface::LayoutManager))
+    , m_interfaceName(QString::fromLatin1(DBus::Interface::LayoutRegistry))
     , m_interface(nullptr)
 {
 }
