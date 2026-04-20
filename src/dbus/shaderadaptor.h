@@ -34,6 +34,13 @@ public:
     explicit ShaderAdaptor(ShaderRegistry* registry, QObject* parent = nullptr);
     ~ShaderAdaptor() override = default;
 
+    /// Null the borrowed ShaderRegistry pointer and sever every signal
+    /// wiring to it. Called from Daemon::stop() before the owning
+    /// unique_ptr member destroys the registry, so a late-arriving D-Bus
+    /// call lands on the null-safe fallback paths below instead of
+    /// dereferencing a dangling pointer.
+    void detach();
+
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Shader discovery and metadata

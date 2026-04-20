@@ -50,6 +50,15 @@ public:
                             Phosphor::Screens::ScreenManager* screenManager, QObject* parent = nullptr);
     ~ControlAdaptor() override = default;
 
+    /// Null every borrowed pointer. Called from Daemon::stop() before the
+    /// unique_ptr members that own these objects run their destructors
+    /// (the adaptor is Qt-parented to the daemon, so ~QObject — which
+    /// destroys us — would otherwise run AFTER those unique_ptrs, leaving
+    /// every m_* member dangling). Each public slot guards on null so the
+    /// adaptor degrades to a no-op instead of UAF when a queued D-Bus
+    /// call lands post-detach.
+    void detach();
+
 public Q_SLOTS:
     // ═══════════════════════════════════════════════════════════════════════════
     // Version and capabilities

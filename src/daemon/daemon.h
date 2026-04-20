@@ -42,6 +42,8 @@ class ActivityManager;
 class ShortcutManager;
 class LayoutAdaptor;
 class SettingsAdaptor;
+class ShaderAdaptor;
+class ControlAdaptor;
 class OverlayAdaptor;
 class ZoneDetectionAdaptor;
 class WindowTrackingAdaptor;
@@ -447,6 +449,13 @@ private:
     WindowTrackingAdaptor* m_windowTrackingAdaptor = nullptr; // Window-zone tracking
     ScreenAdaptor* m_screenAdaptor = nullptr;
     WindowDragAdaptor* m_windowDragAdaptor = nullptr; // Window drag handling
+    // Held so stop() can invoke detach() before the unique_ptr members
+    // those adaptors borrow from are destroyed. ~QObject runs AFTER all
+    // unique_ptr member destructors, so without an explicit detach the
+    // adaptors would see dangling pointers for a destruction-ordering
+    // window (and any queued D-Bus call landing in that window would UAF).
+    ShaderAdaptor* m_shaderAdaptor = nullptr;
+    ControlAdaptor* m_controlAdaptor = nullptr;
 
     // Mode tracking
     std::unique_ptr<ModeTracker> m_modeTracker;

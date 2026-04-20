@@ -41,6 +41,9 @@ void ControlAdaptor::snapWindowToZone(const QString& windowId, int zoneNumber, c
                                 << "zoneNumber=" << zoneNumber;
         return;
     }
+    if (!m_layoutManager) {
+        return;
+    }
 
     // Resolve zone from screen's current layout
     PhosphorZones::Layout* layout = m_layoutManager->resolveLayoutForScreen(screenId);
@@ -138,6 +141,15 @@ QString ControlAdaptor::getFullState()
     return QString::fromUtf8(QJsonDocument(state).toJson(QJsonDocument::Compact));
 }
 
+void ControlAdaptor::detach()
+{
+    m_wta = nullptr;
+    m_layoutAdaptor = nullptr;
+    m_layoutManager = nullptr;
+    m_autotileEngine = nullptr;
+    m_screenManager = nullptr;
+}
+
 QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessage& message)
 {
     qCInfo(lcDbus) << "generateSupportReport: sinceMinutes=" << sinceMinutes;
@@ -148,6 +160,16 @@ QString ControlAdaptor::generateSupportReport(int sinceMinutes, const QDBusMessa
         message.setDelayedReply(true);
         auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Busy"),
                                               QStringLiteral("A support report is already being generated"));
+        QDBusConnection::sessionBus().send(error);
+        return {};
+    }
+
+    // Detach was called (shutdown in progress) — fail the report cleanly
+    // instead of feeding null pointers into collectSnapshot.
+    if (!m_screenManager || !m_layoutManager || !m_autotileEngine) {
+        message.setDelayedReply(true);
+        auto error = message.createErrorReply(QStringLiteral("org.plasmazones.Error.Shutdown"),
+                                              QStringLiteral("Daemon shutting down"));
         QDBusConnection::sessionBus().send(error);
         return {};
     }

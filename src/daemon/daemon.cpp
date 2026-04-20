@@ -419,8 +419,10 @@ bool Daemon::init()
     connect(m_settings.get(), &Settings::defaultLayoutIdChanged, m_layoutAdaptor, &LayoutAdaptor::invalidateCache);
     m_settingsAdaptor = new SettingsAdaptor(m_settings.get(), m_shaderRegistry.get(), this);
 
-    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring
-    new ShaderAdaptor(m_shaderRegistry.get(), this);
+    // Shader adaptor - shader discovery, compilation lifecycle, file monitoring.
+    // Held as a member so stop() can detach() it before the unique_ptr member
+    // that owns m_shaderRegistry runs its destructor.
+    m_shaderAdaptor = new ShaderAdaptor(m_shaderRegistry.get(), this);
 
     // Compositor bridge adaptor - compositor-agnostic window control protocol.
     // Captured as a local so we can wire its bridgeRegistered signal to
@@ -630,9 +632,11 @@ bool Daemon::init()
     m_autotileAdaptor =
         new AutotileAdaptor(m_autotileEngine.get(), m_screenManager.get(), m_algorithmRegistry.get(), this);
 
-    // Control adaptor - high-level convenience API for third-party integrations
-    new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(), m_autotileEngine.get(),
-                       m_screenManager.get(), this);
+    // Control adaptor - high-level convenience API for third-party integrations.
+    // Held as a member so stop() can detach() it before the unique_ptr members
+    // it borrows are destroyed.
+    m_controlAdaptor = new ControlAdaptor(m_windowTrackingAdaptor, m_layoutAdaptor, m_layoutManager.get(),
+                                          m_autotileEngine.get(), m_screenManager.get(), this);
 
     // Handle KCM assignment change resnap/OSD. This runs AFTER the KCM's batch
     // save completes (all setAssignmentEntry + notifyReload finished), so all
@@ -892,6 +896,22 @@ void Daemon::stop()
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.unregisterObject(QString(DBus::ObjectPath));
     bus.unregisterService(QString(DBus::ServiceName));
+
+    // Sever the remaining raw-pointer adaptors from the unique_ptr members
+    // they borrow. ~QObject destroys these adaptors AFTER all unique_ptr
+    // members have already run their destructors, so without detach the
+    // adaptors would see dangling pointers during the destruction window —
+    // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
+    // Settings object. Each adaptor's detach() is null-safe + idempotent.
+    if (m_settingsAdaptor) {
+        m_settingsAdaptor->detach();
+    }
+    if (m_shaderAdaptor) {
+        m_shaderAdaptor->detach();
+    }
+    if (m_controlAdaptor) {
+        m_controlAdaptor->detach();
+    }
 
     m_running = false;
 }

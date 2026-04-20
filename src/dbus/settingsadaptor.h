@@ -43,6 +43,14 @@ public:
     explicit SettingsAdaptor(ISettings* settings, ShaderRegistry* shaderRegistry = nullptr, QObject* parent = nullptr);
     ~SettingsAdaptor() override;
 
+    /// Null the borrowed ISettings / ShaderRegistry pointers, sever their
+    /// signal wiring, and flush any pending debounced save. Called from
+    /// Daemon::stop() before the owning unique_ptr members destroy the
+    /// backing objects — after detach() the adaptor's D-Bus slots hit the
+    /// null-guard paths instead of dereferencing a dangling pointer, and
+    /// the destructor is a no-op for the save-on-teardown branch.
+    void detach();
+
 public Q_SLOTS:
     // Settings operations
     void reloadSettings();
