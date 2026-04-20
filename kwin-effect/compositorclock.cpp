@@ -68,19 +68,22 @@ inline void assertMainThread()
 std::chrono::nanoseconds CompositorClock::now() const
 {
     assertMainThread();
+    const auto wall = std::chrono::steady_clock::now().time_since_epoch();
     if (!m_wasBound) {
-        // Fallback clock: self-driven from std::chrono::steady_clock so
-        // it advances monotonically with wall time rather than with paint
-        // cadence. The per-output path (updatePresentTime-driven) cannot
-        // be reused here because N outputs call prePaintScreen N× per
-        // vsync — pushing presentTime into the fallback every call makes
-        // fallback-bound animations step N× per frame on N-output
-        // systems. Self-driven avoids the double-advance entirely and
-        // matches the epoch of the presentTime-backed path (KWin's
-        // presentTime is sourced from std::chrono::steady_clock).
-        return std::chrono::steady_clock::now().time_since_epoch();
+        return wall;
     }
-    return m_latestPresentTime;
+    // Return the greater of the latched presentTime and the current wall
+    // time. When the effect is inactive (no animations, no drag), KWin
+    // does not call prePaintScreen, so m_latestPresentTime goes stale.
+    // An animation started via a D-Bus signal (float/unfloat, rotate)
+    // while the effect is inactive would latch m_startTime from the stale
+    // clock value. The next prePaintScreen (triggered by requestFrame)
+    // feeds a fresh presentTime, and advance() computes
+    // elapsed = freshTime - staleStartTime >> duration, completing the
+    // animation instantly. Returning max(latched, wall) ensures now()
+    // never falls behind wall time, so the first advance() after an
+    // idle period latches a current start time and progresses normally.
+    return std::max(m_latestPresentTime, std::chrono::duration_cast<std::chrono::nanoseconds>(wall));
 }
 
 qreal CompositorClock::refreshRate() const
