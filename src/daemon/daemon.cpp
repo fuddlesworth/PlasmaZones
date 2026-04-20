@@ -903,6 +903,27 @@ void Daemon::stop()
     // adaptors would see dangling pointers during the destruction window —
     // and the SettingsAdaptor dtor's save-on-teardown would deref a freed
     // Settings object. Each adaptor's detach() is null-safe + idempotent.
+    //
+    // WHY ONLY THESE THREE: SettingsAdaptor has the confirmed dtor-UAF
+    // (debounced save timer flush). ShaderAdaptor + ControlAdaptor have
+    // non-trivial signal wiring + cached state that benefits from
+    // explicit teardown for the same "queued D-Bus call lands during
+    // destruction window" defense-in-depth.
+    //
+    // The other eight raw-Qt-parented adaptors (LayoutAdaptor,
+    // OverlayAdaptor, ZoneDetectionAdaptor, WindowTrackingAdaptor,
+    // ScreenAdaptor, WindowDragAdaptor, SnapAdaptor, AutotileAdaptor) all
+    // ship `= default` destructors (verified — see their class headers),
+    // so they have no dtor body to UAF. QDBusConnection::unregisterObject
+    // (invoked above) blocks new method dispatch to them before we begin
+    // tearing down, and Qt's sender-destruction auto-disconnect cleans
+    // up signal wiring when the borrowed sender (m_layoutManager, etc.)
+    // is destroyed during member destruction. Adding detach() to those
+    // eight would require null-guarding every slot body (they currently
+    // rely on the "borrowed pointer is always valid" invariant), which
+    // is a larger refactor than the defense-in-depth buys. If a future
+    // adaptor grows a dtor body that derefs a borrowed member, add
+    // detach() to it AND wire the call here — same pattern as these three.
     if (m_settingsAdaptor) {
         m_settingsAdaptor->detach();
     }

@@ -5,6 +5,7 @@
 
 #include "screenslogging.h"
 
+#include <QCoreApplication>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
@@ -15,6 +16,7 @@
 #include <QGuiApplication>
 #include <QRegularExpression>
 #include <QScreen>
+#include <QThread>
 
 namespace Phosphor::Screens {
 
@@ -166,6 +168,18 @@ void PlasmaPanelSource::requestRequery(int delayMs)
 
 void PlasmaPanelSource::issueQuery(bool emitRequeryCompleted)
 {
+    // Thread confinement — m_running / m_queryPending / m_requeryQueued /
+    // m_offsets / m_activeWatcher are all touched from this method and
+    // from the QDBusPendingCallWatcher::finished slot below. Both paths
+    // are expected on the main thread (issueQuery is only called from
+    // start(), the service-watcher slot, the requery QTimer, the
+    // finished slot's drain loop, and direct requestRequery callers —
+    // all main-thread). Assert it once at entry so a future off-thread
+    // caller (e.g. a plugin wiring up a worker-thread requery) trips
+    // immediately rather than producing a silent data race that
+    // corrupts m_offsets under concurrent reads from Qt widget code.
+    Q_ASSERT(!QCoreApplication::instance() || QThread::currentThread() == QCoreApplication::instance()->thread());
+
     // Belt-and-braces: even with the stop() disconnect, a queued-but-
     // not-yet-dispatched slot invocation could still reach here. Bail
     // so we don't spin up a fresh D-Bus call or mutate m_offsets post-stop.

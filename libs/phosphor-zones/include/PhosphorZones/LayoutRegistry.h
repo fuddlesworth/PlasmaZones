@@ -272,6 +272,21 @@ private:
     Layout* cycleLayoutImpl(const QString& screenId, int direction);
     bool shouldSkipLayoutAssignment(const QString& layoutId, const QString& context) const;
     void emitLayoutAssigned(const QString& screenId, int virtualDesktop, const QString& layoutId);
+    /**
+     * @brief Commit a targeted per-screen layout switch (from a quick-slot
+     * shortcut, layout cycle, or any caller that wants to change ONLY the
+     * named screen — not fan activeLayoutChanged across every screen).
+     *
+     * Writes the per-desktop assignment for @p screenId with empty activity
+     * (so D-Bus/KCM lookups using empty activity see the entry), clears any
+     * stale activity-keyed assignment that would shadow it in the cascade,
+     * then updates the global active-layout pointer under a QSignalBlocker
+     * so @ref activeLayoutChanged does NOT fire — preventing resnap on the
+     * other screens. Equivalent to the write+update pattern both
+     * applyQuickLayout and cycleLayoutImpl were open-coding before the
+     * extraction.
+     */
+    void applyLayoutToScreen(const QString& screenId, Layout* layout);
     QJsonObject loadAllAutotileOverrides() const;
     void saveAllAutotileOverrides(const QJsonObject& all);
     Layout* resolveConfiguredDefault() const;

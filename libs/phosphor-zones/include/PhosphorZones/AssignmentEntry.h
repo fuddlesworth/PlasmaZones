@@ -31,10 +31,11 @@ struct LayoutAssignmentKey
      * Group names are always constructed internally in this order.
      *
      * @param groupName Full group name from the config backend.
-     * @param prefix    Schema-defined prefix (PlasmaZones uses
-     *                  @c "Assignment:" — see @ref LayoutManagerConfig).
-     *                  Decoupling from a project-specific default keeps
-     *                  this header lib-agnostic.
+     * @param prefix    Schema-defined prefix (the lib's own wire format
+     *                  uses @c "Assignment:" — defined as a private
+     *                  constant in @c layoutregistry_persistence.cpp).
+     *                  Passing it explicitly keeps this header free of
+     *                  any cpp-side constant dependency.
      * @return Key with populated fields; screenId is empty on parse failure.
      */
     static LayoutAssignmentKey fromGroupName(const QString& groupName, const QString& prefix)
@@ -94,9 +95,15 @@ struct AssignmentEntry
     QString activeLayoutId() const
     {
         if (mode == Autotile) {
-            // Return autotile prefix even with empty algorithm — signals "autotile mode,
-            // use default algorithm." Callers use PhosphorLayout::LayoutId::isAutotile() to detect mode
-            // and extractAlgorithmId() to get the algorithm (empty = use default).
+            // Autotile mode always produces a non-empty id so the cascade
+            // visitors in LayoutRegistry accept it (they reject on
+            // activeLayoutId().isEmpty()). For a mode-only entry (empty
+            // tilingAlgorithm — what the KCM writes for "autotile, use
+            // default algorithm"), makeAutotileId returns the bare
+            // prefix @c "autotile:"; downstream callers use
+            // @ref PhosphorLayout::LayoutId::isAutotile to detect mode
+            // and @ref PhosphorLayout::LayoutId::extractAlgorithmId to
+            // get the algorithm (empty = engine default).
             return PhosphorLayout::LayoutId::makeAutotileId(tilingAlgorithm);
         }
         return snappingLayout;

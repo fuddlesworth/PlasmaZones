@@ -28,12 +28,18 @@ class ScriptedAlgorithm;
  * meant every process shared one watchdog regardless of plugin
  * topology).
  *
- * Ownership: @ref ScriptedAlgorithmLoader owns one watchdog via
- * unique_ptr and passes a borrowed pointer to every
- * @ref ScriptedAlgorithm it constructs. The watchdog must outlive every
- * algorithm it tracks — the loader's destructor unregisters its scripts
- * (which destroys the algorithm instances) before the loader's
- * unique_ptr<watchdog> member is destroyed in reverse-declaration order.
+ * Ownership: @ref ScriptedAlgorithmLoader holds the watchdog via
+ * @c std::shared_ptr and hands a @c shared_ptr copy to every
+ * @ref ScriptedAlgorithm it constructs. The shared-ownership shape is
+ * required because the registry destroys algorithms via
+ * @c QObject::deleteLater — an algorithm's destructor (which calls
+ * @ref unregister on this watchdog) can therefore run on a later event-
+ * loop pass, after the loader is already gone. The watchdog thread is
+ * joined in @c ~ScriptedAlgorithmWatchdog, which fires only when the
+ * very last @c shared_ptr (the loader's or a deferred-delete algo's) is
+ * released — so the "watchdog outlives every algorithm using it"
+ * invariant is maintained by reference counting rather than member-
+ * ordering.
  *
  * Usage (from @ref ScriptedAlgorithm::guardedCall):
  *  1. @ref arm(this, timeoutMs) before invoking the guarded JS callable.
@@ -75,7 +81,9 @@ public:
      */
     void unregister(ScriptedAlgorithm* algo);
 
-    // Non-copyable, non-movable — owned as a unique_ptr by ScriptedAlgorithmLoader
+    // Non-copyable, non-movable — ownership is shared via std::shared_ptr
+    // (see class comment above for rationale). Move would invalidate the
+    // mutex / condvar / std::thread members.
     ScriptedAlgorithmWatchdog(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog& operator=(const ScriptedAlgorithmWatchdog&) = delete;
     ScriptedAlgorithmWatchdog(ScriptedAlgorithmWatchdog&&) = delete;

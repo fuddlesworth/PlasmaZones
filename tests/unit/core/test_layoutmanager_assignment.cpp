@@ -318,6 +318,40 @@ private Q_SLOTS:
         QCOMPARE(entry.tilingAlgorithm, QStringLiteral("wide"));
     }
 
+    // Regression for the mode-only autotile cascade bug: the KCM stores
+    // mode=Autotile with empty tilingAlgorithm via setAssignmentEntryDirect
+    // to mean "autotile mode, use the default algorithm". Before the fix to
+    // LayoutId::makeAutotileId's empty-algorithm handling, activeLayoutId()
+    // returned empty for this entry — the cascade visitors in
+    // assignmentIdForScreen / assignmentEntryForScreen rejected it, and
+    // modeForScreen wrongly reported Snapping. Pin the correct behaviour so
+    // a future change to makeAutotileId doesn't silently regress the KCM
+    // mode-only workflow again.
+    void testAssignmentEntry_modeOnlyAutotile_cascadeAccepts()
+    {
+        QScopedPointer<PhosphorZones::LayoutRegistry> mgr(createManager());
+
+        PhosphorZones::AssignmentEntry modeOnly;
+        modeOnly.mode = PhosphorZones::AssignmentEntry::Autotile;
+        // snappingLayout + tilingAlgorithm both left empty — KCM wire format
+        // for "autotile, pick the default algorithm".
+        mgr->setAssignmentEntryDirect(QStringLiteral("DP-1"), 0, QString(), modeOnly);
+
+        // activeLayoutId() returns the bare prefix — non-empty, so the
+        // cascade visitor accepts it.
+        QCOMPARE(modeOnly.activeLayoutId(), QStringLiteral("autotile:"));
+        QVERIFY(!modeOnly.activeLayoutId().isEmpty());
+
+        // Both cascade paths must agree that this entry routes as Autotile.
+        QCOMPARE(mgr->modeForScreen(QStringLiteral("DP-1"), 0), PhosphorZones::AssignmentEntry::Autotile);
+        QCOMPARE(mgr->assignmentIdForScreen(QStringLiteral("DP-1"), 0), QStringLiteral("autotile:"));
+
+        auto roundTrip = mgr->assignmentEntryForScreen(QStringLiteral("DP-1"), 0);
+        QCOMPARE(roundTrip.mode, PhosphorZones::AssignmentEntry::Autotile);
+        QVERIFY(roundTrip.tilingAlgorithm.isEmpty());
+        QVERIFY(roundTrip.snappingLayout.isEmpty());
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // P6: Config round-trip
     // ═══════════════════════════════════════════════════════════════════════════

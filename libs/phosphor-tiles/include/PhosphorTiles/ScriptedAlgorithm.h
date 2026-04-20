@@ -245,6 +245,15 @@ private:
      * may invoke it, and only from its supervisor thread while holding
      * the watchdog mutex. The underlying Qt call is documented
      * thread-safe relative to the main-thread JS evaluation it targets.
+     *
+     * CONTRACT: body MUST be safe to execute with the watchdog mutex
+     * held. No emitting Qt signals, no logging through sinks that can
+     * re-enter the watchdog, no calls into anything that acquires the
+     * watchdog mutex directly or indirectly. See the matching INVARIANT
+     * comment in @c scriptedalgorithmwatchdog.cpp::threadMain for why
+     * relaxing this would regress into either a deadlock or a UAF.
+     * Extend via a QueuedConnection bounce to the main thread if more
+     * work is needed.
      */
     void interruptEngine();
 

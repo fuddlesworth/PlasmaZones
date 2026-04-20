@@ -188,17 +188,27 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     int newIndex = (currentIndex + direction + visible.size()) % visible.size();
     PhosphorZones::Layout* newLayout = visible.at(newIndex);
 
+    // Per-screen assignment + suppressed global-active-layout update —
+    // shared with applyQuickLayout. Cycling with an empty screenId
+    // (uncommon but not invalid — happens when no focused screen is
+    // known) just updates the global active layout.
+    applyLayoutToScreen(resolvedScreenId, newLayout);
+    return newLayout;
+}
+
+void LayoutRegistry::applyLayoutToScreen(const QString& screenId, PhosphorZones::Layout* layout)
+{
     // Per-screen assignment: write per-desktop assignment first so the
     // layoutAssigned handler recalculates zone geometry for this screen.
-    if (!resolvedScreenId.isEmpty()) {
+    if (!screenId.isEmpty()) {
         // Write per-desktop assignment with empty activity so it applies
-        // regardless of which activity is active.  Activity-specific
-        // overrides are a separate KCM-only feature.  Clear any stale
+        // regardless of which activity is active. Activity-specific
+        // overrides are a separate KCM-only feature. Clear any stale
         // activity-keyed entry that would shadow this one in the cascade.
         if (!m_currentActivity.isEmpty()) {
-            clearAssignment(resolvedScreenId, m_currentVirtualDesktop, m_currentActivity);
+            clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
         }
-        assignLayout(resolvedScreenId, m_currentVirtualDesktop, QString(), newLayout);
+        assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
     }
     // Update the global active layout pointer (for overlay/zone detector
     // queries) but suppress activeLayoutChanged to prevent resnap buffer
@@ -206,9 +216,8 @@ PhosphorZones::Layout* LayoutRegistry::cycleLayoutImpl(const QString& screenId, 
     // assignment above already handles the target screen via layoutAssigned.
     {
         const QSignalBlocker blocker(this);
-        setActiveLayout(newLayout);
+        setActiveLayout(layout);
     }
-    return newLayout;
 }
 
 PhosphorZones::Layout* LayoutRegistry::layoutById(const QUuid& id) const
@@ -395,19 +404,7 @@ void LayoutRegistry::applyQuickLayout(int number, const QString& screenId)
     }
 
     qCDebug(lcZonesLib) << "Found layout for shortcut" << number << ":" << layout->name();
-    // Assign to current monitor + current virtual desktop with empty activity
-    // so D-Bus/KCM queries (which use empty activity) can find the entry.
-    if (!m_currentActivity.isEmpty()) {
-        clearAssignment(screenId, m_currentVirtualDesktop, m_currentActivity);
-    }
-    assignLayout(screenId, m_currentVirtualDesktop, QString(), layout);
-    // Update active layout pointer but suppress activeLayoutChanged to
-    // avoid resnap/recalculation on all screens. The per-screen assignment
-    // above handles the target screen via layoutAssigned.
-    {
-        const QSignalBlocker blocker(this);
-        setActiveLayout(layout);
-    }
+    applyLayoutToScreen(screenId, layout);
 }
 
 void LayoutRegistry::setQuickLayoutSlot(int number, const QString& layoutId)
